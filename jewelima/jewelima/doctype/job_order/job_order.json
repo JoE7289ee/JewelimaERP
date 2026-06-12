@@ -1,0 +1,146 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "JO-.YYYY.-.#####",
+ "creation": "2026-06-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "design_name",
+  "is_new_design",
+  "production_item",
+  "bom",
+  "qty",
+  "column_break_main",
+  "status",
+  "work_order",
+  "items_section",
+  "items",
+  "stages_section",
+  "stage_picker",
+  "stages",
+  "notes_section",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "design_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Design Name",
+   "mandatory_depends_on": "eval:!doc.is_new_design"
+  },
+  {
+   "default": "0",
+   "description": "Auto-set when CAD is one of the stages. For a new custom design the Job Order can be created without Design Name / Production Item / BOM — they must be filled before the CAD stage can be completed.",
+   "fieldname": "is_new_design",
+   "fieldtype": "Check",
+   "label": "New Design",
+   "read_only": 1
+  },
+  {
+   "fieldname": "production_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Production Item",
+   "options": "Item"
+  },
+  {
+   "description": "Out-of-box ERPNext BOM for the production item. For CAD/new designs this is filled during the design phase.",
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "options": "BOM"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nDesign\nReady for Production\nIn Production\nCompleted\nCancelled"
+  },
+  {
+   "description": "ERPNext Work Order created behind the scenes for this Job Order.",
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "read_only": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Job Order Item"
+  },
+  {
+   "fieldname": "stages_section",
+   "fieldtype": "Section Break",
+   "label": "Required Stages"
+  },
+  {
+   "fieldname": "stage_picker",
+   "fieldtype": "HTML",
+   "label": "Stage Picker"
+  },
+  {
+   "fieldname": "stages",
+   "fieldtype": "Table",
+   "label": "Stages",
+   "options": "Job Order Stage"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Job Order",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

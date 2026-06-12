@@ -1,0 +1,93 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "SETT-.#####",
+ "creation": "2026-06-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "job_order",
+  "work_order",
+  "employee",
+  "column_break_main",
+  "time_in",
+  "time_out",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "job_order",
+   "fieldtype": "Link",
+   "options": "Job Order",
+   "label": "Job Order",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "options": "Work Order",
+   "label": "Work Order",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "options": "Employee",
+   "label": "Employee / Smith",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "time_in",
+   "fieldtype": "Datetime",
+   "label": "Time In"
+  },
+  {
+   "fieldname": "time_out",
+   "fieldtype": "Datetime",
+   "label": "Time Out"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "options": "In Queue\nIn Progress\nCompleted\nOnHold\nCancelled",
+   "default": "In Queue",
+   "label": "Status",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Setting",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

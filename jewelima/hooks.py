@@ -4,6 +4,7 @@ app_publisher = "Joseph Daison"
 app_description = "Jewelry Manufacturing Management System"
 app_email = "joedai555@gmail.com"
 app_license = "mit"
+app_logo_url = "/assets/jewelima/images/jewelima-diamond.svg"
 
 # Apps
 # ------------------
@@ -11,15 +12,14 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "jewelima",
-# 		"logo": "/assets/jewelima/logo.png",
-# 		"title": "Jewelima",
-# 		"route": "/jewelima",
-# 		"has_permission": "jewelima.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "jewelima",
+		"logo": "/assets/jewelima/images/jewelima-diamond.svg",
+		"title": "Jewelima",
+		"route": "/app/jewelima",
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -86,7 +86,8 @@ app_license = "mit"
 # ------------
 
 # before_install = "jewelima.install.before_install"
-# after_install = "jewelima.install.after_install"
+after_install = "jewelima.setup.after_install"
+after_migrate = "jewelima.setup.after_migrate"
 
 # Uninstallation
 # ------------
@@ -138,13 +139,22 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+JOB_ORDER = "jewelima.jewelima.doctype.job_order.job_order"
+
+STAGE_DOCTYPES = [
+	"CAD", "CAM", "Tree Making", "Casting", "Grinding", "Filing",
+	"Setting", "Pre Polish", "Wax Setting", "Final Polish", "Wax Cleaning", "Bag Extraction",
+]
+
+# Every stage doctype: lock once completed + (for CAD) the Item/BOM restriction,
+# then start the next stage in the sequence when one is completed.
+doc_events = {
+	dt: {
+		"validate": f"{JOB_ORDER}.validate_stage",
+		"on_update": f"{JOB_ORDER}.on_stage_completed",
+	}
+	for dt in STAGE_DOCTYPES
+}
 
 # Scheduled Tasks
 # ---------------

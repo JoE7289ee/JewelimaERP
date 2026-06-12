@@ -1,0 +1,101 @@
+{
+ "app": "jewelima",
+ "creation": "2026-06-12 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace Sidebar",
+ "header_icon": "diamond",
+ "idx": 0,
+ "items": [
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "diamond",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Home",
+   "link_to": "Jewelima",
+   "link_type": "Workspace",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "list-tree",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Job Order",
+   "link_to": "Job Order",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "factory",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Work Order",
+   "link_to": "Work Order",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Metal Ledger Entry",
+   "link_to": "Metal Ledger Entry",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stone Ledger Entry",
+   "link_to": "Stone Ledger Entry",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "shapes",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stone Type",
+   "link_to": "Stone Type",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "filter",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stone Sieve",
+   "link_to": "Stone Sieve",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-06-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Jewelima",
+ "owner": "Administrator",
+ "standard": 1,
+ "title": "Jewelima"
+}
