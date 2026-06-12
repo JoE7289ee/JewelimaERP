@@ -4,7 +4,7 @@ app_publisher = "Joseph Daison"
 app_description = "Jewelry Manufacturing Management System"
 app_email = "joedai555@gmail.com"
 app_license = "mit"
-app_logo_url = "/assets/jewelima/images/jewelima-diamond.svg"
+app_logo_url = "/assets/jewelima/images/jewelima-logo.png"
 
 # Apps
 # ------------------
@@ -15,7 +15,7 @@ app_logo_url = "/assets/jewelima/images/jewelima-diamond.svg"
 add_to_apps_screen = [
 	{
 		"name": "jewelima",
-		"logo": "/assets/jewelima/images/jewelima-diamond.svg",
+		"logo": "/assets/jewelima/images/jewelima-logo.png",
 		"title": "Jewelima",
 		"route": "/app/jewelima",
 	}
@@ -155,6 +155,16 @@ doc_events = {
 	}
 	for dt in STAGE_DOCTYPES
 }
+
+# Purchase documents post to the Metal Ledger for Keep-Metal-Ledger items.
+# Posts only when the document moves stock (PR always; PI when update_stock=1),
+# which prevents double-posting a PI raised against a PR.
+METAL_LEDGER = "jewelima.jewelima.doctype.metal_ledger_entry.metal_ledger_entry"
+for _purchase_doctype in ("Purchase Receipt", "Purchase Invoice"):
+	doc_events[_purchase_doctype] = {
+		"on_submit": f"{METAL_LEDGER}.make_metal_ledger_on_submit",
+		"on_cancel": f"{METAL_LEDGER}.cancel_metal_ledger_on_cancel",
+	}
 
 # Scheduled Tasks
 # ---------------

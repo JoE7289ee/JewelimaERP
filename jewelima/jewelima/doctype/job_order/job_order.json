@@ -15,6 +15,7 @@
   "column_break_main",
   "status",
   "work_order",
+  "reserve_stock_entry",
   "items_section",
   "items",
   "stages_section",
@@ -78,6 +79,14 @@
    "fieldtype": "Link",
    "label": "Work Order",
    "options": "Work Order",
+   "read_only": 1
+  },
+  {
+   "description": "Material Transfer that reserved the raw materials (Raw Materials Store → Reserved).",
+   "fieldname": "reserve_stock_entry",
+   "fieldtype": "Link",
+   "label": "Reserve Stock Entry",
+   "options": "Stock Entry",
    "read_only": 1
   },
   {

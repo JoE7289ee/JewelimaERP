@@ -6,6 +6,9 @@ def after_install():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_raw_material_items()
+	create_manufacturing_warehouses()
+	create_loss_collection_warehouses()
+	create_store_warehouses()
 
 
 def after_migrate():
@@ -13,6 +16,11 @@ def after_migrate():
 	# seeded once at install only (see after_install), not here.
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
+	# Warehouses depend on a Company existing (setup wizard). Re-run on migrate
+	# (idempotent) so they get created even if the company wasn't ready at install.
+	create_manufacturing_warehouses()
+	create_loss_collection_warehouses()
+	create_store_warehouses()
 
 
 def get_item_custom_fields():
@@ -129,3 +137,102 @@ def create_raw_material_items():
 			}
 		).insert(ignore_permissions=True)
 	frappe.db.commit()
+
+
+# Manufacturing stage warehouses (one leaf warehouse per physical stage, under a
+# "Manufacturing" group). CAD and CAM are design/digital stages — no warehouse.
+MANUFACTURING_GROUP = "Manufacturing"
+STAGE_WAREHOUSES = [
+	"Tree Making",
+	"Casting",
+	"Grinding",
+	"Filing",
+	"Setting",
+	"Pre Polish",
+	"Wax Setting",
+	"Final Polish",
+	"Wax Cleaning",
+	"Bag Extraction",
+]
+
+
+# Loss collection warehouses — where recoverable loss is credited, per stage.
+LOSS_COLLECTION_GROUP = "Loss Collection"
+LOSS_STAGES = [
+	"Filing",
+	"Final Polish",
+	"Pre Polish",
+	"Setting",
+	"Grinding",
+	"Casting",
+]
+
+
+def warehouse_context():
+	"""(company, abbr, root_warehouse) or (None, None, None) if no company yet."""
+	company = frappe.defaults.get_defaults().get("company") or frappe.db.get_single_value(
+		"Global Defaults", "default_company"
+	)
+	if not company:
+		return None, None, None
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	root = frappe.db.get_value(
+		"Warehouse", {"company": company, "is_group": 1, "parent_warehouse": ["in", ["", None]]}, "name"
+	) or f"All Warehouses - {abbr}"
+	return company, abbr, root
+
+
+def create_manufacturing_warehouses():
+	"""Seed the Manufacturing warehouse group and one leaf warehouse per stage.
+	Idempotent and safe to call repeatedly."""
+	company, abbr, root = warehouse_context()
+	if not company:
+		return
+	group = make_warehouse(MANUFACTURING_GROUP, company, abbr, parent=root, is_group=1)
+	for stage in STAGE_WAREHOUSES:
+		make_warehouse(stage, company, abbr, parent=group, is_group=0)
+	frappe.db.commit()
+
+
+def create_loss_collection_warehouses():
+	"""Seed the Loss Collection group + one '<Stage> -LOSS' leaf warehouse per
+	stage that produces recoverable loss. Idempotent."""
+	company, abbr, root = warehouse_context()
+	if not company:
+		return
+	group = make_warehouse(LOSS_COLLECTION_GROUP, company, abbr, parent=root, is_group=1)
+	for stage in LOSS_STAGES:
+		make_warehouse(f"{stage} -LOSS", company, abbr, parent=group, is_group=0)
+	frappe.db.commit()
+
+
+# Stock-flow warehouses. Raw Materials Store = default landing for purchases
+# (free stock). Reserved = gold committed to a Job Order once its Work Order is created.
+RAW_MATERIALS_STORE = "Raw Materials Store"
+RESERVED_WAREHOUSE = "Reserved"
+
+
+def create_store_warehouses():
+	"""Seed the Raw Materials Store and Reserved leaf warehouses. Idempotent."""
+	company, abbr, root = warehouse_context()
+	if not company:
+		return
+	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
+	make_warehouse(RESERVED_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	frappe.db.commit()
+
+
+def make_warehouse(warehouse_name, company, abbr, parent, is_group):
+	name = f"{warehouse_name} - {abbr}"
+	if frappe.db.exists("Warehouse", name):
+		return name
+	doc = frappe.get_doc(
+		{
+			"doctype": "Warehouse",
+			"warehouse_name": warehouse_name,
+			"company": company,
+			"parent_warehouse": parent,
+			"is_group": is_group,
+		}
+	).insert(ignore_permissions=True)
+	return doc.name

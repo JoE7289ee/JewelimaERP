@@ -153,8 +153,9 @@ class JobOrder(Document):
 
 
 def create_erpnext_work_order(job_order):
-	"""Create a standard ERPNext Work Order (left in Draft so the user drives the
-	basic submit -> start -> finish lifecycle). Native naming is preserved."""
+	"""Create a standard ERPNext Work Order, left in Draft. skip_transfer is set so
+	the native WO never moves stock to a WIP warehouse — Jewelima drives all material
+	movement (reserve, stage warehouses) itself. Native naming is preserved."""
 	company = frappe.defaults.get_defaults().get("company") or frappe.db.get_single_value(
 		"Global Defaults", "default_company"
 	)
@@ -166,10 +167,58 @@ def create_erpnext_work_order(job_order):
 			"qty": job_order.qty or 1,
 			"company": company,
 			"planned_start_date": now_datetime(),
+			"skip_transfer": 1,
 		}
 	)
 	work_order.insert(ignore_permissions=True)
+	reserve_raw_materials(job_order, work_order)
 	return work_order
+
+
+def reserve_raw_materials(job_order, work_order):
+	"""Move the BOM's raw materials from Raw Materials Store -> Reserved, so gold
+	committed to this order is separated from free stock. A submitted Material
+	Transfer Stock Entry; needs the materials to be in stock."""
+	from jewelima.setup import RAW_MATERIALS_STORE, RESERVED_WAREHOUSE
+
+	company = work_order.company
+	store = frappe.db.get_value(
+		"Warehouse", {"warehouse_name": RAW_MATERIALS_STORE, "company": company}, "name"
+	)
+	reserved = frappe.db.get_value(
+		"Warehouse", {"warehouse_name": RESERVED_WAREHOUSE, "company": company}, "name"
+	)
+	if not store or not reserved or not job_order.bom:
+		return
+
+	bom = frappe.get_doc("BOM", job_order.bom)
+	factor = (job_order.qty or 1) / (bom.quantity or 1)
+	items = []
+	for bom_item in bom.items:
+		qty = (bom_item.qty or 0) * factor
+		if qty <= 0:
+			continue
+		items.append(
+			{"item_code": bom_item.item_code, "qty": qty, "s_warehouse": store, "t_warehouse": reserved}
+		)
+	if not items:
+		return
+
+	entry = frappe.get_doc(
+		{
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Transfer",
+			"company": company,
+			"from_warehouse": store,
+			"to_warehouse": reserved,
+			"items": items,
+			"remarks": f"Reserve for Job Order {job_order.name} / Work Order {work_order.name}",
+		}
+	)
+	entry.insert(ignore_permissions=True)
+	entry.submit()
+	job_order.db_set("reserve_stock_entry", entry.name)
+	return entry
 
 
 # ----------------------------------------------------------------------
