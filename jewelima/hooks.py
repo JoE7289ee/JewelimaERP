@@ -89,6 +89,10 @@ add_to_apps_screen = [
 after_install = "jewelima.setup.after_install"
 after_migrate = "jewelima.setup.after_migrate"
 
+# Re-run seeding once the setup wizard creates the Company (fresh deploys run
+# install/migrate before the wizard, so company-dependent seeding is skipped).
+setup_wizard_complete = ["jewelima.setup.after_setup_wizard"]
+
 # Uninstallation
 # ------------
 

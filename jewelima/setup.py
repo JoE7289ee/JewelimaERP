@@ -12,15 +12,23 @@ def after_install():
 
 
 def after_migrate():
-	# Schema-ish setup re-synced on every migrate. Raw-material items are
-	# seeded once at install only (see after_install), not here.
+	# All seeders are idempotent. Items + warehouses need a Company / item groups
+	# that may not exist at install time on a fresh deploy, so re-run them here too.
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
-	# Warehouses depend on a Company existing (setup wizard). Re-run on migrate
-	# (idempotent) so they get created even if the company wasn't ready at install.
+	create_raw_material_items()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+
+
+def after_setup_wizard(args=None):
+	"""Fired by the `setup_wizard_complete` hook once the ERPNext setup wizard
+	finishes — i.e. once a Company exists. On a fresh deploy, install/migrate run
+	BEFORE the wizard, so the company-dependent seeding (warehouses) and item
+	seeding are skipped; this re-runs everything (idempotent) with the company
+	now present."""
+	after_install()
 
 
 def get_item_custom_fields():
