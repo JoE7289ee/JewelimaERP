@@ -31,6 +31,57 @@ def after_setup_wizard(args=None):
 	after_install()
 
 
+@frappe.whitelist()
+def run_initial_setup(
+	company_name="Jewelima Diamonds",
+	company_abbr="JD",
+	country="India",
+	currency="INR",
+	timezone="Asia/Kolkata",
+	language="English",
+	chart_of_accounts="Standard",
+	fy_start_date=None,
+	fy_end_date=None,
+):
+	"""Complete the ERPNext setup wizard programmatically for a hands-off deploy.
+	No-op if setup is already complete. setup_complete() also fires the
+	setup_wizard_complete hook, which seeds all the Jewelima data. Call e.g.:
+	  bench --site <site> execute jewelima.setup.run_initial_setup
+	Defaults can be overridden via --kwargs."""
+	if frappe.is_setup_complete():
+		return "Setup already complete — nothing to do."
+
+	from frappe.desk.page.setup_wizard.setup_wizard import setup_complete
+	from frappe.utils import getdate, today
+
+	if not fy_start_date:
+		d = getdate(today())
+		start_year = d.year if d.month >= 4 else d.year - 1  # India FY = Apr–Mar
+		fy_start_date = f"{start_year}-04-01"
+		fy_end_date = f"{start_year + 1}-03-31"
+
+	setup_complete(
+		{
+			"language": language,
+			"country": country,
+			"timezone": timezone,
+			"currency": currency,
+			"full_name": "Administrator",
+			"company_name": company_name,
+			"company_abbr": company_abbr,
+			"chart_of_accounts": chart_of_accounts,
+			"fy_start_date": fy_start_date,
+			"fy_end_date": fy_end_date,
+			"bank_account": "Cash",
+		}
+	)
+	frappe.db.commit()
+
+	if frappe.is_setup_complete():
+		return f"Setup completed for company '{company_name}'."
+	return "setup_complete ran but System Settings still shows incomplete — check error log."
+
+
 def get_item_custom_fields():
 	"""
 	jewelima-specific fields added to the standard Item doctype. These flags
@@ -125,7 +176,11 @@ RAW_MATERIALS = [
 
 def create_raw_material_items():
 	"""Seed the standard gold raw-material items. Idempotent: only creates
-	an item if its item_code does not already exist."""
+	an item if its item_code does not already exist. Skips gracefully if the
+	required Item Group / UOM don't exist yet (i.e. ERPNext setup not done) —
+	after_setup_wizard re-runs this once they're present."""
+	if not frappe.db.exists("Item Group", "Raw Material") or not frappe.db.exists("UOM", "Gram"):
+		return
 	for karat, color in RAW_MATERIALS:
 		item_code = f"RM-{karat}-{color}"
 		if frappe.db.exists("Item", item_code):
