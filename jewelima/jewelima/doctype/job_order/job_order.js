@@ -83,6 +83,22 @@ frappe.ui.form.on("Job Order", {
 	},
 
 	refresh(frm) {
+		// A finalized Job Order is fully read-only (reference only).
+		if (["Completed", "Cancelled"].includes(frm.doc.status)) {
+			frm.disable_save();
+			frm.set_read_only();
+			frm.set_intro(
+				__("This Job Order is {0} — read-only, for reference only.", [frm.doc.status]),
+				"blue"
+			);
+			if (frm.doc.work_order) {
+				frm.add_custom_button(__("Work Order"), () => {
+					frappe.set_route("Form", "Work Order", frm.doc.work_order);
+				});
+			}
+			return;
+		}
+
 		lock_stage_grid(frm);
 		render_stage_picker(frm);
 		sync_new_design(frm);

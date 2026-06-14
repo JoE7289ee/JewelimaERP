@@ -1,6 +1,6 @@
 {
  "app": "jewelima",
- "creation": "2026-06-12 22:22:45.428452",
+ "creation": "2026-06-14 06:43:26.503931",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "diamond",
@@ -38,6 +38,30 @@
    "keep_closed": 0,
    "label": "Job Order",
    "link_to": "Job Order",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "scan-line",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Material Issue",
+   "link_to": "Material Issue",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "bookmark",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Material Reservation",
+   "link_to": "Material Reservation",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
@@ -103,7 +127,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-12 22:22:45.428452",
+ "modified": "2026-06-14 06:43:26.503931",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

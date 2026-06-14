@@ -13,7 +13,14 @@
   "column_break_main",
   "time_in",
   "time_out",
-  "status"
+  "status",
+  "materials_section",
+  "materials",
+  "tracking_section",
+  "loss_transferred",
+  "column_break_tracking",
+  "transfer_stock_entry",
+  "loss_stock_entry"
  ],
  "fields": [
   {
@@ -62,6 +69,47 @@
    "label": "Status",
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "materials_section",
+   "fieldtype": "Section Break",
+   "label": "Materials (Bench)"
+  },
+  {
+   "fieldname": "materials",
+   "fieldtype": "Table",
+   "options": "Stage Material",
+   "label": "Materials"
+  },
+  {
+   "fieldname": "tracking_section",
+   "fieldtype": "Section Break",
+   "label": "Stock Movement"
+  },
+  {
+   "fieldname": "loss_transferred",
+   "fieldtype": "Check",
+   "label": "Loss Transferred",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "column_break_tracking",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "transfer_stock_entry",
+   "fieldtype": "Link",
+   "options": "Stock Entry",
+   "label": "Output Transfer Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "loss_stock_entry",
+   "fieldtype": "Link",
+   "options": "Stock Entry",
+   "label": "Loss Transfer Entry",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

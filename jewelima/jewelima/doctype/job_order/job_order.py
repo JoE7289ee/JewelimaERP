@@ -15,10 +15,21 @@ class JobOrder(Document):
 		self.populate_stage_status()
 
 	def validate(self):
+		self.block_edit_when_finalized()
 		self.set_is_new_design()
 		self.normalize_stage_sequence()
 		self.validate_design_name()
 		self.protect_started_stages()
+
+	def block_edit_when_finalized(self):
+		"""A Completed (or Cancelled) Job Order is read-only — reference only."""
+		if self.is_new():
+			return
+		before = self.get_doc_before_save()
+		if before and before.status in ("Completed", "Cancelled"):
+			frappe.throw(
+				_("Job Order {0} is {1} and is read-only (reference only).").format(self.name, before.status)
+			)
 
 	def set_is_new_design(self):
 		"""New Design is system-controlled: on whenever CAD is one of the stages."""
@@ -125,7 +136,9 @@ class JobOrder(Document):
 
 	def create_stage_record(self, stage_name, work_order=None):
 		"""Create one per-stage tracking record (stage doctype name == stage label).
-		Idempotent: skips if a record for this stage already exists."""
+		Idempotent: skips if a record for this stage already exists. Cards start
+		EMPTY — material enters only via the Material Issue screen (or by the
+		output of the previous stage on completion)."""
 		if frappe.db.exists(stage_name, {"job_order": self.name}):
 			return
 		doc = frappe.get_doc(
@@ -138,18 +151,6 @@ class JobOrder(Document):
 		)
 		doc.insert(ignore_permissions=True)
 		return doc.name
-
-	def advance_to_next_stage(self, completed_stage):
-		"""Create the next stage record after `completed_stage`. If there is no
-		next stage, the Job Order is complete."""
-		sequence = self.stage_sequence
-		if completed_stage not in sequence:
-			return
-		idx = sequence.index(completed_stage)
-		if idx + 1 < len(sequence):
-			self.create_stage_record(sequence[idx + 1], work_order=self.work_order)
-		else:
-			self.db_set("status", "Completed")
 
 
 def create_erpnext_work_order(job_order):
@@ -171,54 +172,218 @@ def create_erpnext_work_order(job_order):
 		}
 	)
 	work_order.insert(ignore_permissions=True)
-	reserve_raw_materials(job_order, work_order)
+	populate_job_order_materials(job_order.name)
+	create_reservation(job_order)
 	return work_order
 
 
-def reserve_raw_materials(job_order, work_order):
-	"""Move the BOM's raw materials from Raw Materials Store -> Reserved, so gold
-	committed to this order is separated from free stock. A submitted Material
-	Transfer Stock Entry; needs the materials to be in stock."""
-	from jewelima.setup import RAW_MATERIALS_STORE, RESERVED_WAREHOUSE
-
-	company = work_order.company
-	store = frappe.db.get_value(
-		"Warehouse", {"warehouse_name": RAW_MATERIALS_STORE, "company": company}, "name"
+# ----------------------------------------------------------------------
+# Stage-warehouse material flow
+# ----------------------------------------------------------------------
+def _company():
+	return frappe.defaults.get_defaults().get("company") or frappe.db.get_single_value(
+		"Global Defaults", "default_company"
 	)
-	reserved = frappe.db.get_value(
-		"Warehouse", {"warehouse_name": RESERVED_WAREHOUSE, "company": company}, "name"
-	)
-	if not store or not reserved or not job_order.bom:
-		return
 
-	bom = frappe.get_doc("BOM", job_order.bom)
-	factor = (job_order.qty or 1) / (bom.quantity or 1)
-	items = []
-	for bom_item in bom.items:
-		qty = (bom_item.qty or 0) * factor
-		if qty <= 0:
-			continue
-		items.append(
-			{"item_code": bom_item.item_code, "qty": qty, "s_warehouse": store, "t_warehouse": reserved}
-		)
+
+def stage_warehouse(stage_name, company):
+	"""The bench warehouse for a stage (e.g. 'Casting' -> 'Casting - JD'). None for CAD/CAM."""
+	return frappe.db.get_value("Warehouse", {"warehouse_name": stage_name, "company": company}, "name")
+
+
+def stage_loss_warehouse(stage_name, company):
+	return frappe.db.get_value(
+		"Warehouse", {"warehouse_name": f"{stage_name} -LOSS", "company": company}, "name"
+	)
+
+
+def finished_goods_warehouse(company):
+	return frappe.db.get_value("Warehouse", {"warehouse_name": "Finished Goods", "company": company}, "name")
+
+
+def make_transfer(company, from_wh, to_wh, rows, remarks):
+	"""rows: list of {item_code, qty}. Creates + submits a Material Transfer."""
+	items = [
+		{"item_code": r["item_code"], "qty": r["qty"], "s_warehouse": from_wh, "t_warehouse": to_wh}
+		for r in rows
+		if (r.get("qty") or 0) > 0
+	]
 	if not items:
-		return
-
+		return None
 	entry = frappe.get_doc(
 		{
 			"doctype": "Stock Entry",
 			"stock_entry_type": "Material Transfer",
 			"company": company,
-			"from_warehouse": store,
-			"to_warehouse": reserved,
+			"from_warehouse": from_wh,
+			"to_warehouse": to_wh,
 			"items": items,
-			"remarks": f"Reserve for Job Order {job_order.name} / Work Order {work_order.name}",
+			"remarks": remarks,
 		}
 	)
 	entry.insert(ignore_permissions=True)
 	entry.submit()
-	job_order.db_set("reserve_stock_entry", entry.name)
-	return entry
+	return entry.name
+
+
+def populate_job_order_materials(job_order_name):
+	"""Fill the Job Order's Materials table from its BOM (the materials 'on the job')."""
+	jo = frappe.get_doc("Job Order", job_order_name)
+	if jo.materials or not jo.bom:
+		return
+	bom = frappe.get_doc("BOM", jo.bom)
+	factor = (jo.qty or 1) / (bom.quantity or 1)
+	jo.set(
+		"materials",
+		[{"item": bi.item_code, "qty": (bi.qty or 0) * factor} for bi in bom.items if (bi.qty or 0) > 0],
+	)
+	jo.save(ignore_permissions=True)
+
+
+def process_stage_output(job_order, stage_doc, next_stage):
+	"""On completion of a physical stage: move output -> next stage's bench (or
+	Finished Goods). Loss stays in this bench until transferred."""
+	company = _company()
+	this_wh = stage_warehouse(stage_doc.doctype, company)
+	if not this_wh:
+		return  # CAD/CAM — nothing physical
+	if next_stage and stage_warehouse(next_stage, company):
+		target = stage_warehouse(next_stage, company)
+	else:
+		target = finished_goods_warehouse(company)
+	if not target:
+		return
+
+	rows, out_rows = [], []
+	for row in stage_doc.materials or []:
+		qty = row.out_qty if (row.out_qty or 0) > 0 else (row.in_qty or 0)
+		if qty <= 0:
+			continue
+		rows.append({"item_code": row.item, "qty": qty})
+		out_rows.append({"item": row.item, "qty": qty})
+	se = make_transfer(
+		company, this_wh, target, rows,
+		f"Job {job_order.name}: {stage_doc.doctype} output -> {next_stage or 'Finished Goods'}",
+	)
+	if se:
+		stage_doc.db_set("transfer_stock_entry", se)
+	if next_stage and stage_warehouse(next_stage, company):
+		seed_next_stage_materials(job_order.name, next_stage, out_rows)
+
+
+def seed_next_stage_materials(job_order_name, next_stage, out_rows):
+	name = frappe.db.get_value(next_stage, {"job_order": job_order_name}, "name")
+	if not name:
+		return
+	nxt = frappe.get_doc(next_stage, name)
+	nxt.set("materials", [{"item": r["item"], "in_qty": r["qty"]} for r in out_rows])
+	nxt.save(ignore_permissions=True)
+
+
+def get_active_stage(job_order_name):
+	"""The card the job is currently sitting at: the earliest stage in sequence that
+	has a record which isn't Completed/Cancelled. Returns (stage_doctype, name, bench)."""
+	jo = frappe.get_doc("Job Order", job_order_name)
+	company = _company()
+	for stage_name in jo.stage_sequence:
+		rec = frappe.db.get_value(
+			stage_name, {"job_order": job_order_name}, ["name", "status"], as_dict=True
+		)
+		if rec and rec.status not in ("Completed", "Cancelled"):
+			return stage_name, rec.name, stage_warehouse(stage_name, company)
+	return None, None, None
+
+
+def add_materials_to_stage(stage_doctype, stage_name, rows):
+	"""Add issued materials onto a stage card (accumulate in_qty per item)."""
+	doc = frappe.get_doc(stage_doctype, stage_name)
+	existing = {m.item: m for m in doc.materials}
+	for r in rows:
+		code = r["item_code"]
+		if code in existing:
+			existing[code].in_qty = (existing[code].in_qty or 0) + r["qty"]
+		else:
+			doc.append("materials", {"item": code, "in_qty": r["qty"]})
+	doc.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def transfer_stage_loss(stage_doctype, stage_name):
+	"""Move the loss held at this bench to its -LOSS warehouse."""
+	doc = frappe.get_doc(stage_doctype, stage_name)
+	if doc.get("loss_transferred"):
+		frappe.throw(_("Loss has already been transferred for this stage."))
+	company = _company()
+	this_wh = stage_warehouse(stage_doctype, company)
+	loss_wh = stage_loss_warehouse(stage_doctype, company)
+	if not this_wh or not loss_wh:
+		frappe.throw(_("No -LOSS warehouse exists for {0}.").format(stage_doctype))
+	rows = [{"item_code": r.item, "qty": r.loss_qty} for r in (doc.materials or []) if (r.loss_qty or 0) > 0]
+	if not rows:
+		frappe.throw(_("There is no loss to transfer."))
+	se = make_transfer(company, this_wh, loss_wh, rows, f"Loss from {stage_doctype} {stage_name}")
+	doc.db_set("loss_transferred", 1)
+	doc.db_set("loss_stock_entry", se)
+	frappe.msgprint(_("Loss transferred to {0}.").format(loss_wh), indicator="green", alert=True)
+	return se
+
+
+def create_reservation(job_order):
+	"""Create an informational Material Reservation (NO stock is moved) listing the
+	BOM materials committed to this job. This is how we know how much stock is
+	reserved. Lines flip to Delivered as material is issued; the whole reservation
+	is deleted when the job completes."""
+	from jewelima.setup import RAW_MATERIALS_STORE
+
+	if not job_order.bom:
+		return
+	company = _company()
+	store = frappe.db.get_value(
+		"Warehouse", {"warehouse_name": RAW_MATERIALS_STORE, "company": company}, "name"
+	)
+	bom = frappe.get_doc("BOM", job_order.bom)
+	factor = (job_order.qty or 1) / (bom.quantity or 1)
+	rows = [
+		{"item": bi.item_code, "qty": (bi.qty or 0) * factor, "warehouse": store, "status": "Reserved"}
+		for bi in bom.items
+		if (bi.qty or 0) > 0
+	]
+	if not rows:
+		return
+	resv = frappe.get_doc(
+		{
+			"doctype": "Material Reservation",
+			"job_order": job_order.name,
+			"company": company,
+			"status": "Reserved",
+			"items": rows,
+		}
+	)
+	resv.insert(ignore_permissions=True)
+	frappe.db.set_value("Job Order", job_order.name, "material_reservation", resv.name)
+	return resv.name
+
+
+def mark_reservation_delivered(job_order_name, item_codes):
+	"""Flip reservation lines for the given items to Delivered (called on issue)."""
+	resv_name = frappe.db.get_value("Material Reservation", {"job_order": job_order_name}, "name")
+	if not resv_name:
+		return
+	resv = frappe.get_doc("Material Reservation", resv_name)
+	changed = False
+	for row in resv.items:
+		if row.item in item_codes and row.status != "Delivered":
+			row.status = "Delivered"
+			changed = True
+	if changed:
+		resv.set_overall_status()
+		resv.save(ignore_permissions=True)
+
+
+def delete_reservation(job_order_name):
+	"""Remove the reservation once the job is done — it's no longer required info."""
+	for name in frappe.get_all("Material Reservation", filters={"job_order": job_order_name}, pluck="name"):
+		frappe.delete_doc("Material Reservation", name, ignore_permissions=True, force=True)
 
 
 # ----------------------------------------------------------------------
@@ -231,7 +396,12 @@ def validate_stage(doc, method=None):
 		if before and before.status == "Completed":
 			frappe.throw(_("This stage is completed and locked; it cannot be edited."))
 
-	# 2) CAD restriction: cannot be completed until the Job Order has the design
+	# 2) Loss = In - Out per material row (only when an output weight is entered).
+	for row in doc.get("materials") or []:
+		in_q, out_q = (row.in_qty or 0), (row.out_qty or 0)
+		row.loss_qty = max(in_q - out_q, 0) if out_q else 0
+
+	# 3) CAD restriction: cannot be completed until the Job Order has the design
 	#    output filled in — Design Name, Production Item and BOM.
 	if doc.doctype == CAD_STAGE and doc.status == "Completed" and doc.job_order:
 		design_name, production_item, bom = frappe.db.get_value(
@@ -268,5 +438,19 @@ def on_stage_completed(doc, method=None):
 		job_order.db_set("work_order", work_order.name)
 		job_order.db_set("status", "In Production")
 		doc.db_set("work_order", work_order.name)
+		job_order.reload()
 
-	job_order.advance_to_next_stage(doc.doctype)
+	# Determine the next stage in the sequence.
+	seq = job_order.stage_sequence
+	idx = seq.index(doc.doctype) if doc.doctype in seq else -1
+	next_stage = seq[idx + 1] if (0 <= idx < len(seq) - 1) else None
+
+	# Start the next stage (or finish the job).
+	if next_stage:
+		job_order.create_stage_record(next_stage, work_order=job_order.work_order)
+	else:
+		job_order.db_set("status", "Completed")
+		delete_reservation(job_order.name)
+
+	# Move this stage's output -> next bench (or Finished Goods); loss stays here.
+	process_stage_output(job_order, doc, next_stage)

@@ -269,19 +269,27 @@ def create_loss_collection_warehouses():
 	frappe.db.commit()
 
 
-# Stock-flow warehouses. Raw Materials Store = default landing for purchases
-# (free stock). Reserved = gold committed to a Job Order once its Work Order is created.
+# Stock-flow warehouses.
+#  Raw Materials Store = default landing for purchases (free stock).
+#  Gold Issue / Stone Issue = staging where committed material waits to be issued
+#    to a job card from the Material Issue screen.
+#  Reserved = legacy (kept for back-compat); the flow now reserves into Gold Issue.
 RAW_MATERIALS_STORE = "Raw Materials Store"
 RESERVED_WAREHOUSE = "Reserved"
+GOLD_ISSUE_WAREHOUSE = "Gold Issue"
+STONE_ISSUE_WAREHOUSE = "Stone Issue"
 
 
 def create_store_warehouses():
-	"""Seed the Raw Materials Store and Reserved leaf warehouses. Idempotent."""
+	"""Seed the stock-flow leaf warehouses. Idempotent.
+	Gold reserving is now informational (Material Reservation doctype) — no Gold
+	Issue / Reserved warehouse. Gold issues from Raw Materials Store; stones from
+	Stone Issue."""
 	company, abbr, root = warehouse_context()
 	if not company:
 		return
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
-	make_warehouse(RESERVED_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(STONE_ISSUE_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	frappe.db.commit()
 
 

@@ -15,9 +15,11 @@
   "column_break_main",
   "status",
   "work_order",
-  "reserve_stock_entry",
+  "material_reservation",
   "items_section",
   "items",
+  "materials_section",
+  "materials",
   "stages_section",
   "stage_picker",
   "stages",
@@ -82,11 +84,11 @@
    "read_only": 1
   },
   {
-   "description": "Material Transfer that reserved the raw materials (Raw Materials Store → Reserved).",
-   "fieldname": "reserve_stock_entry",
+   "description": "Informational reservation of the materials committed to this job (no stock moved).",
+   "fieldname": "material_reservation",
    "fieldtype": "Link",
-   "label": "Reserve Stock Entry",
-   "options": "Stock Entry",
+   "label": "Material Reservation",
+   "options": "Material Reservation",
    "read_only": 1
   },
   {
@@ -99,6 +101,18 @@
    "fieldtype": "Table",
    "label": "Items",
    "options": "Job Order Item"
+  },
+  {
+   "description": "Materials on this job (auto-filled from the BOM). These flow through the stage warehouses.",
+   "fieldname": "materials_section",
+   "fieldtype": "Section Break",
+   "label": "Materials On Job"
+  },
+  {
+   "fieldname": "materials",
+   "fieldtype": "Table",
+   "label": "Materials",
+   "options": "Job Order Material"
   },
   {
    "fieldname": "stages_section",

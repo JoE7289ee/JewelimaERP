@@ -1,0 +1,79 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "item_name",
+  "in_qty",
+  "out_qty",
+  "loss_qty",
+  "uom"
+ ],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "item.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Weight/qty received into this stage.",
+   "fieldname": "in_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "In Qty",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Weight/qty that came out of this stage (passed to the next).",
+   "fieldname": "out_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Out Qty"
+  },
+  {
+   "default": "0",
+   "description": "Loss = In - Out. Held at this stage's bench until transferred to its -LOSS warehouse.",
+   "fieldname": "loss_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Loss Qty",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item.stock_uom",
+   "fieldname": "uom",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "UOM",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stage Material",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
