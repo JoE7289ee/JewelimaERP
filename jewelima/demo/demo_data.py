@@ -1,18 +1,23 @@
 # Copyright (c) 2026, efeone and contributors
 # For license information, please see license.txt
 """
-Jewelima demo / dummy data — a fully-loaded sandbox for debugging & demos.
+Jewelima demo / dummy data — a fully-loaded, *packed* sandbox for debugging & demos.
 
-It seeds suppliers, customers, smiths, gold stock, a Design Bank (which auto-makes
-Items + BOMs) and a spread of Job Orders in every state (Draft, Design phase,
-In Production, Completed), exercising Material Issue, Material Reservation,
-stage-to-stage transfers, the Transfers log, Loss Transfer and the Metal Ledger.
+It seeds a large spread of suppliers, customers, smiths, gold purchases (which also
+post to the Metal Ledger), a big Design Bank (each design auto-makes an Item + BOM),
+and ~100 Job Orders across every state — Draft, Design phase, In Production (fresh
+and mid-flow), and Completed — exercising Material Issue, Material Reservation,
+stage-to-stage transfers, the Transfers log, Loss Transfer, Finished Goods and the
+Metal Ledger.
+
+Volume is controlled by the N_* constants below — bump them to pack the system harder.
 
 Everything it creates is tagged so it can be wiped again — make_demo() writes a
-manifest, and clear_demo() removes exactly what it made.
+manifest, and clear_demo() removes exactly what it made (also by tag, so a partial
+run still cleans up).
 
-Run it (works the same on a Mac dev box or an Ubuntu server — only the app needs
-to be installed on the site):
+Run it (same on a Mac dev box or an Ubuntu server — only the app needs to be
+installed on the site):
 
     bench --site <your-site> execute jewelima.demo.demo_data.make_demo
     bench --site <your-site> execute jewelima.demo.demo_data.clear_demo
@@ -24,37 +29,46 @@ Or, if you only have this file copied onto the server, from the bench folder:
 
 import json
 import os
+import random
 
 import frappe
 
+# ---- volume knobs ----------------------------------------------------
+N_DESIGNS = 100          # Design Bank entries (each => 1 Item + 1 BOM)
+N_JOBS = 100             # Job Orders, spread across all states
+N_SUPPLIERS = 12
+N_CUSTOMERS = 12
+N_EMPLOYEES = 20
+N_PURCHASES = 8          # Purchase Receipts of gold (also packs the Metal Ledger)
+GOLD_PER_PURCHASE = 3000  # grams per gold type per Purchase Receipt
+
 MARK = "[JEWELIMA-DEMO]"          # stamped on Job Orders / Purchase Receipts
-DESIGN_PREFIX = "DEMO-"           # Design Bank codes (also the Item codes)
+DESIGN_PREFIX = "DEMO-D"          # Design Bank codes (also the Item codes)
 PARTY_PREFIX = "DEMO "            # suppliers / customers / employees
 
-# Gold to stock up: (item_code, qty grams, rate per gram)
-GOLDS = [
-    ("RM-24-YG", 100, 8000),
-    ("RM-22-YG", 500, 6000),
-    ("RM-18-YG", 300, 5000),
-    ("RM-18-WG", 200, 5200),
-    ("RM-14-YG", 200, 4200),
+# (item_code, karat label) — the gold raw materials seeded by setup.
+METALS = [
+    ("RM-24-YG", "24K"),
+    ("RM-22-YG", "22K"),
+    ("RM-18-YG", "18K"),
+    ("RM-18-WG", "18K"),
+    ("RM-14-YG", "14K"),
 ]
-
 PURITY = {"24K": 99.9, "22K": 91.6, "18K": 75.0, "14K": 58.5}
 
-# Designs to build: (code, name, type, style, [(rm_item, grams)])
-DESIGNS = [
-    ("DEMO-RING-22K", "Solitaire Ring 22K", "Rings", "General", [("RM-22-YG", 8)]),
-    ("DEMO-RING-18K", "Band Ring 18K", "Rings", "Tickly", [("RM-18-YG", 6)]),
-    ("DEMO-PEND-22K", "Heart Pendant 22K", "Pendant", "General", [("RM-22-YG", 12)]),
-    ("DEMO-PEND-18W", "Halo Pendant 18K White", "Pendant", "Tickly", [("RM-18-WG", 10)]),
-    ("DEMO-RING-24K", "Plain Ring 24K", "Rings", "General", [("RM-24-YG", 9)]),
+# Physical manufacturing stages (have bench warehouses), in route order.
+ORDER = [
+    "Tree Making", "Casting", "Grinding", "Filing", "Setting",
+    "Pre Polish", "Wax Setting", "Final Polish", "Wax Cleaning", "Bag Extraction",
 ]
+START_STAGES = ["Tree Making", "Casting", "Grinding"]  # sensible places to begin
+LOSS_STAGES = ["Casting", "Grinding", "Filing", "Setting", "Pre Polish", "Final Polish"]
 
-STAGE_DOCTYPES = [
-    "CAD", "CAM", "Tree Making", "Casting", "Grinding", "Filing",
-    "Setting", "Pre Polish", "Wax Setting", "Final Polish", "Wax Cleaning", "Bag Extraction",
-]
+STAGE_DOCTYPES = ["CAD", "CAM"] + ORDER
+
+# Extra master values created for variety (manifest-tracked, removed on clear).
+EXTRA_DESIGN_TYPES = ["Earrings", "Bangle", "Necklace", "Bracelet", "Nose Pin"]
+EXTRA_DESIGN_STYLES = ["Antique", "Modern", "Filigree", "Temple", "Minimal"]
 
 _MAN = []  # manifest of [doctype, name] created in this run
 
@@ -73,12 +87,18 @@ def _track(doc):
 
 def _save_manifest():
     with open(_manifest_path(), "w") as f:
-        json.dump(_MAN, f, indent=1)
+        json.dump(_MAN, f)
 
 
 def _load_manifest():
     p = _manifest_path()
     return json.load(open(p)) if os.path.exists(p) else []
+
+
+def _checkpoint():
+    """Persist progress so a long run is durable and resumable-to-clear."""
+    _save_manifest()
+    frappe.db.commit()
 
 
 def _company_abbr():
@@ -120,10 +140,11 @@ def _purity_for_design(code):
 # build
 # ----------------------------------------------------------------------
 def make_demo():
-    """Populate the site with a full set of dummy data. Idempotent guard: refuses
-    to run twice — clear_demo() first if a previous demo is still present."""
+    """Populate the site with a large set of dummy data. Idempotent guard: refuses
+    to run while a previous demo is still present — clear_demo() first."""
     global _MAN
     _MAN = []
+    random.seed(42)
     company, abbr = _company_abbr()
     _require_setup(abbr)
 
@@ -131,22 +152,42 @@ def make_demo():
         print("Demo data already present (manifest exists). Run clear_demo first.")
         return
 
+    print("Seeding parties, employees, masters ...")
     _make_parties()
-    _make_employees(company)
+    employees = _make_employees(company)
+    _make_extra_masters()
+    _checkpoint()
+
+    print(f"Buying gold across {N_PURCHASES} Purchase Receipts ...")
     _buy_gold(company, abbr)
-    _make_designs()
-    summary = _make_job_orders()
+    _checkpoint()
+
+    print(f"Building {N_DESIGNS} designs (Design Bank -> Item + BOM) ...")
+    designs = _make_designs()
+    _checkpoint()
+
+    print(f"Building {N_JOBS} Job Orders across all states ...")
+    counts = _make_job_orders(designs)
+    _checkpoint()
+
+    print("Transferring accumulated bench loss to -LOSS warehouses ...")
+    for stage in LOSS_STAGES:
+        _transfer_loss(stage)
 
     _save_manifest()
     frappe.db.commit()
 
-    print("\n==== Jewelima demo data created ====")
-    print(f"  Suppliers/Customers : 2 / 2")
-    print(f"  Employees (smiths)  : {len(frappe.get_all('Employee', {'employee_name': ['like', PARTY_PREFIX + '%']}))}")
-    print(f"  Designs (Design Bank, +Item +BOM): {len(DESIGNS)}")
-    print(f"  Job Orders          : {summary}")
-    print(f"  Gold stocked into Raw Materials Store via Purchase Receipt / Stock Entry")
-    print(f"  Manifest            : {_manifest_path()}")
+    print("\n==== Jewelima demo data created (PACKED) ====")
+    print(f"  Suppliers / Customers : {len(frappe.get_all('Supplier', {'supplier_name': ['like', PARTY_PREFIX + '%']}))}"
+          f" / {len(frappe.get_all('Customer', {'customer_name': ['like', PARTY_PREFIX + '%']}))}")
+    print(f"  Employees (smiths)    : {len(employees)}")
+    print(f"  Designs (+Item +BOM)  : {len(designs)}")
+    print(f"  Purchase Receipts     : {len(frappe.get_all('Purchase Receipt', {'remarks': ['like', '%' + MARK + '%']}))}")
+    print(f"  Metal Ledger Entries  : {frappe.db.count('Metal Ledger Entry')}")
+    print(f"  Job Orders            : {sum(counts.values())}  -> {counts}")
+    print(f"  Material Issues       : {frappe.db.count('Material Issue')}")
+    print(f"  Loss Transfers        : {frappe.db.count('Loss Transfer')}")
+    print(f"  Manifest              : {_manifest_path()}")
     print("  Wipe it all with:  bench --site <site> execute jewelima.demo.demo_data.clear_demo")
 
 
@@ -154,12 +195,14 @@ def _make_parties():
     sg = _leaf("Supplier Group", "All Supplier Groups")
     cg = _leaf("Customer Group", "All Customer Groups")
     terr = _leaf("Territory", "All Territories")
-    for s in ["DEMO Gold House", "DEMO Bullion Traders"]:
+    for i in range(1, N_SUPPLIERS + 1):
+        s = f"DEMO Supplier {i:02d}"
         if not frappe.db.exists("Supplier", s):
             _track(frappe.get_doc(
                 {"doctype": "Supplier", "supplier_name": s, "supplier_group": sg}
             ).insert(ignore_permissions=True))
-    for c in ["DEMO Retail Co", "DEMO Wholesale Jewels"]:
+    for i in range(1, N_CUSTOMERS + 1):
+        c = f"DEMO Customer {i:02d}"
         if not frappe.db.exists("Customer", c):
             _track(frappe.get_doc(
                 {"doctype": "Customer", "customer_name": c, "customer_group": cg, "territory": terr}
@@ -167,53 +210,90 @@ def _make_parties():
 
 
 def _make_employees(company):
-    for nm in ["DEMO Karigar Ravi", "DEMO Karigar Suresh", "DEMO Setter Anil"]:
-        if frappe.db.exists("Employee", {"employee_name": nm}):
+    out = []
+    for i in range(1, N_EMPLOYEES + 1):
+        nm = f"DEMO Smith {i:02d}"
+        existing = frappe.db.get_value("Employee", {"employee_name": nm}, "name")
+        if existing:
+            out.append(existing)
             continue
         try:
-            _track(frappe.get_doc(
-                {"doctype": "Employee", "first_name": nm, "company": company, "gender": "Male",
+            e = frappe.get_doc(
+                {"doctype": "Employee", "first_name": nm, "company": company,
+                 "gender": "Male" if i % 2 else "Female",
                  "date_of_birth": "1990-01-01", "date_of_joining": "2022-01-01", "status": "Active"}
-            ).insert(ignore_permissions=True))
+            ).insert(ignore_permissions=True)
+            out.append(_track(e).name)
         except Exception as e:
             print("  (skipped employee", nm, "->", e, ")")
+    return out
+
+
+def _make_extra_masters():
+    for t in EXTRA_DESIGN_TYPES:
+        if not frappe.db.exists("Design Type", t):
+            _track(frappe.get_doc({"doctype": "Design Type", "design_type_name": t}).insert(ignore_permissions=True))
+    for s in EXTRA_DESIGN_STYLES:
+        if not frappe.db.exists("Design Style", s):
+            _track(frappe.get_doc({"doctype": "Design Style", "design_style_name": s}).insert(ignore_permissions=True))
 
 
 def _buy_gold(company, abbr):
     store = _wh("Raw Materials Store", abbr)
-    items = [{"item_code": i, "qty": q, "rate": r, "warehouse": store}
-             for i, q, r in GOLDS if frappe.db.exists("Item", i)]
-    supplier = frappe.db.get_value("Supplier", {"supplier_name": "DEMO Gold House"}, "name")
-    try:
-        pr = frappe.get_doc(
-            {"doctype": "Purchase Receipt", "supplier": supplier, "company": company,
-             "remarks": MARK, "items": items}
-        )
-        pr.insert(ignore_permissions=True)
-        pr.submit()
-        _track(pr)
-    except Exception as e:
-        print("  (Purchase Receipt failed -> seeding stock via Stock Entry instead:", e, ")")
-        se = frappe.get_doc(
-            {"doctype": "Stock Entry", "stock_entry_type": "Material Receipt", "company": company,
-             "to_warehouse": store,
-             "items": [{"item_code": i, "qty": q, "t_warehouse": store, "basic_rate": r}
-                       for i, q, r in GOLDS if frappe.db.exists("Item", i)]}
-        )
-        se.insert(ignore_permissions=True)
-        se.submit()
-        _track(se)
+    suppliers = frappe.get_all("Supplier", filters={"supplier_name": ["like", PARTY_PREFIX + "%"]}, pluck="name")
+    rates = {"RM-24-YG": 8000, "RM-22-YG": 6000, "RM-18-YG": 5000, "RM-18-WG": 5200, "RM-14-YG": 4200}
+    for p in range(N_PURCHASES):
+        items = [{"item_code": i, "qty": GOLD_PER_PURCHASE, "rate": rates.get(i, 6000), "warehouse": store}
+                 for i, _ in METALS if frappe.db.exists("Item", i)]
+        supplier = suppliers[p % len(suppliers)] if suppliers else None
+        try:
+            pr = frappe.get_doc(
+                {"doctype": "Purchase Receipt", "supplier": supplier, "company": company,
+                 "remarks": MARK, "items": items}
+            )
+            pr.insert(ignore_permissions=True)
+            pr.submit()
+            _track(pr)
+        except Exception as e:
+            print("  (Purchase Receipt failed -> seeding stock via Stock Entry instead:", e, ")")
+            se = frappe.get_doc(
+                {"doctype": "Stock Entry", "stock_entry_type": "Material Receipt", "company": company,
+                 "to_warehouse": store,
+                 "items": [{"item_code": i, "qty": GOLD_PER_PURCHASE, "t_warehouse": store,
+                            "basic_rate": rates.get(i, 6000)} for i, _ in METALS if frappe.db.exists("Item", i)]}
+            )
+            se.insert(ignore_permissions=True)
+            se.submit()
+            _track(se)
 
 
 def _make_designs():
-    for code, nm, typ, sty, mats in DESIGNS:
+    types = ["Rings", "Pendant"] + EXTRA_DESIGN_TYPES
+    styles = ["Tickly", "General"] + EXTRA_DESIGN_STYLES
+    out = []
+    for i in range(1, N_DESIGNS + 1):
+        code = f"{DESIGN_PREFIX}{i:04d}"
+        out.append(code)
         if frappe.db.exists("Design Bank", code):
             continue
+        metal, karat = METALS[i % len(METALS)]
+        typ = types[i % len(types)]
+        sty = styles[i % len(styles)]
+        weight = round(random.uniform(2.5, 25.0), 2)
+        mats = [{"item": metal, "qty": weight}]
+        # ~1 in 4 designs use a second gold component (richer BOM)
+        if i % 4 == 0:
+            alt = METALS[(i + 2) % len(METALS)][0]
+            if alt != metal:
+                mats.append({"item": alt, "qty": round(weight * 0.2, 2)})
         _track(frappe.get_doc(
-            {"doctype": "Design Bank", "design_code": code, "design_name": nm,
-             "design_type": typ, "design_style": sty,
-             "materials": [{"item": i, "qty": q} for i, q in mats]}
+            {"doctype": "Design Bank", "design_code": code, "design_name": f"{typ} {karat} #{i:04d}",
+             "design_type": typ, "design_style": sty, "materials": mats}
         ).insert(ignore_permissions=True))
+        if i % 25 == 0:
+            _checkpoint()
+            print(f"   ... {i} designs")
+    return out
 
 
 # ---- Job Order flow helpers ------------------------------------------
@@ -241,7 +321,7 @@ def _issue_gold(job_order):
     return _track(mi).name
 
 
-def _complete_card(job_order, stage, design=None, next_stage="", loss_per_item=0.0):
+def _complete_card(job_order, stage, design=None, next_stage="", loss_per_item=0.0, stones=False):
     name = frappe.db.get_value(stage, {"job_order": job_order}, "name")
     card = frappe.get_doc(stage, name)
     total_in = 0
@@ -249,6 +329,9 @@ def _complete_card(job_order, stage, design=None, next_stage="", loss_per_item=0
         m.out_qty = max((m.in_qty or 0) - loss_per_item, 0)
         total_in += (m.in_qty or 0)
     if card.meta.has_field("gross_weight"):
+        if stones:
+            card.dmd_no = random.randint(1, 12)
+            card.dmd_weight_ct = round(random.uniform(0.1, 2.5), 3)
         card.gross_weight = round(total_in, 3)
         card.purity = _purity_for_design(design) if design else 91.6
     emp = _any_employee()
@@ -276,51 +359,76 @@ def _transfer_loss(stage):
     return _track(lt).name
 
 
-def _make_job_orders():
-    # A) Draft — created, not started.
-    _jo(design="DEMO-RING-22K", first_stage="Casting")
+def _route(start_stage, length):
+    """An ordered, forward, distinct list of physical stages starting at start_stage."""
+    idx = ORDER.index(start_stage)
+    return ORDER[idx: idx + length]
 
-    # B) Design phase — CAD start, design linked, CAD card waiting (WO not made yet).
-    b = _jo(design=None, first_stage="CAD")
-    b.start_processing()
-    b.reload()
-    b.design = "DEMO-PEND-22K"
-    b.save(ignore_permissions=True)
 
-    # C) In Production (fresh) — started, gold issued, sitting at Casting.
-    c = _jo(design="DEMO-PEND-22K", first_stage="Casting")
-    c.start_processing()
-    _issue_gold(c.name)
-
-    # D) In Production (mid-flow) — Casting done -> routed to Filing, with loss.
-    d = _jo(design="DEMO-RING-18K", first_stage="Casting")
-    d.start_processing()
-    _issue_gold(d.name)
-    _complete_card(d.name, "Casting", "DEMO-RING-18K", next_stage="Filing", loss_per_item=0.12)
-
-    # E) Completed — Casting -> Filing -> done (Finished Goods), loss at each.
-    e = _jo(design="DEMO-PEND-18W", first_stage="Casting")
-    e.start_processing()
-    _issue_gold(e.name)
-    _complete_card(e.name, "Casting", "DEMO-PEND-18W", next_stage="Filing", loss_per_item=0.10)
-    _complete_card(e.name, "Filing", "DEMO-PEND-18W", next_stage="", loss_per_item=0.08)
-
-    # F) Completed via CAD — CAD -> Casting -> Filing -> done.
-    f = _jo(design=None, first_stage="CAD")
-    f.start_processing()
-    f.reload()
-    f.design = "DEMO-RING-22K"
-    f.save(ignore_permissions=True)
-    _complete_card(f.name, "CAD", "DEMO-RING-22K", next_stage="Casting")  # creates the Work Order
-    _issue_gold(f.name)
-    _complete_card(f.name, "Casting", "DEMO-RING-22K", next_stage="Filing", loss_per_item=0.10)
-    _complete_card(f.name, "Filing", "DEMO-RING-22K", next_stage="", loss_per_item=0.07)
-
-    # Move the loss sitting at the shared benches into their -LOSS warehouses.
-    _transfer_loss("Casting")
-    _transfer_loss("Filing")
-
-    return "1 Draft, 1 Design, 1 In-Production, 1 In-Production(mid), 2 Completed"
+def _make_job_orders(designs):
+    counts = {"Draft": 0, "Design": 0, "In Production (fresh)": 0, "In Production (mid)": 0, "Completed": 0}
+    for i in range(1, N_JOBS + 1):
+        design = random.choice(designs)
+        bucket = i % 5
+        try:
+            if bucket == 0:
+                # Draft — created, not started.
+                _jo(design=design, first_stage=random.choice(START_STAGES))
+                counts["Draft"] += 1
+            elif bucket == 1:
+                # Design phase — CAD start; ~half get a design linked (still waiting).
+                jo = _jo(design=None, first_stage="CAD")
+                jo.start_processing()
+                if i % 2 == 0:
+                    jo.reload()
+                    jo.design = design
+                    jo.save(ignore_permissions=True)
+                counts["Design"] += 1
+            elif bucket == 2:
+                # In Production (fresh) — started, gold issued, sitting at first stage.
+                jo = _jo(design=design, first_stage=random.choice(START_STAGES))
+                jo.start_processing()
+                _issue_gold(jo.name)
+                counts["In Production (fresh)"] += 1
+            elif bucket == 3:
+                # In Production (mid) — first stage done -> routed forward, with loss.
+                start = random.choice(START_STAGES)
+                jo = _jo(design=design, first_stage=start)
+                jo.start_processing()
+                _issue_gold(jo.name)
+                route = _route(start, 3)
+                if len(route) >= 2:
+                    _complete_card(jo.name, route[0], design, next_stage=route[1],
+                                   loss_per_item=round(random.uniform(0.05, 0.2), 3))
+                counts["In Production (mid)"] += 1
+            else:
+                # Completed — full chain to Finished Goods. ~1/3 go through CAD first.
+                via_cad = (i % 3 == 0)
+                start = random.choice(START_STAGES)
+                route = _route(start, random.randint(2, 4))
+                if via_cad:
+                    jo = _jo(design=None, first_stage="CAD")
+                    jo.start_processing()
+                    jo.reload()
+                    jo.design = design
+                    jo.save(ignore_permissions=True)
+                    _complete_card(jo.name, "CAD", design, next_stage=route[0])  # creates the Work Order
+                else:
+                    jo = _jo(design=design, first_stage=start)
+                    jo.start_processing()
+                _issue_gold(jo.name)
+                for k, st in enumerate(route):
+                    nxt = route[k + 1] if k + 1 < len(route) else ""
+                    _complete_card(jo.name, st, design, next_stage=nxt,
+                                   loss_per_item=round(random.uniform(0.04, 0.15), 3),
+                                   stones=(k == len(route) - 1 and i % 2 == 0))
+                counts["Completed"] += 1
+        except Exception as e:
+            print(f"  (job #{i} [{bucket}] failed -> {e})")
+        if i % 10 == 0:
+            _checkpoint()
+            print(f"   ... {i} job orders")
+    return counts
 
 
 # ----------------------------------------------------------------------
@@ -357,7 +465,6 @@ def _del(dt, name):
 
 
 def _teardown_job_order(jo):
-    # stage cards + their output Stock Entries
     for st in STAGE_DOCTYPES:
         for name in frappe.get_all(st, filters={"job_order": jo}, pluck="name"):
             se = frappe.db.get_value(st, name, "transfer_stock_entry")
@@ -365,10 +472,8 @@ def _teardown_job_order(jo):
                 _cancel("Stock Entry", se)
                 _del("Stock Entry", se)
             _del(st, name)
-    # informational reservation
     for r in frappe.get_all("Material Reservation", filters={"job_order": jo}, pluck="name"):
         _del("Material Reservation", r)
-    # the behind-the-scenes Work Order
     wo = frappe.db.get_value("Job Order", jo, "work_order")
     if wo:
         _cancel("Work Order", wo)
@@ -429,6 +534,11 @@ def _clear():
     # 6) parties
     for dt, field in [("Supplier", "supplier_name"), ("Customer", "customer_name"), ("Employee", "employee_name")]:
         for n in frappe.get_all(dt, filters={field: ["like", PARTY_PREFIX + "%"]}, pluck="name"):
+            removed += _del(dt, n)
+    # 7) catch-all: any remaining manifest docs (e.g. extra Design Type/Style masters)
+    for dt, n in man:
+        if frappe.db.exists(dt, n):
+            _cancel(dt, n)
             removed += _del(dt, n)
 
     p = _manifest_path()
