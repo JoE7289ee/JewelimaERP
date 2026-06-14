@@ -8,6 +8,12 @@ from frappe.utils import now_datetime
 
 CAD_STAGE = "CAD"
 
+# Product Info fields mirrored from the active stage card up to the Job Order.
+PRODUCT_INFO_FIELDS = (
+	"dmd_no", "dmd_weight_ct", "ps_no", "ps_weight_ct", "cs_no", "cs_weight_ct",
+	"gross_weight", "nett_weight", "purity", "pure_weight",
+)
+
 
 class JobOrder(Document):
 	def onload(self):
@@ -20,6 +26,8 @@ class JobOrder(Document):
 		self.normalize_stage_sequence()
 		self.validate_design_name()
 		self.protect_started_stages()
+		# Product Info on the Job Order is read-only and fed from the stage cards
+		# (see sync in validate_stage) — the JO does not compute it itself.
 
 	def block_edit_when_finalized(self):
 		"""A Completed (or Cancelled) Job Order is read-only — reference only."""
@@ -246,13 +254,13 @@ def process_stage_output(job_order, stage_doc, next_stage):
 	company = _company()
 	this_wh = stage_warehouse(stage_doc.doctype, company)
 	if not this_wh:
-		return  # CAD/CAM — nothing physical
+		return None  # CAD/CAM — nothing physical
 	if next_stage and stage_warehouse(next_stage, company):
 		target = stage_warehouse(next_stage, company)
 	else:
 		target = finished_goods_warehouse(company)
 	if not target:
-		return
+		return None
 
 	rows, out_rows = [], []
 	for row in stage_doc.materials or []:
@@ -269,6 +277,27 @@ def process_stage_output(job_order, stage_doc, next_stage):
 		stage_doc.db_set("transfer_stock_entry", se)
 	if next_stage and stage_warehouse(next_stage, company):
 		seed_next_stage_materials(job_order.name, next_stage, out_rows)
+	return se
+
+
+def log_transition(job_order_name, from_stage, to_stage, stock_entry=None):
+	"""Append a row to the Job Order's Transfers history for a stage transition.
+	Inserted directly as a child row so it works even after the job is Completed."""
+	n = frappe.db.count("Job Order Transfer", {"parent": job_order_name})
+	frappe.get_doc(
+		{
+			"doctype": "Job Order Transfer",
+			"parenttype": "Job Order",
+			"parentfield": "transfers",
+			"parent": job_order_name,
+			"idx": n + 1,
+			"from_stage": from_stage,
+			"to_stage": to_stage,
+			"transition_time": now_datetime(),
+			"had_material_transfer": 1 if stock_entry else 0,
+			"stock_entry": stock_entry,
+		}
+	).insert(ignore_permissions=True)
 
 
 def seed_next_stage_materials(job_order_name, next_stage, out_rows):
@@ -307,25 +336,57 @@ def add_materials_to_stage(stage_doctype, stage_name, rows):
 	doc.save(ignore_permissions=True)
 
 
+def get_pending_stage_loss(stage_doctype):
+	"""Loss sitting at a stage's bench, per item = total loss recorded on that
+	stage's cards MINUS loss already moved out by submitted Loss Transfers."""
+	total = frappe.db.sql(
+		"""SELECT item, SUM(loss_qty) AS qty FROM `tabStage Material`
+		   WHERE parenttype = %s GROUP BY item""",
+		stage_doctype,
+		as_dict=True,
+	)
+	transferred = frappe.db.sql(
+		"""SELECT lti.item, SUM(lti.transfer_qty) AS qty
+		   FROM `tabLoss Transfer Item` lti JOIN `tabLoss Transfer` lt ON lti.parent = lt.name
+		   WHERE lt.stage = %s AND lt.docstatus = 1 GROUP BY lti.item""",
+		stage_doctype,
+		as_dict=True,
+	)
+	moved = {r.item: (r.qty or 0) for r in transferred}
+	pending = []
+	for r in total:
+		qty = (r.qty or 0) - moved.get(r.item, 0)
+		if qty > 0.0005:
+			pending.append({"item": r.item, "qty": qty})
+	return pending
+
+
 @frappe.whitelist()
-def transfer_stage_loss(stage_doctype, stage_name):
-	"""Move the loss held at this bench to its -LOSS warehouse."""
-	doc = frappe.get_doc(stage_doctype, stage_name)
-	if doc.get("loss_transferred"):
-		frappe.throw(_("Loss has already been transferred for this stage."))
+def get_bench_stock(stage_doctype, job_order=None):
+	"""Live stock in a stage's bench warehouse, vs what's on the current card —
+	surfaces any stock not accounted for by the card."""
 	company = _company()
-	this_wh = stage_warehouse(stage_doctype, company)
-	loss_wh = stage_loss_warehouse(stage_doctype, company)
-	if not this_wh or not loss_wh:
-		frappe.throw(_("No -LOSS warehouse exists for {0}.").format(stage_doctype))
-	rows = [{"item_code": r.item, "qty": r.loss_qty} for r in (doc.materials or []) if (r.loss_qty or 0) > 0]
-	if not rows:
-		frappe.throw(_("There is no loss to transfer."))
-	se = make_transfer(company, this_wh, loss_wh, rows, f"Loss from {stage_doctype} {stage_name}")
-	doc.db_set("loss_transferred", 1)
-	doc.db_set("loss_stock_entry", se)
-	frappe.msgprint(_("Loss transferred to {0}.").format(loss_wh), indicator="green", alert=True)
-	return se
+	wh = stage_warehouse(stage_doctype, company)
+	if not wh:
+		return {"warehouse": None, "rows": []}
+
+	on_card = {}
+	if job_order:
+		name = frappe.db.get_value(stage_doctype, {"job_order": job_order}, "name")
+		if name:
+			for m in frappe.get_doc(stage_doctype, name).materials or []:
+				on_card[m.item] = (on_card.get(m.item) or 0) + (m.in_qty or 0)
+
+	rows = []
+	bins = frappe.get_all("Bin", filters={"warehouse": wh, "actual_qty": [">", 0]},
+	                      fields=["item_code", "actual_qty"])
+	items = {b.item_code for b in bins} | set(on_card)
+	bin_map = {b.item_code: b.actual_qty for b in bins}
+	for item in sorted(items):
+		whq = bin_map.get(item, 0)
+		card = on_card.get(item, 0)
+		rows.append({"item": item, "warehouse_qty": whq, "on_card": card, "unaccounted": whq - card})
+	return {"warehouse": wh, "rows": rows}
 
 
 def create_reservation(job_order):
@@ -401,6 +462,16 @@ def validate_stage(doc, method=None):
 		in_q, out_q = (row.in_qty or 0), (row.out_qty or 0)
 		row.loss_qty = max(in_q - out_q, 0) if out_q else 0
 
+	# 2b) Weights: Nett = Gross - total stone weight (1 ct = 0.2 g); Pure = Nett x purity%.
+	if doc.meta.has_field("gross_weight"):
+		stones_g = (
+			(doc.get("dmd_weight_ct") or 0)
+			+ (doc.get("ps_weight_ct") or 0)
+			+ (doc.get("cs_weight_ct") or 0)
+		) * 0.2
+		doc.nett_weight = max((doc.get("gross_weight") or 0) - stones_g, 0)
+		doc.pure_weight = (doc.nett_weight or 0) * (doc.get("purity") or 0) / 100.0
+
 	# 3) CAD restriction: cannot be completed until the Job Order has the design
 	#    output filled in — Design Name, Production Item and BOM.
 	if doc.doctype == CAD_STAGE and doc.status == "Completed" and doc.job_order:
@@ -424,9 +495,20 @@ def validate_stage(doc, method=None):
 			)
 
 
+def sync_product_info_to_job_order(doc, method=None):
+	"""On every stage-card save, mirror its Product Info up to the Job Order
+	(read-only there). Runs in on_update (after the card is saved)."""
+	if not doc.job_order or not doc.meta.has_field("gross_weight"):
+		return
+	values = {f: (doc.get(f) or 0) for f in PRODUCT_INFO_FIELDS}
+	frappe.db.set_value("Job Order", doc.job_order, values, update_modified=False)
+
+
 def on_stage_completed(doc, method=None):
 	"""When a stage is completed: CAD creates the Work Order, then in all cases
 	the next stage in the sequence is started."""
+	sync_product_info_to_job_order(doc)
+
 	if doc.status != "Completed" or not doc.job_order:
 		return
 
@@ -453,4 +535,7 @@ def on_stage_completed(doc, method=None):
 		delete_reservation(job_order.name)
 
 	# Move this stage's output -> next bench (or Finished Goods); loss stays here.
-	process_stage_output(job_order, doc, next_stage)
+	stock_entry = process_stage_output(job_order, doc, next_stage)
+
+	# Log the transition in the Job Order's Transfers history.
+	log_transition(job_order.name, doc.doctype, next_stage or "Finished Goods", stock_entry)

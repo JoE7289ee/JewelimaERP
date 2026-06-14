@@ -16,13 +16,32 @@
   "status",
   "work_order",
   "material_reservation",
-  "items_section",
-  "items",
   "materials_section",
   "materials",
-  "stages_section",
+  "product_info_tab",
+  "po_stones_section",
+  "dmd_no",
+  "dmd_weight_ct",
+  "po_col_st1",
+  "ps_no",
+  "ps_weight_ct",
+  "po_col_st2",
+  "cs_no",
+  "cs_weight_ct",
+  "po_weights_section",
+  "gross_weight",
+  "nett_weight",
+  "po_col_wt",
+  "purity",
+  "pure_weight",
+  "stages_tab",
   "stage_picker",
   "stages",
+  "transfers_tab",
+  "transfers",
+  "other_tab",
+  "items_section",
+  "items",
   "notes_section",
   "remarks"
  ],
@@ -36,7 +55,7 @@
   },
   {
    "default": "0",
-   "description": "Auto-set when CAD is one of the stages. For a new custom design the Job Order can be created without Design Name / Production Item / BOM — they must be filled before the CAD stage can be completed.",
+   "description": "Auto-set when CAD is one of the stages. For a new custom design the Job Order can be created without Design Name / Production Item / BOM \u2014 they must be filled before the CAD stage can be completed.",
    "fieldname": "is_new_design",
    "fieldtype": "Check",
    "label": "New Design",
@@ -115,9 +134,107 @@
    "options": "Job Order Material"
   },
   {
-   "fieldname": "stages_section",
+   "fieldname": "product_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "Product Info"
+  },
+  {
+   "fieldname": "po_stones_section",
    "fieldtype": "Section Break",
-   "label": "Required Stages"
+   "label": "Stones"
+  },
+  {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dmd_weight_ct",
+   "fieldtype": "Float",
+   "label": "DMD Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_col_st1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ps_no",
+   "fieldtype": "Int",
+   "label": "PS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ps_weight_ct",
+   "fieldtype": "Float",
+   "label": "PS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_col_st2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "CS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cs_weight_ct",
+   "fieldtype": "Float",
+   "label": "CS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_weights_section",
+   "fieldtype": "Section Break",
+   "label": "Weights"
+  },
+  {
+   "description": "Total weight of the product.",
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Gross weight minus total stone weight (carats converted to grams).",
+   "fieldname": "nett_weight",
+   "fieldtype": "Float",
+   "label": "Nett Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_col_wt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Percent of gold.",
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Nett weight x purity %.",
+   "fieldname": "pure_weight",
+   "fieldtype": "Float",
+   "label": "Pure Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stages_tab",
+   "fieldtype": "Tab Break",
+   "label": "Stages"
   },
   {
    "fieldname": "stage_picker",
@@ -129,6 +246,24 @@
    "fieldtype": "Table",
    "label": "Stages",
    "options": "Job Order Stage"
+  },
+  {
+   "fieldname": "transfers_tab",
+   "fieldtype": "Tab Break",
+   "label": "Transfers"
+  },
+  {
+   "description": "History of stage-to-stage moves on this job (and whether material was transferred).",
+   "fieldname": "transfers",
+   "fieldtype": "Table",
+   "label": "Transfers",
+   "options": "Job Order Transfer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "other_tab",
+   "fieldtype": "Tab Break",
+   "label": "Other"
   },
   {
    "fieldname": "notes_section",

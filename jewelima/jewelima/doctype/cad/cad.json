@@ -16,11 +16,25 @@
   "status",
   "materials_section",
   "materials",
+  "bench_stock",
   "tracking_section",
-  "loss_transferred",
-  "column_break_tracking",
   "transfer_stock_entry",
-  "loss_stock_entry"
+  "product_info_tab",
+  "stones_section",
+  "dmd_no",
+  "dmd_weight_ct",
+  "col_break_st1",
+  "ps_no",
+  "ps_weight_ct",
+  "col_break_st2",
+  "cs_no",
+  "cs_weight_ct",
+  "weights_section",
+  "gross_weight",
+  "nett_weight",
+  "col_break_wt",
+  "purity",
+  "pure_weight"
  ],
  "fields": [
   {
@@ -71,6 +85,96 @@
    "in_standard_filter": 1
   },
   {
+   "fieldname": "product_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "Product Info"
+  },
+  {
+   "fieldname": "stones_section",
+   "fieldtype": "Section Break",
+   "label": "Stones"
+  },
+  {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No"
+  },
+  {
+   "fieldname": "dmd_weight_ct",
+   "fieldtype": "Float",
+   "label": "DMD Weight (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_st1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ps_no",
+   "fieldtype": "Int",
+   "label": "PS No"
+  },
+  {
+   "fieldname": "ps_weight_ct",
+   "fieldtype": "Float",
+   "label": "PS Weight (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_st2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "CS No"
+  },
+  {
+   "fieldname": "cs_weight_ct",
+   "fieldtype": "Float",
+   "label": "CS Weight (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "weights_section",
+   "fieldtype": "Section Break",
+   "label": "Weights"
+  },
+  {
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (g)",
+   "precision": "3",
+   "description": "Total weight of the product."
+  },
+  {
+   "fieldname": "nett_weight",
+   "fieldtype": "Float",
+   "label": "Nett Weight (g)",
+   "precision": "3",
+   "read_only": 1,
+   "description": "Gross weight minus total stone weight (carats converted to grams)."
+  },
+  {
+   "fieldname": "col_break_wt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3",
+   "description": "Percent of gold."
+  },
+  {
+   "fieldname": "pure_weight",
+   "fieldtype": "Float",
+   "label": "Pure Weight (g)",
+   "precision": "3",
+   "read_only": 1,
+   "description": "Nett weight x purity %."
+  },
+  {
    "fieldname": "materials_section",
    "fieldtype": "Section Break",
    "label": "Materials (Bench)"
@@ -82,20 +186,14 @@
    "label": "Materials"
   },
   {
+   "fieldname": "bench_stock",
+   "fieldtype": "HTML",
+   "label": "Bench Warehouse Stock"
+  },
+  {
    "fieldname": "tracking_section",
    "fieldtype": "Section Break",
    "label": "Stock Movement"
-  },
-  {
-   "fieldname": "loss_transferred",
-   "fieldtype": "Check",
-   "label": "Loss Transferred",
-   "read_only": 1,
-   "default": "0"
-  },
-  {
-   "fieldname": "column_break_tracking",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "transfer_stock_entry",
@@ -103,18 +201,11 @@
    "options": "Stock Entry",
    "label": "Output Transfer Entry",
    "read_only": 1
-  },
-  {
-   "fieldname": "loss_stock_entry",
-   "fieldtype": "Link",
-   "options": "Stock Entry",
-   "label": "Loss Transfer Entry",
-   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-12 00:00:00.000000",
+ "modified": "2026-06-14 11:11:50.125296",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "CAD",
