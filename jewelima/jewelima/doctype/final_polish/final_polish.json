@@ -14,6 +14,7 @@
   "time_in",
   "time_out",
   "status",
+  "next_stage",
   "materials_section",
   "materials",
   "bench_stock",
@@ -83,6 +84,15 @@
    "label": "Status",
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "next_stage",
+   "fieldtype": "Select",
+   "options": "\nCAD\nCAM\nTree Making\nCasting\nGrinding\nFiling\nSetting\nPre Polish\nWax Setting\nFinal Polish\nWax Cleaning\nBag Extraction",
+   "label": "Next Stage",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Where this piece goes after this stage completes. Leave blank if this is the final stage."
   },
   {
    "fieldname": "product_info_tab",
@@ -205,7 +215,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-14 11:11:50.125296",
+ "modified": "2026-06-14 18:50:15.801253",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Final Polish",

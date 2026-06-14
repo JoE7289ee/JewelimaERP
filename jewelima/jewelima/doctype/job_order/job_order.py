@@ -22,12 +22,13 @@ class JobOrder(Document):
 
 	def validate(self):
 		self.block_edit_when_finalized()
+		self.sync_from_design()
 		self.set_is_new_design()
-		self.normalize_stage_sequence()
-		self.validate_design_name()
-		self.protect_started_stages()
+		self.validate_design()
 		# Product Info on the Job Order is read-only and fed from the stage cards
 		# (see sync in validate_stage) — the JO does not compute it itself.
+		# The stages table is an auto-maintained history (read-only); the route is
+		# chosen one step at a time via each stage card's Next Stage field.
 
 	def block_edit_when_finalized(self):
 		"""A Completed (or Cancelled) Job Order is read-only — reference only."""
@@ -40,30 +41,37 @@ class JobOrder(Document):
 			)
 
 	def set_is_new_design(self):
-		"""New Design is system-controlled: on whenever CAD is one of the stages."""
-		self.is_new_design = 1 if self.requires_cad else 0
+		"""New Design is system-controlled: on when the job starts at the CAD stage."""
+		self.is_new_design = 1 if self.first_stage == CAD_STAGE else 0
 
-	def validate_design_name(self):
-		"""Design Name is required unless this is a New Design (filled later, before
-		CAD completion). Server-side backstop for the field's mandatory_depends_on."""
-		if not self.is_new_design and not self.design_name:
-			frappe.throw(_("Design Name is required unless CAD (New Design) is one of the stages."))
+	def sync_from_design(self):
+		"""Pull the Item + BOM from the linked Design (Design Bank). These drive the
+		Work Order; the Design Bank always provisions them when a design is saved."""
+		if self.design:
+			di = frappe.db.get_value("Design Bank", self.design, ["item", "bom"], as_dict=True) or {}
+			self.production_item = di.get("item")
+			self.bom = di.get("bom")
+
+	def validate_design(self):
+		"""A Design (from the Design Bank) is required unless this is a New Design
+		(first stage = CAD; the design is created/linked before CAD completion).
+		Backstop for the field's mandatory_depends_on."""
+		if not self.is_new_design and not self.design:
+			frappe.throw(_("Select a Design (from the Design Bank) unless the job starts at CAD (New Design)."))
 
 	def populate_stage_status(self):
-		"""Pull the current status of each stage from its stage record, if created."""
+		"""Refresh each history row from its stage record (status + chosen Next Stage)."""
 		if self.is_new():
 			return
 		for row in self.stages:
-			row.status = frappe.db.get_value(row.stage, {"job_order": self.name}, "status") or ""
-
-	def normalize_stage_sequence(self):
-		"""Sequence always follows the visual row order (so drag-reordering the
-		table updates the sequence)."""
-		for idx, row in enumerate(self.stages, start=1):
-			row.sequence = idx
+			rec = frappe.db.get_value(
+				row.stage, {"job_order": self.name}, ["status", "next_stage"], as_dict=True
+			) or {}
+			row.status = rec.get("status") or ""
+			row.next_stage = rec.get("next_stage") or ""
 
 	# ------------------------------------------------------------------
-	# Stage ordering helpers
+	# Stage history helpers (the stages table is an auto-maintained log)
 	# ------------------------------------------------------------------
 	@property
 	def ordered_stages(self):
@@ -73,35 +81,6 @@ class JobOrder(Document):
 	def stage_sequence(self):
 		return [r.stage for r in self.ordered_stages]
 
-	@property
-	def requires_cad(self):
-		return any(r.stage == CAD_STAGE for r in self.stages)
-
-	def started_stage_names(self, source_doc=None):
-		"""Ordered stage names that already have a stage record for this Job Order."""
-		doc = source_doc or self
-		ordered = sorted(doc.stages, key=lambda r: (r.sequence or r.idx or 0))
-		return [r.stage for r in ordered if frappe.db.exists(r.stage, {"job_order": self.name})]
-
-	def protect_started_stages(self):
-		"""Stages already started (have a record) are locked: they cannot be
-		renamed, removed or reordered. Only the stages after them can be edited."""
-		if self.is_new():
-			return
-		old = self.get_doc_before_save()
-		if not old:
-			return
-		started = self.started_stage_names(source_doc=old)
-		if not started:
-			return
-		if self.stage_sequence[: len(started)] != started:
-			frappe.throw(
-				_(
-					"Stages that have already started cannot be changed or reordered: {0}. "
-					"You can only edit the stages that come after them."
-				).format(", ".join(started))
-			)
-
 	# ------------------------------------------------------------------
 	# Lifecycle
 	# ------------------------------------------------------------------
@@ -109,13 +88,12 @@ class JobOrder(Document):
 	def start_processing(self):
 		if self.status != "Draft":
 			frappe.throw(_("This Job Order has already been started."))
-		if not self.stages:
-			frappe.throw(_("Add at least one stage before starting."))
+		if not self.first_stage:
+			frappe.throw(_("Choose the First Stage (which queue this job starts in) before starting."))
 
-		first_stage = self.stage_sequence[0]
-		if self.requires_cad:
-			if first_stage != CAD_STAGE:
-				frappe.throw(_("CAD must be the first stage when it is part of the Job Order."))
+		first_stage = self.first_stage
+		if first_stage == CAD_STAGE:
+			# New design: defer the Work Order until CAD completes (Item + BOM ready).
 			self.create_stage_record(CAD_STAGE)
 			self.db_set("status", "Design")
 			frappe.msgprint(
@@ -131,24 +109,24 @@ class JobOrder(Document):
 			self.create_stage_record(first_stage, work_order=work_order.name)
 			self.db_set("status", "In Production")
 			frappe.msgprint(
-				_("Work Order {0} created. First stage started.").format(work_order.name),
+				_("Work Order {0} created. {1} started.").format(work_order.name, first_stage),
 				indicator="green",
 				alert=True,
 			)
 
 	def validate_item_and_bom(self):
-		if not self.production_item:
-			frappe.throw(_("Production Item is required to create the Work Order."))
-		if not self.bom:
-			frappe.throw(_("BOM is required to create the Work Order."))
+		if not self.design:
+			frappe.throw(_("Select a Design (from the Design Bank) to create the Work Order."))
+		if not self.production_item or not self.bom:
+			frappe.throw(_("The selected Design has no linked Item / BOM."))
 
 	def create_stage_record(self, stage_name, work_order=None):
-		"""Create one per-stage tracking record (stage doctype name == stage label).
-		Idempotent: skips if a record for this stage already exists. Cards start
-		EMPTY — material enters only via the Material Issue screen (or by the
-		output of the previous stage on completion)."""
+		"""Create one per-stage tracking record (stage doctype name == stage label)
+		and note it in the Job Order's stage history. Idempotent: skips if a record
+		for this stage already exists. Cards start EMPTY — material enters only via
+		the Material Issue screen (or as the output of the previous stage)."""
 		if frappe.db.exists(stage_name, {"job_order": self.name}):
-			return
+			return None
 		doc = frappe.get_doc(
 			{
 				"doctype": stage_name,
@@ -158,6 +136,7 @@ class JobOrder(Document):
 			}
 		)
 		doc.insert(ignore_permissions=True)
+		append_stage_log(self.name, stage_name)
 		return doc.name
 
 
@@ -296,6 +275,26 @@ def log_transition(job_order_name, from_stage, to_stage, stock_entry=None):
 			"transition_time": now_datetime(),
 			"had_material_transfer": 1 if stock_entry else 0,
 			"stock_entry": stock_entry,
+		}
+	).insert(ignore_permissions=True)
+
+
+def append_stage_log(job_order_name, stage_name):
+	"""Note a stage in the Job Order's stage history (read-only table). Inserted as a
+	child row directly so it works even when the Job Order is otherwise locked."""
+	if frappe.db.exists("Job Order Stage", {"parent": job_order_name, "stage": stage_name}):
+		return
+	n = frappe.db.count("Job Order Stage", {"parent": job_order_name})
+	frappe.get_doc(
+		{
+			"doctype": "Job Order Stage",
+			"parenttype": "Job Order",
+			"parentfield": "stages",
+			"parent": job_order_name,
+			"idx": n + 1,
+			"stage": stage_name,
+			"sequence": n + 1,
+			"status": "In Queue",
 		}
 	).insert(ignore_permissions=True)
 
@@ -472,26 +471,31 @@ def validate_stage(doc, method=None):
 		doc.nett_weight = max((doc.get("gross_weight") or 0) - stones_g, 0)
 		doc.pure_weight = (doc.nett_weight or 0) * (doc.get("purity") or 0) / 100.0
 
-	# 3) CAD restriction: cannot be completed until the Job Order has the design
-	#    output filled in — Design Name, Production Item and BOM.
+	# 3) CAD restriction: cannot be completed until a Design (Design Bank) is linked
+	#    on the Job Order — that's what carries the Item + BOM.
 	if doc.doctype == CAD_STAGE and doc.status == "Completed" and doc.job_order:
-		design_name, production_item, bom = frappe.db.get_value(
-			"Job Order", doc.job_order, ["design_name", "production_item", "bom"]
-		)
-		missing = [
-			label
-			for label, value in (
-				("Design Name", design_name),
-				("Production Item", production_item),
-				("BOM", bom),
-			)
-			if not value
-		]
-		if missing:
+		design = frappe.db.get_value("Job Order", doc.job_order, "design")
+		if not design:
 			frappe.throw(
-				_("Fill {0} on Job Order {1} before completing CAD.").format(
-					", ".join(missing), doc.job_order
+				_("Select a Design (from the Design Bank) on Job Order {0} before completing CAD.").format(
+					doc.job_order
 				)
+			)
+
+	# 4) Next Stage routing (dynamic): can't point at itself; can't revisit a stage
+	#    that has already run on this job.
+	if doc.meta.has_field("next_stage") and doc.get("next_stage"):
+		if doc.next_stage == doc.doctype:
+			frappe.throw(_("Next Stage cannot be the same as the current stage."))
+		if (
+			doc.status == "Completed"
+			and doc.job_order
+			and frappe.db.exists(doc.next_stage, {"job_order": doc.job_order})
+		):
+			frappe.throw(
+				_(
+					"Next Stage '{0}' has already run on this job. Pick a stage that hasn't started yet."
+				).format(doc.next_stage)
 			)
 
 
@@ -522,10 +526,9 @@ def on_stage_completed(doc, method=None):
 		doc.db_set("work_order", work_order.name)
 		job_order.reload()
 
-	# Determine the next stage in the sequence.
-	seq = job_order.stage_sequence
-	idx = seq.index(doc.doctype) if doc.doctype in seq else -1
-	next_stage = seq[idx + 1] if (0 <= idx < len(seq) - 1) else None
+	# Dynamic routing: the next stage is whatever THIS card chose in Next Stage.
+	# Blank = this was the final stage, so the job is finished.
+	next_stage = (doc.get("next_stage") or "").strip() or None
 
 	# Start the next stage (or finish the job).
 	if next_stage:

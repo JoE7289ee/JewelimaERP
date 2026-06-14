@@ -45,6 +45,18 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "palette",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Design Bank",
+   "link_to": "Design Bank",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "scan-line",
    "indent": 0,
    "keep_closed": 0,
@@ -139,7 +151,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-14 11:23:14.505956",
+ "modified": "2026-06-14 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

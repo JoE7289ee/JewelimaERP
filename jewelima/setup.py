@@ -5,6 +5,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 def after_install():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
+	create_design_masters()
 	create_raw_material_items()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
@@ -16,6 +17,7 @@ def after_migrate():
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
+	create_design_masters()
 	create_raw_material_items()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
@@ -155,6 +157,26 @@ def create_default_stone_types():
 		if not frappe.db.exists("Stone Type", stone_type):
 			frappe.get_doc(
 				{"doctype": "Stone Type", "stone_type_name": stone_type}
+			).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+# Design Bank master values seeded on install (dropdowns on Design Bank).
+DESIGN_TYPES = ["Rings", "Pendant"]
+DESIGN_STYLES = ["Tickly", "General"]
+
+
+def create_design_masters():
+	"""Seed the Design Type / Design Style dropdown values used by Design Bank."""
+	for design_type in DESIGN_TYPES:
+		if not frappe.db.exists("Design Type", design_type):
+			frappe.get_doc(
+				{"doctype": "Design Type", "design_type_name": design_type}
+			).insert(ignore_permissions=True)
+	for design_style in DESIGN_STYLES:
+		if not frappe.db.exists("Design Style", design_style):
+			frappe.get_doc(
+				{"doctype": "Design Style", "design_style_name": design_style}
 			).insert(ignore_permissions=True)
 	frappe.db.commit()
 

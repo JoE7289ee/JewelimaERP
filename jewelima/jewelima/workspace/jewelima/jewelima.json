@@ -1,8 +1,8 @@
 {
  "app": "jewelima",
  "charts": [],
- "content": "[{\"id\": \"sc_rmp\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Raw Material Purchase\", \"col\": 3}}, {\"id\": \"sc_jo\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Job Order\", \"col\": 3}}, {\"id\": \"sc_mi\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Material Issue\", \"col\": 3}}, {\"id\": \"sc_metal\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Metal Ledger Entry\", \"col\": 3}}, {\"id\": \"sc_stone\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stone Ledger Entry\", \"col\": 3}}, {\"id\": \"hdr_pur\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Purchasing &amp; Manufacturing</b></span>\", \"col\": 12}}, {\"id\": \"card_pur\", \"type\": \"card\", \"data\": {\"card_name\": \"Purchasing\", \"col\": 4}}, {\"id\": \"card_mfg\", \"type\": \"card\", \"data\": {\"card_name\": \"Manufacturing\", \"col\": 4}}, {\"id\": \"card_stg\", \"type\": \"card\", \"data\": {\"card_name\": \"Stages\", \"col\": 4}}, {\"id\": \"hdr_led\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Ledgers &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"card_led\", \"type\": \"card\", \"data\": {\"card_name\": \"Ledgers\", \"col\": 4}}, {\"id\": \"card_mas\", \"type\": \"card\", \"data\": {\"card_name\": \"Masters\", \"col\": 4}}]",
- "creation": "2026-06-14 11:23:14.428572",
+ "content": "[{\"id\": \"sc_rmp\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Raw Material Purchase\", \"col\": 3}}, {\"id\": \"sc_jo\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Job Order\", \"col\": 3}}, {\"id\": \"sc_db\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Design Bank\", \"col\": 3}}, {\"id\": \"sc_mi\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Material Issue\", \"col\": 3}}, {\"id\": \"sc_metal\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Metal Ledger Entry\", \"col\": 3}}, {\"id\": \"sc_stone\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stone Ledger Entry\", \"col\": 3}}, {\"id\": \"hdr_pur\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Purchasing &amp; Manufacturing</b></span>\", \"col\": 12}}, {\"id\": \"card_pur\", \"type\": \"card\", \"data\": {\"card_name\": \"Purchasing\", \"col\": 4}}, {\"id\": \"card_mfg\", \"type\": \"card\", \"data\": {\"card_name\": \"Manufacturing\", \"col\": 4}}, {\"id\": \"card_stg\", \"type\": \"card\", \"data\": {\"card_name\": \"Stages\", \"col\": 4}}, {\"id\": \"hdr_led\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Ledgers &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"card_led\", \"type\": \"card\", \"data\": {\"card_name\": \"Ledgers\", \"col\": 4}}, {\"id\": \"card_mas\", \"type\": \"card\", \"data\": {\"card_name\": \"Masters\", \"col\": 4}}, {\"id\": \"card_dsn\", \"type\": \"card\", \"data\": {\"card_name\": \"Design\", \"col\": 4}}]",
+ "creation": "2026-06-14 13:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
@@ -299,9 +299,48 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design Bank",
+   "link_count": 0,
+   "link_to": "Design Bank",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design Type",
+   "link_count": 0,
+   "link_to": "Design Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design Style",
+   "link_count": 0,
+   "link_to": "Design Style",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-06-14 11:23:14.428572",
+ "modified": "2026-06-14 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
@@ -328,6 +367,15 @@
    "format": "",
    "label": "Job Order",
    "link_to": "Job Order",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "format": "",
+   "label": "Design Bank",
+   "link_to": "Design Bank",
    "stats_filter": "",
    "type": "DocType"
   },

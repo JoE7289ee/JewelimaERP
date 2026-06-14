@@ -1,87 +1,15 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 
-const STAGE_ORDER = [
-	"CAD", "CAM", "Tree Making", "Casting", "Grinding", "Filing",
-	"Setting", "Pre Polish", "Wax Setting", "Final Polish", "Wax Cleaning", "Bag Extraction",
-];
-
-function renumber_stages(frm) {
-	(frm.doc.stages || []).forEach((row, i) => {
-		row.sequence = i + 1;
-	});
-}
-
 function sync_new_design(frm) {
-	// New Design is system-controlled: on whenever CAD is one of the stages.
-	const has_cad = (frm.doc.stages || []).some((r) => r.stage === "CAD");
-	const target = has_cad ? 1 : 0;
+	// New Design = the job starts at CAD (system-controlled, read-only field).
+	const target = frm.doc.first_stage === "CAD" ? 1 : 0;
 	if (cint(frm.doc.is_new_design) !== target) {
 		frm.set_value("is_new_design", target);
 	}
 }
 
-function lock_stage_grid(frm) {
-	// The stages table is controlled entirely by the buttons — no direct editing.
-	const grid = frm.fields_dict.stages && frm.fields_dict.stages.grid;
-	if (!grid) return;
-	grid.cannot_add_rows = true;
-	grid.cannot_delete_rows = true;
-	grid.refresh();
-}
-
-function toggle_stage(frm, stage) {
-	const rows = frm.doc.stages || [];
-	const existing = rows.find((r) => r.stage === stage);
-	if (existing) {
-		frm.doc.stages = rows.filter((r) => r.name !== existing.name);
-	} else {
-		frm.add_child("stages", { stage: stage });
-	}
-	renumber_stages(frm);
-	sync_new_design(frm);
-	frm.refresh_field("stages");
-	render_stage_picker(frm);
-	frm.dirty();
-}
-
-function render_stage_picker(frm) {
-	const field = frm.fields_dict.stage_picker;
-	if (!field || !field.$wrapper) return;
-	const wrapper = field.$wrapper;
-	wrapper.empty();
-
-	const selected = new Set((frm.doc.stages || []).map((r) => r.stage));
-	const $row = $('<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;"></div>');
-
-	STAGE_ORDER.forEach((stage) => {
-		const added = selected.has(stage);
-		const cls = added ? "btn-danger" : "btn-default";
-		const prefix = added ? "✓ " : "+ ";
-		const $btn = $(
-			`<button type="button" class="btn btn-xs ${cls}">${prefix}${frappe.utils.escape_html(stage)}</button>`
-		);
-		$btn.on("click", () => toggle_stage(frm, stage));
-		$row.append($btn);
-	});
-
-	wrapper.append($row);
-	wrapper.append(
-		'<div class="text-muted" style="font-size:11px;">Red = added to this Job Order (click to remove). Drag rows in the table below to reorder them.</div>'
-	);
-}
-
 frappe.ui.form.on("Job Order", {
-	onload(frm) {
-		// New Job Order: pre-add all stages in the default order.
-		if (frm.is_new() && !(frm.doc.stages || []).length) {
-			STAGE_ORDER.forEach((stage) => frm.add_child("stages", { stage: stage }));
-			renumber_stages(frm);
-			sync_new_design(frm);
-			frm.refresh_field("stages");
-		}
-	},
-
 	refresh(frm) {
 		// A finalized Job Order is fully read-only (reference only).
 		if (["Completed", "Cancelled"].includes(frm.doc.status)) {
@@ -99,8 +27,6 @@ frappe.ui.form.on("Job Order", {
 			return;
 		}
 
-		lock_stage_grid(frm);
-		render_stage_picker(frm);
 		sync_new_design(frm);
 
 		if (!frm.is_new() && frm.doc.status === "Draft") {
@@ -115,19 +41,8 @@ frappe.ui.form.on("Job Order", {
 		}
 	},
 
-	// Keep picker + sequence + new-design flag in sync when rows change via the grid.
-	stages_add(frm) {
-		renumber_stages(frm);
+	first_stage(frm) {
 		sync_new_design(frm);
-		render_stage_picker(frm);
-	},
-	stages_remove(frm) {
-		renumber_stages(frm);
-		sync_new_design(frm);
-		render_stage_picker(frm);
-	},
-	stages_move(frm) {
-		renumber_stages(frm);
 	},
 
 	// Product Info live weight calc.
@@ -140,8 +55,9 @@ frappe.ui.form.on("Job Order", {
 
 function jo_calc_weights(frm) {
 	// 1 carat = 0.2 g
-	const stones_g = ((frm.doc.dmd_weight_ct || 0) + (frm.doc.ps_weight_ct || 0) + (frm.doc.cs_weight_ct || 0)) * 0.2;
+	const stones_g =
+		((frm.doc.dmd_weight_ct || 0) + (frm.doc.ps_weight_ct || 0) + (frm.doc.cs_weight_ct || 0)) * 0.2;
 	const nett = Math.max((frm.doc.gross_weight || 0) - stones_g, 0);
 	frm.set_value("nett_weight", nett);
-	frm.set_value("pure_weight", nett * (frm.doc.purity || 0) / 100);
+	frm.set_value("pure_weight", (nett * (frm.doc.purity || 0)) / 100);
 }
