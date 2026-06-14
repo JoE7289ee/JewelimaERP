@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:design_code",
+ "creation": "2026-06-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "image_field": "image",
+ "field_order": [
+  "design_code",
+  "design_name",
+  "design_type",
+  "design_style",
+  "column_break_main",
+  "image",
+  "company",
+  "linked_section",
+  "item",
+  "column_break_linked",
+  "bom",
+  "bom_section",
+  "materials"
+ ],
+ "fields": [
+  {
+   "fieldname": "design_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Design Code",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "design_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Design Name"
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Design Type",
+   "options": "Design Type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "design_style",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Design Style",
+   "options": "Design Style"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Design Image"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "description": "The ERPNext Item and BOM created/kept in sync from this design.",
+   "fieldname": "linked_section",
+   "fieldtype": "Section Break",
+   "label": "Linked Records"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_linked",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "options": "BOM",
+   "read_only": 1
+  },
+  {
+   "description": "Materials that make up this design (becomes the BOM).",
+   "fieldname": "bom_section",
+   "fieldtype": "Section Break",
+   "label": "BOM Details"
+  },
+  {
+   "fieldname": "materials",
+   "fieldtype": "Table",
+   "label": "Materials",
+   "options": "Design Bank Item",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Design Bank",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

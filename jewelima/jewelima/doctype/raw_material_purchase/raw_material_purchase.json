@@ -1,0 +1,133 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "RMP-.YYYY.-.#####",
+ "creation": "2026-06-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "field_order": [
+  "supplier",
+  "posting_date",
+  "column_break_main",
+  "set_warehouse",
+  "company",
+  "items_section",
+  "items",
+  "totals_section",
+  "total_amount",
+  "column_break_totals",
+  "purchase_receipt",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Posting Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Warehouse the received goods go into.",
+   "fieldname": "set_warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target Warehouse",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Raw Materials"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Raw Material Purchase Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "totals_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_amount",
+   "fieldtype": "Currency",
+   "label": "Total Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "ERPNext Purchase Receipt created when this is submitted.",
+   "fieldname": "purchase_receipt",
+   "fieldtype": "Link",
+   "label": "Purchase Receipt",
+   "options": "Purchase Receipt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Raw Material Purchase",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Raw Material Purchase",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

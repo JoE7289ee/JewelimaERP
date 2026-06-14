@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "MI-.YYYY.-.#####",
+ "creation": "2026-06-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "field_order": [
+  "issue_type",
+  "scan_barcode",
+  "job_order",
+  "column_break_main",
+  "current_stage",
+  "current_stage_record",
+  "company",
+  "warehouses_section",
+  "source_warehouse",
+  "column_break_wh",
+  "bench_warehouse",
+  "items_section",
+  "items",
+  "stock_entry",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "default": "Gold",
+   "fieldname": "issue_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Issue Type",
+   "options": "Gold\nStone",
+   "reqd": 1
+  },
+  {
+   "description": "Scan the Job Order barcode here.",
+   "fieldname": "scan_barcode",
+   "fieldtype": "Data",
+   "label": "Scan Barcode"
+  },
+  {
+   "fieldname": "job_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Job Order",
+   "options": "Job Order",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The card the job is currently sitting at.",
+   "fieldname": "current_stage",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Current Stage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "current_stage_record",
+   "fieldtype": "Data",
+   "label": "Current Stage Record",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "warehouses_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouses"
+  },
+  {
+   "description": "Issued FROM (Gold Issue / Stone Issue).",
+   "fieldname": "source_warehouse",
+   "fieldtype": "Link",
+   "label": "Source Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_wh",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Issued INTO (the bench where the card is).",
+   "fieldname": "bench_warehouse",
+   "fieldtype": "Link",
+   "label": "Bench Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items to Issue"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Material Issue Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Material Issue",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Material Issue",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

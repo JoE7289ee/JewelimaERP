@@ -4,6 +4,7 @@ app_publisher = "Joseph Daison"
 app_description = "Jewelry Manufacturing Management System"
 app_email = "joedai555@gmail.com"
 app_license = "mit"
+app_logo_url = "/assets/jewelima/images/jewelima-logo.png"
 
 # Apps
 # ------------------
@@ -11,15 +12,14 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "jewelima",
-# 		"logo": "/assets/jewelima/logo.png",
-# 		"title": "Jewelima",
-# 		"route": "/jewelima",
-# 		"has_permission": "jewelima.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "jewelima",
+		"logo": "/assets/jewelima/images/jewelima-logo.png",
+		"title": "Jewelima",
+		"route": "/app/jewelima",
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -86,7 +86,12 @@ app_license = "mit"
 # ------------
 
 # before_install = "jewelima.install.before_install"
-# after_install = "jewelima.install.after_install"
+after_install = "jewelima.setup.after_install"
+after_migrate = "jewelima.setup.after_migrate"
+
+# Re-run seeding once the setup wizard creates the Company (fresh deploys run
+# install/migrate before the wizard, so company-dependent seeding is skipped).
+setup_wizard_complete = ["jewelima.setup.after_setup_wizard"]
 
 # Uninstallation
 # ------------
@@ -138,13 +143,32 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+JOB_ORDER = "jewelima.jewelima.doctype.job_order.job_order"
+
+STAGE_DOCTYPES = [
+	"CAD", "CAM", "Tree Making", "Casting", "Grinding", "Filing",
+	"Setting", "Pre Polish", "Wax Setting", "Final Polish", "Wax Cleaning", "Bag Extraction",
+]
+
+# Every stage doctype: lock once completed + (for CAD) the Item/BOM restriction,
+# then start the next stage in the sequence when one is completed.
+doc_events = {
+	dt: {
+		"validate": f"{JOB_ORDER}.validate_stage",
+		"on_update": f"{JOB_ORDER}.on_stage_completed",
+	}
+	for dt in STAGE_DOCTYPES
+}
+
+# Purchase documents post to the Metal Ledger for Keep-Metal-Ledger items.
+# Posts only when the document moves stock (PR always; PI when update_stock=1),
+# which prevents double-posting a PI raised against a PR.
+METAL_LEDGER = "jewelima.jewelima.doctype.metal_ledger_entry.metal_ledger_entry"
+for _purchase_doctype in ("Purchase Receipt", "Purchase Invoice"):
+	doc_events[_purchase_doctype] = {
+		"on_submit": f"{METAL_LEDGER}.make_metal_ledger_on_submit",
+		"on_cancel": f"{METAL_LEDGER}.cancel_metal_ledger_on_cancel",
+	}
 
 # Scheduled Tasks
 # ---------------

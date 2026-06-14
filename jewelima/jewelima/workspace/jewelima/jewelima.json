@@ -1,0 +1,412 @@
+{
+ "app": "jewelima",
+ "charts": [],
+ "content": "[{\"id\": \"sc_rmp\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Raw Material Purchase\", \"col\": 3}}, {\"id\": \"sc_jo\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Job Order\", \"col\": 3}}, {\"id\": \"sc_db\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Design Bank\", \"col\": 3}}, {\"id\": \"sc_mi\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Material Issue\", \"col\": 3}}, {\"id\": \"sc_metal\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Metal Ledger Entry\", \"col\": 3}}, {\"id\": \"sc_stone\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Stone Ledger Entry\", \"col\": 3}}, {\"id\": \"hdr_pur\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Purchasing &amp; Manufacturing</b></span>\", \"col\": 12}}, {\"id\": \"card_pur\", \"type\": \"card\", \"data\": {\"card_name\": \"Purchasing\", \"col\": 4}}, {\"id\": \"card_mfg\", \"type\": \"card\", \"data\": {\"card_name\": \"Manufacturing\", \"col\": 4}}, {\"id\": \"card_stg\", \"type\": \"card\", \"data\": {\"card_name\": \"Stages\", \"col\": 4}}, {\"id\": \"hdr_led\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Ledgers &amp; Masters</b></span>\", \"col\": 12}}, {\"id\": \"card_led\", \"type\": \"card\", \"data\": {\"card_name\": \"Ledgers\", \"col\": 4}}, {\"id\": \"card_mas\", \"type\": \"card\", \"data\": {\"card_name\": \"Masters\", \"col\": 4}}, {\"id\": \"card_dsn\", \"type\": \"card\", \"data\": {\"card_name\": \"Design\", \"col\": 4}}]",
+ "creation": "2026-06-14 13:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "diamond",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "Jewelima",
+ "link_type": "DocType",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchasing",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Raw Material Purchase",
+   "link_count": 0,
+   "link_to": "Raw Material Purchase",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Receipt",
+   "link_count": 0,
+   "link_to": "Purchase Receipt",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Manufacturing",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Job Order",
+   "link_count": 0,
+   "link_to": "Job Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Material Issue",
+   "link_count": 0,
+   "link_to": "Material Issue",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Loss Transfer",
+   "link_count": 0,
+   "link_to": "Loss Transfer",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Material Reservation",
+   "link_count": 0,
+   "link_to": "Material Reservation",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Work Order",
+   "link_count": 0,
+   "link_to": "Work Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Stages",
+   "link_count": 12,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "CAD",
+   "link_count": 0,
+   "link_to": "CAD",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "CAM",
+   "link_count": 0,
+   "link_to": "CAM",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Tree Making",
+   "link_count": 0,
+   "link_to": "Tree Making",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Casting",
+   "link_count": 0,
+   "link_to": "Casting",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Grinding",
+   "link_count": 0,
+   "link_to": "Grinding",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Filing",
+   "link_count": 0,
+   "link_to": "Filing",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Setting",
+   "link_count": 0,
+   "link_to": "Setting",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Pre Polish",
+   "link_count": 0,
+   "link_to": "Pre Polish",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Wax Setting",
+   "link_count": 0,
+   "link_to": "Wax Setting",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Final Polish",
+   "link_count": 0,
+   "link_to": "Final Polish",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Wax Cleaning",
+   "link_count": 0,
+   "link_to": "Wax Cleaning",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bag Extraction",
+   "link_count": 0,
+   "link_to": "Bag Extraction",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Ledgers",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Metal Ledger Entry",
+   "link_count": 0,
+   "link_to": "Metal Ledger Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Stone Ledger Entry",
+   "link_count": 0,
+   "link_to": "Stone Ledger Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Masters",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Item",
+   "link_count": 0,
+   "link_to": "Item",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Stone Type",
+   "link_count": 0,
+   "link_to": "Stone Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Stone Sieve",
+   "link_count": 0,
+   "link_to": "Stone Sieve",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design Bank",
+   "link_count": 0,
+   "link_to": "Design Bank",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design Type",
+   "link_count": 0,
+   "link_to": "Design Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Design Style",
+   "link_count": 0,
+   "link_to": "Design Style",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-06-14 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Jewelima",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "doc_view": "",
+   "format": "",
+   "label": "Raw Material Purchase",
+   "link_to": "Raw Material Purchase",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "",
+   "format": "",
+   "label": "Job Order",
+   "link_to": "Job Order",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "format": "",
+   "label": "Design Bank",
+   "link_to": "Design Bank",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Orange",
+   "doc_view": "",
+   "format": "",
+   "label": "Material Issue",
+   "link_to": "Material Issue",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Yellow",
+   "doc_view": "",
+   "format": "",
+   "label": "Metal Ledger Entry",
+   "link_to": "Metal Ledger Entry",
+   "stats_filter": "",
+   "type": "DocType"
+  },
+  {
+   "color": "Cyan",
+   "doc_view": "",
+   "format": "",
+   "label": "Stone Ledger Entry",
+   "link_to": "Stone Ledger Entry",
+   "stats_filter": "",
+   "type": "DocType"
+  }
+ ],
+ "title": "Jewelima",
+ "type": "Workspace"
+}

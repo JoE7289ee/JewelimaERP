@@ -1,0 +1,317 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "JO-.YYYY.-.#####",
+ "creation": "2026-06-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "design",
+  "is_new_design",
+  "production_item",
+  "bom",
+  "qty",
+  "first_stage",
+  "column_break_main",
+  "status",
+  "work_order",
+  "material_reservation",
+  "materials_section",
+  "materials",
+  "product_info_tab",
+  "po_stones_section",
+  "dmd_no",
+  "dmd_weight_ct",
+  "po_col_st1",
+  "ps_no",
+  "ps_weight_ct",
+  "po_col_st2",
+  "cs_no",
+  "cs_weight_ct",
+  "po_weights_section",
+  "gross_weight",
+  "nett_weight",
+  "po_col_wt",
+  "purity",
+  "pure_weight",
+  "stages_tab",
+  "stages",
+  "transfers_tab",
+  "transfers",
+  "other_tab",
+  "items_section",
+  "items",
+  "notes_section",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "description": "The design being produced (from the Design Bank). It carries the Item + BOM. For a New Design (CAD), create it in the Design Bank during the design phase, then link it here.",
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Design",
+   "options": "Design Bank",
+   "mandatory_depends_on": "eval:!doc.is_new_design"
+  },
+  {
+   "default": "0",
+   "description": "Auto-set when the job starts at CAD. For a new custom design the Job Order can be created without a Design \u2014 it is created in the Design Bank during the design phase and linked before the CAD stage can be completed.",
+   "fieldname": "is_new_design",
+   "fieldtype": "Check",
+   "label": "New Design",
+   "read_only": 1
+  },
+  {
+   "description": "Auto-filled from the selected Design.",
+   "fetch_from": "design.item",
+   "fieldname": "production_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Production Item",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "description": "Out-of-box ERPNext BOM, auto-filled from the selected Design.",
+   "fetch_from": "design.bom",
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "options": "BOM",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty"
+  },
+  {
+   "default": "CAD",
+   "description": "Which stage's queue this job starts in. The route after that is chosen one step at a time on each stage card (its 'Next Stage' field).",
+   "fieldname": "first_stage",
+   "fieldtype": "Select",
+   "label": "First Stage",
+   "options": "CAD\nCAM\nTree Making\nCasting\nGrinding\nFiling\nSetting\nPre Polish\nWax Setting\nFinal Polish\nWax Cleaning\nBag Extraction",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nDesign\nReady for Production\nIn Production\nCompleted\nCancelled"
+  },
+  {
+   "description": "ERPNext Work Order created behind the scenes for this Job Order.",
+   "fieldname": "work_order",
+   "fieldtype": "Link",
+   "label": "Work Order",
+   "options": "Work Order",
+   "read_only": 1
+  },
+  {
+   "description": "Informational reservation of the materials committed to this job (no stock moved).",
+   "fieldname": "material_reservation",
+   "fieldtype": "Link",
+   "label": "Material Reservation",
+   "options": "Material Reservation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Job Order Item"
+  },
+  {
+   "description": "Materials on this job (auto-filled from the BOM). These flow through the stage warehouses.",
+   "fieldname": "materials_section",
+   "fieldtype": "Section Break",
+   "label": "Materials On Job"
+  },
+  {
+   "fieldname": "materials",
+   "fieldtype": "Table",
+   "label": "Materials",
+   "options": "Job Order Material"
+  },
+  {
+   "fieldname": "product_info_tab",
+   "fieldtype": "Tab Break",
+   "label": "Product Info"
+  },
+  {
+   "fieldname": "po_stones_section",
+   "fieldtype": "Section Break",
+   "label": "Stones"
+  },
+  {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dmd_weight_ct",
+   "fieldtype": "Float",
+   "label": "DMD Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_col_st1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ps_no",
+   "fieldtype": "Int",
+   "label": "PS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ps_weight_ct",
+   "fieldtype": "Float",
+   "label": "PS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_col_st2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "CS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cs_weight_ct",
+   "fieldtype": "Float",
+   "label": "CS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_weights_section",
+   "fieldtype": "Section Break",
+   "label": "Weights"
+  },
+  {
+   "description": "Total weight of the product.",
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Gross weight minus total stone weight (carats converted to grams).",
+   "fieldname": "nett_weight",
+   "fieldtype": "Float",
+   "label": "Nett Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "po_col_wt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Percent of gold.",
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Nett weight x purity %.",
+   "fieldname": "pure_weight",
+   "fieldtype": "Float",
+   "label": "Pure Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stages_tab",
+   "fieldtype": "Tab Break",
+   "label": "Stages"
+  },
+  {
+   "description": "History of the stages this job has gone through (auto-maintained). The route is chosen one step at a time on each stage card's Next Stage field.",
+   "fieldname": "stages",
+   "fieldtype": "Table",
+   "label": "Stages (History)",
+   "options": "Job Order Stage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transfers_tab",
+   "fieldtype": "Tab Break",
+   "label": "Transfers"
+  },
+  {
+   "description": "History of stage-to-stage moves on this job (and whether material was transferred).",
+   "fieldname": "transfers",
+   "fieldtype": "Table",
+   "label": "Transfers",
+   "options": "Job Order Transfer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "other_tab",
+   "fieldtype": "Tab Break",
+   "label": "Other"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-14 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Job Order",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
