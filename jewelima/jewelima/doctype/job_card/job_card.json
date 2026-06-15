@@ -1,0 +1,248 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "",
+ "creation": "2026-06-15 12:30:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "job_order",
+  "design",
+  "qty",
+  "size",
+  "column_break_main",
+  "stage",
+  "weights_section",
+  "gross_weight",
+  "nett_weight",
+  "col_break_wt",
+  "purity",
+  "order_info_section",
+  "customer",
+  "order_date",
+  "due_date",
+  "oi_col",
+  "salesman",
+  "customer_order_id",
+  "stones_section",
+  "dmd_no",
+  "dmd_weight",
+  "col_break_dmd",
+  "ps_no",
+  "ps_weight",
+  "col_break_ps",
+  "cs_no",
+  "cs_weight",
+  "narration_section",
+  "narration"
+ ],
+ "fields": [
+  {
+   "description": "The Job Order this card belongs to. The card is numbered off it (e.g. E0001.01).",
+   "fieldname": "job_order",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Job Order",
+   "options": "Job Order",
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "description": "The design being produced (auto-creates a sellable item with the same code).",
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Design",
+   "options": "Design"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Qty"
+  },
+  {
+   "fieldname": "size",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Size",
+   "options": "\n-2.2/16\n2.0/16\nNA"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "\nCAD\nCAM\nWax Injecting\nTree Making\nCasting\nGrinding\nFiling\nSetting\nPre Polish\nWax Setting\nFinal Polish\nWax Cleaning\nBag Extraction"
+  },
+  {
+   "fieldname": "weights_section",
+   "fieldtype": "Section Break",
+   "label": "Weights & Purity"
+  },
+  {
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "nett_weight",
+   "fieldtype": "Float",
+   "label": "Nett Weight (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_wt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3"
+  },
+  {
+   "description": "Copied from the Job Order when the card is created — so cards can be queried on their own.",
+   "fieldname": "order_info_section",
+   "fieldtype": "Section Break",
+   "label": "Order Info"
+  },
+  {
+   "fetch_from": "job_order.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_order.order_date",
+   "fieldname": "order_date",
+   "fieldtype": "Date",
+   "label": "Order Date",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_order.due_date",
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Due Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "oi_col",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "job_order.salesman",
+   "fieldname": "salesman",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Salesman",
+   "options": "Sales Person",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_order.customer_order_id",
+   "fieldname": "customer_order_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Customer Order ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stones_section",
+   "fieldtype": "Section Break",
+   "label": "Stones"
+  },
+  {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No"
+  },
+  {
+   "fieldname": "dmd_weight",
+   "fieldtype": "Float",
+   "label": "DMD Weight (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_dmd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ps_no",
+   "fieldtype": "Int",
+   "label": "PS No"
+  },
+  {
+   "fieldname": "ps_weight",
+   "fieldtype": "Float",
+   "label": "PS Weight (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_ps",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "CS No"
+  },
+  {
+   "fieldname": "cs_weight",
+   "fieldtype": "Float",
+   "label": "CS Weight (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "narration_section",
+   "fieldtype": "Section Break",
+   "label": "Narration"
+  },
+  {
+   "fieldname": "narration",
+   "fieldtype": "Small Text",
+   "label": "Narration"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-15 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Job Card",
+ "naming_rule": "",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

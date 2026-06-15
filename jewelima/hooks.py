@@ -142,33 +142,13 @@ setup_wizard_complete = ["jewelima.setup.after_setup_wizard"]
 # Document Events
 # ---------------
 # Hook on document methods and events
+# (Custom Metal/Stone ledgers were removed — stock is tracked by ERPNext natively.)
 
-JOB_ORDER = "jewelima.jewelima.doctype.job_order.job_order"
-
-STAGE_DOCTYPES = [
-	"CAD", "CAM", "Tree Making", "Casting", "Grinding", "Filing",
-	"Setting", "Pre Polish", "Wax Setting", "Final Polish", "Wax Cleaning", "Bag Extraction",
-]
-
-# Every stage doctype: lock once completed + (for CAD) the Item/BOM restriction,
-# then start the next stage in the sequence when one is completed.
 doc_events = {
-	dt: {
-		"validate": f"{JOB_ORDER}.validate_stage",
-		"on_update": f"{JOB_ORDER}.on_stage_completed",
-	}
-	for dt in STAGE_DOCTYPES
+	"Item": {
+		"validate": "jewelima.jewelima.api.set_item_weight_uom",
+	},
 }
-
-# Purchase documents post to the Metal Ledger for Keep-Metal-Ledger items.
-# Posts only when the document moves stock (PR always; PI when update_stock=1),
-# which prevents double-posting a PI raised against a PR.
-METAL_LEDGER = "jewelima.jewelima.doctype.metal_ledger_entry.metal_ledger_entry"
-for _purchase_doctype in ("Purchase Receipt", "Purchase Invoice"):
-	doc_events[_purchase_doctype] = {
-		"on_submit": f"{METAL_LEDGER}.make_metal_ledger_on_submit",
-		"on_cancel": f"{METAL_LEDGER}.cancel_metal_ledger_on_cancel",
-	}
 
 # Scheduled Tasks
 # ---------------

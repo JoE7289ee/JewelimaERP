@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-15 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "item_name",
+  "purity",
+  "qty",
+  "weight"
+ ],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Material",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "item.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item.purity_percentage",
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Purity %",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Base Qty",
+   "precision": "3",
+   "reqd": 1
+  },
+  {
+   "description": "Grams for metal, carats for stones.",
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight",
+   "precision": "3"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-15 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Design BOM Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

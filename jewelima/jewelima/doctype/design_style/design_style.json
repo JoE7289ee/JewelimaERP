@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "field:design_style_name",
- "creation": "2026-06-14 00:00:00.000000",
+ "creation": "2026-06-15 14:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -21,7 +21,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-14 00:00:00.000000",
+ "modified": "2026-06-15 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Style",
@@ -29,16 +29,8 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1
   }
  ],
  "sort_field": "creation",

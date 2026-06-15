@@ -6,7 +6,7 @@ def after_install():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
-	create_raw_material_items()
+	create_default_supplier()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -18,10 +18,20 @@ def after_migrate():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
-	create_raw_material_items()
+	create_default_supplier()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+
+
+def create_default_supplier():
+	"""Default supplier used for in-house stock purchases."""
+	if not frappe.db.exists("Supplier", "JD Stock"):
+		sg = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name") or "All Supplier Groups"
+		frappe.get_doc(
+			{"doctype": "Supplier", "supplier_name": "JD Stock", "supplier_group": sg}
+		).insert(ignore_permissions=True)
+		frappe.db.commit()
 
 
 def after_setup_wizard(args=None):
@@ -100,52 +110,46 @@ def get_item_custom_fields():
 				"collapsible": 0,
 			},
 			{
-				"fieldname": "keep_metal_ledger",
-				"fieldtype": "Check",
-				"label": "Keep Metal Ledger",
-				"insert_after": "jewelima_section",
-			},
-			{
 				"fieldname": "metal_purity",
 				"fieldtype": "Select",
 				"label": "Default Purity",
 				"options": "\n24K\n22K\n18K\n14K",
-				"insert_after": "keep_metal_ledger",
-				"depends_on": "eval:doc.keep_metal_ledger",
+				"insert_after": "jewelima_section",
+			},
+			{
+				"fieldname": "purity_percentage",
+				"fieldtype": "Float",
+				"label": "Purity %",
+				"precision": "2",
+				"insert_after": "metal_purity",
+			},
+			{
+				"fieldname": "weight_unit",
+				"fieldtype": "Select",
+				"label": "Weight UOM",
+				"options": "Gram\nCarat",
+				"default": "Gram",
+				"insert_after": "purity_percentage",
+				"in_list_view": 1,
+				"description": "Grams for metal, carats for stones (auto-set: an item with a Stone Type = Carat).",
 			},
 			{
 				"fieldname": "jewelima_column_break",
 				"fieldtype": "Column Break",
-				"insert_after": "metal_purity",
-			},
-			{
-				"fieldname": "keep_stone_ledger",
-				"fieldtype": "Check",
-				"label": "Keep Stone Ledger",
-				"insert_after": "jewelima_column_break",
+				"insert_after": "weight_unit",
 			},
 			{
 				"fieldname": "stone_type",
 				"fieldtype": "Link",
 				"label": "Stone Type",
 				"options": "Stone Type",
-				"insert_after": "keep_stone_ledger",
-				"depends_on": "eval:doc.keep_stone_ledger",
-			},
-			{
-				"fieldname": "stone_sieve",
-				"fieldtype": "Link",
-				"label": "Stone Sieve",
-				"options": "Stone Sieve",
-				"insert_after": "stone_type",
-				"depends_on": "eval:doc.keep_stone_ledger",
+				"insert_after": "jewelima_column_break",
 			},
 			{
 				"fieldname": "stone_size",
 				"fieldtype": "Data",
 				"label": "Stone Size",
-				"insert_after": "stone_sieve",
-				"depends_on": "eval:doc.keep_stone_ledger",
+				"insert_after": "stone_type",
 			},
 		]
 	}
@@ -161,73 +165,32 @@ def create_default_stone_types():
 	frappe.db.commit()
 
 
-# Design Bank master values seeded on install (dropdowns on Design Bank).
-DESIGN_TYPES = ["Rings", "Pendant"]
-DESIGN_STYLES = ["Tickly", "General"]
+# Seed values for the Design masters (extensible — users can add more).
+DESIGN_TYPES = ["Rings", "Pendant", "Necklace"]
+DESIGN_STYLES = ["General", "Tickly"]
 
 
 def create_design_masters():
-	"""Seed the Design Type / Design Style dropdown values used by Design Bank."""
-	for design_type in DESIGN_TYPES:
-		if not frappe.db.exists("Design Type", design_type):
-			frappe.get_doc(
-				{"doctype": "Design Type", "design_type_name": design_type}
-			).insert(ignore_permissions=True)
-	for design_style in DESIGN_STYLES:
-		if not frappe.db.exists("Design Style", design_style):
-			frappe.get_doc(
-				{"doctype": "Design Style", "design_style_name": design_style}
-			).insert(ignore_permissions=True)
+	"""Seed Design Type / Design Style dropdown values used by the Design master."""
+	for name in DESIGN_TYPES:
+		if not frappe.db.exists("Design Type", name):
+			frappe.get_doc({"doctype": "Design Type", "design_type_name": name}).insert(ignore_permissions=True)
+	for name in DESIGN_STYLES:
+		if not frappe.db.exists("Design Style", name):
+			frappe.get_doc({"doctype": "Design Style", "design_style_name": name}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
-# Gold colour codes used in raw-material item codes/names.
-GOLD_COLOR_LABELS = {"YG": "Yellow Gold", "WG": "White Gold", "PG": "Pink Gold"}
-
-# Standard gold raw materials seeded once on install.
-# (karat, colour) -> item_code "RM-<karat>-<colour>", item_name "<karat>K<colour>"
-RAW_MATERIALS = [
-	("24", "YG"),
-	("22", "YG"),
-	("18", "YG"),
-	("18", "WG"),
-	("18", "PG"),
-	("14", "YG"),
-]
-
-
-def create_raw_material_items():
-	"""Seed the standard gold raw-material items. Idempotent: only creates
-	an item if its item_code does not already exist. Skips gracefully if the
-	required Item Group / UOM don't exist yet (i.e. ERPNext setup not done) —
-	after_setup_wizard re-runs this once they're present."""
-	if not frappe.db.exists("Item Group", "Raw Material") or not frappe.db.exists("UOM", "Gram"):
-		return
-	for karat, color in RAW_MATERIALS:
-		item_code = f"RM-{karat}-{color}"
-		if frappe.db.exists("Item", item_code):
-			continue
-		frappe.get_doc(
-			{
-				"doctype": "Item",
-				"item_code": item_code,
-				"item_name": f"{karat}K{color}",
-				"item_group": "Raw Material",
-				"stock_uom": "Gram",
-				"is_stock_item": 1,
-				"is_sales_item": 0,
-				"keep_metal_ledger": 1,
-				"metal_purity": f"{karat}K",
-				"description": f"{karat}K {GOLD_COLOR_LABELS.get(color, color)} raw gold",
-			}
-		).insert(ignore_permissions=True)
-	frappe.db.commit()
+# NOTE: gold raw-material items are no longer seeded here. They come from the
+# client's master sheet via jewelima.jewelima.imports.import_raw_materials.run
+# (group GOLD / ALLOY). Seeding placeholder RM-* items here caused duplicates.
 
 
 # Manufacturing stage warehouses (one leaf warehouse per physical stage, under a
 # "Manufacturing" group). CAD and CAM are design/digital stages — no warehouse.
 MANUFACTURING_GROUP = "Manufacturing"
 STAGE_WAREHOUSES = [
+	"Wax Injecting",
 	"Tree Making",
 	"Casting",
 	"Grinding",

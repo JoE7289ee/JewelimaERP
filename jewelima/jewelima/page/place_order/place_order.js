@@ -1,0 +1,319 @@
+// Copyright (c) 2026, efeone and contributors
+// For license information, please see license.txt
+//
+// Place Order — a pure-JS order-entry screen (no doctype form behind it).
+// Header (Order No / Customer / Order Date / Due Date) on top, a full-width
+// grid of Job Card lines below. Picking an item AJAX-fetches its stone profile
+// (DMD/PS/CS counts from the item's BOM) and fills the line. "Place Order"
+// creates the Job Order header + one Job Card per filled line.
+// Route: /app/place-order
+
+const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
+
+const PO_COLUMNS = [
+	{ key: "design", label: "Design", type: "link", options: "Design", width: "190px" },
+	{ key: "size", label: "Size", type: "select", options: PO_SIZES, width: "90px" },
+	{ key: "qty", label: "Qty", type: "int", width: "60px" },
+	{ key: "gross_weight", label: "Gross Wt (g)", type: "float", width: "95px" },
+	{ key: "purity", label: "Purity (%)", type: "float", width: "85px" },
+	{ key: "ps_no", label: "PS No", type: "int", width: "65px" },
+	{ key: "ps_weight", label: "PS Wt (ct)", type: "float", width: "85px" },
+	{ key: "dmd_no", label: "DMD No", type: "int", width: "70px" },
+	{ key: "dmd_weight", label: "DMD Wt (ct)", type: "float", width: "85px" },
+	{ key: "cs_no", label: "CS No", type: "int", width: "65px" },
+	{ key: "cs_weight", label: "CS Wt (ct)", type: "float", width: "85px" },
+	{ key: "nett_weight", label: "Nett Wt (g)", type: "float", width: "95px" },
+];
+
+frappe.pages["place-order"].on_page_load = function (wrapper) {
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Place Order", single_column: true });
+	const state = { rows: [], header: {} };
+
+	$(page.main).append(`
+		<style>
+		.po-wrap{display:flex;flex-direction:column;height:calc(100vh - 130px);}
+		.po-head{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:4px 0 12px;}
+		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
+		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
+		table.po-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
+			border-right:3px solid var(--gray-500, #8d96a0);border-bottom:4px solid var(--gray-500, #8d96a0);padding:1px 2px;text-align:left;white-space:nowrap;font-weight:700;}
+		table.po-grid td{border-right:3px solid var(--gray-500, #8d96a0);border-bottom:3px solid var(--gray-500, #8d96a0);padding:0;vertical-align:middle;background:var(--fg-color);}
+		table.po-grid td.po-num{color:var(--text-muted);text-align:center;width:36px;background:var(--control-bg);}
+		table.po-grid tfoot td{position:sticky;bottom:0;z-index:2;background:var(--control-bg, var(--fg-color));border-top:4px solid var(--gray-500, #8d96a0);border-right:3px solid var(--gray-500, #8d96a0);font-weight:700;padding:4px 6px;text-align:right;white-space:nowrap;}
+		table.po-grid tfoot td.po-foot-label{text-align:left;}
+		table.po-grid input,table.po-grid select{width:100%;border:2px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
+			padding:1px 4px;font-size:12px;color:var(--text-color);border-radius:3px;height:24px;line-height:1.1;box-sizing:border-box;}
+		table.po-grid input:focus,table.po-grid select:focus{box-shadow:inset 0 0 0 2px var(--primary);outline:none;}
+		table.po-grid .frappe-control,table.po-grid .frappe-control .control-input,table.po-grid .frappe-control .control-input-wrapper{margin:0;padding:0;min-height:0;}
+		table.po-grid .frappe-control .control-input input{border:2px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:24px;min-height:24px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
+		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
+		</style>
+		<div class="po-wrap">
+			<div class="po-head">
+				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div>
+				<div class="po-h-orderdate"></div><div class="po-h-duedate"></div><div class="po-h-custorderid"></div>
+			</div>
+			<div class="po-gridbox">
+				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
+			</div>
+			<div class="po-foot"><span class="po-count">0</span> line(s). Empty lines are ignored when you place the order. Pick an item to auto-fill its stones from the BOM.</div>
+		</div>
+	`);
+
+	const mk = (sel, df) => {
+		const c = frappe.ui.form.make_control({ df, parent: $(page.main).find(sel).get(0), render_input: true });
+		c.refresh();
+		return c;
+	};
+	state.header.order_no = mk(".po-h-orderno", {
+		fieldtype: "Data", label: "Job Order No", fieldname: "order_no", read_only: 1,
+		description: "Auto-assigned (E####) when you place the order.",
+	});
+	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Customer", fieldname: "customer", options: "Customer" });
+	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person" });
+	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date" });
+	state.header.due_date = mk(".po-h-duedate", { fieldtype: "Date", label: "Due Date", fieldname: "due_date" });
+	state.header.customer_order_id = mk(".po-h-custorderid", { fieldtype: "Data", label: "Customer Order ID", fieldname: "customer_order_id" });
+	state.header.order_date.set_value(frappe.datetime.get_today());
+
+	const $headrow = $(page.main).find(".po-headrow");
+	$headrow.append('<th class="po-num">#</th>');
+	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
+	$headrow.append('<th style="width:34px"></th>');
+
+	const $body = $(page.main).find(".po-body");
+
+	// ---- live totals footer ----
+	const SUM_KEYS = ["qty", "gross_weight", "ps_weight", "dmd_weight", "cs_weight", "nett_weight"];
+	const $footrow = $(page.main).find(".po-footrow");
+	$footrow.append('<td class="po-foot-label">Total</td>');
+	const totalCells = {};
+	PO_COLUMNS.forEach((c) => {
+		const $td = $("<td></td>").appendTo($footrow);
+		if (SUM_KEYS.includes(c.key)) totalCells[c.key] = $td;
+	});
+	$footrow.append("<td></td>");
+	function recalcTotals() {
+		const sums = {};
+		SUM_KEYS.forEach((k) => (sums[k] = 0));
+		state.rows.forEach((r) =>
+			SUM_KEYS.forEach((k) => {
+				sums[k] += (k === "qty" ? cint(r.f[k].get()) : flt(r.f[k].get())) || 0;
+			})
+		);
+		SUM_KEYS.forEach((k) => {
+			if (totalCells[k]) totalCells[k].text(k === "qty" ? sums[k] : sums[k].toFixed(3));
+		});
+	}
+	state.recalcTotals = recalcTotals;
+	$body.on("input change", "input,select", () => recalcTotals());
+
+	function renumber() {
+		$body.find("tr").each((i, tr) => $(tr).find(".po-num").text(i + 1));
+		$(page.main).find(".po-count").text(state.rows.length);
+	}
+
+	function addRow() {
+		const $tr = $("<tr></tr>");
+		$tr.append('<td class="po-num"></td>');
+		const row = { $tr, f: {} };
+		PO_COLUMNS.forEach((col) => {
+			const $td = $("<td></td>").appendTo($tr);
+			if (col.type === "link") {
+				const df = { fieldtype: "Link", options: col.options, fieldname: col.key, placeholder: col.label };
+				if (col.key === "design") df.get_query = () => ({ filters: { status: "Active" } });
+				const ctrl = frappe.ui.form.make_control({ df, parent: $td.get(0), render_input: true });
+				ctrl.refresh();
+				row.f[col.key] = { get: () => ctrl.get_value(), set: (v) => ctrl.set_value(v || "") };
+				if (col.key === "design") {
+					// AJAX: when the design changes, pull its stone profile and fill the line.
+					ctrl.$input.on("change awesomplete-selectcomplete", () =>
+						setTimeout(() => onDesignPicked(row), 50)
+					);
+				}
+			} else if (col.type === "select") {
+				const $s = $("<select></select>").appendTo($td);
+				$s.append('<option value=""></option>');
+				col.options.forEach((o) => $s.append(`<option>${frappe.utils.escape_html(o)}</option>`));
+				row.f[col.key] = { get: () => $s.val(), set: (v) => $s.val(v || "") };
+			} else {
+				const step = col.type === "int" ? "1" : "0.001";
+				const $i = $(`<input type="number" step="${step}" min="0">`).appendTo($td);
+				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
+			}
+		});
+		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
+		$rm.find("button").on("click", () => {
+			state.rows = state.rows.filter((r) => r !== row);
+			$tr.remove();
+			renumber();
+			recalcTotals();
+		});
+		$body.append($tr);
+		state.rows.push(row);
+		renumber();
+		recalcTotals();
+		return row;
+	}
+
+	function onDesignPicked(row) {
+		const design = row.f.design.get();
+		if (!design || row._lastDesign === design) return;
+		row._lastDesign = design;
+		frappe.call({
+			method: "jewelima.jewelima.api.get_design_profile",
+			args: { design },
+		}).then((r) => {
+			const p = r.message || {};
+			// fill only the empty cells so manual edits aren't clobbered
+			["dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight", "purity"].forEach((k) => {
+				if (p[k] && row.f[k] && !cint(row.f[k].get()) && !flt(row.f[k].get())) row.f[k].set(p[k]);
+			});
+			recalcTotals();
+		});
+	}
+
+	// expose for the New Design dialog to drop a freshly-created design onto a row
+	state.onDesignPicked = onDesignPicked;
+	state.addRow = addRow;
+
+	const addRows = (n) => { let last; for (let i = 0; i < n; i++) last = addRow(); return last; };
+
+	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
+	page.add_inner_button(__("Add Row"), () => addRow());
+	page.add_inner_button(__("Add 10 Rows"), () => addRows(10));
+	page.add_inner_button(__("Reset"), () => {
+		$body.empty();
+		state.rows = [];
+		state.header.customer.set_value("");
+		state.header.salesman.set_value("");
+		state.header.customer_order_id.set_value("");
+		state.header.due_date.set_value("");
+		state.header.order_no.set_value("");
+		state.header.order_date.set_value(frappe.datetime.get_today());
+		addRow();
+	});
+
+	addRow(); // start with a single line
+
+	page.set_primary_action(__("Place Order"), () => placeOrder(page, state, renumber, addRow, $body), "add");
+};
+
+function po_readLine(r) {
+	const g = (k) => r.f[k].get();
+	return {
+		design: g("design") || undefined,
+		size: g("size") || undefined,
+		qty: cint(g("qty")) || 0,
+		gross_weight: flt(g("gross_weight")) || 0,
+		nett_weight: flt(g("nett_weight")) || 0,
+		purity: flt(g("purity")) || 0,
+		dmd_no: cint(g("dmd_no")) || 0, dmd_weight: flt(g("dmd_weight")) || 0,
+		ps_no: cint(g("ps_no")) || 0, ps_weight: flt(g("ps_weight")) || 0,
+		cs_no: cint(g("cs_no")) || 0, cs_weight: flt(g("cs_weight")) || 0,
+	};
+}
+
+async function placeOrder(page, state, renumber, addRow, $body) {
+	const customer = state.header.customer.get_value();
+	const salesman = state.header.salesman.get_value();
+	const customer_order_id = state.header.customer_order_id.get_value();
+	const order_date = state.header.order_date.get_value();
+	const due_date = state.header.due_date.get_value();
+
+	const lines = state.rows.map(po_readLine).filter((l) => l.design || l.qty);
+	if (!lines.length) {
+		frappe.msgprint(__("Add at least one line (a Design or Qty)."));
+		return;
+	}
+
+	frappe.dom.freeze(__("Placing order…"));
+	try {
+		const order = await frappe.db.insert({
+			doctype: "Job Order",
+			order_date: order_date || frappe.datetime.get_today(),
+			due_date: due_date || undefined,
+			customer: customer || undefined,
+			salesman: salesman || undefined,
+			customer_order_id: customer_order_id || undefined,
+		});
+		let made = 0;
+		for (const l of lines) {
+			await frappe.db.insert({
+				doctype: "Job Card", job_order: order.name, design: l.design, qty: l.qty || 1,
+				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
+				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
+				cs_no: l.cs_no, cs_weight: l.cs_weight,
+			});
+			made++;
+		}
+		frappe.dom.unfreeze();
+		state.header.order_no.set_value(order.name);
+		frappe.show_alert({ message: __("Placed {0} with {1} card(s).", [order.name, made]), indicator: "green" }, 7);
+		frappe.msgprint({
+			title: __("Order placed"), indicator: "green",
+			message: __("{0} created with {1} Job Card(s). <a href='/app/job-order/{0}'>Open order</a>", [order.name, made]),
+		});
+		$body.empty();
+		state.rows = [];
+		addRow();
+		renumber();
+	} catch (e) {
+		frappe.dom.unfreeze();
+	}
+}
+
+function openNewDesignDialog(state) {
+	const d = new frappe.ui.Dialog({
+		title: __("New Design"),
+		size: "large",
+		fields: [
+			{ fieldname: "design_name", fieldtype: "Data", label: __("Design Name"), reqd: 1 },
+			{ fieldname: "cb1", fieldtype: "Column Break" },
+			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1 },
+			{ fieldname: "design_style", fieldtype: "Link", label: __("Design Style"), options: "Design Style" },
+			{ fieldname: "sb_img", fieldtype: "Section Break" },
+			{ fieldname: "image", fieldtype: "Attach Image", label: __("Design Image") },
+			{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
+			{
+				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item",
+				fields: [
+					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 5, reqd: 1 },
+					{ fieldname: "qty", fieldtype: "Float", label: __("Base Qty"), in_list_view: 1, columns: 3, default: 1, reqd: 1 },
+					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 3 },
+				],
+			},
+		],
+		primary_action_label: __("Create Design"),
+		primary_action(values) {
+			const materials = (values.materials || [])
+				.filter((m) => m.item)
+				.map((m) => ({ item: m.item, qty: m.qty || 1, weight: m.weight || 0 }));
+			if (!materials.length) {
+				frappe.msgprint(__("Add at least one material to the design's BOM."));
+				return;
+			}
+			frappe.call({
+				method: "jewelima.jewelima.api.create_design",
+				args: {
+					design_name: values.design_name,
+					design_type: values.design_type,
+					design_style: values.design_style,
+					image: values.image,
+					materials: JSON.stringify(materials),
+				},
+			}).then((r) => {
+				const res = r.message || {};
+				if (!res.name) return;
+				d.hide();
+				frappe.show_alert({ message: __("Design {0} created.", [res.name]), indicator: "green" }, 5);
+				// drop the new design onto the first empty row (or a fresh one) and pull its stones
+				let row = state.rows.find((rr) => !rr.f.design.get());
+				if (!row) row = state.addRow();
+				row.f.design.set(res.name);
+				state.onDesignPicked(row);
+			});
+		},
+	});
+	d.show();
+}
