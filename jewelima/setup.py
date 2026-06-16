@@ -6,6 +6,7 @@ def after_install():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
+	create_order_types()
 	create_default_supplier()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
@@ -19,11 +20,23 @@ def after_migrate():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
+	create_order_types()
 	create_default_supplier()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	seed_raw_materials()
+
+
+ORDER_TYPES = ["BULK", "CUSTOMER"]
+
+
+def create_order_types():
+	"""Seed the Job Order 'Type' dropdown values (Order Type master; extensible)."""
+	for name in ORDER_TYPES:
+		if not frappe.db.exists("Order Type", name):
+			frappe.get_doc({"doctype": "Order Type", "order_type_name": name}).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def create_default_supplier():

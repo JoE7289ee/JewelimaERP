@@ -51,7 +51,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		<div class="po-wrap">
 			<div class="po-head">
 				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div>
-				<div class="po-h-orderdate"></div><div class="po-h-duedate"></div><div class="po-h-custorderid"></div>
+				<div class="po-h-ordertype"></div><div class="po-h-orderdate"></div><div class="po-h-days"></div>
+				<div class="po-h-duedate"></div><div class="po-h-custorderid"></div>
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
@@ -71,10 +72,24 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	});
 	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Customer", fieldname: "customer", options: "Customer" });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person" });
+	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type" });
 	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date" });
+	state.header.days = mk(".po-h-days", {
+		fieldtype: "Int", label: "Days", fieldname: "days",
+		description: "Lead time — auto-sets Due Date = Order Date + N days.",
+	});
 	state.header.due_date = mk(".po-h-duedate", { fieldtype: "Date", label: "Due Date", fieldname: "due_date" });
 	state.header.customer_order_id = mk(".po-h-custorderid", { fieldtype: "Data", label: "Customer Order ID", fieldname: "customer_order_id" });
 	state.header.order_date.set_value(frappe.datetime.get_today());
+
+	// Days -> Due Date (= order_date + N). Recompute when either Days or Order Date changes.
+	const applyDueFromDays = () => {
+		const n = cint(state.header.days.get_value());
+		const od = state.header.order_date.get_value();
+		if (n > 0 && od) state.header.due_date.set_value(frappe.datetime.add_days(od, n));
+	};
+	state.header.days.$input.on("change", applyDueFromDays);
+	state.header.order_date.$input.on("change", applyDueFromDays);
 
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
@@ -187,7 +202,9 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		state.rows = [];
 		state.header.customer.set_value("");
 		state.header.salesman.set_value("");
+		state.header.order_type.set_value("");
 		state.header.customer_order_id.set_value("");
+		state.header.days.set_value(0);
 		state.header.due_date.set_value("");
 		state.header.order_no.set_value("");
 		state.header.order_date.set_value(frappe.datetime.get_today());
@@ -217,6 +234,7 @@ function po_readLine(r) {
 async function placeOrder(page, state, renumber, addRow, $body) {
 	const customer = state.header.customer.get_value();
 	const salesman = state.header.salesman.get_value();
+	const order_type = state.header.order_type.get_value();
 	const customer_order_id = state.header.customer_order_id.get_value();
 	const order_date = state.header.order_date.get_value();
 	const due_date = state.header.due_date.get_value();
@@ -235,6 +253,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 			due_date: due_date || undefined,
 			customer: customer || undefined,
 			salesman: salesman || undefined,
+			order_type: order_type || undefined,
 			customer_order_id: customer_order_id || undefined,
 		});
 		let made = 0;
