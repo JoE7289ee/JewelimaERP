@@ -31,8 +31,12 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.po-wrap{display:flex;flex-direction:column;height:calc(100vh - 130px);}
-		.po-head{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:4px 0 12px;}
+		.po-wrap{display:flex;flex-direction:column;height:calc(100vh - 95px);}
+		.po-head{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px 10px;margin:2px 0 6px;}
+		.po-head .frappe-control{margin:0;}
+		.po-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
+		.po-head .control-input-wrapper .control-input,.po-head .control-input input,.po-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
+		.po-head .help-box,.po-head .description,.po-head p.help-box{display:none !important;}
 		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
 		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.po-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
@@ -50,9 +54,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		</style>
 		<div class="po-wrap">
 			<div class="po-head">
-				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div>
-				<div class="po-h-ordertype"></div><div class="po-h-orderdate"></div><div class="po-h-days"></div>
-				<div class="po-h-duedate"></div><div class="po-h-custorderid"></div>
+				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
+				<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-duedate"></div><div class="po-h-custorderid"></div>
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
