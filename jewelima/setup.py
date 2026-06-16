@@ -25,13 +25,18 @@ def after_migrate():
 
 
 def create_default_supplier():
-	"""Default supplier used for in-house stock purchases."""
-	if not frappe.db.exists("Supplier", "JD Stock"):
-		sg = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name") or "All Supplier Groups"
-		frappe.get_doc(
-			{"doctype": "Supplier", "supplier_name": "JD Stock", "supplier_group": sg}
-		).insert(ignore_permissions=True)
-		frappe.db.commit()
+	"""Default supplier used for in-house stock purchases. Skips on a fresh site
+	where the Supplier Group tree doesn't exist yet (it's seeded by the ERPNext
+	setup wizard); after_setup_wizard re-runs after_install once it's present."""
+	if frappe.db.exists("Supplier", "JD Stock"):
+		return
+	sg = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name")
+	if not sg:
+		return
+	frappe.get_doc(
+		{"doctype": "Supplier", "supplier_name": "JD Stock", "supplier_group": sg}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def after_setup_wizard(args=None):
