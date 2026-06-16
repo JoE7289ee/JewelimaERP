@@ -10,6 +10,7 @@ def after_install():
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+	seed_raw_materials()
 
 
 def after_migrate():
@@ -22,6 +23,7 @@ def after_migrate():
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+	seed_raw_materials()
 
 
 def create_default_supplier():
@@ -37,6 +39,26 @@ def create_default_supplier():
 		{"doctype": "Supplier", "supplier_name": "JD Stock", "supplier_group": sg}
 	).insert(ignore_permissions=True)
 	frappe.db.commit()
+
+
+def seed_raw_materials():
+	"""Load the raw-material master items (gold + stones) that SHIP WITH the app,
+	from the bundled spreadsheet jewelima/data/raw_material_report.xlsx.
+	Idempotent. Skips if:
+	  - the ERPNext item-group tree isn't ready yet (fresh install before the
+	    setup wizard) — after_setup_wizard re-runs this once it is; or
+	  - the items are already seeded (the GOLD group already has items).
+	"""
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		return
+	if frappe.db.count("Item", {"item_group": "GOLD"}):
+		return
+	try:
+		from jewelima.jewelima.imports.import_raw_materials import run
+
+		run()
+	except FileNotFoundError:
+		pass
 
 
 def after_setup_wizard(args=None):

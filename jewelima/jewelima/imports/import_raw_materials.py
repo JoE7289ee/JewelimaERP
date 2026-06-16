@@ -1,17 +1,16 @@
 # Copyright (c) 2026, efeone and contributors
 # For license information, please see license.txt
 """
-Raw-material import set — bulk-loads Items from the RAW_MATERIAL_REPORT spreadsheet.
+Raw-material import set — bulk-loads Items from the bundled RAW_MATERIAL sheet.
 
-Run (dry run first to see the counts, then the real load):
+The spreadsheet SHIPS WITH THE APP at jewelima/data/raw_material_report.xlsx and is
+auto-seeded on install via jewelima.setup.seed_raw_materials (after_setup_wizard).
+To update the masters: replace that file in the repo and redeploy.
 
-  bench --site development.localhost execute \
-    jewelima.jewelima.imports.import_raw_materials.run \
-    --kwargs "{'file_path': '/workspace/development/frappe-bench/raw_material_report.xlsx', 'dry_run': True}"
+Manual run (defaults to the bundled file; pass file_path to override):
 
-  bench --site development.localhost execute \
-    jewelima.jewelima.imports.import_raw_materials.run \
-    --kwargs "{'file_path': '/workspace/development/frappe-bench/raw_material_report.xlsx'}"
+  bench --site <site> execute jewelima.jewelima.imports.import_raw_materials.run
+  bench --site <site> execute jewelima.jewelima.imports.import_raw_materials.run --kwargs "{'dry_run': True}"
 
 Idempotent: re-running skips Item Groups / Stone Types / Items that already exist.
 Rows whose "Import" column is not TRUE are ignored.
@@ -34,7 +33,9 @@ STONE_TYPE_MAP = {
 
 TRUE_VALUES = {"TRUE", "1", "YES", "Y"}
 
-DEFAULT_FILE = "/workspace/development/frappe-bench/raw_material_report.xlsx"
+def _bundled_file():
+	"""The raw-material sheet that ships with the app (jewelima/data/...)."""
+	return frappe.get_app_path("jewelima", "data", "raw_material_report.xlsx")
 
 # Standard gold purity by karat (matches the client's sheet convention). Used to
 # fill purity_percentage + metal_purity for karat-named gold rows whose Purity
@@ -99,7 +100,7 @@ def _ensure_item_group(name):
 def run(file_path=None, dry_run=False):
 	import openpyxl
 
-	file_path = file_path or DEFAULT_FILE
+	file_path = file_path or _bundled_file()
 	wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
 	ws = wb.active
 	data = list(ws.iter_rows(min_row=2, values_only=True))
