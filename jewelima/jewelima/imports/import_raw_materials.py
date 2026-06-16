@@ -36,12 +36,26 @@ TRUE_VALUES = {"TRUE", "1", "YES", "Y"}
 
 DEFAULT_FILE = "/workspace/development/frappe-bench/raw_material_report.xlsx"
 
+# Standard gold purity by karat (matches the client's sheet convention). Used to
+# fill purity_percentage + metal_purity for karat-named gold rows whose Purity
+# cell is blank/0 in the sheet (e.g. 14KYG). Non-karat gold (BULLION, Alloy,
+# "Standard Gold") is left alone for the user to set.
+KARAT_PURITY = {"14K": 58.3, "18K": 75.1, "22K": 91.7, "24K": 99.9}
+
 # column indexes
 C_SL, C_NAME, C_PURITY, C_STONE, C_GROUP, C_UNIT, C_IMPORT = range(7)
 
 
 def _s(v):
 	return ("" if v is None else str(v)).strip()
+
+
+def _karat_from_name(name):
+	"""'14KYG' -> '14K' for standard karats; None otherwise."""
+	import re
+
+	m = re.match(r"^(14|18|22|24)K", _s(name).upper())
+	return f"{m.group(1)}K" if m else None
 
 
 def _num(v):
@@ -133,6 +147,10 @@ def run(file_path=None, dry_run=False):
 			unit = _s(r[C_UNIT]) or "Nos"
 			stone = _resolve_stone_type(r[C_STONE])
 			purity = _num(r[C_PURITY])
+			karat = _karat_from_name(name)
+			# karat-named gold with a blank/0 purity cell -> fill from convention
+			if not purity and karat:
+				purity = KARAT_PURITY.get(karat)
 			frappe.get_doc({
 				"doctype": "Item",
 				"item_code": name,
@@ -144,6 +162,7 @@ def run(file_path=None, dry_run=False):
 				"is_sales_item": 0,
 				"include_item_in_manufacturing": 1,
 				"stone_type": stone or None,
+				"metal_purity": karat,
 				"weight_unit": unit if unit in ("Gram", "Carat") else None,
 				"purity_percentage": purity,
 			}).insert(ignore_permissions=True)
