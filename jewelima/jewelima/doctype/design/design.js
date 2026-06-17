@@ -2,6 +2,10 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Design", {
+	setup(frm) {
+		// BOM materials are raw materials only (exclude the sellable design Items).
+		frm.set_query("item", "materials", () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }));
+	},
 	refresh(frm) {
 		if (frm.is_new()) return;
 
