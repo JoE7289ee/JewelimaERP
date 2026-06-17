@@ -60,7 +60,12 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 		frappe.throw(frappe._("A design named {0} already exists.").format(design_name))
 
 	rows = [
-		{"item": m.get("item"), "qty": m.get("qty") or 1, "weight": m.get("weight") or 0}
+		{
+			"item": m.get("item"),
+			"qty": m.get("qty") or 1,
+			"weight_gram": m.get("weight_gram") or 0,
+			"weight_carat": m.get("weight_carat") or 0,
+		}
 		for m in materials
 		if m.get("item")
 	]

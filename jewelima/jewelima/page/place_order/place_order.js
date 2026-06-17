@@ -300,9 +300,11 @@ function openNewDesignDialog(state) {
 			{
 				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item",
 				fields: [
-					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 5, reqd: 1 },
-					{ fieldname: "qty", fieldtype: "Float", label: __("Base Qty"), in_list_view: 1, columns: 3, default: 1, reqd: 1 },
-					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 3 },
+					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1 },
+					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), fetch_from: "item.purity_percentage", read_only: 1, in_list_view: 1, columns: 1 },
+					{ fieldname: "qty", fieldtype: "Float", label: __("Base Qty"), in_list_view: 1, columns: 2, default: 1, reqd: 1 },
+					{ fieldname: "weight_gram", fieldtype: "Float", label: __("Gram (g)"), in_list_view: 1, columns: 2 },
+					{ fieldname: "weight_carat", fieldtype: "Float", label: __("Carat (ct)"), in_list_view: 1, columns: 2 },
 				],
 			},
 		],
@@ -310,7 +312,7 @@ function openNewDesignDialog(state) {
 		primary_action(values) {
 			const materials = (values.materials || [])
 				.filter((m) => m.item)
-				.map((m) => ({ item: m.item, qty: m.qty || 1, weight: m.weight || 0 }));
+				.map((m) => ({ item: m.item, qty: m.qty || 1, weight_gram: m.weight_gram || 0, weight_carat: m.weight_carat || 0 }));
 			if (!materials.length) {
 				frappe.msgprint(__("Add at least one material to the design's BOM."));
 				return;
