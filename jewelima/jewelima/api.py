@@ -194,3 +194,37 @@ def get_item_stone_profile(item):
 		if st in bucket:
 			out[bucket[st]] += (r.qty or 0)
 	return out
+
+
+@frappe.whitelist()
+def get_order_bag_cards(names):
+	"""Print-card data for a list of Order Bags: the bag's own fields plus its
+	design's type/image and BOM materials. Used by the Print Order Bags page."""
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	cards = []
+	for nm in names or []:
+		if not frappe.db.exists("Order Bag", nm):
+			continue
+		b = frappe.get_doc("Order Bag", nm)
+		dtype = dstyle = dimg = ""
+		materials = []
+		if b.design and frappe.db.exists("Design", b.design):
+			d = frappe.get_doc("Design", b.design)
+			dtype, dstyle, dimg = d.design_type, d.design_style, d.image
+			for m in d.materials:
+				materials.append({"item": m.item, "purity": m.purity, "qty": m.qty, "weight": m.weight, "uom": m.uom})
+		cards.append({
+			"name": b.name, "job_order": b.job_order, "design": b.design,
+			"design_type": dtype, "design_style": dstyle, "image": dimg,
+			"size": b.size, "qty": b.qty, "location": b.location,
+			"customer": b.customer, "salesman": b.salesman, "order_type": b.order_type,
+			"customer_order_id": b.customer_order_id,
+			"order_date": frappe.utils.formatdate(b.order_date, "dd-mm-yyyy") if b.order_date else "",
+			"due_date": frappe.utils.formatdate(b.due_date, "dd-mm-yyyy") if b.due_date else "",
+			"gross_weight": b.gross_weight, "nett_weight": b.nett_weight, "purity": b.purity,
+			"dmd_no": b.dmd_no, "dmd_weight": b.dmd_weight, "ps_no": b.ps_no, "ps_weight": b.ps_weight,
+			"cs_no": b.cs_no, "cs_weight": b.cs_weight, "narration": b.narration,
+			"materials": materials,
+		})
+	return cards
