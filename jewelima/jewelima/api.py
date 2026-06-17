@@ -252,3 +252,18 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 	bag.db_set("location", to_location)
 	frappe.db.commit()
 	return {"transfer": t.name, "from_location": from_location, "to_location": to_location}
+
+
+@frappe.whitelist()
+def transfer_order_bags(names, to_location, remarks=None):
+	"""Transfer a batch of Order Bags (all collected at one source) to a destination."""
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	done, errors = [], []
+	for nm in names or []:
+		try:
+			transfer_order_bag(nm, to_location, remarks)
+			done.append(nm)
+		except Exception as e:
+			errors.append({"name": nm, "error": str(e)})
+	return {"transferred": done, "count": len(done), "errors": errors}
