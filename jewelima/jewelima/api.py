@@ -121,6 +121,7 @@ def get_design_profile(design):
 	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight"}
 	metal_g = 0.0
 	purity_num = 0.0  # sum(gram * purity) for metal rows
+	metal_purities = []  # fallback when no gram weights entered yet
 	for m in mats:
 		st = stype.get(m.item)
 		if st in NO_BUCKET:  # a stone — count + carat weight
@@ -129,11 +130,16 @@ def get_design_profile(design):
 		else:  # metal / other — nett grams + purity
 			metal_g += flt(m.weight)
 			purity_num += flt(m.weight) * flt(m.purity)
+			if flt(m.purity):
+				metal_purities.append(flt(m.purity))
 
 	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2
 	out["nett_weight"] = round(metal_g, 3)
 	out["gross_weight"] = round(metal_g + stone_g, 3)
-	out["purity"] = round(purity_num / metal_g, 3) if metal_g else 0.0
+	if metal_g:
+		out["purity"] = round(purity_num / metal_g, 3)  # gram-weighted
+	elif metal_purities:
+		out["purity"] = round(sum(metal_purities) / len(metal_purities), 3)  # avg of metal purities
 	for k in ("dmd_weight", "ps_weight", "cs_weight"):
 		out[k] = round(out[k], 3)
 	return out
