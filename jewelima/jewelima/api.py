@@ -63,9 +63,8 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 	rows = [
 		{
 			"item": m.get("item"),
-			"qty": m.get("qty") or 1,
-			"weight_gram": m.get("weight_gram") or 0,
-			"weight_carat": m.get("weight_carat") or 0,
+			"qty": m.get("qty") or 0,
+			"weight": m.get("weight") or 0,
 		}
 		for m in materials
 		if m.get("item")
@@ -110,7 +109,7 @@ def get_design_profile(design):
 	mats = frappe.get_all(
 		"Design BOM Item",
 		filters={"parent": design, "parenttype": "Design"},
-		fields=["item", "qty", "purity", "weight_gram", "weight_carat"],
+		fields=["item", "qty", "purity", "weight"],
 	)
 	codes = list({m.item for m in mats if m.item})
 	stype = {}
@@ -126,10 +125,10 @@ def get_design_profile(design):
 		st = stype.get(m.item)
 		if st in NO_BUCKET:  # a stone — count + carat weight
 			out[NO_BUCKET[st]] += int(m.qty or 0)
-			out[WT_BUCKET[st]] += flt(m.weight_carat)
+			out[WT_BUCKET[st]] += flt(m.weight)
 		else:  # metal / other — nett grams + purity
-			metal_g += flt(m.weight_gram)
-			purity_num += flt(m.weight_gram) * flt(m.purity)
+			metal_g += flt(m.weight)
+			purity_num += flt(m.weight) * flt(m.purity)
 
 	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2
 	out["nett_weight"] = round(metal_g, 3)

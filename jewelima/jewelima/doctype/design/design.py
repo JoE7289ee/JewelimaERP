@@ -73,7 +73,7 @@ class Design(Document):
 				"company": _company(),
 				"is_active": 1,
 				"is_default": 1,
-				"items": [{"item_code": m.item, "qty": m.qty} for m in self.materials],
+				"items": [{"item_code": m.item, "qty": (m.qty or m.weight or 1)} for m in self.materials],
 			}
 		)
 		bom.insert(ignore_permissions=True)
