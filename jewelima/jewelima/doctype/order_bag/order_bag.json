@@ -30,6 +30,8 @@
   "cs_weight",
   "narration_section",
   "narration",
+  "current_contents_section",
+  "materials_html",
   "schedule_tab",
   "order_date",
   "due_date",
@@ -181,6 +183,16 @@
    "fieldname": "narration",
    "fieldtype": "Small Text",
    "label": "Narration"
+  },
+  {
+   "fieldname": "current_contents_section",
+   "fieldtype": "Section Break",
+   "label": "Current Contents (in bag)"
+  },
+  {
+   "fieldname": "materials_html",
+   "fieldtype": "HTML",
+   "label": "Materials"
   },
   {
    "fieldname": "schedule_tab",
