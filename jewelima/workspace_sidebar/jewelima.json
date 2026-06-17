@@ -60,8 +60,8 @@
    "icon": "credit-card",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Job Card",
-   "link_to": "Job Card",
+   "label": "Order Bag",
+   "link_to": "Order Bag",
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
@@ -91,7 +91,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-16 10:00:00.000000",
+ "modified": "2026-06-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

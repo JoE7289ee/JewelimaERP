@@ -12,7 +12,7 @@
   "qty",
   "size",
   "column_break_main",
-  "stage",
+  "location",
   "weights_section",
   "gross_weight",
   "nett_weight",
@@ -77,12 +77,15 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "stage",
+   "default": "ORDERING",
+   "description": "Current bench/location of this bag. System-set as it moves; read-only.",
+   "fieldname": "location",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Stage",
-   "options": "\nCAD\nCAM\nWax Injecting\nTree Making\nCasting\nGrinding\nFiling\nSetting\nPre Polish\nWax Setting\nFinal Polish\nWax Cleaning\nBag Extraction"
+   "label": "Location",
+   "options": "ORDERING\nCAD\nCAM\nWAX INJECTING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION",
+   "read_only": 1
   },
   {
    "fieldname": "weights_section",
@@ -231,10 +234,10 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-16 10:00:00.000000",
+ "modified": "2026-06-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "Job Card",
+ "name": "Order Bag",
  "naming_rule": "",
  "owner": "Administrator",
  "permissions": [

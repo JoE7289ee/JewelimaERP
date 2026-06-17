@@ -3,9 +3,9 @@
 //
 // Place Order — a pure-JS order-entry screen (no doctype form behind it).
 // Header (Order No / Customer / Order Date / Due Date) on top, a full-width
-// grid of Job Card lines below. Picking an item AJAX-fetches its stone profile
+// grid of Order Bag lines below. Picking an item AJAX-fetches its stone profile
 // (DMD/PS/CS counts from the item's BOM) and fills the line. "Place Order"
-// creates the Job Order header + one Job Card per filled line.
+// creates the Job Order header + one Order Bag per filled line.
 // Route: /app/place-order
 
 const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
@@ -262,7 +262,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 		let made = 0;
 		for (const l of lines) {
 			await frappe.db.insert({
-				doctype: "Job Card", job_order: order.name, design: l.design, qty: l.qty || 1,
+				doctype: "Order Bag", job_order: order.name, design: l.design, qty: l.qty || 1,
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
 				cs_no: l.cs_no, cs_weight: l.cs_weight,
@@ -274,7 +274,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 		frappe.show_alert({ message: __("Placed {0} with {1} card(s).", [order.name, made]), indicator: "green" }, 7);
 		frappe.msgprint({
 			title: __("Order placed"), indicator: "green",
-			message: __("{0} created with {1} Job Card(s). <a href='/app/job-order/{0}'>Open order</a>", [order.name, made]),
+			message: __("{0} created with {1} Order Bag(s). <a href='/app/job-order/{0}'>Open order</a>", [order.name, made]),
 		});
 		$body.empty();
 		state.rows = [];

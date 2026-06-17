@@ -85,10 +85,10 @@ class Design(Document):
 	def retire(self):
 		if self.status == "Retired":
 			return "already"
-		used = frappe.db.count("Job Card", {"design": self.name})
+		used = frappe.db.count("Order Bag", {"design": self.name})
 		if used:
 			frappe.throw(
-				_("Cannot retire — {0} Job Card(s) are using this design. Retire is only allowed when nothing in manufacturing uses it.").format(used)
+				_("Cannot retire — {0} Order Bag(s) are using this design. Retire is only allowed when nothing in manufacturing uses it.").format(used)
 			)
 		self.db_set("status", "Retired")
 		return "retired"
