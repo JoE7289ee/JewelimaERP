@@ -184,7 +184,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		}).then((r) => {
 			const p = r.message || {};
 			// fill only the empty cells so manual edits aren't clobbered
-			["dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight", "purity"].forEach((k) => {
+			["gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight"].forEach((k) => {
 				if (p[k] && row.f[k] && !cint(row.f[k].get()) && !flt(row.f[k].get())) row.f[k].set(p[k]);
 			});
 			recalcTotals();

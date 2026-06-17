@@ -5,6 +5,7 @@
 import json
 
 import frappe
+from frappe.utils import flt
 
 
 def _company():
@@ -91,16 +92,51 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 
 @frappe.whitelist()
 def get_design_profile(design):
-	"""The design's stored stone profile (used to fill a Place Order line on pick)."""
-	out = {"dmd_no": 0, "ps_no": 0, "cs_no": 0, "dmd_weight": 0, "ps_weight": 0, "cs_weight": 0, "purity": 0}
-	if not design:
+	"""Full line profile derived from the design's BOM — used to auto-fill a Place
+	Order line when a design is picked:
+	  - stone counts (dmd/ps/cs no) and carat weights (dmd/ps/cs weight) by stone_type
+	  - nett_weight (g) = total metal grams
+	  - gross_weight (g) = metal grams + stone grams (1 ct = 0.2 g)
+	  - purity (%) = gram-weighted average purity of the metal rows
+	"""
+	out = {
+		"dmd_no": 0, "ps_no": 0, "cs_no": 0,
+		"dmd_weight": 0.0, "ps_weight": 0.0, "cs_weight": 0.0,
+		"gross_weight": 0.0, "nett_weight": 0.0, "purity": 0.0,
+	}
+	if not design or not frappe.db.exists("Design", design):
 		return out
-	d = frappe.db.get_value("Design", design, ["dmd_no", "ps_no", "cs_no", "purity"], as_dict=True)
-	if d:
-		out["dmd_no"] = d.dmd_no or 0
-		out["ps_no"] = d.ps_no or 0
-		out["cs_no"] = d.cs_no or 0
-		out["purity"] = d.purity or 0
+
+	mats = frappe.get_all(
+		"Design BOM Item",
+		filters={"parent": design, "parenttype": "Design"},
+		fields=["item", "qty", "purity", "weight_gram", "weight_carat"],
+	)
+	codes = list({m.item for m in mats if m.item})
+	stype = {}
+	if codes:
+		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
+			stype[it.name] = it.stone_type
+
+	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no"}
+	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight"}
+	metal_g = 0.0
+	purity_num = 0.0  # sum(gram * purity) for metal rows
+	for m in mats:
+		st = stype.get(m.item)
+		if st in NO_BUCKET:  # a stone — count + carat weight
+			out[NO_BUCKET[st]] += int(m.qty or 0)
+			out[WT_BUCKET[st]] += flt(m.weight_carat)
+		else:  # metal / other — nett grams + purity
+			metal_g += flt(m.weight_gram)
+			purity_num += flt(m.weight_gram) * flt(m.purity)
+
+	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2
+	out["nett_weight"] = round(metal_g, 3)
+	out["gross_weight"] = round(metal_g + stone_g, 3)
+	out["purity"] = round(purity_num / metal_g, 3) if metal_g else 0.0
+	for k in ("dmd_weight", "ps_weight", "cs_weight"):
+		out[k] = round(out[k], 3)
 	return out
 
 
