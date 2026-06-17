@@ -51,7 +51,11 @@ frappe.pages["print-order-bags"].on_page_load = function (wrapper) {
 	state.f.customer = mk(".pob-f-cust", { fieldtype: "Link", label: "Customer", fieldname: "customer", options: "Customer" });
 	state.f.job_order = mk(".pob-f-jo", { fieldtype: "Link", label: "Job Order", fieldname: "job_order", options: "Job Order" });
 	state.f.order_type = mk(".pob-f-type", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type" });
-	Object.values(state.f).forEach((c) => c.$input && c.$input.on("change", () => loadList()));
+	// Select fires "change"; Link fields fire "awesomplete-selectcomplete" on pick
+	// (and "change" on manual clear). Listen for both, let the value settle, then reload.
+	Object.values(state.f).forEach((c) => {
+		if (c.$input) c.$input.on("change awesomplete-selectcomplete", () => setTimeout(() => loadList(), 80));
+	});
 
 	const $body = $(page.main).find(".pob-body");
 
