@@ -286,6 +286,60 @@ def get_bag_contents(order_bag):
 	return out
 
 
+def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employee=None, remarks=None, reference=None):
+	"""Write one Bag Material Ledger row (the per-bag material truth)."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	if not item or not frappe.db.exists("Item", item):
+		frappe.throw(frappe._("Item {0} not found.").format(item))
+	qty = flt(qty)
+	if qty <= 0:
+		frappe.throw(frappe._("Weight / qty must be greater than zero."))
+	doc = frappe.get_doc({
+		"doctype": "Bag Material Ledger",
+		"order_bag": order_bag, "item": item, "direction": direction, "qty": qty,
+		"entry_type": entry_type, "bench": bench or None, "employee": employee or None,
+		"datetime": frappe.utils.now_datetime(), "reference": reference, "remarks": remarks,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return doc.name
+
+
+@frappe.whitelist()
+def add_weight(order_bag, item, qty, bench=None, remarks=None):
+	"""Give gold (grams) to a bag — the Casting 'add weight' action."""
+	name = _bag_ledger(order_bag, item, "In", qty, "Gold Issue", bench=bench, remarks=remarks)
+	return {"ledger": name, **get_bag_contents(order_bag)}
+
+
+@frappe.whitelist()
+def issue_stones(order_bag, item, qty, bench=None, remarks=None):
+	"""Issue stones (carats) into a bag — done before the piece goes to work."""
+	name = _bag_ledger(order_bag, item, "In", qty, "Stone Issue", bench=bench, remarks=remarks)
+	return {"ledger": name, **get_bag_contents(order_bag)}
+
+
+@frappe.whitelist()
+def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
+	"""Record metal loss out of a bag (the out-minus-in difference at a bench)."""
+	name = _bag_ledger(order_bag, item, "Out", qty, "Loss", bench=bench, employee=employee, remarks=remarks)
+	return {"ledger": name, **get_bag_contents(order_bag)}
+
+
+@frappe.whitelist()
+def convert_to_ornament(order_bag):
+	"""The piece is finished: consume the bag's remaining materials (zero it out),
+	one Convert (Out) row per held item. Finished-good stock posting is added with
+	the coarse-stock wiring."""
+	c = get_bag_contents(order_bag)
+	held = [it for it in c["items"] if it["qty"] > 0]
+	if not held:
+		frappe.throw(frappe._("{0} holds no materials to convert.").format(order_bag))
+	for it in held:
+		_bag_ledger(order_bag, it["item"], "Out", it["qty"], "Convert")
+	return {"order_bag": order_bag, "consumed": held}
+
+
 @frappe.whitelist()
 def transfer_order_bags(names, to_location, remarks=None):
 	"""Transfer a batch of Order Bags (all collected at one source) to a destination."""
