@@ -303,6 +303,9 @@ RAW_MATERIALS_STORE = "Raw Materials Store"
 RESERVED_WAREHOUSE = "Reserved"
 GOLD_ISSUE_WAREHOUSE = "Gold Issue"
 STONE_ISSUE_WAREHOUSE = "Stone Issue"
+# Coarse value pool for materials currently inside Order Bags (per-bag detail
+# lives in the Bag Material Ledger; this warehouse holds the aggregate value).
+IN_PRODUCTION_WAREHOUSE = "In Production"
 
 
 def create_store_warehouses():
@@ -315,6 +318,7 @@ def create_store_warehouses():
 		return
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
 	make_warehouse(STONE_ISSUE_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	frappe.db.commit()
 
 

@@ -255,6 +255,38 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 
 
 @frappe.whitelist()
+def get_bag_contents(order_bag):
+	"""Net materials currently held by an Order Bag (summed from the Bag Material
+	Ledger) plus the gross weight = gold grams + stone carats * 0.2."""
+	out = {"items": [], "gold_grams": 0.0, "stone_carats": 0.0, "gross_weight": 0.0}
+	if not order_bag:
+		return out
+	rows = frappe.get_all(
+		"Bag Material Ledger",
+		filters={"order_bag": order_bag},
+		fields=["item", "uom", "direction", "qty"],
+	)
+	net = {}
+	for r in rows:
+		sign = 1 if (r.direction or "In") == "In" else -1
+		e = net.setdefault(r.item, {"uom": r.uom or "", "qty": 0.0})
+		e["qty"] += sign * flt(r.qty)
+	for item, e in net.items():
+		qty = round(e["qty"], 3)
+		if abs(qty) < 0.0005:
+			continue
+		out["items"].append({"item": item, "uom": e["uom"], "qty": qty})
+		if e["uom"] == "Carat":
+			out["stone_carats"] += qty
+		else:
+			out["gold_grams"] += qty
+	out["gold_grams"] = round(out["gold_grams"], 3)
+	out["stone_carats"] = round(out["stone_carats"], 3)
+	out["gross_weight"] = round(out["gold_grams"] + out["stone_carats"] * 0.2, 3)
+	return out
+
+
+@frappe.whitelist()
 def transfer_order_bags(names, to_location, remarks=None):
 	"""Transfer a batch of Order Bags (all collected at one source) to a destination."""
 	if isinstance(names, str):
