@@ -69,6 +69,18 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "arrow-right",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Transfer Order Bag",
+   "link_to": "transfer-order-bag",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "printer",
    "indent": 0,
    "keep_closed": 0,
@@ -103,7 +115,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-17 10:00:00.000000",
+ "modified": "2026-06-17 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

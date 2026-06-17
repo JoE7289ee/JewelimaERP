@@ -228,3 +228,27 @@ def get_order_bag_cards(names):
 			"materials": materials,
 		})
 	return cards
+
+
+@frappe.whitelist()
+def transfer_order_bag(order_bag, to_location, remarks=None):
+	"""The ONLY way an Order Bag changes location: records an Order Bag Transfer
+	(from -> to, time, who) and updates the bag's read-only location."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	bag = frappe.get_doc("Order Bag", order_bag)
+	from_location = bag.location or ""
+	if from_location == to_location:
+		frappe.throw(frappe._("{0} is already at {1}.").format(order_bag, to_location))
+	t = frappe.get_doc({
+		"doctype": "Order Bag Transfer",
+		"order_bag": order_bag,
+		"from_location": from_location or None,
+		"to_location": to_location,
+		"transfer_time": frappe.utils.now_datetime(),
+		"transferred_by": frappe.session.user,
+		"remarks": remarks,
+	}).insert(ignore_permissions=True)
+	bag.db_set("location", to_location)
+	frappe.db.commit()
+	return {"transfer": t.name, "from_location": from_location, "to_location": to_location}
