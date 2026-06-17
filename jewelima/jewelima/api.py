@@ -133,9 +133,10 @@ def get_design_profile(design):
 			if flt(m.purity):
 				metal_purities.append(flt(m.purity))
 
-	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2
-	out["nett_weight"] = round(metal_g, 3)
-	out["gross_weight"] = round(metal_g + stone_g, 3)
+	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2  # 1 ct = 0.2 g
+	# the metal/piece weight entered IS the gross; nett = gross - stone weight
+	out["gross_weight"] = round(metal_g, 3)
+	out["nett_weight"] = round(max(metal_g - stone_g, 0.0), 3)
 	if metal_g:
 		out["purity"] = round(purity_num / metal_g, 3)  # gram-weighted
 	elif metal_purities:
