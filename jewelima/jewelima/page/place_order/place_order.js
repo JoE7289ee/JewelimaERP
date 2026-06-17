@@ -158,6 +158,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				const step = col.type === "int" ? "1" : "0.001";
 				const $i = $(`<input type="number" step="${step}" min="0">`).appendTo($td);
 				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
+				// changing qty rescales the design-derived weights/counts
+				if (col.key === "qty") $i.on("input change", () => applyProfile(row));
 			}
 		});
 		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
@@ -182,13 +184,25 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			method: "jewelima.jewelima.api.get_design_profile",
 			args: { design },
 		}).then((r) => {
-			const p = r.message || {};
-			// fill only the empty cells so manual edits aren't clobbered
-			["gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight"].forEach((k) => {
-				if (p[k] && row.f[k] && !cint(row.f[k].get()) && !flt(row.f[k].get())) row.f[k].set(p[k]);
-			});
-			recalcTotals();
+			row._profile = r.message || {};
+			applyProfile(row);
 		});
+	}
+
+	// Fill the line from the design's PER-PIECE profile, scaled by qty.
+	// Weights + stone counts are totals (per-piece × qty); purity is a ratio (unscaled).
+	function applyProfile(row) {
+		const p = row._profile;
+		if (!p) return;
+		const q = cint(row.f.qty.get()) || 1;
+		const set = (k, v) => { if (row.f[k]) row.f[k].set(v || ""); };
+		set("purity", p.purity);
+		["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight"].forEach((k) => {
+			const v = flt(p[k]) * q;
+			set(k, v ? v.toFixed(3) : "");
+		});
+		["dmd_no", "ps_no", "cs_no"].forEach((k) => set(k, cint(p[k]) * q || ""));
+		recalcTotals();
 	}
 
 	// expose for the New Design dialog to drop a freshly-created design onto a row
