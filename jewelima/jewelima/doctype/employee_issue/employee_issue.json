@@ -1,0 +1,147 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "EI-.#####",
+ "creation": "2026-06-18 11:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_bag",
+  "employee",
+  "bench",
+  "item",
+  "column_break_main",
+  "status",
+  "weight_out",
+  "time_out",
+  "weight_in",
+  "time_in",
+  "loss",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Order Bag",
+   "options": "Order Bag",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "bench",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Bench",
+   "options": "\nORDERING\nCAD\nCAM\nWAX INJECTING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Metal Item (loss booked to)",
+   "options": "Item"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Issued",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Issued\nReturned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "weight_out",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight Out (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "time_out",
+   "fieldtype": "Datetime",
+   "label": "Time Out",
+   "read_only": 1
+  },
+  {
+   "fieldname": "weight_in",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight In (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_in",
+   "fieldtype": "Datetime",
+   "label": "Time In",
+   "read_only": 1
+  },
+  {
+   "fieldname": "loss",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Loss (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-18 11:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Employee Issue",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

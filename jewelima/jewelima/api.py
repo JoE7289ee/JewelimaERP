@@ -326,6 +326,67 @@ def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
+def _bag_gold_item(order_bag):
+	"""The bag's main metal item (the largest non-Carat holding) — loss is booked here."""
+	golds = [it for it in get_bag_contents(order_bag)["items"] if it["uom"] != "Carat" and it["qty"] > 0]
+	golds.sort(key=lambda x: -x["qty"])
+	return golds[0]["item"] if golds else None
+
+
+def _adjust_employee_balance(employee, delta):
+	"""Running total of weight currently out with an employee (informational)."""
+	if frappe.db.exists("Employee Metal Balance", employee):
+		bal = frappe.get_doc("Employee Metal Balance", employee)
+	else:
+		bal = frappe.get_doc({"doctype": "Employee Metal Balance", "employee": employee, "current_weight": 0}).insert(ignore_permissions=True)
+	bal.db_set("current_weight", round(flt(bal.current_weight) + flt(delta), 3))
+	bal.db_set("last_updated", frappe.utils.now_datetime())
+
+
+@frappe.whitelist()
+def issue_to_employee(order_bag, employee, weight_out, bench=None, item=None):
+	"""Issue a bag's piece to an employee to work (time tracked). Bumps the
+	employee's running weight total. Loss is settled on receipt."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	if not employee or not frappe.db.exists("Employee", employee):
+		frappe.throw(frappe._("Employee {0} not found.").format(employee))
+	weight_out = flt(weight_out)
+	if weight_out <= 0:
+		frappe.throw(frappe._("Weight out must be greater than zero."))
+	ei = frappe.get_doc({
+		"doctype": "Employee Issue",
+		"order_bag": order_bag, "employee": employee, "bench": bench or None,
+		"item": item or _bag_gold_item(order_bag),
+		"status": "Issued", "weight_out": weight_out, "time_out": frappe.utils.now_datetime(),
+	}).insert(ignore_permissions=True)
+	_adjust_employee_balance(employee, weight_out)
+	frappe.db.commit()
+	return {"issue": ei.name, "employee": employee, "weight_out": weight_out}
+
+
+@frappe.whitelist()
+def receive_from_employee(issue, weight_in, remarks=None):
+	"""Receive the piece back. Loss = weight_out - weight_in, booked to the bag's
+	metal (via book_loss). Clears the employee's running total."""
+	ei = frappe.get_doc("Employee Issue", issue)
+	if ei.status != "Issued":
+		frappe.throw(frappe._("{0} is already returned.").format(issue))
+	weight_in = flt(weight_in)
+	loss = round(max(flt(ei.weight_out) - weight_in, 0), 3)
+	ei.db_set("weight_in", weight_in)
+	ei.db_set("time_in", frappe.utils.now_datetime())
+	ei.db_set("loss", loss)
+	ei.db_set("status", "Returned")
+	if remarks:
+		ei.db_set("remarks", remarks)
+	_adjust_employee_balance(ei.employee, -flt(ei.weight_out))
+	if loss > 0 and ei.item:
+		_bag_ledger(ei.order_bag, ei.item, "Out", loss, "Loss", bench=ei.bench, employee=ei.employee, reference=ei.name)
+	frappe.db.commit()
+	return {"issue": ei.name, "loss": loss, **get_bag_contents(ei.order_bag)}
+
+
 @frappe.whitelist()
 def convert_to_ornament(order_bag):
 	"""The piece is finished: consume the bag's remaining materials (zero it out),
