@@ -40,7 +40,7 @@
  ],
  "fields": [
   {
-   "description": "The Job Order this card belongs to. The card is numbered off it (e.g. E0001.01).",
+   "description": "The Job Order this bag belongs to. Numbered <Job Order>.<line>.<qty> (e.g. E0001.1.10).",
    "fieldname": "job_order",
    "fieldtype": "Link",
    "in_list_view": 1,
