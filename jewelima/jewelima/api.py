@@ -373,15 +373,14 @@ def get_bench_dashboard(bench=None):
 
 	def stats(loc):
 		dt = BENCH_DOCTYPE.get(loc)
-		o = {
-			"location": loc, "label": dt, "has_ir": loc in ISSUE_RECEIPT_LOCATIONS,
-			"present": frappe.db.count("Order Bag", {"location": loc}),
-			"in_queue": 0, "issued": 0, "receipted": 0,
-		}
-		if dt and frappe.db.exists("DocType", dt):
-			o["in_queue"] = frappe.db.count(dt, {"status": "In Queue"})
-			o["issued"] = frappe.db.count(dt, {"status": "Issued"})
-			o["receipted"] = frappe.db.count(dt, {"status": "Receipted"})
+		has_ir = loc in ISSUE_RECEIPT_LOCATIONS
+		# cards CURRENTLY at this bench (a card that moved on no longer counts)
+		bags = frappe.get_all("Order Bag", filters={"location": loc}, pluck="name")
+		o = {"location": loc, "label": dt, "has_ir": has_ir, "present": len(bags), "in_queue": 0, "issued": 0, "receipted": 0}
+		if has_ir and dt and bags and frappe.db.exists("DocType", dt):
+			o["in_queue"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "In Queue"})
+			o["issued"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Issued"})
+			o["receipted"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Receipted"})
 		return o
 
 	if not bench:
