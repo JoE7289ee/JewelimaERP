@@ -559,6 +559,118 @@ def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 
 
 # ---------------------------------------------------------------------------
+# Weight Add / Weight Reduce screens (single card, warehouse-aware).
+# ---------------------------------------------------------------------------
+def _recompute_bag_from_contents(order_bag):
+	"""Sync the bag's gross/nett to its ACTUAL contents (the ledger)."""
+	c = get_bag_contents(order_bag)
+	frappe.db.set_value("Order Bag", order_bag, {
+		"gross_weight": round(flt(c.get("gross_weight")), 3),
+		"nett_weight": round(flt(c.get("gold_grams")), 3),
+	})
+
+
+@frappe.whitelist()
+def get_card_for_weight(order_bag):
+	"""Header + materials (the bag's BOM merged with what it actually holds) for the
+	Weight Add / Reduce screens."""
+	bag = frappe.db.get_value(
+		"Order Bag", order_bag,
+		["name", "design", "qty", "size", "purity", "gross_weight", "nett_weight",
+		 "job_order", "customer", "salesman", "order_date", "is_finished"],
+		as_dict=True,
+	)
+	if not bag:
+		return {}
+	item = item_name = None
+	if bag.design:
+		item = frappe.db.get_value("Design", bag.design, "item")
+		if item:
+			item_name = frappe.db.get_value("Item", item, "item_name")
+	cur = {c["item"]: c for c in get_bag_contents(order_bag)["items"]}
+	mats = []
+	for r in frappe.get_all(
+		"Order Bag BOM Item", filters={"parent": order_bag, "parenttype": "Order Bag"},
+		fields=["item", "item_name", "purity", "uom", "stone_type", "qty", "weight"], order_by="idx asc",
+	):
+		mats.append({
+			"item": r.item, "item_name": r.item_name, "purity": r.purity, "uom": r.uom, "stone_type": r.stone_type,
+			"bom_qty": r.qty, "bom_weight": r.weight,
+			"cur_qty": 0, "cur_weight": flt((cur.get(r.item) or {}).get("qty")),
+		})
+	return {"bag": bag, "item": item, "item_name": item_name, "materials": mats}
+
+
+@frappe.whitelist()
+def weight_add(order_bag, lines, from_warehouse=None):
+	"""Add real weight to a card: ledger In + stock move from_warehouse -> In Bags,
+	per line {item, weight}. Source defaults to the Raw Materials Store."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
+
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
+		frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
+	src = _wh(from_warehouse) if from_warehouse else _wh(RAW_MATERIALS_STORE)
+	tgt = _wh(IN_PRODUCTION_WAREHOUSE)
+	added = 0.0
+	for ln in lines or []:
+		item, wt = ln.get("item"), flt(ln.get("weight"))
+		if not item or wt <= 0:
+			continue
+		_bag_ledger(order_bag, item, "In", wt, "Weight Add", remarks=ln.get("remarks"))
+		_stock_move(item, wt, src, tgt)
+		added += wt
+	_recompute_bag_from_contents(order_bag)
+	frappe.db.commit()
+	return {"added": round(added, 3), **get_bag_contents(order_bag)}
+
+
+@frappe.whitelist()
+def weight_reduce(order_bag, lines, to_warehouse=None):
+	"""Remove weight from a card: ledger Out + stock move In Bags -> to_warehouse,
+	per line {item, weight}. Destination defaults to the Raw Materials Store."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
+
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
+		frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
+	src = _wh(IN_PRODUCTION_WAREHOUSE)
+	tgt = _wh(to_warehouse) if to_warehouse else _wh(RAW_MATERIALS_STORE)
+	removed = 0.0
+	for ln in lines or []:
+		item, wt = ln.get("item"), flt(ln.get("weight"))
+		if not item or wt <= 0:
+			continue
+		_bag_ledger(order_bag, item, "Out", wt, "Weight Reduce", remarks=ln.get("remarks"))
+		_stock_move(item, wt, src, tgt)
+		removed += wt
+	_recompute_bag_from_contents(order_bag)
+	frappe.db.commit()
+	return {"removed": round(removed, 3), **get_bag_contents(order_bag)}
+
+
+@frappe.whitelist()
+def save_bag_bom(order_bag, rows):
+	"""Replace a card's BOM (editable plan) from the Weight Add screen. Blocked once
+	the ornament is made."""
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	bag = frappe.get_doc("Order Bag", order_bag)
+	if bag.is_finished:
+		frappe.throw(frappe._("The BOM is locked — the ornament for {0} has already been made.").format(order_bag))
+	bag.set("bag_bom", [])
+	for r in rows or []:
+		if not r.get("item"):
+			continue
+		bag.append("bag_bom", {"item": r.get("item"), "qty": r.get("qty") or 0, "weight": r.get("weight") or 0})
+	bag.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "rows": len(bag.bag_bom)}
+
+
+# ---------------------------------------------------------------------------
 # Job Work — the bench Issue / Receipt screens (scan-driven, batch).
 # ---------------------------------------------------------------------------
 def _current_bench_record(dt, order_bag):

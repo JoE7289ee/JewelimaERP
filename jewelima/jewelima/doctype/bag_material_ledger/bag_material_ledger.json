@@ -75,7 +75,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Entry Type",
-   "options": "Gold Issue\nStone Issue\nLoss\nConvert\nSplit Out\nSplit In\nAdjustment"
+   "options": "Gold Issue\nStone Issue\nLoss\nConvert\nSplit Out\nSplit In\nAdjustment\nWeight Add\nWeight Reduce"
   },
   {
    "fieldname": "context_section",

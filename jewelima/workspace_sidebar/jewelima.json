@@ -81,6 +81,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "plus-circle",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Weight Add",
+   "link_to": "weight-add",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "minus-circle",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Weight Reduce",
+   "link_to": "weight-reduce",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "arrow-right",
    "indent": 0,
    "keep_closed": 0,
@@ -165,7 +191,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-22 23:51:05.705179",
+ "modified": "2026-06-23 00:07:44.492221",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
