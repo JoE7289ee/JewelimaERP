@@ -14,6 +14,7 @@
   "size",
   "column_break_main",
   "location",
+  "is_finished",
   "weights_section",
   "gross_weight",
   "nett_weight",
@@ -32,6 +33,8 @@
   "narration",
   "current_contents_section",
   "materials_html",
+  "bom_tab",
+  "bag_bom",
   "schedule_tab",
   "order_date",
   "due_date",
@@ -99,6 +102,14 @@
    "in_standard_filter": 1,
    "label": "Location",
    "options": "ORDERING\nCAD\nCAM\nWAX INJECTING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Set when the ornament is made — locks the BOM (Plan).",
+   "fieldname": "is_finished",
+   "fieldtype": "Check",
+   "label": "Ornament Made",
    "read_only": 1
   },
   {
@@ -195,6 +206,18 @@
    "label": "Materials"
   },
   {
+   "fieldname": "bom_tab",
+   "fieldtype": "Tab Break",
+   "label": "BOM (Plan)"
+  },
+  {
+   "description": "Working BOM for this bag — seeded from the design, editable until the ornament is made (then locked). This is the PLAN; actual materials issued are in Current Contents.",
+   "fieldname": "bag_bom",
+   "fieldtype": "Table",
+   "label": "Bill of Materials",
+   "options": "Order Bag BOM Item"
+  },
+  {
    "fieldname": "schedule_tab",
    "fieldtype": "Tab Break",
    "label": "Schedule"
@@ -289,7 +312,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-17 12:00:00.000000",
+ "modified": "2026-06-22 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Bag",

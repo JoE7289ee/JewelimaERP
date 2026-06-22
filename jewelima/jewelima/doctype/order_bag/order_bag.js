@@ -15,6 +15,20 @@ frappe.ui.form.on("Order Bag", {
 			frm.add_custom_button(__("Transfer"), () => {
 				frappe.set_route("transfer-order-bag");
 			});
+			if (!frm.doc.is_finished) {
+				frm.add_custom_button(__("Recalc Weights from BOM"), () => {
+					frappe.call({
+						method: "jewelima.jewelima.api.recalc_bag_weights_from_bom",
+						args: { order_bag: frm.doc.name },
+					}).then(() => frm.reload_doc());
+				});
+			}
+		}
+		// BOM (plan) is locked once the ornament is made
+		frm.set_df_property("bag_bom", "read_only", frm.doc.is_finished ? 1 : 0);
+		if (frm.doc.is_finished) {
+			frm.get_field("bag_bom").grid.cannot_add_rows = true;
+			frm.get_field("bag_bom").grid.cannot_delete_rows = true;
 		}
 	},
 });

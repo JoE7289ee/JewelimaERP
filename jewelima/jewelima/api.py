@@ -89,6 +89,70 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 	}
 
 
+def _profile_from_materials(mats):
+	"""Line profile from a materials list (rows with item/qty/purity/weight): stones
+	(by item.stone_type) -> dmd/ps/cs counts + carat weights; metal -> nett grams +
+	gram-weighted purity. gross = metal grams; nett = gross - stone grams (1 ct = 0.2 g)."""
+	out = {
+		"dmd_no": 0, "ps_no": 0, "cs_no": 0,
+		"dmd_weight": 0.0, "ps_weight": 0.0, "cs_weight": 0.0,
+		"gross_weight": 0.0, "nett_weight": 0.0, "purity": 0.0,
+	}
+	rows = mats or []
+	codes = list({m.get("item") for m in rows if m.get("item")})
+	stype, purity_map = {}, {}
+	if codes:
+		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
+			stype[it.name] = it.stone_type
+			purity_map[it.name] = flt(it.purity_percentage)
+	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no"}
+	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight"}
+	metal_g = 0.0
+	purity_num = 0.0
+	metal_purities = []
+	for m in rows:
+		st = stype.get(m.get("item"))
+		if st in NO_BUCKET:
+			out[NO_BUCKET[st]] += int(m.get("qty") or 0)
+			out[WT_BUCKET[st]] += flt(m.get("weight"))
+		else:
+			pu = purity_map.get(m.get("item")) or flt(m.get("purity"))
+			metal_g += flt(m.get("weight"))
+			purity_num += flt(m.get("weight")) * pu
+			if pu:
+				metal_purities.append(pu)
+	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2
+	out["gross_weight"] = round(metal_g, 3)
+	out["nett_weight"] = round(max(metal_g - stone_g, 0.0), 3)
+	if metal_g:
+		out["purity"] = round(purity_num / metal_g, 3)
+	elif metal_purities:
+		out["purity"] = round(sum(metal_purities) / len(metal_purities), 3)
+	for k in ("dmd_weight", "ps_weight", "cs_weight"):
+		out[k] = round(out[k], 3)
+	return out
+
+
+@frappe.whitelist()
+def recalc_bag_weights_from_bom(order_bag):
+	"""Recompute a bag's gross/nett/purity/stones from its OWN BOM (plan) x qty.
+	Purity is a ratio (unscaled). Manual action so it never clobbers manual edits."""
+	bag = frappe.get_doc("Order Bag", order_bag)
+	mats = [{"item": r.item, "qty": r.qty, "purity": r.purity, "weight": r.weight} for r in bag.bag_bom]
+	p = _profile_from_materials(mats)
+	q = max(int(bag.qty or 1), 1)
+	bag.db_set({
+		"gross_weight": round(p["gross_weight"] * q, 3),
+		"nett_weight": round(p["nett_weight"] * q, 3),
+		"purity": p["purity"],
+		"dmd_no": int(p["dmd_no"]) * q, "dmd_weight": round(p["dmd_weight"] * q, 3),
+		"ps_no": int(p["ps_no"]) * q, "ps_weight": round(p["ps_weight"] * q, 3),
+		"cs_no": int(p["cs_no"]) * q, "cs_weight": round(p["cs_weight"] * q, 3),
+	})
+	frappe.db.commit()
+	return {"order_bag": order_bag, "qty": q, **p}
+
+
 @frappe.whitelist()
 def get_design_profile(design):
 	"""Full line profile derived from the design's BOM — used to auto-fill a Place
@@ -111,39 +175,7 @@ def get_design_profile(design):
 		filters={"parent": design, "parenttype": "Design"},
 		fields=["item", "qty", "purity", "weight"],
 	)
-	codes = list({m.item for m in mats if m.item})
-	stype = {}
-	if codes:
-		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
-			stype[it.name] = it.stone_type
-
-	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no"}
-	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight"}
-	metal_g = 0.0
-	purity_num = 0.0  # sum(gram * purity) for metal rows
-	metal_purities = []  # fallback when no gram weights entered yet
-	for m in mats:
-		st = stype.get(m.item)
-		if st in NO_BUCKET:  # a stone — count + carat weight
-			out[NO_BUCKET[st]] += int(m.qty or 0)
-			out[WT_BUCKET[st]] += flt(m.weight)
-		else:  # metal / other — nett grams + purity
-			metal_g += flt(m.weight)
-			purity_num += flt(m.weight) * flt(m.purity)
-			if flt(m.purity):
-				metal_purities.append(flt(m.purity))
-
-	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2  # 1 ct = 0.2 g
-	# the metal/piece weight entered IS the gross; nett = gross - stone weight
-	out["gross_weight"] = round(metal_g, 3)
-	out["nett_weight"] = round(max(metal_g - stone_g, 0.0), 3)
-	if metal_g:
-		out["purity"] = round(purity_num / metal_g, 3)  # gram-weighted
-	elif metal_purities:
-		out["purity"] = round(sum(metal_purities) / len(metal_purities), 3)  # avg of metal purities
-	for k in ("dmd_weight", "ps_weight", "cs_weight"):
-		out[k] = round(out[k], 3)
-	return out
+	return _profile_from_materials(mats)
 
 
 def set_item_weight_uom(doc, method=None):
@@ -433,6 +465,8 @@ def convert_to_ornament(order_bag):
 		frappe.throw(frappe._("{0} holds no materials to convert.").format(order_bag))
 	for it in held:
 		_bag_ledger(order_bag, it["item"], "Out", it["qty"], "Convert")
+	frappe.db.set_value("Order Bag", order_bag, "is_finished", 1)  # locks the BOM (plan)
+	frappe.db.commit()
 	return {"order_bag": order_bag, "consumed": held}
 
 

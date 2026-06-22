@@ -2,10 +2,35 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
 class OrderBag(Document):
+	def validate(self):
+		self.seed_bag_bom()
+		self.guard_bom_locked()
+
+	def seed_bag_bom(self):
+		"""On creation, copy the linked design's BOM into this bag's editable BOM (the plan)."""
+		if not self.is_new() or self.bag_bom or not self.design:
+			return
+		if not frappe.db.exists("Design", self.design):
+			return
+		design = frappe.get_doc("Design", self.design)
+		for m in design.materials or []:
+			self.append("bag_bom", {"item": m.item, "qty": m.qty, "weight": m.weight})
+
+	def guard_bom_locked(self):
+		"""Once the ornament is made, the BOM (plan) is frozen."""
+		before = self.get_doc_before_save()
+		if not before or not before.is_finished:
+			return
+		cur = [(r.item, r.qty, r.weight) for r in self.bag_bom]
+		old = [(r.item, r.qty, r.weight) for r in before.bag_bom]
+		if cur != old:
+			frappe.throw(_("The BOM is locked — the ornament for {0} has already been made.").format(self.name))
+
 	def autoname(self):
 		"""Named <Job Order>.<line>.<n>  e.g. E0001.1.10
 
