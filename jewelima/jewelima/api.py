@@ -480,6 +480,128 @@ def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
+# ---------------------------------------------------------------------------
+# Job Work — the bench Issue / Receipt screens (scan-driven, batch).
+# ---------------------------------------------------------------------------
+def _current_bench_record(dt, order_bag):
+	"""The latest bench record for a bag at a bench, or None."""
+	if not dt or not frappe.db.exists("DocType", dt):
+		return None
+	recs = frappe.get_all(dt, filters={"order_bag": order_bag}, order_by="creation desc", limit=1, pluck="name")
+	return recs[0] if recs else None
+
+
+@frappe.whitelist()
+def get_bench_card(order_bag):
+	"""Job Work scan lookup: the bag's location, its current bench record + status,
+	and the gold grams it holds (the 'weight out')."""
+	from jewelima.jewelima.benches import bench_doctype
+
+	bag = frappe.db.get_value("Order Bag", order_bag, ["location", "design", "qty"], as_dict=True)
+	if not bag:
+		return {}
+	dt = bench_doctype(bag.location)
+	rec = None
+	if dt and frappe.db.exists("DocType", dt):
+		recs = frappe.get_all(
+			dt, filters={"order_bag": order_bag},
+			fields=["name", "status", "employee", "weight_out", "weight_in", "loss"],
+			order_by="creation desc", limit=1,
+		)
+		rec = recs[0] if recs else None
+	return {
+		"order_bag": order_bag, "location": bag.location, "design": bag.design, "qty": bag.qty,
+		"doctype": dt, "record": rec, "status": (rec or {}).get("status"),
+		"gold": flt(get_bag_contents(order_bag)["gold_grams"]),
+	}
+
+
+@frappe.whitelist()
+def issue_bench_cards(names, location, employee=None):
+	"""Issue a batch of bags at one bench: status -> Issued, snapshot weight_out
+	(gold grams), stamp issued_at (+ employee if given). Skips already-Issued cards;
+	with an employee, bumps their held-weight balance."""
+	from jewelima.jewelima.benches import bench_doctype
+
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	dt = bench_doctype(location)
+	now = frappe.utils.now_datetime()
+	done, errors = [], []
+	for nm in names or []:
+		try:
+			rec = _current_bench_record(dt, nm)
+			if not rec:
+				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
+				continue
+			doc = frappe.get_doc(dt, rec)
+			if doc.status == "Issued":
+				errors.append({"name": nm, "error": frappe._("Already issued")})
+				continue
+			gold = flt(get_bag_contents(nm)["gold_grams"])
+			doc.status = "Issued"
+			doc.weight_out = gold
+			doc.issued_at = now
+			if not doc.time_in:
+				doc.time_in = now
+			if employee:
+				doc.employee = employee
+			doc.save(ignore_permissions=True)
+			if employee:
+				_adjust_employee_balance(employee, gold)
+			done.append(nm)
+		except Exception as e:
+			errors.append({"name": nm, "error": str(e)})
+	frappe.db.commit()
+	return {"count": len(done), "done": done, "errors": errors}
+
+
+@frappe.whitelist()
+def receipt_bench_cards(lines, location, employee=None):
+	"""Receive a batch of issued bags at one bench (one employee). Per line
+	{order_bag, weight_in}: loss = weight_out - weight_in, status -> Receipted,
+	loss booked (per-bag ledger + In Bags -> '<bench> -LOSS' stock)."""
+	from jewelima.jewelima.benches import bench_doctype
+
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	dt = bench_doctype(location)
+	now = frappe.utils.now_datetime()
+	done, errors, total_loss = [], [], 0.0
+	for ln in lines or []:
+		nm = ln.get("order_bag")
+		win = flt(ln.get("weight_in"))
+		try:
+			rec = _current_bench_record(dt, nm)
+			if not rec:
+				errors.append({"name": nm, "error": frappe._("No bench record")})
+				continue
+			doc = frappe.get_doc(dt, rec)
+			if doc.status != "Issued":
+				errors.append({"name": nm, "error": frappe._("Not in Issued state")})
+				continue
+			wout = flt(doc.weight_out)
+			loss = max(wout - win, 0.0)
+			issue_emp = doc.employee
+			if issue_emp:
+				_adjust_employee_balance(issue_emp, -wout)  # held weight returns
+			doc.employee = employee or issue_emp
+			doc.weight_in = win
+			doc.loss = loss
+			doc.status = "Receipted"
+			doc.receipted_at = now
+			doc.time_out = now
+			doc.save(ignore_permissions=True)
+			if loss > 0:
+				book_loss(nm, _bag_gold_item(nm), loss, bench=location, employee=doc.employee)
+			total_loss += loss
+			done.append({"name": nm, "loss": round(loss, 3)})
+		except Exception as e:
+			errors.append({"name": nm, "error": str(e)})
+	frappe.db.commit()
+	return {"count": len(done), "done": done, "errors": errors, "total_loss": round(total_loss, 3), "employee": employee}
+
+
 def _bag_gold_item(order_bag):
 	"""The bag's main metal item (the largest non-Carat holding) — loss is booked here."""
 	golds = [it for it in get_bag_contents(order_bag)["items"] if it["uom"] != "Carat" and it["qty"] > 0]
