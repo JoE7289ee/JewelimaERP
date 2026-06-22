@@ -291,6 +291,42 @@ def get_order_bag_cards(names):
 	return cards
 
 
+def _all_locations():
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	return list(BENCH_DOCTYPE.keys())
+
+
+def _transfer_allowed(roles, from_location, to_location):
+	"""Role-based from->to permission. Dormant (allow all) until any Transfer Rule
+	exists; System Manager always allowed. A rule with a blank from/to = wildcard."""
+	if "System Manager" in roles:
+		return True
+	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
+	if not rules:
+		return True
+	for r in rules:
+		if r.role in roles and (not r.from_location or r.from_location == from_location) and (not r.to_location or r.to_location == to_location):
+			return True
+	return False
+
+
+@frappe.whitelist()
+def allowed_to_locations(from_location):
+	"""Destinations the current user may transfer to from `from_location` (for the
+	page's dropdown). All locations if rules are dormant or the user is admin."""
+	roles = set(frappe.get_roles())
+	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
+	all_locs = _all_locations()
+	if not rules or "System Manager" in roles:
+		return all_locs
+	allowed = set()
+	for r in rules:
+		if r.role in roles and (not r.from_location or r.from_location == from_location):
+			allowed.update(all_locs if not r.to_location else [r.to_location])
+	return [loc for loc in all_locs if loc in allowed]
+
+
 @frappe.whitelist()
 def transfer_order_bag(order_bag, to_location, remarks=None):
 	"""The ONLY way an Order Bag changes location: records an Order Bag Transfer
@@ -301,6 +337,8 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 	from_location = bag.location or ""
 	if from_location == to_location:
 		frappe.throw(frappe._("{0} is already at {1}.").format(order_bag, to_location))
+	if not _transfer_allowed(set(frappe.get_roles()), from_location, to_location):
+		frappe.throw(frappe._("You don't have permission to move {0} from {1} to {2}.").format(order_bag, from_location or "—", to_location))
 	t = frappe.get_doc({
 		"doctype": "Order Bag Transfer",
 		"order_bag": order_bag,

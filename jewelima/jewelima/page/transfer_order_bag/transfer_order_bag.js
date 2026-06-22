@@ -70,6 +70,14 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	function updateLoc() {
 		$(page.main).find(".tob-locval").text(state.location || "—");
 	}
+	function setAllowedDestinations(fromLoc) {
+		frappe.call({ method: "jewelima.jewelima.api.allowed_to_locations", args: { from_location: fromLoc } }).then((r) => {
+			const allowed = r.message || [];
+			state.to.df.options = ["", ...allowed].join("\n");
+			state.to.refresh();
+			if (!allowed.length) setMsg(__("You have no transfer rights from <b>{0}</b>.", [frappe.utils.escape_html(fromLoc)]), "err");
+		});
+	}
 	function renderRows() {
 		$body.empty();
 		state.rows.forEach((r, i) => {
@@ -113,6 +121,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			if (!state.location) {
 				state.location = v.location; // first scan locks the location
 				updateLoc();
+				setAllowedDestinations(state.location); // limit destinations to what this user may do
 			} else if (v.location !== state.location) {
 				setMsg(__("<b>{0}</b> is at <b>{1}</b> — this batch is collecting from <b>{2}</b>.", [safe, frappe.utils.escape_html(v.location), frappe.utils.escape_html(state.location)]), "err");
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
@@ -139,6 +148,8 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		state.rows = [];
 		state.location = null;
 		state.to.set_value("");
+		state.to.df.options = TOB_LOCATIONS; // restore full list until next batch locks a from
+		state.to.refresh();
 		state.scan.set_value("");
 		setMsg("");
 		updateLoc();
