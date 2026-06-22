@@ -58,6 +58,11 @@ def _base_fields(label):
 		{"fieldname": "time_out", "fieldtype": "Datetime", "label": "Time Out"},
 		{"fieldname": "issued_at", "fieldtype": "Datetime", "label": "Issued At"},
 		{"fieldname": "receipted_at", "fieldtype": "Datetime", "label": "Receipted At"},
+		{"fieldname": "sec_weights", "fieldtype": "Section Break", "label": "Weight"},
+		{"fieldname": "weight_out", "fieldtype": "Float", "label": "Weight Out (Issued)", "precision": "3", "read_only": 1, "in_list_view": 1},
+		{"fieldname": "weight_in", "fieldtype": "Float", "label": "Weight In (Received)", "precision": "3", "in_list_view": 1},
+		{"fieldname": "cb_weights", "fieldtype": "Column Break"},
+		{"fieldname": "loss", "fieldtype": "Float", "label": "Loss", "precision": "3", "read_only": 1, "in_list_view": 1},
 		{"fieldname": "sec_remarks", "fieldtype": "Section Break"},
 		{"fieldname": "remarks", "fieldtype": "Small Text", "label": "Remarks"},
 	]
