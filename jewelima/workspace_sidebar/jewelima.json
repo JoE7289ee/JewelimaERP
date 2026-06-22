@@ -147,7 +147,7 @@
    "label": "Dashboards",
    "link_to": "",
    "link_type": "DocType",
-   "show_arrow": 1,
+   "show_arrow": 0,
    "type": "Section Break",
    "url": ""
   },
@@ -347,7 +347,7 @@
    "url": "/app/bench-dashboard/bag_extraction"
   }
  ],
- "modified": "2026-06-22 23:08:32.116584",
+ "modified": "2026-06-22 23:24:05.356009",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
