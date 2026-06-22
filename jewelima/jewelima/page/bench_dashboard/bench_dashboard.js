@@ -39,6 +39,9 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		table.bd-list th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.bd-list td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
 		table.bd-list td.num{text-align:right;}
+		table.bd-list th.bd-sort{cursor:pointer;user-select:none;white-space:nowrap;}
+		table.bd-list th.bd-sort:hover{background:var(--bg-light-gray,#f4f5f6);}
+		.bd-arrow{font-size:9px;color:var(--text-muted);margin-left:2px;}
 		.bd-empty{color:var(--text-muted);padding:18px;text-align:center;}
 		</style>
 		<div class="bd-bar"></div>
@@ -85,6 +88,49 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		});
 	}
 
+	const BD_COLS = [
+		{ f: "name", label: "Order Bag", t: "str" },
+		{ f: "design", label: "Design", t: "str" },
+		{ f: "qty", label: "Qty", t: "num" },
+		{ f: "due_date", label: "Due", t: "date" },
+		{ f: "status", label: "Status", t: "str" },
+		{ f: "employee", label: "Employee", t: "str" },
+		{ f: "weight_out", label: "Wt Out", t: "num" },
+	];
+	let bdCards = [];
+	let bdSort = { field: null, dir: 1 };
+
+	function sortedCards() {
+		if (!bdSort.field) return bdCards.slice();
+		const col = BD_COLS.find((c) => c.f === bdSort.field) || { t: "str" };
+		const d = bdSort.dir;
+		return bdCards.slice().sort((a, b) => {
+			let va = a[bdSort.field],
+				vb = b[bdSort.field];
+			if (col.t === "num") return ((parseFloat(va) || 0) - (parseFloat(vb) || 0)) * d;
+			va = (va == null ? "" : va).toString().toLowerCase();
+			vb = (vb == null ? "" : vb).toString().toLowerCase();
+			return (va < vb ? -1 : va > vb ? 1 : 0) * d;
+		});
+	}
+	function renderCardRows() {
+		const dtu = (v) => (v ? frappe.datetime.str_to_user(v) : "");
+		const num = (v) => (v ? flt(v).toFixed(3) : "");
+		const rows = sortedCards()
+			.map(
+				(c) => `<tr>
+				<td><a href="/app/order-bag/${encodeURIComponent(c.name)}"><b>${frappe.utils.escape_html(c.name)}</b></a></td>
+				<td>${frappe.utils.escape_html(c.design || "")}</td>
+				<td class="num">${c.qty || ""}</td>
+				<td>${dtu(c.due_date)}</td>
+				<td>${frappe.utils.escape_html(c.status || "")}</td>
+				<td>${frappe.utils.escape_html(c.employee || "")}</td>
+				<td class="num">${num(c.weight_out)}</td>
+			</tr>`
+			)
+			.join("");
+		$body.find(".bd-list tbody").html(rows || `<tr><td colspan="7"><div class="bd-empty">No cards at this bench right now.</div></td></tr>`);
+	}
 	function renderBench(s) {
 		page.set_title(s.label || __("Bench"));
 		sel.set_value(s.label || "");
@@ -93,26 +139,25 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 			tiles += tile(__("Issued"), s.issued, "issued");
 			tiles += tile(__("Receipted"), s.receipted, "receipted");
 		}
-		const rows = (s.cards || [])
-			.map(
-				(c) => `<tr>
-				<td><a href="/app/order-bag/${encodeURIComponent(c.name)}"><b>${frappe.utils.escape_html(c.name)}</b></a></td>
-				<td>${frappe.utils.escape_html(c.design || "")}</td>
-				<td class="num">${c.qty || ""}</td>
-				<td>${c.due_date ? frappe.datetime.str_to_user(c.due_date) : ""}</td>
-				<td>${frappe.utils.escape_html(c.status || "")}</td>
-				<td>${frappe.utils.escape_html(c.employee || "")}</td>
-				<td class="num">${c.weight_out ? flt(c.weight_out).toFixed(3) : ""}</td>
-			</tr>`
-			)
-			.join("");
+		bdCards = s.cards || [];
+		bdSort = { field: null, dir: 1 };
+		const ths = BD_COLS.map((c) => `<th class="bd-sort ${c.t === "num" ? "num" : ""}" data-f="${c.f}">${__(c.label)}<span class="bd-arrow"></span></th>`).join("");
 		$body.html(`
 			<div class="bd-tiles">${tiles}</div>
 			<div class="bd-box"><table class="bd-list">
-				<thead><tr><th>Order Bag</th><th>Design</th><th class="num">Qty</th><th>Due</th><th>Status</th><th>Employee</th><th class="num">Wt Out</th></tr></thead>
-				<tbody>${rows || `<tr><td colspan="7"><div class="bd-empty">No cards at this bench right now.</div></td></tr>`}</tbody>
+				<thead><tr>${ths}</tr></thead>
+				<tbody></tbody>
 			</table></div>
 		`);
+		renderCardRows();
+		$body.find(".bd-sort").on("click", function () {
+			const f = $(this).data("f");
+			if (bdSort.field === f) bdSort.dir *= -1;
+			else bdSort = { field: f, dir: 1 };
+			$body.find(".bd-arrow").text("");
+			$(this).find(".bd-arrow").text(bdSort.dir === 1 ? " ▲" : " ▼");
+			renderCardRows();
+		});
 	}
 	function flt(v) {
 		const n = parseFloat(v);
