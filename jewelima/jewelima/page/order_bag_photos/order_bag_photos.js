@@ -93,14 +93,18 @@ frappe.pages["order-bag-photos"].on_page_load = function (wrapper) {
 	page.set_primary_action(__("Upload Photos"), upload, "upload");
 	page.add_inner_button(__("Refresh"), load);
 
-	// prefill from the route (/app/order-bag-photos/<bag>) — set after controls exist
+	// prefill from the route (/app/order-bag-photos/<bag>). Run deferred (so the
+	// route + control are ready on a hard browser refresh) and on every route
+	// change back to this page.
 	const fromRoute = () => {
-		const r = frappe.get_route();
-		if (r[1] && r[1] !== state.bag.get_value()) {
-			state.bag.set_value(r[1]);
+		const r = frappe.get_route() || [];
+		if (r[0] !== "order-bag-photos") return;
+		const bag = r[1];
+		if (bag && bag !== state.bag.get_value()) {
+			state.bag.set_value(bag);
 			load();
 		}
 	};
-	fromRoute();
-	$(wrapper).on("show", fromRoute);
+	setTimeout(fromRoute, 250);
+	frappe.router.on("change", fromRoute);
 };
