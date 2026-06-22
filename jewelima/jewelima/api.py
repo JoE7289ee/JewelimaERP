@@ -197,6 +197,35 @@ def get_item_stone_profile(item):
 
 
 @frappe.whitelist()
+def get_order_bag_images(order_bag):
+	"""All image files for an Order Bag: native File attachments + the Attachments
+	child-table images, deduped, image extensions only."""
+	if not order_bag or not frappe.db.exists("Order Bag", order_bag):
+		return []
+	IMG = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
+	files = frappe.get_all(
+		"File",
+		filters={"attached_to_doctype": "Order Bag", "attached_to_name": order_bag},
+		fields=["file_url", "file_name"],
+		order_by="creation desc",
+	)
+	bag = frappe.get_doc("Order Bag", order_bag)
+	for a in bag.attachments or []:
+		if a.image:
+			files.append({"file_url": a.image, "file_name": a.title or a.image.split("/")[-1]})
+	out, seen = [], set()
+	for f in files:
+		url = f.get("file_url")
+		if not url or url in seen:
+			continue
+		if not url.lower().split("?")[0].endswith(IMG):
+			continue
+		seen.add(url)
+		out.append({"file_url": url, "file_name": f.get("file_name") or url.split("/")[-1]})
+	return out
+
+
+@frappe.whitelist()
 def get_order_bag_cards(names):
 	"""Print-card data for a list of Order Bags: the bag's own fields plus its
 	design's type/image and BOM materials. Used by the Print Order Bags page."""

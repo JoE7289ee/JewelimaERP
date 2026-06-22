@@ -9,6 +9,9 @@ frappe.ui.form.on("Order Bag", {
 			`<div class="text-muted" style="padding:14px;">Stage history — who worked on this bag at each bench — will appear here.</div>`
 		);
 		if (!frm.is_new()) {
+			frm.add_custom_button(__("Photos"), () => {
+				frappe.set_route("order-bag-photos", frm.doc.name);
+			});
 			frm.add_custom_button(__("Transfer"), () => {
 				frappe.set_route("transfer-order-bag");
 			});
