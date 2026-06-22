@@ -430,12 +430,20 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 		"remarks": remarks,
 	}).insert(ignore_permissions=True)
 	bag.db_set("location", to_location)
-	# create the destination bench's record (only if that bench doctype exists yet)
+	# the card is leaving its current bench — close out that bench's record so it
+	# stops counting as present/queue/issued/receipted there (status -> Completed).
 	try:
-		from jewelima.jewelima.benches import on_bag_arrival
+		from jewelima.jewelima.benches import bench_doctype, on_bag_arrival
+
+		fdt = bench_doctype(from_location)
+		if fdt and frappe.db.exists("DocType", fdt):
+			old = frappe.get_all(fdt, filters={"order_bag": order_bag, "status": ["!=", "Completed"]}, order_by="creation desc", limit=1, pluck="name")
+			if old:
+				frappe.db.set_value(fdt, old[0], {"status": "Completed", "time_out": frappe.utils.now_datetime()})
+		# create the destination bench's record (only if that bench doctype exists yet)
 		on_bag_arrival(order_bag, to_location)
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "on_bag_arrival failed")
+		frappe.log_error(frappe.get_traceback(), "bench record transition failed")
 	frappe.db.commit()
 	return {"transfer": t.name, "from_location": from_location, "to_location": to_location}
 
