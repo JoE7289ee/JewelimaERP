@@ -97,11 +97,12 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			</tr>`);
 			$body.append($tr);
 		});
+		const qT = state.rows.reduce((s, r) => s + flt(r.qty), 0);
 		const gT = state.rows.reduce((s, r) => s + flt(r.gross), 0);
 		const nT = state.rows.reduce((s, r) => s + flt(r.nett), 0);
 		$(page.main).find(".tob-foot-row").html(
 			state.rows.length
-				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="5" style="text-align:right">Totals</td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td></td></tr>`
+				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">Totals</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td></td></tr>`
 				: ""
 		);
 		$(page.main).find(".tob-count").text(state.rows.length);
