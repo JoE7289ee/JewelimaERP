@@ -126,9 +126,11 @@ def make_demo(orders=200, designs=60, customers=30, salesmen=10, employees=20, s
 
 def _simulate(bag, golds, stones, employees):
 	"""Walk a bag through a random slice of the flow so states are spread out."""
+	import json
+
 	from jewelima.jewelima.api import (
-		add_weight, convert_to_ornament, get_bag_contents, issue_stones,
-		issue_to_employee, receive_from_employee, transfer_order_bag,
+		add_weight, convert_to_ornament, get_bag_contents, issue_bench_cards,
+		issue_stones, receipt_bench_cards, transfer_order_bag,
 	)
 	r = random.random()
 	if r < 0.18:
@@ -149,12 +151,14 @@ def _simulate(bag, golds, stones, employees):
 
 	for bench in random.sample(WORK_BENCHES, random.randint(1, 3)):
 		try:
-			transfer_order_bag(bag, bench)
+			transfer_order_bag(bag, bench)  # creates the bench record (In Queue)
+			emp = random.choice(employees)
+			issue_bench_cards(json.dumps([bag]), bench, employee=emp)  # -> Issued, weight_out snapshot
+			gold = flt(get_bag_contents(bag).get("gold_grams")) or grams
+			win = round(max(gold - random.uniform(0.01, 0.15), 0), 3)
+			receipt_bench_cards(json.dumps([{"order_bag": bag, "weight_in": win}]), bench, employee=emp)  # -> Receipted + loss
 		except Exception:
 			pass
-		gross = flt(get_bag_contents(bag).get("gross_weight")) or grams
-		iss = issue_to_employee(bag, random.choice(employees), gross, bench=bench)
-		receive_from_employee(iss["issue"], round(max(gross - random.uniform(0.01, 0.15), 0), 3))
 
 	if r > 0.8:
 		try:
