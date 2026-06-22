@@ -26,7 +26,7 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 		table.wt-tbl th{background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;white-space:nowrap;}
 		table.wt-tbl td{border-bottom:1px solid var(--border-color);padding:4px 8px;}
 		table.wt-tbl td.num,table.wt-tbl th.num{text-align:right;}
-		table.wt-tbl input{width:90px;text-align:right;}
+		table.wt-tbl input{width:100%;text-align:right;box-sizing:border-box;}
 		.wt-foot{display:none;justify-content:space-between;align-items:center;margin-top:10px;}
 		.wt-foot.show{display:flex;}
 		.wt-foot .tot{font-size:13px;color:var(--text-muted);}
@@ -87,9 +87,9 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 	function renderTable() {
 		state.itemCtl = {};
 		$head.html(`<tr>
-			<th style="width:30px">#</th><th>Item</th><th>Purity</th>
-			<th class="num">BOM Qty</th><th class="num">BOM Wt</th><th class="num">Current Wt</th>
-			<th class="num">Add Wt</th><th style="width:28px"></th>
+			<th style="width:30px">#</th><th>Item</th><th style="width:70px">Purity</th>
+			<th class="num" style="width:100px">BOM Qty</th><th class="num" style="width:100px">BOM Wt</th><th class="num" style="width:100px">Current Wt</th>
+			<th class="num" style="width:120px">Add Wt</th><th style="width:28px"></th>
 		</tr>`);
 		$body.empty();
 		state.materials.forEach((m, i) => {
