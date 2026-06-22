@@ -365,6 +365,50 @@ def allowed_to_locations(from_location):
 
 
 @frappe.whitelist()
+def get_bench_dashboard(bench=None):
+	"""Bench dashboard data. No bench -> overview of all benches (cards present +
+	Issued/Receipted for work benches). With a bench -> that bench's counts plus the
+	list of cards currently there."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE, ISSUE_RECEIPT_LOCATIONS, resolve_location
+
+	def stats(loc):
+		dt = BENCH_DOCTYPE.get(loc)
+		o = {
+			"location": loc, "label": dt, "has_ir": loc in ISSUE_RECEIPT_LOCATIONS,
+			"present": frappe.db.count("Order Bag", {"location": loc}),
+			"in_queue": 0, "issued": 0, "receipted": 0,
+		}
+		if dt and frappe.db.exists("DocType", dt):
+			o["in_queue"] = frappe.db.count(dt, {"status": "In Queue"})
+			o["issued"] = frappe.db.count(dt, {"status": "Issued"})
+			o["receipted"] = frappe.db.count(dt, {"status": "Receipted"})
+		return o
+
+	if not bench:
+		return {"overview": [stats(loc) for loc in BENCH_DOCTYPE]}
+
+	loc = resolve_location(bench)
+	if not loc:
+		return {}
+	out = stats(loc)
+	dt = BENCH_DOCTYPE.get(loc)
+	cards = []
+	for b in frappe.get_all("Order Bag", filters={"location": loc}, fields=["name", "design", "qty", "due_date"], order_by="due_date asc"):
+		rec = None
+		if dt and frappe.db.exists("DocType", dt):
+			r = frappe.get_all(dt, filters={"order_bag": b.name}, fields=["status", "employee", "weight_out"], order_by="creation desc", limit=1)
+			rec = r[0] if r else None
+		cards.append({
+			"name": b.name, "design": b.design, "qty": b.qty, "due_date": b.due_date,
+			"status": (rec or {}).get("status") or "—",
+			"employee": (rec or {}).get("employee") or "",
+			"weight_out": (rec or {}).get("weight_out") or 0,
+		})
+	out["cards"] = cards
+	return out
+
+
+@frappe.whitelist()
 def transfer_order_bag(order_bag, to_location, remarks=None):
 	"""The ONLY way an Order Bag changes location: records an Order Bag Transfer
 	(from -> to, time, who) and updates the bag's read-only location."""

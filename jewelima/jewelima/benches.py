@@ -42,8 +42,27 @@ BENCH_DOCTYPE = {
 }
 
 
+# Benches where work is issued to / received from an employee (loss is booked).
+# Their dashboards show Issued / Receipted counts; others show only cards present.
+ISSUE_RECEIPT_LOCATIONS = {"GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"}
+
+
 def bench_doctype(location):
 	return BENCH_DOCTYPE.get((location or "").upper())
+
+
+def resolve_location(bench):
+	"""Accept a location ('PRE POLISH'), a bench doctype name ('Pre Polish') or its
+	scrubbed form ('pre_polish') and return the UPPERCASE location, or None."""
+	if not bench:
+		return None
+	b = str(bench).strip()
+	if b.upper() in BENCH_DOCTYPE:
+		return b.upper()
+	for loc, label in BENCH_DOCTYPE.items():
+		if label.lower() == b.lower() or frappe.scrub(label) == b.lower():
+			return loc
+	return None
 
 
 def _base_fields(label):
