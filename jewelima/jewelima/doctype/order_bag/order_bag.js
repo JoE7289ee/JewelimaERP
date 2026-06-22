@@ -5,9 +5,7 @@ frappe.ui.form.on("Order Bag", {
 	refresh(frm) {
 		render_contents(frm);
 		render_transfers(frm);
-		frm.get_field("stages_html").$wrapper.html(
-			`<div class="text-muted" style="padding:14px;">Stage history — who worked on this bag at each bench — will appear here.</div>`
-		);
+		render_stages(frm);
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Photos"), () => {
 				frappe.set_route("order-bag-photos", frm.doc.name);
@@ -95,4 +93,45 @@ function render_transfers(frm) {
 					<tbody>${body}</tbody>
 				</table>`);
 		});
+}
+
+function render_stages(frm) {
+	const $w = frm.get_field("stages_html").$wrapper;
+	if (frm.is_new()) {
+		$w.html('<div class="text-muted" style="padding:14px;">Save the bag first.</div>');
+		return;
+	}
+	frappe.call({ method: "jewelima.jewelima.api.get_bag_stage_history", args: { order_bag: frm.doc.name } }).then((r) => {
+		const rows = r.message || [];
+		if (!rows.length) {
+			$w.html('<div class="text-muted" style="padding:14px;">No bench activity yet — this bag has not been worked at any bench.</div>');
+			return;
+		}
+		const dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
+		const num = (v) => (v ? flt(v).toFixed(3) : "");
+		const body = rows
+			.map(
+				(s, i) => `<tr>
+					<td>${i + 1}</td>
+					<td><b>${frappe.utils.escape_html(s.bench || "")}</b></td>
+					<td>${frappe.utils.escape_html(s.employee_name || "—")}</td>
+					<td>${frappe.utils.escape_html(s.status || "")}</td>
+					<td>${dt(s.issued_at || s.time_in)}</td>
+					<td>${dt(s.receipted_at)}</td>
+					<td style="text-align:right">${num(s.weight_out)}</td>
+					<td style="text-align:right">${num(s.weight_in)}</td>
+					<td style="text-align:right">${num(s.loss)}</td>
+				</tr>`
+			)
+			.join("");
+		$w.html(`
+			<table class="table table-bordered" style="font-size:12px;">
+				<thead><tr>
+					<th style="width:32px">#</th><th>Bench</th><th>Employee</th><th>Status</th>
+					<th>Issued</th><th>Received</th>
+					<th style="text-align:right">Wt Out</th><th style="text-align:right">Wt In</th><th style="text-align:right">Loss</th>
+				</tr></thead>
+				<tbody>${body}</tbody>
+			</table>`);
+	});
 }

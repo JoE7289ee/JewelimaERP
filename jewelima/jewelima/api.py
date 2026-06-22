@@ -408,6 +408,32 @@ def get_bench_dashboard(bench=None):
 
 
 @frappe.whitelist()
+def get_bag_stage_history(order_bag):
+	"""Every bench this bag passed through, chronologically: who worked it, status,
+	times, weight in/out and loss. Aggregated across the per-bench doctypes."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	rows = []
+	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
+		if not frappe.db.exists("DocType", dt):
+			continue
+		for r in frappe.get_all(
+			dt, filters={"order_bag": order_bag},
+			fields=["name", "status", "employee", "time_in", "time_out", "issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
+		):
+			r["bench"] = dt
+			rows.append(r)
+	rows.sort(key=lambda x: (x.get("time_in") or x.get("creation")))
+	emps = list({r["employee"] for r in rows if r.get("employee")})
+	names = {}
+	if emps:
+		names = {e.name: e.employee_name for e in frappe.get_all("Employee", filters={"name": ["in", emps]}, fields=["name", "employee_name"])}
+	for r in rows:
+		r["employee_name"] = names.get(r.get("employee")) or r.get("employee") or ""
+	return rows
+
+
+@frappe.whitelist()
 def transfer_order_bag(order_bag, to_location, remarks=None):
 	"""The ONLY way an Order Bag changes location: records an Order Bag Transfer
 	(from -> to, time, who) and updates the bag's read-only location."""
