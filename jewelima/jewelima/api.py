@@ -435,6 +435,20 @@ def get_bag_stage_history(order_bag):
 
 
 @frappe.whitelist()
+def get_bag_transfer_info(order_bag):
+	"""Scan lookup for the Transfer page: location/design/qty/due plus the gross &
+	nett weight the card ACTUALLY holds right now (from the ledger; 0 if empty)."""
+	bag = frappe.db.get_value("Order Bag", order_bag, ["location", "design", "qty", "due_date"], as_dict=True)
+	if not bag:
+		return {}
+	c = get_bag_contents(order_bag)
+	return {
+		"location": bag.location, "design": bag.design, "qty": bag.qty, "due_date": bag.due_date,
+		"gross": round(flt(c.get("gross_weight")), 3), "nett": round(flt(c.get("gold_grams")), 3),
+	}
+
+
+@frappe.whitelist()
 def transfer_order_bag(order_bag, to_location, remarks=None):
 	"""The ONLY way an Order Bag changes location: records an Order Bag Transfer
 	(from -> to, time, who) and updates the bag's read-only location."""

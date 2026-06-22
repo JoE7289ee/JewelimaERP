@@ -27,6 +27,8 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		table.tob-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.tob-grid th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.tob-grid td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
+		table.tob-grid td.num,table.tob-grid th.num{text-align:right;}
+		table.tob-grid tfoot td{border-top:2px solid var(--gray-400,#aeb6bf);}
 		.tob-foot{margin-top:6px;color:var(--text-muted);font-size:12px;}
 		.tob-msg{display:none;margin:0 0 8px;padding:7px 11px;border-radius:6px;font-size:13px;}
 		.tob-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
@@ -41,8 +43,9 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		<div class="tob-msg"></div>
 		<div class="tob-box">
 			<table class="tob-grid">
-				<thead><tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th style="width:34px"></th></tr></thead>
+				<thead><tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th class="num">Gross (g)</th><th class="num">Nett (g)</th><th style="width:34px"></th></tr></thead>
 				<tbody class="tob-body"></tbody>
+				<tfoot class="tob-foot-row"></tfoot>
 			</table>
 		</div>
 		<div class="tob-foot"><span class="tob-count">0</span> bag(s) collected.</div>
@@ -59,6 +62,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const $body = $(page.main).find(".tob-body");
 	const $msg = $(page.main).find(".tob-msg");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
+	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 	function setMsg(html, kind) {
 		$msg.removeClass("err warn ok").html(html || "");
 		if (html) $msg.addClass(kind || "err");
@@ -87,10 +91,19 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				<td>${frappe.utils.escape_html(r.design || "")}</td>
 				<td>${r.qty || ""}</td>
 				<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td>
+				<td class="num">${flt(r.gross) ? flt(r.gross).toFixed(3) : ""}</td>
+				<td class="num">${flt(r.nett) ? flt(r.nett).toFixed(3) : ""}</td>
 				<td><button class="btn btn-xs btn-default tob-rm" data-name="${frappe.utils.escape_html(r.name)}" title="Remove">&times;</button></td>
 			</tr>`);
 			$body.append($tr);
 		});
+		const gT = state.rows.reduce((s, r) => s + flt(r.gross), 0);
+		const nT = state.rows.reduce((s, r) => s + flt(r.nett), 0);
+		$(page.main).find(".tob-foot-row").html(
+			state.rows.length
+				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="5" style="text-align:right">Totals</td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td></td></tr>`
+				: ""
+		);
 		$(page.main).find(".tob-count").text(state.rows.length);
 	}
 	$body.on("click", ".tob-rm", function () {
@@ -111,7 +124,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			logHistory(code, "Already scanned", "warn");
 			return;
 		}
-		frappe.db.get_value("Order Bag", code, ["location", "design", "qty", "due_date"]).then((r) => {
+		frappe.call({ method: "jewelima.jewelima.api.get_bag_transfer_info", args: { order_bag: code } }).then((r) => {
 			const v = r.message || {};
 			if (!v.location) {
 				setMsg(__("No Order Bag <b>{0}</b>.", [safe]), "err");
@@ -127,7 +140,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date });
+			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date, gross: v.gross, nett: v.nett });
 			renderRows();
 			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
