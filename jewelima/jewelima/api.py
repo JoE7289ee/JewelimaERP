@@ -250,6 +250,12 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 		"remarks": remarks,
 	}).insert(ignore_permissions=True)
 	bag.db_set("location", to_location)
+	# create the destination bench's record (only if that bench doctype exists yet)
+	try:
+		from jewelima.jewelima.benches import on_bag_arrival
+		on_bag_arrival(order_bag, to_location)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "on_bag_arrival failed")
 	frappe.db.commit()
 	return {"transfer": t.name, "from_location": from_location, "to_location": to_location}
 
