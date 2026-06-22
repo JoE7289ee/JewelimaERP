@@ -69,9 +69,10 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		sel.set_value("");
 		const cards = rows
 			.map((s) => {
-				const sub = s.has_ir
-					? `<div class="sub"><span class="pill bd-pill-q">Queue ${s.in_queue}</span><span class="pill bd-pill-i">Issued ${s.issued}</span><span class="pill bd-pill-r">Recd ${s.receipted}</span></div>`
-					: `<div class="sub">&nbsp;</div>`;
+				const irPills = s.has_ir
+					? `<span class="pill bd-pill-i">Issued ${s.issued}</span><span class="pill bd-pill-r">Recd ${s.receipted}</span>`
+					: "";
+				const sub = `<div class="sub"><span class="pill bd-pill-q">Queue ${s.in_queue}</span>${irPills}</div>`;
 				return `<div class="bd-card" data-slug="${bd_slug(s.label)}">
 					<div class="name">${frappe.utils.escape_html(s.label)}</div>
 					<div class="big">${s.present}</div><div class="sub">cards present</div>
@@ -87,9 +88,8 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 	function renderBench(s) {
 		page.set_title(s.label || __("Bench"));
 		sel.set_value(s.label || "");
-		let tiles = tile(__("Cards Present"), s.present);
+		let tiles = tile(__("Cards Present"), s.present) + tile(__("In Queue"), s.in_queue);
 		if (s.has_ir) {
-			tiles += tile(__("In Queue"), s.in_queue);
 			tiles += tile(__("Issued"), s.issued, "issued");
 			tiles += tile(__("Receipted"), s.receipted, "receipted");
 		}

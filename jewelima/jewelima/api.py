@@ -377,10 +377,11 @@ def get_bench_dashboard(bench=None):
 		# cards CURRENTLY at this bench (a card that moved on no longer counts)
 		bags = frappe.get_all("Order Bag", filters={"location": loc}, pluck="name")
 		o = {"location": loc, "label": dt, "has_ir": has_ir, "present": len(bags), "in_queue": 0, "issued": 0, "receipted": 0}
-		if has_ir and dt and bags and frappe.db.exists("DocType", dt):
+		if dt and bags and frappe.db.exists("DocType", dt):
 			o["in_queue"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "In Queue"})
-			o["issued"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Issued"})
-			o["receipted"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Receipted"})
+			if has_ir:  # Issued/Received only at benches that actually issue & receipt
+				o["issued"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Issued"})
+				o["receipted"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Receipted"})
 		return o
 
 	if not bench:
