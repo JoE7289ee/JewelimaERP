@@ -306,9 +306,10 @@ RAW_MATERIALS_STORE = "Raw Materials Store"
 RESERVED_WAREHOUSE = "Reserved"
 GOLD_ISSUE_WAREHOUSE = "Gold Issue"
 STONE_ISSUE_WAREHOUSE = "Stone Issue"
-# Coarse value pool for materials currently inside Order Bags (per-bag detail
-# lives in the Bag Material Ledger; this warehouse holds the aggregate value).
-IN_PRODUCTION_WAREHOUSE = "In Production"
+# Coarse value pool for materials currently inside Order Bags ("In Bags"). Per-bag
+# detail lives in the Bag Material Ledger; this warehouse holds the aggregate gold.
+# Gold lands here on add-weight; loss moves out of here to a '<bench> -LOSS' wh.
+IN_PRODUCTION_WAREHOUSE = "In Bags"
 
 
 def create_store_warehouses():
@@ -322,6 +323,10 @@ def create_store_warehouses():
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
 	make_warehouse(STONE_ISSUE_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	# The bench flow issues gold/loss as real stock moves; gold isn't always
+	# pre-stocked in the Store, so allow negative stock (a negative balance just
+	# flags unrecorded purchasing rather than blocking the floor).
+	frappe.db.set_single_value("Stock Settings", "allow_negative_stock", 1)
 	frappe.db.commit()
 
 

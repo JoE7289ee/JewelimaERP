@@ -14,6 +14,43 @@ def _company():
 	)
 
 
+def _abbr():
+	return frappe.db.get_value("Company", _company(), "abbr")
+
+
+def _wh(name):
+	"""Full '<name> - <abbr>' warehouse, or None if it doesn't exist."""
+	full = "{0} - {1}".format(name, _abbr())
+	return full if frappe.db.exists("Warehouse", full) else None
+
+
+def _stock_move(item, qty, source, target):
+	"""Submit a Material Transfer of `qty` (stock UOM) of `item` from source ->
+	target warehouse. No-op when qty<=0 or either warehouse is missing."""
+	qty = flt(qty)
+	if qty <= 0 or not source or not target:
+		return None
+	se = frappe.get_doc({
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Material Transfer",
+		"company": _company(),
+		"items": [{
+			"item_code": item,
+			"qty": qty,
+			"uom": frappe.db.get_value("Item", item, "stock_uom") or "Gram",
+			"s_warehouse": source,
+			"t_warehouse": target,
+			# we track grams here; valuation flows in automatically once gold is
+			# actually purchased (until then a zero rate is fine).
+			"allow_zero_valuation_rate": 1,
+		}],
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+	return se.name
+
+
 @frappe.whitelist()
 def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=None):
 	"""Create + submit a Purchase Receipt for raw materials (from the Purchase
@@ -412,8 +449,12 @@ def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employe
 
 @frappe.whitelist()
 def add_weight(order_bag, item, qty, bench=None, remarks=None):
-	"""Give gold (grams) to a bag — the Casting 'add weight' action."""
+	"""Give gold (grams) to a bag — the Casting 'add weight' action. Records the
+	per-bag ledger row AND moves the gold as real stock: Store -> In Bags pool."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
+
 	name = _bag_ledger(order_bag, item, "In", qty, "Gold Issue", bench=bench, remarks=remarks)
+	_stock_move(item, qty, _wh(RAW_MATERIALS_STORE), _wh(IN_PRODUCTION_WAREHOUSE))
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
@@ -426,8 +467,16 @@ def issue_stones(order_bag, item, qty, bench=None, remarks=None):
 
 @frappe.whitelist()
 def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
-	"""Record metal loss out of a bag (the out-minus-in difference at a bench)."""
+	"""Record metal loss out of a bag (the out-minus-in difference at a bench).
+	Per-bag ledger row AND real stock: In Bags pool -> '<bench> -LOSS' warehouse.
+	`bench` may be the UPPERCASE location or the Title bench name."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
 	name = _bag_ledger(order_bag, item, "Out", qty, "Loss", bench=bench, employee=employee, remarks=remarks)
+	bench_title = BENCH_DOCTYPE.get(bench, bench) if bench else None
+	loss_wh = _wh("{0} -LOSS".format(bench_title)) if bench_title else None
+	_stock_move(item, qty, _wh(IN_PRODUCTION_WAREHOUSE), loss_wh)
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
@@ -497,12 +546,18 @@ def convert_to_ornament(order_bag):
 	"""The piece is finished: consume the bag's remaining materials (zero it out),
 	one Convert (Out) row per held item. Finished-good stock posting is added with
 	the coarse-stock wiring."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
 	c = get_bag_contents(order_bag)
 	held = [it for it in c["items"] if it["qty"] > 0]
 	if not held:
 		frappe.throw(frappe._("{0} holds no materials to convert.").format(order_bag))
+	in_bags, fg = _wh(IN_PRODUCTION_WAREHOUSE), _wh("Finished Goods")
 	for it in held:
 		_bag_ledger(order_bag, it["item"], "Out", it["qty"], "Convert")
+		# gold drains from the In Bags pool into Finished Goods (stones aren't pooled)
+		if not frappe.db.get_value("Item", it["item"], "stone_type"):
+			_stock_move(it["item"], it["qty"], in_bags, fg)
 	frappe.db.set_value("Order Bag", order_bag, "is_finished", 1)  # locks the BOM (plan)
 	frappe.db.commit()
 	return {"order_bag": order_bag, "consumed": held}
