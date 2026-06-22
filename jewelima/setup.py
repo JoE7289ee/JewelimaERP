@@ -206,7 +206,10 @@ def create_default_stone_types():
 
 
 # Seed values for the Design masters (extensible — users can add more).
-DESIGN_TYPES = ["Rings", "Pendant", "Necklace"]
+DESIGN_TYPES = [
+	"NOSEPIN", "STUD", "NECKLACE", "PENDANT", "CHAIN", "BACK CHAIN", "BIRTH NECK",
+	"RING", "BRACELET", "BANGLE", "ANKLET", "PIPE BANGLE", "CHAIN BRACELET", "CHAIN NECKLACE",
+]
 DESIGN_STYLES = ["General", "Tickly"]
 
 
