@@ -13,7 +13,7 @@ const TOB_LOCATIONS =
 
 frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Transfer Order Bag", single_column: true });
-	const state = { rows: [], location: null };
+	const state = { rows: [], location: null, history: [] };
 
 	$(page.main).append(`
 		<style>
@@ -63,6 +63,9 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		$msg.removeClass("err warn ok").html(html || "");
 		if (html) $msg.addClass(kind || "err");
 	}
+	function logHistory(code, result, kind) {
+		state.history.push({ time: frappe.datetime.now_datetime(), code: code, result: result, kind: kind || "ok" });
+	}
 
 	function updateLoc() {
 		$(page.main).find(".tob-locval").text(state.location || "—");
@@ -97,12 +100,14 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		const safe = frappe.utils.escape_html(code);
 		if (state.rows.find((x) => x.name === code)) {
 			setMsg(__("<b>{0}</b> already scanned.", [safe]), "warn");
+			logHistory(code, "Already scanned", "warn");
 			return;
 		}
 		frappe.db.get_value("Order Bag", code, ["location", "design", "qty", "due_date"]).then((r) => {
 			const v = r.message || {};
 			if (!v.location) {
 				setMsg(__("No Order Bag <b>{0}</b>.", [safe]), "err");
+				logHistory(code, "Not found", "err");
 				return;
 			}
 			if (!state.location) {
@@ -110,11 +115,13 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				updateLoc();
 			} else if (v.location !== state.location) {
 				setMsg(__("<b>{0}</b> is at <b>{1}</b> — this batch is collecting from <b>{2}</b>.", [safe, frappe.utils.escape_html(v.location), frappe.utils.escape_html(state.location)]), "err");
+				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
 			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date });
 			renderRows();
 			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
+			logHistory(code, __("Added ({0})", [v.location]), "ok");
 		});
 	}
 
@@ -128,7 +135,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		}
 	});
 
-	function resetPage() {
+	function clearBatch() {
 		state.rows = [];
 		state.location = null;
 		state.to.set_value("");
@@ -137,6 +144,30 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		updateLoc();
 		renderRows();
 		focusScan();
+	}
+	function resetPage() {
+		clearBatch();
+		state.history = []; // Reset also wipes the scan history
+	}
+	function showHistory() {
+		const h = state.history;
+		const body = h
+			.slice()
+			.reverse()
+			.map((e, idx) => {
+				const color = e.kind === "err" ? "#b00020" : e.kind === "warn" ? "#9a6700" : "#1d7a33";
+				return `<tr><td>${h.length - idx}</td><td>${e.time ? frappe.datetime.str_to_user(e.time) : ""}</td>
+					<td><b>${frappe.utils.escape_html(e.code)}</b></td>
+					<td style="color:${color}">${frappe.utils.escape_html(e.result)}</td></tr>`;
+			})
+			.join("");
+		const d = new frappe.ui.Dialog({ title: __("Scan history ({0})", [h.length]), size: "large", fields: [{ fieldtype: "HTML", fieldname: "h" }] });
+		d.fields_dict.h.$wrapper.html(
+			h.length
+				? `<table class="table table-bordered" style="font-size:12px;"><thead><tr><th style="width:40px">#</th><th>Time</th><th>Order Bag</th><th>Result</th></tr></thead><tbody>${body}</tbody></table>`
+				: '<div class="text-muted" style="padding:12px;">No scans yet this session.</div>'
+		);
+		d.show();
 	}
 
 	function transferAll() {
@@ -155,11 +186,13 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			if (res.errors && res.errors.length) {
 				frappe.msgprint({ title: __("Some not transferred"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
 			}
-			resetPage();
+			logHistory("—", __("Transferred {0} → {1}", [res.count, to]), "ok");
+			clearBatch(); // keep history; only Reset wipes it
 		}).catch(() => frappe.dom.unfreeze());
 	}
 
 	page.set_primary_action(__("Transfer All"), transferAll, "arrow-right");
-	page.set_secondary_action(__("Reset"), resetPage, "refresh");
+	page.add_inner_button(__("History"), showHistory);
+	page.add_inner_button(__("Reset"), resetPage);
 	focusScan();
 };
