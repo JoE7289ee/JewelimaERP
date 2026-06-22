@@ -28,12 +28,17 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		table.tob-grid th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.tob-grid td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
 		.tob-foot{margin-top:6px;color:var(--text-muted);font-size:12px;}
+		.tob-msg{display:none;margin:0 0 8px;padding:7px 11px;border-radius:6px;font-size:13px;}
+		.tob-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
+		.tob-msg.warn{display:block;background:#fdf3e3;color:#9a6700;border:1px solid #f0d9a8;}
+		.tob-msg.ok{display:block;background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		</style>
 		<div class="tob-head">
 			<div class="tob-scan"></div>
 			<div class="tob-loc"><div class="lbl">Batch location</div><div class="val tob-locval">—</div></div>
 			<div class="tob-to"></div>
 		</div>
+		<div class="tob-msg"></div>
 		<div class="tob-box">
 			<table class="tob-grid">
 				<thead><tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th style="width:34px"></th></tr></thead>
@@ -52,7 +57,12 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	state.to = mk(".tob-to", { fieldtype: "Select", label: "Transfer all to", fieldname: "to_location", options: TOB_LOCATIONS });
 
 	const $body = $(page.main).find(".tob-body");
+	const $msg = $(page.main).find(".tob-msg");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
+	function setMsg(html, kind) {
+		$msg.removeClass("err warn ok").html(html || "");
+		if (html) $msg.addClass(kind || "err");
+	}
 
 	function updateLoc() {
 		$(page.main).find(".tob-locval").text(state.location || "—");
@@ -84,29 +94,27 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	function processScan(code) {
 		code = (code || "").trim();
 		if (!code) return;
+		const safe = frappe.utils.escape_html(code);
 		if (state.rows.find((x) => x.name === code)) {
-			frappe.show_alert({ message: __("{0} already scanned", [code]), indicator: "orange" }, 4);
+			setMsg(__("<b>{0}</b> already scanned.", [safe]), "warn");
 			return;
 		}
 		frappe.db.get_value("Order Bag", code, ["location", "design", "qty", "due_date"]).then((r) => {
 			const v = r.message || {};
 			if (!v.location) {
-				frappe.msgprint({ title: __("Not found"), message: __("No Order Bag <b>{0}</b>.", [code]), indicator: "red" });
+				setMsg(__("No Order Bag <b>{0}</b>.", [safe]), "err");
 				return;
 			}
 			if (!state.location) {
 				state.location = v.location; // first scan locks the location
 				updateLoc();
 			} else if (v.location !== state.location) {
-				frappe.msgprint({
-					title: __("Different location"),
-					message: __("<b>{0}</b> is at <b>{1}</b> — this batch is collecting from <b>{2}</b>.", [code, v.location, state.location]),
-					indicator: "red",
-				});
+				setMsg(__("<b>{0}</b> is at <b>{1}</b> — this batch is collecting from <b>{2}</b>.", [safe, frappe.utils.escape_html(v.location), frappe.utils.escape_html(state.location)]), "err");
 				return;
 			}
 			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date });
 			renderRows();
+			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
 		});
 	}
 
@@ -125,6 +133,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		state.location = null;
 		state.to.set_value("");
 		state.scan.set_value("");
+		setMsg("");
 		updateLoc();
 		renderRows();
 		focusScan();
