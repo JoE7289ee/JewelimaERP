@@ -189,9 +189,22 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "package",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Warehouse Stock",
+   "link_to": "warehouse-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
   }
  ],
- "modified": "2026-06-23 00:07:44.492221",
+ "modified": "2026-06-23 17:18:24.705075",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

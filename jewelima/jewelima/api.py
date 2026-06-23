@@ -685,6 +685,41 @@ def save_bag_bom(order_bag, rows):
 
 
 # ---------------------------------------------------------------------------
+# Warehouse Stock dashboard — live balances straight from the stock ledger (Bin).
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_warehouse_stock():
+	"""Per (leaf) warehouse totals: gold grams (Gram items), stone carats (Carat
+	items) and distinct item count. Live from Bin."""
+	whs = frappe.get_all("Warehouse", filters={"is_group": 0, "company": _company()}, fields=["name", "warehouse_name"])
+	bins = frappe.get_all("Bin", filters={"actual_qty": ["!=", 0]}, fields=["warehouse", "item_code", "actual_qty", "stock_uom"])
+	agg = {}
+	for b in bins:
+		a = agg.setdefault(b.warehouse, {"gold_g": 0.0, "stone_ct": 0.0, "items": 0})
+		if b.stock_uom == "Carat":
+			a["stone_ct"] += flt(b.actual_qty)
+		else:
+			a["gold_g"] += flt(b.actual_qty)
+		a["items"] += 1
+	out = []
+	for w in whs:
+		a = agg.get(w.name) or {"gold_g": 0, "stone_ct": 0, "items": 0}
+		out.append({
+			"warehouse": w.name, "warehouse_name": w.warehouse_name,
+			"gold_g": round(a["gold_g"], 3), "stone_ct": round(a["stone_ct"], 3), "items": a["items"],
+		})
+	return out
+
+
+@frappe.whitelist()
+def get_warehouse_items(warehouse):
+	"""Items (with balance) currently in a warehouse — the drill-down."""
+	rows = frappe.get_all("Bin", filters={"warehouse": warehouse, "actual_qty": ["!=", 0]}, fields=["item_code", "actual_qty", "stock_uom"])
+	out = [{"item": r.item_code, "item_name": frappe.db.get_value("Item", r.item_code, "item_name"), "qty": round(flt(r.actual_qty), 3), "uom": r.stock_uom} for r in rows]
+	return sorted(out, key=lambda x: -x["qty"])
+
+
+# ---------------------------------------------------------------------------
 # Job Work — the bench Issue / Receipt screens (scan-driven, batch).
 # ---------------------------------------------------------------------------
 def _current_bench_record(dt, order_bag):
