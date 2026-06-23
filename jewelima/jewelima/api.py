@@ -719,6 +719,26 @@ def get_warehouse_items(warehouse):
 	return sorted(out, key=lambda x: -x["qty"])
 
 
+@frappe.whitelist()
+def get_item_stock(warehouse=None):
+	"""Every item and its stock in a chosen warehouse (blank = totalled across all
+	warehouses). For the Item Stock screen."""
+	filters = {"actual_qty": ["!=", 0]}
+	if warehouse:
+		filters["warehouse"] = warehouse
+	bins = frappe.get_all("Bin", filters=filters, fields=["item_code", "actual_qty", "stock_uom"])
+	names = {}
+	codes = list({b.item_code for b in bins})
+	if codes:
+		names = {i.name: i.item_name for i in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "item_name"])}
+	agg = {}
+	for b in bins:
+		a = agg.setdefault(b.item_code, {"qty": 0.0, "uom": b.stock_uom})
+		a["qty"] += flt(b.actual_qty)
+	rows = [{"item": k, "item_name": names.get(k) or k, "qty": round(v["qty"], 3), "uom": v["uom"]} for k, v in agg.items()]
+	return sorted(rows, key=lambda x: -x["qty"])
+
+
 # ---------------------------------------------------------------------------
 # Job Work — the bench Issue / Receipt screens (scan-driven, batch).
 # ---------------------------------------------------------------------------

@@ -202,9 +202,22 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "list",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Item Stock",
+   "link_to": "item-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
   }
  ],
- "modified": "2026-06-23 17:18:24.705075",
+ "modified": "2026-06-23 19:16:36.213773",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
