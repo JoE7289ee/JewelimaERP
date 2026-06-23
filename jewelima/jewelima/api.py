@@ -721,22 +721,25 @@ def get_warehouse_items(warehouse):
 
 @frappe.whitelist()
 def get_item_stock(warehouse=None):
-	"""Every item and its stock in a chosen warehouse (blank = totalled across all
-	warehouses). For the Item Stock screen."""
-	filters = {"actual_qty": ["!=", 0]}
+	"""Every stock item (gold + all stones) with its balance in a chosen warehouse
+	(blank = totalled across all warehouses). Shows the full item list, 0 where there
+	is no stock; skips disabled/non-stock items. For the Item Stock screen."""
+	bin_filters = {}
 	if warehouse:
-		filters["warehouse"] = warehouse
-	bins = frappe.get_all("Bin", filters=filters, fields=["item_code", "actual_qty", "stock_uom"])
-	names = {}
-	codes = list({b.item_code for b in bins})
-	if codes:
-		names = {i.name: i.item_name for i in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "item_name"])}
-	agg = {}
-	for b in bins:
-		a = agg.setdefault(b.item_code, {"qty": 0.0, "uom": b.stock_uom})
-		a["qty"] += flt(b.actual_qty)
-	rows = [{"item": k, "item_name": names.get(k) or k, "qty": round(v["qty"], 3), "uom": v["uom"]} for k, v in agg.items()]
-	return sorted(rows, key=lambda x: -x["qty"])
+		bin_filters["warehouse"] = warehouse
+	qmap = {}
+	for b in frappe.get_all("Bin", filters=bin_filters, fields=["item_code", "actual_qty"]):
+		qmap[b.item_code] = qmap.get(b.item_code, 0.0) + flt(b.actual_qty)
+	rows = []
+	for it in frappe.get_all(
+		"Item", filters={"is_stock_item": 1, "disabled": 0},
+		fields=["name", "item_name", "stock_uom", "stone_type"], order_by="item_name asc",
+	):
+		rows.append({
+			"item": it.name, "item_name": it.item_name, "uom": it.stock_uom,
+			"type": it.stone_type or "Metal", "qty": round(flt(qmap.get(it.name, 0)), 3),
+		})
+	return sorted(rows, key=lambda x: (-x["qty"], (x["item_name"] or x["item"]).lower()))
 
 
 # ---------------------------------------------------------------------------
