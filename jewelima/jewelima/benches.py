@@ -21,7 +21,7 @@ import os
 
 import frappe
 
-STATUS_OPTIONS = "In Queue\nOn Hold\nIssued\nReceipted\nCompleted"
+STATUS_OPTIONS = "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted"
 
 # location label (UPPERCASE, as stored on Order Bag) -> bench doctype name (plain)
 BENCH_DOCTYPE = {

@@ -107,6 +107,19 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "git-branch",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Bag Extraction",
+   "link_to": "bag-split",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "arrow-right",
    "indent": 0,
    "keep_closed": 0,
@@ -217,7 +230,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-23 19:16:36.213773",
+ "modified": "2026-06-23 19:58:09.803178",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

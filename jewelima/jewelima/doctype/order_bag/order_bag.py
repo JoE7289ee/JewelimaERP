@@ -37,9 +37,12 @@ class OrderBag(Document):
 		<line> = this bag's position within the order (1, 2, 3 …).
 		<n>     = the bag's quantity at creation. So a line of qty 10 -> E0001.1.10,
 		          while ten single-qty lines -> E0001.1.1, E0001.2.1 … E0001.10.1.
-		When a multi-qty bag is later split into single pieces, the units take
-		<Job Order>.<line>.1 … <line>.<qty> (split logic TBD).
+		When a multi-qty bag is split into single pieces at Bag Extraction, each new
+		piece is named <parent>-<piece_no> (parent stays as piece 1).
 		"""
+		if self.split_of:
+			self.name = f"{self.split_of}-{int(self.piece_no or 0)}"
+			return
 		if self.job_order:
 			prefix = f"{self.job_order}."
 			existing = frappe.get_all("Order Bag", filters={"job_order": self.job_order}, pluck="name")

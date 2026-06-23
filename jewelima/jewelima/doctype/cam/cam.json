@@ -57,7 +57,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "In Queue\nOn Hold\nIssued\nReceipted\nCompleted",
+   "options": "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted",
    "default": "In Queue",
    "in_list_view": 1,
    "in_standard_filter": 1

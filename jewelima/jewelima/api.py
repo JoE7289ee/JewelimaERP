@@ -743,6 +743,164 @@ def get_item_stock(warehouse=None):
 
 
 # ---------------------------------------------------------------------------
+# Bag Extraction — split one N-piece bag into N individual order bags.
+# ---------------------------------------------------------------------------
+def _even_split(total, n, prec=3):
+	"""Split `total` into `n` parts rounded to `prec` dp, summing back to `total`
+	(the rounding remainder is spread over the first parts)."""
+	total = flt(total)
+	if n <= 0:
+		return []
+	base = round(total / n, prec)
+	parts = [base] * n
+	diff = round(total - base * n, prec)
+	step = 10 ** (-prec)
+	i = 0
+	while abs(diff) >= step / 2 and i < n:
+		parts[i] = round(parts[i] + (step if diff > 0 else -step), prec)
+		diff = round(diff - (step if diff > 0 else -step), prec)
+		i += 1
+	return parts
+
+
+def _split_counts(total, n):
+	"""Split an integer count into n parts (first parts get the remainder)."""
+	total = int(total or 0)
+	base, rem = divmod(total, n) if n else (0, 0)
+	return [base + (1 if i < rem else 0) for i in range(n)]
+
+
+@frappe.whitelist()
+def get_bag_for_split(order_bag):
+	"""Bag Extraction scan: validate the card is AT Bag Extraction and In Queue, then
+	return its header, contents and a suggested even split across its qty pieces."""
+	from jewelima.jewelima.benches import bench_doctype
+
+	bag = frappe.db.get_value(
+		"Order Bag", order_bag,
+		["name", "location", "design", "qty", "size", "purity", "gross_weight", "nett_weight",
+		 "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight", "job_order", "customer", "salesman"],
+		as_dict=True,
+	)
+	if not bag:
+		return {"error": frappe._("No Order Bag {0}.").format(order_bag)}
+	loc = (bag.location or "").upper()
+	if loc != "BAG EXTRACTION":
+		return {"error": frappe._("{0} is at {1} — not at Bag Extraction.").format(order_bag, bag.location or "—")}
+	dt = bench_doctype(loc)
+	status = None
+	if dt and frappe.db.exists("DocType", dt):
+		recs = frappe.get_all(dt, filters={"order_bag": order_bag}, fields=["status"], order_by="creation desc", limit=1)
+		status = recs[0].status if recs else None
+	if status != "In Queue":
+		return {"error": frappe._("{0} is '{1}' at Bag Extraction — only In Queue cards can be split.").format(order_bag, status or "—")}
+	n = max(int(bag.qty or 1), 1)
+	c = get_bag_contents(order_bag)
+	gold = flt(c.get("gold_grams"))
+	pieces = []
+	dmd_n = _split_counts(bag.dmd_no, n); dmd_w = _even_split(bag.dmd_weight, n)
+	ps_n = _split_counts(bag.ps_no, n); ps_w = _even_split(bag.ps_weight, n)
+	cs_n = _split_counts(bag.cs_no, n); cs_w = _even_split(bag.cs_weight, n)
+	gold_each = _even_split(gold, n)
+	for i in range(n):
+		pieces.append({
+			"piece_no": i + 1,
+			"gold": gold_each[i],
+			"dmd_no": dmd_n[i], "dmd_ct": dmd_w[i],
+			"ps_no": ps_n[i], "ps_ct": ps_w[i],
+			"cs_no": cs_n[i], "cs_ct": cs_w[i],
+		})
+	return {
+		"bag": bag, "n": n,
+		"gold_total": round(gold, 3),
+		"stone_g_total": round((flt(bag.dmd_weight) + flt(bag.ps_weight) + flt(bag.cs_weight)) * 0.2, 3),
+		"pieces": pieces,
+	}
+
+
+@frappe.whitelist()
+def split_bag(order_bag, pieces, employee=None):
+	"""Split a Bag Extraction card into one bag per piece. Parent stays as piece 1;
+	pieces 2..N are new bags (named <parent>-2 …). Distributes gold (entered) + stones
+	(per piece) via the ledger, sets each bag's weights, marks the Bag Extraction
+	record Completed (+ employee)."""
+	from jewelima.jewelima.benches import bench_doctype
+
+	if isinstance(pieces, str):
+		pieces = json.loads(pieces or "[]")
+	bag = frappe.get_doc("Order Bag", order_bag)
+	if (bag.location or "").upper() != "BAG EXTRACTION":
+		frappe.throw(frappe._("{0} is not at Bag Extraction.").format(order_bag))
+	n = len(pieces)
+	if n < 1:
+		frappe.throw(frappe._("Nothing to split."))
+	if not employee:
+		employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+
+	contents = get_bag_contents(order_bag)
+	items = {it["item"]: flt(it["qty"]) for it in contents["items"] if flt(it["qty"]) != 0}
+	gold_item = _bag_gold_item(order_bag)
+	# per-item amount for each piece: gold item from entered gold, others even-split
+	amounts = {}
+	for item, qty in items.items():
+		if item == gold_item:
+			amounts[item] = [flt(p.get("gold")) for p in pieces]
+		else:
+			amounts[item] = _even_split(qty, n)
+
+	def piece_fields(p):
+		gold = flt(p.get("gold"))
+		stone_g = (flt(p.get("dmd_ct")) + flt(p.get("ps_ct")) + flt(p.get("cs_ct"))) * 0.2
+		return {
+			"qty": 1,
+			"nett_weight": round(gold, 3),
+			"gross_weight": round(gold + stone_g, 3),
+			"purity": bag.purity,
+			"dmd_no": int(p.get("dmd_no") or 0), "dmd_weight": flt(p.get("dmd_ct")),
+			"ps_no": int(p.get("ps_no") or 0), "ps_weight": flt(p.get("ps_ct")),
+			"cs_no": int(p.get("cs_no") or 0), "cs_weight": flt(p.get("cs_ct")),
+		}
+
+	created = []
+	for j, p in enumerate(pieces):
+		if j == 0:
+			frappe.db.set_value("Order Bag", order_bag, piece_fields(p))
+			created.append(order_bag)
+			continue
+		child = frappe.get_doc({
+			"doctype": "Order Bag",
+			"split_of": order_bag, "piece_no": j + 1,
+			"job_order": bag.job_order, "design": bag.design, "size": bag.size,
+			"location": "BAG EXTRACTION", "customer": bag.customer, "salesman": bag.salesman,
+			"order_type": bag.order_type, "order_date": bag.order_date, "due_date": bag.due_date,
+		})
+		child.insert(ignore_permissions=True)
+		frappe.db.set_value("Order Bag", child.name, piece_fields(p))
+		for item, arr in amounts.items():
+			if flt(arr[j]) > 0:
+				_bag_ledger(child.name, item, "In", arr[j], "Split In", reference=order_bag)
+		created.append(child.name)
+
+	# parent gives up everything beyond piece 1's share
+	for item, arr in amounts.items():
+		out = round(sum(flt(x) for x in arr[1:]), 3)
+		if out > 0:
+			_bag_ledger(order_bag, item, "Out", out, "Split Out")
+
+	# close the Bag Extraction record
+	dt = bench_doctype("BAG EXTRACTION")
+	if dt and frappe.db.exists("DocType", dt):
+		rec = frappe.get_all(dt, filters={"order_bag": order_bag}, order_by="creation desc", limit=1, pluck="name")
+		if rec:
+			vals = {"status": "Completed", "time_out": frappe.utils.now_datetime()}
+			if employee:
+				vals["employee"] = employee
+			frappe.db.set_value(dt, rec[0], vals)
+	frappe.db.commit()
+	return {"created": created, "count": len(created)}
+
+
+# ---------------------------------------------------------------------------
 # Job Work — the bench Issue / Receipt screens (scan-driven, batch).
 # ---------------------------------------------------------------------------
 def _current_bench_record(dt, order_bag):

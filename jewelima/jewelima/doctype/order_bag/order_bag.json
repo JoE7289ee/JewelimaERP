@@ -15,6 +15,8 @@
   "column_break_main",
   "location",
   "is_finished",
+  "split_of",
+  "piece_no",
   "weights_section",
   "gross_weight",
   "nett_weight",
@@ -110,6 +112,19 @@
    "fieldname": "is_finished",
    "fieldtype": "Check",
    "label": "Ornament Made",
+   "read_only": 1
+  },
+  {
+   "fieldname": "split_of",
+   "fieldtype": "Link",
+   "label": "Split Of",
+   "options": "Order Bag",
+   "read_only": 1
+  },
+  {
+   "fieldname": "piece_no",
+   "fieldtype": "Int",
+   "label": "Piece No",
    "read_only": 1
   },
   {
