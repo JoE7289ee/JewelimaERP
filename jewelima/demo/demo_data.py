@@ -147,7 +147,7 @@ def _simulate(bag, golds, stones, employees):
 		return
 
 	if stones and random.random() < 0.7:
-		issue_stones(bag, random.choice(stones), round(random.uniform(0.1, 2.0), 3), bench="SETTING")
+		issue_stones(bag, random.choice(stones), round(random.uniform(0.1, 2.0), 3), pcs=random.randint(1, 12), bench="SETTING")
 
 	for bench in random.sample(WORK_BENCHES, random.randint(1, 3)):
 		try:

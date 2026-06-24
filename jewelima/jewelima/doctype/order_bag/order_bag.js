@@ -54,14 +54,14 @@ function render_contents(frm) {
 			return;
 		}
 		const rows = c.items
-			.map((m) => `<tr><td>${frappe.utils.escape_html(m.item)}</td><td style="text-align:right">${m.qty}</td><td>${frappe.utils.escape_html(m.uom || "")}</td></tr>`)
+			.map((m) => `<tr><td>${frappe.utils.escape_html(m.item)}</td><td style="text-align:right">${m.pcs ? m.pcs : ""}</td><td style="text-align:right">${m.qty}</td><td>${frappe.utils.escape_html(m.uom || "")}</td></tr>`)
 			.join("");
 		$w.html(`
-			<table class="table table-bordered" style="font-size:12px;max-width:480px;">
-				<thead><tr><th>Material</th><th style="text-align:right">Qty</th><th>UOM</th></tr></thead>
+			<table class="table table-bordered" style="font-size:12px;max-width:540px;">
+				<thead><tr><th>Material</th><th style="text-align:right">No.</th><th style="text-align:right">Qty</th><th>UOM</th></tr></thead>
 				<tbody>${rows}</tbody>
 				<tfoot><tr style="font-weight:700;background:var(--control-bg);">
-					<td>Gross</td><td style="text-align:right">${c.gross_weight}</td><td>g</td>
+					<td>Gross</td><td></td><td style="text-align:right">${c.gross_weight}</td><td>g</td>
 				</tr></tfoot>
 			</table>
 			<div class="text-muted" style="font-size:11px;">Gold ${c.gold_grams} g + Stones ${c.stone_carats} ct (×0.2) = ${c.gross_weight} g gross.</div>`);

@@ -199,16 +199,18 @@ def _actual_profile(order_bag):
 		for i in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
 			meta[i.name] = (i.stone_type, flt(i.purity_percentage))
 	dmd_w = ps_w = cs_w = gold = pnum = 0.0
+	dmd_n = ps_n = cs_n = 0
 	mp = []
 	for it in rows:
 		q = flt(it["qty"])
+		n = int(it.get("pcs") or 0)
 		st, pu = meta.get(it["item"], (None, 0.0))
 		if st == "Diamond":
-			dmd_w += q
+			dmd_w += q; dmd_n += n
 		elif st == "Precious Stone":
-			ps_w += q
+			ps_w += q; ps_n += n
 		elif st == "Color Stone":
-			cs_w += q
+			cs_w += q; cs_n += n
 		else:
 			gold += q
 			pnum += q * pu
@@ -218,22 +220,19 @@ def _actual_profile(order_bag):
 	return {
 		"gross": round(gold + (dmd_w + ps_w + cs_w) * 0.2, 3), "nett": round(gold, 3),
 		"purity": round(purity, 3), "dmd_weight": round(dmd_w, 3), "ps_weight": round(ps_w, 3), "cs_weight": round(cs_w, 3),
+		"dmd_no": dmd_n, "ps_no": ps_n, "cs_no": cs_n,
 	}
 
 
 @frappe.whitelist()
 def refresh_actual_weights(order_bag):
-	"""Recompute + store the ACTUAL weight fields (act_*) from current contents. Stone
-	counts mirror the plan counts but only when stones of that type are actually held
-	(the ledger tracks carats, not counts)."""
+	"""Recompute + store the ACTUAL weight fields (act_*) from current contents,
+	including real stone counts (pcs) from the ledger."""
 	p = _actual_profile(order_bag)
-	plan = frappe.db.get_value("Order Bag", order_bag, ["dmd_no", "ps_no", "cs_no"], as_dict=True) or {}
 	vals = {
 		"act_gross_weight": p["gross"], "act_nett_weight": p["nett"], "act_purity": p["purity"],
 		"act_dmd_weight": p["dmd_weight"], "act_ps_weight": p["ps_weight"], "act_cs_weight": p["cs_weight"],
-		"act_dmd_no": int(plan.get("dmd_no") or 0) if p["dmd_weight"] else 0,
-		"act_ps_no": int(plan.get("ps_no") or 0) if p["ps_weight"] else 0,
-		"act_cs_no": int(plan.get("cs_no") or 0) if p["cs_weight"] else 0,
+		"act_dmd_no": p["dmd_no"], "act_ps_no": p["ps_no"], "act_cs_no": p["cs_no"],
 	}
 	frappe.db.set_value("Order Bag", order_bag, vals)
 	return vals
@@ -558,18 +557,19 @@ def get_bag_contents(order_bag):
 	rows = frappe.get_all(
 		"Bag Material Ledger",
 		filters={"order_bag": order_bag},
-		fields=["item", "uom", "direction", "qty"],
+		fields=["item", "uom", "direction", "qty", "pcs"],
 	)
 	net = {}
 	for r in rows:
 		sign = 1 if (r.direction or "In") == "In" else -1
-		e = net.setdefault(r.item, {"uom": r.uom or "", "qty": 0.0})
+		e = net.setdefault(r.item, {"uom": r.uom or "", "qty": 0.0, "pcs": 0})
 		e["qty"] += sign * flt(r.qty)
+		e["pcs"] += sign * int(r.pcs or 0)
 	for item, e in net.items():
 		qty = round(e["qty"], 3)
 		if abs(qty) < 0.0005:
 			continue
-		out["items"].append({"item": item, "uom": e["uom"], "qty": qty})
+		out["items"].append({"item": item, "uom": e["uom"], "qty": qty, "pcs": int(e["pcs"])})
 		if e["uom"] == "Carat":
 			out["stone_carats"] += qty
 		else:
@@ -580,8 +580,9 @@ def get_bag_contents(order_bag):
 	return out
 
 
-def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employee=None, remarks=None, reference=None):
-	"""Write one Bag Material Ledger row (the per-bag material truth)."""
+def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employee=None, remarks=None, reference=None, pcs=0):
+	"""Write one Bag Material Ledger row (the per-bag material truth). `pcs` = stone
+	count for the line (0 for metal)."""
 	if not frappe.db.exists("Order Bag", order_bag):
 		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
 	if not item or not frappe.db.exists("Item", item):
@@ -591,7 +592,7 @@ def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employe
 		frappe.throw(frappe._("Weight / qty must be greater than zero."))
 	doc = frappe.get_doc({
 		"doctype": "Bag Material Ledger",
-		"order_bag": order_bag, "item": item, "direction": direction, "qty": qty,
+		"order_bag": order_bag, "item": item, "direction": direction, "qty": qty, "pcs": int(pcs or 0),
 		"entry_type": entry_type, "bench": bench or None, "employee": employee or None,
 		"datetime": frappe.utils.now_datetime(), "reference": reference, "remarks": remarks,
 	}).insert(ignore_permissions=True)
@@ -611,9 +612,9 @@ def add_weight(order_bag, item, qty, bench=None, remarks=None):
 
 
 @frappe.whitelist()
-def issue_stones(order_bag, item, qty, bench=None, remarks=None):
-	"""Issue stones (carats) into a bag — done before the piece goes to work."""
-	name = _bag_ledger(order_bag, item, "In", qty, "Stone Issue", bench=bench, remarks=remarks)
+def issue_stones(order_bag, item, qty, pcs=0, bench=None, remarks=None):
+	"""Issue stones into a bag (qty = carats, pcs = number of stones) — before work."""
+	name = _bag_ledger(order_bag, item, "In", qty, "Stone Issue", bench=bench, remarks=remarks, pcs=pcs)
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
@@ -1002,14 +1003,14 @@ def split_bag(order_bag, pieces, employee=None):
 		frappe.db.set_value("Order Bag", child.name, piece_fields(j))
 		for code, arr in amounts.items():
 			if flt(arr[j]) > 0:
-				_bag_ledger(child.name, code, "In", arr[j], "Split In", reference=order_bag)
+				_bag_ledger(child.name, code, "In", arr[j], "Split In", reference=order_bag, pcs=counts[code][j])
 		created.append(child.name)
 
 	# parent gives up everything beyond piece 1's share
 	for code, arr in amounts.items():
 		out = round(sum(flt(x) for x in arr[1:]), 3)
 		if out > 0:
-			_bag_ledger(order_bag, code, "Out", out, "Split Out")
+			_bag_ledger(order_bag, code, "Out", out, "Split Out", pcs=sum(counts[code][1:]))
 
 	# close the Bag Extraction record
 	dt = bench_doctype("BAG EXTRACTION")

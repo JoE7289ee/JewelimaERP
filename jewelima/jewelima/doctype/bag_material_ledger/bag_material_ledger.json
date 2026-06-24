@@ -13,6 +13,7 @@
   "column_break_main",
   "direction",
   "qty",
+  "pcs",
   "entry_type",
   "context_section",
   "bench",
@@ -68,6 +69,13 @@
    "label": "Qty / Weight",
    "precision": "3",
    "reqd": 1
+  },
+  {
+   "description": "Stone count (number of pieces) for this line — 0 for metal.",
+   "fieldname": "pcs",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Pcs (No.)"
   },
   {
    "fieldname": "entry_type",
