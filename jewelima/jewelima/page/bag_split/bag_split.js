@@ -192,6 +192,7 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		$(`<button class="btn btn-default btn-sm">${state.manual ? __("Auto (gross)") : __("Edit manually")}</button>`)
 			.appendTo($actions)
 			.on("click", () => { state.manual = !state.manual; renderPieces(); });
+		$(`<button class="btn btn-default btn-sm bs-splitrem" style="display:none">${__("Split remaining")}</button>`).appendTo($actions).on("click", splitRemaining);
 		$(`<button class="btn btn-primary btn-sm bs-splitbtn">${__("Split")}</button>`).appendTo($actions).on("click", doSplit);
 	}
 	function totals() {
@@ -227,6 +228,33 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		txt += `<div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Product gross: <b>${productGross.toFixed(3)}</b> g  ·  put in pieces: <b>${put.toFixed(3)}</b> g  ·  left in bag: <b>${left.toFixed(3)}</b> g</div>`;
 		$rem.html(txt);
 		$(page.main).find(".bs-splitbtn").prop("disabled", !ok).css("opacity", ok ? 1 : 0.5);
+		// offer "Split remaining" when only a tiny sliver of gold is left (<= 0.010 g)
+		$(page.main).find(".bs-splitrem").toggle(t.rem > 0.0005 && t.rem <= 0.0105 && !t.over);
+	}
+
+	function splitRemaining() {
+		// sprinkle the tiny leftover gold across pieces in 0.001 g steps (random order)
+		const d = state.data, gis = goldItems();
+		if (!gis.length) return;
+		let rem = flt(d.gold_total);
+		gis.forEach((it) => it.per_piece.forEach((p) => (rem -= flt(p.weight))));
+		let steps = Math.round(rem * 1000);
+		if (steps <= 0) return;
+		const order = Array.from({ length: d.n }, (_, i) => i);
+		for (let i = order.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[order[i], order[j]] = [order[j], order[i]];
+		}
+		for (let s = 0; s < steps; s++) {
+			const i = order[s % d.n];
+			if (state.manual) {
+				gis[0].per_piece[i].weight = Math.round((flt(gis[0].per_piece[i].weight) + 0.001) * 1000) / 1000;
+			} else {
+				state.gross[i] = Math.round((flt(state.gross[i]) + 0.001) * 1000) / 1000;
+				applyAutoGold(i);
+			}
+		}
+		renderPieces();
 	}
 
 	function buildPieces() {
