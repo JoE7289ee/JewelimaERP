@@ -994,7 +994,7 @@ def split_bag(order_bag, pieces, employee=None):
 			continue
 		child = frappe.get_doc({
 			"doctype": "Order Bag",
-			"split_of": order_bag, "piece_no": j + 1,
+			"split_of": order_bag, "piece_no": j,
 			"job_order": bag.job_order, "design": bag.design, "size": bag.size,
 			"location": "BAG EXTRACTION", "customer": bag.customer, "salesman": bag.salesman,
 			"order_type": bag.order_type, "order_date": bag.order_date, "due_date": bag.due_date,

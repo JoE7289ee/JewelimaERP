@@ -46,11 +46,13 @@ class OrderBag(Document):
 		<line> = this bag's position within the order (1, 2, 3 …).
 		<n>     = the bag's quantity at creation. So a line of qty 10 -> E0001.1.10,
 		          while ten single-qty lines -> E0001.1.1, E0001.2.1 … E0001.10.1.
-		When a multi-qty bag is split into single pieces at Bag Extraction, each new
-		piece is named <parent>-<piece_no> (parent stays as piece 1).
+		When a multi-qty bag is split at Bag Extraction, the pieces take
+		<Job Order>.<line>.<piece> — e.g. E0197.3.5 (qty 5) splits into E0197.3.1 …
+		E0197.3.4 (new) plus E0197.3.5 (the original, kept as the last piece).
 		"""
 		if self.split_of:
-			self.name = f"{self.split_of}-{int(self.piece_no or 0)}"
+			base = (self.split_of or "").rsplit(".", 1)[0]  # E0197.3.5 -> E0197.3
+			self.name = f"{base}.{int(self.piece_no or 0)}"
 			return
 		if self.job_order:
 			prefix = f"{self.job_order}."
