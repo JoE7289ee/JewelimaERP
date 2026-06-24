@@ -17,6 +17,10 @@
   "is_finished",
   "split_of",
   "piece_no",
+  "narration_section",
+  "narration",
+  "bom_tab",
+  "bag_bom",
   "weights_section",
   "gross_weight",
   "nett_weight",
@@ -31,12 +35,23 @@
   "col_break_ps",
   "cs_no",
   "cs_weight",
-  "narration_section",
-  "narration",
+  "actual_tab",
+  "act_weights_section",
+  "act_gross_weight",
+  "act_nett_weight",
+  "act_col_wt",
+  "act_purity",
+  "act_stones_section",
+  "act_dmd_no",
+  "act_dmd_weight",
+  "act_col_dmd",
+  "act_ps_no",
+  "act_ps_weight",
+  "act_col_ps",
+  "act_cs_no",
+  "act_cs_weight",
   "current_contents_section",
   "materials_html",
-  "bom_tab",
-  "bag_bom",
   "schedule_tab",
   "order_date",
   "due_date",
@@ -128,79 +143,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "weights_section",
-   "fieldtype": "Section Break",
-   "label": "Weights & Purity"
-  },
-  {
-   "fieldname": "gross_weight",
-   "fieldtype": "Float",
-   "label": "Gross Weight (g)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "nett_weight",
-   "fieldtype": "Float",
-   "label": "Nett Weight (g)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "col_break_wt",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "purity",
-   "fieldtype": "Float",
-   "label": "Purity (%)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "stones_section",
-   "fieldtype": "Section Break",
-   "label": "Stones"
-  },
-  {
-   "fieldname": "dmd_no",
-   "fieldtype": "Int",
-   "label": "DMD No"
-  },
-  {
-   "fieldname": "dmd_weight",
-   "fieldtype": "Float",
-   "label": "DMD Weight (ct)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "col_break_dmd",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "ps_no",
-   "fieldtype": "Int",
-   "label": "PS No"
-  },
-  {
-   "fieldname": "ps_weight",
-   "fieldtype": "Float",
-   "label": "PS Weight (ct)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "col_break_ps",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cs_no",
-   "fieldtype": "Int",
-   "label": "CS No"
-  },
-  {
-   "fieldname": "cs_weight",
-   "fieldtype": "Float",
-   "label": "CS Weight (ct)",
-   "precision": "3"
-  },
-  {
    "fieldname": "narration_section",
    "fieldtype": "Section Break",
    "label": "Narration"
@@ -211,6 +153,189 @@
    "label": "Narration"
   },
   {
+   "fieldname": "bom_tab",
+   "fieldtype": "Tab Break",
+   "label": "BOM (Plan)"
+  },
+  {
+   "description": "Working BOM for this bag — seeded from the design, editable until the ornament is made (then locked). This is the PLAN; the weights below are derived from it.",
+   "fieldname": "bag_bom",
+   "fieldtype": "Table",
+   "label": "Bill of Materials",
+   "options": "Order Bag BOM Item"
+  },
+  {
+   "fieldname": "weights_section",
+   "fieldtype": "Section Break",
+   "label": "Plan — Weights & Purity"
+  },
+  {
+   "description": "Derived from the BOM x qty.",
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nett_weight",
+   "fieldtype": "Float",
+   "label": "Nett Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_wt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stones_section",
+   "fieldtype": "Section Break",
+   "label": "Plan — Stones"
+  },
+  {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dmd_weight",
+   "fieldtype": "Float",
+   "label": "DMD Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_dmd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ps_no",
+   "fieldtype": "Int",
+   "label": "PS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ps_weight",
+   "fieldtype": "Float",
+   "label": "PS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_ps",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "CS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cs_weight",
+   "fieldtype": "Float",
+   "label": "CS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actual_tab",
+   "fieldtype": "Tab Break",
+   "label": "Actual"
+  },
+  {
+   "fieldname": "act_weights_section",
+   "fieldtype": "Section Break",
+   "label": "Actual — Weights & Purity"
+  },
+  {
+   "description": "Derived live from the materials actually in the bag (Current Contents).",
+   "fieldname": "act_gross_weight",
+   "fieldtype": "Float",
+   "label": "Gross Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_nett_weight",
+   "fieldtype": "Float",
+   "label": "Nett Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_col_wt",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_stones_section",
+   "fieldtype": "Section Break",
+   "label": "Actual — Stones"
+  },
+  {
+   "fieldname": "act_dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_dmd_weight",
+   "fieldtype": "Float",
+   "label": "DMD Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_col_dmd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_ps_no",
+   "fieldtype": "Int",
+   "label": "PS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_ps_weight",
+   "fieldtype": "Float",
+   "label": "PS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_col_ps",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_cs_no",
+   "fieldtype": "Int",
+   "label": "CS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_cs_weight",
+   "fieldtype": "Float",
+   "label": "CS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
    "fieldname": "current_contents_section",
    "fieldtype": "Section Break",
    "label": "Current Contents (in bag)"
@@ -219,18 +344,6 @@
    "fieldname": "materials_html",
    "fieldtype": "HTML",
    "label": "Materials"
-  },
-  {
-   "fieldname": "bom_tab",
-   "fieldtype": "Tab Break",
-   "label": "BOM (Plan)"
-  },
-  {
-   "description": "Working BOM for this bag — seeded from the design, editable until the ornament is made (then locked). This is the PLAN; actual materials issued are in Current Contents.",
-   "fieldname": "bag_bom",
-   "fieldtype": "Table",
-   "label": "Bill of Materials",
-   "options": "Order Bag BOM Item"
   },
   {
    "fieldname": "schedule_tab",
@@ -327,7 +440,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-22 12:00:00.000000",
+ "modified": "2026-06-24 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Bag",

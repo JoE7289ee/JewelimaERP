@@ -7,6 +7,16 @@ frappe.ui.form.on("Order Bag", {
 		render_transfers(frm);
 		render_stages(frm);
 		if (!frm.is_new()) {
+			// keep the Actual tab in sync with what the bag really holds
+			frappe.call({ method: "jewelima.jewelima.api.refresh_actual_weights", args: { order_bag: frm.doc.name } }).then((r) => {
+				const v = r.message || {};
+				Object.keys(v).forEach((k) => {
+					frm.doc[k] = v[k];
+					frm.refresh_field(k);
+				});
+			});
+		}
+		if (!frm.is_new()) {
 			frm.add_custom_button(__("Photos"), () => {
 				frappe.set_route("order-bag-photos", frm.doc.name);
 			});

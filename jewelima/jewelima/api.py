@@ -170,24 +170,84 @@ def _profile_from_materials(mats):
 	return out
 
 
-@frappe.whitelist()
-def recalc_bag_weights_from_bom(order_bag):
-	"""Recompute a bag's gross/nett/purity/stones from its OWN BOM (plan) x qty.
-	Purity is a ratio (unscaled). Manual action so it never clobbers manual edits."""
-	bag = frappe.get_doc("Order Bag", order_bag)
-	mats = [{"item": r.item, "qty": r.qty, "purity": r.purity, "weight": r.weight} for r in bag.bag_bom]
+def _plan_values(bag_bom, qty):
+	"""The PLAN weight fields (gross/nett/purity/stones) = profile(bag BOM) x qty.
+	Shared by the Order Bag controller (validate) and recalc."""
+	mats = [{"item": r.item, "qty": r.qty, "weight": r.weight} for r in (bag_bom or [])]
 	p = _profile_from_materials(mats)
-	q = max(int(bag.qty or 1), 1)
-	bag.db_set({
-		"gross_weight": round(p["gross_weight"] * q, 3),
-		"nett_weight": round(p["nett_weight"] * q, 3),
+	q = max(int(qty or 1), 1)
+	# match the ACTUAL convention: gross = gold + stones, nett = gold (metal)
+	metal = flt(p["gross_weight"])  # _profile_from_materials' "gross" is metal grams
+	stone_g = (flt(p["dmd_weight"]) + flt(p["ps_weight"]) + flt(p["cs_weight"])) * 0.2
+	return {
+		"gross_weight": round((metal + stone_g) * q, 3),
+		"nett_weight": round(metal * q, 3),
 		"purity": p["purity"],
 		"dmd_no": int(p["dmd_no"]) * q, "dmd_weight": round(p["dmd_weight"] * q, 3),
 		"ps_no": int(p["ps_no"]) * q, "ps_weight": round(p["ps_weight"] * q, 3),
 		"cs_no": int(p["cs_no"]) * q, "cs_weight": round(p["cs_weight"] * q, 3),
-	})
+	}
+
+
+def _actual_profile(order_bag):
+	"""The ACTUAL weight profile from what the bag really holds (the ledger): gold
+	grams, stone carats by stone_type, gram-weighted metal purity."""
+	rows = [it for it in get_bag_contents(order_bag)["items"] if flt(it["qty"])]
+	codes = list({it["item"] for it in rows})
+	meta = {}
+	if codes:
+		for i in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
+			meta[i.name] = (i.stone_type, flt(i.purity_percentage))
+	dmd_w = ps_w = cs_w = gold = pnum = 0.0
+	mp = []
+	for it in rows:
+		q = flt(it["qty"])
+		st, pu = meta.get(it["item"], (None, 0.0))
+		if st == "Diamond":
+			dmd_w += q
+		elif st == "Precious Stone":
+			ps_w += q
+		elif st == "Color Stone":
+			cs_w += q
+		else:
+			gold += q
+			pnum += q * pu
+			if pu:
+				mp.append(pu)
+	purity = (pnum / gold) if gold else (sum(mp) / len(mp) if mp else 0.0)
+	return {
+		"gross": round(gold + (dmd_w + ps_w + cs_w) * 0.2, 3), "nett": round(gold, 3),
+		"purity": round(purity, 3), "dmd_weight": round(dmd_w, 3), "ps_weight": round(ps_w, 3), "cs_weight": round(cs_w, 3),
+	}
+
+
+@frappe.whitelist()
+def refresh_actual_weights(order_bag):
+	"""Recompute + store the ACTUAL weight fields (act_*) from current contents. Stone
+	counts mirror the plan counts but only when stones of that type are actually held
+	(the ledger tracks carats, not counts)."""
+	p = _actual_profile(order_bag)
+	plan = frappe.db.get_value("Order Bag", order_bag, ["dmd_no", "ps_no", "cs_no"], as_dict=True) or {}
+	vals = {
+		"act_gross_weight": p["gross"], "act_nett_weight": p["nett"], "act_purity": p["purity"],
+		"act_dmd_weight": p["dmd_weight"], "act_ps_weight": p["ps_weight"], "act_cs_weight": p["cs_weight"],
+		"act_dmd_no": int(plan.get("dmd_no") or 0) if p["dmd_weight"] else 0,
+		"act_ps_no": int(plan.get("ps_no") or 0) if p["ps_weight"] else 0,
+		"act_cs_no": int(plan.get("cs_no") or 0) if p["cs_weight"] else 0,
+	}
+	frappe.db.set_value("Order Bag", order_bag, vals)
+	return vals
+
+
+@frappe.whitelist()
+def recalc_bag_weights_from_bom(order_bag):
+	"""Recompute a bag's PLAN weights from its OWN BOM x qty + refresh the actuals."""
+	bag = frappe.get_doc("Order Bag", order_bag)
+	vals = _plan_values(bag.bag_bom, bag.qty)
+	bag.db_set(vals)
+	refresh_actual_weights(order_bag)
 	frappe.db.commit()
-	return {"order_bag": order_bag, "qty": q, **p}
+	return {"order_bag": order_bag, **vals}
 
 
 @frappe.whitelist()
@@ -576,12 +636,9 @@ def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 # Weight Add / Weight Reduce screens (single card, warehouse-aware).
 # ---------------------------------------------------------------------------
 def _recompute_bag_from_contents(order_bag):
-	"""Sync the bag's gross/nett to its ACTUAL contents (the ledger)."""
-	c = get_bag_contents(order_bag)
-	frappe.db.set_value("Order Bag", order_bag, {
-		"gross_weight": round(flt(c.get("gross_weight")), 3),
-		"nett_weight": round(flt(c.get("gold_grams")), 3),
-	})
+	"""Sync the bag's ACTUAL weight fields to its current contents (the ledger).
+	The PLAN fields are left alone (they come from the BOM)."""
+	refresh_actual_weights(order_bag)
 
 
 @frappe.whitelist()
@@ -919,17 +976,19 @@ def split_bag(order_bag, pieces, employee=None):
 			else:
 				gold += w
 		gross = gold + (dmd_w + ps_w + cs_w) * 0.2
+		# the piece's ACTUAL weights (what it physically holds after the split)
 		return {
-			"qty": 1, "nett_weight": round(gold, 3), "gross_weight": round(gross, 3), "purity": bag.purity,
-			"dmd_no": dmd_no, "dmd_weight": round(dmd_w, 3),
-			"ps_no": ps_no, "ps_weight": round(ps_w, 3),
-			"cs_no": cs_no, "cs_weight": round(cs_w, 3),
+			"qty": 1, "act_nett_weight": round(gold, 3), "act_gross_weight": round(gross, 3), "act_purity": bag.purity,
+			"act_dmd_no": dmd_no, "act_dmd_weight": round(dmd_w, 3),
+			"act_ps_no": ps_no, "act_ps_weight": round(ps_w, 3),
+			"act_cs_no": cs_no, "act_cs_weight": round(cs_w, 3),
 		}
 
 	created = []
 	for j in range(n):
 		if j == 0:
 			frappe.db.set_value("Order Bag", order_bag, piece_fields(0))
+			frappe.db.set_value("Order Bag", order_bag, _plan_values(bag.bag_bom, 1))  # parent now 1 piece -> plan per-unit
 			created.append(order_bag)
 			continue
 		child = frappe.get_doc({

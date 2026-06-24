@@ -10,6 +10,15 @@ class OrderBag(Document):
 	def validate(self):
 		self.seed_bag_bom()
 		self.guard_bom_locked()
+		self.set_plan_weights()
+
+	def set_plan_weights(self):
+		"""Plan weights (gross/nett/purity/stones) are derived from the BOM x qty, so
+		editing the BOM updates them automatically."""
+		from jewelima.jewelima.api import _plan_values
+
+		for k, v in _plan_values(self.bag_bom, self.qty).items():
+			self.set(k, v)
 
 	def seed_bag_bom(self):
 		"""On creation, copy the linked design's BOM into this bag's editable BOM (the plan)."""
