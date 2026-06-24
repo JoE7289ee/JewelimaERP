@@ -65,16 +65,24 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 			const d = r.message || {};
 			if (d.error) { setMsg(d.error); resetView(); return; }
 			state.data = d;
-			state.started = false;
 			state.manual = false;
 			state.gross = new Array(d.n).fill(0);
 			setMsg("");
-			renderDetails();
+			if (d.status === "Ongoing") {
+				// already started (e.g. browser was closed) — resume straight to split
+				state.started = true;
+				frappe.show_alert({ message: __("Resuming {0} (already in progress)", [d.bag.name]), indicator: "blue" }, 4);
+				renderDetails(false);
+				renderPieces();
+			} else {
+				state.started = false;
+				renderDetails(true);
+			}
 		});
 	}
 
 	// ---- Phase 1: card details + Start ----
-	function renderDetails() {
+	function renderDetails(showStart) {
 		const d = state.data, b = d.bag;
 		const cell = (k, v) => `<div><span class="k">${k}</span><br><span class="v">${frappe.utils.escape_html(v == null || v === "" ? "—" : "" + v)}</span></div>`;
 		const totQty = (it) => it.per_piece.reduce((s, p) => s + flt(p.qty), 0);
@@ -97,8 +105,10 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		$pieces.empty();
 		$foot.removeClass("show");
 		$actions.empty();
-		$(`<button class="btn btn-primary btn-sm">${__("Start")}</button>`).appendTo($card).wrap('<div style="margin-top:12px;"></div>');
-		$card.find(".btn-primary").on("click", doStart);
+		if (showStart) {
+			$(`<button class="btn btn-primary btn-sm">${__("Start")}</button>`).appendTo($card).wrap('<div style="margin-top:12px;"></div>');
+			$card.find(".btn-primary").on("click", doStart);
+		}
 	}
 
 	function doStart() {

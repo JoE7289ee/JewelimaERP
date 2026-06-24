@@ -792,8 +792,10 @@ def get_bag_for_split(order_bag):
 	if dt and frappe.db.exists("DocType", dt):
 		recs = frappe.get_all(dt, filters={"order_bag": order_bag}, fields=["status"], order_by="creation desc", limit=1)
 		status = recs[0].status if recs else None
-	if status != "In Queue":
-		return {"error": frappe._("{0} is '{1}' at Bag Extraction — only In Queue cards can be split.").format(order_bag, status or "—")}
+	if status == "Completed":
+		return {"error": frappe._("{0} has already been extracted (Completed).").format(order_bag)}
+	if not status:
+		return {"error": frappe._("{0} has no Bag Extraction record.").format(order_bag)}
 	n = max(int(bag.qty or 1), 1)
 	contents = get_bag_contents(order_bag)
 	cmap = {it["item"]: flt(it["qty"]) for it in contents["items"]}  # actual available per item
@@ -842,17 +844,21 @@ def start_bag_split(order_bag, employee=None):
 	dt = bench_doctype("BAG EXTRACTION")
 	if not (dt and frappe.db.exists("DocType", dt)):
 		frappe.throw(frappe._("Bag Extraction bench is not set up."))
-	rec = frappe.get_all(dt, filters={"order_bag": order_bag}, order_by="creation desc", limit=1, fields=["name", "status", "time_in"])
+	rec = frappe.get_all(dt, filters={"order_bag": order_bag}, order_by="creation desc", limit=1, fields=["name", "status", "time_in", "issued_at", "employee"])
 	if not rec:
 		frappe.throw(frappe._("No Bag Extraction record for {0}.").format(order_bag))
-	if rec[0].status != "In Queue":
-		frappe.throw(frappe._("{0} is '{1}' — already started or done.").format(order_bag, rec[0].status))
+	if rec[0].status == "Completed":
+		frappe.throw(frappe._("{0} has already been extracted.").format(order_bag))
 	if not employee:
-		employee = frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+		employee = rec[0].employee or frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
 	now = frappe.utils.now_datetime()
-	frappe.db.set_value(dt, rec[0].name, {"status": "Ongoing", "employee": employee, "issued_at": now, "time_in": rec[0].time_in or now})
+	# resuming keeps the original start time + employee
+	frappe.db.set_value(dt, rec[0].name, {
+		"status": "Ongoing", "employee": employee,
+		"issued_at": rec[0].issued_at or now, "time_in": rec[0].time_in or now,
+	})
 	frappe.db.commit()
-	return {"ok": 1, "employee": employee, "started": now}
+	return {"ok": 1, "employee": employee, "resumed": rec[0].status == "Ongoing"}
 
 
 @frappe.whitelist()
