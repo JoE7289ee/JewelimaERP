@@ -795,40 +795,39 @@ def get_bag_for_split(order_bag):
 	if status != "In Queue":
 		return {"error": frappe._("{0} is '{1}' at Bag Extraction — only In Queue cards can be split.").format(order_bag, status or "—")}
 	n = max(int(bag.qty or 1), 1)
-	gold = flt(get_bag_contents(order_bag).get("gold_grams"))
-	status_rec = status  # In Queue here
-	# the ENTIRE item list (from the bag's BOM): stones split + rounded to .000;
-	# gold left empty (filled per piece from gross - stone weight, in carats).
+	contents = get_bag_contents(order_bag)
+	cmap = {it["item"]: flt(it["qty"]) for it in contents["items"]}  # actual available per item
+	gold_total = flt(contents.get("gold_grams"))
+	# item order: BOM first (gives counts + order), then any held item not in the BOM
+	bom_qty = {}
+	order = []
+	for r in frappe.get_all("Order Bag BOM Item", filters={"parent": order_bag, "parenttype": "Order Bag"}, fields=["item", "qty"], order_by="idx asc"):
+		bom_qty[r.item] = flt(r.qty)
+		if r.item not in order:
+			order.append(r.item)
+	for it in contents["items"]:
+		if it["item"] not in order:
+			order.append(it["item"])
+	# stone_type/uom/purity are authoritative on the Item (BOM-row fetched copies are
+	# unreliable on programmatic seed). Stones split + rounded to .000; gold left empty.
 	items = []
-	for r in frappe.get_all(
-		"Order Bag BOM Item", filters={"parent": order_bag, "parenttype": "Order Bag"},
-		fields=["item", "item_name", "purity", "qty", "weight"], order_by="idx asc",
-	):
-		# stone_type/uom/purity are authoritative on the Item (the BOM row's fetched
-		# copies aren't reliably populated on programmatic seed).
-		meta = frappe.db.get_value("Item", r.item, ["stone_type", "stock_uom", "purity_percentage"], as_dict=True) or {}
-		stone_type = meta.get("stone_type")
-		if stone_type:
-			cnt = _split_counts(int(round(flt(r.qty) * n)), n)
-			wt = _even_split(flt(r.weight) * n, n)
+	for code in order:
+		meta = frappe.db.get_value("Item", code, ["item_name", "stone_type", "stock_uom", "purity_percentage"], as_dict=True) or {}
+		st = meta.get("stone_type")
+		total = round(flt(cmap.get(code, 0.0)), 3)
+		if st:
+			cnt = _split_counts(int(round(flt(bom_qty.get(code, 0)) * n)), n)
+			wt = _even_split(total, n)
 			per = [{"qty": cnt[i], "weight": wt[i]} for i in range(n)]
 		else:
 			per = [{"qty": 0, "weight": 0.0} for _ in range(n)]
 		items.append({
-			"item": r.item, "item_name": r.item_name,
-			"purity": r.purity or meta.get("purity_percentage") or 0,
-			"uom": meta.get("stock_uom") or ("Carat" if stone_type else "Gram"),
-			"stone_type": stone_type, "is_gold": not stone_type, "per_piece": per,
-		})
-	gold_item = _bag_gold_item(order_bag)
-	if gold_item and not any(it["item"] == gold_item for it in items):
-		items.insert(0, {
-			"item": gold_item, "item_name": frappe.db.get_value("Item", gold_item, "item_name"),
-			"purity": bag.purity, "uom": "Gram", "stone_type": None, "is_gold": True,
-			"per_piece": [{"qty": 0, "weight": 0.0} for _ in range(n)],
+			"item": code, "item_name": meta.get("item_name"), "purity": meta.get("purity_percentage") or 0,
+			"uom": meta.get("stock_uom") or ("Carat" if st else "Gram"),
+			"stone_type": st, "is_gold": not st, "total": total, "per_piece": per,
 		})
 	return {
-		"bag": bag, "n": n, "status": status_rec, "gold_total": round(gold, 3),
+		"bag": bag, "n": n, "status": status, "gold_total": round(gold_total, 3),
 		"stone_g_total": round((flt(bag.dmd_weight) + flt(bag.ps_weight) + flt(bag.cs_weight)) * 0.2, 3),
 		"items": items,
 	}
@@ -891,6 +890,14 @@ def split_bag(order_bag, pieces, employee=None):
 			counts.setdefault(code, [0] * n)[j] = int(it.get("qty") or 0)
 			if code not in stype:
 				stype[code] = frappe.db.get_value("Item", code, "stone_type")
+
+	# never take out more than the bag holds (no negative balances)
+	cmap = {it["item"]: flt(it["qty"]) for it in get_bag_contents(order_bag)["items"]}
+	for code, arr in amounts.items():
+		want = round(sum(flt(x) for x in arr), 3)
+		have = round(flt(cmap.get(code, 0.0)), 3)
+		if want > have + 0.0005:
+			frappe.throw(frappe._("Not enough {0} in the bag — assigning {1} but only {2} available.").format(code, want, have))
 
 	def piece_fields(j):
 		dmd_no = ps_no = cs_no = 0

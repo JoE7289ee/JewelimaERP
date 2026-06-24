@@ -66,6 +66,7 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 			if (d.error) { setMsg(d.error); resetView(); return; }
 			state.data = d;
 			state.started = false;
+			state.manual = false;
 			state.gross = new Array(d.n).fill(0);
 			setMsg("");
 			renderDetails();
@@ -114,11 +115,18 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 	}
 
 	// ---- Phase 2: per-piece item tables ----
+	function goldItems() { return state.data.items.filter((it) => it.is_gold); }
 	function stoneGrams(i) {
 		return state.data.items.filter((it) => !it.is_gold).reduce((s, it) => s + flt(it.per_piece[i].weight) * CT_TO_G, 0);
 	}
-	function goldOf(i) {
-		return Math.round((flt(state.gross[i]) - stoneGrams(i)) * 1000) / 1000;
+	function applyAutoGold(i) {
+		// piece gold = gross - stone weight, distributed across gold items by their share
+		const goldForPiece = Math.round((flt(state.gross[i]) - stoneGrams(i)) * 1000) / 1000;
+		const totalAll = flt(state.data.gold_total);
+		goldItems().forEach((it, k) => {
+			const w = totalAll > 0 ? goldForPiece * (flt(it.total) / totalAll) : k === 0 ? goldForPiece : 0;
+			it.per_piece[i].weight = Math.round(w * 1000) / 1000;
+		});
 	}
 	function pieceName(i) {
 		return i === 0 ? state.data.bag.name : `${state.data.bag.name}-${i + 1}`;
@@ -128,78 +136,92 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		$pieces.empty();
 		for (let i = 0; i < d.n; i++) {
 			const itemRows = d.items
-				.map((it) => {
+				.map((it, k) => {
 					const pp = it.per_piece[i];
-					const qty = it.is_gold ? "—" : `${pp.qty} no`;
-					const wt = it.is_gold ? `<span class="bs-goldcell bs-gold-${i}">${goldOf(i).toFixed(3)} g</span>` : `${flt(pp.weight).toFixed(3)} ct`;
-					return `<tr><td><b>${frappe.utils.escape_html(it.item)}</b></td><td>${(it.purity || 0)}%</td><td class="num">${qty}</td><td class="num">${wt}</td></tr>`;
+					let qtyCell, wtCell;
+					if (it.is_gold) {
+						qtyCell = "—";
+						wtCell = state.manual
+							? `<input type="number" step="0.001" class="bs-w" data-i="${i}" data-k="${k}" value="${flt(pp.weight) || ""}"> g`
+							: `<span class="bs-goldcell bs-w-${i}-${k}">${flt(pp.weight).toFixed(3)} g</span>`;
+					} else {
+						qtyCell = state.manual ? `<input type="number" step="1" class="bs-q" data-i="${i}" data-k="${k}" value="${pp.qty}"> no` : `${pp.qty} no`;
+						wtCell = state.manual ? `<input type="number" step="0.001" class="bs-w" data-i="${i}" data-k="${k}" value="${flt(pp.weight)}"> ct` : `${flt(pp.weight).toFixed(3)} ct`;
+					}
+					return `<tr><td><b>${frappe.utils.escape_html(it.item)}</b></td><td>${(it.purity || 0)}%</td><td class="num">${qtyCell}</td><td class="num">${wtCell}</td></tr>`;
 				})
 				.join("");
+			const grossInput = state.manual ? "" : `<span><span class="lbl">Gross g</span> <input type="number" step="0.001" class="bs-gross" data-i="${i}" value="${state.gross[i] || ""}"></span>`;
 			$pieces.append(`
 				<div class="bs-piece">
-					<div class="ph">
-						<span class="nm">${i + 1}. ${frappe.utils.escape_html(pieceName(i))}</span>
-						<span><span class="lbl">Gross g</span> <input type="number" step="0.001" class="bs-gross" data-i="${i}" value="${state.gross[i] || ""}"></span>
-					</div>
+					<div class="ph"><span class="nm">${i + 1}. ${frappe.utils.escape_html(pieceName(i))}</span>${grossInput}</div>
 					<table class="bs-mini"><thead><tr><th>Item</th><th>Purity</th><th class="num">Qty</th><th class="num">Weight</th></tr></thead><tbody>${itemRows}</tbody></table>
 				</div>`);
 		}
 		$pieces.find(".bs-gross").on("input", function () {
 			const i = $(this).data("i");
 			state.gross[i] = flt(this.value);
-			$pieces.find(`.bs-gold-${i}`).text(goldOf(i).toFixed(3) + " g");
+			applyAutoGold(i);
+			goldItems().forEach((it, k) => $pieces.find(`.bs-w-${i}-${k}`).text(flt(it.per_piece[i].weight).toFixed(3) + " g"));
 			recalcRemaining();
 		});
+		$pieces.find(".bs-w").on("input", function () {
+			state.data.items[$(this).data("k")].per_piece[$(this).data("i")].weight = flt(this.value);
+			recalcRemaining();
+		});
+		$pieces.find(".bs-q").on("input", function () {
+			state.data.items[$(this).data("k")].per_piece[$(this).data("i")].qty = parseInt(this.value || "0", 10);
+		});
 		$foot.addClass("show");
-		$actions.empty();
-		$(`<button class="btn btn-primary btn-sm">${__("Split")}</button>`).appendTo($actions).on("click", doSplit);
+		renderActions();
 		recalcRemaining();
 		focusScan();
 	}
-	function recalcRemaining() {
+	function renderActions() {
+		$actions.empty();
+		$(`<button class="btn btn-default btn-sm">${state.manual ? __("Auto (gross)") : __("Edit manually")}</button>`)
+			.appendTo($actions)
+			.on("click", () => { state.manual = !state.manual; renderPieces(); });
+		$(`<button class="btn btn-primary btn-sm bs-splitbtn">${__("Split")}</button>`).appendTo($actions).on("click", doSplit);
+	}
+	function totals() {
 		const d = state.data;
-		let used = 0;
-		for (let i = 0; i < d.n; i++) used += goldOf(i);
+		let used = 0, over = null;
+		goldItems().forEach((it) => {
+			const s = it.per_piece.reduce((a, p) => a + flt(p.weight), 0);
+			used += s;
+			if (s > flt(it.total) + 0.0005) over = it.item;
+		});
 		used = Math.round(used * 1000) / 1000;
 		const rem = Math.round((flt(d.gold_total) - used) * 1000) / 1000;
-		$rem.removeClass("bad ok").addClass(Math.abs(rem) < 0.0005 ? "ok" : "bad");
-		$rem.html(`Gold remaining in bag: <b>${rem.toFixed(3)}</b> g  ·  assigned ${used.toFixed(3)} / ${flt(d.gold_total).toFixed(3)} g`);
+		return { used, rem, over };
+	}
+	function recalcRemaining() {
+		const d = state.data, t = totals();
+		const ok = Math.abs(t.rem) < 0.0005 && !t.over;
+		$rem.removeClass("bad ok").addClass(ok ? "ok" : "bad");
+		let txt = `Gold remaining in bag: <b>${t.rem.toFixed(3)}</b> g  ·  assigned ${t.used.toFixed(3)} / ${flt(d.gold_total).toFixed(3)} g`;
+		if (t.over) txt += ` · <span style="color:#b00020">too much ${frappe.utils.escape_html(t.over)}</span>`;
+		$rem.html(txt);
+		$(page.main).find(".bs-splitbtn").prop("disabled", !ok).css("opacity", ok ? 1 : 0.5);
 	}
 
 	function buildPieces() {
 		const d = state.data;
 		const out = [];
 		for (let i = 0; i < d.n; i++) {
-			const items = d.items.map((it) => ({
-				item: it.item,
-				qty: it.is_gold ? 0 : it.per_piece[i].qty,
-				weight: it.is_gold ? goldOf(i) : flt(it.per_piece[i].weight),
-			}));
-			out.push({ items });
+			out.push({ items: d.items.map((it) => ({ item: it.item, qty: it.is_gold ? 0 : it.per_piece[i].qty, weight: flt(it.per_piece[i].weight) })) });
 		}
 		return out;
 	}
 	function doSplit() {
-		const d = state.data;
-		let used = 0;
-		for (let i = 0; i < d.n; i++) used += goldOf(i);
-		const rem = flt(d.gold_total) - used;
-		const go = () => {
-			frappe.dom.freeze(__("Splitting…"));
-			frappe.call({ method: "jewelima.jewelima.api.split_bag", args: { order_bag: d.bag.name, pieces: JSON.stringify(buildPieces()) } })
-				.then((r) => {
-					frappe.dom.unfreeze();
-					const res = r.message || {};
-					frappe.show_alert({ message: __("Split into {0} bags.", [res.count]), indicator: "green" }, 8);
-					resetView();
-				})
-				.catch(() => frappe.dom.unfreeze());
-		};
-		if (Math.abs(rem) >= 0.0005) {
-			frappe.confirm(__("Gold isn't fully assigned ({0} g remaining). Piece 1 absorbs the difference. Continue?", [rem.toFixed(3)]), go);
-		} else {
-			go();
-		}
+		const t = totals();
+		if (Math.abs(t.rem) >= 0.0005) return frappe.msgprint(__("Assign all the gold first — {0} g still unassigned.", [t.rem.toFixed(3)]));
+		if (t.over) return frappe.msgprint(__("Too much {0} assigned — more than the bag holds.", [t.over]));
+		frappe.dom.freeze(__("Splitting…"));
+		frappe.call({ method: "jewelima.jewelima.api.split_bag", args: { order_bag: state.data.bag.name, pieces: JSON.stringify(buildPieces()) } })
+			.then((r) => { frappe.dom.unfreeze(); frappe.show_alert({ message: __("Split into {0} bags.", [(r.message || {}).count]), indicator: "green" }, 8); resetView(); })
+			.catch(() => frappe.dom.unfreeze());
 	}
 
 	function resetView() {
