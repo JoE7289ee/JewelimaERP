@@ -888,7 +888,7 @@ def get_bag_for_split(order_bag):
 		})
 	return {
 		"bag": bag, "n": n, "status": status, "gold_total": round(gold_total, 3),
-		"stone_g_total": round((flt(bag.dmd_weight) + flt(bag.ps_weight) + flt(bag.cs_weight)) * 0.2, 3),
+		"stone_ct_total": round(flt(contents.get("stone_carats")), 3),
 		"items": items,
 	}
 

@@ -98,7 +98,7 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		$card.addClass("show").html(`
 			<div class="bs-grid" style="margin-bottom:10px;">
 				${cell("Bag", b.name)}${cell("Design", b.design)}${cell("Size", b.size)}${cell("Pieces (qty)", d.n)}
-				${cell("Purity", (b.purity || 0) + "%")}${cell("Gold in bag", d.gold_total + " g")}${cell("Stone wt", d.stone_g_total + " g")}${cell("Order", b.job_order)}
+				${cell("Purity", (b.purity || 0) + "%")}${cell("Gold in bag", d.gold_total + " g")}${cell("Stone wt", d.stone_ct_total + " ct")}${cell("Order", b.job_order)}
 			</div>
 			<table class="bs-mini"><thead><tr><th>Item</th><th>Purity</th><th class="num">Qty</th><th class="num">Weight</th></tr></thead><tbody>${rows}</tbody></table>
 		`);
