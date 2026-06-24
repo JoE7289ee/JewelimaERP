@@ -210,8 +210,21 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		const d = state.data, t = totals();
 		const ok = Math.abs(t.rem) < 0.0005 && !t.over;
 		$rem.removeClass("bad ok").addClass(ok ? "ok" : "bad");
+		// gross picture: product gross (gold + stones), how much is put in the pieces,
+		// and how much is left in the bag
+		const productGross = Math.round((flt(d.gold_total) + flt(d.stone_ct_total) * 0.2) * 1000) / 1000;
+		let put = 0;
+		for (let i = 0; i < d.n; i++) {
+			d.items.forEach((it) => {
+				const w = flt(it.per_piece[i].weight);
+				put += it.is_gold ? w : w * 0.2;
+			});
+		}
+		put = Math.round(put * 1000) / 1000;
+		const left = Math.round((productGross - put) * 1000) / 1000;
 		let txt = `Gold remaining in bag: <b>${t.rem.toFixed(3)}</b> g  ·  assigned ${t.used.toFixed(3)} / ${flt(d.gold_total).toFixed(3)} g`;
 		if (t.over) txt += ` · <span style="color:#b00020">too much ${frappe.utils.escape_html(t.over)}</span>`;
+		txt += `<div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Product gross: <b>${productGross.toFixed(3)}</b> g  ·  put in pieces: <b>${put.toFixed(3)}</b> g  ·  left in bag: <b>${left.toFixed(3)}</b> g</div>`;
 		$rem.html(txt);
 		$(page.main).find(".bs-splitbtn").prop("disabled", !ok).css("opacity", ok ? 1 : 0.5);
 	}
