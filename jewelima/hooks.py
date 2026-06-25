@@ -26,7 +26,7 @@ add_to_apps_screen = [
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/jewelima/css/jewelima.css"
-app_include_js = "/assets/jewelima/js/branding.js"
+app_include_js = "branding.bundle.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/jewelima/css/jewelima.css"
