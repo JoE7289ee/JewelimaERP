@@ -11,18 +11,15 @@
 const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
 
 const PO_COLUMNS = [
-	{ key: "design", label: "Design", type: "link", options: "Design", width: "190px" },
+	{ key: "design", label: "Design", type: "link", options: "Design", width: "220px" },
 	{ key: "size", label: "Size", type: "select", options: PO_SIZES, width: "90px" },
 	{ key: "qty", label: "Qty", type: "int", width: "60px" },
-	{ key: "gross_weight", label: "Gross Wt (g)", type: "float", width: "95px" },
-	{ key: "purity", label: "Purity (%)", type: "float", width: "85px" },
-	{ key: "ps_no", label: "PS No", type: "int", width: "65px" },
-	{ key: "ps_weight", label: "PS Wt (ct)", type: "float", width: "85px" },
-	{ key: "dmd_no", label: "DMD No", type: "int", width: "70px" },
-	{ key: "dmd_weight", label: "DMD Wt (ct)", type: "float", width: "85px" },
-	{ key: "cs_no", label: "CS No", type: "int", width: "65px" },
-	{ key: "cs_weight", label: "CS Wt (ct)", type: "float", width: "85px" },
-	{ key: "nett_weight", label: "Nett Wt (g)", type: "float", width: "95px" },
+	{ key: "gross_weight", label: "Gross (g)", type: "ro", width: "85px" },
+	{ key: "nett_weight", label: "Nett (g)", type: "ro", width: "85px" },
+	{ key: "purity", label: "Purity %", type: "ro", width: "75px" },
+	{ key: "dmd", label: "DMD (no/ct)", type: "stone", no: "dmd_no", wt: "dmd_weight", width: "105px" },
+	{ key: "ps", label: "PS (no/ct)", type: "stone", no: "ps_no", wt: "ps_weight", width: "105px" },
+	{ key: "cs", label: "CS (no/ct)", type: "stone", no: "cs_no", wt: "cs_weight", width: "105px" },
 ];
 
 frappe.pages["place-order"].on_page_load = function (wrapper) {
@@ -48,8 +45,9 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		table.po-grid input,table.po-grid select{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
 			padding:1px 4px;font-size:12px;color:var(--text-color);border-radius:3px;height:26px;line-height:1.1;box-sizing:border-box;}
 		table.po-grid input:focus,table.po-grid select:focus{box-shadow:inset 0 0 0 1px var(--primary);outline:none;}
-		table.po-grid .frappe-control,table.po-grid .frappe-control .control-input,table.po-grid .frappe-control .control-input-wrapper{margin:0;padding:0;min-height:0;height:26px;overflow:hidden;}
+		table.po-grid .frappe-control,table.po-grid .frappe-control .control-input,table.po-grid .frappe-control .control-input-wrapper{margin:0;padding:0;min-height:0;height:26px;}
 		table.po-grid .frappe-control .control-input input{border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:26px;min-height:26px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
+		table.po-grid td.po-ro{padding:0 8px;text-align:right;white-space:nowrap;color:var(--text-color);font-variant-numeric:tabular-nums;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="po-wrap">
@@ -102,25 +100,23 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $body = $(page.main).find(".po-body");
 
 	// ---- live totals footer ----
-	const SUM_KEYS = ["qty", "gross_weight", "ps_weight", "dmd_weight", "cs_weight", "nett_weight"];
 	const $footrow = $(page.main).find(".po-footrow");
 	$footrow.append('<td class="po-foot-label">Total</td>');
 	const totalCells = {};
-	PO_COLUMNS.forEach((c) => {
-		const $td = $("<td></td>").appendTo($footrow);
-		if (SUM_KEYS.includes(c.key)) totalCells[c.key] = $td;
-	});
+	PO_COLUMNS.forEach((c) => (totalCells[c.key] = $("<td></td>").appendTo($footrow)));
 	$footrow.append("<td></td>");
 	function recalcTotals() {
-		const sums = {};
-		SUM_KEYS.forEach((k) => (sums[k] = 0));
-		state.rows.forEach((r) =>
-			SUM_KEYS.forEach((k) => {
-				sums[k] += (k === "qty" ? cint(r.f[k].get()) : flt(r.f[k].get())) || 0;
-			})
-		);
-		SUM_KEYS.forEach((k) => {
-			if (totalCells[k]) totalCells[k].text(k === "qty" ? sums[k] : sums[k].toFixed(3));
+		const s = { qty: 0, gross_weight: 0, nett_weight: 0, dmd_no: 0, dmd_weight: 0, ps_no: 0, ps_weight: 0, cs_no: 0, cs_weight: 0 };
+		state.rows.forEach((r) => {
+			s.qty += cint(r.f.qty.get()) || 0;
+			["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
+			["dmd_no", "ps_no", "cs_no"].forEach((k) => (s[k] += cint(r.f[k].get()) || 0));
+		});
+		totalCells.qty.text(s.qty || "");
+		totalCells.gross_weight.text(s.gross_weight ? s.gross_weight.toFixed(3) : "");
+		totalCells.nett_weight.text(s.nett_weight ? s.nett_weight.toFixed(3) : "");
+		[["dmd", "dmd_no", "dmd_weight"], ["ps", "ps_no", "ps_weight"], ["cs", "cs_no", "cs_weight"]].forEach(([gk, nk, wk]) => {
+			totalCells[gk].text(s[nk] || s[wk] ? `${s[nk]} / ${s[wk].toFixed(3)}` : "");
 		});
 	}
 	state.recalcTotals = recalcTotals;
@@ -154,11 +150,28 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				$s.append('<option value=""></option>');
 				col.options.forEach((o) => $s.append(`<option>${frappe.utils.escape_html(o)}</option>`));
 				row.f[col.key] = { get: () => $s.val(), set: (v) => $s.val(v || "") };
+			} else if (col.type === "ro") {
+				// read-only, derived from the design (no input)
+				$td.addClass("po-ro").text("—");
+				const isPurity = col.key === "purity";
+				row.f[col.key] = {
+					get: () => $td.attr("data-v") || "",
+					set: (v) => { $td.attr("data-v", v == null ? "" : v); $td.text(v ? (isPurity ? flt(v).toFixed(1) + "%" : v) : "—"); },
+				};
+			} else if (col.type === "stone") {
+				// one read-only cell showing "no / ct" (derived from the design)
+				$td.addClass("po-ro");
+				const render = () => {
+					const no = cint($td.attr("data-no")) || 0, wt = flt($td.attr("data-wt")) || 0;
+					$td.text(no || wt ? `${no} / ${wt.toFixed(3)}` : "—");
+				};
+				row.f[col.no] = { get: () => $td.attr("data-no") || "", set: (v) => { $td.attr("data-no", v == null ? "" : v); render(); } };
+				row.f[col.wt] = { get: () => $td.attr("data-wt") || "", set: (v) => { $td.attr("data-wt", v == null ? "" : v); render(); } };
+				render();
 			} else {
-				const step = col.type === "int" ? "1" : "0.001";
-				const $i = $(`<input type="number" step="${step}" min="0">`).appendTo($td);
+				// editable number (qty)
+				const $i = $(`<input type="number" step="1" min="0">`).appendTo($td);
 				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
-				// changing qty rescales the design-derived weights/counts
 				if (col.key === "qty") $i.on("input change", () => applyProfile(row));
 			}
 		});
