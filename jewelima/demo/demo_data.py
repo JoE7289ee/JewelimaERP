@@ -177,6 +177,12 @@ def clear_demo():
 	with open(_mpath()) as f:
 		m = json.load(f)
 
+	# Each frappe.delete_doc enqueues a 'delete_dynamic_links' background job; a big clear
+	# would flood the queue and trip QueueOverloaded. Running with in_test makes that
+	# cleanup inline (delete_doc uses now=frappe.in_test), so nothing piles up.
+	prev_in_test = frappe.flags.in_test
+	frappe.flags.in_test = True
+
 	bags = m.get("order_bags") or []
 	# activity tied to the demo bags / employees
 	for dt in ["Employee Issue", "Bag Material Ledger", "Order Bag Transfer"]:
@@ -213,6 +219,7 @@ def clear_demo():
 	_drop("Sales Person", m.get("sales_persons"))
 	_drop("Employee", m.get("employees"))
 
+	frappe.flags.in_test = prev_in_test
 	os.remove(_mpath())
 	frappe.db.commit()
 	return "Demo cleared."
