@@ -163,6 +163,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "printer",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Print Barcode",
+   "link_to": "print-barcode",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "package",
@@ -345,7 +358,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-25 22:31:07.005479",
+ "modified": "2026-06-26 03:05:54.340813",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

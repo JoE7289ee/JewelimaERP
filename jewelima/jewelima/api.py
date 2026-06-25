@@ -1417,3 +1417,42 @@ def transfer_order_bags(names, to_location, remarks=None):
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
 	return {"transferred": done, "count": len(done), "errors": errors}
+
+
+def _qr_data_uri(text):
+	"""QR as a PNG data-URI via segno (pure-python). None if segno is unavailable."""
+	try:
+		import segno
+
+		return segno.make(str(text), error="m").png_data_uri(scale=5, border=2)
+	except Exception:
+		return None
+
+
+@frappe.whitelist()
+def get_barcode_card(order_bag):
+	"""Label data for the Print Barcode page. Weights come from ACTUAL (never the BOM/plan);
+	`actual_empty` flags cards with no actual weight yet (the page warns). Errors if qty > 1 —
+	a multi-piece card must be extracted into singles first. No status restriction: a card can
+	be barcode-printed at any stage."""
+	if not order_bag or not frappe.db.exists("Order Bag", order_bag):
+		return {"error": "No Order Bag {0}.".format(order_bag)}
+	b = frappe.get_doc("Order Bag", order_bag)
+	if int(b.qty or 0) > 1:
+		return {"error": "{0}: qty is {1} — extract it into single pieces before printing.".format(b.name, b.qty)}
+	gw = flt(b.act_gross_weight)
+	return {
+		"name": b.name,
+		"design": b.design,
+		"design_type": frappe.db.get_value("Design", b.design, "design_type") if b.design else None,
+		"size": b.size,
+		"qty": int(b.qty or 0),
+		"gw": gw,
+		"nett": flt(b.act_nett_weight),
+		"purity": flt(b.act_purity),
+		"dmd_no": int(b.act_dmd_no or 0), "dmd_wt": flt(b.act_dmd_weight),
+		"ps_no": int(b.act_ps_no or 0), "ps_wt": flt(b.act_ps_weight),
+		"cs_no": int(b.act_cs_no or 0), "cs_wt": flt(b.act_cs_weight),
+		"actual_empty": not gw,
+		"qr": _qr_data_uri(b.name),
+	}
