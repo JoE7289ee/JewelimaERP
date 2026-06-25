@@ -1322,6 +1322,38 @@ def get_finished_items(status=None, held_by=None):
 
 
 @frappe.whitelist()
+def get_card_passport(order_bag):
+	"""Everything about a card for the lookup/print view: header, plan + actual
+	weights, current contents, the transfer trail and the bench stage history."""
+	bag = frappe.db.get_value(
+		"Order Bag", order_bag,
+		[
+			"name", "design", "qty", "size", "location", "stock_status", "held_by", "customer", "salesman",
+			"order_type", "order_date", "due_date", "is_finished", "narration",
+			"gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
+			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
+			"act_dmd_no", "act_dmd_weight", "act_ps_no", "act_ps_weight", "act_cs_no", "act_cs_weight",
+		],
+		as_dict=True,
+	)
+	if not bag:
+		return {}
+	if bag.design:
+		d = frappe.db.get_value("Design", bag.design, ["design_type", "item"], as_dict=True) or {}
+		bag["design_type"] = d.get("design_type")
+		bag["item"] = d.get("item")
+	return {
+		"bag": bag,
+		"contents": get_bag_contents(order_bag),
+		"transfers": frappe.get_all(
+			"Order Bag Transfer", filters={"order_bag": order_bag},
+			fields=["from_location", "to_location", "transfer_time", "transferred_by"], order_by="transfer_time asc",
+		),
+		"stages": get_bag_stage_history(order_bag),
+	}
+
+
+@frappe.whitelist()
 def transfer_order_bags(names, to_location, remarks=None):
 	"""Transfer a batch of Order Bags (all collected at one source) to a destination."""
 	if isinstance(names, str):

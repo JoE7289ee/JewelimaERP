@@ -69,6 +69,19 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "search",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Card Info",
+   "link_to": "card-info",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "briefcase",
    "indent": 0,
    "keep_closed": 0,
@@ -256,7 +269,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-25 14:42:43.485909",
+ "modified": "2026-06-25 14:53:22.040556",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -25,10 +25,33 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 		.mp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;}
 		.mp-foot .cnt{color:var(--text-muted);font-size:13px;}
 		</style>
-		<div class="mp-bar"><div class="mp-loc" style="flex:1"></div></div>
+		<div class="mp-bar"><div class="mp-scan" style="flex:1"></div><div class="mp-loc" style="flex:1"></div></div>
 		<div class="mp-box"><table class="mp-tbl"><thead></thead><tbody></tbody></table></div>
 		<div class="mp-foot"><span class="cnt"></span><div class="mp-actions"></div></div>
 	`);
+
+	const scanCtl = frappe.ui.form.make_control({
+		df: { fieldtype: "Data", label: "Scan to make", fieldname: "scan", description: "Scan a card to make it a product right away." },
+		parent: $(page.main).find(".mp-scan").get(0), render_input: true,
+	});
+	scanCtl.refresh();
+	scanCtl.$input.on("keydown", (e) => {
+		if (e.which === 13 || e.key === "Enter") {
+			e.preventDefault();
+			const c = (scanCtl.$input.val() || "").trim();
+			scanCtl.set_value("");
+			if (c) makeOne(c);
+		}
+	});
+	function makeOne(code) {
+		frappe.call({ method: "jewelima.jewelima.api.make_products", args: { bags: JSON.stringify([code]) } }).then((r) => {
+			const res = r.message || {};
+			if (res.count) frappe.show_alert({ message: __("Made {0} into a product.", [code]), indicator: "green" }, 4);
+			if (res.errors && res.errors.length) frappe.show_alert({ message: code + ": " + res.errors[0].error, indicator: "red" }, 6);
+			load();
+			setTimeout(() => scanCtl.$input.focus(), 30);
+		});
+	}
 
 	const locCtl = frappe.ui.form.make_control({
 		df: { fieldtype: "Select", label: "Location", fieldname: "loc", options: MP_LOCATIONS, description: "Blank = all locations." },
