@@ -50,6 +50,9 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		table.po-grid .frappe-control .control-input-wrapper,table.po-grid .frappe-control .control-input{margin:0;padding:0;min-height:0;}
 		table.po-grid .frappe-control .control-input input{border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:26px;min-height:26px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
 		table.po-grid td.po-ro{padding:0 8px;text-align:right;white-space:nowrap;color:var(--text-color);font-variant-numeric:tabular-nums;}
+		table.po-grid td.po-act{text-align:center;padding:0 4px;}
+		table.po-grid td.po-act .btn{padding:1px 9px;font-size:11px;height:24px;line-height:1;}
+		table.po-grid td.po-act .btn:disabled{opacity:.4;cursor:not-allowed;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="po-wrap">
@@ -97,6 +100,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
 	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
+	$headrow.append('<th style="width:64px;text-align:center">Split</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
 	const $body = $(page.main).find(".po-body");
@@ -106,7 +110,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	$footrow.append('<td class="po-foot-label">Total</td>');
 	const totalCells = {};
 	PO_COLUMNS.forEach((c) => (totalCells[c.key] = $("<td></td>").appendTo($footrow)));
-	$footrow.append("<td></td>");
+	$footrow.append("<td></td>"); // actions (Split)
+	$footrow.append("<td></td>"); // remove
 	function recalcTotals() {
 		const s = { qty: 0, gross_weight: 0, nett_weight: 0, dmd_no: 0, dmd_weight: 0, ps_no: 0, ps_weight: 0, cs_no: 0, cs_weight: 0 };
 		state.rows.forEach((r) => {
@@ -150,7 +155,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		$(page.main).find(".po-count").text(state.rows.length);
 	}
 
-	function addRow() {
+	function addRow(afterRow) {
 		const $tr = $("<tr></tr>");
 		$tr.append('<td class="po-num"></td>');
 		const row = { $tr, f: {} };
@@ -198,11 +203,18 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				if (col.key === "qty")
 					$i.on("input change", () => {
 						applyProfile(row);
+						updateSplitBtn(row); // enable/disable Split as qty crosses 1
 						// auto-append a fresh line once the last row gets a qty
 						if (cint(row.f.qty.get()) > 0 && state.rows[state.rows.length - 1] === row) addRow();
 					});
 			}
 		});
+		// actions cell — Split (enabled only when qty > 1); more buttons can live here later
+		const $act = $('<td class="po-act"></td>').appendTo($tr);
+		row.$split = $('<button class="btn btn-xs btn-default" title="Split this line into multiple bags">Split</button>').appendTo($act);
+		row.$split.on("click", () => doSplit(row));
+		updateSplitBtn(row);
+
 		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
 		$rm.find("button").on("click", () => {
 			state.rows = state.rows.filter((r) => r !== row);
@@ -210,11 +222,64 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			renumber();
 			recalcTotals();
 		});
-		$body.append($tr);
-		state.rows.push(row);
+		if (afterRow) {
+			afterRow.$tr.after($tr); // insert right below the given row
+			state.rows.splice(state.rows.indexOf(afterRow) + 1, 0, row);
+		} else {
+			$body.append($tr);
+			state.rows.push(row);
+		}
 		renumber();
 		recalcTotals();
 		return row;
+	}
+
+	function updateSplitBtn(row) {
+		if (row.$split) row.$split.prop("disabled", cint(row.f.qty.get()) <= 1);
+	}
+
+	// Split a line's qty across N bags. Divides as evenly as possible; the last line
+	// takes any remainder (e.g. 50 → 4 bags = 12, 12, 12, 14).
+	function doSplit(row) {
+		const total = cint(row.f.qty.get());
+		if (!row.f.design.get()) return frappe.msgprint(__("Pick a Design on this line first."));
+		if (total <= 1) return frappe.msgprint(__("This line has only 1 — nothing to split."));
+		frappe.prompt(
+			{
+				fieldname: "bags", fieldtype: "Int", reqd: 1, default: 2,
+				label: __("Split into how many bags?"),
+				description: __("{0} qty will be divided across this many lines (the last line takes any remainder).", [total]),
+			},
+			(v) => {
+				const n = cint(v.bags);
+				if (n < 2) return frappe.msgprint(__("Enter 2 or more."));
+				if (n > total) return frappe.msgprint(__("Can't split {0} into more than {0} bags (each bag needs at least 1).", [total]));
+				const base = Math.floor(total / n);
+				const qtys = [];
+				for (let i = 0; i < n - 1; i++) qtys.push(base);
+				qtys.push(total - base * (n - 1)); // last line gets the remainder
+				const design = row.f.design.get(), size = row.f.size.get();
+				row.f.qty.set(qtys[0]); // original line becomes the first bag
+				applyProfile(row);
+				updateSplitBtn(row);
+				let prev = row;
+				for (let i = 1; i < n; i++) {
+					const nr = addRow(prev);
+					nr._profile = row._profile;
+					nr._lastDesign = design;
+					nr.f.design.set(design);
+					nr.f.size.set(size);
+					nr.f.qty.set(qtys[i]);
+					applyProfile(nr);
+					updateSplitBtn(nr);
+					prev = nr;
+				}
+				recalcTotals();
+				frappe.show_alert({ message: __("Split into {0} bags: {1}", [n, qtys.join(" + ")]), indicator: "green" });
+			},
+			__("Split Line"),
+			__("Split")
+		);
 	}
 
 	function onDesignPicked(row) {
