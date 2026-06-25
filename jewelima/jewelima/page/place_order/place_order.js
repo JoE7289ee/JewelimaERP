@@ -195,7 +195,12 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				// editable number (qty)
 				const $i = $(`<input type="number" step="1" min="0">`).appendTo($td);
 				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
-				if (col.key === "qty") $i.on("input change", () => applyProfile(row));
+				if (col.key === "qty")
+					$i.on("input change", () => {
+						applyProfile(row);
+						// auto-append a fresh line once the last row gets a qty
+						if (cint(row.f.qty.get()) > 0 && state.rows[state.rows.length - 1] === row) addRow();
+					});
 			}
 		});
 		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
@@ -292,9 +297,15 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	const order_date = state.header.order_date.get_value();
 	const due_date = state.header.due_date.get_value();
 
-	const lines = state.rows.map(po_readLine).filter((l) => l.design || l.qty);
+	const all = state.rows.map(po_readLine);
+	const lines = all.filter((l) => l.design); // rows without a Design are denied
+	const ghosts = all.filter((l) => !l.design && l.qty); // qty typed but Design forgotten
+	if (ghosts.length) {
+		frappe.msgprint(__("{0} line(s) have a Qty but no Design — add a Design or clear the Qty before placing the order.", [ghosts.length]));
+		return;
+	}
 	if (!lines.length) {
-		frappe.msgprint(__("Add at least one line (a Design or Qty)."));
+		frappe.msgprint(__("Add at least one line with a Design."));
 		return;
 	}
 
