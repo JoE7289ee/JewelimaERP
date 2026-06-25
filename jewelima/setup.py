@@ -3,6 +3,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
 def after_install():
+	set_default_timezone()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
@@ -18,6 +19,7 @@ def after_install():
 def after_migrate():
 	# All seeders are idempotent. Items + warehouses need a Company / item groups
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
+	set_default_timezone()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
@@ -28,6 +30,17 @@ def after_migrate():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	seed_raw_materials()
+
+
+DEFAULT_TIME_ZONE = "Asia/Kolkata"
+
+
+def set_default_timezone():
+	"""Ship with India Standard Time (IST) as the default application timezone.
+	Idempotent — only writes when System Settings differs, so it won't churn on every
+	migrate. Frappe tracks its own app timezone independent of the server's OS clock."""
+	if frappe.db.get_single_value("System Settings", "time_zone") != DEFAULT_TIME_ZONE:
+		frappe.db.set_single_value("System Settings", "time_zone", DEFAULT_TIME_ZONE)
 
 
 ORDER_TYPES = ["BULK", "CUSTOMER"]
