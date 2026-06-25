@@ -1456,3 +1456,65 @@ def get_barcode_card(order_bag):
 		"actual_empty": not gw,
 		"qr": _qr_data_uri(b.name),
 	}
+
+
+@frappe.whitelist()
+def get_job_order_status(job_order):
+	"""Where every piece of a Job Order is right now: current location, whether it's
+	assigned/issued (and to whom), and when it entered that location. Accepts a Job Order
+	name or any of its card codes. Used by the Job Order Status page."""
+	from collections import Counter
+
+	from jewelima.jewelima.benches import bench_doctype
+
+	if not job_order:
+		return {"error": "Enter a Job Order or a card code."}
+	# accept a card code too -> resolve to its job order
+	if not frappe.db.exists("Job Order", job_order):
+		jo2 = frappe.db.get_value("Order Bag", job_order, "job_order")
+		if jo2:
+			job_order = jo2
+		else:
+			return {"error": "No Job Order (or card) '{0}'.".format(job_order)}
+
+	bags = frappe.get_all(
+		"Order Bag", filters={"job_order": job_order},
+		fields=["name", "design", "qty", "location", "is_finished", "stock_status", "act_gross_weight"],
+		order_by="name asc",
+	)
+	emp_names, out = {}, []
+	for b in bags:
+		loc = b.location
+		status = employee = entered = None
+		dt = bench_doctype(loc)
+		if dt and frappe.db.exists("DocType", dt):
+			recs = frappe.get_all(
+				dt, filters={"order_bag": b.name},
+				fields=["status", "employee", "time_in", "issued_at"], order_by="creation desc", limit=1,
+			)
+			if recs:
+				status, employee = recs[0].status, recs[0].employee
+				entered = recs[0].issued_at or recs[0].time_in
+		if not entered and loc:
+			entered = frappe.db.get_value(
+				"Order Bag Transfer", {"order_bag": b.name, "to_location": loc}, "transfer_time", order_by="transfer_time desc"
+			)
+		if not entered:
+			entered = frappe.db.get_value("Order Bag", b.name, "creation")
+		if employee and employee not in emp_names:
+			emp_names[employee] = frappe.db.get_value("Employee", employee, "employee_name") or employee
+		out.append({
+			"name": b.name, "design": b.design, "qty": b.qty,
+			"location": loc or "—", "is_finished": b.is_finished, "stock_status": b.stock_status,
+			"gross": flt(b.act_gross_weight),
+			"status": status, "employee": employee, "employee_name": emp_names.get(employee),
+			"entered": str(entered) if entered else None,
+		})
+
+	header = frappe.db.get_value(
+		"Job Order", job_order, ["customer", "salesman", "order_type", "order_date", "due_date"], as_dict=True
+	) or {}
+	return {
+		"job_order": job_order, "header": header, "bags": out, "total": len(out),
+		"by_location": dict(Counter(x["location"] for x in out)),
+	}

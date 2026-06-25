@@ -85,6 +85,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "map-pin",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Job Order Status",
+   "link_to": "job-order-status",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
@@ -358,7 +371,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-26 03:20:32.752454",
+ "modified": "2026-06-26 03:31:58.094356",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
