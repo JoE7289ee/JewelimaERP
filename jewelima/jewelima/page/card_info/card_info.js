@@ -2,40 +2,41 @@
 // For license information, please see license.txt
 //
 // Card Info — scan a card to see everything about it: where it is, where it
-// travelled, who worked on it, plan vs actual weights, current contents. Pretty,
-// with a Print option. Route: /app/card-info
+// travelled, who worked on it, plan vs actual weights, current contents. Slim +
+// printable (Print opens a clean one-page view). Route: /app/card-info
 
 frappe.pages["card-info"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Card Info", single_column: true });
 	const state = { data: null };
 
 	const CSS = `
-	.ci-wrap{max-width:880px;}
-	.ci-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:10px;padding:14px 18px;background:#fff;margin-bottom:14px;}
-	.ci-code{font-size:24px;font-weight:800;letter-spacing:.5px;}
-	.ci-sub{color:#6b7785;font-size:13px;margin-top:3px;}
-	.ci-badge{display:inline-block;padding:3px 10px;border-radius:14px;font-size:12px;font-weight:700;margin-top:8px;}
+	.ci-wrap{max-width:760px;}
+	.ci-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:8px;}
+	.ci-code{font-size:20px;font-weight:800;letter-spacing:.4px;}
+	.ci-sub{color:#6b7785;font-size:12px;margin-top:2px;}
+	.ci-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;margin-top:6px;}
 	.ci-badge.prod{background:#eaf6ec;color:#1d7a33;}
 	.ci-badge.wip{background:#eef2f7;color:#5a6b7b;}
-	.ci-loc{font-size:12px;color:#8a96a3;text-align:right;}
-	.ci-loc b{font-size:18px;color:#222;display:block;margin-top:2px;}
-	.ci-sec{border:1px solid #e2e6ea;border-radius:10px;padding:12px 18px;background:#fff;margin-bottom:14px;}
-	.ci-sec h4{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7785;}
-	.ci-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 18px;font-size:13px;}
-	.ci-grid .k{color:#8a96a3;font-size:11px;}
-	.ci-grid .v{font-weight:600;}
-	table.ci-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
-	table.ci-tbl th,table.ci-tbl td{border:1px solid #e2e6ea;padding:5px 9px;text-align:left;}
-	table.ci-tbl th{background:#f6f8fa;font-weight:700;}
+	.ci-loc{font-size:11px;color:#8a96a3;text-align:right;}
+	.ci-loc b{font-size:16px;color:#222;display:block;margin-top:2px;}
+	.ci-sec{border:1px solid #e2e6ea;border-radius:9px;padding:9px 14px;background:#fff;margin-bottom:8px;}
+	.ci-sec h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a96a3;}
+	.ci-kvs{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;}
+	.ci-kvs .k{color:#8a96a3;}
+	.ci-line{font-size:13px;margin:2px 0;}
+	.ci-line .tag{display:inline-block;min-width:46px;color:#8a96a3;font-size:11px;font-weight:700;text-transform:uppercase;}
+	.ci-line.muted{color:#6b7785;}
+	.ci-chain{font-size:13px;line-height:1.7;}
+	.ci-chain .ar{color:#b3bdc7;margin:0 3px;}
+	table.ci-tbl{width:100%;border-collapse:collapse;font-size:12px;}
+	table.ci-tbl th,table.ci-tbl td{border-bottom:1px solid #eef1f4;padding:3px 6px;text-align:left;}
+	table.ci-tbl th{color:#8a96a3;font-weight:700;font-size:11px;}
 	table.ci-tbl td.num,table.ci-tbl th.num{text-align:right;}
-	.ci-trail{list-style:none;padding:0;margin:0;font-size:13px;}
-	.ci-trail li{padding:4px 0;border-bottom:1px dashed #e2e6ea;}
-	.ci-trail .ar{color:#8a96a3;}
-	.ci-empty{color:#8a96a3;padding:10px 0;text-align:center;}
+	.ci-empty{color:#8a96a3;}
 	`;
 
 	$(page.main).append(`<style>${CSS}</style>
-		<div class="ci-bar" style="max-width:420px;margin:2px 0 14px;"></div>
+		<div class="ci-bar" style="max-width:420px;margin:2px 0 12px;"></div>
 		<div class="ci-out ci-wrap"></div>`);
 
 	const scan = frappe.ui.form.make_control({
@@ -46,17 +47,45 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	const $out = $(page.main).find(".ci-out");
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
-	const num = (v) => (v ? flt(v).toFixed(3) : "—");
+	const g = (v) => flt(v).toFixed(3);
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
+
+	// compact weight line, skipping anything zero/empty
+	function wline(v, pure) {
+		const p = [];
+		if (flt(v.gross)) p.push(`Gross <b>${g(v.gross)}</b>g`);
+		if (flt(v.nett)) p.push(`Nett <b>${g(v.nett)}</b>g`);
+		if (pure && flt(v.pure)) p.push(`Pure <b>${g(v.pure)}</b>g`);
+		if (flt(v.purity)) p.push(`<b>${flt(v.purity).toFixed(1)}%</b>`);
+		if (v.dmd_no || flt(v.dmd_w)) p.push(`DMD <b>${v.dmd_no || 0}</b>/<b>${g(v.dmd_w)}</b>ct`);
+		if (v.ps_no || flt(v.ps_w)) p.push(`PS <b>${v.ps_no || 0}</b>/<b>${g(v.ps_w)}</b>ct`);
+		if (v.cs_no || flt(v.cs_w)) p.push(`CS <b>${v.cs_no || 0}</b>/<b>${g(v.cs_w)}</b>ct`);
+		return p.join(" &middot; ");
+	}
 
 	function buildHTML(d) {
 		const b = d.bag;
-		const cell = (k, v) => `<div><div class="k">${k}</div><div class="v">${esc(v == null || v === "" ? "—" : "" + v)}</div></div>`;
-		const wrow = (lbl, plan, act) => `<tr><td>${lbl}</td><td class="num">${plan}</td><td class="num">${act}</td></tr>`;
-		const contents = (d.contents.items || []).map((m) => `<tr><td>${esc(m.item)}</td><td class="num">${m.pcs || ""}</td><td class="num">${m.qty}</td><td>${esc(m.uom || "")}</td></tr>`).join("") || `<tr><td colspan="4" class="ci-empty">Empty</td></tr>`;
-		const trail = (d.transfers || []).map((t, i) => `<li>${i + 1}. <b>${esc(t.from_location || "—")}</b> <span class="ar">&rarr;</span> <b>${esc(t.to_location || "")}</b> &middot; ${t.transfer_time ? frappe.datetime.str_to_user(t.transfer_time) : ""} &middot; ${esc(t.transferred_by || "")}</li>`).join("") || `<li class="ci-empty">No transfers yet.</li>`;
-		const stages = (d.stages || []).map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${s.loss ? flt(s.loss).toFixed(3) : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="ci-empty">No bench activity yet.</td></tr>`;
+		const kv = (k, v) => (v == null || v === "" ? "" : `<span><span class="k">${k}</span> ${esc("" + v)}</span>`);
+		const dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
 		const finished = b.is_finished;
+
+		const act = wline({ gross: b.act_gross_weight, nett: b.act_nett_weight, pure: b.act_pure_weight, purity: b.act_purity, dmd_no: b.act_dmd_no, dmd_w: b.act_dmd_weight, ps_no: b.act_ps_no, ps_w: b.act_ps_weight, cs_no: b.act_cs_no, cs_w: b.act_cs_weight }, true);
+		const plan = wline({ gross: b.gross_weight, nett: b.nett_weight, purity: b.purity, dmd_no: b.dmd_no, dmd_w: b.dmd_weight, ps_no: b.ps_no, ps_w: b.ps_weight, cs_no: b.cs_no, cs_w: b.cs_weight }, false);
+
+		const contents = (d.contents.items || []).map((m) => `${esc(m.item)} <b>${m.pcs ? m.pcs + " / " : ""}${m.qty} ${esc(m.uom || "")}</b>`).join(" &middot; ") || '<span class="ci-empty">Empty</span>';
+
+		let chain = '<span class="ci-empty">No transfers yet.</span>';
+		if ((d.transfers || []).length) {
+			const locs = [d.transfers[0].from_location || "—"].concat(d.transfers.map((t) => t.to_location || ""));
+			chain = locs.map((l) => `<b>${esc(l)}</b>`).join('<span class="ar">&rarr;</span>');
+		}
+
+		const stages = (d.stages || []).filter((s) => s.employee_name || flt(s.loss) || (s.status && s.status !== "In Queue"));
+		const stageRows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
+		const stageTbl = stageRows
+			? `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${stageRows}</tbody></table>`
+			: '<span class="ci-empty">No bench work yet.</span>';
+
 		return `
 		<div class="ci-head">
 			<div>
@@ -66,29 +95,18 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			</div>
 			<div class="ci-loc">Location<b>${esc(b.location || "—")}</b></div>
 		</div>
-		<div class="ci-sec"><h4>Order</h4><div class="ci-grid">
-			${cell("Customer", b.customer || b.held_by)}${cell("Held By", b.held_by)}${cell("Salesman", b.salesman)}${cell("Type", b.order_type)}
-			${cell("Qty", b.qty)}${cell("Size", b.size)}${cell("Order Date", b.order_date ? frappe.datetime.str_to_user(b.order_date) : "")}${cell("Due", b.due_date ? frappe.datetime.str_to_user(b.due_date) : "")}
+		<div class="ci-sec"><div class="ci-kvs">
+			${kv("Customer", b.customer || b.held_by)}${kv("Held By", b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
+			${kv("Qty", b.qty)}${kv("Size", b.size)}${kv("Ordered", dt(b.order_date))}${kv("Due", dt(b.due_date))}
 		</div></div>
 		<div class="ci-sec"><h4>Weights</h4>
-			<table class="ci-tbl"><thead><tr><th>Metric</th><th class="num">Plan</th><th class="num">Actual</th></tr></thead><tbody>
-			${wrow("Gross (g)", num(b.gross_weight), num(b.act_gross_weight))}
-			${wrow("Nett (g)", num(b.nett_weight), num(b.act_nett_weight))}
-			${wrow("Pure (g)", "—", num(b.act_pure_weight))}
-			${wrow("Purity (%)", b.purity ? flt(b.purity).toFixed(1) : "—", b.act_purity ? flt(b.act_purity).toFixed(1) : "—")}
-			${wrow("DMD No", b.dmd_no || 0, b.act_dmd_no || 0)}
-			${wrow("DMD (ct)", num(b.dmd_weight), num(b.act_dmd_weight))}
-			${wrow("CS No", b.cs_no || 0, b.act_cs_no || 0)}
-			${wrow("CS (ct)", num(b.cs_weight), num(b.act_cs_weight))}
-			</tbody></table>
+			${act ? `<div class="ci-line"><span class="tag">Actual</span> ${act}</div>` : ""}
+			${plan ? `<div class="ci-line muted"><span class="tag">Plan</span> ${plan}</div>` : ""}
+			${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
 		</div>
-		<div class="ci-sec"><h4>Current Contents (in bag)</h4>
-			<table class="ci-tbl"><thead><tr><th>Material</th><th class="num">No.</th><th class="num">Qty</th><th>UOM</th></tr></thead><tbody>${contents}</tbody></table>
-		</div>
-		<div class="ci-sec"><h4>Where it travelled</h4><ul class="ci-trail">${trail}</ul></div>
-		<div class="ci-sec"><h4>Who worked on it</h4>
-			<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss (g)</th></tr></thead><tbody>${stages}</tbody></table>
-		</div>`;
+		<div class="ci-sec"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
+		<div class="ci-sec"><h4>Where it travelled</h4><div class="ci-chain">${chain}</div></div>
+		<div class="ci-sec"><h4>Who worked on it</h4>${stageTbl}</div>`;
 	}
 
 	function load(code) {
@@ -108,8 +126,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 
 	function printCard() {
 		if (!state.data) return frappe.msgprint(__("Scan a card first."));
-		const w = window.open("", "_blank", "width=820,height=940");
-		w.document.write(`<html><head><title>${esc(state.data.bag.name)}</title><style>${CSS} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:18px;color:#222;}</style></head><body>${buildHTML(state.data)}</body></html>`);
+		const w = window.open("", "_blank", "width=780,height=900");
+		w.document.write(`<html><head><title>${esc(state.data.bag.name)}</title><style>${CSS} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:14px;color:#222;}</style></head><body>${buildHTML(state.data)}</body></html>`);
 		w.document.close();
 		w.focus();
 		setTimeout(() => w.print(), 350);
