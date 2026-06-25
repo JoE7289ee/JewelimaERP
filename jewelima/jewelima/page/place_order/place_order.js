@@ -40,16 +40,16 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
 		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.po-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
-			border-right:3px solid var(--gray-500, #8d96a0);border-bottom:4px solid var(--gray-500, #8d96a0);padding:1px 2px;text-align:left;white-space:nowrap;font-weight:700;}
-		table.po-grid td{border-right:3px solid var(--gray-500, #8d96a0);border-bottom:3px solid var(--gray-500, #8d96a0);padding:0;vertical-align:middle;background:var(--fg-color);}
-		table.po-grid td.po-num{color:var(--text-muted);text-align:center;width:36px;background:var(--control-bg);}
-		table.po-grid tfoot td{position:sticky;bottom:0;z-index:2;background:var(--control-bg, var(--fg-color));border-top:4px solid var(--gray-500, #8d96a0);border-right:3px solid var(--gray-500, #8d96a0);font-weight:700;padding:4px 6px;text-align:right;white-space:nowrap;}
+			border-right:1px solid var(--border-color);border-bottom:1px solid var(--gray-400, #aeb6bf);padding:3px 6px;text-align:left;white-space:nowrap;font-weight:700;}
+		table.po-grid td{border-right:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:0 2px;vertical-align:middle;background:var(--fg-color);height:30px;}
+		table.po-grid td.po-num{color:var(--text-muted);text-align:center;width:30px;background:var(--control-bg);}
+		table.po-grid tfoot td{position:sticky;bottom:0;z-index:2;background:var(--control-bg, var(--fg-color));border-top:2px solid var(--gray-400, #aeb6bf);border-right:1px solid var(--border-color);font-weight:700;padding:3px 6px;text-align:right;white-space:nowrap;}
 		table.po-grid tfoot td.po-foot-label{text-align:left;}
-		table.po-grid input,table.po-grid select{width:100%;border:2px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
-			padding:1px 4px;font-size:12px;color:var(--text-color);border-radius:3px;height:24px;line-height:1.1;box-sizing:border-box;}
-		table.po-grid input:focus,table.po-grid select:focus{box-shadow:inset 0 0 0 2px var(--primary);outline:none;}
-		table.po-grid .frappe-control,table.po-grid .frappe-control .control-input,table.po-grid .frappe-control .control-input-wrapper{margin:0;padding:0;min-height:0;}
-		table.po-grid .frappe-control .control-input input{border:2px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:24px;min-height:24px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
+		table.po-grid input,table.po-grid select{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
+			padding:1px 4px;font-size:12px;color:var(--text-color);border-radius:3px;height:26px;line-height:1.1;box-sizing:border-box;}
+		table.po-grid input:focus,table.po-grid select:focus{box-shadow:inset 0 0 0 1px var(--primary);outline:none;}
+		table.po-grid .frappe-control,table.po-grid .frappe-control .control-input,table.po-grid .frappe-control .control-input-wrapper{margin:0;padding:0;min-height:0;height:26px;overflow:hidden;}
+		table.po-grid .frappe-control .control-input input{border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:26px;min-height:26px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="po-wrap">
