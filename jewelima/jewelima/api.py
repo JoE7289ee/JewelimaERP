@@ -1357,7 +1357,7 @@ def get_print_branding():
 	company = _company()
 	c = {}
 	if company:
-		c = frappe.db.get_value("Company", company, ["company_name", "phone_no", "email", "tax_id"], as_dict=True) or {}
+		c = frappe.db.get_value("Company", company, ["company_name", "phone_no", "email", "tax_id", "website"], as_dict=True) or {}
 	addr = ""
 	if company:
 		links = frappe.get_all("Dynamic Link", filters={"link_doctype": "Company", "link_name": company, "parenttype": "Address"}, fields=["parent"], limit=1)
@@ -1367,8 +1367,9 @@ def get_print_branding():
 			addr = ", ".join([x for x in [a.get("address_line1"), a.get("address_line2"), loc] if x])
 	return {
 		"company": c.get("company_name") or company or "Jewelima",
-		"address": addr, "phone": c.get("phone_no") or "", "email": c.get("email") or "", "gstin": c.get("tax_id") or "",
-		"logo_url": "/assets/jewelima/images/jewelima-logo.svg",
+		"address": addr, "phone": c.get("phone_no") or "", "email": c.get("email") or "",
+		"gstin": c.get("tax_id") or "", "website": c.get("website") or "",
+		"logo_url": "/assets/jewelima/images/jewelima-letterhead.png",
 	}
 
 
