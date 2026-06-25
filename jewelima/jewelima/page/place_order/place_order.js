@@ -124,6 +124,27 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	state.recalcTotals = recalcTotals;
 	$body.on("input change", "input,select", () => recalcTotals());
 
+	// Press Enter to jump to the next field (Design → Size → Qty → next row) for fast
+	// keyboard entry. On the Design field, if the autocomplete list is open Enter still
+	// picks from it (press Enter again to advance).
+	$body.on("keydown", "input,select", (e) => {
+		if (e.which !== 13 && e.key !== "Enter") return;
+		const $ul = $(e.target).closest(".awesomplete").find("ul");
+		if ($ul.length && !$ul.prop("hidden") && $ul.find("li").length) return; // let it pick from the list
+		e.preventDefault();
+		const fields = $body.find("input:visible,select:visible").toArray();
+		const i = fields.indexOf(e.target);
+		if (i === -1) return;
+		if (i < fields.length - 1) {
+			const nx = fields[i + 1];
+			nx.focus();
+			if (nx.select) nx.select();
+		} else {
+			const row = addRow(); // last field → start a new line
+			setTimeout(() => row.$tr.find("input,select").first().focus(), 30);
+		}
+	});
+
 	function renumber() {
 		$body.find("tr").each((i, tr) => $(tr).find(".po-num").text(i + 1));
 		$(page.main).find(".po-count").text(state.rows.length);
