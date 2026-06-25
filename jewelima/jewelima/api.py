@@ -1339,7 +1339,7 @@ def get_print_branding():
 	return {
 		"company": c.get("company_name") or company or "Jewelima",
 		"address": addr, "phone": c.get("phone_no") or "", "email": c.get("email") or "", "gstin": c.get("tax_id") or "",
-		"logo_url": "/assets/jewelima/images/jewelima-logo.png",
+		"logo_url": "/assets/jewelima/images/jewelima-logo.svg",
 	}
 
 
