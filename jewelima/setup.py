@@ -15,6 +15,7 @@ def after_install():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	seed_raw_materials()
+	seed_karat_golds()
 
 
 def after_migrate():
@@ -32,6 +33,7 @@ def after_migrate():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	seed_raw_materials()
+	seed_karat_golds()
 
 
 DEFAULT_TIME_ZONE = "Asia/Kolkata"
@@ -43,6 +45,31 @@ def set_default_timezone():
 	migrate. Frappe tracks its own app timezone independent of the server's OS clock."""
 	if frappe.db.get_single_value("System Settings", "time_zone") != DEFAULT_TIME_ZONE:
 		frappe.db.set_single_value("System Settings", "time_zone", DEFAULT_TIME_ZONE)
+
+
+KARAT_GOLDS = {"14K": 58.3, "18K": 75.1, "22K": 91.7}
+GOLD_COLORS = ["YG", "WG", "PG"]  # Yellow / White / Pink(Rose) gold
+
+
+def seed_karat_golds():
+	"""Ship the standard karat golds designs use: 14/18/22 K in YG/WG/PG (9 items).
+	Idempotent — creates only the variants that are missing."""
+	if not frappe.db.exists("Item Group", "GOLD"):
+		frappe.get_doc({
+			"doctype": "Item Group", "item_group_name": "GOLD",
+			"parent_item_group": "All Item Groups", "is_group": 0,
+		}).insert(ignore_permissions=True)
+	for karat, purity in KARAT_GOLDS.items():
+		for color in GOLD_COLORS:
+			code = f"{karat}{color}"  # e.g. 22KYG
+			if frappe.db.exists("Item", code):
+				continue
+			frappe.get_doc({
+				"doctype": "Item", "item_code": code, "item_name": code, "item_group": "GOLD",
+				"stock_uom": "Gram", "weight_unit": "Gram", "is_stock_item": 1,
+				"is_purchase_item": 1, "is_sales_item": 0, "include_item_in_manufacturing": 1,
+				"metal_purity": karat, "purity_percentage": purity,
+			}).insert(ignore_permissions=True)
 
 
 def relax_employee_mandatory():
