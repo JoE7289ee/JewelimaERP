@@ -4,6 +4,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 def after_install():
 	set_default_timezone()
+	relax_employee_mandatory()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
@@ -20,6 +21,7 @@ def after_migrate():
 	# All seeders are idempotent. Items + warehouses need a Company / item groups
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
 	set_default_timezone()
+	relax_employee_mandatory()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
@@ -41,6 +43,16 @@ def set_default_timezone():
 	migrate. Frappe tracks its own app timezone independent of the server's OS clock."""
 	if frappe.db.get_single_value("System Settings", "time_zone") != DEFAULT_TIME_ZONE:
 		frappe.db.set_single_value("System Settings", "time_zone", DEFAULT_TIME_ZONE)
+
+
+def relax_employee_mandatory():
+	"""Workshops rarely track DOB / joining dates for karigars — make Employee's Date of
+	Birth and Date of Joining optional (Property Setters, idempotent)."""
+	from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+
+	for field in ("date_of_birth", "date_of_joining"):
+		if not frappe.db.exists("Property Setter", {"doc_type": "Employee", "field_name": field, "property": "reqd"}):
+			make_property_setter("Employee", field, "reqd", "0", "Check", validate_fields_for_doctype=False)
 
 
 ORDER_TYPES = ["BULK", "CUSTOMER"]

@@ -1,0 +1,98 @@
+full_name,gender,salutation,department,designation,employee_number
+AMRITHA K U,Female,Mrs,Accounts,Junior Accountant,EMP-001
+ARCHANA M R,Female,Mrs,Accounts,Accountant,EMP-002
+K J SHEENA,Female,Mrs,Accounts,Senior Accountant,EMP-003
+K R BAVIN,Male,Mr,Accounts,Accounts Manager,EMP-004
+KRISHNAKUMAR B,Male,Mr,Accounts,Chief Accountant,EMP-005
+RESHMA V R,Female,Mrs,Accounts,Senior Accountant,EMP-006
+SREEJITH K,Male,Mr,Accounts,Senior Accountant,EMP-007
+BINOY,Male,Mr,Boutique,Sales & Marketing,EMP-008
+FEMI PAUL,Female,Mrs,Boutique,Inventory Clerk,EMP-009
+JISMY BINSON,Female,Mrs,Boutique,Inventory Clerk,EMP-010
+JOJU T D,Male,Mr,Boutique,HOD - Billing Clerk,EMP-011
+JOPSON,Male,Mr,Boutique,Messenger,EMP-012
+LISON K S,Male,Mr,Boutique,Sales & Marketing,EMP-013
+SUMI P S,Female,Mrs,Boutique,Inventory Clerk,EMP-014
+SYAM K R,Male,Mr,Boutique,Clerk,EMP-015
+SAJEEV E.H,Male,Mr,Boutique,Messenger,EMP-016
+SREYA SREEKUMAR,Female,Mrs,Boutique,Inventory Clerk,EMP-018
+JISHNU T J,Male,Mr,Boutique,Sales & Marketing,EMP-019
+ANOOP ASOKAN,Male,Mr,Cad,Designer,EMP-020
+DEEPTHY K B,Female,Mrs,Cad,Designer Trainee,EMP-021
+PRABIN P P,Male,Mr,Cad,Designer,EMP-022
+REMYA K V,Female,Mrs,Cad,Designer,EMP-023
+SINANEA,Female,Mrs,Cad,Designer,EMP-024
+FATHIMA,Female,Mrs,Cad,Designer,EMP-025
+SHERIN,Female,Mrs,Cad,Designer,EMP-026
+LENUS THOMAS,Male,Mr,Cam Or Studio,Photo Editor,EMP-027
+MEGHNA VIPIN KANNAN,Female,Mrs,Cam Or Studio,Cam Operator,EMP-028
+SK OYASIM,Male,Mr,Casting,Caster,EMP-029
+SUKBAHAR ALI SK,Male,Mr,Casting,Caster,EMP-030
+SANDRA,Female,Mrs,Central,Data Entry Clerk,EMP-017
+JOJO K K,Male,Mr,Central,Production Manager,EMP-031
+ANTONY SEBASTIAN,Male,Mr,Central,Software Support,EMP-032
+NIMA K.S,Female,Mrs,Central,Barcode Operator,EMP-034
+SHEEJA,Female,Mrs,Central,Data Entry Clerk,EMP-035
+SREEKUTTY SINTO,Female,Mrs,Central,Barcode Operator,EMP-036
+BALAN S,Male,Mr,Diamond,Diamond Assorter,EMP-037
+BAVANA T BAIJU,Female,Mrs,Diamond,Bagging,EMP-038
+SMITHA K K,Female,Mrs,Diamond,Bagging,EMP-040
+BISWAJIT MONDAL,Male,Mr,Filing,HOD - Gold Smith,EMP-041
+DHIRENDRA NATH KOLEY,Male,Mr,Filing,Gold Smith,EMP-042
+JOSIM MOLLA,Male,Mr,Filing,Gold Smith,EMP-043
+MIRAJ SEKH,Male,Mr,Filing,Gold Smith,EMP-044
+MOFIJUL,Male,Mr,Filing,Gold Smith,EMP-045
+PRASENJIT MONDAL,Male,Mr,Filing,Gold Smith,EMP-046
+SAHAJUDDIN MOLLA,Male,Mr,Filing,Gold Smith,EMP-047
+SAHIT S.K,Male,Mr,Filing,Gold Smith,EMP-048
+SELIM ALI MOLLA,Male,Mr,Filing,Gold Smith,EMP-049
+SUBRATA NATH,Male,Mr,Filing,Gold Smith,EMP-050
+TAPAS DAS,Male,Mr,Filing,Gold Smith,EMP-051
+SHAJAHAN SK,Male,Mr,Filing,Filing - Trainee,
+BABY THOMAS,Female,Mrs,Housekeeping,Office Cleaner,EMP-052
+SOBHANA K N,Female,Mrs,Housekeeping,Office Cleaner,EMP-053
+SREEDHARAN T V,Male,Mr,Housekeeping,Office Cleaner,EMP-054
+JENIN K J,Male,Mr,Maintenance,Electrician,EMP-055
+ANAKHA K JAYAN,Female,Mrs,Ordering,Order Processing Clerk,EMP-056
+REENA ALEX,Female,Mrs,Ordering,Order Processing Clerk,EMP-057
+SANGEETHA,Female,Mrs,Ordering,Order Processing Clerk,EMP-058
+JAY SHANKER SHARMA,Male,Mr,Polishing,HOD - Polisher,EMP-059
+KUTUB SK,Male,Mr,Polishing,Junior Polisher,EMP-060
+LIYAKAT ALI,Male,Mr,Polishing,Polisher,EMP-061
+MIRAJUL ISLAM,Male,Mr,Polishing,Polisher,EMP-062
+PANKAJ MURALIDHAR GUPTA,Male,Mr,Polishing,Polisher,EMP-063
+RAHUL MOLLA,Male,Mr,Polishing,Polisher Trainee,EMP-064
+ASLAM,Male,Mr,Polishing,Polisher,
+LIJI SUNNY,Female,Mrs,Reception,Receptionist,EMP-039
+ASWATHY M R,Female,Mrs,Reception,Receptionist,EMP-065
+TISSY ROSE SHABU,Female,Mrs,Reception,Receptionist,EMP-066
+P D JOSE,Male,Mr,Security,Security Guard,EMP-067
+REGHUMON,Male,Mr,Security,Security Guard,EMP-068
+UNNIKRISHNAN,Male,Mr,Security,Security Guard,EMP-069
+ABIB SK,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-070
+BAKIBUL SEKH,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-071
+DIBYENDU SANTRA,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-072
+MITHUN MONDAL,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-073
+MRINMOY GHORUI,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-074
+NAZRUL MONDAL,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-075
+PINTU SANTRA,Male,Mr,Setting,HOD - Diamond Setter Hand Set,EMP-076
+RABINDRANATH DHARA,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-077
+RAMESH DAS,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-078
+R RANJITHSINGH,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-079
+SURAJIT HAZRA,Male,Mr,Setting,Diamond Setter - Hand Set,EMP-080
+MANNAN,Male,Mr,Setting,Diamond Setter - Trainee,
+ANCY JOMON,Female,Mrs,Wax Cleaning,Wax Cleaner,EMP-081
+BABY C V,Female,Mrs,Wax Cleaning,Wax Cleaner,EMP-082
+SUMA THOMAS,Female,Mrs,Wax Cleaning,Wax Cleaner,EMP-083
+GREESHMA R,Female,Mrs,Wax Setting,Wax Setter,EMP-084
+MOSTAKIM MOLLA,Male,Mr,Wax Setting,Diamond Setter,EMP-085
+SUMA ARUN K S,Female,Mrs,Wax Setting,Wax Setter,EMP-086
+NEETHU,Female,Mrs,Wax Setting,Wax Setter,EMP-087
+JISHA,Female,Mrs,Wax Setting,Wax Setter Trainee,EMP-088
+BINCY BIJU,Female,Mrs,Waxing And Dye Cut,Wax Injector,EMP-089
+JINU,Male,Mr,Waxing And Dye Cut,HOD - Wax,EMP-090
+SINDHU SURESH,Female,Mrs,Waxing And Dye Cut,Dye Cutter,EMP-091
+SUDUIP GARAI,Male,Mr,Waxing And Dye Cut,Wax Injector Trainee,EMP-092
+JIT,Male,Mr,Waxing And Dye Cut,Wax Injector Trainee,
+SASI K C,Male,Mr,Wholesale,Messenger,EMP-093
+SHAJU K M,Male,Mr,Wholesale,Sales & Marketing,EMP-094
