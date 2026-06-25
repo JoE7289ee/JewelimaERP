@@ -291,6 +291,7 @@ def get_design_materials(design):
 	d = frappe.get_doc("Design", design)
 	out["design_type"] = d.design_type
 	out["design_style"] = d.design_style
+	out["image"] = d.image
 	for m in d.materials:
 		im = frappe.db.get_value(
 			"Item", m.item,

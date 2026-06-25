@@ -89,14 +89,53 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	state.header.customer_order_id = mk(".po-h-custorderid", { fieldtype: "Data", label: "Customer Order ID", fieldname: "customer_order_id" });
 	state.header.order_date.set_value(frappe.datetime.get_today());
 
-	// Days -> Due Date (= order_date + N). Recompute when either Days or Order Date changes.
-	const applyDueFromDays = () => {
-		const n = cint(state.header.days.get_value());
-		const od = state.header.order_date.get_value();
-		if (n > 0 && od) state.header.due_date.set_value(frappe.datetime.add_days(od, n));
+	// --- Date rules ---
+	// • Order Date can't be in the past.  • Due Date can't be before the Order Date.
+	// • Days <-> Due Date stay in sync both ways (set Days OR set Due Date).
+	const today = () => frappe.datetime.get_today();
+	let _sync = false; // guard so programmatic set_value doesn't re-trigger handlers
+	const setVal = (ctrl, v) => { _sync = true; ctrl.set_value(v); _sync = false; };
+	const dpSetMin = (ctrl, d) => { try { if (ctrl.datepicker && d) ctrl.datepicker.update({ minDate: frappe.datetime.str_to_obj(d) }); } catch (e) {} };
+	const dayDiff = (a, b) => Math.round((frappe.datetime.str_to_obj(a) - frappe.datetime.str_to_obj(b)) / 86400000);
+	const syncDueFromDays = () => {
+		const n = cint(state.header.days.get_value()), od = state.header.order_date.get_value();
+		if (n > 0 && od) setVal(state.header.due_date, frappe.datetime.add_days(od, n));
 	};
-	state.header.days.$input.on("change", applyDueFromDays);
-	state.header.order_date.$input.on("change", applyDueFromDays);
+	const syncDaysFromDue = () => {
+		const od = state.header.order_date.get_value(), dd = state.header.due_date.get_value();
+		if (od && dd) setVal(state.header.days, Math.max(dayDiff(dd, od), 0));
+	};
+	state.header.order_date.$input.on("change", () => {
+		if (_sync) return;
+		let od = state.header.order_date.get_value();
+		if (od && od < today()) {
+			frappe.show_alert({ message: __("Order Date can't be in the past — reset to today."), indicator: "orange" });
+			setVal(state.header.order_date, today());
+			od = today();
+		}
+		dpSetMin(state.header.due_date, od);
+		const dd = state.header.due_date.get_value();
+		if (dd && od && dd < od) { setVal(state.header.due_date, od); syncDaysFromDue(); }
+		else syncDueFromDays();
+	});
+	state.header.days.$input.on("change", () => {
+		if (_sync) return;
+		if (cint(state.header.days.get_value()) < 0) setVal(state.header.days, 0);
+		syncDueFromDays();
+	});
+	state.header.due_date.$input.on("change", () => {
+		if (_sync) return;
+		const od = state.header.order_date.get_value() || today();
+		let dd = state.header.due_date.get_value();
+		if (dd && dd < od) {
+			frappe.show_alert({ message: __("Due Date can't be before the Order Date — adjusted."), indicator: "orange" });
+			setVal(state.header.due_date, od);
+			dd = od;
+		}
+		syncDaysFromDue(); // manual Due Date recalculates Days
+	});
+	dpSetMin(state.header.order_date, today());
+	dpSetMin(state.header.due_date, today());
 
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
@@ -276,6 +315,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				.dm-tbl td.r,.dm-tbl th.r{text-align:right;font-variant-numeric:tabular-nums;}
 				.dm-tbl td.muted{color:var(--text-muted);text-align:center;}
 			</style>
+			${d.image ? `<div style="text-align:center;margin:0 0 10px;"><img src="${encodeURI(d.image)}" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--border-color);" onerror="this.style.display='none'"></div>` : ""}
 			${d.design_type ? `<div class="dm-sub">${esc(d.design_type)}${d.design_style ? " &middot; " + esc(d.design_style) : ""}</div>` : ""}
 			<table class="dm-tbl"><thead><tr>
 				<th>Item</th><th>Stone Type</th><th class="r">Qty</th><th class="r">Weight</th><th>UOM</th><th class="r">Purity</th>
@@ -439,6 +479,16 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	}
 	if (!lines.length) {
 		frappe.msgprint(__("Add at least one line with a Design."));
+		return;
+	}
+
+	const todayStr = frappe.datetime.get_today();
+	if (order_date && order_date < todayStr) {
+		frappe.msgprint(__("Order Date can't be in the past."));
+		return;
+	}
+	if (due_date && due_date < (order_date || todayStr)) {
+		frappe.msgprint(__("Due Date can't be before the Order Date."));
 		return;
 	}
 
