@@ -49,6 +49,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		table.po-grid .frappe-control .help-box,table.po-grid .frappe-control .description,table.po-grid .frappe-control .control-label{display:none !important;}
 		table.po-grid .frappe-control .control-input-wrapper,table.po-grid .frappe-control .control-input{margin:0;padding:0;min-height:0;}
 		table.po-grid .frappe-control .control-input input{border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:26px;min-height:26px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
+		table.po-grid .frappe-control .link-btn{display:none !important;} /* no jump-to-record arrow; info is via the Design button */
 		table.po-grid td.po-ro{padding:0 8px;text-align:right;white-space:nowrap;color:var(--text-color);font-variant-numeric:tabular-nums;}
 		table.po-grid td.po-act{text-align:center;padding:0 4px;}
 		table.po-grid td.po-act .btn{padding:1px 7px;font-size:11px;height:24px;line-height:1;margin:0 1px;}
@@ -100,7 +101,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
 	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
-	$headrow.append('<th style="width:124px;text-align:center">Functions</th>');
+	$headrow.append('<th style="width:170px;text-align:center">Functions</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
 	const $body = $(page.main).find(".po-body");
@@ -170,7 +171,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				if (col.key === "design") {
 					// AJAX: when the design changes, pull its stone profile and fill the line.
 					ctrl.$input.on("change awesomplete-selectcomplete", () =>
-						setTimeout(() => onDesignPicked(row), 50)
+						setTimeout(() => { onDesignPicked(row); updateDesignBtn(row); }, 50)
 					);
 				}
 			} else if (col.type === "select") {
@@ -211,11 +212,14 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		});
 		// actions cell — Split (enabled only when qty > 1); more buttons can live here later
 		const $act = $('<td class="po-act"></td>').appendTo($tr);
+		row.$design = $('<button class="btn btn-xs btn-default" title="View design raw materials">Design</button>').appendTo($act);
+		row.$design.on("click", () => showDesignInfo(row));
 		row.$split = $('<button class="btn btn-xs btn-default" title="Split this line into multiple bags">Split</button>').appendTo($act);
 		row.$split.on("click", () => doSplit(row));
 		row._remark = "";
 		row.$remark = $('<button class="btn btn-xs btn-default" title="Add a remark">Remark</button>').appendTo($act);
 		row.$remark.on("click", () => editRemark(row));
+		updateDesignBtn(row);
 		updateSplitBtn(row);
 		updateRemarkBtn(row);
 
@@ -240,6 +244,46 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 
 	function updateSplitBtn(row) {
 		if (row.$split) row.$split.prop("disabled", cint(row.f.qty.get()) <= 1);
+	}
+
+	function updateDesignBtn(row) {
+		if (row.$design) row.$design.prop("disabled", !row.f.design.get());
+	}
+
+	// Info-only dialog of the design's raw-materials (BOM) table — no link to the record.
+	function showDesignInfo(row) {
+		const design = row.f.design.get();
+		if (!design) return;
+		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
+			const d = r.message || {};
+			const mats = d.materials || [];
+			const esc = frappe.utils.escape_html;
+			const body = mats
+				.map((m) => `<tr>
+					<td>${esc(m.item_name || m.item)}</td>
+					<td>${esc(m.stone_type || "—")}</td>
+					<td class="r">${cint(m.qty) || 0}</td>
+					<td class="r">${flt(m.weight).toFixed(3)}</td>
+					<td>${esc(m.uom || "")}</td>
+					<td class="r">${m.purity ? flt(m.purity).toFixed(1) + "%" : ""}</td>
+				</tr>`)
+				.join("") || '<tr><td colspan="6" class="muted">No raw materials on this design.</td></tr>';
+			const html = `<style>
+				.dm-sub{color:var(--text-muted);font-size:12px;margin:0 0 8px;}
+				.dm-tbl{width:100%;border-collapse:collapse;font-size:13px;}
+				.dm-tbl th,.dm-tbl td{border-bottom:1px solid var(--border-color);padding:5px 8px;text-align:left;}
+				.dm-tbl th{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+				.dm-tbl td.r,.dm-tbl th.r{text-align:right;font-variant-numeric:tabular-nums;}
+				.dm-tbl td.muted{color:var(--text-muted);text-align:center;}
+			</style>
+			${d.design_type ? `<div class="dm-sub">${esc(d.design_type)}${d.design_style ? " &middot; " + esc(d.design_style) : ""}</div>` : ""}
+			<table class="dm-tbl"><thead><tr>
+				<th>Item</th><th>Stone Type</th><th class="r">Qty</th><th class="r">Weight</th><th>UOM</th><th class="r">Purity</th>
+			</tr></thead><tbody>${body}</tbody></table>`;
+			const dlg = new frappe.ui.Dialog({ title: __("Raw Materials — {0}", [design]), size: "large" });
+			$(dlg.body).html(html);
+			dlg.show();
+		});
 	}
 
 	function updateRemarkBtn(row) {
@@ -292,6 +336,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 					nr.f.qty.set(qtys[i]);
 					applyProfile(nr);
 					updateSplitBtn(nr);
+					updateDesignBtn(nr);
 					nr._remark = row._remark; // split bags inherit the line's remark
 					updateRemarkBtn(nr);
 					prev = nr;

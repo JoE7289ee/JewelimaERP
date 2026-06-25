@@ -280,6 +280,34 @@ def get_design_profile(design):
 	return _profile_from_materials(mats)
 
 
+@frappe.whitelist()
+def get_design_materials(design):
+	"""Raw-materials (BOM) table for a Design — for the Place Order 'Design' info dialog.
+	Item attributes (name / stone type / uom / purity) are read from the Item master, since
+	BOM-row copies are unreliable on programmatically seeded designs."""
+	out = {"design": design, "design_type": None, "materials": []}
+	if not design or not frappe.db.exists("Design", design):
+		return out
+	d = frappe.get_doc("Design", design)
+	out["design_type"] = d.design_type
+	out["design_style"] = d.design_style
+	for m in d.materials:
+		im = frappe.db.get_value(
+			"Item", m.item,
+			["item_name", "stone_type", "weight_unit", "purity_percentage"], as_dict=True,
+		) or {}
+		out["materials"].append({
+			"item": m.item,
+			"item_name": im.get("item_name") or m.item,
+			"stone_type": im.get("stone_type") or "",
+			"uom": im.get("weight_unit") or getattr(m, "uom", "") or "",
+			"purity": im.get("purity_percentage") or getattr(m, "purity", 0) or 0,
+			"qty": m.qty or 0,
+			"weight": m.weight or 0,
+		})
+	return out
+
+
 def set_item_weight_uom(doc, method=None):
 	"""Keep the Weight UOM unambiguous: a stone (has stone_type) is weighed in
 	carats, everything else in grams. Hooked on Item validate."""
