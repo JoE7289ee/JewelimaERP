@@ -51,7 +51,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		table.po-grid .frappe-control .control-input input{border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;height:26px;min-height:26px;line-height:1.1;box-sizing:border-box;border-radius:3px;}
 		table.po-grid td.po-ro{padding:0 8px;text-align:right;white-space:nowrap;color:var(--text-color);font-variant-numeric:tabular-nums;}
 		table.po-grid td.po-act{text-align:center;padding:0 4px;}
-		table.po-grid td.po-act .btn{padding:1px 9px;font-size:11px;height:24px;line-height:1;}
+		table.po-grid td.po-act .btn{padding:1px 7px;font-size:11px;height:24px;line-height:1;margin:0 1px;}
 		table.po-grid td.po-act .btn:disabled{opacity:.4;cursor:not-allowed;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
@@ -100,7 +100,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
 	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
-	$headrow.append('<th style="width:64px;text-align:center">Split</th>');
+	$headrow.append('<th style="width:124px;text-align:center">Functions</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
 	const $body = $(page.main).find(".po-body");
@@ -213,7 +213,11 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		const $act = $('<td class="po-act"></td>').appendTo($tr);
 		row.$split = $('<button class="btn btn-xs btn-default" title="Split this line into multiple bags">Split</button>').appendTo($act);
 		row.$split.on("click", () => doSplit(row));
+		row._remark = "";
+		row.$remark = $('<button class="btn btn-xs btn-default" title="Add a remark">Remark</button>').appendTo($act);
+		row.$remark.on("click", () => editRemark(row));
 		updateSplitBtn(row);
+		updateRemarkBtn(row);
 
 		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
 		$rm.find("button").on("click", () => {
@@ -236,6 +240,22 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 
 	function updateSplitBtn(row) {
 		if (row.$split) row.$split.prop("disabled", cint(row.f.qty.get()) <= 1);
+	}
+
+	function updateRemarkBtn(row) {
+		const has = !!(row._remark || "").trim();
+		row.$remark.toggleClass("btn-success", has).toggleClass("btn-default", !has);
+		row.$remark.attr("title", has ? row._remark : __("Add a remark"));
+	}
+
+	// remark lives in a dialog (not an inline field) to save space; button turns green when set
+	function editRemark(row) {
+		frappe.prompt(
+			{ fieldname: "remark", fieldtype: "Small Text", label: __("Remark"), default: row._remark || "" },
+			(v) => { row._remark = (v.remark || "").trim(); updateRemarkBtn(row); },
+			__("Remark"),
+			__("Save")
+		);
 	}
 
 	// Split a line's qty across N bags. Divides as evenly as possible; the last line
@@ -272,6 +292,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 					nr.f.qty.set(qtys[i]);
 					applyProfile(nr);
 					updateSplitBtn(nr);
+					nr._remark = row._remark; // split bags inherit the line's remark
+					updateRemarkBtn(nr);
 					prev = nr;
 				}
 				recalcTotals();
@@ -351,6 +373,7 @@ function po_readLine(r) {
 		dmd_no: cint(g("dmd_no")) || 0, dmd_weight: flt(g("dmd_weight")) || 0,
 		ps_no: cint(g("ps_no")) || 0, ps_weight: flt(g("ps_weight")) || 0,
 		cs_no: cint(g("cs_no")) || 0, cs_weight: flt(g("cs_weight")) || 0,
+		narration: r._remark || undefined,
 	};
 }
 
@@ -391,7 +414,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				doctype: "Order Bag", job_order: order.name, design: l.design, qty: l.qty || 1,
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
-				cs_no: l.cs_no, cs_weight: l.cs_weight,
+				cs_no: l.cs_no, cs_weight: l.cs_weight, narration: l.narration,
 			});
 			made++;
 		}
