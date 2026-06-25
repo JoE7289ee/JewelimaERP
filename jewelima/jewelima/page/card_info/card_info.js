@@ -44,6 +44,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		parent: $(page.main).find(".ci-bar").get(0), render_input: true,
 	});
 	scan.refresh();
+	frappe.call({ method: "jewelima.jewelima.api.get_print_branding" }).then((r) => (state.branding = r.message || {}));
 	const $out = $(page.main).find(".ci-out");
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
@@ -126,6 +127,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 
 	function printCard() {
 		if (!state.data) return frappe.msgprint(__("Scan a card first."));
+		const title = "Card " + state.data.bag.name;
+		if (window.jewelima && jewelima.print_window) {
+			// shared branded header/footer + this page's CSS
+			jewelima.print_window(state.branding || {}, title, buildHTML(state.data), CSS);
+			return;
+		}
 		const w = window.open("", "_blank", "width=780,height=900");
 		w.document.write(`<html><head><title>${esc(state.data.bag.name)}</title><style>${CSS} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:14px;color:#222;}</style></head><body>${buildHTML(state.data)}</body></html>`);
 		w.document.close();

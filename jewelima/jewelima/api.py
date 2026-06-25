@@ -1322,6 +1322,28 @@ def get_finished_items(status=None, held_by=None):
 
 
 @frappe.whitelist()
+def get_print_branding():
+	"""Company + logo for the shared print header (logo ships with the app; company
+	name/address/contact come from the ERPNext Company so they're editable)."""
+	company = _company()
+	c = {}
+	if company:
+		c = frappe.db.get_value("Company", company, ["company_name", "phone_no", "email", "tax_id"], as_dict=True) or {}
+	addr = ""
+	if company:
+		links = frappe.get_all("Dynamic Link", filters={"link_doctype": "Company", "link_name": company, "parenttype": "Address"}, fields=["parent"], limit=1)
+		if links:
+			a = frappe.db.get_value("Address", links[0].parent, ["address_line1", "address_line2", "city", "state", "pincode"], as_dict=True) or {}
+			loc = ", ".join([x for x in [a.get("city"), a.get("state"), a.get("pincode")] if x])
+			addr = ", ".join([x for x in [a.get("address_line1"), a.get("address_line2"), loc] if x])
+	return {
+		"company": c.get("company_name") or company or "Jewelima",
+		"address": addr, "phone": c.get("phone_no") or "", "email": c.get("email") or "", "gstin": c.get("tax_id") or "",
+		"logo_url": "/assets/jewelima/images/jewelima-logo.png",
+	}
+
+
+@frappe.whitelist()
 def get_card_passport(order_bag):
 	"""Everything about a card for the lookup/print view: header, plan + actual
 	weights, current contents, the transfer trail and the bench stage history."""
