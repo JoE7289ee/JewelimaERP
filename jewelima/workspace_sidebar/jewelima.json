@@ -120,6 +120,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "box",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Make Products",
+   "link_to": "make-products",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Finished Items",
+   "link_to": "finished-items",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "arrow-right",
    "indent": 0,
    "keep_closed": 0,
@@ -230,7 +256,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-23 19:58:09.803178",
+ "modified": "2026-06-25 14:42:43.485909",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

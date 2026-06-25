@@ -8,6 +8,7 @@ def after_install():
 	create_design_masters()
 	create_order_types()
 	create_default_supplier()
+	create_jd_stock_customer()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -22,6 +23,7 @@ def after_migrate():
 	create_design_masters()
 	create_order_types()
 	create_default_supplier()
+	create_jd_stock_customer()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -50,6 +52,22 @@ def create_default_supplier():
 		return
 	frappe.get_doc(
 		{"doctype": "Supplier", "supplier_name": "JD Stock", "supplier_group": sg}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def create_jd_stock_customer():
+	"""'JD Stock' Customer = the holder of own finished-goods stock (a piece with no
+	real customer is 'held by' JD Stock). Skips until Customer Group / Territory exist
+	(seeded by the ERPNext setup wizard)."""
+	if frappe.db.exists("Customer", "JD Stock"):
+		return
+	cg = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+	terr = frappe.db.get_value("Territory", {"is_group": 0}, "name") or frappe.db.get_value("Territory", {}, "name")
+	if not (cg and terr):
+		return
+	frappe.get_doc(
+		{"doctype": "Customer", "customer_name": "JD Stock", "customer_group": cg, "territory": terr}
 	).insert(ignore_permissions=True)
 	frappe.db.commit()
 
@@ -310,6 +328,8 @@ STONE_ISSUE_WAREHOUSE = "Stone Issue"
 # detail lives in the Bag Material Ledger; this warehouse holds the aggregate gold.
 # Gold lands here on add-weight; loss moves out of here to a '<bench> -LOSS' wh.
 IN_PRODUCTION_WAREHOUSE = "In Bags"
+# Finished pieces sent out for certification sit here (still own stock).
+CERTIFICATION_WAREHOUSE = "At Certification"
 
 
 def create_store_warehouses():
@@ -323,6 +343,7 @@ def create_store_warehouses():
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
 	make_warehouse(STONE_ISSUE_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	# The bench flow issues gold/loss as real stock moves; gold isn't always
 	# pre-stocked in the Store, so allow negative stock (a negative balance just
 	# flags unrecorded purchasing rather than blocking the floor).

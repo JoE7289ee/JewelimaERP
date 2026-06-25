@@ -227,10 +227,16 @@ def _actual_profile(order_bag):
 @frappe.whitelist()
 def refresh_actual_weights(order_bag):
 	"""Recompute + store the ACTUAL weight fields (act_*) from current contents,
-	including real stone counts (pcs) from the ledger."""
+	including real stone counts (pcs) from the ledger. Once the piece is a finished
+	product its materials are consumed, so the actuals are FROZEN (just return them)."""
+	act_fields = ["act_gross_weight", "act_nett_weight", "act_purity", "act_pure_weight",
+		"act_dmd_weight", "act_ps_weight", "act_cs_weight", "act_dmd_no", "act_ps_no", "act_cs_no"]
+	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
+		return frappe.db.get_value("Order Bag", order_bag, act_fields, as_dict=True)
 	p = _actual_profile(order_bag)
 	vals = {
 		"act_gross_weight": p["gross"], "act_nett_weight": p["nett"], "act_purity": p["purity"],
+		"act_pure_weight": round(p["nett"] * p["purity"] / 100.0, 3),
 		"act_dmd_weight": p["dmd_weight"], "act_ps_weight": p["ps_weight"], "act_cs_weight": p["cs_weight"],
 		"act_dmd_no": p["dmd_no"], "act_ps_no": p["ps_no"], "act_cs_no": p["cs_no"],
 	}
@@ -1219,6 +1225,7 @@ def convert_to_ornament(order_bag):
 	held = [it for it in c["items"] if it["qty"] > 0]
 	if not held:
 		frappe.throw(frappe._("{0} holds no materials to convert.").format(order_bag))
+	refresh_actual_weights(order_bag)  # freeze the finished piece's actual weights before consuming
 	in_bags, fg = _wh(IN_PRODUCTION_WAREHOUSE), _wh("Finished Goods")
 	for it in held:
 		_bag_ledger(order_bag, it["item"], "Out", it["qty"], "Convert")
@@ -1228,6 +1235,90 @@ def convert_to_ornament(order_bag):
 	frappe.db.set_value("Order Bag", order_bag, "is_finished", 1)  # locks the BOM (plan)
 	frappe.db.commit()
 	return {"order_bag": order_bag, "consumed": held}
+
+
+# ---------------------------------------------------------------------------
+# Finished products — turn finished (qty-1) bags into stock products.
+# ---------------------------------------------------------------------------
+def _jd_stock_customer():
+	return "JD Stock" if frappe.db.exists("Customer", "JD Stock") else None
+
+
+@frappe.whitelist()
+def get_makeable_bags(location=None):
+	"""Qty-1 bags that hold materials and aren't products yet — ready to make."""
+	filters = {"qty": 1, "is_finished": 0}
+	if location:
+		filters["location"] = location
+	out = []
+	for b in frappe.get_all(
+		"Order Bag", filters=filters,
+		fields=["name", "design", "customer", "location", "act_gross_weight", "act_nett_weight"],
+		order_by="modified desc", limit=300,
+	):
+		gold = flt(get_bag_contents(b.name)["gold_grams"])
+		if gold <= 0:
+			continue
+		b["gold"] = round(gold, 3)
+		out.append(b)
+	return out
+
+
+@frappe.whitelist()
+def make_products(bags):
+	"""Turn selected qty-1 bags into finished stock products: consume their materials
+	(gold In Bags -> Finished Goods), freeze the actual weights, set held_by (the
+	order's customer, else JD Stock) and stock_status = In Stock."""
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	jd = _jd_stock_customer()
+	done, errors = [], []
+	for nm in bags or []:
+		try:
+			bag = frappe.db.get_value("Order Bag", nm, ["qty", "is_finished", "customer"], as_dict=True)
+			if not bag:
+				errors.append({"name": nm, "error": frappe._("Not found")})
+				continue
+			if bag.is_finished:
+				errors.append({"name": nm, "error": frappe._("Already a product")})
+				continue
+			if int(bag.qty or 0) != 1:
+				errors.append({"name": nm, "error": frappe._("Qty must be 1 — extract/split it first")})
+				continue
+			convert_to_ornament(nm)  # consume materials -> product + freeze actuals + is_finished
+			frappe.db.set_value("Order Bag", nm, {"stock_status": "In Stock", "held_by": bag.customer or jd})
+			done.append(nm)
+		except Exception as e:
+			errors.append({"name": nm, "error": str(e)})
+	frappe.db.commit()
+	return {"count": len(done), "done": done, "errors": errors}
+
+
+@frappe.whitelist()
+def get_finished_items(status=None, held_by=None):
+	"""The finished-goods register: every bag made into a product, with its frozen
+	weights, holder, design + design type and stock status."""
+	filters = {"is_finished": 1}
+	if status:
+		filters["stock_status"] = status
+	if held_by:
+		filters["held_by"] = held_by
+	rows = frappe.get_all(
+		"Order Bag", filters=filters,
+		fields=[
+			"name", "design", "held_by", "stock_status",
+			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
+			"act_dmd_no", "act_dmd_weight", "act_cs_no", "act_cs_weight",
+		],
+		order_by="modified desc", limit=2000,
+	)
+	designs = list({r.design for r in rows if r.design})
+	dtype = {}
+	if designs:
+		dtype = {d.name: d.design_type for d in frappe.get_all("Design", filters={"name": ["in", designs]}, fields=["name", "design_type"])}
+	for r in rows:
+		r["design_type"] = dtype.get(r.design)
+	return rows
 
 
 @frappe.whitelist()
