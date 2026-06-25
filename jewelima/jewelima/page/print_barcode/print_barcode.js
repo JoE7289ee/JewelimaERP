@@ -10,7 +10,7 @@
 
 frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Print Barcode", single_column: true });
-	const state = { cards: [] };
+	const state = { cards: [], history: [] };
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 
@@ -30,7 +30,8 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	.pb-wrap{max-width:780px;}
 	.pb-bar{max-width:420px;margin:2px 0 10px;}
 	.pb-prev-wrap{margin:6px 0 14px;}
-	.pb-prev-wrap h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a96a3;margin:0 0 5px;}
+	.pb-prev-wrap h4,.pb-qh{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a96a3;margin:0 0 5px;}
+	.pb-qh{margin:6px 0 5px;}
 	.pb-prev{display:inline-block;border:1px dashed #c4ccd4;border-radius:4px;background:#fff;}
 	.pb-empty{color:#8a96a3;font-size:13px;}
 	table.pb-tbl{width:100%;border-collapse:collapse;font-size:13px;}
@@ -44,6 +45,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		<div class="pb-wrap">
 			<div class="pb-bar"></div>
 			<div class="pb-prev-wrap"><h4>Label preview (actual size)</h4><div class="pb-prev-out"></div></div>
+			<div class="pb-qh">Labels to print</div>
 			<div class="pb-hist"></div>
 		</div>`);
 
@@ -108,6 +110,31 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		renderPreview(state.cards[state.cards.length - 1] || null);
 	});
 
+	// Scan history — logs every scan attempt + its outcome (like the Transfer page).
+	function logHistory(code, result, kind) {
+		state.history.push({ time: frappe.datetime.now_datetime(), code: code, result: result, kind: kind || "ok" });
+	}
+
+	function showHistory() {
+		const h = state.history;
+		const body = h
+			.slice()
+			.reverse()
+			.map((e, idx) => {
+				const color = e.kind === "err" ? "#b00020" : e.kind === "warn" ? "#9a6700" : "#1d7a33";
+				return `<tr><td>${h.length - idx}</td><td>${e.time ? frappe.datetime.str_to_user(e.time) : ""}</td>
+					<td><b>${esc(e.code)}</b></td><td style="color:${color}">${esc(e.result)}</td></tr>`;
+			})
+			.join("");
+		const d = new frappe.ui.Dialog({ title: __("Scan history ({0})", [h.length]), size: "large", fields: [{ fieldtype: "HTML", fieldname: "h" }] });
+		d.fields_dict.h.$wrapper.html(
+			h.length
+				? `<table class="table table-bordered" style="font-size:12px;"><thead><tr><th style="width:40px">#</th><th>Time</th><th>Order Bag</th><th>Result</th></tr></thead><tbody>${body}</tbody></table>`
+				: '<div class="text-muted" style="padding:12px;">No scans yet this session.</div>'
+		);
+		d.show();
+	}
+
 	function load(code) {
 		code = (code || "").trim();
 		if (!code) return;
@@ -115,10 +142,12 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			const c = r.message || {};
 			if (c.error) {
 				frappe.msgprint({ title: __("Can't add card"), message: esc(c.error), indicator: "red" });
+				logHistory(code, c.error, "err");
 				return focusScan();
 			}
 			if (state.cards.some((x) => x.name === c.name)) {
 				frappe.show_alert({ message: __("{0} is already in the list.", [c.name]), indicator: "orange" });
+				logHistory(c.name, __("Already in list"), "warn");
 				return focusScan();
 			}
 			if (c.actual_empty) {
@@ -126,6 +155,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			}
 			c._t = frappe.datetime.now_time();
 			state.cards.push(c);
+			logHistory(c.name, c.actual_empty ? __("Added — no actual weight") : __("Added (GW {0} g)", [flt(c.gw).toFixed(3)]), c.actual_empty ? "warn" : "ok");
 			renderHistory();
 			renderPreview(c);
 			focusScan();
@@ -146,6 +176,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		w.document.close();
 		w.focus();
 		setTimeout(() => w.print(), 350);
+		logHistory("—", __("Printed {0} label(s)", [state.cards.length]), "ok");
 	}
 
 	scan.$input.on("keydown", (e) => {
@@ -157,8 +188,9 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		}
 	});
 	page.set_primary_action(__("Print"), printAll, "printer");
+	page.add_inner_button(__("History"), showHistory);
 	page.add_inner_button(__("Clear"), () => {
-		state.cards = [];
+		state.cards = []; // clears the print queue; scan history is kept for the session
 		renderHistory();
 		renderPreview(null);
 		focusScan();
