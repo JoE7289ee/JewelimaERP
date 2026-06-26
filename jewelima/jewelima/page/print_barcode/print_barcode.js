@@ -23,7 +23,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
 	.bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
 	.bc-label .bc-qr{flex:0 0 auto;}
-	.bc-label .bc-qr img{height:0.40in;width:0.40in;display:block;}
+	.bc-label .bc-qr img{height:0.33in;width:0.33in;display:block;}
 	.bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
 	.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
 
