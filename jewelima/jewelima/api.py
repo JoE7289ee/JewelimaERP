@@ -1421,11 +1421,13 @@ def transfer_order_bags(names, to_location, remarks=None):
 
 
 def _qr_data_uri(text):
-	"""QR as a PNG data-URI via segno (pure-python). None if segno is unavailable."""
+	"""Standard (full) QR as a PNG data-URI via segno. make_qr() forces a real QR with all
+	three finder patterns — segno.make() emits a Micro QR for short codes, which most phone
+	cameras / barcode scanners can't read. None if segno is unavailable."""
 	try:
 		import segno
 
-		return segno.make(str(text), error="m").png_data_uri(scale=5, border=2)
+		return segno.make_qr(str(text), error="m").png_data_uri(scale=4, border=2)
 	except Exception:
 		return None
 
