@@ -1599,3 +1599,61 @@ def get_tv_overview():
 		"loss_today": round(loss_today, 3),
 		"by_stage": [{"stage": k, "n": v} for k, v in by_stage.most_common(10)],
 	}
+
+
+@frappe.whitelist()
+def get_orders_taken(days=30):
+	"""Order intake aggregated from the ORIGINAL Order Bags (extraction pieces excluded via
+	split_of): by karat (22K/18K/14K), a date-wise pure-gold trend, stone totals and top
+	customers. Uses plan/order-time weights (set at creation). Pure gold = nett grams x purity%."""
+	from collections import defaultdict
+
+	days = int(days or 30)
+	since = frappe.utils.add_days(frappe.utils.nowdate(), -days)
+	bands = [("22K", 88, 96), ("18K", 70, 80), ("14K", 54, 63)]
+
+	def karat(p):
+		for k, lo, hi in bands:
+			if lo <= p <= hi:
+				return k
+		return "Other"
+
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"split_of": ["is", "not set"], "order_date": [">=", since]},
+		fields=["order_date", "purity", "gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight", "qty", "customer"],
+	)
+	bk = defaultdict(lambda: {"orders": 0, "qty": 0, "gross": 0.0, "pure": 0.0})
+	day = defaultdict(lambda: {"22K": 0.0, "18K": 0.0, "14K": 0.0, "Other": 0.0, "qty": 0})
+	cust = defaultdict(float)
+	tot = {"orders": 0, "qty": 0, "gross": 0.0, "pure": 0.0, "dmd": 0.0, "ps": 0.0, "cs": 0.0}
+	for b in bags:
+		p = flt(b.purity)
+		k = karat(p)
+		q = int(b.qty or 0)
+		pure = flt(b.nett_weight) * p / 100.0
+		bk[k]["orders"] += 1; bk[k]["qty"] += q; bk[k]["gross"] += flt(b.gross_weight); bk[k]["pure"] += pure
+		d = str(b.order_date)
+		day[d][k] += pure; day[d]["qty"] += q
+		if b.customer:
+			cust[b.customer] += pure
+		tot["orders"] += 1; tot["qty"] += q; tot["gross"] += flt(b.gross_weight); tot["pure"] += pure
+		tot["dmd"] += flt(b.dmd_weight); tot["ps"] += flt(b.ps_weight); tot["cs"] += flt(b.cs_weight)
+
+	by_karat = [
+		{"karat": k, "orders": bk[k]["orders"], "qty": bk[k]["qty"], "gross": round(bk[k]["gross"], 1), "pure": round(bk[k]["pure"], 1)}
+		for k in ("22K", "18K", "14K", "Other") if bk[k]["orders"]
+	]
+	trend = [
+		{"date": d, "k22": round(v["22K"], 1), "k18": round(v["18K"], 1), "k14": round(v["14K"], 1), "qty": v["qty"]}
+		for d, v in sorted(day.items())
+	]
+	top = sorted(cust.items(), key=lambda x: -x[1])[:8]
+	return {
+		"as_of": frappe.utils.now_datetime().strftime("%d %b %H:%M"),
+		"days": days,
+		"totals": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in tot.items()},
+		"by_karat": by_karat,
+		"trend": trend,
+		"top_customers": [{"customer": c, "pure": round(w, 1)} for c, w in top],
+	}
