@@ -16,15 +16,16 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 
 	// Label geometry/typography — exactly as specified.
 	const LABEL_CSS = `
-	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;gap:0.06in;
-		padding:0 0.05in;overflow:hidden;font-family:"Arial Narrow","Arial Narrow CE",Arial,sans-serif;
-		font-size:11pt;font-weight:900;font-style:oblique;line-height:1.0;color:#000;}
+	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;gap:0.045in;
+		padding:0 0.04in;overflow:hidden;
+		font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
+		font-stretch:condensed;font-size:9.5pt;font-weight:600;font-style:oblique;line-height:1.02;letter-spacing:-.2px;color:#000;}
 	.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
-	.bc-label .bc-left{flex:1 1 0;white-space:nowrap;}
+	.bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
 	.bc-label .bc-qr{flex:0 0 auto;}
-	.bc-label .bc-qr img{height:0.42in;width:0.42in;display:block;}
-	.bc-label .bc-right{flex:1 1 0;white-space:nowrap;text-align:left;}
-	.bc-label .bc-fallback{font-size:8pt;font-style:normal;}`;
+	.bc-label .bc-qr img{height:0.40in;width:0.40in;display:block;}
+	.bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
+	.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
 
 	const UI_CSS = `
 	.pb-wrap{max-width:780px;}
