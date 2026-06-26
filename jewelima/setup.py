@@ -16,6 +16,7 @@ def after_install():
 	create_store_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
+	sync_workspace_sidebar()
 
 
 def after_migrate():
@@ -34,6 +35,7 @@ def after_migrate():
 	create_store_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
+	sync_workspace_sidebar()
 
 
 DEFAULT_TIME_ZONE = "Asia/Kolkata"
@@ -45,6 +47,33 @@ def set_default_timezone():
 	migrate. Frappe tracks its own app timezone independent of the server's OS clock."""
 	if frappe.db.get_single_value("System Settings", "time_zone") != DEFAULT_TIME_ZONE:
 		frappe.db.set_single_value("System Settings", "time_zone", DEFAULT_TIME_ZONE)
+
+
+SIDEBAR_KEYS = ("child", "collapsible", "icon", "indent", "keep_closed", "label", "link_to", "link_type", "show_arrow", "type", "url")
+
+
+def sync_workspace_sidebar():
+	"""Push the bundled Workspace Sidebar (workspace_sidebar/jewelima.json) into the DB.
+	A plain migrate does NOT overwrite an existing sidebar, so its items go stale (missing
+	new pages, old icons). Re-syncing here on every migrate keeps the menu matching the
+	shipped JSON. Idempotent."""
+	import json
+	import os
+
+	path = frappe.get_app_path("jewelima", "workspace_sidebar", "jewelima.json")
+	if not os.path.exists(path):
+		return
+	with open(path) as f:
+		data = json.load(f)
+	name = data.get("name") or "Jewelima"
+	if frappe.db.exists("Workspace Sidebar", name):
+		sb = frappe.get_doc("Workspace Sidebar", name)
+		sb.set("items", [])
+		for it in data.get("items", []):
+			sb.append("items", {k: it.get(k) for k in SIDEBAR_KEYS})
+		sb.save(ignore_permissions=True)
+	else:
+		frappe.get_doc(data).insert(ignore_permissions=True)
 
 
 KARAT_GOLDS = {"14K": 58.3, "18K": 75.1, "22K": 91.7}
