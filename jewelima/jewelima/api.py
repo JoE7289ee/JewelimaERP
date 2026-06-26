@@ -1603,13 +1603,15 @@ def get_tv_overview():
 
 @frappe.whitelist()
 def get_orders_taken(days=30):
-	"""Order intake aggregated from the ORIGINAL Order Bags (extraction pieces excluded via
-	split_of): by karat (22K/18K/14K), a date-wise pure-gold trend, stone totals and top
-	customers. Uses plan/order-time weights (set at creation). Pure gold = nett grams x purity%."""
+	"""Order intake from the ORIGINAL Order Bags (extraction pieces excluded via split_of),
+	focused on TODAY: today's totals + karat split (22K/18K/14K) + top customers, plus a
+	daily pure-gold trend over `days` for context. Plan/order-time weights; pure gold =
+	nett grams x purity%."""
 	from collections import defaultdict
 
 	days = int(days or 30)
-	since = frappe.utils.add_days(frappe.utils.nowdate(), -days)
+	today = frappe.utils.nowdate()
+	since = frappe.utils.add_days(today, -days)
 	bands = [("22K", 88, 96), ("18K", 70, 80), ("14K", 54, 63)]
 
 	def karat(p):
@@ -1623,37 +1625,38 @@ def get_orders_taken(days=30):
 		filters={"split_of": ["is", "not set"], "order_date": [">=", since]},
 		fields=["order_date", "purity", "gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight", "qty", "customer"],
 	)
-	bk = defaultdict(lambda: {"orders": 0, "qty": 0, "gross": 0.0, "pure": 0.0})
-	day = defaultdict(lambda: {"22K": 0.0, "18K": 0.0, "14K": 0.0, "Other": 0.0, "qty": 0})
-	cust = defaultdict(float)
-	tot = {"orders": 0, "qty": 0, "gross": 0.0, "pure": 0.0, "dmd": 0.0, "ps": 0.0, "cs": 0.0}
+	tbk = defaultdict(lambda: {"orders": 0, "qty": 0, "gross": 0.0, "pure": 0.0})   # today, by karat
+	ttot = {"orders": 0, "qty": 0, "gross": 0.0, "pure": 0.0, "dmd": 0.0, "ps": 0.0, "cs": 0.0}
+	tcust = defaultdict(float)                                                      # today, by customer
+	day = defaultdict(lambda: {"22K": 0.0, "18K": 0.0, "14K": 0.0, "Other": 0.0, "qty": 0})  # trend
 	for b in bags:
 		p = flt(b.purity)
 		k = karat(p)
 		q = int(b.qty or 0)
 		pure = flt(b.nett_weight) * p / 100.0
-		bk[k]["orders"] += 1; bk[k]["qty"] += q; bk[k]["gross"] += flt(b.gross_weight); bk[k]["pure"] += pure
 		d = str(b.order_date)
 		day[d][k] += pure; day[d]["qty"] += q
-		if b.customer:
-			cust[b.customer] += pure
-		tot["orders"] += 1; tot["qty"] += q; tot["gross"] += flt(b.gross_weight); tot["pure"] += pure
-		tot["dmd"] += flt(b.dmd_weight); tot["ps"] += flt(b.ps_weight); tot["cs"] += flt(b.cs_weight)
+		if d == today:
+			tbk[k]["orders"] += 1; tbk[k]["qty"] += q; tbk[k]["gross"] += flt(b.gross_weight); tbk[k]["pure"] += pure
+			ttot["orders"] += 1; ttot["qty"] += q; ttot["gross"] += flt(b.gross_weight); ttot["pure"] += pure
+			ttot["dmd"] += flt(b.dmd_weight); ttot["ps"] += flt(b.ps_weight); ttot["cs"] += flt(b.cs_weight)
+			if b.customer:
+				tcust[b.customer] += pure
 
-	by_karat = [
-		{"karat": k, "orders": bk[k]["orders"], "qty": bk[k]["qty"], "gross": round(bk[k]["gross"], 1), "pure": round(bk[k]["pure"], 1)}
-		for k in ("22K", "18K", "14K", "Other") if bk[k]["orders"]
+	today_kar = [
+		{"karat": k, "orders": tbk[k]["orders"], "qty": tbk[k]["qty"], "gross": round(tbk[k]["gross"], 1), "pure": round(tbk[k]["pure"], 1)}
+		for k in ("22K", "18K", "14K", "Other") if tbk[k]["orders"]
 	]
 	trend = [
 		{"date": d, "k22": round(v["22K"], 1), "k18": round(v["18K"], 1), "k14": round(v["14K"], 1), "qty": v["qty"]}
 		for d, v in sorted(day.items())
 	]
-	top = sorted(cust.items(), key=lambda x: -x[1])[:8]
+	top = sorted(tcust.items(), key=lambda x: -x[1])[:8]
 	return {
-		"as_of": frappe.utils.now_datetime().strftime("%d %b %H:%M"),
+		"date": frappe.utils.formatdate(today, "dd MMM yyyy"),
+		"as_of": frappe.utils.now_datetime().strftime("%H:%M"),
 		"days": days,
-		"totals": {k: (round(v, 1) if isinstance(v, float) else v) for k, v in tot.items()},
-		"by_karat": by_karat,
+		"today": {**{k: (round(v, 1) if isinstance(v, float) else v) for k, v in ttot.items()}, "by_karat": today_kar},
 		"trend": trend,
 		"top_customers": [{"customer": c, "pure": round(w, 1)} for c, w in top],
 	}
