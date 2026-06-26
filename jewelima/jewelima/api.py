@@ -1564,3 +1564,38 @@ def get_employee_performance(days=30):
 		})
 	rows.sort(key=lambda x: (-x["pieces"], x["loss_pct"]))
 	return {"period_days": days, "as_of": frappe.utils.now_datetime().strftime("%d %b %H:%M"), "rows": rows}
+
+
+@frappe.whitelist()
+def get_tv_overview():
+	"""Headline shop KPIs for the at-a-glance TV board: orders today/this month, pieces in
+	production, pieces completed + loss today, workers active now, gold in hand, and a
+	breakdown of work-in-progress by stage."""
+	from collections import Counter
+
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	today = frappe.utils.nowdate()
+	month_start = today[:8] + "01"
+	done_today, loss_today, active = 0, 0.0, set()
+	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
+		if not frappe.db.exists("DocType", dt):
+			continue
+		for r in frappe.get_all(dt, filters={"receipted_at": [">=", today]}, fields=["loss"]):
+			done_today += 1
+			loss_today += flt(r.loss)
+		for r in frappe.get_all(dt, filters={"status": ["in", ["Issued", "Ongoing"]], "employee": ["is", "set"]}, fields=["employee"]):
+			active.add(r.employee)
+	gold = sum(flt(b.current_weight) for b in frappe.get_all("Employee Metal Balance", fields=["current_weight"]))
+	by_stage = Counter((b.location or "—") for b in frappe.get_all("Order Bag", filters={"is_finished": 0}, fields=["location"]))
+	return {
+		"as_of": frappe.utils.now_datetime().strftime("%d %b %H:%M"),
+		"orders_today": frappe.db.count("Job Order", {"order_date": today}),
+		"orders_month": frappe.db.count("Job Order", {"order_date": [">=", month_start]}),
+		"in_production": frappe.db.count("Order Bag", {"is_finished": 0}),
+		"done_today": done_today,
+		"active_workers": len(active),
+		"gold_in_hand": round(gold, 1),
+		"loss_today": round(loss_today, 3),
+		"by_stage": [{"stage": k, "n": v} for k, v in by_stage.most_common(10)],
+	}
