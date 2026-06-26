@@ -256,6 +256,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "trophy",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Employee Performance",
+   "link_to": "employee-performance",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "package",
    "indent": 1,
    "keep_closed": 0,
@@ -371,7 +384,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-26 03:31:58.094356",
+ "modified": "2026-06-26 17:11:39.610968",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

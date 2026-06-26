@@ -1521,3 +1521,46 @@ def get_job_order_status(job_order):
 		"job_order": job_order, "header": header, "bags": out, "total": len(out),
 		"by_location": dict(Counter(x["location"] for x in out)),
 	}
+
+
+@frappe.whitelist()
+def get_employee_performance(days=30):
+	"""Per-employee shop-floor performance for the live TV dashboard: pieces completed,
+	gold handled, loss + loss%, pieces today, work in hand now, and current held weight.
+	Aggregated across every bench doctype over the last `days`."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	days = int(days or 30)
+	since = frappe.utils.add_days(frappe.utils.nowdate(), -days)
+	today = frappe.utils.nowdate()
+	agg = {}
+	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
+		if not frappe.db.exists("DocType", dt):
+			continue
+		for r in frappe.get_all(
+			dt,
+			filters={"employee": ["is", "set"], "creation": [">=", since]},
+			fields=["employee", "status", "weight_out", "loss", "receipted_at", "creation"],
+		):
+			a = agg.setdefault(r.employee, {"pieces": 0, "gold": 0.0, "loss": 0.0, "today": 0, "active": 0})
+			if r.status in ("Receipted", "Completed"):
+				a["pieces"] += 1
+				a["gold"] += flt(r.weight_out)
+				a["loss"] += flt(r.loss)
+				if str(r.receipted_at or r.creation)[:10] == today:
+					a["today"] += 1
+			elif r.status in ("Issued", "Ongoing"):
+				a["active"] += 1
+
+	rows = []
+	for emp, a in agg.items():
+		rows.append({
+			"employee": emp,
+			"name": frappe.db.get_value("Employee", emp, "employee_name") or emp,
+			"pieces": a["pieces"], "gold": round(a["gold"], 3), "loss": round(a["loss"], 3),
+			"loss_pct": round(a["loss"] / a["gold"] * 100, 2) if a["gold"] else 0,
+			"today": a["today"], "active": a["active"],
+			"holding": round(flt(frappe.db.get_value("Employee Metal Balance", emp, "current_weight")), 3),
+		})
+	rows.sort(key=lambda x: (-x["pieces"], x["loss_pct"]))
+	return {"period_days": days, "as_of": frappe.utils.now_datetime().strftime("%d %b %H:%M"), "rows": rows}
