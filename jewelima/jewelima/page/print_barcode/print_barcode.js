@@ -19,7 +19,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;gap:0.045in;
 		padding:0 0.04in;overflow:hidden;
 		font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
-		font-stretch:condensed;font-size:9.5pt;font-weight:600;font-style:oblique;line-height:1.02;letter-spacing:-.2px;color:#000;}
+		font-stretch:condensed;font-size:8pt;font-weight:400;font-style:normal;line-height:1.05;letter-spacing:-.2px;color:#000;}
 	.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
 	.bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
 	.bc-label .bc-qr{flex:0 0 auto;}
