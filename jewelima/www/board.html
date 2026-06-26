@@ -1,0 +1,140 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Live Production{% endblock %}
+
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block banner %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block head_include %}
+<script src="/assets/jewelima/js/echarts.min.js"></script>
+{% endblock %}
+
+{% block style %}
+<style>
+	.navbar, header, footer, .web-footer, .page-breadcrumbs, .web-sidebar, #navbar-search { display: none !important; }
+	html, body { margin: 0 !important; padding: 0 !important; height: 100%; background: #0e1217 !important; }
+	main, .main-section, #body, .page_content, .container, .page-content-wrapper {
+		margin: 0 !important; padding: 0 !important; max-width: none !important; width: 100% !important; }
+
+	.bd { background: #0e1217; color: #e8edf2; min-height: 100vh; padding: 22px 30px 26px; box-sizing: border-box;
+		font-family: -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif; }
+	.bd-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+	.bd-title { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+	.bd-title span { color: #f2c14e; }
+	.bd-clock { font-size: 26px; font-weight: 700; color: #cfd6dd; font-variant-numeric: tabular-nums; }
+	.bd-clock small { display: block; font-size: 13px; font-weight: 400; color: #6b7785; text-align: right; }
+
+	.kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
+	.kpi { background: #161d25; border: 1px solid #232c36; border-radius: 16px; padding: 20px 22px; position: relative; overflow: hidden; }
+	.kpi::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--ac); }
+	.kpi .v { font-size: 52px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ac); }
+	.kpi .l { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #8693a0; margin-top: 10px; }
+	.kpi .s { font-size: 13px; color: #5e6b76; margin-top: 3px; min-height: 16px; }
+
+	.charts { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; }
+	.panel { background: #161d25; border: 1px solid #232c36; border-radius: 16px; padding: 16px 20px; }
+	.panel h3 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: .07em; color: #8693a0; font-weight: 700; }
+	#chart-bar { width: 100%; height: 360px; }
+	#chart-donut { width: 100%; height: 360px; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="bd">
+	<div class="bd-head">
+		<div class="bd-title">JEWELIMA &middot; <span>Live Production</span></div>
+		<div class="bd-clock"><span id="clock">--:--</span><small id="asof">—</small></div>
+	</div>
+
+	<div class="kpis">
+		<div class="kpi" style="--ac:#f2c14e"><div class="v" id="k-orders">0</div><div class="l">Orders Today</div><div class="s" id="k-orders-sub"></div></div>
+		<div class="kpi" style="--ac:#5b9bff"><div class="v" id="k-wip">0</div><div class="l">In Production</div><div class="s">pieces being made</div></div>
+		<div class="kpi" style="--ac:#57d9a3"><div class="v" id="k-done">0</div><div class="l">Done Today</div><div class="s">completed at benches</div></div>
+		<div class="kpi" style="--ac:#4fd1c5"><div class="v" id="k-workers">0</div><div class="l">Workers Active</div><div class="s">work in hand now</div></div>
+		<div class="kpi" style="--ac:#f0795f"><div class="v" id="k-loss">0</div><div class="l">Loss Today (g)</div><div class="s">across benches</div></div>
+	</div>
+
+	<div class="charts">
+		<div class="panel"><h3>Work in progress — by stage</h3><div id="chart-bar"></div></div>
+		<div class="panel"><h3>Where the work sits</h3><div id="chart-donut"></div></div>
+	</div>
+</div>
+
+<script>
+(function () {
+	var REFRESH = 25000;
+	var bar = echarts.init(document.getElementById("chart-bar"));
+	var donut = echarts.init(document.getElementById("chart-donut"));
+	window.addEventListener("resize", function () { bar.resize(); donut.resize(); });
+	var PALETTE = ["#5b9bff","#57d9a3","#f2c14e","#4fd1c5","#f0795f","#b58bff","#7fb4ff","#9fe6c4","#f6d488","#f2a48f"];
+
+	function clock() {
+		var d = new Date();
+		document.getElementById("clock").textContent =
+			String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+	}
+	setInterval(clock, 1000); clock();
+
+	// animate a number from its current value to `to`
+	function countTo(id, to, decimals) {
+		var el = document.getElementById(id), from = parseFloat(el.dataset.v || "0") || 0;
+		to = Number(to) || 0; el.dataset.v = to;
+		var t0 = performance.now(), dur = 700;
+		(function step(t) {
+			var p = Math.min(1, (t - t0) / dur), val = from + (to - from) * p;
+			el.textContent = decimals ? val.toFixed(decimals) : Math.round(val);
+			if (p < 1) requestAnimationFrame(step);
+		})(performance.now());
+	}
+
+	function render(d) {
+		document.getElementById("asof").textContent = d.as_of ? "as of " + d.as_of : "";
+		countTo("k-orders", d.orders_today);
+		document.getElementById("k-orders-sub").textContent = (d.orders_month || 0) + " this month";
+		countTo("k-wip", d.in_production);
+		countTo("k-done", d.done_today);
+		countTo("k-workers", d.active_workers);
+		countTo("k-loss", d.loss_today, 1);
+
+		var st = (d.by_stage || []).slice().reverse(); // bar: smallest at bottom looks tidy
+		bar.setOption({
+			grid: { left: 150, right: 56, top: 8, bottom: 8 },
+			tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+			xAxis: { type: "value", axisLabel: { color: "#6b7785" }, splitLine: { lineStyle: { color: "#1b2228" } } },
+			yAxis: { type: "category", data: st.map(function (s) { return s.stage; }),
+				axisLabel: { color: "#cfd6dd", fontSize: 15 }, axisLine: { show: false }, axisTick: { show: false } },
+			series: [{
+				type: "bar", data: st.map(function (s) { return s.n; }), barWidth: "58%",
+				itemStyle: { borderRadius: [0, 6, 6, 0],
+					color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [{ offset: 0, color: "#2f6df0" }, { offset: 1, color: "#62a6ff" }]) },
+				label: { show: true, position: "right", color: "#e8edf2", fontSize: 15, fontWeight: 700 }
+			}],
+			animationDuration: 800
+		});
+
+		donut.setOption({
+			color: PALETTE,
+			tooltip: { trigger: "item" },
+			legend: { type: "scroll", orient: "vertical", right: 6, top: "center", textStyle: { color: "#8693a0" } },
+			series: [{
+				type: "pie", radius: ["48%", "72%"], center: ["38%", "50%"], avoidLabelOverlap: true,
+				data: (d.by_stage || []).map(function (s) { return { name: s.stage, value: s.n }; }),
+				label: { show: false }, itemStyle: { borderColor: "#161d25", borderWidth: 3 }
+			}],
+			animationDuration: 800
+		});
+	}
+
+	function load() {
+		fetch("/api/method/jewelima.jewelima.api.get_tv_overview", { credentials: "same-origin", headers: { Accept: "application/json" } })
+			.then(function (r) { return r.json(); })
+			.then(function (j) { if (j && j.message) render(j.message); })
+			.catch(function () {});
+	}
+	load();
+	setInterval(load, REFRESH);
+})();
+</script>
+{% endblock %}
