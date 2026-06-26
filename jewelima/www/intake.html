@@ -34,7 +34,7 @@
 	.od-title b { color: #b9b09a; font-weight: 400; }
 	.od-title span { color: var(--green); font-style: italic; }
 	.od-right { text-align: right; }
-	.od-clock { font-family: var(--serif); font-size: 30px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
+	.od-clock { font-family: var(--sans); font-size: 27px; font-weight: 700; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .02em; line-height: 1; }
 	.od-sub { font-size: 13px; color: var(--muted); letter-spacing: .04em; margin-top: 5px; }
 
 	.deck { flex: 1; position: relative; overflow: hidden; }
@@ -47,8 +47,8 @@
 	.kpis.three { grid-template-columns: repeat(3, 1fr); }
 	.kpi { padding: 22px 26px; position: relative; overflow: hidden; }
 	.kpi::before { content:""; position:absolute; left:0; top:18px; bottom:18px; width:3px; border-radius:3px; background: var(--ac); }
-	.kpi .v { font-family: var(--serif); font-size: 60px; font-weight: 600; line-height: 1; color: var(--ac); font-variant-numeric: tabular-nums; }
-	.kpi .v .u { font-size: 24px; color: #b9b09a; font-weight: 600; margin-left: 4px; }
+	.kpi .v { font-family: var(--sans); font-size: 54px; font-weight: 700; line-height: 1; color: var(--ac); font-variant-numeric: lining-nums tabular-nums; letter-spacing: -.01em; }
+	.kpi .v .u { font-size: 22px; color: #b9b09a; font-weight: 600; margin-left: 5px; letter-spacing: 0; }
 	.kpi .l { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--gold); margin-top: 14px; font-weight: 700; }
 	.kpi .s { font-size: 13px; color: var(--muted); margin-top: 4px; min-height: 16px; }
 
@@ -158,7 +158,7 @@
 				yAxis:Object.assign({type:"value"},axis()),
 				series:[{ type:"bar", barWidth:"46%", data: order.map(function(k){
 					return {value:bk[k].qty, itemStyle:{borderRadius:[8,8,0,0], color:colorFor(k)}}; }),
-					label:{show:true,position:"top",color:"#3a4138",fontWeight:700,fontSize:17,fontFamily:"Georgia, serif"} }],
+					label:{show:true,position:"top",color:"#3a4138",fontWeight:700,fontSize:16,fontFamily:'-apple-system,"Helvetica Neue",Arial,sans-serif'} }],
 				animationDuration:900 };
 		}
 
@@ -183,7 +183,7 @@
 			yAxis:{type:"category", data:cs.map(function(c){return c.customer;}), axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:"#5d6358",fontSize:14}},
 			series:[{ type:"bar", barWidth:"52%", data:cs.map(function(c){return c.pure;}),
 				itemStyle:{borderRadius:[0,6,6,0], color:"#b0892f"},
-				label:{show:true,position:"right",color:"#3a4138",fontWeight:600,fontFamily:"Georgia, serif"} }],
+				label:{show:true,position:"right",color:"#3a4138",fontWeight:600,fontFamily:'-apple-system,"Helvetica Neue",Arial,sans-serif'} }],
 			animationDuration:900 };
 
 		charts.donut.setOption(opt.donut, true); charts.bar.setOption(opt.bar, true);
