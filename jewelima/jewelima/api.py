@@ -81,6 +81,12 @@ def melt_gold(warehouse, output_item, output_weight, inputs):
 	if out_w > total_in + 0.0005:
 		frappe.throw(frappe._("Output ({0} g) cannot exceed the total input ({1} g).").format(out_w, round(total_in, 3)))
 
+	# every input must actually be in stock in this warehouse
+	for s in src:
+		avail = flt(frappe.db.get_value("Bin", {"item_code": s["item_code"], "warehouse": warehouse}, "actual_qty"))
+		if s["qty"] > avail + 0.0005:
+			frappe.throw(frappe._("Only {0} of {1} in stock here — can't melt {2}.").format(round(avail, 3), s["item_code"], s["qty"]))
+
 	se = frappe.get_doc({
 		"doctype": "Stock Entry",
 		"stock_entry_type": "Repack",
@@ -96,6 +102,30 @@ def melt_gold(warehouse, output_item, output_weight, inputs):
 	se.submit()
 	frappe.db.commit()
 	return {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3), "loss": round(total_in - out_w, 3)}
+
+
+@frappe.whitelist()
+def get_melt_stock(warehouse):
+	"""Non-empty stock in a warehouse for the Melting screen: item, group, purity, weight
+	(balance) and pure gold grams (weight x purity% for gram-weighted metals; 0 for stones).
+	Sorted by pure desc. Returns rows + gross/pure totals (grams only)."""
+	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
+		return {"rows": [], "total_weight": 0, "total_pure": 0}
+	rows, tw, tp = [], 0.0, 0.0
+	for b in frappe.get_all("Bin", filters={"warehouse": warehouse, "actual_qty": [">", 0]}, fields=["item_code", "actual_qty", "stock_uom"]):
+		m = frappe.db.get_value("Item", b.item_code, ["item_name", "item_group", "purity_percentage", "stone_type"], as_dict=True) or {}
+		wt = flt(b.actual_qty)
+		pure = wt * flt(m.get("purity_percentage")) / 100.0 if not m.get("stone_type") else 0.0
+		rows.append({
+			"item": b.item_code, "item_name": m.get("item_name") or b.item_code,
+			"item_group": m.get("item_group") or "", "purity": flt(m.get("purity_percentage")),
+			"weight": round(wt, 3), "uom": b.stock_uom or "Gram", "pure": round(pure, 3),
+		})
+		if (b.stock_uom or "Gram") == "Gram":
+			tw += wt
+		tp += pure
+	rows.sort(key=lambda r: -r["pure"])
+	return {"rows": rows, "total_weight": round(tw, 3), "total_pure": round(tp, 3)}
 
 
 @frappe.whitelist()
