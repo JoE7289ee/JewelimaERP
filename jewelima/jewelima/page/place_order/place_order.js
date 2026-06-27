@@ -543,12 +543,12 @@ function openNewDesignDialog(state) {
 			{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
 			{
 				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item",
+				description: __("Stones need both a Qty (count) and a Weight (carats). Metals need a Weight (grams)."),
 				fields: [
 					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }) },
 					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), fetch_from: "item.purity_percentage", read_only: 1, in_list_view: 1, columns: 1 },
 					{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), fetch_from: "item.weight_unit", read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "stone_type", fieldtype: "Data", label: __("Stone Type"), fetch_from: "item.stone_type", read_only: 1, hidden: 1 },
-					{ fieldname: "qty", fieldtype: "Float", label: __("Base Qty"), in_list_view: 1, columns: 2, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
+					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 2 },
 					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 2 },
 				],
 			},

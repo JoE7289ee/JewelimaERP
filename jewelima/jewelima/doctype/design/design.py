@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import flt
 
 STONE_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no"}
 
@@ -15,9 +16,32 @@ class Design(Document):
 	def validate(self):
 		if not self.materials:
 			frappe.throw(_("Add at least one material in the Bill of Materials."))
+		self.check_stone_qty_weight()
 		self.compute_stone_counts()
 		if not self.is_new():
 			self.block_edits()
+
+	def _stone_types(self):
+		"""item -> stone_type ('' for metals) for the BOM's items."""
+		codes = list({m.item for m in self.materials if m.item})
+		out = {}
+		if codes:
+			for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
+				out[it.name] = it.stone_type or ""
+		return out
+
+	def check_stone_qty_weight(self):
+		"""A stone (Item with a stone_type) must have BOTH a quantity and a weight;
+		a metal must have a weight. Keeps every BOM consistent at the source."""
+		stype = self._stone_types()
+		for m in self.materials:
+			if not m.item:
+				frappe.throw(_("Row {0}: pick a material.").format(m.idx))
+			if stype.get(m.item):  # stone
+				if flt(m.qty) <= 0 or flt(m.weight) <= 0:
+					frappe.throw(_("Row {0}: {1} is a stone — enter both a quantity and a weight (carats).").format(m.idx, m.item))
+			elif flt(m.weight) <= 0:  # metal
+				frappe.throw(_("Row {0}: {1} needs a weight (grams).").format(m.idx, m.item))
 
 	def compute_stone_counts(self):
 		"""Derive DMD/PS/CS counts from the BOM's stone components (by stone_type)."""
