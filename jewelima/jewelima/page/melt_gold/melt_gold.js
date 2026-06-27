@@ -175,6 +175,19 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	noLoss.addEventListener("change", recompute);
 	recompute();
 
+	// Reset everything except the warehouse, and refresh the stock panel.
+	page.add_inner_button(__("Reset"), () => {
+		goldCtl.set_value(""); S.gold.purity = 0; q(".ml-gold-pur").textContent = "—"; goldWt.value = "";
+		outCtl.set_value(""); S.out.purity = 0; q(".ml-outname").textContent = "— pick an item above —";
+		alloyWt.value = ""; noLoss.checked = true;
+		frappe.db.get_value("Item", "Alloy", "purity_percentage").then((r) => {
+			if (r.message) { alloyCtl.set_value("Alloy"); S.alloy.purity = flt(r.message.purity_percentage); q(".ml-alloy-pur").textContent = S.alloy.purity.toFixed(2) + "%"; }
+			recompute();
+		});
+		recompute();
+		loadStock();
+	});
+
 	page.set_primary_action(__("Melt"), () => {
 		const warehouse = whCtl.get_value(), output_item = outCtl.get_value();
 		if (!warehouse) return frappe.msgprint(__("Pick a warehouse."));
