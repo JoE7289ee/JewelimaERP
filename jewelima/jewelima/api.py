@@ -52,6 +52,53 @@ def _stock_move(item, qty, source, target):
 
 
 @frappe.whitelist()
+def melt_gold(warehouse, output_item, output_weight, inputs):
+	"""Convert fine gold + alloy into a karat gold (e.g. 999 -> 18KPG) in ONE warehouse.
+	Repack Stock Entry: consume each input (gold, alloy) and produce `output_weight` grams
+	of `output_item` in the same warehouse. inputs = [{item, weight}, ...]. Output weight
+	may be less than total input (the difference is melt loss)."""
+	if isinstance(inputs, str):
+		inputs = json.loads(inputs or "[]")
+	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
+		frappe.throw(frappe._("Pick a valid warehouse."))
+	out_w = flt(output_weight)
+	if not output_item or out_w <= 0:
+		frappe.throw(frappe._("Choose what to create and a positive output weight."))
+
+	src, total_in = [], 0.0
+	for i in inputs or []:
+		item, w = i.get("item"), flt(i.get("weight"))
+		if not item or w <= 0:
+			continue
+		src.append({
+			"item_code": item, "qty": w,
+			"uom": frappe.db.get_value("Item", item, "stock_uom") or "Gram",
+			"s_warehouse": warehouse, "allow_zero_valuation_rate": 1,
+		})
+		total_in += w
+	if not src:
+		frappe.throw(frappe._("Add at least one input (gold + alloy)."))
+	if out_w > total_in + 0.0005:
+		frappe.throw(frappe._("Output ({0} g) cannot exceed the total input ({1} g).").format(out_w, round(total_in, 3)))
+
+	se = frappe.get_doc({
+		"doctype": "Stock Entry",
+		"stock_entry_type": "Repack",
+		"company": _company(),
+		"items": src + [{
+			"item_code": output_item, "qty": out_w,
+			"uom": frappe.db.get_value("Item", output_item, "stock_uom") or "Gram",
+			"t_warehouse": warehouse, "allow_zero_valuation_rate": 1,
+		}],
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+	frappe.db.commit()
+	return {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3), "loss": round(total_in - out_w, 3)}
+
+
+@frappe.whitelist()
 def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=None):
 	"""Create + submit a Purchase Receipt for raw materials (from the Purchase
 	Raw Material page). Stock lands in `warehouse`. Returns the PR name."""
