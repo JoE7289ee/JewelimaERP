@@ -12,7 +12,8 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		{ key: "item", label: "Item", type: "link", options: "Item", width: "220px" },
 		{ key: "uom", label: "UOM", type: "display", width: "70px" },
 		{ key: "purity", label: "Purity %", type: "display", width: "80px" },
-		{ key: "qty", label: "Qty / Weight", type: "num", step: "0.001", width: "110px" },
+		{ key: "count", label: "Qty", type: "num", step: "1", width: "90px" },
+		{ key: "weight", label: "Weight", type: "num", step: "0.001", width: "110px" },
 		{ key: "rate", label: "Rate", type: "num", step: "0.01", width: "100px" },
 		{ key: "amount", label: "Amount", type: "display", width: "110px" },
 	];
@@ -51,7 +52,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			<div class="pr-gridbox">
 				<table class="pr-grid"><thead><tr class="pr-headrow"></tr></thead><tbody class="pr-body"></tbody><tfoot><tr class="pr-footrow"></tr></tfoot></table>
 			</div>
-			<div class="pr-foot"><span class="pr-count">0</span> line(s). Posts a submitted Purchase Receipt into the chosen warehouse.</div>
+			<div class="pr-foot"><span class="pr-count">0</span> line(s). Stones need a Qty (count) and a Weight (carats); metals need a Weight (grams). Posts a submitted Purchase Receipt into the chosen warehouse.</div>
 		</div>
 	`);
 
@@ -85,20 +86,22 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	const totals = {};
 	COLS.forEach((c) => {
 		const $td = $("<td></td>").appendTo($fr);
-		if (c.key === "qty" || c.key === "amount") totals[c.key] = $td;
+		if (c.key === "count" || c.key === "weight" || c.key === "amount") totals[c.key] = $td;
 	});
 	$fr.append("<td></td>");
 
 	function recalc() {
-		let q = 0, a = 0;
+		let csum = 0, wsum = 0, a = 0;
 		state.rows.forEach((r) => {
-			const qty = flt(r.f.qty.get());
-			const amt = qty * flt(r.f.rate.get());
-			q += qty;
+			const w = flt(r.f.weight.get());
+			const amt = w * flt(r.f.rate.get());
+			csum += cint(r.f.count.get());
+			wsum += w;
 			a += amt;
 			if (r.setAmount) r.setAmount(amt);
 		});
-		totals.qty.text(q.toFixed(3));
+		if (totals.count) totals.count.text(csum || "");
+		totals.weight.text(wsum.toFixed(3));
 		totals.amount.text(a.toFixed(2));
 		$(page.main).find(".pr-count").text(state.rows.length);
 	}
@@ -110,17 +113,25 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		const item = row.f.item.get();
 		if (!item || row._last === item) return;
 		row._last = item;
-		frappe.db.get_value("Item", item, ["weight_unit", "purity_percentage"]).then((r) => {
+		frappe.db.get_value("Item", item, ["weight_unit", "purity_percentage", "stone_type"]).then((r) => {
 			const v = r.message || {};
 			if (row.setUom) row.setUom(v.weight_unit);
 			if (row.setPurity) row.setPurity(v.purity_percentage);
+			row.isStone = !!v.stone_type;
+			const $c = row.inputs && row.inputs.count;
+			if ($c) {
+				if (row.isStone) $c.prop("disabled", false).attr("placeholder", "count");
+				else $c.prop("disabled", true).val("").attr("placeholder", "—");
+			}
+			if (row.inputs && row.inputs.weight) row.inputs.weight.attr("placeholder", row.isStone ? "carats" : "grams");
+			recalc();
 		});
 	}
 
 	function addRow() {
 		const $tr = $("<tr></tr>");
 		$tr.append('<td class="pr-num"></td>');
-		const row = { $tr, f: {} };
+		const row = { $tr, f: {}, inputs: {} };
 		COLS.forEach((col) => {
 			const $td = $("<td></td>").appendTo($tr);
 			if (col.type === "link") {
@@ -141,6 +152,8 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			} else {
 				const $i = $(`<input type="number" step="${col.step}" min="0">`).appendTo($td);
 				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
+				row.inputs[col.key] = $i;
+				if (col.key === "count") $i.prop("disabled", true).attr("placeholder", "—");
 			}
 		});
 		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
@@ -172,10 +185,12 @@ function postPurchase(page, state, $body) {
 	const warehouse = state.header.warehouse.get_value();
 	const posting_date = state.header.posting_date.get_value();
 	const items = state.rows
-		.map((r) => ({ item: r.f.item.get() || undefined, qty: flt(r.f.qty.get()) || 0, rate: flt(r.f.rate.get()) || 0 }))
-		.filter((l) => l.item && l.qty > 0);
+		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.f.weight.get()) || 0, count: cint(r.f.count.get()) || 0, rate: flt(r.f.rate.get()) || 0, isStone: !!r.isStone }))
+		.filter((l) => l.item && l.weight > 0);
 
-	if (!items.length) return frappe.msgprint(__("Add at least one item with a quantity."));
+	if (!items.length) return frappe.msgprint(__("Add at least one item with a weight."));
+	const badStone = items.find((l) => l.isStone && l.count <= 0);
+	if (badStone) return frappe.msgprint(__("{0} is a stone — enter the piece count (Qty).", [badStone.item]));
 	if (!supplier) return frappe.msgprint(__("Select a supplier."));
 	if (!warehouse) return frappe.msgprint(__("Select a warehouse."));
 

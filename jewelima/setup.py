@@ -290,7 +290,16 @@ def get_item_custom_fields():
 				"label": "Stone Size",
 				"insert_after": "stone_type",
 			},
-		]
+		],
+		"Purchase Receipt Item": [
+			{
+				"fieldname": "custom_stone_count",
+				"fieldtype": "Int",
+				"label": "Stone Count (pcs)",
+				"insert_after": "qty",
+				"description": "Number of stones received (informational; stock is by carat).",
+			},
+		],
 	}
 
 

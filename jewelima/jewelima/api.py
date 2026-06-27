@@ -5,7 +5,7 @@
 import json
 
 import frappe
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 
 def _company():
@@ -59,13 +59,31 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 
 	if isinstance(items, str):
 		items = json.loads(items or "[]")
-	rows = [
-		{"item_code": i.get("item"), "qty": i.get("qty") or 0, "rate": i.get("rate") or 0, "warehouse": warehouse}
-		for i in (items or [])
-		if i.get("item") and (i.get("qty") or 0) > 0
-	]
+	items = items or []
+
+	# stock qty is the WEIGHT (carats for stones, grams for metal). Stones also carry a
+	# piece count, stored on the PR line for reference (it does not affect stock).
+	codes = list({i.get("item") for i in items if i.get("item")})
+	stype = {}
+	if codes:
+		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
+			stype[it.name] = it.stone_type or ""
+
+	rows = []
+	for i in items:
+		item = i.get("item")
+		weight = flt(i.get("weight"))
+		if not item or weight <= 0:
+			continue
+		count = cint(i.get("count"))
+		if stype.get(item) and count <= 0:
+			frappe.throw(frappe._("{0} is a stone — enter the piece count (Qty).").format(item))
+		row = {"item_code": item, "qty": weight, "rate": flt(i.get("rate")), "warehouse": warehouse}
+		if stype.get(item):
+			row["custom_stone_count"] = count
+		rows.append(row)
 	if not rows:
-		frappe.throw(frappe._("Add at least one item with a quantity."))
+		frappe.throw(frappe._("Add at least one item with a weight."))
 	if not supplier:
 		frappe.throw(frappe._("Select a supplier."))
 	if not warehouse:
