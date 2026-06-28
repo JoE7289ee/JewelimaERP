@@ -315,6 +315,13 @@ def get_item_custom_fields():
 				"insert_after": "custom_is_loss",
 				"description": "Gold/stone issue point that raw material is purchased into.",
 			},
+			{
+				"fieldname": "custom_is_issue_location",
+				"fieldtype": "Check",
+				"label": "Issue Warehouse",
+				"insert_after": "custom_is_purchase_location",
+				"description": "Material is issued from here onto bags (e.g. Gold Issue, Stone Issue, Casting).",
+			},
 		],
 	}
 
@@ -392,10 +399,14 @@ def create_manufacturing_warehouses():
 	if not company:
 		return
 	group = make_warehouse(MANUFACTURING_GROUP, company, abbr, parent=root, is_group=1)
-	make_warehouse("Casting", company, abbr, parent=group, is_group=0)
+	# Casting + the Gold/Stone issue points are all "issue" warehouses (material is issued
+	# from them onto bags). Gold Issue + Stone Issue are also purchase locations.
+	names = {}
+	for wh in ("Casting", GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE):
+		names[wh] = make_warehouse(wh, company, abbr, parent=group, is_group=0)
+		frappe.db.set_value("Warehouse", names[wh], "custom_is_issue_location", 1)
 	for wh in (GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE):
-		name = make_warehouse(wh, company, abbr, parent=group, is_group=0)
-		frappe.db.set_value("Warehouse", name, "custom_is_purchase_location", 1)
+		frappe.db.set_value("Warehouse", names[wh], "custom_is_purchase_location", 1)
 	frappe.db.commit()
 
 

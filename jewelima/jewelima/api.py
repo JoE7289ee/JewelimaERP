@@ -813,13 +813,18 @@ def weight_add(order_bag, lines, from_warehouse=None):
 		lines = json.loads(lines or "[]")
 	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
 		frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
-	src = _wh(from_warehouse) if from_warehouse else _wh(RAW_MATERIALS_STORE)
+	# from_warehouse from the UI is already the full "<name> - <abbr>"; only fall back to
+	# the Raw Materials Store (which needs the abbr appended) when nothing was passed.
+	src = from_warehouse if (from_warehouse and frappe.db.exists("Warehouse", from_warehouse)) else _wh(RAW_MATERIALS_STORE)
 	tgt = _wh(IN_PRODUCTION_WAREHOUSE)
 	added = 0.0
 	for ln in lines or []:
 		item, wt = ln.get("item"), flt(ln.get("weight"))
 		if not item or wt <= 0:
 			continue
+		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": src}, "actual_qty"))
+		if wt > avail + 0.0005:
+			frappe.throw(frappe._("Only {0} of {1} available in {2} — can't issue {3}.").format(round(avail, 3), item, src, wt))
 		_bag_ledger(order_bag, item, "In", wt, "Weight Add", remarks=ln.get("remarks"))
 		_stock_move(item, wt, src, tgt)
 		added += wt
@@ -839,7 +844,7 @@ def weight_reduce(order_bag, lines, to_warehouse=None):
 	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
 		frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
 	src = _wh(IN_PRODUCTION_WAREHOUSE)
-	tgt = _wh(to_warehouse) if to_warehouse else _wh(RAW_MATERIALS_STORE)
+	tgt = to_warehouse if (to_warehouse and frappe.db.exists("Warehouse", to_warehouse)) else _wh(RAW_MATERIALS_STORE)
 	removed = 0.0
 	for ln in lines or []:
 		item, wt = ln.get("item"), flt(ln.get("weight"))

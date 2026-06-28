@@ -32,6 +32,16 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 		.wt-foot .tot{font-size:13px;color:var(--text-muted);}
 		.wt-foot .tot b{color:var(--text-color);font-size:16px;}
 		.wt-actions{display:flex;gap:8px;}
+		.wt-stock{margin-top:18px;}
+		.wt-stock-head{font-weight:700;font-size:14px;margin:0 0 6px;color:var(--text-color);}
+		.wt-stock-head span{color:var(--text-muted);font-weight:400;}
+		.wt-stock-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:38vh;}
+		table.wt-stock-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
+		table.wt-stock-tbl th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:5px 8px;text-align:left;font-weight:700;white-space:nowrap;}
+		table.wt-stock-tbl th.num,table.wt-stock-tbl td.num{text-align:right;}
+		table.wt-stock-tbl td{border-bottom:1px solid var(--border-color);padding:4px 8px;white-space:nowrap;}
+		table.wt-stock-tbl td.num{font-variant-numeric:tabular-nums;}
+		.wt-stock-empty{padding:12px;color:var(--text-muted);text-align:center;}
 		</style>
 		<div class="wt-bar"><div class="wt-scan"></div><div class="wt-wh"></div></div>
 		<div class="wt-msg"></div>
@@ -41,6 +51,10 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 			<div class="tot">Total added weight: <b class="wt-total">0.000</b> g</div>
 			<div class="wt-actions"></div>
 		</div>
+		<div class="wt-stock">
+			<div class="wt-stock-head">Stock in <span class="wt-stock-wh">—</span></div>
+			<div class="wt-stock-box"><table class="wt-stock-tbl"><thead><tr><th>Item</th><th>Group</th><th class="num">Purity</th><th class="num">Weight</th><th class="num">Pure</th></tr></thead><tbody><tr><td colspan="5" class="wt-stock-empty">Pick a warehouse</td></tr></tbody></table></div>
+		</div>
 	`);
 
 	const mk = (sel, df) => {
@@ -49,7 +63,9 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 		return c;
 	};
 	const scan = mk(".wt-scan", { fieldtype: "Data", label: "Scan Order Bag", fieldname: "scan", description: "Scan a bag barcode (or type + Enter)." });
-	const whCtl = mk(".wt-wh", { fieldtype: "Link", label: "Add from warehouse", fieldname: "wh", options: "Warehouse", description: "Defaults to Raw Materials Store." });
+	const whCtl = mk(".wt-wh", { fieldtype: "Link", label: "Add from warehouse", fieldname: "wh", options: "Warehouse", get_query: () => ({ filters: { is_group: 0, custom_is_issue_location: 1 } }), description: "Issue warehouses only (Gold Issue, Stone Issue, Casting)." });
+	frappe.db.get_value("Warehouse", { warehouse_name: "Gold Issue" }, "name").then((r) => { if (r.message && r.message.name) { whCtl.set_value(r.message.name); loadStock(r.message.name); } });
+	whCtl.$input.on("change awesomplete-selectcomplete", () => setTimeout(() => loadStock(), 60));
 
 	const $msg = $(page.main).find(".wt-msg");
 	const $card = $(page.main).find(".wt-card");
@@ -128,6 +144,24 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 		$(page.main).find(".wt-total").text(t.toFixed(3));
 	}
 
+	// bottom panel: live stock in the chosen issue warehouse (so you see what's available)
+	function loadStock(whOverride) {
+		const wh = whOverride || whCtl.get_value();
+		const $b = $(page.main).find(".wt-stock-tbl tbody");
+		$(page.main).find(".wt-stock-wh").text(wh ? wh.replace(/ - [A-Za-z]+$/, "") : "—");
+		if (!wh) { $b.html('<tr><td colspan="5" class="wt-stock-empty">Pick a warehouse</td></tr>'); return; }
+		frappe.call({ method: "jewelima.jewelima.api.get_melt_stock", args: { warehouse: wh } }).then((r) => {
+			const rows = (r.message || {}).rows || [];
+			$b.html(rows.map((x) => {
+				const u = x.uom === "Carat" ? " ct" : " g";
+				return `<tr><td>${frappe.utils.escape_html(x.item)}</td><td>${frappe.utils.escape_html(x.item_group)}</td>`
+					+ `<td class="num">${x.purity ? x.purity.toFixed(2) + "%" : "—"}</td>`
+					+ `<td class="num">${flt(x.weight).toFixed(3)}${u}</td>`
+					+ `<td class="num">${x.pure ? flt(x.pure).toFixed(3) + " g" : "—"}</td></tr>`;
+			}).join("") || '<tr><td colspan="5" class="wt-stock-empty">No stock in this warehouse</td></tr>');
+		});
+	}
+
 	function renderAll() {
 		renderCard();
 		renderTable();
@@ -146,7 +180,7 @@ frappe.pages["weight-add"].on_page_load = function (wrapper) {
 		if (!lines.length) return frappe.msgprint(__("Enter an Add Wt on at least one line."));
 		frappe.dom.freeze(__("Adding…"));
 		frappe.call({ method: "jewelima.jewelima.api.weight_add", args: { order_bag: state.bag.bag.name, lines: JSON.stringify(lines), from_warehouse: whCtl.get_value() || null } })
-			.then((r) => { frappe.dom.unfreeze(); frappe.show_alert({ message: __("Added {0} g to {1}", [(r.message || {}).added, state.bag.bag.name]), indicator: "green" }, 5); loadCard(state.bag.bag.name); })
+			.then((r) => { frappe.dom.unfreeze(); frappe.show_alert({ message: __("Added {0} g to {1}", [(r.message || {}).added, state.bag.bag.name]), indicator: "green" }, 5); loadCard(state.bag.bag.name); loadStock(); })
 			.catch(() => frappe.dom.unfreeze());
 	}
 	function doSaveBom() {
