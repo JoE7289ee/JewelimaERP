@@ -530,6 +530,26 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 }
 
 function openNewDesignDialog(state) {
+	// fetch_from doesn't fire in a Dialog grid, so fill Purity / UOM / Pure ourselves.
+	function bomItemChanged() {
+		const row = this.doc || (this.grid_row && this.grid_row.doc);
+		if (!row) return;
+		if (!row.item) { row.purity = 0; row.uom = ""; row.pure = 0; d.fields_dict.materials.grid.refresh(); return; }
+		frappe.db.get_value("Item", row.item, ["purity_percentage", "weight_unit", "stone_type"]).then((r) => {
+			const v = r.message || {};
+			row.purity = flt(v.purity_percentage);
+			row.uom = v.weight_unit || "";
+			row.stone_type = v.stone_type || "";
+			row.pure = v.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
+			d.fields_dict.materials.grid.refresh();
+		});
+	}
+	function bomWeightChanged() {
+		const row = this.doc || (this.grid_row && this.grid_row.doc);
+		if (!row) return;
+		row.pure = row.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
+		d.fields_dict.materials.grid.refresh();
+	}
 	const d = new frappe.ui.Dialog({
 		title: __("New Design"),
 		size: "large",
@@ -545,11 +565,12 @@ function openNewDesignDialog(state) {
 				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item",
 				description: __("Stones need both a Qty (count) and a Weight (carats). Metals need a Weight (grams)."),
 				fields: [
-					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }) },
-					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), fetch_from: "item.purity_percentage", read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), fetch_from: "item.weight_unit", read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 2 },
-					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 2 },
+					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
+					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
+					{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
+					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1 },
+					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, onchange: bomWeightChanged },
+					{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
 				],
 			},
 		],

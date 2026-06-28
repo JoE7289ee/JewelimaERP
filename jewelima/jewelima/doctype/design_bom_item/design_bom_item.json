@@ -12,7 +12,8 @@
   "uom",
   "stone_type",
   "qty",
-  "weight"
+  "weight",
+  "pure"
  ],
  "fields": [
   {
@@ -72,6 +73,15 @@
    "in_list_view": 1,
    "label": "Weight",
    "precision": "3"
+  },
+  {
+   "description": "Pure gold grams = weight x purity%. 0 for stones.",
+   "fieldname": "pure",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Pure (g)",
+   "precision": "3",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
