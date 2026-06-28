@@ -63,14 +63,15 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	};
 	state.header.supplier = mk(".pr-h-supplier", { fieldtype: "Link", label: "Supplier", fieldname: "supplier", options: "Supplier" });
 	state.header.posting_date = mk(".pr-h-date", { fieldtype: "Date", label: "Date", fieldname: "posting_date" });
-	state.header.warehouse = mk(".pr-h-wh", { fieldtype: "Link", label: "Warehouse", fieldname: "warehouse", options: "Warehouse", get_query: () => ({ filters: { is_group: 0 } }) });
+	state.header.warehouse = mk(".pr-h-wh", { fieldtype: "Link", label: "Warehouse", fieldname: "warehouse", options: "Warehouse", get_query: () => ({ filters: { is_group: 0, custom_is_purchase_location: 1 } }) });
 	state.header.posting_date.set_value(frappe.datetime.get_today());
 
-	// defaults: JD Stock supplier, Raw Materials Store warehouse
+	// defaults: JD Stock supplier, Gold Issue warehouse (a purchase location; switch to
+	// Stone Issue when buying stones)
 	frappe.db.get_value("Supplier", "JD Stock", "name").then((r) => {
 		if (r.message && r.message.name) state.header.supplier.set_value("JD Stock");
 	});
-	frappe.db.get_value("Warehouse", { warehouse_name: "Raw Materials Store" }, "name").then((r) => {
+	frappe.db.get_value("Warehouse", { warehouse_name: "Gold Issue" }, "name").then((r) => {
 		if (r.message && r.message.name) state.header.warehouse.set_value(r.message.name);
 	});
 
