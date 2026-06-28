@@ -300,6 +300,22 @@ def get_item_custom_fields():
 				"description": "Number of stones received (informational; stock is by carat).",
 			},
 		],
+		"Warehouse": [
+			{
+				"fieldname": "custom_is_loss",
+				"fieldtype": "Check",
+				"label": "Loss Warehouse",
+				"insert_after": "warehouse_name",
+				"description": "Loss-collection bin — hidden from material/issue dropdowns.",
+			},
+			{
+				"fieldname": "custom_is_purchase_location",
+				"fieldtype": "Check",
+				"label": "Purchase Location",
+				"insert_after": "custom_is_loss",
+				"description": "Gold/stone issue point that raw material is purchased into.",
+			},
+		],
 	}
 
 
@@ -337,22 +353,10 @@ def create_design_masters():
 # (group GOLD / ALLOY). Seeding placeholder RM-* items here caused duplicates.
 
 
-# Manufacturing stage warehouses (one leaf warehouse per physical stage, under a
-# "Manufacturing" group). CAD and CAM are design/digital stages — no warehouse.
+# Manufacturing group: work-in-hand now lives in the single "In Bags" warehouse, so we
+# no longer keep a warehouse per stage — only the Casting stage plus the Gold/Stone
+# issue points (the purchase locations) live under this group.
 MANUFACTURING_GROUP = "Manufacturing"
-STAGE_WAREHOUSES = [
-	"Wax Injecting",
-	"Tree Making",
-	"Casting",
-	"Grinding",
-	"Filing",
-	"Setting",
-	"Pre Polish",
-	"Wax Setting",
-	"Final Polish",
-	"Wax Cleaning",
-	"Bag Extraction",
-]
 
 
 # Loss collection warehouses — where recoverable loss is credited, per stage.
@@ -382,26 +386,30 @@ def warehouse_context():
 
 
 def create_manufacturing_warehouses():
-	"""Seed the Manufacturing warehouse group and one leaf warehouse per stage.
-	Idempotent and safe to call repeatedly."""
+	"""Seed the Manufacturing group with the Casting stage plus the Gold/Stone issue
+	points. Gold Issue + Stone Issue are flagged as purchase locations. Idempotent."""
 	company, abbr, root = warehouse_context()
 	if not company:
 		return
 	group = make_warehouse(MANUFACTURING_GROUP, company, abbr, parent=root, is_group=1)
-	for stage in STAGE_WAREHOUSES:
-		make_warehouse(stage, company, abbr, parent=group, is_group=0)
+	make_warehouse("Casting", company, abbr, parent=group, is_group=0)
+	for wh in (GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE):
+		name = make_warehouse(wh, company, abbr, parent=group, is_group=0)
+		frappe.db.set_value("Warehouse", name, "custom_is_purchase_location", 1)
 	frappe.db.commit()
 
 
 def create_loss_collection_warehouses():
 	"""Seed the Loss Collection group + one '<Stage> -LOSS' leaf warehouse per
-	stage that produces recoverable loss. Idempotent."""
+	stage that produces recoverable loss. Each is flagged custom_is_loss so material
+	dropdowns can hide it. Idempotent."""
 	company, abbr, root = warehouse_context()
 	if not company:
 		return
 	group = make_warehouse(LOSS_COLLECTION_GROUP, company, abbr, parent=root, is_group=1)
 	for stage in LOSS_STAGES:
-		make_warehouse(f"{stage} -LOSS", company, abbr, parent=group, is_group=0)
+		name = make_warehouse(f"{stage} -LOSS", company, abbr, parent=group, is_group=0)
+		frappe.db.set_value("Warehouse", name, "custom_is_loss", 1)
 	frappe.db.commit()
 
 
@@ -431,7 +439,6 @@ def create_store_warehouses():
 	if not company:
 		return
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
-	make_warehouse(STONE_ISSUE_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	# The bench flow issues gold/loss as real stock moves; gold isn't always
