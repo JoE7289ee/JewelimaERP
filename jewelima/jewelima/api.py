@@ -129,6 +129,46 @@ def get_melt_stock(warehouse):
 
 
 @frappe.whitelist()
+def transfer_stock(from_warehouse, to_warehouse, items):
+	"""Move stock between two warehouses (Material Transfer). items = [{item, weight}].
+	Refuses to transfer more than is available in the source for any item."""
+	if isinstance(items, str):
+		items = json.loads(items or "[]")
+	if not from_warehouse or not frappe.db.exists("Warehouse", from_warehouse):
+		frappe.throw(frappe._("Pick a valid source warehouse."))
+	if not to_warehouse or not frappe.db.exists("Warehouse", to_warehouse):
+		frappe.throw(frappe._("Pick a valid destination warehouse."))
+	if from_warehouse == to_warehouse:
+		frappe.throw(frappe._("Source and destination warehouses must be different."))
+
+	rows = []
+	for i in items or []:
+		item, wt = i.get("item"), flt(i.get("weight"))
+		if not item or wt <= 0:
+			continue
+		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": from_warehouse}, "actual_qty"))
+		if wt > avail + 0.0005:
+			frappe.throw(frappe._("Only {0} of {1} in {2} — can't transfer {3}.").format(round(avail, 3), item, from_warehouse, wt))
+		rows.append({
+			"item_code": item, "qty": wt,
+			"uom": frappe.db.get_value("Item", item, "stock_uom") or "Gram",
+			"s_warehouse": from_warehouse, "t_warehouse": to_warehouse, "allow_zero_valuation_rate": 1,
+		})
+	if not rows:
+		frappe.throw(frappe._("Add at least one item with a weight to transfer."))
+
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Material Transfer",
+		"company": _company(), "items": rows,
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+	frappe.db.commit()
+	return {"name": se.name, "count": len(rows)}
+
+
+@frappe.whitelist()
 def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=None):
 	"""Create + submit a Purchase Receipt for raw materials (from the Purchase
 	Raw Material page). Stock lands in `warehouse`. Returns the PR name."""

@@ -215,6 +215,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "arrow-left-right",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Stock Transfer",
+   "link_to": "stock-transfer",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "package",
@@ -410,7 +423,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-27 19:19:21.693914",
+ "modified": "2026-06-28 17:03:02.991307",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
