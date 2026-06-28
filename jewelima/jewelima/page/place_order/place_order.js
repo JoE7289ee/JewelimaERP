@@ -540,6 +540,7 @@ function openNewDesignDialog(state) {
 			row.purity = flt(v.purity_percentage);
 			row.uom = v.weight_unit || "";
 			row.stone_type = v.stone_type || "";
+			if (!v.stone_type) row.qty = 0;   // metals are weighed, not counted
 			row.pure = v.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
 			d.fields_dict.materials.grid.refresh();
 		});
@@ -568,21 +569,28 @@ function openNewDesignDialog(state) {
 					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
 					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 					{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1 },
-					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, onchange: bomWeightChanged },
+					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
+					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: bomWeightChanged },
 					{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
 				],
 			},
 		],
 		primary_action_label: __("Create Design"),
 		primary_action(values) {
-			const materials = (values.materials || [])
-				.filter((m) => m.item)
-				.map((m) => ({ item: m.item, qty: m.qty || 0, weight: m.weight || 0 }));
-			if (!materials.length) {
+			const raw = (values.materials || []).filter((m) => m.item);
+			if (!raw.length) {
 				frappe.msgprint(__("Add at least one material to the design's BOM."));
 				return;
 			}
+			const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
+			if (bad) {
+				frappe.msgprint(bad.stone_type
+					? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item])
+					: __("{0} needs a Weight (grams).", [bad.item]));
+				return;
+			}
+			// metals carry no piece qty
+			const materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0 }));
 			frappe.call({
 				method: "jewelima.jewelima.api.create_design",
 				args: {

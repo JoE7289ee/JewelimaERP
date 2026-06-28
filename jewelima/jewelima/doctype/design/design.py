@@ -31,8 +31,8 @@ class Design(Document):
 		return out
 
 	def check_stone_qty_weight(self):
-		"""A stone (Item with a stone_type) must have BOTH a quantity and a weight;
-		a metal must have a weight. Keeps every BOM consistent at the source."""
+		"""A stone (Item with a stone_type) must have BOTH a quantity and a weight.
+		A metal must have a weight and carries NO piece qty (it is weighed, not counted)."""
 		stype = self._stone_types()
 		for m in self.materials:
 			if not m.item:
@@ -40,8 +40,10 @@ class Design(Document):
 			if stype.get(m.item):  # stone
 				if flt(m.qty) <= 0 or flt(m.weight) <= 0:
 					frappe.throw(_("Row {0}: {1} is a stone — enter both a quantity and a weight (carats).").format(m.idx, m.item))
-			elif flt(m.weight) <= 0:  # metal
-				frappe.throw(_("Row {0}: {1} needs a weight (grams).").format(m.idx, m.item))
+			else:  # metal — no piece qty
+				m.qty = 0
+				if flt(m.weight) <= 0:
+					frappe.throw(_("Row {0}: {1} needs a weight (grams).").format(m.idx, m.item))
 
 	def compute_stone_counts(self):
 		"""Derive DMD/PS/CS counts from the BOM's stone components (by stone_type)."""
