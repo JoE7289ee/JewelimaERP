@@ -17,6 +17,7 @@ const PO_COLUMNS = [
 	{ key: "gross_weight", label: "Gross (g)", type: "ro", width: "85px" },
 	{ key: "nett_weight", label: "Nett (g)", type: "ro", width: "85px" },
 	{ key: "purity", label: "Purity %", type: "ro", width: "75px" },
+	{ key: "pure", label: "Pure (g)", type: "ro", width: "80px" },
 	{ key: "dmd", label: "DMD (no/ct)", type: "stone", no: "dmd_no", wt: "dmd_weight", width: "105px" },
 	{ key: "ps", label: "PS (no/ct)", type: "stone", no: "ps_no", wt: "ps_weight", width: "105px" },
 	{ key: "cs", label: "CS (no/ct)", type: "stone", no: "cs_no", wt: "cs_weight", width: "105px" },
@@ -153,15 +154,16 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	$footrow.append("<td></td>"); // actions (Split)
 	$footrow.append("<td></td>"); // remove
 	function recalcTotals() {
-		const s = { qty: 0, gross_weight: 0, nett_weight: 0, dmd_no: 0, dmd_weight: 0, ps_no: 0, ps_weight: 0, cs_no: 0, cs_weight: 0 };
+		const s = { qty: 0, gross_weight: 0, nett_weight: 0, pure: 0, dmd_no: 0, dmd_weight: 0, ps_no: 0, ps_weight: 0, cs_no: 0, cs_weight: 0 };
 		state.rows.forEach((r) => {
 			s.qty += cint(r.f.qty.get()) || 0;
-			["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
+			["gross_weight", "nett_weight", "pure", "dmd_weight", "ps_weight", "cs_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
 			["dmd_no", "ps_no", "cs_no"].forEach((k) => (s[k] += cint(r.f[k].get()) || 0));
 		});
 		totalCells.qty.text(s.qty || "");
 		totalCells.gross_weight.text(s.gross_weight ? s.gross_weight.toFixed(3) : "");
 		totalCells.nett_weight.text(s.nett_weight ? s.nett_weight.toFixed(3) : "");
+		totalCells.pure.text(s.pure ? s.pure.toFixed(3) : "");
 		[["dmd", "dmd_no", "dmd_weight"], ["ps", "ps_no", "ps_weight"], ["cs", "cs_no", "cs_weight"]].forEach(([gk, nk, wk]) => {
 			totalCells[gk].text(s[nk] || s[wk] ? `${s[nk]} / ${s[wk].toFixed(3)}` : "");
 		});
@@ -414,6 +416,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			const v = flt(p[k]) * q;
 			set(k, v ? v.toFixed(3) : "");
 		});
+		const pure = (flt(p.nett_weight) * q * flt(p.purity)) / 100; // pure gold grams (scales with qty)
+		set("pure", pure ? pure.toFixed(3) : "");
 		["dmd_no", "ps_no", "cs_no"].forEach((k) => set(k, cint(p[k]) * q || ""));
 		recalcTotals();
 	}
