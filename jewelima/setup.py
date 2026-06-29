@@ -83,6 +83,10 @@ GOLD_COLORS = ["YG", "WG", "PG"]  # Yellow / White / Pink(Rose) gold
 def seed_karat_golds():
 	"""Ship the standard karat golds designs use: 14/18/22 K in YG/WG/PG (9 items).
 	Idempotent — creates only the variants that are missing."""
+	# The Item Group tree root only exists after the ERPNext setup wizard. On a fresh
+	# install (before the wizard) skip; after_setup_wizard re-runs this once it's there.
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		return
 	if not frappe.db.exists("Item Group", "GOLD"):
 		frappe.get_doc({
 			"doctype": "Item Group", "item_group_name": "GOLD",
