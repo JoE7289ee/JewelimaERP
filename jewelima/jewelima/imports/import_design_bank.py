@@ -459,3 +459,125 @@ def list_duplicate_names(path):
 			])
 	print(f"Wrote {len(rows)} rows ({len(dups)} codes) -> {path}")
 	return {"codes": len(dups), "rows": len(rows), "path": path}
+
+
+# --- Pack export / restore (durable, out-of-container snapshot) ---------------------
+#
+# The "pack" lives on the host OUTSIDE the bench (e.g. ~/designbank), bind-mounted into the
+# container at /workspace/designbank. photos/ is served via a symlink; sets/ holds the CSVs
+# below. export_sets() snapshots the DB -> sets/; load_sets() rebuilds the DB from sets/ on a
+# fresh site. Both default to the mounted pack path.
+
+PACK_SETS = "/workspace/designbank/sets"
+
+
+def export_sets(out_dir=None):
+	"""Snapshot the 3 Design Bank tables to CSV in the pack (run after the team's edits)."""
+	import csv
+	import os
+
+	out_dir = out_dir or PACK_SETS
+	os.makedirs(out_dir, exist_ok=True)
+
+	banks = frappe.get_all(
+		"Design Bank",
+		fields=["source_file", "design_no", "gross_weight", "diamond_weight", "note", "ocr_done"],
+		order_by="design_no",
+	)
+	with open(os.path.join(out_dir, "design_bank.csv"), "w", newline="") as fh:
+		w = csv.writer(fh)
+		w.writerow(["source_file", "design_no", "gross_weight", "diamond_weight", "note", "ocr_done"])
+		for r in banks:
+			w.writerow([r.source_file, r.design_no, r.gross_weight or 0, r.diamond_weight or 0, r.note or "", int(r.ocr_done or 0)])
+
+	tags = frappe.get_all("Design Tag", fields=["name", "color"], order_by="name")
+	with open(os.path.join(out_dir, "design_tags.csv"), "w", newline="") as fh:
+		w = csv.writer(fh)
+		w.writerow(["tag_name", "color"])
+		for t in tags:
+			w.writerow([t.name, t.color or ""])
+
+	links = frappe.db.sql(
+		"""SELECT db.source_file AS sf, t.tag AS tag
+		   FROM `tabDesign Bank Tag` t JOIN `tabDesign Bank` db ON db.name = t.parent""",
+		as_dict=True,
+	)
+	with open(os.path.join(out_dir, "design_bank_tags.csv"), "w", newline="") as fh:
+		w = csv.writer(fh)
+		w.writerow(["source_file", "tag"])
+		for l in links:
+			w.writerow([l.sf, l.tag])
+
+	print(f"Exported: {len(banks)} designs, {len(tags)} tags, {len(links)} tag links -> {out_dir}")
+	return {"designs": len(banks), "tags": len(tags), "links": len(links), "out_dir": out_dir}
+
+
+def load_sets(in_dir=None):
+	"""Rebuild the 3 tables from the pack's CSVs. Idempotent: inserts new designs, updates
+	existing (refresh), and rebuilds tag links from the CSV (authoritative)."""
+	import csv
+	import os
+	from urllib.parse import quote
+
+	in_dir = in_dir or PACK_SETS
+	f_bank = os.path.join(in_dir, "design_bank.csv")
+	if not os.path.exists(f_bank):
+		frappe.throw(f"No Design Bank sets found at {in_dir}")
+
+	# 1) tag masters
+	f_tags = os.path.join(in_dir, "design_tags.csv")
+	if os.path.exists(f_tags):
+		with open(f_tags) as fh:
+			for row in csv.DictReader(fh):
+				tn = (row.get("tag_name") or "").strip()
+				if tn and not frappe.db.exists("Design Tag", tn):
+					frappe.get_doc({"doctype": "Design Tag", "tag_name": tn, "color": row.get("color") or "#6b7280"}).insert(ignore_permissions=True)
+		frappe.db.commit()
+
+	# 2) design records — bulk-insert new, update existing
+	existing = {r.source_file: r.name for r in frappe.get_all("Design Bank", fields=["name", "source_file"])}
+	now = frappe.utils.now()
+	new_rows, updated = [], 0
+	with open(f_bank) as fh:
+		for row in csv.DictReader(fh):
+			sf = row["source_file"]
+			gw = float(row.get("gross_weight") or 0)
+			dw = float(row.get("diamond_weight") or 0)
+			note = row.get("note") or None
+			dn = row.get("design_no")
+			ocr = int(row.get("ocr_done") or 0)
+			if sf in existing:
+				frappe.db.set_value("Design Bank", existing[sf],
+					{"design_no": dn, "gross_weight": gw, "diamond_weight": dw, "note": note, "ocr_done": ocr},
+					update_modified=False)
+				updated += 1
+			else:
+				new_rows.append((frappe.generate_hash(length=10), sf, dn, "/files/design-bank/" + quote(sf),
+					gw, dw, note, ocr, now, now, "Administrator", "Administrator", 0))
+	if new_rows:
+		frappe.db.bulk_insert("Design Bank",
+			fields=["name", "source_file", "design_no", "image", "gross_weight", "diamond_weight", "note", "ocr_done", "creation", "modified", "owner", "modified_by", "docstatus"],
+			values=new_rows, ignore_duplicates=True)
+	frappe.db.commit()
+
+	# 3) tag links — clear + rebuild from CSV
+	sf2name = {r.source_file: r.name for r in frappe.get_all("Design Bank", fields=["name", "source_file"])}
+	valid = set(frappe.get_all("Design Tag", pluck="name"))
+	frappe.db.delete("Design Bank Tag")
+	link_rows = []
+	f_links = os.path.join(in_dir, "design_bank_tags.csv")
+	if os.path.exists(f_links):
+		with open(f_links) as fh:
+			for row in csv.DictReader(fh):
+				name = sf2name.get(row["source_file"])
+				if name and row["tag"] in valid:
+					link_rows.append((frappe.generate_hash(length=10), name, "Design Bank", "tags", row["tag"],
+						now, now, "Administrator", "Administrator", 0, 1))
+	if link_rows:
+		frappe.db.bulk_insert("Design Bank Tag",
+			fields=["name", "parent", "parenttype", "parentfield", "tag", "creation", "modified", "owner", "modified_by", "docstatus", "idx"],
+			values=link_rows, ignore_duplicates=True)
+	frappe.db.commit()
+
+	print(f"Loaded: {len(new_rows)} new + {updated} updated designs, {len(link_rows)} tag links.")
+	return {"new": len(new_rows), "updated": updated, "links": len(link_rows)}
