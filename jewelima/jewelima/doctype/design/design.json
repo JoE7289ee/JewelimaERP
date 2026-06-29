@@ -46,6 +46,7 @@
    "reqd": 1
   },
   {
+   "default": "General",
    "fieldname": "design_style",
    "fieldtype": "Link",
    "in_standard_filter": 1,
