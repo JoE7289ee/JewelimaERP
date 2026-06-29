@@ -17,6 +17,7 @@ def after_install():
 	seed_raw_materials()
 	seed_karat_golds()
 	sync_workspace_sidebar()
+	setup_roles()
 
 
 def after_migrate():
@@ -36,6 +37,83 @@ def after_migrate():
 	seed_raw_materials()
 	seed_karat_golds()
 	sync_workspace_sidebar()
+	setup_roles()
+
+
+# ---------------------------------------------------------------------------
+# Roles & permissions
+# ---------------------------------------------------------------------------
+# ERPNext masters a Jewelima user needs to READ (we don't own these doctypes).
+JEWELIMA_READ_ERPNEXT = [
+	"Customer", "Item", "Item Group", "Sales Person", "Warehouse",
+	"BOM", "Employee", "UOM", "Company", "Bin",
+]
+# Order-flow doctypes the Ordering role fully manages.
+JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design"]
+# Desk pages the order-taker uses.
+JEWELIMA_ORDER_PAGES = ["place-order", "card-info", "job-order-status"]
+
+
+def setup_roles():
+	"""Create the Jewelima role hierarchy + permissions. Idempotent (runs on after_migrate).
+
+	  Jewelima          — base for every user: desk access + READ-ONLY on our doctypes and the
+	                      ERPNext masters we use; nothing from other modules.
+	  Jewelima Ordering — sits on top: full control of the order flow (Job Order, Order Bag,
+	                      Ordering, Design) + the order pages. Frappe roles are additive, so an
+	                      order-taker simply holds BOTH roles.
+	  Role Profile 'Jewelima Order Taker' = Jewelima + Jewelima Ordering.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	for name in ("Jewelima", "Jewelima Ordering"):
+		if not frappe.db.exists("Role", name):
+			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
+
+	def grant(doctype, role, ptypes):
+		if not frappe.db.exists("DocType", doctype):
+			return
+		add_permission(doctype, role, 0)  # copies existing perms to Custom DocPerm, then adds the role
+		for ptype, val in ptypes.items():
+			update_permission_property(doctype, role, 0, ptype, val, validate=False)
+
+	# base Jewelima — read-only on our doctypes + the ERPNext masters
+	our_doctypes = frappe.get_all("DocType", filters={"module": "Jewelima", "istable": 0}, pluck="name")
+	for dt in our_doctypes + JEWELIMA_READ_ERPNEXT:
+		grant(dt, "Jewelima", {"read": 1, "report": 1, "export": 1})
+
+	# Jewelima Ordering — full control of the order flow
+	base = {"read": 1, "write": 1, "create": 1, "delete": 1, "print": 1, "export": 1, "email": 1, "share": 1}
+	for dt in JEWELIMA_ORDER_DOCTYPES:
+		if not frappe.db.exists("DocType", dt):
+			continue
+		perms = dict(base)
+		if frappe.get_meta(dt).is_submittable:
+			perms.update({"submit": 1, "cancel": 1, "amend": 1})
+		grant(dt, "Jewelima Ordering", perms)
+
+	# order pages -> both roles (base can view, ordering can act)
+	for page in JEWELIMA_ORDER_PAGES:
+		if not frappe.db.exists("Page", page):
+			continue
+		pg = frappe.get_doc("Page", page)
+		have = {r.role for r in pg.roles}
+		added = False
+		for role in ("Jewelima", "Jewelima Ordering"):
+			if role not in have:
+				pg.append("roles", {"role": role})
+				added = True
+		if added:
+			pg.save(ignore_permissions=True)
+
+	# Role Profile bundle for easy assignment
+	if not frappe.db.exists("Role Profile", "Jewelima Order Taker"):
+		frappe.get_doc({
+			"doctype": "Role Profile", "role_profile": "Jewelima Order Taker",
+			"roles": [{"role": "Jewelima"}, {"role": "Jewelima Ordering"}],
+		}).insert(ignore_permissions=True)
+
+	frappe.db.commit()
 
 
 DEFAULT_TIME_ZONE = "Asia/Kolkata"
