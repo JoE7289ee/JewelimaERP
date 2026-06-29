@@ -126,6 +126,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "user-check",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Assign / Collect",
+   "link_to": "assign-collect",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "git-branch",
    "indent": 1,
    "keep_closed": 0,
@@ -501,7 +514,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-29 23:51:11.397533",
+ "modified": "2026-06-30 00:02:39.620837",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

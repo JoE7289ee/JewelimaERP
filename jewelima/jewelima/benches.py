@@ -47,6 +47,10 @@ BENCH_DOCTYPE = {
 ISSUE_RECEIPT_LOCATIONS = {"GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"}
 
 
+# Transfer benches that use the lighter Assign / Collect flow (times only — no weight/loss).
+ASSIGN_COLLECT_LOCATIONS = {"CAD", "WAX INJECTING", "WAX CLEANING"}
+
+
 def bench_doctype(location):
 	return BENCH_DOCTYPE.get((location or "").upper())
 

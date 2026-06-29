@@ -1302,6 +1302,79 @@ def issue_bench_cards(names, location, employee=None):
 
 
 @frappe.whitelist()
+def assign_bench_cards(names, location, employee=None):
+	"""Assign a batch of bags at a transfer bench (CAD / Wax Injecting / Wax Cleaning):
+	status -> Issued, stamp issued_at (+ employee if given). Times only — no weight/loss."""
+	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, bench_doctype
+
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	loc = (location or "").upper()
+	if loc not in ASSIGN_COLLECT_LOCATIONS:
+		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
+	dt = bench_doctype(loc)
+	now = frappe.utils.now_datetime()
+	done, errors = [], []
+	for nm in names or []:
+		try:
+			rec = _current_bench_record(dt, nm)
+			if not rec:
+				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
+				continue
+			doc = frappe.get_doc(dt, rec)
+			if doc.status == "Issued":
+				errors.append({"name": nm, "error": frappe._("Already assigned")})
+				continue
+			doc.status = "Issued"
+			doc.issued_at = now
+			if not doc.time_in:
+				doc.time_in = now
+			if employee:
+				doc.employee = employee
+			doc.save(ignore_permissions=True)
+			done.append(nm)
+		except Exception as e:
+			errors.append({"name": nm, "error": str(e)})
+	frappe.db.commit()
+	return {"count": len(done), "done": done, "errors": errors}
+
+
+@frappe.whitelist()
+def collect_bench_cards(names, location):
+	"""Collect a batch of assigned bags at a transfer bench: status -> Completed, stamp
+	receipted_at + time_out. Times only — no weight/loss. Only assigned (Issued) cards."""
+	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, bench_doctype
+
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	loc = (location or "").upper()
+	if loc not in ASSIGN_COLLECT_LOCATIONS:
+		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
+	dt = bench_doctype(loc)
+	now = frappe.utils.now_datetime()
+	done, errors = [], []
+	for nm in names or []:
+		try:
+			rec = _current_bench_record(dt, nm)
+			if not rec:
+				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
+				continue
+			doc = frappe.get_doc(dt, rec)
+			if doc.status != "Issued":
+				errors.append({"name": nm, "error": frappe._("Not assigned (is {0})").format(doc.status)})
+				continue
+			doc.status = "Completed"
+			doc.receipted_at = now
+			doc.time_out = now
+			doc.save(ignore_permissions=True)
+			done.append(nm)
+		except Exception as e:
+			errors.append({"name": nm, "error": str(e)})
+	frappe.db.commit()
+	return {"count": len(done), "done": done, "errors": errors}
+
+
+@frappe.whitelist()
 def receipt_bench_cards(lines, location, employee=None):
 	"""Receive a batch of issued bags at one bench (one employee). Per line
 	{order_bag, weight_in}: loss = weight_out - weight_in, status -> Receipted,
