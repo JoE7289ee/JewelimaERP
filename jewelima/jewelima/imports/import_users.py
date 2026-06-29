@@ -99,6 +99,14 @@ def run(file_path=None, dry_run=False):
 					user.append("roles", {"role": role})
 					role_adds += 1
 					changed = True
+
+			# minimal desk — only the Jewelima module visible (hides other workspace cards)
+			if frappe.db.exists("Module Profile", "Jewelima Only") and user.module_profile != "Jewelima Only":
+				user.module_profile = "Jewelima Only"
+				mp = frappe.get_doc("Module Profile", "Jewelima Only")
+				user.set("block_modules", [{"module": m.module} for m in mp.block_modules])
+				changed = True
+
 			if changed:
 				user.save(ignore_permissions=True)
 

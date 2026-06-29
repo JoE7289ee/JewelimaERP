@@ -113,6 +113,20 @@ def setup_roles():
 			"roles": [{"role": "Jewelima"}, {"role": "Jewelima Ordering"}],
 		}).insert(ignore_permissions=True)
 
+	# Module Profile: hide every module except Jewelima from the desk (assigned to users by
+	# import_users). Blocking modules hides the workspace cards/nav only — it does NOT remove
+	# the doctype read perms the order flow relies on.
+	blocked = [m for m in frappe.get_all("Module Def", pluck="name") if m != "Jewelima"]
+	rows = [{"module": m} for m in blocked]
+	if frappe.db.exists("Module Profile", "Jewelima Only"):
+		mp = frappe.get_doc("Module Profile", "Jewelima Only")
+		mp.set("block_modules", rows)
+		mp.save(ignore_permissions=True)
+	else:
+		frappe.get_doc({
+			"doctype": "Module Profile", "module_profile_name": "Jewelima Only", "block_modules": rows,
+		}).insert(ignore_permissions=True)
+
 	frappe.db.commit()
 
 
