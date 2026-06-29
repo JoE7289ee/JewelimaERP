@@ -60,7 +60,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		<div class="po-wrap">
 			<div class="po-head">
 				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
-				<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-duedate"></div><div class="po-h-custorderid"></div>
+				<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-duedate"></div>
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
@@ -87,7 +87,6 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		description: "Lead time — auto-sets Due Date = Order Date + N days.",
 	});
 	state.header.due_date = mk(".po-h-duedate", { fieldtype: "Date", label: "Due Date", fieldname: "due_date" });
-	state.header.customer_order_id = mk(".po-h-custorderid", { fieldtype: "Data", label: "Customer Order ID", fieldname: "customer_order_id" });
 	state.header.order_date.set_value(frappe.datetime.get_today());
 
 	// --- Date rules ---
@@ -437,7 +436,6 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		state.header.customer.set_value("");
 		state.header.salesman.set_value("");
 		state.header.order_type.set_value("");
-		state.header.customer_order_id.set_value("");
 		state.header.days.set_value(0);
 		state.header.due_date.set_value("");
 		state.header.order_no.set_value("");
@@ -470,7 +468,6 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	const customer = state.header.customer.get_value();
 	const salesman = state.header.salesman.get_value();
 	const order_type = state.header.order_type.get_value();
-	const customer_order_id = state.header.customer_order_id.get_value();
 	const order_date = state.header.order_date.get_value();
 	const due_date = state.header.due_date.get_value();
 
@@ -505,7 +502,6 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 			customer: customer || undefined,
 			salesman: salesman || undefined,
 			order_type: order_type || undefined,
-			customer_order_id: customer_order_id || undefined,
 		});
 		let made = 0;
 		for (const l of lines) {

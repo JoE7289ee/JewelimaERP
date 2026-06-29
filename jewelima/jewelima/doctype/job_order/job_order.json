@@ -12,8 +12,7 @@
   "salesman",
   "order_type",
   "column_break_main",
-  "customer",
-  "customer_order_id"
+  "customer"
  ],
  "fields": [
   {
@@ -56,12 +55,6 @@
    "in_list_view": 1,
    "label": "Customer",
    "options": "Customer"
-  },
-  {
-   "description": "The customer's own order / PO reference.",
-   "fieldname": "customer_order_id",
-   "fieldtype": "Data",
-   "label": "Customer Order ID"
   }
  ],
  "index_web_pages_for_search": 1,

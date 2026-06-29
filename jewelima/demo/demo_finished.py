@@ -96,7 +96,7 @@ def make_finished(products=300, designs=10, salesmen=5, seed=7):
 			jo = frappe.get_doc({
 				"doctype": "Job Order", "order_date": od, "due_date": add_days(od, random.randint(7, 30)),
 				"customer": cust, "salesman": random.choice(m["sales_persons"]),
-				"order_type": random.choice(otypes), "customer_order_id": f"FP-PO-{1000 + len(m['job_orders'])}",
+				"order_type": random.choice(otypes),
 			}).insert(ignore_permissions=True)
 			m["job_orders"].append(jo.name)
 

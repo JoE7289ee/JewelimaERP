@@ -106,7 +106,7 @@ def make_demo(orders=200, designs=60, salesmen=10, seed=42):
 			jo = frappe.get_doc({
 				"doctype": "Job Order", "order_date": od, "due_date": add_days(od, random.randint(7, 30)),
 				"customer": random.choice(customers), "salesman": random.choice(m["sales_persons"]),
-				"order_type": random.choice(otypes), "customer_order_id": f"PO-{1000 + i}",
+				"order_type": random.choice(otypes),
 			}).insert(ignore_permissions=True)
 			m["job_orders"].append(jo.name)
 			for _ in range(random.randint(1, 5)):

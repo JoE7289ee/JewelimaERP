@@ -546,7 +546,6 @@ def get_order_bag_cards(names):
 			"design_type": dtype, "design_style": dstyle, "image": dimg,
 			"size": b.size, "qty": b.qty, "location": b.location,
 			"customer": b.customer, "salesman": b.salesman, "order_type": b.order_type,
-			"customer_order_id": b.customer_order_id,
 			"order_date": frappe.utils.formatdate(b.order_date, "dd-mm-yyyy") if b.order_date else "",
 			"due_date": frappe.utils.formatdate(b.due_date, "dd-mm-yyyy") if b.due_date else "",
 			"gross_weight": b.gross_weight, "nett_weight": b.nett_weight, "purity": b.purity,

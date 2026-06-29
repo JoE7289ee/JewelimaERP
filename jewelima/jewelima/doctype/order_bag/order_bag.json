@@ -63,7 +63,6 @@
   "customer",
   "salesman",
   "order_type",
-  "customer_order_id",
   "transfers_tab",
   "transfers_html",
   "stages_tab",
@@ -432,14 +431,6 @@
    "in_standard_filter": 1,
    "label": "Type",
    "options": "Order Type",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "job_order.customer_order_id",
-   "fieldname": "customer_order_id",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Customer Order ID",
    "read_only": 1
   },
   {
