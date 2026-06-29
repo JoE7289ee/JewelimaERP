@@ -76,6 +76,7 @@ class Design(Document):
 
 	def after_insert(self):
 		"""Provision the sellable Item (same code) + its BOM."""
+		self._copy_bank_image()
 		item_code = self.name
 		if not frappe.db.exists("Item", item_code):
 			frappe.get_doc(
@@ -106,6 +107,38 @@ class Design(Document):
 		bom.submit()
 		self.db_set("item", item_code)
 		self.db_set("bom", bom.name)
+
+	def _copy_bank_image(self):
+		"""If the image points at the shared design-bank folder, copy it to a Design-owned
+		File so each design carries its own image (not a reference to the catalog file)."""
+		if not self.image or "/files/design-bank/" not in self.image:
+			return
+		import os
+		from urllib.parse import unquote
+
+		rel = unquote(self.image.split("/files/", 1)[1])  # "design-bank/<file>"
+		src = frappe.get_site_path("public", "files", *rel.split("/"))
+		if not os.path.exists(src):
+			return
+		with open(src, "rb") as fh:
+			content = fh.read()
+		# drop any auto-attached File for the original reference, keep only our copy
+		for old in frappe.get_all("File", filters={"attached_to_doctype": "Design", "attached_to_name": self.name}, pluck="name"):
+			frappe.delete_doc("File", old, force=1, ignore_permissions=True)
+		# bind to the image field so Frappe's post-insert handler reuses it (no duplicate File)
+		f = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": os.path.basename(rel),
+				"content": content,
+				"attached_to_doctype": "Design",
+				"attached_to_name": self.name,
+				"attached_to_field": "image",
+				"is_private": 0,
+			}
+		).insert(ignore_permissions=True)
+		self.image = f.file_url
+		self.db_set("image", f.file_url)
 
 	@frappe.whitelist()
 	def retire(self):
