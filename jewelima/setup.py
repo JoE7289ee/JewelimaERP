@@ -18,6 +18,7 @@ def after_install():
 	seed_karat_golds()
 	sync_workspace_sidebar()
 	setup_roles()
+	seed_benches()
 
 
 def after_migrate():
@@ -38,6 +39,7 @@ def after_migrate():
 	seed_karat_golds()
 	sync_workspace_sidebar()
 	setup_roles()
+	seed_benches()
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +129,17 @@ def setup_roles():
 			"doctype": "Module Profile", "module_profile_name": "Jewelima Only", "block_modules": rows,
 		}).insert(ignore_permissions=True)
 
+	frappe.db.commit()
+
+
+def seed_benches():
+	"""One Bench master record per location (from benches.BENCH_DOCTYPE) so employees can be
+	allotted to each bench. Idempotent."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	for loc in BENCH_DOCTYPE:
+		if not frappe.db.exists("Bench", loc):
+			frappe.get_doc({"doctype": "Bench", "bench_name": loc}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 

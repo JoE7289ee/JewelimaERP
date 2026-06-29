@@ -64,6 +64,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	};
 	state.scan = mk(".jw-scan", { fieldtype: "Data", label: "Scan Order Bag", fieldname: "scan", description: "Scan a bag barcode (or type + Enter)." });
 	state.emp = mk(".jw-emp", { fieldtype: "Link", label: "Employee", fieldname: "employee", options: "Employee" });
+	// only show employees allotted to the current bench (state.location); all if none set — see api.bench_employee_query
+	state.emp.get_query = () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: state.location || "" } });
 
 	const $body = $(page.main).find(".jw-body");
 	const $thead = $(page.main).find(".jw-thead");
