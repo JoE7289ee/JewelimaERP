@@ -412,6 +412,45 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "images",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Design Bank",
+   "link_to": "Design Bank",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "layout-grid",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Design Gallery",
+   "link_to": "design-gallery",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "tag",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Design Tags",
+   "link_to": "design-tags",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "shapes",
    "indent": 1,
    "keep_closed": 0,
@@ -423,7 +462,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-28 17:03:02.991307",
+ "modified": "2026-06-29 19:54:34.210705",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

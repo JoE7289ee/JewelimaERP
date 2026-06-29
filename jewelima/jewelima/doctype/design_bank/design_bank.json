@@ -1,0 +1,118 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "hash",
+ "creation": "2026-06-29 17:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "design_no",
+  "image",
+  "gross_weight",
+  "diamond_weight",
+  "note",
+  "tags",
+  "source_file",
+  "ocr_done"
+ ],
+ "fields": [
+  {
+   "bold": 1,
+   "fieldname": "design_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Design No",
+   "reqd": 1
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "in_list_view": 1,
+   "label": "Image"
+  },
+  {
+   "fieldname": "gross_weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "GW (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "diamond_weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "DW (ct)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Data",
+   "label": "Note"
+  },
+  {
+   "fieldname": "tags",
+   "fieldtype": "Table MultiSelect",
+   "label": "Tags",
+   "options": "Design Bank Tag"
+  },
+  {
+   "description": "Original image filename in /files/design-bank (used for idempotent import).",
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "label": "Source File",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "description": "Set once the card has been OCR'd (so it is not re-processed).",
+   "fieldname": "ocr_done",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "OCR Done",
+   "read_only": 1
+  }
+ ],
+ "image_field": "image",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-29 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Design Bank",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "design_no",
+ "track_changes": 1
+}

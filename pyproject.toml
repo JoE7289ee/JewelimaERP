@@ -10,6 +10,7 @@ dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
     "segno>=1.6",  # pure-python QR generation for the Print Barcode labels
+    "pytesseract>=0.3",  # OCR the Design Bank cards (gross/diamond weight). Needs the tesseract binary.
 ]
 
 [build-system]
