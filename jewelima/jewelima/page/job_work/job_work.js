@@ -16,6 +16,7 @@
 frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Job Work", single_column: true });
 	const state = { mode: "issue", rows: [], location: null, history: [] };
+	const ALLOWED = ["GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"];
 
 	$(page.main).append(`
 		<style>
@@ -173,6 +174,11 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			if (!v.location) {
 				setMsg(__("No Order Bag <b>{0}</b>.", [safe]), "err");
 				logHistory(code, "Not found", "err");
+				return;
+			}
+			if (ALLOWED.indexOf(v.location) === -1) {
+				setMsg(__("<b>{0}</b> is at <b>{1}</b> — Job Work (Issue/Receipt) is only for {2}.", [safe, frappe.utils.escape_html(v.location), ALLOWED.join(", ")]), "err");
+				logHistory(code, __("At {0} (not allowed)", [v.location]), "err");
 				return;
 			}
 			if (!v.doctype) {

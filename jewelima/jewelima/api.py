@@ -1266,10 +1266,12 @@ def issue_bench_cards(names, location, employee=None):
 	"""Issue a batch of bags at one bench: status -> Issued, snapshot weight_out
 	(gold grams), stamp issued_at (+ employee if given). Skips already-Issued cards;
 	with an employee, bumps their held-weight balance."""
-	from jewelima.jewelima.benches import bench_doctype
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS, bench_doctype
 
 	if isinstance(names, str):
 		names = json.loads(names or "[]")
+	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
+		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	dt = bench_doctype(location)
 	now = frappe.utils.now_datetime()
 	done, errors = [], []
@@ -1379,10 +1381,12 @@ def receipt_bench_cards(lines, location, employee=None):
 	"""Receive a batch of issued bags at one bench (one employee). Per line
 	{order_bag, weight_in}: loss = weight_out - weight_in, status -> Receipted,
 	loss booked (per-bag ledger + In Bags -> '<bench> -LOSS' stock)."""
-	from jewelima.jewelima.benches import bench_doctype
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS, bench_doctype
 
 	if isinstance(lines, str):
 		lines = json.loads(lines or "[]")
+	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
+		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	dt = bench_doctype(location)
 	now = frappe.utils.now_datetime()
 	done, errors, total_loss = [], [], 0.0
