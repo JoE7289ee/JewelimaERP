@@ -473,9 +473,35 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "settings",
+   "indent": 0,
+   "keep_closed": 1,
+   "label": "Setup",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Bench",
+   "link_to": "Bench",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
   }
  ],
- "modified": "2026-06-29 23:47:56.617627",
+ "modified": "2026-06-29 23:51:11.397533",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
