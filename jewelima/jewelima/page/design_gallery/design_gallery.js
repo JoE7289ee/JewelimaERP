@@ -284,6 +284,16 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 					.then(() => { if (!(d.tags || []).includes(tag)) (d.tags = d.tags || []).push(tag); render(d); loadTags(); });
 			});
 		});
+		dlg.set_primary_action(__("Create New Design"), () => {
+			dlg.hide();
+			frappe.model.with_doctype("Design", () => {
+				const nd = frappe.model.get_new_doc("Design");
+				nd.design_name = d.design_no; // pulled from the catalog (Design name is unique)
+				nd.image = d.image;           // same image, referenced
+				nd.design_bank = d.name;      // link back to this catalog entry
+				frappe.set_route("Form", "Design", nd.name);
+			});
+		});
 		dlg.show();
 	}
 

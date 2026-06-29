@@ -16,6 +16,7 @@
   "image",
   "item",
   "bom",
+  "design_bank",
   "stones_section",
   "dmd_no",
   "ps_no",
@@ -84,6 +85,13 @@
    "label": "BOM",
    "options": "BOM",
    "read_only": 1
+  },
+  {
+   "description": "The Design Bank catalog entry this design was created from (if any).",
+   "fieldname": "design_bank",
+   "fieldtype": "Link",
+   "label": "Design Bank",
+   "options": "Design Bank"
   },
   {
    "description": "Auto-derived from the Bill of Materials below.",
