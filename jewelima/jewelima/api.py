@@ -129,6 +129,36 @@ def get_melt_stock(warehouse):
 
 
 @frappe.whitelist()
+def get_warehouse_flags():
+	"""All toggleable Warehouse flags (custom Check fields) + every leaf warehouse's current
+	values. Powers the Warehouse Management page (flags only — no warehouse create/edit)."""
+	flags = frappe.get_all(
+		"Custom Field", filters={"dt": "Warehouse", "fieldtype": "Check"},
+		fields=["fieldname", "label"], order_by="idx",
+	)
+	fieldnames = [f.fieldname for f in flags]
+	warehouses = frappe.get_all(
+		"Warehouse", filters={"is_group": 0},
+		fields=["name", "warehouse_name"] + fieldnames, order_by="warehouse_name",
+	)
+	return {"flags": flags, "warehouses": warehouses}
+
+
+@frappe.whitelist()
+def set_warehouse_flag(warehouse, flag, value):
+	"""Toggle ONE flag (a custom Check field) on a warehouse. Flags only — nothing else."""
+	frappe.only_for(["System Manager", "Stock Manager"])
+	if not frappe.get_all("Custom Field", filters={"dt": "Warehouse", "fieldtype": "Check", "fieldname": flag}, limit=1):
+		frappe.throw(frappe._("Unknown warehouse flag: {0}").format(flag))
+	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
+		frappe.throw(frappe._("No such warehouse."))
+	val = 1 if frappe.utils.cint(value) else 0
+	frappe.db.set_value("Warehouse", warehouse, flag, val)
+	frappe.db.commit()
+	return {"ok": 1, "warehouse": warehouse, "flag": flag, "value": val}
+
+
+@frappe.whitelist()
 def transfer_stock(from_warehouse, to_warehouse, items):
 	"""Move stock between two warehouses (Material Transfer). items = [{item, weight}].
 	Refuses to transfer more than is available in the source for any item."""

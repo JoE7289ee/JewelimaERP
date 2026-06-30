@@ -538,9 +538,22 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "warehouse",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Warehouse Management",
+   "link_to": "warehouse-management",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
   }
  ],
- "modified": "2026-06-30 13:56:30.690077",
+ "modified": "2026-06-30 14:41:35.396012",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
