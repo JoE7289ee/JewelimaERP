@@ -136,11 +136,20 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		const alloys = S.rows.filter((r) => r.purity <= 0.001);
 		const pureNeeded = W * Tf;
 
+		let scaled = false;
 		const lockedGoldPure = golds.filter((r) => r.locked).reduce((s, r) => s + flt(r.weight) * r.purity / 100, 0);
 		const freeGolds = golds.filter((r) => !r.locked);
 		const sumFreePf = freeGolds.reduce((s, r) => s + r.purity / 100, 0);
 		const g = sumFreePf > 0 ? Math.max((pureNeeded - lockedGoldPure) / sumFreePf, 0) : 0;
 		freeGolds.forEach((r) => (r.weight = g));
+
+		// STRICT honours the required grams: if locked/Full'd golds carry MORE pure than the
+		// target needs, scale them down so the blend can still come out at exactly the required.
+		if (strict.checked && W > 0 && lockedGoldPure > pureNeeded + 0.0005) {
+			const f = pureNeeded / lockedGoldPure;
+			golds.filter((r) => r.locked).forEach((r) => (r.weight = flt(r.weight) * f));
+			scaled = true;
+		}
 
 		const totalGold = golds.reduce((s, r) => s + flt(r.weight), 0);
 		const totalGoldPure = golds.reduce((s, r) => s + flt(r.weight) * r.purity / 100, 0);
@@ -150,8 +159,20 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		const freeAlloys = alloys.filter((r) => !r.locked);
 		if (freeAlloys.length) { const a = alloyTot / freeAlloys.length; freeAlloys.forEach((r) => (r.weight = a)); }
 
-		// push computed weights into the free rows' inputs (never the one being edited)
-		S.rows.forEach((r) => { if (!r.locked && r.$wt) r.$wt.value = r.weight ? fmt(r.weight) : ""; });
+		// STRICT guarantee: the total input is exactly the required grams. If anything still
+		// pushes it over (e.g. a locked alloy), scale the whole blend down so output can't exceed it.
+		if (strict.checked && W > 0) {
+			const total = S.rows.reduce((s, r) => s + flt(r.weight), 0);
+			if (total > W + 0.0005) {
+				const k = W / total;
+				S.rows.forEach((r) => (r.weight = flt(r.weight) * k));
+				scaled = true;
+			}
+		}
+
+		// push weights into inputs (free rows always; if strict re-scaled locks, all of them).
+		// Never clobber the input the user is actively typing in.
+		S.rows.forEach((r) => { if (r.$wt && document.activeElement !== r.$wt && (!r.locked || scaled)) r.$wt.value = r.weight ? fmt(r.weight) : ""; });
 		// flag any row that exceeds its available stock — you can't melt more than you have
 		S.rows.forEach((r) => {
 			const over = flt(r.weight) > flt(r.available) + 0.0005;
