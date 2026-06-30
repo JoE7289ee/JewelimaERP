@@ -18,6 +18,7 @@ def after_install():
 	flag_melt_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
+	seed_standard_golds()
 	sync_workspace_sidebar()
 	setup_roles()
 	seed_benches()
@@ -41,6 +42,7 @@ def after_migrate():
 	flag_melt_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
+	seed_standard_golds()
 	sync_workspace_sidebar()
 	setup_roles()
 	seed_benches()
@@ -263,6 +265,37 @@ def create_jd_stock_customer():
 	frappe.get_doc(
 		{"doctype": "Customer", "customer_name": "JD Stock", "customer_group": cg, "territory": terr}
 	).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def seed_standard_golds():
+	"""Standard Gold 990–998 (purity 99.0–99.8 %) to sit alongside Standard Gold 999 (99.9 %),
+	and retire the legacy generic 'Standard Gold' (0 %). Idempotent; mirrors the GOLD item shape."""
+	if not frappe.db.exists("Item Group", "GOLD"):
+		return
+	for n in range(990, 999):  # 990 … 998 (999 already ships)
+		code = f"Standard Gold {n}"
+		if frappe.db.exists("Item", code):
+			continue
+		frappe.get_doc({
+			"doctype": "Item",
+			"item_code": code,
+			"item_name": code,
+			"item_group": "GOLD",
+			"stock_uom": "Gram",
+			"is_stock_item": 1,
+			"is_purchase_item": 1,
+			"is_sales_item": 0,
+			"include_item_in_manufacturing": 1,
+			"weight_unit": "Gram",
+			"purity_percentage": round(n / 10.0, 2),  # 990 -> 99.0 %
+		}).insert(ignore_permissions=True)
+	# retire the legacy generic "Standard Gold" (0 %): delete if unused, else disable
+	if frappe.db.exists("Item", "Standard Gold"):
+		try:
+			frappe.delete_doc("Item", "Standard Gold", ignore_permissions=True)
+		except Exception:
+			frappe.db.set_value("Item", "Standard Gold", "disabled", 1)
 	frappe.db.commit()
 
 
