@@ -17,9 +17,9 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.ml-page{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;}
-		.ml-left{flex:1 1 560px;min-width:520px;max-width:780px;}
-		.ml-right{flex:1 1 340px;min-width:320px;}
+		.ml-page{display:flex;flex-direction:column;gap:20px;}
+		.ml-left{width:100%;max-width:900px;}
+		.ml-right{width:100%;max-width:900px;}
 		.ml-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px;margin:2px 0 10px;align-items:end;}
 		.ml-bar .help-box,.ml-bar .description{display:none !important;}
 		.ml-bar .frappe-control{margin:0;}
@@ -35,6 +35,10 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		table.ml-tbl input.ml-wt{width:110px;text-align:right;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:2px 6px;height:28px;border-radius:4px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
 		table.ml-tbl .pur{color:var(--text-color);font-variant-numeric:tabular-nums;}
 		table.ml-tbl td.avail{color:var(--text-muted);font-variant-numeric:tabular-nums;}
+		table.ml-tbl tr.over td.avail{color:#b00020;font-weight:600;}
+		table.ml-tbl input.ml-wt.over{border-color:#b00020;color:#b00020;}
+		.ml-warn.err{color:#b00020;}
+		.ml-full{padding:0 9px;}
 		.ml-empty{color:var(--text-muted);text-align:center;padding:18px 8px !important;}
 		.ml-rm{padding:0 7px;}
 		.ml-sum{display:flex;gap:22px;flex-wrap:wrap;margin:14px 2px 4px;font-size:13px;color:var(--text-muted);}
@@ -87,14 +91,14 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 						<span class="ml-warn"></span>
 					</div>
 				</div>
-				<div class="ml-hint">Pick the karat to create (its purity is the target), enter the grams you need, then tick gold + alloy from the stock on the right. Edit any weight to override — the rest re-balance. Untick “Strict out” to let the output float when you add more of a source.</div>
+				<div class="ml-hint">Pick the karat to create (its purity is the target), enter the grams you need, then tick gold + alloy from the stock below — or hit “Full” to use all of an item (capped at what's needed). Edit any weight to override; the rest re-balance. You can't melt more than the available stock.</div>
 			</div>
 			<div class="ml-right">
 				<div class="ml-stock-head">Stock <span class="ml-stock-wh"></span></div>
 				<div class="ml-stock-box">
 					<table class="ml-stock-tbl">
-						<thead><tr><th style="width:26px"></th><th>Item</th><th>Group</th><th class="num">Purity</th><th class="num">Available</th><th class="num">Pure</th></tr></thead>
-						<tbody class="ml-stock-body"><tr><td colspan="6" class="ml-stock-empty">Pick a warehouse</td></tr></tbody>
+						<thead><tr><th style="width:26px"></th><th>Item</th><th>Group</th><th class="num">Purity</th><th class="num">Available</th><th class="num">Pure</th><th style="width:64px"></th></tr></thead>
+						<tbody class="ml-stock-body"><tr><td colspan="7" class="ml-stock-empty">Pick a warehouse</td></tr></tbody>
 					</table>
 				</div>
 			</div>
@@ -148,6 +152,12 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 
 		// push computed weights into the free rows' inputs (never the one being edited)
 		S.rows.forEach((r) => { if (!r.locked && r.$wt) r.$wt.value = r.weight ? fmt(r.weight) : ""; });
+		// flag any row that exceeds its available stock — you can't melt more than you have
+		S.rows.forEach((r) => {
+			const over = flt(r.weight) > flt(r.available) + 0.0005;
+			if (r.$tr) r.$tr.classList.toggle("over", over);
+			if (r.$wt) r.$wt.classList.toggle("over", over);
+		});
 		updateSummary();
 	}
 
@@ -163,9 +173,12 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		else outWt.disabled = false;
 		const loss = totalIn - flt(outWt.value);
 		q(".ml-loss").textContent = fmt(loss) + " g";
+		const over = S.rows.filter((r) => flt(r.weight) > flt(r.available) + 0.0005);
 		let warn = "";
-		if (T && totalIn > 0 && Math.abs(cur - T) > 0.05) warn = `Blend is ${cur.toFixed(2)}% vs target ${T.toFixed(2)}% — add/adjust alloy or gold.`;
+		if (over.length) warn = `Not enough stock: ${over.map((r) => r.item + " (have " + fmt(r.available) + " g)").join(", ")}.`;
+		else if (T && totalIn > 0 && Math.abs(cur - T) > 0.05) warn = `Blend is ${cur.toFixed(2)}% vs target ${T.toFixed(2)}% — add/adjust alloy or gold.`;
 		q(".ml-warn").textContent = warn;
+		q(".ml-warn").classList.toggle("err", !!over.length);
 	}
 
 	// ---- materials table ------------------------------------------------------
@@ -206,15 +219,30 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		if (cb) { cb.checked = on; cb.closest("tr").classList.toggle("picked", on); }
 	}
 
+	// "Full": use this item up to what the blend needs, capped at its available stock — so if
+	// 20 g is left it uses 20, and if 100 g is there but only 20 is needed it takes 20. Adds the
+	// row first if needed, then locks it (the rest re-balance around it).
+	function fullSource(x) {
+		if (!x) return;
+		if (!S.rows.some((r) => r.item === x.item)) addSource(x); // adds + solves -> a proposed weight
+		const row = S.rows.find((r) => r.item === x.item);
+		if (!row) return;
+		const proposed = flt(row.weight); // what the blend wants from this item
+		row.weight = Math.min(flt(row.available), proposed > 0.0005 ? proposed : flt(row.available));
+		row.locked = true;
+		renderMaterials();
+		solve();
+	}
+
 	// ---- stock panel (with tick-to-add) ---------------------------------------
 	function loadStock(whOverride) {
 		const wh = whOverride || whCtl.get_value();
 		q(".ml-stock-wh").textContent = wh ? wh.replace(/ - [A-Za-z]+$/, "") : "";
 		const body = q(".ml-stock-body");
-		if (!wh) { body.innerHTML = '<tr><td colspan="6" class="ml-stock-empty">Pick a warehouse</td></tr>'; return; }
+		if (!wh) { body.innerHTML = '<tr><td colspan="7" class="ml-stock-empty">Pick a warehouse</td></tr>'; return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_melt_stock", args: { warehouse: wh } }).then((r) => {
 			S.stock = ((r.message || {}).rows || []).filter((x) => x.purity > 0 || x.item_group === "ALLOY"); // meltable only
-			if (!S.stock.length) { body.innerHTML = '<tr><td colspan="6" class="ml-stock-empty">No gold/alloy stock here</td></tr>'; return; }
+			if (!S.stock.length) { body.innerHTML = '<tr><td colspan="7" class="ml-stock-empty">No gold/alloy stock here</td></tr>'; return; }
 			body.innerHTML = S.stock.map((x, i) => {
 				const picked = S.rows.some((r) => r.item === x.item);
 				return `<tr class="${picked ? "picked" : ""}">`
@@ -222,13 +250,17 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 					+ `<td>${frappe.utils.escape_html(x.item)}</td><td>${frappe.utils.escape_html(x.item_group)}</td>`
 					+ `<td class="num">${x.purity ? x.purity.toFixed(2) + "%" : "—"}</td>`
 					+ `<td class="num">${fmt(x.weight)}${x.uom === "Carat" ? " ct" : " g"}</td>`
-					+ `<td class="num">${x.pure ? fmt(x.pure) + " g" : "—"}</td></tr>`;
+					+ `<td class="num">${x.pure ? fmt(x.pure) + " g" : "—"}</td>`
+					+ `<td class="num"><button class="btn btn-xs btn-default ml-full" data-idx="${i}" title="Use this item — up to what's needed, capped at its available stock">Full</button></td></tr>`;
 			}).join("");
 			body.querySelectorAll(".ml-stock-cb").forEach((cb) => {
 				cb.addEventListener("change", () => {
 					const x = S.stock[+cb.getAttribute("data-idx")];
 					if (x && cb.checked) addSource(x); else removeSource((x || {}).item);
 				});
+			});
+			body.querySelectorAll(".ml-full").forEach((b) => {
+				b.addEventListener("click", () => fullSource(S.stock[+b.getAttribute("data-idx")]));
 			});
 		});
 	}
@@ -258,6 +290,8 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		if (!inputs.length) return frappe.msgprint(__("Tick at least one material with a weight."));
 		const output_weight = flt(outWt.value);
 		if (output_weight <= 0) return frappe.msgprint(__("Output weight must be greater than zero."));
+		const over = S.rows.filter((r) => flt(r.weight) > flt(r.available) + 0.0005);
+		if (over.length) return frappe.msgprint(__("Not enough stock: {0}. Use “Full” or lower the weight.", [over.map((r) => `${r.item} (need ${fmt(r.weight)}, have ${fmt(r.available)})`).join("; ")]));
 
 		frappe.dom.freeze(__("Melting…"));
 		frappe.call({
