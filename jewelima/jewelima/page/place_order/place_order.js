@@ -318,7 +318,9 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		const design = row.f.design.get();
 		if (!design) { row._materials = []; row._profile = null; applyProfile(row); return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
-			row._materials = ((r.message || {}).materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+			const msg = r.message || {};
+			row._materials = (msg.materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+			row._image = msg.image || "";
 			row._edited = false;
 			row._profile = planProfile(row._materials);
 			applyProfile(row);
@@ -337,11 +339,24 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		}
 	}
 
-	// Edit this bag's OWN materials (BOM). Seeded from the design's BOM; edits here recompute
-	// the line's weights/stones and are saved into Order Bag.bag_bom when the order is placed.
+	// Edit this bag's OWN materials (BOM) and see the photo. Seeded from the design's BOM;
+	// edits recompute the line's weights/stones and are saved into Order Bag.bag_bom on placing.
 	function editMaterials(row) {
 		const design = row.f.design.get();
 		if (!design) return frappe.msgprint(__("Pick a Design on this line first."));
+		if (row._materials && row._materials.length) return openMaterials(row, design);
+		// not pulled yet — fetch the design's BOM + photo first, then open
+		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
+			const msg = r.message || {};
+			row._materials = (msg.materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+			row._image = msg.image || "";
+			row._profile = planProfile(row._materials);
+			applyProfile(row);
+			openMaterials(row, design);
+		});
+	}
+
+	function openMaterials(row, design) {
 		function itemChanged() {
 			const r = this.doc || (this.grid_row && this.grid_row.doc);
 			if (!r) return;
@@ -364,9 +379,10 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			title: __("Materials — {0}", [design]),
 			size: "large",
 			fields: [
+				{ fieldname: "photo", fieldtype: "HTML" },
 				{
-					fieldname: "materials", fieldtype: "Table", reqd: 1, options: "Design BOM Item",
-					description: __("This bag's own BOM. Stones need a Qty + Weight (ct); metals need a Weight (g). The line updates on Apply."),
+					fieldname: "materials", fieldtype: "Table", reqd: 1, options: "Design BOM Item", data: [],
+					description: __("This bag's own BOM (copied from the design). Stones need a Qty + Weight (ct); metals need a Weight (g). The line updates on Apply."),
 					fields: [
 						{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: itemChanged },
 						{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
@@ -392,13 +408,12 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			},
 		});
 		dd.show();
-		// seed the grid with this line's current materials (add_new_row -> proper child docs)
+		if (row._image) {
+			dd.fields_dict.photo.$wrapper.html(`<div style="text-align:center;margin:0 0 12px;"><img src="${encodeURI(row._image)}" style="max-height:200px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`);
+		}
+		// seed the grid with this line's current materials (static-mode dialog grid)
 		const grid = dd.fields_dict.materials.grid;
-		(row._materials || []).forEach((m) => {
-			const gr = grid.add_new_row();
-			const doc = gr && gr.doc ? gr.doc : gr;
-			if (doc) { doc.item = m.item; doc.qty = m.qty; doc.weight = m.weight; doc.purity = m.purity; doc.uom = m.uom; doc.stone_type = m.stone_type; }
-		});
+		grid.df.data = (row._materials || []).map((m, i) => ({ idx: i + 1, name: "new-mat-" + (i + 1), item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
 		grid.refresh();
 	}
 

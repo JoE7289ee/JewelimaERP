@@ -508,6 +508,8 @@ def get_order_bag_images(order_bag):
 		order_by="creation desc",
 	)
 	bag = frappe.get_doc("Order Bag", order_bag)
+	if bag.image:
+		files.insert(0, {"file_url": bag.image, "file_name": bag.design or "design"})  # the bag's held design photo, first
 	for a in bag.attachments or []:
 		if a.image:
 			files.append({"file_url": a.image, "file_name": a.title or a.image.split("/")[-1]})

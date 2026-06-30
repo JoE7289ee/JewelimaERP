@@ -6,10 +6,12 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "image_field": "image",
  "field_order": [
   "details_tab",
   "job_order",
   "design",
+  "image",
   "qty",
   "size",
   "column_break_main",
@@ -94,6 +96,12 @@
    "in_list_view": 1,
    "label": "Design",
    "options": "Design"
+  },
+  {
+   "description": "Held from the design when the bag is created.",
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
   },
   {
    "default": "1",
