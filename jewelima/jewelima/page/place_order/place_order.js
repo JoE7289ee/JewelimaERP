@@ -65,7 +65,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
 			</div>
-			<div class="po-foot"><span class="po-count">0</span> line(s). Empty lines are ignored when you place the order. Pick an item to auto-fill its stones from the BOM.</div>
+			<div class="po-foot"><span class="po-count">0</span> line(s). Empty lines are ignored. Picking a design pulls its BOM — <b>Materials</b> edits a line's BOM, <b>Reset</b> restores it.</div>
 		</div>
 	`);
 
@@ -140,7 +140,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
 	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
-	$headrow.append('<th style="width:170px;text-align:center">Functions</th>');
+	$headrow.append('<th style="width:240px;text-align:center">Functions</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
 	const $body = $(page.main).find(".po-body");
@@ -252,13 +252,15 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		});
 		// actions cell — Split (enabled only when qty > 1); more buttons can live here later
 		const $act = $('<td class="po-act"></td>').appendTo($tr);
-		row.$design = $('<button class="btn btn-xs btn-default" title="View design raw materials">Design</button>').appendTo($act);
-		row.$design.on("click", () => showDesignInfo(row));
+		row.$design = $('<button class="btn btn-xs btn-default" title="Edit this bag\'s materials (BOM)">Materials</button>').appendTo($act);
+		row.$design.on("click", () => editMaterials(row));
 		row.$split = $('<button class="btn btn-xs btn-default" title="Split this line into multiple bags">Split</button>').appendTo($act);
 		row.$split.on("click", () => doSplit(row));
 		row._remark = "";
 		row.$remark = $('<button class="btn btn-xs btn-default" title="Add a remark">Remark</button>').appendTo($act);
 		row.$remark.on("click", () => editRemark(row));
+		row.$reset = $('<button class="btn btn-xs btn-default" title="Reset this line to the design\'s BOM">Reset</button>').appendTo($act);
+		row.$reset.on("click", () => resetLine(row));
 		updateDesignBtn(row);
 		updateSplitBtn(row);
 		updateRemarkBtn(row);
@@ -290,41 +292,114 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		if (row.$design) row.$design.prop("disabled", !row.f.design.get());
 	}
 
-	// Info-only dialog of the design's raw-materials (BOM) table — no link to the record.
-	function showDesignInfo(row) {
-		const design = row.f.design.get();
-		if (!design) return;
-		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
-			const d = r.message || {};
-			const mats = d.materials || [];
-			const esc = frappe.utils.escape_html;
-			const body = mats
-				.map((m) => `<tr>
-					<td>${esc(m.item_name || m.item)}</td>
-					<td>${esc(m.stone_type || "—")}</td>
-					<td class="r">${cint(m.qty) || 0}</td>
-					<td class="r">${flt(m.weight).toFixed(3)}</td>
-					<td>${esc(m.uom || "")}</td>
-					<td class="r">${m.purity ? flt(m.purity).toFixed(1) + "%" : ""}</td>
-				</tr>`)
-				.join("") || '<tr><td colspan="6" class="muted">No raw materials on this design.</td></tr>';
-			const html = `<style>
-				.dm-sub{color:var(--text-muted);font-size:12px;margin:0 0 8px;}
-				.dm-tbl{width:100%;border-collapse:collapse;font-size:13px;}
-				.dm-tbl th,.dm-tbl td{border-bottom:1px solid var(--border-color);padding:5px 8px;text-align:left;}
-				.dm-tbl th{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
-				.dm-tbl td.r,.dm-tbl th.r{text-align:right;font-variant-numeric:tabular-nums;}
-				.dm-tbl td.muted{color:var(--text-muted);text-align:center;}
-			</style>
-			${d.image ? `<div style="text-align:center;margin:0 0 10px;"><img src="${encodeURI(d.image)}" style="max-width:100%;max-height:240px;border-radius:8px;border:1px solid var(--border-color);" onerror="this.style.display='none'"></div>` : ""}
-			${d.design_type ? `<div class="dm-sub">${esc(d.design_type)}${d.design_style ? " &middot; " + esc(d.design_style) : ""}</div>` : ""}
-			<table class="dm-tbl"><thead><tr>
-				<th>Item</th><th>Stone Type</th><th class="r">Qty</th><th class="r">Weight</th><th>UOM</th><th class="r">Purity</th>
-			</tr></thead><tbody>${body}</tbody></table>`;
-			const dlg = new frappe.ui.Dialog({ title: __("Raw Materials — {0}", [design]), size: "large" });
-			$(dlg.body).html(html);
-			dlg.show();
+	// Per-piece plan profile from a materials list — mirrors api._plan_values: gross = metal
+	// grams + stone grams (1 ct = 0.2 g), nett = metal grams, gram-weighted metal purity.
+	// Lets edited materials recompute the line's numbers instantly (no round-trip).
+	function planProfile(mats) {
+		let metal = 0, pnum = 0, dmd_no = 0, dmd_w = 0, ps_no = 0, ps_w = 0, cs_no = 0, cs_w = 0;
+		const mp = [];
+		(mats || []).forEach((m) => {
+			const st = m.stone_type, wt = flt(m.weight), q = cint(m.qty);
+			if (st === "Diamond") { dmd_no += q; dmd_w += wt; }
+			else if (st === "Precious Stone") { ps_no += q; ps_w += wt; }
+			else if (st === "Color Stone") { cs_no += q; cs_w += wt; }
+			else { const pu = flt(m.purity); metal += wt; pnum += wt * pu; if (pu) mp.push(pu); }
 		});
+		const stone_g = (dmd_w + ps_w + cs_w) * 0.2;
+		const purity = metal ? pnum / metal : (mp.length ? mp.reduce((a, b) => a + b, 0) / mp.length : 0);
+		return {
+			gross_weight: +(metal + stone_g).toFixed(3), nett_weight: +metal.toFixed(3), purity: +purity.toFixed(3),
+			dmd_no, dmd_weight: +dmd_w.toFixed(3), ps_no, ps_weight: +ps_w.toFixed(3), cs_no, cs_weight: +cs_w.toFixed(3),
+		};
+	}
+
+	// Pull the design's BOM into this line's editable working copy + recompute.
+	function pullDesignBOM(row) {
+		const design = row.f.design.get();
+		if (!design) { row._materials = []; row._profile = null; applyProfile(row); return; }
+		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
+			row._materials = ((r.message || {}).materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+			row._edited = false;
+			row._profile = planProfile(row._materials);
+			applyProfile(row);
+		});
+	}
+
+	// Per-line reset: re-pull the design's BOM (discarding edits) and recompute. With no
+	// design picked yet, just clear the line's size/qty.
+	function resetLine(row) {
+		if (row.f.design.get()) {
+			pullDesignBOM(row);
+			frappe.show_alert({ message: __("Line reset to the design's BOM."), indicator: "blue" }, 3);
+		} else {
+			row.f.size.set(""); row.f.qty.set("");
+			row._materials = []; row._profile = null; applyProfile(row);
+		}
+	}
+
+	// Edit this bag's OWN materials (BOM). Seeded from the design's BOM; edits here recompute
+	// the line's weights/stones and are saved into Order Bag.bag_bom when the order is placed.
+	function editMaterials(row) {
+		const design = row.f.design.get();
+		if (!design) return frappe.msgprint(__("Pick a Design on this line first."));
+		function itemChanged() {
+			const r = this.doc || (this.grid_row && this.grid_row.doc);
+			if (!r) return;
+			if (!r.item) { r.purity = 0; r.uom = ""; r.pure = 0; r.stone_type = ""; dd.fields_dict.materials.grid.refresh(); return; }
+			frappe.db.get_value("Item", r.item, ["purity_percentage", "weight_unit", "stone_type"]).then((res) => {
+				const v = res.message || {};
+				r.purity = flt(v.purity_percentage); r.uom = v.weight_unit || ""; r.stone_type = v.stone_type || "";
+				if (!v.stone_type) r.qty = 0;
+				r.pure = v.stone_type ? 0 : (flt(r.weight) * flt(r.purity)) / 100;
+				dd.fields_dict.materials.grid.refresh();
+			});
+		}
+		function weightChanged() {
+			const r = this.doc || (this.grid_row && this.grid_row.doc);
+			if (!r) return;
+			r.pure = r.stone_type ? 0 : (flt(r.weight) * flt(r.purity)) / 100;
+			dd.fields_dict.materials.grid.refresh();
+		}
+		const dd = new frappe.ui.Dialog({
+			title: __("Materials — {0}", [design]),
+			size: "large",
+			fields: [
+				{
+					fieldname: "materials", fieldtype: "Table", reqd: 1, options: "Design BOM Item",
+					description: __("This bag's own BOM. Stones need a Qty + Weight (ct); metals need a Weight (g). The line updates on Apply."),
+					fields: [
+						{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: itemChanged },
+						{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
+						{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
+						{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
+						{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: weightChanged },
+						{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
+					],
+				},
+			],
+			primary_action_label: __("Apply"),
+			primary_action(values) {
+				const raw = (values.materials || []).filter((m) => m.item);
+				if (!raw.length) return frappe.msgprint(__("Add at least one material."));
+				const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
+				if (bad) return frappe.msgprint(bad.stone_type ? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item]) : __("{0} needs a Weight (grams).", [bad.item]));
+				row._materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0, purity: flt(m.purity) || 0, uom: m.uom || "", stone_type: m.stone_type || "" }));
+				row._edited = true;
+				row._profile = planProfile(row._materials);
+				applyProfile(row);
+				dd.hide();
+				frappe.show_alert({ message: __("Line materials updated."), indicator: "green" }, 3);
+			},
+		});
+		dd.show();
+		// seed the grid with this line's current materials (add_new_row -> proper child docs)
+		const grid = dd.fields_dict.materials.grid;
+		(row._materials || []).forEach((m) => {
+			const gr = grid.add_new_row();
+			const doc = gr && gr.doc ? gr.doc : gr;
+			if (doc) { doc.item = m.item; doc.qty = m.qty; doc.weight = m.weight; doc.purity = m.purity; doc.uom = m.uom; doc.stone_type = m.stone_type; }
+		});
+		grid.refresh();
 	}
 
 	function updateRemarkBtn(row) {
@@ -371,6 +446,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				for (let i = 1; i < n; i++) {
 					const nr = addRow(prev);
 					nr._profile = row._profile;
+					nr._materials = (row._materials || []).map((m) => ({ ...m }));
 					nr._lastDesign = design;
 					nr.f.design.set(design);
 					nr.f.size.set(size);
@@ -394,13 +470,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		const design = row.f.design.get();
 		if (!design || row._lastDesign === design) return;
 		row._lastDesign = design;
-		frappe.call({
-			method: "jewelima.jewelima.api.get_design_profile",
-			args: { design },
-		}).then((r) => {
-			row._profile = r.message || {};
-			applyProfile(row);
-		});
+		pullDesignBOM(row); // copy the design's BOM into the line, then recompute
 	}
 
 	// Fill the line from the design's PER-PIECE profile, scaled by qty.
@@ -461,6 +531,7 @@ function po_readLine(r) {
 		ps_no: cint(g("ps_no")) || 0, ps_weight: flt(g("ps_weight")) || 0,
 		cs_no: cint(g("cs_no")) || 0, cs_weight: flt(g("cs_weight")) || 0,
 		narration: r._remark || undefined,
+		bag_bom: (r._materials || []).map((m) => ({ item: m.item, qty: flt(m.qty) || 0, weight: flt(m.weight) || 0 })),
 	};
 }
 
@@ -510,6 +581,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
 				cs_no: l.cs_no, cs_weight: l.cs_weight, narration: l.narration,
+				bag_bom: l.bag_bom && l.bag_bom.length ? l.bag_bom : undefined,
 			});
 			made++;
 		}
