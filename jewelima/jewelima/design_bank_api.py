@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 """Whitelisted APIs for the Design Bank gallery + tag manager (custom Design Tag system)."""
 
+import re
+
 import frappe
 from frappe import _
 
@@ -148,3 +150,85 @@ def set_design_tags(designs, add=None, remove=None):
 
 	frappe.db.commit()
 	return {"ok": 1, "count": len(designs)}
+
+
+# --- Manual create (the "Add Design" page) -----------------------------------------
+
+def _clean_prefix(text):
+	"""Leading non-numeric part of the user's input: 'A 9' / 'A' -> 'A', 'BA 5256 RG' -> 'BA'."""
+	return re.split(r"\d", (text or "").strip(), 1)[0].strip()
+
+
+@frappe.whitelist()
+def check_design_no(design_no):
+	"""Does this exact design_no already exist? (for the Check button)."""
+	design_no = (design_no or "").strip()
+	if not design_no:
+		return {"empty": True, "exists": False, "design_no": design_no}
+	return {"empty": False, "exists": bool(frappe.db.exists("Design Bank", {"design_no": design_no})), "design_no": design_no}
+
+
+@frappe.whitelist()
+def next_design_no(prefix=None):
+	"""Next unused design_no for a prefix: '<prefix> <max+1>'. Empty prefix -> next plain number.
+	The user fills the prefix ('half'); this completes it with a number never used before."""
+	clean = _clean_prefix(prefix)
+	if clean:
+		pat = re.compile(r"^" + re.escape(clean) + r"\s+0*(\d+)\b")
+		maxn = 0
+		for (dn,) in frappe.db.sql("SELECT design_no FROM `tabDesign Bank` WHERE design_no LIKE %s", (clean + " %",)):
+			m = pat.match(dn or "")
+			if m:
+				maxn = max(maxn, int(m.group(1)))
+		n = maxn + 1
+		make = lambda i: f"{clean} {i}"
+	else:
+		row = frappe.db.sql("SELECT MAX(CAST(design_no AS UNSIGNED)) FROM `tabDesign Bank` WHERE design_no REGEXP '^[0-9]+$'")
+		n = int(row[0][0] or 0) + 1
+		make = lambda i: str(i)
+	cand = make(n)
+	while frappe.db.exists("Design Bank", {"design_no": cand}):
+		n += 1
+		cand = make(n)
+	return {"design_no": cand, "prefix": clean, "number": n}
+
+
+@frappe.whitelist()
+def create_design_bank(design_no, gross_weight=None, diamond_weight=None, note=None, image=None, tags=None):
+	"""Create a Design Bank entry from the Add Design page. Unknown tags are created."""
+	design_no = (design_no or "").strip()
+	if not design_no:
+		frappe.throw(_("Design No is required"))
+	if frappe.db.exists("Design Bank", {"design_no": design_no}):
+		frappe.throw(_("Design No '{0}' already exists").format(design_no))
+
+	tags = frappe.parse_json(tags) if isinstance(tags, str) else (tags or [])
+	tags = [t.strip() for t in tags if t and t.strip()]
+	for t in tags:
+		if not frappe.db.exists("Design Tag", t):
+			frappe.get_doc({"doctype": "Design Tag", "tag_name": t}).insert(ignore_permissions=True)
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "Design Bank",
+			"design_no": design_no,
+			"gross_weight": frappe.utils.flt(gross_weight) or None,
+			"diamond_weight": frappe.utils.flt(diamond_weight) or None,
+			"note": (note or "").strip() or None,
+			"image": image or None,
+			"tags": [{"tag": t} for t in tags],
+		}
+	).insert(ignore_permissions=True)
+
+	# bind the uploaded image (uploaded with no parent on the page) to this record
+	if image:
+		for fn in frappe.get_all(
+			"File", filters={"file_url": image, "attached_to_name": ["in", ["", None]]}, pluck="name"
+		):
+			frappe.db.set_value(
+				"File", fn,
+				{"attached_to_doctype": "Design Bank", "attached_to_name": doc.name, "attached_to_field": "image"},
+			)
+
+	frappe.db.commit()
+	return {"name": doc.name, "design_no": doc.design_no}
