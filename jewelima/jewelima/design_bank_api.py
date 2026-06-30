@@ -232,3 +232,37 @@ def create_design_bank(design_no, gross_weight=None, diamond_weight=None, note=N
 
 	frappe.db.commit()
 	return {"name": doc.name, "design_no": doc.design_no}
+
+
+# --- Retire / delete (the "Retire Design" page) ------------------------------------
+
+@frappe.whitelist()
+def get_design_bank_detail(name):
+	"""Full detail for one catalog entry + whether it has been used to create a Design
+	(Design.design_bank). used_by non-empty => deletion is blocked."""
+	if not name or not frappe.db.exists("Design Bank", name):
+		frappe.throw(_("Select a design first"))
+	d = frappe.db.get_value(
+		"Design Bank", name,
+		["name", "design_no", "image", "gross_weight", "diamond_weight", "note"],
+		as_dict=True,
+	)
+	d["tags"] = frappe.get_all("Design Bank Tag", filters={"parent": name}, pluck="tag")
+	d["used_by"] = frappe.get_all("Design", filters={"design_bank": name}, pluck="name")
+	d["can_delete"] = not d["used_by"]
+	return d
+
+
+@frappe.whitelist()
+def delete_design_bank(name):
+	"""Permanently remove a catalog entry — ONLY if no Design was created from it."""
+	frappe.only_for(["System Manager", "Stock Manager"])
+	if not name or not frappe.db.exists("Design Bank", name):
+		frappe.throw(_("Not found"))
+	used = frappe.get_all("Design", filters={"design_bank": name}, pluck="name")
+	if used:
+		frappe.throw(_("Cannot delete — this design was used to create Design(s): {0}").format(", ".join(used)))
+	design_no = frappe.db.get_value("Design Bank", name, "design_no")
+	frappe.delete_doc("Design Bank", name, ignore_permissions=True)  # tags + uploaded image File cascade
+	frappe.db.commit()
+	return {"ok": 1, "design_no": design_no}

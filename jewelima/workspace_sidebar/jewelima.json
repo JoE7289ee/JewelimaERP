@@ -449,6 +449,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "trash-2",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Retire Design",
+   "link_to": "retire-design",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "list",
@@ -527,7 +540,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-30 11:05:56.244128",
+ "modified": "2026-06-30 11:15:13.850799",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
