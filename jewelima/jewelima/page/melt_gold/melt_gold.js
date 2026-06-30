@@ -18,8 +18,8 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		.ml-page{display:flex;flex-direction:column;gap:20px;}
-		.ml-left{width:100%;max-width:900px;}
-		.ml-right{width:100%;max-width:900px;}
+		.ml-left{width:100%;}
+		.ml-right{width:100%;}
 		.ml-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px;margin:2px 0 10px;align-items:end;}
 		.ml-bar .help-box,.ml-bar .description{display:none !important;}
 		.ml-bar .frappe-control{margin:0;}
