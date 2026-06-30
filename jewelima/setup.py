@@ -468,6 +468,14 @@ def get_item_custom_fields():
 				"insert_after": "qty",
 				"description": "Number of stones received (informational; stock is by carat).",
 			},
+			{
+				"fieldname": "custom_purity",
+				"fieldtype": "Float",
+				"label": "Purity %",
+				"precision": "2",
+				"insert_after": "custom_stone_count",
+				"description": "Purity recorded at purchase (informational; pure content uses the item's purity).",
+			},
 		],
 		"Warehouse": [
 			{

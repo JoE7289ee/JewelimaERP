@@ -228,6 +228,8 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 		row = {"item_code": item, "qty": weight, "rate": flt(i.get("rate")), "warehouse": warehouse}
 		if stype.get(item):
 			row["custom_stone_count"] = count
+		else:
+			row["custom_purity"] = flt(i.get("purity"))
 		rows.append(row)
 	if not rows:
 		frappe.throw(frappe._("Add at least one item with a weight."))

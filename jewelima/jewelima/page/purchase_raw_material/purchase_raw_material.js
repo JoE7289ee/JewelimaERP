@@ -11,7 +11,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	const COLS = [
 		{ key: "item", label: "Item", type: "link", options: "Item", width: "220px" },
 		{ key: "uom", label: "UOM", type: "display", width: "70px" },
-		{ key: "purity", label: "Purity %", type: "display", width: "80px" },
+		{ key: "purity", label: "Purity %", type: "num", step: "0.01", width: "90px" },
 		{ key: "count", label: "Qty", type: "num", step: "1", width: "90px" },
 		{ key: "gram", label: "Gram", type: "num", step: "0.001", width: "110px" },
 		{ key: "carat", label: "Carat", type: "num", step: "0.001", width: "110px" },
@@ -113,17 +113,18 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		frappe.db.get_value("Item", item, ["weight_unit", "purity_percentage", "stone_type"]).then((r) => {
 			const v = r.message || {};
 			if (row.setUom) row.setUom(v.weight_unit);
-			if (row.setPurity) row.setPurity(v.purity_percentage);
 			row.isStone = !!v.stone_type;
-			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat;
+			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat, $p = row.inputs.purity;
 			if (row.isStone) {
 				if ($c) $c.prop("disabled", false).attr("placeholder", "count");
 				if ($g) $g.prop("disabled", true).val("").attr("placeholder", "—");
 				if ($ct) $ct.prop("disabled", false).attr("placeholder", "carats");
+				if ($p) $p.prop("disabled", true).val("").attr("placeholder", "—");
 			} else {
 				if ($c) $c.prop("disabled", true).val("").attr("placeholder", "—");
 				if ($g) $g.prop("disabled", false).attr("placeholder", "grams");
 				if ($ct) $ct.prop("disabled", true).val("").attr("placeholder", "—");
+				if ($p) $p.prop("disabled", false).val(v.purity_percentage || "").attr("placeholder", "%");
 			}
 			recalc();
 		});
@@ -148,7 +149,6 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 				const $s = $('<div class="pr-disp"></div>').appendTo($td);
 				row.f[col.key] = { get: () => $s.text(), set: (v) => $s.text(v == null ? "" : v) };
 				if (col.key === "uom") row.setUom = (v) => $s.text(v || "");
-				if (col.key === "purity") row.setPurity = (v) => $s.text(v || "");
 			} else {
 				const $i = $(`<input type="number" step="${col.step}" min="0">`).appendTo($td);
 				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
@@ -192,7 +192,7 @@ function postPurchase(page, state, $body) {
 	const warehouse = state.header.warehouse.get_value();
 	const posting_date = state.header.posting_date.get_value();
 	const items = state.rows
-		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.isStone ? r.f.carat.get() : r.f.gram.get()) || 0, count: cint(r.f.count.get()) || 0, isStone: !!r.isStone }))
+		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.isStone ? r.f.carat.get() : r.f.gram.get()) || 0, count: cint(r.f.count.get()) || 0, purity: flt(r.f.purity.get()) || 0, isStone: !!r.isStone }))
 		.filter((l) => l.item && l.weight > 0);
 
 	if (!items.length) return frappe.msgprint(__("Add at least one item with a weight."));
