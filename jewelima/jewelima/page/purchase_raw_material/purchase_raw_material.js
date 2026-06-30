@@ -14,8 +14,6 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		{ key: "purity", label: "Purity %", type: "display", width: "80px" },
 		{ key: "count", label: "Qty", type: "num", step: "1", width: "90px" },
 		{ key: "weight", label: "Weight", type: "num", step: "0.001", width: "110px" },
-		{ key: "rate", label: "Rate", type: "num", step: "0.01", width: "100px" },
-		{ key: "amount", label: "Amount", type: "display", width: "110px" },
 	];
 
 	$(page.main).append(`
@@ -62,7 +60,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		return c;
 	};
 	state.header.supplier = mk(".pr-h-supplier", { fieldtype: "Link", label: "Supplier", fieldname: "supplier", options: "Supplier" });
-	state.header.posting_date = mk(".pr-h-date", { fieldtype: "Date", label: "Date", fieldname: "posting_date" });
+	state.header.posting_date = mk(".pr-h-date", { fieldtype: "Date", label: "Date", fieldname: "posting_date", read_only: 1 });
 	state.header.warehouse = mk(".pr-h-wh", { fieldtype: "Link", label: "Warehouse", fieldname: "warehouse", options: "Warehouse", get_query: () => ({ filters: { is_group: 0, custom_is_purchase_location: 1 } }) });
 	state.header.posting_date.set_value(frappe.datetime.get_today());
 
@@ -87,23 +85,18 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	const totals = {};
 	COLS.forEach((c) => {
 		const $td = $("<td></td>").appendTo($fr);
-		if (c.key === "count" || c.key === "weight" || c.key === "amount") totals[c.key] = $td;
+		if (c.key === "count" || c.key === "weight") totals[c.key] = $td;
 	});
 	$fr.append("<td></td>");
 
 	function recalc() {
-		let csum = 0, wsum = 0, a = 0;
+		let csum = 0, wsum = 0;
 		state.rows.forEach((r) => {
-			const w = flt(r.f.weight.get());
-			const amt = w * flt(r.f.rate.get());
 			csum += cint(r.f.count.get());
-			wsum += w;
-			a += amt;
-			if (r.setAmount) r.setAmount(amt);
+			wsum += flt(r.f.weight.get());
 		});
 		if (totals.count) totals.count.text(csum || "");
 		totals.weight.text(wsum.toFixed(3));
-		totals.amount.text(a.toFixed(2));
 		$(page.main).find(".pr-count").text(state.rows.length);
 	}
 	function renumber() {
@@ -147,7 +140,6 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			} else if (col.type === "display") {
 				const $s = $('<div class="pr-disp"></div>').appendTo($td);
 				row.f[col.key] = { get: () => $s.text(), set: (v) => $s.text(v == null ? "" : v) };
-				if (col.key === "amount") row.setAmount = (v) => $s.text(flt(v).toFixed(2));
 				if (col.key === "uom") row.setUom = (v) => $s.text(v || "");
 				if (col.key === "purity") row.setPurity = (v) => $s.text(v || "");
 			} else {
@@ -186,7 +178,7 @@ function postPurchase(page, state, $body) {
 	const warehouse = state.header.warehouse.get_value();
 	const posting_date = state.header.posting_date.get_value();
 	const items = state.rows
-		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.f.weight.get()) || 0, count: cint(r.f.count.get()) || 0, rate: flt(r.f.rate.get()) || 0, isStone: !!r.isStone }))
+		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.f.weight.get()) || 0, count: cint(r.f.count.get()) || 0, isStone: !!r.isStone }))
 		.filter((l) => l.item && l.weight > 0);
 
 	if (!items.length) return frappe.msgprint(__("Add at least one item with a weight."));

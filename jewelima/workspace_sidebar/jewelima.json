@@ -191,6 +191,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "shopping-cart",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Purchase Raw Material",
+   "link_to": "purchase-raw-material",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "circle-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -477,19 +490,6 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "shopping-cart",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Purchase Raw Material",
-   "link_to": "purchase-raw-material",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
    "icon": "palette",
    "indent": 1,
    "keep_closed": 0,
@@ -553,7 +553,7 @@
    "url": ""
   }
  ],
- "modified": "2026-06-30 15:39:53.812585",
+ "modified": "2026-06-30 18:02:38.611942",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
