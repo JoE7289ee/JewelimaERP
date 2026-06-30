@@ -13,7 +13,8 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		{ key: "uom", label: "UOM", type: "display", width: "70px" },
 		{ key: "purity", label: "Purity %", type: "display", width: "80px" },
 		{ key: "count", label: "Qty", type: "num", step: "1", width: "90px" },
-		{ key: "weight", label: "Weight", type: "num", step: "0.001", width: "110px" },
+		{ key: "gram", label: "Gram", type: "num", step: "0.001", width: "110px" },
+		{ key: "carat", label: "Carat", type: "num", step: "0.001", width: "110px" },
 	];
 
 	$(page.main).append(`
@@ -50,7 +51,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			<div class="pr-gridbox">
 				<table class="pr-grid"><thead><tr class="pr-headrow"></tr></thead><tbody class="pr-body"></tbody><tfoot><tr class="pr-footrow"></tr></tfoot></table>
 			</div>
-			<div class="pr-foot"><span class="pr-count">0</span> line(s). Stones need a Qty (count) and a Weight (carats); metals need a Weight (grams). Posts a submitted Purchase Receipt into the chosen warehouse.</div>
+			<div class="pr-foot"><span class="pr-count">0</span> line(s). Pick an item first — metals fill <b>Gram</b>, stones fill <b>Qty</b> + <b>Carat</b>. A new row appears as you enter a weight. Posts a submitted Purchase Receipt.</div>
 		</div>
 	`);
 
@@ -85,18 +86,20 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	const totals = {};
 	COLS.forEach((c) => {
 		const $td = $("<td></td>").appendTo($fr);
-		if (c.key === "count" || c.key === "weight") totals[c.key] = $td;
+		if (c.key === "count" || c.key === "gram" || c.key === "carat") totals[c.key] = $td;
 	});
 	$fr.append("<td></td>");
 
 	function recalc() {
-		let csum = 0, wsum = 0;
+		let csum = 0, gsum = 0, ctsum = 0;
 		state.rows.forEach((r) => {
 			csum += cint(r.f.count.get());
-			wsum += flt(r.f.weight.get());
+			gsum += flt(r.f.gram.get());
+			ctsum += flt(r.f.carat.get());
 		});
 		if (totals.count) totals.count.text(csum || "");
-		totals.weight.text(wsum.toFixed(3));
+		if (totals.gram) totals.gram.text(gsum ? gsum.toFixed(3) : "");
+		if (totals.carat) totals.carat.text(ctsum ? ctsum.toFixed(3) : "");
 		$(page.main).find(".pr-count").text(state.rows.length);
 	}
 	function renumber() {
@@ -112,12 +115,16 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			if (row.setUom) row.setUom(v.weight_unit);
 			if (row.setPurity) row.setPurity(v.purity_percentage);
 			row.isStone = !!v.stone_type;
-			const $c = row.inputs && row.inputs.count;
-			if ($c) {
-				if (row.isStone) $c.prop("disabled", false).attr("placeholder", "count");
-				else $c.prop("disabled", true).val("").attr("placeholder", "—");
+			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat;
+			if (row.isStone) {
+				if ($c) $c.prop("disabled", false).attr("placeholder", "count");
+				if ($g) $g.prop("disabled", true).val("").attr("placeholder", "—");
+				if ($ct) $ct.prop("disabled", false).attr("placeholder", "carats");
+			} else {
+				if ($c) $c.prop("disabled", true).val("").attr("placeholder", "—");
+				if ($g) $g.prop("disabled", false).attr("placeholder", "grams");
+				if ($ct) $ct.prop("disabled", true).val("").attr("placeholder", "—");
 			}
-			if (row.inputs && row.inputs.weight) row.inputs.weight.attr("placeholder", row.isStone ? "carats" : "grams");
 			recalc();
 		});
 	}
@@ -146,7 +153,8 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 				const $i = $(`<input type="number" step="${col.step}" min="0">`).appendTo($td);
 				row.f[col.key] = { get: () => $i.val(), set: (v) => $i.val(v == null ? "" : v) };
 				row.inputs[col.key] = $i;
-				if (col.key === "count") $i.prop("disabled", true).attr("placeholder", "—");
+				$i.prop("disabled", true).attr("placeholder", "—"); // enabled by onItem once an item is picked
+				if (col.key === "gram" || col.key === "carat") $i.on("input", () => maybeAddRow(row));
 			}
 		});
 		const $rm = $('<td><button class="btn btn-xs btn-default" title="Remove">&times;</button></td>').appendTo($tr);
@@ -164,6 +172,12 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	}
 	state.addRow = addRow;
 
+	// auto-append a fresh line once the last row gets a weight (gram or carat)
+	function maybeAddRow(row) {
+		const hasWeight = flt(row.f.gram.get()) > 0 || flt(row.f.carat.get()) > 0;
+		if (hasWeight && state.rows[state.rows.length - 1] === row) addRow();
+	}
+
 	$body.on("input change", "input", () => recalc());
 
 	page.add_inner_button(__("Add Row"), () => addRow());
@@ -178,7 +192,7 @@ function postPurchase(page, state, $body) {
 	const warehouse = state.header.warehouse.get_value();
 	const posting_date = state.header.posting_date.get_value();
 	const items = state.rows
-		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.f.weight.get()) || 0, count: cint(r.f.count.get()) || 0, isStone: !!r.isStone }))
+		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.isStone ? r.f.carat.get() : r.f.gram.get()) || 0, count: cint(r.f.count.get()) || 0, isStone: !!r.isStone }))
 		.filter((l) => l.item && l.weight > 0);
 
 	if (!items.length) return frappe.msgprint(__("Add at least one item with a weight."));
