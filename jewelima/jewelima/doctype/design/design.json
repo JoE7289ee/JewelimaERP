@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:design_name",
+ "creation": "2026-06-15 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "image_field": "image",
+ "field_order": [
+  "design_name",
+  "design_type",
+  "design_style",
+  "status",
+  "column_break_main",
+  "image",
+  "item",
+  "bom",
+  "design_bank",
+  "stones_section",
+  "dmd_no",
+  "ps_no",
+  "col_break_stone",
+  "cs_no",
+  "purity",
+  "bom_section",
+  "materials"
+ ],
+ "fields": [
+  {
+   "fieldname": "design_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Design Name",
+   "reqd": 1,
+   "set_only_once": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Design Type",
+   "options": "Design Type",
+   "reqd": 1
+  },
+  {
+   "default": "General",
+   "fieldname": "design_style",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Design Style",
+   "options": "Design Style"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nRetired",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Design Image"
+  },
+  {
+   "description": "Sellable item auto-created with the same code (allow sales, excluded from manufacturing).",
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bom",
+   "fieldtype": "Link",
+   "label": "BOM",
+   "options": "BOM",
+   "read_only": 1
+  },
+  {
+   "description": "The Design Bank catalog entry this design was created from (if any).",
+   "fieldname": "design_bank",
+   "fieldtype": "Link",
+   "label": "Design Bank",
+   "options": "Design Bank"
+  },
+  {
+   "description": "Auto-derived from the Bill of Materials below.",
+   "fieldname": "stones_section",
+   "fieldtype": "Section Break",
+   "label": "Stones & Purity (auto)"
+  },
+  {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "DMD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ps_no",
+   "fieldtype": "Int",
+   "label": "PS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_stone",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "CS No",
+   "read_only": 1
+  },
+  {
+   "description": "Gold purity %. Auto-fill logic to be defined.",
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity (%)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Raw materials needed (becomes the BOM). Includes gold + any stones.",
+   "fieldname": "bom_section",
+   "fieldtype": "Section Break",
+   "label": "Bill of Materials"
+  },
+  {
+   "fieldname": "materials",
+   "fieldtype": "Table",
+   "label": "Materials",
+   "options": "Design BOM Item",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-15 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Design",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

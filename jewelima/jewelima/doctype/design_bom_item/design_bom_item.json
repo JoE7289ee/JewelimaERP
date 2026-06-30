@@ -1,0 +1,99 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-15 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "item_name",
+  "purity",
+  "uom",
+  "stone_type",
+  "qty",
+  "weight",
+  "pure"
+ ],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Material",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "item.item_name",
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item.purity_percentage",
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Purity %",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item.weight_unit",
+   "fieldname": "uom",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "UOM",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "item.stone_type",
+   "fieldname": "stone_type",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Stone Type",
+   "read_only": 1
+  },
+  {
+   "description": "Number of stones. Not used for metal.",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Base Qty",
+   "mandatory_depends_on": "eval:doc.stone_type",
+   "precision": "3",
+   "read_only_depends_on": "eval:!doc.stone_type"
+  },
+  {
+   "description": "Grams for metal, carats for stones (see UOM).",
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight",
+   "precision": "3"
+  },
+  {
+   "description": "Pure gold grams = weight x purity%. 0 for stones.",
+   "fieldname": "pure",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Pure (g)",
+   "precision": "3",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-16 13:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Design BOM Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

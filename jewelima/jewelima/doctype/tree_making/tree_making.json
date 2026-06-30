@@ -2,68 +2,68 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "TREE-.#####",
- "creation": "2026-06-12 00:00:00.000000",
+ "naming_rule": "Expression (old style)",
+ "creation": "2026-06-18 12:00:00.000000",
+ "modified": "2026-06-18 12:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
  "field_order": [
-  "job_order",
-  "work_order",
+  "order_bag",
+  "bench",
   "employee",
-  "column_break_main",
+  "status",
+  "cb_times",
   "time_in",
   "time_out",
-  "status",
-  "next_stage",
-  "materials_section",
-  "materials",
-  "bench_stock",
-  "tracking_section",
-  "transfer_stock_entry",
-  "product_info_tab",
-  "stones_section",
-  "dmd_no",
-  "dmd_weight_ct",
-  "col_break_st1",
-  "ps_no",
-  "ps_weight_ct",
-  "col_break_st2",
-  "cs_no",
-  "cs_weight_ct",
-  "weights_section",
-  "gross_weight",
-  "nett_weight",
-  "col_break_wt",
-  "purity",
-  "pure_weight"
+  "issued_at",
+  "receipted_at",
+  "sec_weights",
+  "weight_out",
+  "weight_in",
+  "cb_weights",
+  "loss",
+  "sec_remarks",
+  "remarks"
  ],
  "fields": [
   {
-   "fieldname": "job_order",
+   "fieldname": "order_bag",
    "fieldtype": "Link",
-   "options": "Job Order",
-   "label": "Job Order",
+   "options": "Order Bag",
+   "label": "Order Bag",
+   "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
   },
   {
-   "fieldname": "work_order",
-   "fieldtype": "Link",
-   "options": "Work Order",
-   "label": "Work Order",
-   "in_list_view": 1,
+   "fieldname": "bench",
+   "fieldtype": "Data",
+   "label": "Bench",
+   "default": "Tree Making",
+   "read_only": 1,
    "in_standard_filter": 1
   },
   {
    "fieldname": "employee",
    "fieldtype": "Link",
    "options": "Employee",
-   "label": "Employee / Smith",
+   "label": "Employee",
    "in_list_view": 1,
    "in_standard_filter": 1
   },
   {
-   "fieldname": "column_break_main",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted",
+   "default": "In Queue",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "cb_times",
    "fieldtype": "Column Break"
   },
   {
@@ -77,150 +77,62 @@
    "label": "Time Out"
   },
   {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "options": "In Queue\nIn Progress\nCompleted\nOnHold\nCancelled",
-   "default": "In Queue",
-   "label": "Status",
-   "in_list_view": 1,
-   "in_standard_filter": 1
+   "fieldname": "issued_at",
+   "fieldtype": "Datetime",
+   "label": "Issued At"
   },
   {
-   "fieldname": "next_stage",
-   "fieldtype": "Select",
-   "options": "\nCAD\nCAM\nTree Making\nCasting\nGrinding\nFiling\nSetting\nPre Polish\nWax Setting\nFinal Polish\nWax Cleaning\nBag Extraction",
-   "label": "Next Stage",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "description": "Where this piece goes after this stage completes. Leave blank if this is the final stage."
+   "fieldname": "receipted_at",
+   "fieldtype": "Datetime",
+   "label": "Receipted At"
   },
   {
-   "fieldname": "product_info_tab",
-   "fieldtype": "Tab Break",
-   "label": "Product Info"
-  },
-  {
-   "fieldname": "stones_section",
+   "fieldname": "sec_weights",
    "fieldtype": "Section Break",
-   "label": "Stones"
+   "label": "Weight"
   },
   {
-   "fieldname": "dmd_no",
-   "fieldtype": "Int",
-   "label": "DMD No"
-  },
-  {
-   "fieldname": "dmd_weight_ct",
+   "fieldname": "weight_out",
    "fieldtype": "Float",
-   "label": "DMD Weight (ct)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "col_break_st1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "ps_no",
-   "fieldtype": "Int",
-   "label": "PS No"
-  },
-  {
-   "fieldname": "ps_weight_ct",
-   "fieldtype": "Float",
-   "label": "PS Weight (ct)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "col_break_st2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cs_no",
-   "fieldtype": "Int",
-   "label": "CS No"
-  },
-  {
-   "fieldname": "cs_weight_ct",
-   "fieldtype": "Float",
-   "label": "CS Weight (ct)",
-   "precision": "3"
-  },
-  {
-   "fieldname": "weights_section",
-   "fieldtype": "Section Break",
-   "label": "Weights"
-  },
-  {
-   "fieldname": "gross_weight",
-   "fieldtype": "Float",
-   "label": "Gross Weight (g)",
-   "precision": "3",
-   "description": "Total weight of the product."
-  },
-  {
-   "fieldname": "nett_weight",
-   "fieldtype": "Float",
-   "label": "Nett Weight (g)",
+   "label": "Weight Out (Issued)",
    "precision": "3",
    "read_only": 1,
-   "description": "Gross weight minus total stone weight (carats converted to grams)."
+   "in_list_view": 1
   },
   {
-   "fieldname": "col_break_wt",
+   "fieldname": "weight_in",
+   "fieldtype": "Float",
+   "label": "Weight In (Received)",
+   "precision": "3",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cb_weights",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "purity",
+   "fieldname": "loss",
    "fieldtype": "Float",
-   "label": "Purity (%)",
-   "precision": "3",
-   "description": "Percent of gold."
-  },
-  {
-   "fieldname": "pure_weight",
-   "fieldtype": "Float",
-   "label": "Pure Weight (g)",
+   "label": "Loss",
    "precision": "3",
    "read_only": 1,
-   "description": "Nett weight x purity %."
+   "in_list_view": 1
   },
   {
-   "fieldname": "materials_section",
-   "fieldtype": "Section Break",
-   "label": "Materials (Bench)"
+   "fieldname": "sec_remarks",
+   "fieldtype": "Section Break"
   },
   {
-   "fieldname": "materials",
-   "fieldtype": "Table",
-   "options": "Stage Material",
-   "label": "Materials"
-  },
-  {
-   "fieldname": "bench_stock",
-   "fieldtype": "HTML",
-   "label": "Bench Warehouse Stock"
-  },
-  {
-   "fieldname": "tracking_section",
-   "fieldtype": "Section Break",
-   "label": "Stock Movement"
-  },
-  {
-   "fieldname": "transfer_stock_entry",
-   "fieldtype": "Link",
-   "options": "Stock Entry",
-   "label": "Output Transfer Entry",
-   "read_only": 1
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
   }
  ],
- "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-14 18:50:15.801253",
- "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Tree Making",
- "naming_rule": "Expression (old style)",
  "owner": "Administrator",
+ "modified_by": "Administrator",
  "permissions": [
   {
    "create": 1,
@@ -230,9 +142,21 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
    "share": 1,
-   "write": 1
+   "write": 1,
+   "role": "System Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "share": 1,
+   "write": 1,
+   "role": "Stock User"
   }
  ],
  "sort_field": "creation",

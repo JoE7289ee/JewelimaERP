@@ -1,0 +1,35 @@
+{
+ "content": null,
+ "creation": "2026-06-15 13:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-06-29 22:46:29.955861",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "place-order",
+ "owner": "Administrator",
+ "page_name": "place-order",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Manufacturing User"
+  },
+  {
+   "role": "Jewelima"
+  },
+  {
+   "role": "Jewelima Ordering"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Place Order"
+}

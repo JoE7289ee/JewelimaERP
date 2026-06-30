@@ -1,0 +1,87 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Employee Performance{% endblock %}
+
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block banner %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block style %}
+<style>
+	/* strip every bit of website chrome so only the board shows */
+	.navbar, header, footer, .web-footer, .page-breadcrumbs, .web-sidebar, #navbar-search { display: none !important; }
+	html, body { margin: 0 !important; padding: 0 !important; height: 100%; background: #0f1419 !important; }
+	main, .main-section, #body, .page_content, .container, .page-content-wrapper {
+		margin: 0 !important; padding: 0 !important; max-width: none !important; width: 100% !important; }
+
+	.tv { background: #0f1419; color: #e8edf2; min-height: 100vh; padding: 22px 34px 28px;
+		font-family: -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif; box-sizing: border-box; }
+	.tv-head { display: flex; justify-content: space-between; align-items: flex-end;
+		border-bottom: 2px solid #2a3138; padding-bottom: 14px; margin-bottom: 4px; }
+	.tv-title { font-size: 34px; font-weight: 800; letter-spacing: .5px; }
+	.tv-title span { color: #c9a227; }
+	.tv-meta { font-size: 16px; color: #8a97a3; text-align: right; line-height: 1.35; }
+	.tv-meta b { color: #e8edf2; }
+	table.tv-tbl { width: 100%; border-collapse: collapse; font-size: 24px; }
+	table.tv-tbl th { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: #7c8a96;
+		text-align: right; padding: 14px 18px 11px; border-bottom: 1px solid #2a3138; }
+	table.tv-tbl th.l { text-align: left; }
+	table.tv-tbl td { padding: 13px 18px; text-align: right; border-bottom: 1px solid #1b2228; font-variant-numeric: tabular-nums; }
+	table.tv-tbl td.l { text-align: left; }
+	table.tv-tbl tbody tr:nth-child(even) { background: #141b21; }
+	.tv-rank { width: 64px; font-weight: 800; color: #7c8a96; }
+	.tv-name { font-weight: 600; }
+	.tv-1 { background: #1d2433 !important; } .tv-1 .tv-rank { color: #ffd24a; }
+	.tv-2 .tv-rank { color: #cfd6dd; } .tv-3 .tv-rank { color: #d8954a; }
+	.tv-pieces { font-weight: 800; font-size: 28px; color: #7fd1a3; }
+	.tv-ok { color: #7fd1a3; } .tv-mid { color: #e6b450; } .tv-hi { color: #e06b6b; }
+	.tv-dim { color: #5e6b76; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="tv">
+	<div class="tv-head">
+		<div class="tv-title">JEWELIMA &middot; <span>Employee Performance</span></div>
+		<div class="tv-meta">Last <b id="tv-period">30 days</b><br><span id="tv-asof"></span></div>
+	</div>
+	<div id="tv-out"></div>
+</div>
+
+<script>
+(function () {
+	var DAYS = 30, REFRESH = 25000;
+	function esc(s){ var d=document.createElement("div"); d.textContent = s==null?"":s; return d.innerHTML; }
+	function lossCls(p){ return p < 1 ? "tv-ok" : p < 2 ? "tv-mid" : "tv-hi"; }
+
+	function render(d){
+		document.getElementById("tv-period").textContent = (d.period_days||DAYS) + " days";
+		document.getElementById("tv-asof").textContent = d.as_of ? "as of " + d.as_of : "";
+		var rows = (d.rows||[]).slice(0,12).map(function(r,i){
+			return '<tr class="' + (i<3?"tv-"+(i+1):"") + '">' +
+				'<td class="l tv-rank">' + (i+1) + '</td>' +
+				'<td class="l tv-name">' + esc(r.name) + '</td>' +
+				'<td class="tv-pieces">' + r.pieces + '</td>' +
+				'<td>' + (r.today ? r.today : '<span class="tv-dim">0</span>') + '</td>' +
+				'<td>' + (r.active ? r.active : '<span class="tv-dim">0</span>') + '</td>' +
+				'<td class="' + lossCls(r.loss_pct) + '">' + Number(r.loss_pct).toFixed(2) + '%</td>' +
+			'</tr>';
+		}).join("") || '<tr><td class="l tv-dim" colspan="6">No bench activity yet.</td></tr>';
+		document.getElementById("tv-out").innerHTML =
+			'<table class="tv-tbl"><thead><tr>' +
+			'<th class="l" style="width:64px">#</th><th class="l">Employee</th>' +
+			'<th>Pieces</th><th>Today</th><th>In&nbsp;Hand</th><th>Loss&nbsp;%</th>' +
+			'</tr></thead><tbody>' + rows + '</tbody></table>';
+	}
+	function load(){
+		fetch("/api/method/jewelima.jewelima.api.get_employee_performance?days=" + DAYS, { credentials: "same-origin", headers: { Accept: "application/json" } })
+			.then(function(r){ return r.json(); })
+			.then(function(j){ if (j && j.message) render(j.message); })
+			.catch(function(){});
+	}
+	load();
+	setInterval(load, REFRESH);
+})();
+</script>
+{% endblock %}

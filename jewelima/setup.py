@@ -3,25 +3,287 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
 def after_install():
+	set_default_timezone()
+	relax_employee_mandatory()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
-	create_raw_material_items()
+	create_order_types()
+	create_default_supplier()
+	create_jd_stock_customer()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+	flag_melt_warehouses()
+	seed_raw_materials()
+	seed_karat_golds()
+	sync_workspace_sidebar()
+	setup_roles()
+	seed_benches()
 
 
 def after_migrate():
 	# All seeders are idempotent. Items + warehouses need a Company / item groups
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
+	set_default_timezone()
+	relax_employee_mandatory()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
-	create_raw_material_items()
+	create_order_types()
+	create_default_supplier()
+	create_jd_stock_customer()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+	flag_melt_warehouses()
+	seed_raw_materials()
+	seed_karat_golds()
+	sync_workspace_sidebar()
+	setup_roles()
+	seed_benches()
+
+
+# ---------------------------------------------------------------------------
+# Roles & permissions
+# ---------------------------------------------------------------------------
+# ERPNext masters a Jewelima user needs to READ (we don't own these doctypes).
+JEWELIMA_READ_ERPNEXT = [
+	"Customer", "Item", "Item Group", "Sales Person", "Warehouse",
+	"BOM", "Employee", "UOM", "Company", "Bin",
+]
+# Order-flow doctypes the Ordering role fully manages.
+JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design"]
+# Desk pages the order-taker uses.
+JEWELIMA_ORDER_PAGES = ["place-order", "card-info", "job-order-status"]
+
+
+def setup_roles():
+	"""Create the Jewelima role hierarchy + permissions. Idempotent (runs on after_migrate).
+
+	  Jewelima          — base for every user: desk access + READ-ONLY on our doctypes and the
+	                      ERPNext masters we use; nothing from other modules.
+	  Jewelima Ordering — sits on top: full control of the order flow (Job Order, Order Bag,
+	                      Ordering, Design) + the order pages. Frappe roles are additive, so an
+	                      order-taker simply holds BOTH roles.
+	  Role Profile 'Jewelima Order Taker' = Jewelima + Jewelima Ordering.
+	"""
+	from frappe.permissions import add_permission, update_permission_property
+
+	for name in ("Jewelima", "Jewelima Ordering"):
+		if not frappe.db.exists("Role", name):
+			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
+
+	def grant(doctype, role, ptypes):
+		if not frappe.db.exists("DocType", doctype):
+			return
+		add_permission(doctype, role, 0)  # copies existing perms to Custom DocPerm, then adds the role
+		for ptype, val in ptypes.items():
+			update_permission_property(doctype, role, 0, ptype, val, validate=False)
+
+	# base Jewelima — read-only on our doctypes + the ERPNext masters
+	our_doctypes = frappe.get_all("DocType", filters={"module": "Jewelima", "istable": 0}, pluck="name")
+	for dt in our_doctypes + JEWELIMA_READ_ERPNEXT:
+		grant(dt, "Jewelima", {"read": 1, "report": 1, "export": 1})
+
+	# Jewelima Ordering — full control of the order flow
+	base = {"read": 1, "write": 1, "create": 1, "delete": 1, "print": 1, "export": 1, "email": 1, "share": 1}
+	for dt in JEWELIMA_ORDER_DOCTYPES:
+		if not frappe.db.exists("DocType", dt):
+			continue
+		perms = dict(base)
+		if frappe.get_meta(dt).is_submittable:
+			perms.update({"submit": 1, "cancel": 1, "amend": 1})
+		grant(dt, "Jewelima Ordering", perms)
+
+	# order pages -> both roles (base can view, ordering can act)
+	for page in JEWELIMA_ORDER_PAGES:
+		if not frappe.db.exists("Page", page):
+			continue
+		pg = frappe.get_doc("Page", page)
+		have = {r.role for r in pg.roles}
+		added = False
+		for role in ("Jewelima", "Jewelima Ordering"):
+			if role not in have:
+				pg.append("roles", {"role": role})
+				added = True
+		if added:
+			pg.save(ignore_permissions=True)
+
+	# Role Profile bundle for easy assignment
+	if not frappe.db.exists("Role Profile", "Jewelima Order Taker"):
+		frappe.get_doc({
+			"doctype": "Role Profile", "role_profile": "Jewelima Order Taker",
+			"roles": [{"role": "Jewelima"}, {"role": "Jewelima Ordering"}],
+		}).insert(ignore_permissions=True)
+
+	# Module Profile: hide every module except Jewelima from the desk (assigned to users by
+	# import_users). Blocking modules hides the workspace cards/nav only — it does NOT remove
+	# the doctype read perms the order flow relies on.
+	blocked = [m for m in frappe.get_all("Module Def", pluck="name") if m != "Jewelima"]
+	rows = [{"module": m} for m in blocked]
+	if frappe.db.exists("Module Profile", "Jewelima Only"):
+		mp = frappe.get_doc("Module Profile", "Jewelima Only")
+		mp.set("block_modules", rows)
+		mp.save(ignore_permissions=True)
+	else:
+		frappe.get_doc({
+			"doctype": "Module Profile", "module_profile_name": "Jewelima Only", "block_modules": rows,
+		}).insert(ignore_permissions=True)
+
+	frappe.db.commit()
+
+
+def seed_benches():
+	"""One Bench master record per location (from benches.BENCH_DOCTYPE) so employees can be
+	allotted to each bench. Idempotent."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	for loc in BENCH_DOCTYPE:
+		if not frappe.db.exists("Bench", loc):
+			frappe.get_doc({"doctype": "Bench", "bench_name": loc}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+DEFAULT_TIME_ZONE = "Asia/Kolkata"
+
+
+def set_default_timezone():
+	"""Ship with India Standard Time (IST) as the default application timezone.
+	Idempotent — only writes when System Settings differs, so it won't churn on every
+	migrate. Frappe tracks its own app timezone independent of the server's OS clock."""
+	if frappe.db.get_single_value("System Settings", "time_zone") != DEFAULT_TIME_ZONE:
+		frappe.db.set_single_value("System Settings", "time_zone", DEFAULT_TIME_ZONE)
+
+
+SIDEBAR_KEYS = ("child", "collapsible", "icon", "indent", "keep_closed", "label", "link_to", "link_type", "show_arrow", "type", "url")
+
+
+def sync_workspace_sidebar():
+	"""Push the bundled Workspace Sidebar (workspace_sidebar/jewelima.json) into the DB.
+	A plain migrate does NOT overwrite an existing sidebar, so its items go stale (missing
+	new pages, old icons). Re-syncing here on every migrate keeps the menu matching the
+	shipped JSON. Idempotent."""
+	import json
+	import os
+
+	path = frappe.get_app_path("jewelima", "workspace_sidebar", "jewelima.json")
+	if not os.path.exists(path):
+		return
+	with open(path) as f:
+		data = json.load(f)
+	name = data.get("name") or "Jewelima"
+	if frappe.db.exists("Workspace Sidebar", name):
+		sb = frappe.get_doc("Workspace Sidebar", name)
+		sb.set("items", [])
+		for it in data.get("items", []):
+			sb.append("items", {k: it.get(k) for k in SIDEBAR_KEYS})
+		sb.save(ignore_permissions=True)
+	else:
+		frappe.get_doc(data).insert(ignore_permissions=True)
+
+
+KARAT_GOLDS = {"14K": 58.3, "18K": 75.1, "22K": 91.7}
+GOLD_COLORS = ["YG", "WG", "PG"]  # Yellow / White / Pink(Rose) gold
+
+
+def seed_karat_golds():
+	"""Ship the standard karat golds designs use: 14/18/22 K in YG/WG/PG (9 items).
+	Idempotent — creates only the variants that are missing."""
+	# The Item Group tree root only exists after the ERPNext setup wizard. On a fresh
+	# install (before the wizard) skip; after_setup_wizard re-runs this once it's there.
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		return
+	if not frappe.db.exists("Item Group", "GOLD"):
+		frappe.get_doc({
+			"doctype": "Item Group", "item_group_name": "GOLD",
+			"parent_item_group": "All Item Groups", "is_group": 0,
+		}).insert(ignore_permissions=True)
+	for karat, purity in KARAT_GOLDS.items():
+		for color in GOLD_COLORS:
+			code = f"{karat}{color}"  # e.g. 22KYG
+			if frappe.db.exists("Item", code):
+				continue
+			frappe.get_doc({
+				"doctype": "Item", "item_code": code, "item_name": code, "item_group": "GOLD",
+				"stock_uom": "Gram", "weight_unit": "Gram", "is_stock_item": 1,
+				"is_purchase_item": 1, "is_sales_item": 0, "include_item_in_manufacturing": 1,
+				"metal_purity": karat, "purity_percentage": purity,
+			}).insert(ignore_permissions=True)
+
+
+def relax_employee_mandatory():
+	"""Workshops rarely track DOB / joining dates for karigars — make Employee's Date of
+	Birth and Date of Joining optional (Property Setters, idempotent)."""
+	from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+
+	for field in ("date_of_birth", "date_of_joining"):
+		if not frappe.db.exists("Property Setter", {"doc_type": "Employee", "field_name": field, "property": "reqd"}):
+			make_property_setter("Employee", field, "reqd", "0", "Check", validate_fields_for_doctype=False)
+
+
+ORDER_TYPES = ["BULK", "CUSTOMER"]
+
+
+def create_order_types():
+	"""Seed the Job Order 'Type' dropdown values (Order Type master; extensible)."""
+	for name in ORDER_TYPES:
+		if not frappe.db.exists("Order Type", name):
+			frappe.get_doc({"doctype": "Order Type", "order_type_name": name}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def create_default_supplier():
+	"""Default supplier used for in-house stock purchases. Skips on a fresh site
+	where the Supplier Group tree doesn't exist yet (it's seeded by the ERPNext
+	setup wizard); after_setup_wizard re-runs after_install once it's present."""
+	if frappe.db.exists("Supplier", "JD Stock"):
+		return
+	sg = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name")
+	if not sg:
+		return
+	frappe.get_doc(
+		{"doctype": "Supplier", "supplier_name": "JD Stock", "supplier_group": sg}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def create_jd_stock_customer():
+	"""'JD Stock' Customer = the holder of own finished-goods stock (a piece with no
+	real customer is 'held by' JD Stock). Skips until Customer Group / Territory exist
+	(seeded by the ERPNext setup wizard)."""
+	if frappe.db.exists("Customer", "JD Stock"):
+		return
+	cg = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+	terr = frappe.db.get_value("Territory", {"is_group": 0}, "name") or frappe.db.get_value("Territory", {}, "name")
+	if not (cg and terr):
+		return
+	frappe.get_doc(
+		{"doctype": "Customer", "customer_name": "JD Stock", "customer_group": cg, "territory": terr}
+	).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def seed_raw_materials():
+	"""Load the raw-material master items (gold + stones) that SHIP WITH the app,
+	from the bundled spreadsheet jewelima/data/raw_material_report.xlsx.
+	Idempotent. Skips if:
+	  - the ERPNext item-group tree isn't ready yet (fresh install before the
+	    setup wizard) — after_setup_wizard re-runs this once it is; or
+	  - the items are already seeded (the GOLD group already has items).
+	"""
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		return
+	if frappe.db.count("Item", {"item_group": "GOLD"}):
+		return
+	try:
+		from jewelima.jewelima.imports.import_raw_materials import run
+
+		run()
+	except FileNotFoundError:
+		pass
 
 
 def after_setup_wizard(args=None):
@@ -84,6 +346,29 @@ def run_initial_setup(
 	return "setup_complete ran but System Settings still shows incomplete — check error log."
 
 
+def get_warehouse_custom_fields():
+	"""is_melt_warehouse flag — gates which warehouses show in the Melting 'Gold Issue' picker."""
+	return {
+		"Warehouse": [
+			{
+				"fieldname": "is_melt_warehouse",
+				"fieldtype": "Check",
+				"label": "Is Melt Warehouse",
+				"insert_after": "warehouse_name",
+				"description": "Show this warehouse in the Melting screen's 'Gold Issue' picker.",
+			},
+		],
+	}
+
+
+def flag_melt_warehouses():
+	"""Flag the default gold-issue warehouse(s) so the Melting picker isn't empty out of the box."""
+	for wh_name in ("Raw Materials Store",):
+		wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name}, "name")
+		if wh and not frappe.db.get_value("Warehouse", wh, "is_melt_warehouse"):
+			frappe.db.set_value("Warehouse", wh, "is_melt_warehouse", 1)
+
+
 def get_item_custom_fields():
 	"""
 	jewelima-specific fields added to the standard Item doctype. These flags
@@ -100,54 +385,80 @@ def get_item_custom_fields():
 				"collapsible": 0,
 			},
 			{
-				"fieldname": "keep_metal_ledger",
-				"fieldtype": "Check",
-				"label": "Keep Metal Ledger",
-				"insert_after": "jewelima_section",
-			},
-			{
 				"fieldname": "metal_purity",
 				"fieldtype": "Select",
 				"label": "Default Purity",
 				"options": "\n24K\n22K\n18K\n14K",
-				"insert_after": "keep_metal_ledger",
-				"depends_on": "eval:doc.keep_metal_ledger",
+				"insert_after": "jewelima_section",
+			},
+			{
+				"fieldname": "purity_percentage",
+				"fieldtype": "Float",
+				"label": "Purity %",
+				"precision": "2",
+				"insert_after": "metal_purity",
+			},
+			{
+				"fieldname": "weight_unit",
+				"fieldtype": "Select",
+				"label": "Weight UOM",
+				"options": "Gram\nCarat",
+				"default": "Gram",
+				"insert_after": "purity_percentage",
+				"in_list_view": 1,
+				"description": "Grams for metal, carats for stones (auto-set: an item with a Stone Type = Carat).",
 			},
 			{
 				"fieldname": "jewelima_column_break",
 				"fieldtype": "Column Break",
-				"insert_after": "metal_purity",
-			},
-			{
-				"fieldname": "keep_stone_ledger",
-				"fieldtype": "Check",
-				"label": "Keep Stone Ledger",
-				"insert_after": "jewelima_column_break",
+				"insert_after": "weight_unit",
 			},
 			{
 				"fieldname": "stone_type",
 				"fieldtype": "Link",
 				"label": "Stone Type",
 				"options": "Stone Type",
-				"insert_after": "keep_stone_ledger",
-				"depends_on": "eval:doc.keep_stone_ledger",
-			},
-			{
-				"fieldname": "stone_sieve",
-				"fieldtype": "Link",
-				"label": "Stone Sieve",
-				"options": "Stone Sieve",
-				"insert_after": "stone_type",
-				"depends_on": "eval:doc.keep_stone_ledger",
+				"insert_after": "jewelima_column_break",
 			},
 			{
 				"fieldname": "stone_size",
 				"fieldtype": "Data",
 				"label": "Stone Size",
-				"insert_after": "stone_sieve",
-				"depends_on": "eval:doc.keep_stone_ledger",
+				"insert_after": "stone_type",
 			},
-		]
+		],
+		"Purchase Receipt Item": [
+			{
+				"fieldname": "custom_stone_count",
+				"fieldtype": "Int",
+				"label": "Stone Count (pcs)",
+				"insert_after": "qty",
+				"description": "Number of stones received (informational; stock is by carat).",
+			},
+		],
+		"Warehouse": [
+			{
+				"fieldname": "custom_is_loss",
+				"fieldtype": "Check",
+				"label": "Loss Warehouse",
+				"insert_after": "warehouse_name",
+				"description": "Loss-collection bin — hidden from material/issue dropdowns.",
+			},
+			{
+				"fieldname": "custom_is_purchase_location",
+				"fieldtype": "Check",
+				"label": "Purchase Location",
+				"insert_after": "custom_is_loss",
+				"description": "Gold/stone issue point that raw material is purchased into.",
+			},
+			{
+				"fieldname": "custom_is_issue_location",
+				"fieldtype": "Check",
+				"label": "Issue Warehouse",
+				"insert_after": "custom_is_purchase_location",
+				"description": "Material is issued from here onto bags (e.g. Gold Issue, Stone Issue, Casting).",
+			},
+		],
 	}
 
 
@@ -161,84 +472,34 @@ def create_default_stone_types():
 	frappe.db.commit()
 
 
-# Design Bank master values seeded on install (dropdowns on Design Bank).
-DESIGN_TYPES = ["Rings", "Pendant"]
-DESIGN_STYLES = ["Tickly", "General"]
+# Seed values for the Design masters (extensible — users can add more).
+DESIGN_TYPES = [
+	"NOSEPIN", "STUD", "NECKLACE", "PENDANT", "CHAIN", "BACK CHAIN", "BIRTH NECK",
+	"RING", "BRACELET", "BANGLE", "ANKLET", "PIPE BANGLE", "CHAIN BRACELET", "CHAIN NECKLACE",
+]
+DESIGN_STYLES = ["General", "Tickly"]
 
 
 def create_design_masters():
-	"""Seed the Design Type / Design Style dropdown values used by Design Bank."""
-	for design_type in DESIGN_TYPES:
-		if not frappe.db.exists("Design Type", design_type):
-			frappe.get_doc(
-				{"doctype": "Design Type", "design_type_name": design_type}
-			).insert(ignore_permissions=True)
-	for design_style in DESIGN_STYLES:
-		if not frappe.db.exists("Design Style", design_style):
-			frappe.get_doc(
-				{"doctype": "Design Style", "design_style_name": design_style}
-			).insert(ignore_permissions=True)
+	"""Seed Design Type / Design Style dropdown values used by the Design master."""
+	for name in DESIGN_TYPES:
+		if not frappe.db.exists("Design Type", name):
+			frappe.get_doc({"doctype": "Design Type", "design_type_name": name}).insert(ignore_permissions=True)
+	for name in DESIGN_STYLES:
+		if not frappe.db.exists("Design Style", name):
+			frappe.get_doc({"doctype": "Design Style", "design_style_name": name}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
-# Gold colour codes used in raw-material item codes/names.
-GOLD_COLOR_LABELS = {"YG": "Yellow Gold", "WG": "White Gold", "PG": "Pink Gold"}
-
-# Standard gold raw materials seeded once on install.
-# (karat, colour) -> item_code "RM-<karat>-<colour>", item_name "<karat>K<colour>"
-RAW_MATERIALS = [
-	("24", "YG"),
-	("22", "YG"),
-	("18", "YG"),
-	("18", "WG"),
-	("18", "PG"),
-	("14", "YG"),
-]
+# NOTE: gold raw-material items are no longer seeded here. They come from the
+# client's master sheet via jewelima.jewelima.imports.import_raw_materials.run
+# (group GOLD / ALLOY). Seeding placeholder RM-* items here caused duplicates.
 
 
-def create_raw_material_items():
-	"""Seed the standard gold raw-material items. Idempotent: only creates
-	an item if its item_code does not already exist. Skips gracefully if the
-	required Item Group / UOM don't exist yet (i.e. ERPNext setup not done) —
-	after_setup_wizard re-runs this once they're present."""
-	if not frappe.db.exists("Item Group", "Raw Material") or not frappe.db.exists("UOM", "Gram"):
-		return
-	for karat, color in RAW_MATERIALS:
-		item_code = f"RM-{karat}-{color}"
-		if frappe.db.exists("Item", item_code):
-			continue
-		frappe.get_doc(
-			{
-				"doctype": "Item",
-				"item_code": item_code,
-				"item_name": f"{karat}K{color}",
-				"item_group": "Raw Material",
-				"stock_uom": "Gram",
-				"is_stock_item": 1,
-				"is_sales_item": 0,
-				"keep_metal_ledger": 1,
-				"metal_purity": f"{karat}K",
-				"description": f"{karat}K {GOLD_COLOR_LABELS.get(color, color)} raw gold",
-			}
-		).insert(ignore_permissions=True)
-	frappe.db.commit()
-
-
-# Manufacturing stage warehouses (one leaf warehouse per physical stage, under a
-# "Manufacturing" group). CAD and CAM are design/digital stages — no warehouse.
+# Manufacturing group: work-in-hand now lives in the single "In Bags" warehouse, so we
+# no longer keep a warehouse per stage — only the Casting stage plus the Gold/Stone
+# issue points (the purchase locations) live under this group.
 MANUFACTURING_GROUP = "Manufacturing"
-STAGE_WAREHOUSES = [
-	"Tree Making",
-	"Casting",
-	"Grinding",
-	"Filing",
-	"Setting",
-	"Pre Polish",
-	"Wax Setting",
-	"Final Polish",
-	"Wax Cleaning",
-	"Bag Extraction",
-]
 
 
 # Loss collection warehouses — where recoverable loss is credited, per stage.
@@ -268,26 +529,34 @@ def warehouse_context():
 
 
 def create_manufacturing_warehouses():
-	"""Seed the Manufacturing warehouse group and one leaf warehouse per stage.
-	Idempotent and safe to call repeatedly."""
+	"""Seed the Manufacturing group with the Casting stage plus the Gold/Stone issue
+	points. Gold Issue + Stone Issue are flagged as purchase locations. Idempotent."""
 	company, abbr, root = warehouse_context()
 	if not company:
 		return
 	group = make_warehouse(MANUFACTURING_GROUP, company, abbr, parent=root, is_group=1)
-	for stage in STAGE_WAREHOUSES:
-		make_warehouse(stage, company, abbr, parent=group, is_group=0)
+	# Casting + the Gold/Stone issue points are all "issue" warehouses (material is issued
+	# from them onto bags). Gold Issue + Stone Issue are also purchase locations.
+	names = {}
+	for wh in ("Casting", GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE):
+		names[wh] = make_warehouse(wh, company, abbr, parent=group, is_group=0)
+		frappe.db.set_value("Warehouse", names[wh], "custom_is_issue_location", 1)
+	for wh in (GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE):
+		frappe.db.set_value("Warehouse", names[wh], "custom_is_purchase_location", 1)
 	frappe.db.commit()
 
 
 def create_loss_collection_warehouses():
 	"""Seed the Loss Collection group + one '<Stage> -LOSS' leaf warehouse per
-	stage that produces recoverable loss. Idempotent."""
+	stage that produces recoverable loss. Each is flagged custom_is_loss so material
+	dropdowns can hide it. Idempotent."""
 	company, abbr, root = warehouse_context()
 	if not company:
 		return
 	group = make_warehouse(LOSS_COLLECTION_GROUP, company, abbr, parent=root, is_group=1)
 	for stage in LOSS_STAGES:
-		make_warehouse(f"{stage} -LOSS", company, abbr, parent=group, is_group=0)
+		name = make_warehouse(f"{stage} -LOSS", company, abbr, parent=group, is_group=0)
+		frappe.db.set_value("Warehouse", name, "custom_is_loss", 1)
 	frappe.db.commit()
 
 
@@ -300,6 +569,12 @@ RAW_MATERIALS_STORE = "Raw Materials Store"
 RESERVED_WAREHOUSE = "Reserved"
 GOLD_ISSUE_WAREHOUSE = "Gold Issue"
 STONE_ISSUE_WAREHOUSE = "Stone Issue"
+# Coarse value pool for materials currently inside Order Bags ("In Bags"). Per-bag
+# detail lives in the Bag Material Ledger; this warehouse holds the aggregate gold.
+# Gold lands here on add-weight; loss moves out of here to a '<bench> -LOSS' wh.
+IN_PRODUCTION_WAREHOUSE = "In Bags"
+# Finished pieces sent out for certification sit here (still own stock).
+CERTIFICATION_WAREHOUSE = "At Certification"
 
 
 def create_store_warehouses():
@@ -311,7 +586,12 @@ def create_store_warehouses():
 	if not company:
 		return
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
-	make_warehouse(STONE_ISSUE_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	# The bench flow issues gold/loss as real stock moves; gold isn't always
+	# pre-stocked in the Store, so allow negative stock (a negative balance just
+	# flags unrecorded purchasing rather than blocking the floor).
+	frappe.db.set_single_value("Stock Settings", "allow_negative_stock", 1)
 	frappe.db.commit()
 
 
