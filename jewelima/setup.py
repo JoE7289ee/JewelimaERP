@@ -6,6 +6,7 @@ def after_install():
 	set_default_timezone()
 	relax_employee_mandatory()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
@@ -14,6 +15,7 @@ def after_install():
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+	flag_melt_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
 	sync_workspace_sidebar()
@@ -27,6 +29,7 @@ def after_migrate():
 	set_default_timezone()
 	relax_employee_mandatory()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
@@ -35,6 +38,7 @@ def after_migrate():
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
+	flag_melt_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
 	sync_workspace_sidebar()
@@ -340,6 +344,29 @@ def run_initial_setup(
 	if frappe.is_setup_complete():
 		return f"Setup completed for company '{company_name}'."
 	return "setup_complete ran but System Settings still shows incomplete — check error log."
+
+
+def get_warehouse_custom_fields():
+	"""is_melt_warehouse flag — gates which warehouses show in the Melting 'Gold Issue' picker."""
+	return {
+		"Warehouse": [
+			{
+				"fieldname": "is_melt_warehouse",
+				"fieldtype": "Check",
+				"label": "Is Melt Warehouse",
+				"insert_after": "warehouse_name",
+				"description": "Show this warehouse in the Melting screen's 'Gold Issue' picker.",
+			},
+		],
+	}
+
+
+def flag_melt_warehouses():
+	"""Flag the default gold-issue warehouse(s) so the Melting picker isn't empty out of the box."""
+	for wh_name in ("Raw Materials Store",):
+		wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name}, "name")
+		if wh and not frappe.db.get_value("Warehouse", wh, "is_melt_warehouse"):
+			frappe.db.set_value("Warehouse", wh, "is_melt_warehouse", 1)
 
 
 def get_item_custom_fields():
