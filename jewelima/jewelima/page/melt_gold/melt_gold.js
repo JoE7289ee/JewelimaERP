@@ -22,8 +22,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		.ml-right{flex:1 1 340px;min-width:320px;}
 		.ml-bar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 16px;margin:2px 0 10px;align-items:end;}
 		.ml-bar .help-box,.ml-bar .description{display:none !important;}
-		.ml-lbl{font-size:11px;color:var(--text-muted);display:block;margin:0 0 1px;}
-		.ml-req{width:100%;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:2px 8px;height:28px;border-radius:4px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
+		.ml-bar .frappe-control{margin:0;}
 		.ml-opts{display:flex;gap:22px;margin:0 2px 12px;font-size:13px;}
 		.ml-opts label{display:flex;align-items:center;gap:6px;color:var(--text-color);cursor:pointer;margin:0;}
 		.ml-opts .ml-help{color:var(--text-muted);font-size:11px;}
@@ -65,7 +64,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 				<div class="ml-bar">
 					<div class="ml-wh"></div>
 					<div class="ml-out"></div>
-					<div><label class="ml-lbl">Required (g)</label><input type="number" min="0" step="0.001" class="ml-req" placeholder="grams needed"></div>
+					<div class="ml-req"></div>
 				</div>
 				<div class="ml-opts">
 					<label><input type="checkbox" class="ml-strict" checked> Strict out <span class="ml-help">lock the required grams</span></label>
@@ -94,8 +93,8 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 				<div class="ml-stock-head">Stock <span class="ml-stock-wh"></span></div>
 				<div class="ml-stock-box">
 					<table class="ml-stock-tbl">
-						<thead><tr><th style="width:26px"></th><th>Item</th><th>Group</th><th class="num">Purity</th><th class="num">Available</th></tr></thead>
-						<tbody class="ml-stock-body"><tr><td colspan="5" class="ml-stock-empty">Pick a warehouse</td></tr></tbody>
+						<thead><tr><th style="width:26px"></th><th>Item</th><th>Group</th><th class="num">Purity</th><th class="num">Available</th><th class="num">Pure</th></tr></thead>
+						<tbody class="ml-stock-body"><tr><td colspan="6" class="ml-stock-empty">Pick a warehouse</td></tr></tbody>
 					</table>
 				</div>
 			</div>
@@ -109,7 +108,8 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 
 	const whCtl = mk(".ml-wh", { fieldtype: "Link", label: "Gold Issue", fieldname: "warehouse", options: "Warehouse", reqd: 1, get_query: () => ({ filters: { is_melt_warehouse: 1, is_group: 0 } }) });
 	const outCtl = mk(".ml-out", { fieldtype: "Link", label: "Create (karat gold)", fieldname: "out", options: "Item", reqd: 1, get_query: () => ({ filters: { item_group: "GOLD", metal_purity: ["!=", ""] } }) });
-	const reqInput = q(".ml-req"), strict = q(".ml-strict"), noLoss = q(".ml-noloss"), outWt = q(".ml-outwt");
+	const reqCtl = mk(".ml-req", { fieldtype: "Float", label: "Required (g)", fieldname: "required", precision: "3" });
+	const strict = q(".ml-strict"), noLoss = q(".ml-noloss"), outWt = q(".ml-outwt");
 
 	// default to the first melt warehouse so the stock panel isn't empty
 	frappe.db.get_value("Warehouse", { is_melt_warehouse: 1, is_group: 0 }, "name").then((r) => {
@@ -127,7 +127,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	// alloy balances. Strict: alloy fills weight to the required grams (output = required).
 	// Non-strict: alloy fills to the target purity (output floats with the inputs).
 	function solve() {
-		const T = S.out.purity, Tf = T / 100, W = flt(reqInput.value);
+		const T = S.out.purity, Tf = T / 100, W = flt(reqCtl.get_value());
 		const golds = S.rows.filter((r) => r.purity > 0.001);
 		const alloys = S.rows.filter((r) => r.purity <= 0.001);
 		const pureNeeded = W * Tf;
@@ -211,17 +211,18 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		const wh = whOverride || whCtl.get_value();
 		q(".ml-stock-wh").textContent = wh ? wh.replace(/ - [A-Za-z]+$/, "") : "";
 		const body = q(".ml-stock-body");
-		if (!wh) { body.innerHTML = '<tr><td colspan="5" class="ml-stock-empty">Pick a warehouse</td></tr>'; return; }
+		if (!wh) { body.innerHTML = '<tr><td colspan="6" class="ml-stock-empty">Pick a warehouse</td></tr>'; return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_melt_stock", args: { warehouse: wh } }).then((r) => {
 			S.stock = ((r.message || {}).rows || []).filter((x) => x.purity > 0 || x.item_group === "ALLOY"); // meltable only
-			if (!S.stock.length) { body.innerHTML = '<tr><td colspan="5" class="ml-stock-empty">No gold/alloy stock here</td></tr>'; return; }
+			if (!S.stock.length) { body.innerHTML = '<tr><td colspan="6" class="ml-stock-empty">No gold/alloy stock here</td></tr>'; return; }
 			body.innerHTML = S.stock.map((x, i) => {
 				const picked = S.rows.some((r) => r.item === x.item);
 				return `<tr class="${picked ? "picked" : ""}">`
 					+ `<td><input type="checkbox" class="ml-stock-cb" data-idx="${i}" data-item="${frappe.utils.escape_html(x.item)}" ${picked ? "checked" : ""}></td>`
 					+ `<td>${frappe.utils.escape_html(x.item)}</td><td>${frappe.utils.escape_html(x.item_group)}</td>`
 					+ `<td class="num">${x.purity ? x.purity.toFixed(2) + "%" : "—"}</td>`
-					+ `<td class="num">${fmt(x.weight)}${x.uom === "Carat" ? " ct" : " g"}</td></tr>`;
+					+ `<td class="num">${fmt(x.weight)}${x.uom === "Carat" ? " ct" : " g"}</td>`
+					+ `<td class="num">${x.pure ? fmt(x.pure) + " g" : "—"}</td></tr>`;
 			}).join("");
 			body.querySelectorAll(".ml-stock-cb").forEach((cb) => {
 				cb.addEventListener("change", () => {
@@ -238,14 +239,14 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	outCtl.$input && outCtl.$input.on("change awesomplete-selectcomplete", () => setTimeout(() => {
 		pur(outCtl.get_value(), (p) => { S.out.purity = p; solve(); });
 	}, 60));
-	reqInput.addEventListener("input", solve);
+	reqCtl.$input.on("input", solve);
 	strict.addEventListener("change", solve);
 	noLoss.addEventListener("change", updateSummary);
 	outWt.addEventListener("input", updateSummary);
 
 	page.add_inner_button(__("Re-balance"), () => { S.rows.forEach((r) => { r.locked = false; }); renderMaterials(); solve(); });
 	page.add_inner_button(__("Reset"), () => {
-		S.rows = []; S.out.purity = 0; outCtl.set_value(""); reqInput.value = ""; strict.checked = true; noLoss.checked = true;
+		S.rows = []; S.out.purity = 0; outCtl.set_value(""); reqCtl.set_value(0); strict.checked = true; noLoss.checked = true;
 		renderMaterials(); solve(); loadStock();
 	});
 
