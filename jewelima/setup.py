@@ -5,6 +5,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 def after_install():
 	set_default_timezone()
 	relax_employee_mandatory()
+	show_employee_names_in_links()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
@@ -29,6 +30,7 @@ def after_migrate():
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
 	set_default_timezone()
 	relax_employee_mandatory()
+	show_employee_names_in_links()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
@@ -224,6 +226,22 @@ def relax_employee_mandatory():
 	for field in ("date_of_birth", "date_of_joining"):
 		if not frappe.db.exists("Property Setter", {"doc_type": "Employee", "field_name": field, "property": "reqd"}):
 			make_property_setter("Employee", field, "reqd", "0", "Check", validate_fields_for_doctype=False)
+
+
+def show_employee_names_in_links():
+	"""Show the employee NAME (not the HR-EMP code) in Employee link fields — e.g. the Bench
+	roster pills. Doctype-level Property Setter on Employee (title_field is already employee_name)."""
+	if frappe.db.exists("Property Setter", {"doc_type": "Employee", "property": "show_title_field_in_link"}):
+		return
+	frappe.get_doc({
+		"doctype": "Property Setter",
+		"doctype_or_field": "DocType",
+		"doc_type": "Employee",
+		"property": "show_title_field_in_link",
+		"property_type": "Check",
+		"value": "1",
+	}).insert(ignore_permissions=True)
+	frappe.clear_cache(doctype="Employee")
 
 
 ORDER_TYPES = ["BULK", "CUSTOMER"]
