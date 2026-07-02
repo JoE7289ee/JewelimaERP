@@ -12,8 +12,9 @@ const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
 
 const PO_COLUMNS = [
 	{ key: "design", label: "Design", type: "link", options: "Design", width: "220px" },
-	{ key: "size", label: "Size", type: "select", options: PO_SIZES, width: "90px" },
 	{ key: "qty", label: "Qty", type: "int", width: "60px" },
+	{ key: "size", label: "Size", type: "select", options: PO_SIZES, width: "90px" },
+	{ key: "design_type", label: "Type", type: "ro", width: "120px" },
 	{ key: "gross_weight", label: "Gross (g)", type: "ro", width: "85px" },
 	{ key: "nett_weight", label: "Nett (g)", type: "ro", width: "85px" },
 	{ key: "purity", label: "Purity %", type: "ro", width: "75px" },
@@ -316,11 +317,14 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	// Pull the design's BOM into this line's editable working copy + recompute.
 	function pullDesignBOM(row) {
 		const design = row.f.design.get();
+		if (row.f.design_type) row.f.design_type.set("");
 		if (!design) { row._materials = []; row._profile = null; applyProfile(row); return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
 			const msg = r.message || {};
 			row._materials = (msg.materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
 			row._image = msg.image || "";
+			row._designType = msg.design_type || "";
+			if (row.f.design_type) row.f.design_type.set(row._designType);
 			row._edited = false;
 			row._profile = planProfile(row._materials);
 			applyProfile(row);
@@ -462,9 +466,11 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 					const nr = addRow(prev);
 					nr._profile = row._profile;
 					nr._materials = (row._materials || []).map((m) => ({ ...m }));
+					nr._designType = row._designType;
 					nr._lastDesign = design;
 					nr.f.design.set(design);
 					nr.f.size.set(size);
+					if (nr.f.design_type) nr.f.design_type.set(row._designType || "");
 					nr.f.qty.set(qtys[i]);
 					applyProfile(nr);
 					updateSplitBtn(nr);
