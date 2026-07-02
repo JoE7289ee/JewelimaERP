@@ -129,7 +129,10 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	// Pre-fill Days / Type / Salesman from the global Order Settings (Setup → Order Settings).
 	frappe.call({ method: "jewelima.jewelima.api.get_order_defaults" }).then((r) => {
 		const d = r.message || {};
-		if (cint(d.days) && !cint(state.header.days.get_value())) { state.header.days.set_value(cint(d.days)); showDue(); }
+		if (cint(d.days) && !cint(state.header.days.get_value())) {
+			// set_value resolves async — show the date only once the value has landed
+			Promise.resolve(state.header.days.set_value(cint(d.days))).then(() => showDue());
+		}
 		if (d.order_type && !state.header.order_type.get_value()) state.header.order_type.set_value(d.order_type);
 		if (d.salesman && !state.header.salesman.get_value()) state.header.salesman.set_value(d.salesman);
 	});
