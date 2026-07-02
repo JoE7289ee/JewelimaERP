@@ -358,12 +358,32 @@ def get_design_types_with_sizes():
 	used = {r.design_type: r.cnt for r in frappe.db.sql(
 		"SELECT design_type, COUNT(*) cnt FROM `tabDesign` GROUP BY design_type", as_dict=True)}
 	for t in frappe.get_all("Design Type", order_by="name", pluck="name"):
-		sizes = frappe.get_all(
+		rows = frappe.get_all(
 			"Design Type Size", filters={"parent": t, "parenttype": "Design Type"},
-			order_by="idx", pluck="size",
+			fields=["size", "is_default"], order_by="idx",
 		)
-		out.append({"design_type": t, "sizes": sizes, "used_by": int(used.get(t, 0))})
+		default = next((r.size for r in rows if r.is_default), None)
+		out.append({
+			"design_type": t, "sizes": [r.size for r in rows],
+			"default": default, "used_by": int(used.get(t, 0)),
+		})
 	return out
+
+
+@frappe.whitelist()
+def set_design_type_default(design_type, size=None):
+	"""Mark one size as the type's default (pre-selected on Place Order). Pass no size
+	(or the current default) to clear it."""
+	frappe.only_for(["System Manager", "Stock Manager"])
+	doc = frappe.get_doc("Design Type", design_type)
+	size = (size or "").strip()
+	if size and size not in [r.size for r in doc.sizes]:
+		frappe.throw(frappe._("'{0}' is not a size of {1}").format(size, design_type))
+	for r in doc.sizes:
+		r.is_default = 1 if (size and r.size == size) else 0
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"design_type": design_type, "default": size or None}
 
 
 @frappe.whitelist()
@@ -418,9 +438,10 @@ def set_design_type_sizes(design_type, sizes):
 				frappe._("Cannot remove size '{0}' — {1} active Order Bag(s) of type {2} are using it.").format(s, used, design_type)
 			)
 	doc.reload()  # fresh copy — guards against stale-cache row loss on rebuild
+	old_default = next((r.size for r in doc.sizes if r.is_default), None)
 	doc.set("sizes", [])
 	for s in clean:
-		doc.append("sizes", {"size": s})
+		doc.append("sizes", {"size": s, "is_default": 1 if s == old_default else 0})
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"design_type": design_type, "sizes": clean}

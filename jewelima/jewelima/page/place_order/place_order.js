@@ -302,15 +302,16 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	}
 
 	// Pull the design's BOM into this line's editable working copy + recompute.
-	// type -> its size list (Setup → Design Types); the row's Size dropdown follows the type
+	// type -> {sizes, default} (Setup → Design Types); the row's Size dropdown follows the type
 	state.typeSizes = {};
 	frappe.call({ method: "jewelima.jewelima.api.get_design_types_with_sizes" }).then((r) => {
-		(r.message || []).forEach((t) => (state.typeSizes[t.design_type] = t.sizes || []));
+		(r.message || []).forEach((t) => (state.typeSizes[t.design_type] = { sizes: t.sizes || [], default: t.default || "" }));
 	});
 	function applyTypeSizes(row) {
 		if (!row.f.size || !row.f.size.setOptions) return;
-		const sizes = state.typeSizes[row._designType] || [];
-		row.f.size.setOptions(sizes.length ? sizes : ["NA"]);
+		const t = state.typeSizes[row._designType] || { sizes: [], default: "" };
+		row.f.size.setOptions(t.sizes.length ? t.sizes : ["NA"]);
+		if (t.default && !row.f.size.get()) row.f.size.set(t.default); // pre-select the type's default
 	}
 
 	function pullDesignBOM(row) {

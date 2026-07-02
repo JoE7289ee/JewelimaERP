@@ -27,6 +27,8 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 		.dt-used{color:var(--text-muted);font-size:11px;display:block;}
 		.dt-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 		.dt-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg-light-gray,#f1f3f5);border:1px solid var(--border-color);border-radius:14px;padding:2px 9px;font-size:12px;}
+		.dt-chip .lbl{cursor:pointer;}
+		.dt-chip.default{background:#eaf6ec;border-color:#1d7a33;color:#1d7a33;font-weight:600;}
 		.dt-chip .x{cursor:pointer;color:var(--text-muted);font-weight:700;}
 		.dt-addsize{width:110px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:2px 8px;height:26px;border-radius:13px;box-sizing:border-box;font-size:12px;color:var(--text-color);}
 		.dt-none{color:var(--text-muted);font-size:12px;}
@@ -42,7 +44,7 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 				<thead><tr><th style="width:220px">Design Type</th><th>Sizes</th><th style="width:70px"></th></tr></thead>
 				<tbody class="dt-body"></tbody>
 			</table></div>
-			<div class="dt-hint">Each design type carries its own size list — these are the options the team sees in the <b>Place Order</b> Size dropdown for that type. Type a size and press Enter to add it; click × to remove. A type can only be deleted while no designs are linked to it (🔒 in use = locked).</div>
+			<div class="dt-hint">Each design type carries its own size list — these are the options the team sees in the <b>Place Order</b> Size dropdown for that type. Type a size and press Enter to add it; click × to remove. <b>Click a size to make it the default</b> (shown green — pre-selected on Place Order; click it again to clear). A type can only be deleted while no designs are linked to it (🔒 in use = locked).</div>
 		</div>
 	`);
 
@@ -57,7 +59,7 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 				<td><span class="dt-name">${esc(r.design_type)}</span>
 					<span class="dt-used">${r.used_by ? r.used_by + " design(s)" : "unused"}</span></td>
 				<td><div class="dt-chips" data-idx="${i}">
-					${r.sizes.map((s) => `<span class="dt-chip">${esc(s)}<span class="x" data-idx="${i}" data-size="${esc(s)}">×</span></span>`).join("")}
+					${r.sizes.map((s) => `<span class="dt-chip ${r.default === s ? "default" : ""}"><span class="lbl" data-idx="${i}" data-size="${esc(s)}" title="${r.default === s ? "Default — click to clear" : "Click to make default"}">${esc(s)}</span><span class="x" data-idx="${i}" data-size="${esc(s)}">×</span></span>`).join("")}
 					${r.sizes.length ? "" : '<span class="dt-none">no sizes —</span>'}
 					<input class="dt-addsize" data-idx="${i}" placeholder="+ size ⏎">
 				</div></td>
@@ -80,6 +82,15 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 			x.addEventListener("click", () => {
 				const r = rows[+x.getAttribute("data-idx")], s = x.getAttribute("data-size");
 				saveSizes(r, r.sizes.filter((z) => z !== s));
+			});
+		});
+		// click a chip's label to make it the default (green); click the default again to clear
+		body.querySelectorAll(".dt-chip .lbl").forEach((l) => {
+			l.addEventListener("click", () => {
+				const r = rows[+l.getAttribute("data-idx")], s = l.getAttribute("data-size");
+				const next = r.default === s ? "" : s;
+				frappe.call({ method: API + ".set_design_type_default", args: { design_type: r.design_type, size: next } })
+					.then((res) => { r.default = (res.message || {}).default || null; render(); });
 			});
 		});
 		body.querySelectorAll(".dt-del").forEach((b) => {

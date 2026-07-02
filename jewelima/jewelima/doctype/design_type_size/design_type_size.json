@@ -5,7 +5,8 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "size"
+  "size",
+  "is_default"
  ],
  "fields": [
   {
@@ -14,6 +15,14 @@
    "in_list_view": 1,
    "label": "Size",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Pre-selected in the Place Order Size dropdown for this type.",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default"
   }
  ],
  "istable": 1,

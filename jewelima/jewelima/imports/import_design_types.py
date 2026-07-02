@@ -31,7 +31,7 @@ def run(file_path=None):
 		print(f"No file at {path} — nothing to import.")
 		return {"types": 0, "sizes": 0}
 
-	wanted = {}  # type -> [sizes in file order]
+	wanted = {}  # type -> [(size, is_default) in file order]
 	with open(path, newline="") as fh:
 		for r in csv.DictReader(fh):
 			t = (r.get("design_type") or "").strip()
@@ -39,8 +39,8 @@ def run(file_path=None):
 				continue
 			wanted.setdefault(t, [])
 			s = (r.get("size") or "").strip()
-			if s and s not in wanted[t]:
-				wanted[t].append(s)
+			if s and s not in [x[0] for x in wanted[t]]:
+				wanted[t].append((s, (r.get("is_default") or "").strip() in ("1", "TRUE", "true", "yes")))
 
 	types = sizes = 0
 	for t, size_list in wanted.items():
@@ -48,11 +48,17 @@ def run(file_path=None):
 			frappe.get_doc({"doctype": "Design Type", "design_type_name": t}).insert(ignore_permissions=True)
 			types += 1
 		doc = frappe.get_doc("Design Type", t)
-		current = [row.size for row in doc.sizes]
-		if current != size_list:
+		cur_sizes = [row.size for row in doc.sizes]
+		file_sizes = [s for s, _ in size_list]
+		file_default = next((s for s, d in size_list if d), None)
+		cur_default = next((row.size for row in doc.sizes if row.is_default), None)
+		# rebuild only when the size LIST differs, or the file explicitly sets a different
+		# default — a UI-set default is never wiped by a defaults-less file (migrate re-runs this).
+		if cur_sizes != file_sizes or (file_default and file_default != cur_default):
+			keep_default = file_default or cur_default
 			doc.sizes = []
-			for s in size_list:
-				doc.append("sizes", {"size": s})
+			for s, _ in size_list:
+				doc.append("sizes", {"size": s, "is_default": 1 if s == keep_default else 0})
 			doc.save(ignore_permissions=True)
 			sizes += len(size_list)
 	frappe.db.commit()
@@ -68,14 +74,14 @@ def export_csv(file_path=None):
 	for t in frappe.get_all("Design Type", order_by="name", pluck="name"):
 		size_list = frappe.get_all(
 			"Design Type Size", filters={"parent": t, "parenttype": "Design Type"},
-			order_by="idx", pluck="size",
+			fields=["size", "is_default"], order_by="idx",
 		)
 		if size_list:
-			rows += [{"design_type": t, "size": s} for s in size_list]
+			rows += [{"design_type": t, "size": r.size, "is_default": 1 if r.is_default else ""} for r in size_list]
 		else:
-			rows.append({"design_type": t, "size": ""})
+			rows.append({"design_type": t, "size": "", "is_default": ""})
 	with open(path, "w", newline="") as fh:
-		w = csv.DictWriter(fh, fieldnames=["design_type", "size"])
+		w = csv.DictWriter(fh, fieldnames=["design_type", "size", "is_default"])
 		w.writeheader()
 		w.writerows(rows)
 	print(f"Exported {len(rows)} rows -> {path}")
