@@ -386,14 +386,27 @@ def get_design_variants(design):
 	m = re.match(r"^(.*)\s\d+[A-Z]$", base)
 	root = m.group(1) if m and any(base.endswith(" " + suffix(k.name)) for k in karats) else base
 
+	# the design FAMILY = the root-named design + every 'root <suffix>' design.
+	# Map each member's actual BOM gold -> its name, so a karat counts as "exists" when ANY
+	# family member carries it (e.g. from 'A 2849 PB 18Y', 22KYG = the original 'A 2849 PB' —
+	# no duplicate 'A 2849 PB 22Y' can be created).
+	family = {}
+	for nm in [root] + [f"{root} {suffix(k.name)}" for k in karats]:
+		if not frappe.db.exists("Design", nm):
+			continue
+		mats = frappe.get_all("Design BOM Item", filters={"parent": nm, "parenttype": "Design"}, pluck="item")
+		g = next((i for i in mats if i in karat_names), None)
+		if g and g not in family:
+			family[g] = nm
+
 	out = []
 	for k in karats:
 		if k.name == current_gold:
 			continue
-		vname = f"{root} {suffix(k.name)}"
+		existing = family.get(k.name)
 		out.append({
 			"karat": k.name, "purity": flt(k.purity_percentage), "suffix": suffix(k.name),
-			"variant_name": vname, "exists": bool(frappe.db.exists("Design", vname)),
+			"variant_name": existing or f"{root} {suffix(k.name)}", "exists": bool(existing),
 		})
 	return {
 		"design": design, "base": root, "current_gold": current_gold,
