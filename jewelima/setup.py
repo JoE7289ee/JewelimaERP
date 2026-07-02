@@ -553,6 +553,13 @@ def create_design_masters():
 		if frappe.db.exists("Design Type", name) and not frappe.db.exists("Design", {"design_type": name}):
 			frappe.delete_doc("Design Type", name, ignore_permissions=True, force=True)
 	frappe.db.commit()
+	# type-linked sizes ship in data/design_types.csv (managed via Setup -> Design Types)
+	try:
+		from jewelima.jewelima.imports.import_design_types import run as import_design_type_sizes
+
+		import_design_type_sizes()
+	except Exception:
+		pass  # sizes are additive — never block install/migrate on them
 
 
 # NOTE: gold raw-material items are no longer seeded here. They come from the
