@@ -62,7 +62,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		<div class="po-wrap">
 			<div class="po-head">
 				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
-				<div class="po-h-orderdate"></div><div class="po-h-days"></div>
+				<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-custdays"></div>
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
@@ -88,23 +88,41 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		fieldtype: "Int", label: "Days (Due Date)", fieldname: "days",
 		description: "Due date = today + N days.",
 	});
+	state.header.cust_days = mk(".po-h-custdays", {
+		fieldtype: "Int", label: "Days (Customer Date)", fieldname: "cust_days",
+		description: "Date promised to the customer — empty copies the Due Date.",
+	});
 	state.header.order_date.set_value(frappe.datetime.get_today());
 	$(page.main).find(".po-h-days").append('<div class="po-due"></div>');
+	$(page.main).find(".po-h-custdays").append('<div class="po-due po-custdue"></div>');
 
 	// Order Date is fixed to today (read-only). Days is the lead time; the Due Date
 	// (today + Days) is derived — shown live under Days and computed when placing the order.
+	// Customer Date works the same off its own Days; left empty it copies the Due Date.
 	const dueFromDays = () => {
 		const n = cint(state.header.days.get_value());
 		return n > 0 ? frappe.datetime.add_days(frappe.datetime.get_today(), n) : "";
 	};
-	state.dueFromDays = dueFromDays; // placeOrder() reads this
+	const custFromDays = () => {
+		const n = cint(state.header.cust_days.get_value());
+		return n > 0 ? frappe.datetime.add_days(frappe.datetime.get_today(), n) : dueFromDays();
+	};
+	state.dueFromDays = dueFromDays; // placeOrder() reads these
+	state.custFromDays = custFromDays;
 	const showDue = () => {
 		const dd = dueFromDays();
-		$(page.main).find(".po-due").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
+		$(page.main).find(".po-due").not(".po-custdue").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
+		const cd = custFromDays();
+		const copied = !cint(state.header.cust_days.get_value());
+		$(page.main).find(".po-custdue").text(cd ? __("Customer {0}{1}", [frappe.datetime.str_to_user(cd), copied ? " (= due date)" : ""]) : "");
 	};
 	state.showDue = showDue;
 	state.header.days.$input.on("input change", () => {
 		if (cint(state.header.days.get_value()) < 0) state.header.days.set_value(0);
+		showDue();
+	});
+	state.header.cust_days.$input.on("input change", () => {
+		if (cint(state.header.cust_days.get_value()) < 0) state.header.cust_days.set_value(0);
 		showDue();
 	});
 
@@ -529,6 +547,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		state.header.salesman.set_value("");
 		state.header.order_type.set_value("");
 		state.header.days.set_value(0);
+		state.header.cust_days.set_value(0);
 		if (state.showDue) state.showDue();
 		state.header.order_no.set_value("");
 		state.header.order_date.set_value(frappe.datetime.get_today());
@@ -563,6 +582,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	const order_type = state.header.order_type.get_value();
 	const order_date = state.header.order_date.get_value() || frappe.datetime.get_today();
 	const due_date = state.dueFromDays ? state.dueFromDays() : "";
+	const customer_date = (state.custFromDays ? state.custFromDays() : "") || due_date; // empty -> copies due date
 
 	const all = state.rows.map(po_readLine);
 	const lines = all.filter((l) => l.design); // rows without a Design are denied
@@ -582,6 +602,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 			doctype: "Job Order",
 			order_date: order_date || frappe.datetime.get_today(),
 			due_date: due_date || undefined,
+			customer_date: customer_date || undefined,
 			customer: customer || undefined,
 			salesman: salesman || undefined,
 			order_type: order_type || undefined,

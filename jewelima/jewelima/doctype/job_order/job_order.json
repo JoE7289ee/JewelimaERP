@@ -9,6 +9,7 @@
  "field_order": [
   "order_date",
   "due_date",
+  "customer_date",
   "salesman",
   "order_type",
   "column_break_main",
@@ -28,6 +29,12 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Due Date"
+  },
+  {
+   "description": "Date promised to the customer — defaults to the Due Date if not set.",
+   "fieldname": "customer_date",
+   "fieldtype": "Date",
+   "label": "Customer Date"
   },
   {
    "fieldname": "salesman",

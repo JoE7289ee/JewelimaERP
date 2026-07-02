@@ -61,6 +61,7 @@
   "schedule_tab",
   "order_date",
   "due_date",
+  "customer_date",
   "sch_col",
   "customer",
   "salesman",
@@ -407,6 +408,13 @@
    "fieldtype": "Date",
    "in_standard_filter": 1,
    "label": "Due Date",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "job_order.customer_date",
+   "fieldname": "customer_date",
+   "fieldtype": "Date",
+   "label": "Customer Date",
    "read_only": 1
   },
   {
