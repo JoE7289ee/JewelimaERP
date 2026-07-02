@@ -85,7 +85,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type" });
 	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date", read_only: 1 });
 	state.header.days = mk(".po-h-days", {
-		fieldtype: "Int", label: "Days (lead time)", fieldname: "days",
+		fieldtype: "Int", label: "Days (Due Date)", fieldname: "days",
 		description: "Due date = today + N days.",
 	});
 	state.header.order_date.set_value(frappe.datetime.get_today());
