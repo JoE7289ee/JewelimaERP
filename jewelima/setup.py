@@ -19,6 +19,7 @@ def after_install():
 	flag_melt_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
+	seed_salesmen()
 	seed_standard_golds()
 	sync_workspace_sidebar()
 	setup_roles()
@@ -44,6 +45,7 @@ def after_migrate():
 	flag_melt_warehouses()
 	seed_raw_materials()
 	seed_karat_golds()
+	seed_salesmen()
 	seed_standard_golds()
 	sync_workspace_sidebar()
 	setup_roles()
@@ -283,6 +285,24 @@ def create_jd_stock_customer():
 	frappe.get_doc(
 		{"doctype": "Customer", "customer_name": "JD Stock", "customer_group": cg, "territory": terr}
 	).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+SALESMEN = ["BINOY", "LISON", "JOJU", "JISHNU"]
+
+
+def seed_salesmen():
+	"""Seed the shipped Sales Person records (the Place Order Salesman dropdown).
+	Idempotent; skips until the Sales Team root exists (ERPNext setup wizard)."""
+	root = frappe.db.get_value("Sales Person", {"is_group": 1, "parent_sales_person": ["in", ["", None]]}, "name")
+	if not root:
+		return
+	for name in SALESMEN:
+		if not frappe.db.exists("Sales Person", name):
+			frappe.get_doc({
+				"doctype": "Sales Person", "sales_person_name": name,
+				"parent_sales_person": root, "is_group": 0, "enabled": 1,
+			}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
