@@ -111,11 +111,11 @@
    "label": "Qty"
   },
   {
+   "description": "Options come from the design type's size list (Setup → Design Types).",
    "fieldname": "size",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Size",
-   "options": "\n-2.2/16\n2.0/16\nNA"
+   "label": "Size"
   },
   {
    "fieldname": "column_break_main",

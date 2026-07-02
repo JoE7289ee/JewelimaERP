@@ -555,6 +555,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "shapes",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Design Types",
+   "link_to": "design-types",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "settings-2",
    "indent": 1,
    "keep_closed": 0,
@@ -566,7 +579,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-02 14:38:00.229585",
+ "modified": "2026-07-02 15:17:50.150141",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

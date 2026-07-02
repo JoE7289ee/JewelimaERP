@@ -195,9 +195,18 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				}
 			} else if (col.type === "select") {
 				const $s = $("<select></select>").appendTo($td);
-				$s.append('<option value=""></option>');
-				col.options.forEach((o) => $s.append(`<option>${frappe.utils.escape_html(o)}</option>`));
-				row.f[col.key] = { get: () => $s.val(), set: (v) => $s.val(v || "") };
+				const fill = (opts) => {
+					const cur = $s.val();
+					$s.empty().append('<option value=""></option>');
+					(opts || []).forEach((o) => $s.append(`<option>${frappe.utils.escape_html(o)}</option>`));
+					if (cur && (opts || []).includes(cur)) $s.val(cur);
+				};
+				fill(col.options);
+				row.f[col.key] = {
+					get: () => $s.val(),
+					set: (v) => $s.val(v || ""),
+					setOptions: (opts) => { fill(opts); if ((opts || []).length === 1) $s.val(opts[0]); },
+				};
 			} else if (col.type === "ro") {
 				// read-only, derived from the design (no input)
 				$td.addClass("po-ro").text("—");
@@ -293,6 +302,17 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	}
 
 	// Pull the design's BOM into this line's editable working copy + recompute.
+	// type -> its size list (Setup → Design Types); the row's Size dropdown follows the type
+	state.typeSizes = {};
+	frappe.call({ method: "jewelima.jewelima.api.get_design_types_with_sizes" }).then((r) => {
+		(r.message || []).forEach((t) => (state.typeSizes[t.design_type] = t.sizes || []));
+	});
+	function applyTypeSizes(row) {
+		if (!row.f.size || !row.f.size.setOptions) return;
+		const sizes = state.typeSizes[row._designType] || [];
+		row.f.size.setOptions(sizes.length ? sizes : ["NA"]);
+	}
+
 	function pullDesignBOM(row) {
 		const design = row.f.design.get();
 		if (row.f.design_type) row.f.design_type.set("");
@@ -303,6 +323,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			row._image = msg.image || "";
 			row._designType = msg.design_type || "";
 			if (row.f.design_type) row.f.design_type.set(row._designType);
+			applyTypeSizes(row);
 			row._edited = false;
 			row._profile = planProfile(row._materials);
 			applyProfile(row);
@@ -447,6 +468,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 					nr._designType = row._designType;
 					nr._lastDesign = design;
 					nr.f.design.set(design);
+					applyTypeSizes(nr);
 					nr.f.size.set(size);
 					if (nr.f.design_type) nr.f.design_type.set(row._designType || "");
 					nr.f.qty.set(qtys[i]);

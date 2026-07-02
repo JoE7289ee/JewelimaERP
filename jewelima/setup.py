@@ -533,9 +533,11 @@ def create_default_stone_types():
 
 # Seed values for the Design masters (extensible — users can add more).
 DESIGN_TYPES = [
-	"NOSEPIN", "STUD", "NECKLACE", "PENDANT", "CHAIN", "BACK CHAIN", "BIRTH NECK",
+	"NOSEPIN", "STUD", "NECKLACE", "PENDANT", "CHAIN", "BACK CHAIN",
 	"RING", "BRACELET", "BANGLE", "ANKLET", "PIPE BANGLE", "CHAIN BRACELET", "CHAIN NECKLACE",
 ]
+# design types removed from the shipped set — deleted on migrate if nothing uses them
+RETIRED_DESIGN_TYPES = ["BIRTH NECK"]
 DESIGN_STYLES = ["General", "Tickly"]
 
 
@@ -547,6 +549,9 @@ def create_design_masters():
 	for name in DESIGN_STYLES:
 		if not frappe.db.exists("Design Style", name):
 			frappe.get_doc({"doctype": "Design Style", "design_style_name": name}).insert(ignore_permissions=True)
+	for name in RETIRED_DESIGN_TYPES:
+		if frappe.db.exists("Design Type", name) and not frappe.db.exists("Design", {"design_type": name}):
+			frappe.delete_doc("Design Type", name, ignore_permissions=True, force=True)
 	frappe.db.commit()
 
 

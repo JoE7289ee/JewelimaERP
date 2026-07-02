@@ -265,6 +265,66 @@ def get_order_defaults():
 
 
 @frappe.whitelist()
+def get_design_types_with_sizes():
+	"""All Design Types with their size lists — the Setup page grid + the Place Order
+	Size dropdown (sizes follow the picked design's type)."""
+	out = []
+	used = {r.design_type: r.cnt for r in frappe.db.sql(
+		"SELECT design_type, COUNT(*) cnt FROM `tabDesign` GROUP BY design_type", as_dict=True)}
+	for t in frappe.get_all("Design Type", order_by="name", pluck="name"):
+		sizes = frappe.get_all(
+			"Design Type Size", filters={"parent": t, "parenttype": "Design Type"},
+			order_by="idx", pluck="size",
+		)
+		out.append({"design_type": t, "sizes": sizes, "used_by": int(used.get(t, 0))})
+	return out
+
+
+@frappe.whitelist()
+def add_design_type(name):
+	frappe.only_for(["System Manager", "Stock Manager"])
+	name = (name or "").strip().upper()
+	if not name:
+		frappe.throw(frappe._("Type name is required"))
+	if frappe.db.exists("Design Type", name):
+		frappe.throw(frappe._("Design Type '{0}' already exists").format(name))
+	frappe.get_doc({"doctype": "Design Type", "design_type_name": name}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"design_type": name}
+
+
+@frappe.whitelist()
+def delete_design_type(name):
+	frappe.only_for(["System Manager", "Stock Manager"])
+	used = frappe.db.count("Design", {"design_type": name})
+	if used:
+		frappe.throw(frappe._("Cannot delete — {0} Design(s) use this type.").format(used))
+	frappe.delete_doc("Design Type", name, ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+@frappe.whitelist()
+def set_design_type_sizes(design_type, sizes):
+	"""Replace a Design Type's size list (the Setup page's add/remove)."""
+	frappe.only_for(["System Manager", "Stock Manager"])
+	sizes = frappe.parse_json(sizes) if isinstance(sizes, str) else (sizes or [])
+	seen, clean = set(), []
+	for s in sizes:
+		s = (s or "").strip()
+		if s and s not in seen:
+			seen.add(s)
+			clean.append(s)
+	doc = frappe.get_doc("Design Type", design_type)
+	doc.sizes = []
+	for s in clean:
+		doc.append("sizes", {"size": s})
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"design_type": design_type, "sizes": clean}
+
+
+@frappe.whitelist()
 def create_design(design_name, design_type, design_style=None, image=None, materials=None):
 	"""Quick-create a Design from the Place Order dialog. The Design controller
 	provisions the sellable Item + BOM and derives the stone counts. Returns the
