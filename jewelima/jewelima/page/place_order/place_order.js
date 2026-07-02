@@ -36,6 +36,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		.po-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.po-head .control-input-wrapper .control-input,.po-head .control-input input,.po-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
 		.po-head .help-box,.po-head .description,.po-head p.help-box{display:none !important;}
+		.po-due{font-size:11px;color:var(--text-muted);margin:1px 0 0 2px;white-space:nowrap;}
 		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
 		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.po-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
@@ -88,6 +89,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		description: "Due date = today + N days.",
 	});
 	state.header.order_date.set_value(frappe.datetime.get_today());
+	$(page.main).find(".po-h-days").append('<div class="po-due"></div>');
 
 	// Order Date is fixed to today (read-only). Days is the lead time; the Due Date
 	// (today + Days) is derived — shown live under Days and computed when placing the order.
@@ -98,7 +100,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	state.dueFromDays = dueFromDays; // placeOrder() reads this
 	const showDue = () => {
 		const dd = dueFromDays();
-		state.header.days.set_description(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "Due date = today + N days.");
+		$(page.main).find(".po-due").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
 	};
 	state.showDue = showDue;
 	state.header.days.$input.on("input change", () => {
