@@ -93,7 +93,8 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 
 	function saveSizes(r, sizes) {
 		frappe.call({ method: API + ".set_design_type_sizes", args: { design_type: r.design_type, sizes: JSON.stringify(sizes) } })
-			.then((res) => { r.sizes = (res.message || {}).sizes || sizes; render(); });
+			.then((res) => { r.sizes = (res.message || {}).sizes || sizes; render(); })
+			.catch(() => render()); // blocked (e.g. size in use by Order Bags) — restore the chips
 	}
 
 	function load() {
