@@ -551,9 +551,22 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "settings-2",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Order Settings",
+   "link_to": "Jewelima Order Settings",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
   }
  ],
- "modified": "2026-07-02 10:22:37.154493",
+ "modified": "2026-07-02 14:38:00.229585",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

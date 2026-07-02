@@ -254,6 +254,17 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 
 
 @frappe.whitelist()
+def get_order_defaults():
+	"""Global Place Order defaults from the Jewelima Order Settings single."""
+	s = frappe.get_cached_doc("Jewelima Order Settings")
+	return {
+		"days": frappe.utils.cint(s.default_days) or 0,
+		"order_type": s.default_order_type or None,
+		"salesman": s.default_salesman or None,
+	}
+
+
+@frappe.whitelist()
 def create_design(design_name, design_type, design_style=None, image=None, materials=None):
 	"""Quick-create a Design from the Place Order dialog. The Design controller
 	provisions the sellable Item + BOM and derives the stone counts. Returns the

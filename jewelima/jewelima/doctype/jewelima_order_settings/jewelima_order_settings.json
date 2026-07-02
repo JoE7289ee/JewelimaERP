@@ -1,0 +1,61 @@
+{
+ "actions": [],
+ "creation": "2026-06-30 15:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "intro",
+  "default_days",
+  "default_order_type",
+  "default_salesman"
+ ],
+ "fields": [
+  {
+   "fieldname": "intro",
+   "fieldtype": "HTML",
+   "options": "<p style='color:var(--text-muted)'>Global defaults for the <b>Place Order</b> page. New order lines pre-fill from these; each order can still be changed.</p>"
+  },
+  {
+   "fieldname": "default_days",
+   "fieldtype": "Int",
+   "label": "Default Days (lead time)",
+   "description": "Pre-fills the Days field on Place Order (Due Date = order date + N days)."
+  },
+  {
+   "fieldname": "default_order_type",
+   "fieldtype": "Link",
+   "label": "Default Type",
+   "options": "Order Type"
+  },
+  {
+   "fieldname": "default_salesman",
+   "fieldtype": "Link",
+   "label": "Default Salesman",
+   "options": "Sales Person"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-30 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Jewelima Order Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "role": "System Manager"
+  },
+  {
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "role": "Stock Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
