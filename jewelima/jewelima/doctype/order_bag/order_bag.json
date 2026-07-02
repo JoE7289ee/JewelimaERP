@@ -170,13 +170,13 @@
   },
   {
    "default": "In Production",
-   "description": "In Production -> In Stock (made into a product) -> At Certification / Sold.",
+   "description": "In Production -> In Stock (made into a product) -> At Certification / Sold. Cancelled = order called off.",
    "fieldname": "stock_status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Stock Status",
-   "options": "In Production\nIn Stock\nAt Certification\nSold",
+   "options": "In Production\nIn Stock\nAt Certification\nSold\nCancelled",
    "read_only": 1
   },
   {

@@ -315,21 +315,24 @@ def set_design_type_sizes(design_type, sizes):
 		if s and s not in seen:
 			seen.add(s)
 			clean.append(s)
-	# a size can't be removed while an Order Bag of this type is using it
+	# a size can't be removed while an ACTIVE Order Bag of this type is using it
+	# (Cancelled / Sold bags are history — they don't block).
 	doc = frappe.get_doc("Design Type", design_type)
 	removed = [row.size for row in doc.sizes if row.size not in seen]
 	for s in removed:
 		used = frappe.db.sql(
 			"""SELECT COUNT(*) FROM `tabOrder Bag` ob
 			   JOIN `tabDesign` d ON d.name = ob.design
-			   WHERE d.design_type = %s AND ob.size = %s""",
+			   WHERE d.design_type = %s AND ob.size = %s
+			     AND IFNULL(ob.stock_status, '') NOT IN ('Cancelled', 'Sold')""",
 			(design_type, s),
 		)[0][0]
 		if used:
 			frappe.throw(
-				frappe._("Cannot remove size '{0}' — {1} Order Bag(s) of type {2} are using it.").format(s, used, design_type)
+				frappe._("Cannot remove size '{0}' — {1} active Order Bag(s) of type {2} are using it.").format(s, used, design_type)
 			)
-	doc.sizes = []
+	doc.reload()  # fresh copy — guards against stale-cache row loss on rebuild
+	doc.set("sizes", [])
 	for s in clean:
 		doc.append("sizes", {"size": s})
 	doc.save(ignore_permissions=True)
