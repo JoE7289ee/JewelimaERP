@@ -264,6 +264,92 @@ def get_order_defaults():
 	}
 
 
+# --- Order dropdown masters (Setup -> Types & Salesmen) ----------------------------
+# kind "type" = Order Type (jewelima master, retire via `disabled`);
+# kind "salesman" = Sales Person (ERPNext tree master, retire via `enabled`).
+
+def _order_master_conf(kind):
+	if kind == "type":
+		return {"doctype": "Order Type", "bag_field": "order_type", "off_field": "disabled", "off_value": 1}
+	if kind == "salesman":
+		return {"doctype": "Sales Person", "bag_field": "salesman", "off_field": "enabled", "off_value": 0}
+	frappe.throw(frappe._("Unknown master kind: {0}").format(kind))
+
+
+def _active_bags_using(bag_field, value):
+	"""Order Bags in an ACTIVE state (not Cancelled/Sold) carrying this value."""
+	return frappe.db.sql(
+		f"""SELECT COUNT(*) FROM `tabOrder Bag`
+		    WHERE `{bag_field}` = %s AND IFNULL(stock_status, '') NOT IN ('Cancelled', 'Sold')""",
+		(value,),
+	)[0][0]
+
+
+@frappe.whitelist()
+def get_order_masters():
+	"""Both dropdown masters with usage + retired state, for the Types & Salesmen page."""
+	out = {}
+	for kind in ("type", "salesman"):
+		c = _order_master_conf(kind)
+		filters = {"is_group": 0} if kind == "salesman" else {}
+		rows = []
+		for d in frappe.get_all(c["doctype"], filters=filters, fields=["name", c["off_field"]], order_by="name"):
+			retired = bool(d[c["off_field"]]) if kind == "type" else not d[c["off_field"]]
+			rows.append({
+				"name": d.name,
+				"retired": retired,
+				"active_bags": int(_active_bags_using(c["bag_field"], d.name)),
+				"total_bags": int(frappe.db.count("Order Bag", {c["bag_field"]: d.name})),
+			})
+		out[kind] = rows
+	return out
+
+
+@frappe.whitelist()
+def add_order_master(kind, name):
+	frappe.only_for(["System Manager", "Stock Manager"])
+	c = _order_master_conf(kind)
+	name = (name or "").strip().upper()
+	if not name:
+		frappe.throw(frappe._("Name is required"))
+	if frappe.db.exists(c["doctype"], name):
+		frappe.throw(frappe._("{0} '{1}' already exists").format(c["doctype"], name))
+	if kind == "type":
+		frappe.get_doc({"doctype": "Order Type", "order_type_name": name}).insert(ignore_permissions=True)
+	else:
+		root = frappe.db.get_value("Sales Person", {"is_group": 1, "parent_sales_person": ["in", ["", None]]}, "name")
+		frappe.get_doc({
+			"doctype": "Sales Person", "sales_person_name": name,
+			"parent_sales_person": root, "is_group": 0, "enabled": 1,
+		}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def retire_order_master(kind, name, restore=0):
+	"""Retire (hide from dropdowns) or restore a Type / Salesman. Retiring is blocked while
+	ACTIVE Order Bags use it (Cancelled/Sold don't count); a never-used value is deleted."""
+	frappe.only_for(["System Manager", "Stock Manager"])
+	c = _order_master_conf(kind)
+	if not frappe.db.exists(c["doctype"], name):
+		frappe.throw(frappe._("Not found"))
+	if frappe.utils.cint(restore):
+		frappe.db.set_value(c["doctype"], name, c["off_field"], 0 if kind == "type" else 1)
+		frappe.db.commit()
+		return {"name": name, "state": "restored"}
+	active = _active_bags_using(c["bag_field"], name)
+	if active:
+		frappe.throw(frappe._("Cannot retire '{0}' — {1} active Order Bag(s) use it (only Cancelled/Sold usage may be retired).").format(name, active))
+	if not frappe.db.count("Order Bag", {c["bag_field"]: name}) and not frappe.db.count("Job Order", {c["bag_field"]: name}):
+		frappe.delete_doc(c["doctype"], name, ignore_permissions=True)
+		frappe.db.commit()
+		return {"name": name, "state": "deleted"}
+	frappe.db.set_value(c["doctype"], name, c["off_field"], c["off_value"])
+	frappe.db.commit()
+	return {"name": name, "state": "retired"}
+
+
 @frappe.whitelist()
 def get_design_types_with_sizes():
 	"""All Design Types with their size lists — the Setup page grid + the Place Order

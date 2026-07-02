@@ -568,6 +568,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Types & Salesmen",
+   "link_to": "order-masters",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "settings-2",
    "indent": 1,
    "keep_closed": 0,
@@ -579,7 +592,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-02 15:40:36.633439",
+ "modified": "2026-07-02 16:16:28.152824",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
