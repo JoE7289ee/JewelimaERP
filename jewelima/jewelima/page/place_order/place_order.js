@@ -57,6 +57,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		table.po-grid td.po-act{text-align:center;padding:0 4px;}
 		table.po-grid td.po-act .btn{padding:1px 7px;font-size:11px;height:24px;line-height:1;margin:0 1px;}
 		table.po-grid td.po-act .btn:disabled{opacity:.4;cursor:not-allowed;}
+		table.po-grid td.po-act .btn.po-new.ready{background:#b00020;border-color:#b00020;color:#fff;font-weight:600;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="po-wrap">
@@ -140,7 +141,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
 	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
-	$headrow.append('<th style="width:240px;text-align:center">Functions</th>');
+	$headrow.append('<th style="width:285px;text-align:center">Functions</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
 	const $body = $(page.main).find(".po-body");
@@ -270,6 +271,9 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		row.$remark.on("click", () => editRemark(row));
 		row.$reset = $('<button class="btn btn-xs btn-default" title="Reset this line to the design\'s BOM">Reset</button>').appendTo($act);
 		row.$reset.on("click", () => resetLine(row));
+		row.$new = $('<button class="btn btn-xs btn-default po-new" title="Create a purity variant of this design (e.g. 22KYG → 18KPG)">New</button>').appendTo($act);
+		row.$new.on("click", () => openVariantPicker(row));
+		updateNewBtn(row);
 		updateDesignBtn(row);
 		updateSplitBtn(row);
 		updateRemarkBtn(row);
@@ -299,6 +303,71 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 
 	function updateDesignBtn(row) {
 		if (row.$design) row.$design.prop("disabled", !row.f.design.get());
+		updateNewBtn(row);
+	}
+
+	// "New" goes RED (ready) once a design is chosen on the line
+	function updateNewBtn(row) {
+		if (!row.$new) return;
+		const has = !!row.f.design.get();
+		row.$new.prop("disabled", !has).toggleClass("ready", has);
+	}
+
+	// select a design onto the line programmatically (set_value is async and does not fire
+	// the input change handler — chain, clear the guard, then pull the BOM explicitly)
+	function selectDesign(row, name) {
+		Promise.resolve(row.f.design.set(name)).then(() => {
+			row._lastDesign = null;
+			onDesignPicked(row);
+			updateDesignBtn(row);
+		});
+	}
+	state.selectDesign = selectDesign;
+
+	// The per-line "New" flow: show the design's current gold + every other karat gold.
+	// RED = variant doesn't exist yet (click -> prefilled New Design dialog);
+	// BLACK = variant already exists (click -> select it on this line).
+	function openVariantPicker(row) {
+		const design = row.f.design.get();
+		if (!design) return;
+		frappe.call({ method: "jewelima.jewelima.api.get_design_variants", args: { design } }).then((r) => {
+			const v = r.message || {};
+			const esc = frappe.utils.escape_html;
+			const dlg = new frappe.ui.Dialog({ title: __("New purity variant — {0}", [esc(design)]) });
+			const btns = (v.variants || []).map((x, i) =>
+				`<button class="btn btn-sm pv-btn" data-i="${i}" style="min-width:96px;margin:4px;${x.exists
+					? "background:#171717;border-color:#171717;color:#fff;"
+					: "background:#b00020;border-color:#b00020;color:#fff;"}"
+					title="${esc(x.variant_name)}${x.exists ? " — already exists, click to use it" : " — click to create"}">
+					${esc(x.karat)}${x.exists ? " ●" : ""}</button>`
+			).join("");
+			$(dlg.body).html(`
+				<div style="margin:0 0 10px;color:var(--text-muted);font-size:13px;">
+					Current gold: <b style="color:var(--text-color)">${esc(v.current_gold)}</b> (${flt(v.current_purity).toFixed(1)}%)
+					&nbsp;·&nbsp; base name <b style="color:var(--text-color)">${esc(v.base)}</b></div>
+				<div style="display:flex;flex-wrap:wrap;">${btns}</div>
+				<div style="margin-top:10px;color:var(--text-muted);font-size:12px;">
+					<span style="color:#b00020;font-weight:600;">Red</span> = create this variant ·
+					<span style="font-weight:600;">Black ●</span> = exists, click to use it on this line.</div>`);
+			$(dlg.body).find(".pv-btn").on("click", function () {
+				const x = v.variants[+this.getAttribute("data-i")];
+				dlg.hide();
+				if (x.exists) return selectDesign(row, x.variant_name);
+				// build the prefilled BOM: same rows, gold swapped to the chosen karat
+				frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((mr) => {
+					const mats = ((mr.message || {}).materials || []).map((m) =>
+						m.item === v.current_gold
+							? { ...m, item: x.karat, purity: x.purity, pure: (flt(m.weight) * flt(x.purity)) / 100 }
+							: { ...m, pure: m.stone_type ? 0 : (flt(m.weight) * flt(m.purity)) / 100 }
+					);
+					openNewDesignDialog(state, {
+						design_name: x.variant_name, design_type: v.design_type,
+						design_style: v.design_style, image: v.image, materials: mats, row,
+					});
+				});
+			});
+			dlg.show();
+		});
 	}
 
 	// Per-piece plan profile from a materials list — mirrors api._plan_values: gross = metal
@@ -637,7 +706,9 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	}
 }
 
-function openNewDesignDialog(state) {
+function openNewDesignDialog(state, prefill) {
+	// prefill (optional) = a purity-variant seed: {design_name, design_type, design_style,
+	// image, materials, row} — everything copied from the source design, gold already swapped.
 	// fetch_from doesn't fire in a Dialog grid, so fill Purity / UOM / Pure ourselves.
 	function bomItemChanged() {
 		const row = this.doc || (this.grid_row && this.grid_row.doc);
@@ -683,7 +754,7 @@ function openNewDesignDialog(state) {
 			{ fieldname: "image_preview", fieldtype: "HTML" },
 			{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
 			{
-				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item",
+				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item", data: [],
 				description: __("Stones need both a Qty (count) and a Weight (carats). Metals need a Weight (grams)."),
 				fields: [
 					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
@@ -725,13 +796,27 @@ function openNewDesignDialog(state) {
 				if (!res.name) return;
 				d.hide();
 				frappe.show_alert({ message: __("Design {0} created.", [res.name]), indicator: "green" }, 5);
-				// drop the new design onto the first empty row (or a fresh one) and pull its stones
-				let row = state.rows.find((rr) => !rr.f.design.get());
+				// drop the new design onto its line: the variant's source row, else the first
+				// empty one. selectDesign chains the async set_value so the materials pull too.
+				let row = (prefill && prefill.row) || state.rows.find((rr) => !rr.f.design.get());
 				if (!row) row = state.addRow();
-				row.f.design.set(res.name);
-				state.onDesignPicked(row);
+				state.selectDesign(row, res.name);
 			});
 		},
 	});
 	d.show();
+	if (prefill) {
+		d.set_value("design_name", prefill.design_name);
+		d.set_value("design_type", prefill.design_type || "");
+		d.set_value("design_style", prefill.design_style || "");
+		Promise.resolve(d.set_value("image", prefill.image || "")).then(() => {
+			if (d.fields_dict.image.df.onchange) d.fields_dict.image.df.onchange();
+		});
+		const grid = d.fields_dict.materials.grid;
+		grid.df.data = (prefill.materials || []).map((m, i) => ({
+			idx: i + 1, name: "new-var-" + (i + 1), item: m.item, purity: m.purity, uom: m.uom,
+			stone_type: m.stone_type, qty: m.qty, weight: m.weight, pure: m.pure,
+		}));
+		grid.refresh();
+	}
 }

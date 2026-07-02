@@ -351,6 +351,59 @@ def retire_order_master(kind, name, restore=0):
 
 
 @frappe.whitelist()
+def get_design_variants(design):
+	"""Purity-variant options for a design (the Place Order 'New' button).
+
+	Finds the design BOM's gold row, then for every OTHER karat gold (22KPG, 18KYG, …)
+	returns the would-be variant name (base + karat suffix, e.g. 'A 2849 PB' + 18KPG ->
+	'A 2849 PB 18P') and whether that Design already exists."""
+	import re
+
+	if not design or not frappe.db.exists("Design", design):
+		frappe.throw(frappe._("No such design"))
+	doc = frappe.get_doc("Design", design)
+
+	karats = frappe.get_all(
+		"Item", filters={"item_group": "GOLD", "metal_purity": ["!=", ""]},
+		fields=["name", "purity_percentage"], order_by="name desc",
+	)
+	karat_names = {k.name for k in karats}
+
+	def suffix(item):  # 18KPG -> 18P, 14KWG -> 14W
+		m = re.match(r"^(\d+)K([A-Z])G$", item)
+		return f"{m.group(1)}{m.group(2)}" if m else item
+
+	# the BOM's gold row = a karat-gold item (fall back to any metal row)
+	current_gold = next((m.item for m in doc.materials if m.item in karat_names), None)
+	if not current_gold:
+		stones = {i.name for i in frappe.get_all("Item", filters={"name": ["in", [m.item for m in doc.materials]], "stone_type": ["!=", ""]})}
+		current_gold = next((m.item for m in doc.materials if m.item not in stones), None)
+	if not current_gold:
+		frappe.throw(frappe._("{0} has no gold row in its BOM to swap.").format(design))
+
+	# strip an existing karat suffix so variants of variants share one base name
+	base = doc.design_name
+	m = re.match(r"^(.*)\s\d+[A-Z]$", base)
+	root = m.group(1) if m and any(base.endswith(" " + suffix(k.name)) for k in karats) else base
+
+	out = []
+	for k in karats:
+		if k.name == current_gold:
+			continue
+		vname = f"{root} {suffix(k.name)}"
+		out.append({
+			"karat": k.name, "purity": flt(k.purity_percentage), "suffix": suffix(k.name),
+			"variant_name": vname, "exists": bool(frappe.db.exists("Design", vname)),
+		})
+	return {
+		"design": design, "base": root, "current_gold": current_gold,
+		"current_purity": flt(frappe.db.get_value("Item", current_gold, "purity_percentage")),
+		"design_type": doc.design_type, "design_style": doc.design_style, "image": doc.image,
+		"variants": out,
+	}
+
+
+@frappe.whitelist()
 def get_design_types_with_sizes():
 	"""All Design Types with their size lists — the Setup page grid + the Place Order
 	Size dropdown (sizes follow the picked design's type)."""
