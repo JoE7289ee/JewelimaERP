@@ -66,7 +66,19 @@ frappe.pages["add-design"].on_page_load = function (wrapper) {
 		return c;
 	};
 	const dno = mk(".ad-dno-control", { fieldtype: "Data", label: "Design No", fieldname: "design_no", reqd: 1 });
-	const img = mk(".ad-img", { fieldtype: "Attach Image", label: "Image", fieldname: "image" });
+	const img = mk(".ad-img", {
+		fieldtype: "Attach Image", label: "Image", fieldname: "image",
+		onchange() {
+			// show the attached photo itself, not just the file link
+			const url = img.get_value();
+			$(page.main).find(".ad-img-preview").html(
+				url
+					? `<img src="${encodeURI(url)}" style="max-height:200px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.parentElement.innerHTML=''">`
+					: ""
+			);
+		},
+	});
+	$(page.main).find(".ad-img").append('<div class="ad-img-preview" style="text-align:center;margin-top:6px;"></div>');
 	const gw = mk(".ad-gw", { fieldtype: "Float", label: "GW (g)", fieldname: "gross_weight", precision: "3" });
 	const dw = mk(".ad-dw", { fieldtype: "Float", label: "DW (ct)", fieldname: "diamond_weight", precision: "2" });
 	const note = mk(".ad-note-box", { fieldtype: "Data", label: "Note", fieldname: "note" });
@@ -138,6 +150,7 @@ frappe.pages["add-design"].on_page_load = function (wrapper) {
 	function resetForm() {
 		dno.set_value("");
 		img.set_value("");
+		$(page.main).find(".ad-img-preview").empty();
 		gw.set_value(null);
 		dw.set_value(null);
 		note.set_value("");
