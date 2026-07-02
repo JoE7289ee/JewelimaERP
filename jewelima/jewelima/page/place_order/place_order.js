@@ -644,7 +644,19 @@ function openNewDesignDialog(state) {
 			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1 },
 			{ fieldname: "design_style", fieldtype: "Link", label: __("Design Style"), options: "Design Style" },
 			{ fieldname: "sb_img", fieldtype: "Section Break" },
-			{ fieldname: "image", fieldtype: "Attach Image", label: __("Design Image") },
+			{
+				fieldname: "image", fieldtype: "Attach Image", label: __("Design Image"),
+				onchange() {
+					// show the attached image itself, not just the file link
+					const url = d.get_value("image");
+					d.fields_dict.image_preview.$wrapper.html(
+						url
+							? `<div style="text-align:center;margin:4px 0 8px;"><img src="${encodeURI(url)}" style="max-height:220px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`
+							: ""
+					);
+				},
+			},
+			{ fieldname: "image_preview", fieldtype: "HTML" },
 			{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
 			{
 				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item",
