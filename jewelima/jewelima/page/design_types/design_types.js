@@ -15,7 +15,7 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.dt-wrap{max-width:900px;}
+		.dt-wrap{width:100%;}
 		.dt-top{display:flex;gap:8px;align-items:center;margin:2px 0 12px;}
 		.dt-new{width:260px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;text-transform:uppercase;}
 		.dt-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
@@ -42,7 +42,7 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 				<thead><tr><th style="width:220px">Design Type</th><th>Sizes</th><th style="width:70px"></th></tr></thead>
 				<tbody class="dt-body"></tbody>
 			</table></div>
-			<div class="dt-hint">Sizes typed here become the <b>Place Order</b> Size options for that type (no sizes = the Size box stays free-text-less “NA”-style empty). After editing, hit <b>Export CSV</b> and commit <code>data/design_types.csv</code> so it ships.</div>
+			<div class="dt-hint">Each design type carries its own size list — these are the options the team sees in the <b>Place Order</b> Size dropdown for that type. Type a size and press Enter to add it; click × to remove. A type can only be deleted while no designs are linked to it (🔒 in use = locked).</div>
 		</div>
 	`);
 
@@ -61,7 +61,9 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 					${r.sizes.length ? "" : '<span class="dt-none">no sizes —</span>'}
 					<input class="dt-addsize" data-idx="${i}" placeholder="+ size ⏎">
 				</div></td>
-				<td><button class="btn btn-xs btn-default dt-del" data-idx="${i}" ${r.used_by ? "disabled title='In use by designs'" : ""}>Delete</button></td>
+				<td>${r.used_by
+					? `<span class="dt-none" title="Delete is blocked while designs use this type">🔒 in use</span>`
+					: `<button class="btn btn-xs btn-default dt-del" data-idx="${i}">Delete</button>`}</td>
 			</tr>`).join("");
 
 		body.querySelectorAll(".dt-addsize").forEach((inp) => {
@@ -106,12 +108,6 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".add_design_type", args: { name: v } }).then(() => { root.querySelector(".dt-new").value = ""; load(); });
 	}
 
-	page.add_inner_button(__("Export CSV"), () => {
-		frappe.call({ method: "jewelima.jewelima.imports.import_design_types.export_csv" }).then((r) => {
-			const m = r.message || {};
-			frappe.msgprint(__("Exported {0} rows to <code>{1}</code> — commit this file so it ships.", [m.rows, esc(m.path || "")]));
-		});
-	});
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };
