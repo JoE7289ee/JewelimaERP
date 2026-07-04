@@ -73,3 +73,51 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	w.focus();
 	setTimeout(() => w.print(), 350);
 };
+
+// ---------------------------------------------------------------------------
+// Reset-on-return for the Jewelima functional pages.
+//
+// Frappe builds a custom desk page ONCE (on_page_load) and merely re-shows it on
+// later visits, so half-filled forms linger. Rule here: ROUTE AWAY and come back
+// -> the page rebuilds fresh. Staying on the page (kept open in a tab, switching
+// browser tabs/windows, reloads) never resets — only in-app navigation does.
+// ---------------------------------------------------------------------------
+(() => {
+	const RESET_PAGES = new Set([
+		"place-order", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",
+		"bag-split", "transfer-order-bag", "print-barcode", "weight-add", "weight-reduce",
+		"stock-transfer", "make-products", "finished-items", "card-info", "job-order-status",
+		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
+		"order-masters", "warehouse-management", "print-order-bags", "order-bag-photos",
+		"bench-dashboard", "employee-performance", "warehouse-stock", "item-stock",
+	]);
+	let last = null;
+
+	function onRouteChange() {
+		const cur = (frappe.get_route() || [])[0];
+		if (last && last !== cur && RESET_PAGES.has(last) && frappe.pages[last]) {
+			frappe.pages[last].__jw_stale = true; // left a functional page — rebuild on return
+		}
+		if (cur && RESET_PAGES.has(cur)) {
+			const pg = frappe.pages[cur];
+			if (pg && pg.__jw_stale && pg.on_page_load) {
+				pg.__jw_stale = false;
+				const wrapper = document.getElementById("page-" + cur);
+				if (wrapper) {
+					$(wrapper).empty();
+					pg.on_page_load(wrapper);
+				}
+			}
+		}
+		last = cur;
+	}
+
+	function attach() {
+		if (frappe.router && frappe.router.on) {
+			last = (frappe.get_route() || [])[0];
+			frappe.router.on("change", onRouteChange);
+		}
+	}
+	if (window.frappe && frappe.router && frappe.router.on) attach();
+	else $(document).on("app_ready", attach);
+})();
