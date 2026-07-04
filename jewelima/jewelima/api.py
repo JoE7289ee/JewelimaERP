@@ -989,10 +989,11 @@ def get_bag_transfer_info(order_bag):
 	bag = frappe.db.get_value("Order Bag", order_bag, ["location", "design", "qty", "due_date"], as_dict=True)
 	if not bag:
 		return {}
-	c = get_bag_contents(order_bag)
+	p = _actual_profile(order_bag)  # everything from what the bag ACTUALLY holds
 	return {
 		"location": bag.location, "design": bag.design, "qty": bag.qty, "due_date": bag.due_date,
-		"gross": round(flt(c.get("gross_weight")), 3), "nett": round(flt(c.get("gold_grams")), 3),
+		"gross": p["gross"], "nett": p["nett"],
+		"dmd_weight": p["dmd_weight"], "ps_no": p["ps_no"], "cs_no": p["cs_no"],
 	}
 
 

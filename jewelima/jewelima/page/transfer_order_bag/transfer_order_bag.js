@@ -43,7 +43,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		<div class="tob-msg"></div>
 		<div class="tob-box">
 			<table class="tob-grid">
-				<thead><tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th class="num">Gross (g)</th><th class="num">Nett (g)</th><th style="width:34px"></th></tr></thead>
+				<thead><tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th class="num">Gross (g)</th><th class="num">Nett (g)</th><th class="num">DMD (ct)</th><th class="num">PS No</th><th class="num">CS No</th><th style="width:34px"></th></tr></thead>
 				<tbody class="tob-body"></tbody>
 				<tfoot class="tob-foot-row"></tfoot>
 			</table>
@@ -93,16 +93,18 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td>
 				<td class="num">${flt(r.gross) ? flt(r.gross).toFixed(3) : ""}</td>
 				<td class="num">${flt(r.nett) ? flt(r.nett).toFixed(3) : ""}</td>
+				<td class="num">${flt(r.dmd_weight) ? flt(r.dmd_weight).toFixed(3) : ""}</td>
+				<td class="num">${r.ps_no || ""}</td>
+				<td class="num">${r.cs_no || ""}</td>
 				<td><button class="btn btn-xs btn-default tob-rm" data-name="${frappe.utils.escape_html(r.name)}" title="Remove">&times;</button></td>
 			</tr>`);
 			$body.append($tr);
 		});
-		const qT = state.rows.reduce((s, r) => s + flt(r.qty), 0);
-		const gT = state.rows.reduce((s, r) => s + flt(r.gross), 0);
-		const nT = state.rows.reduce((s, r) => s + flt(r.nett), 0);
+		const sum = (k) => state.rows.reduce((s, r) => s + flt(r[k]), 0);
+		const qT = sum("qty"), gT = sum("gross"), nT = sum("nett"), dT = sum("dmd_weight"), pT = sum("ps_no"), cT = sum("cs_no");
 		$(page.main).find(".tob-foot-row").html(
 			state.rows.length
-				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">Totals</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td></td></tr>`
+				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">Totals</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td class="num">${dT ? dT.toFixed(3) : ""}</td><td class="num">${pT || ""}</td><td class="num">${cT || ""}</td><td></td></tr>`
 				: ""
 		);
 		$(page.main).find(".tob-count").text(state.rows.length);
@@ -141,7 +143,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date, gross: v.gross, nett: v.nett });
+			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date, gross: v.gross, nett: v.nett, dmd_weight: v.dmd_weight, ps_no: v.ps_no, cs_no: v.cs_no });
 			renderRows();
 			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
