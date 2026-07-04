@@ -21,6 +21,15 @@
   "piece_no",
   "narration_section",
   "narration",
+  "cad_section",
+  "is_cad",
+  "cad_design_type",
+  "cad_karat",
+  "cad_col_break",
+  "cad_gold_weight",
+  "cad_diamond_weight",
+  "cad_stone_no",
+  "cad_remarks",
   "stock_section",
   "stock_status",
   "held_by",
@@ -163,6 +172,69 @@
    "fieldname": "narration",
    "fieldtype": "Small Text",
    "label": "Narration"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.is_cad || doc.cad_design_type",
+   "fieldname": "cad_section",
+   "fieldtype": "Section Break",
+   "label": "CAD"
+  },
+  {
+   "default": "0",
+   "description": "Awaiting a CAD design — must go to CAD first; can't be collected there until a real design is assigned (the flag then clears).",
+   "fieldname": "is_cad",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "CAD",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cad_design_type",
+   "fieldtype": "Link",
+   "label": "CAD Design Type",
+   "options": "Design Type",
+   "read_only": 1
+  },
+  {
+   "description": "Target karat gold (22KYG, 18KPG, …).",
+   "fieldname": "cad_karat",
+   "fieldtype": "Link",
+   "label": "CAD Purity",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cad_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Gold weight budget (g).",
+   "fieldname": "cad_gold_weight",
+   "fieldtype": "Float",
+   "label": "CAD Gold Weight (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Diamond budget (ct).",
+   "fieldname": "cad_diamond_weight",
+   "fieldtype": "Float",
+   "label": "CAD Budget (ct)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cad_stone_no",
+   "fieldtype": "Int",
+   "label": "CAD Stone No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cad_remarks",
+   "fieldtype": "Small Text",
+   "label": "CAD Remarks",
+   "read_only": 1
   },
   {
    "fieldname": "stock_section",

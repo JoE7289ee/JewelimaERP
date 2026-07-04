@@ -273,6 +273,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		row.$reset.on("click", () => resetLine(row));
 		row.$new = $('<button class="btn btn-xs btn-default po-new" title="Create a purity variant of this design (e.g. 22KYG → 18KPG)">New</button>').appendTo($act);
 		row.$new.on("click", () => openVariantPicker(row));
+		row.$cad = $('<button class="btn btn-xs btn-default" title="CAD job — no design yet; order with target budgets">CAD</button>').appendTo($act);
+		row.$cad.on("click", () => openCadDialog(row));
 		updateNewBtn(row);
 		updateDesignBtn(row);
 		updateSplitBtn(row);
@@ -311,6 +313,73 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		if (!row.$new) return;
 		const has = !!row.f.design.get();
 		row.$new.prop("disabled", !has).toggleClass("ready", has);
+		if (row.$cad) {
+			// CAD is for design-less lines; once a design is picked (or this IS a CAD line) it flips role
+			row.$cad.prop("disabled", has && !row._cad);
+			row.$cad.text(row._cad ? "CAD ✓" : "CAD").toggleClass("btn-success", !!row._cad);
+		}
+	}
+
+	// ---- CAD lines: order with target budgets, the real design comes after CAD ----
+	function openCadDialog(row) {
+		const c = row._cad || {};
+		const d = new frappe.ui.Dialog({
+			title: __("CAD job — target budgets"),
+			fields: [
+				{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1, default: c.design_type,
+					onchange() {
+						const t = state.typeSizes[d.get_value("design_type")] || { sizes: [], default: "" };
+						d.fields_dict.size.df.options = ["", ...(t.sizes.length ? t.sizes : ["NA"])].join("\n");
+						d.fields_dict.size.refresh();
+						if (t.default) d.set_value("size", t.default);
+					} },
+				{ fieldname: "size", fieldtype: "Select", label: __("Size"), options: "\nNA", default: c.size },
+				{ fieldname: "karat", fieldtype: "Link", label: __("Purity (karat gold)"), options: "Item", reqd: 1, default: c.karat,
+					get_query: () => ({ filters: { item_group: "GOLD", metal_purity: ["!=", ""] } }) },
+				{ fieldname: "cb", fieldtype: "Column Break" },
+				{ fieldname: "gold_weight", fieldtype: "Float", label: __("Gold Weight Target (g)"), reqd: 1, default: c.gold_weight },
+				{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Budget (ct)"), default: c.diamond_weight },
+				{ fieldname: "stone_no", fieldtype: "Int", label: __("Stone No (pcs)"), default: c.stone_no },
+				{ fieldname: "sb", fieldtype: "Section Break" },
+				{ fieldname: "remarks", fieldtype: "Small Text", label: __("CAD Remarks"), default: c.remarks },
+			],
+			primary_action_label: __("Set CAD Line"),
+			primary_action(v) {
+				if (flt(v.gold_weight) <= 0) return frappe.msgprint(__("Enter the gold weight target."));
+				row._cad = { design_type: v.design_type, size: v.size, karat: v.karat, gold_weight: flt(v.gold_weight),
+					diamond_weight: flt(v.diamond_weight), stone_no: cint(v.stone_no), remarks: v.remarks || "" };
+				d.hide();
+				applyCadLine(row);
+			},
+		});
+		d.show();
+		if (c.design_type) d.fields_dict.design_type.df.onchange.call(d.fields_dict.design_type);
+	}
+
+	function applyCadLine(row) {
+		const c = row._cad;
+		// design-less line: lock the Design input, show the CAD identity in the Type column
+		row.f.design.set("");
+		row._lastDesign = null;
+		row._materials = [];
+		row._profile = null;
+		row._designType = c.design_type;
+		if (row.f.design_type) row.f.design_type.set(c.design_type + " · CAD");
+		applyTypeSizes(row);
+		if (c.size) row.f.size.set(c.size);
+		setTimeout(() => row.f.design.$input && row.f.design.$input.prop("disabled", true).attr("placeholder", "CAD JOB — design after CAD"), 50);
+		// no plan yet — budgets live on the bag's CAD fields, so the weight cells stay blank
+		["gross_weight", "nett_weight", "purity", "pure", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight"]
+			.forEach((k) => row.f[k] && row.f[k].set(""));
+		updateDesignBtn(row);
+		recalcTotals();
+	}
+	function clearCadLine(row) {
+		row._cad = null;
+		row._designType = "";
+		if (row.f.design_type) row.f.design_type.set("");
+		if (row.f.design.$input) row.f.design.$input.prop("disabled", false).attr("placeholder", "Design");
+		updateDesignBtn(row);
 	}
 
 	// select a design onto the line programmatically (set_value is async and does not fire
@@ -424,7 +493,11 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	// Per-line reset: re-pull the design's BOM (discarding edits) and recompute. With no
 	// design picked yet, just clear the line's size/qty.
 	function resetLine(row) {
-		if (row.f.design.get()) {
+		if (row._cad) {
+			clearCadLine(row);
+			row.f.size.set(""); row.f.qty.set("");
+			frappe.show_alert({ message: __("CAD line cleared."), indicator: "blue" }, 3);
+		} else if (row.f.design.get()) {
 			pullDesignBOM(row);
 			frappe.show_alert({ message: __("Line reset to the design's BOM."), indicator: "blue" }, 3);
 		} else {
@@ -531,7 +604,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	// takes any remainder (e.g. 50 → 4 bags = 12, 12, 12, 14).
 	function doSplit(row) {
 		const total = cint(row.f.qty.get());
-		if (!row.f.design.get()) return frappe.msgprint(__("Pick a Design on this line first."));
+		if (!row.f.design.get() && !row._cad) return frappe.msgprint(__("Pick a Design (or set a CAD line) first."));
 		if (total <= 1) return frappe.msgprint(__("This line has only 1 — nothing to split."));
 		frappe.prompt(
 			{
@@ -554,18 +627,27 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				let prev = row;
 				for (let i = 1; i < n; i++) {
 					const nr = addRow(prev);
-					nr._profile = row._profile;
-					nr._materials = (row._materials || []).map((m) => ({ ...m }));
-					nr._designType = row._designType;
-					nr._lastDesign = design;
-					nr.f.design.set(design);
-					applyTypeSizes(nr);
-					nr.f.size.set(size);
-					if (nr.f.design_type) nr.f.design_type.set(row._designType || "");
-					nr.f.qty.set(qtys[i]);
-					applyProfile(nr);
+					if (row._cad) {
+						// split CAD twins carry the SAME targets — finalize later attaches
+						// the same design to all of them
+						nr._cad = { ...row._cad };
+						nr.f.qty.set(qtys[i]);
+						applyCadLine(nr);
+						nr.f.size.set(size);
+					} else {
+						nr._profile = row._profile;
+						nr._materials = (row._materials || []).map((m) => ({ ...m }));
+						nr._designType = row._designType;
+						nr._lastDesign = design;
+						nr.f.design.set(design);
+						applyTypeSizes(nr);
+						nr.f.size.set(size);
+						if (nr.f.design_type) nr.f.design_type.set(row._designType || "");
+						nr.f.qty.set(qtys[i]);
+						applyProfile(nr);
+						updateDesignBtn(nr);
+					}
 					updateSplitBtn(nr);
-					updateDesignBtn(nr);
 					nr._remark = row._remark; // split bags inherit the line's remark
 					updateRemarkBtn(nr);
 					prev = nr;
@@ -645,6 +727,7 @@ function po_readLine(r) {
 		cs_no: cint(g("cs_no")) || 0, cs_weight: flt(g("cs_weight")) || 0,
 		narration: r._remark || undefined,
 		bag_bom: (r._materials || []).map((m) => ({ item: m.item, qty: flt(m.qty) || 0, weight: flt(m.weight) || 0 })),
+		cad: r._cad || null,
 	};
 }
 
@@ -657,14 +740,14 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	const customer_date = (state.custFromDays ? state.custFromDays() : "") || due_date; // empty -> copies due date
 
 	const all = state.rows.map(po_readLine);
-	const lines = all.filter((l) => l.design); // rows without a Design are denied
-	const ghosts = all.filter((l) => !l.design && l.qty); // qty typed but Design forgotten
+	const lines = all.filter((l) => l.design || l.cad); // a line needs a Design OR CAD targets
+	const ghosts = all.filter((l) => !l.design && !l.cad && l.qty); // qty typed but neither set
 	if (ghosts.length) {
-		frappe.msgprint(__("{0} line(s) have a Qty but no Design — add a Design or clear the Qty before placing the order.", [ghosts.length]));
+		frappe.msgprint(__("{0} line(s) have a Qty but no Design — add a Design (or set CAD) or clear the Qty.", [ghosts.length]));
 		return;
 	}
 	if (!lines.length) {
-		frappe.msgprint(__("Add at least one line with a Design."));
+		frappe.msgprint(__("Add at least one line with a Design (or a CAD line)."));
 		return;
 	}
 
@@ -687,6 +770,11 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
 				cs_no: l.cs_no, cs_weight: l.cs_weight, narration: l.narration,
 				bag_bom: l.bag_bom && l.bag_bom.length ? l.bag_bom : undefined,
+				...(l.cad ? {
+					is_cad: 1, cad_design_type: l.cad.design_type, cad_karat: l.cad.karat,
+					cad_gold_weight: l.cad.gold_weight, cad_diamond_weight: l.cad.diamond_weight,
+					cad_stone_no: l.cad.stone_no, cad_remarks: l.cad.remarks,
+				} : {}),
 			});
 			made++;
 		}

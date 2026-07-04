@@ -169,13 +169,58 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .card .ft .bc svg { width: 100%; height: 12mm; }
 .card .ft .num { font-size: 12px; font-weight: 700; letter-spacing: 1px; }
 .card .ft .rm { font-size: 8.5px; align-self: start; }
+/* CAD job card (design not made yet — budgets + sketch space) */
+.card.cad .cad-hd { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; }
+.card.cad .cad-hd .bc svg { width: 34mm; height: 9mm; }
+.card.cad .cad-hd .num { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.card.cad .cad-tag { border: 1.5px solid #000; padding: 0.5mm 2mm; font-weight: 800; font-size: 11px; letter-spacing: 1.5px; }
+.card.cad .cad-mid { display: grid; grid-template-columns: 1fr 30mm; gap: 2mm; padding: 1.5mm 0; }
+.card.cad .cad-kv div { margin-bottom: 1mm; }
+.card.cad .cad-kv .blank { display: inline-block; border-bottom: 1px solid #000; min-width: 28mm; }
+.card.cad .sketch { border: 1px solid #000; min-height: 22mm; display: flex; align-items: center; justify-content: center; color: #999; font-size: 8px; }
+.card.cad .cad-bud { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm; text-align: center; }
+.card.cad .cad-bud .bx { border: 1px solid #000; padding: 1mm; }
+.card.cad .cad-bud .bx .v { font-size: 12px; font-weight: 700; }
+.card.cad .cad-bud .bx .k { font-size: 7.5px; letter-spacing: .5px; }
+.card.cad .cad-rem { flex: 1 1 auto; border-top: 1px solid #000; margin-top: 1.5mm; padding-top: 1mm; font-size: 8.5px; }
+.card.cad .cad-ft { display: flex; justify-content: space-between; border-top: 1px solid #000; padding-top: 1mm; font-size: 8.5px; }
 `;
 
 function pob_esc(s) {
 	return frappe.utils.escape_html(s == null ? "" : String(s));
 }
 
+// CAD job card — per the workshop sketch: order no + barcode and CAD tag on top, sketch
+// space, TYPE / NAME(blank) / SIZE / QTY, the BUDGET boxes (GW / CW / Purity), a big
+// remarks area, and the order · party · due footer.
+function pob_cadCardHTML(c) {
+	return `
+	<div class="card cad">
+		<div class="cad-hd">
+			<div class="bc">${pob_barcodeSVG(c.name)}<div class="num">${pob_esc(c.name)}</div></div>
+			<div class="cad-tag">CAD JOB</div>
+		</div>
+		<div class="cad-mid">
+			<div class="cad-kv">
+				<div><b>DESIGN TYPE:</b> ${pob_esc(c.cad_design_type || "")}</div>
+				<div><b>DESIGN NAME:</b> <span class="blank">&nbsp;</span></div>
+				<div><b>DESIGN SIZE:</b> ${pob_esc(c.size || "NA")}</div>
+				<div><b>QTY:</b> ${pob_esc(c.qty)}</div>
+			</div>
+			<div class="sketch">design</div>
+		</div>
+		<div class="cad-bud">
+			<div class="bx"><div class="v">${flt(c.cad_gold_weight) ? flt(c.cad_gold_weight).toFixed(3) : "—"}</div><div class="k">BUDGET GW (g)</div></div>
+			<div class="bx"><div class="v">${flt(c.cad_diamond_weight) ? flt(c.cad_diamond_weight).toFixed(2) : "—"}${c.cad_stone_no ? " / " + c.cad_stone_no : ""}</div><div class="k">BUDGET CW (ct${c.cad_stone_no ? " / pcs" : ""})</div></div>
+			<div class="bx"><div class="v">${pob_esc(c.cad_karat || "—")}</div><div class="k">PURITY</div></div>
+		</div>
+		<div class="cad-rem"><b>Remarks:</b> ${pob_esc(c.cad_remarks || "")}${c.narration ? "<br>" + pob_esc(c.narration) : ""}</div>
+		<div class="cad-ft"><span><b>ORD:</b> ${pob_esc(c.job_order)} · ${pob_esc(c.order_date)}</span><span><b>PARTY:</b> ${pob_esc(c.customer || "")}</span><span><b>DUE:</b> ${pob_esc(c.due_date)}</span></div>
+	</div>`;
+}
+
 function pob_cardHTML(c) {
+	if (c.is_cad) return pob_cadCardHTML(c);
 	const mats = (c.materials || [])
 		.map(
 			(m) => `<tr><td>${pob_esc(m.item)}${m.purity ? " - " + flt(m.purity) : ""}</td>

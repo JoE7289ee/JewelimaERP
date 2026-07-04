@@ -98,6 +98,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "pen-tool",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "CAD Jobs",
+   "link_to": "cad-jobs",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
@@ -592,7 +605,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-02 16:31:29.229866",
+ "modified": "2026-07-04 15:26:34.805400",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

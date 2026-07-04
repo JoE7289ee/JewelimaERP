@@ -138,6 +138,16 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 				logHistory(code, "Not assigned (" + status + ")", "err");
 				return;
 			}
+			// CAD gate: can't collect a bag still awaiting its design — finalize it right here
+			if (state.mode === "collect" && v.is_cad) {
+				setMsg(__("<b>{0}</b> is a CAD job — its design isn't finalized yet.", [safe]), "err");
+				logHistory(code, "CAD design pending", "err");
+				frappe.confirm(
+					__("<b>{0}</b> is a CAD job ({1}) — create the real design now?", [safe, frappe.utils.escape_html(v.cad_design_type || "")]),
+					() => jewelima.finalize_cad(code, () => { setMsg(__("Design attached — scan <b>{0}</b> again to collect.", [safe]), "ok"); focusScan(); })
+				);
+				return;
+			}
 			if (!state.location) {
 				state.location = v.location; // first scan locks the bench
 				updateLoc();
@@ -146,7 +156,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			state.rows.push({ name: code, design: v.design, qty: v.qty, status });
+			state.rows.push({ name: code, design: v.design || (v.is_cad ? "CAD: " + (v.cad_design_type || "?") : ""), qty: v.qty, status });
 			renderRows();
 			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");

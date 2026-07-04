@@ -350,6 +350,75 @@ def retire_order_master(kind, name, restore=0):
 	return {"name": name, "state": "retired"}
 
 
+# --- CAD jobs: targets live on the bag until the real design is finalized ----------
+
+def _cad_siblings(bag):
+	"""Other is_cad bags of the same Job Order with the SAME targets (split twins etc.)."""
+	return frappe.get_all(
+		"Order Bag",
+		filters={
+			"job_order": bag.job_order, "is_cad": 1, "name": ["!=", bag.name],
+			"cad_design_type": bag.cad_design_type or "", "cad_karat": bag.cad_karat or "",
+			"cad_gold_weight": flt(bag.cad_gold_weight), "cad_diamond_weight": flt(bag.cad_diamond_weight),
+		},
+		pluck="name",
+	)
+
+
+@frappe.whitelist()
+def get_cad_bag_info(order_bag):
+	"""A CAD bag's targets + its same-target siblings — feeds the Finalize dialog."""
+	bag = frappe.db.get_value(
+		"Order Bag", order_bag,
+		["name", "job_order", "is_cad", "qty", "size", "location", "cad_design_type", "cad_karat",
+		 "cad_gold_weight", "cad_diamond_weight", "cad_stone_no", "cad_remarks"],
+		as_dict=True,
+	)
+	if not bag:
+		frappe.throw(frappe._("No Order Bag {0}").format(order_bag))
+	bag["siblings"] = _cad_siblings(bag) if bag.is_cad else []
+	return bag
+
+
+@frappe.whitelist()
+def finalize_cad_design(order_bag, design_name, design_style=None, image=None, materials=None, apply_to_siblings=1):
+	"""CAD done: create the REAL design and attach it to the bag (and its same-target
+	siblings) — design set, bag BOM seeded, plan recomputed, image pulled, is_cad cleared.
+	From here the bag collects and routes like any designed order."""
+	bag = frappe.get_doc("Order Bag", order_bag)
+	if not bag.is_cad:
+		frappe.throw(frappe._("{0} is not awaiting a CAD design.").format(order_bag))
+	if not bag.cad_design_type:
+		frappe.throw(frappe._("{0} has no CAD design type recorded.").format(order_bag))
+
+	res = create_design(design_name, bag.cad_design_type, design_style, image, materials)
+	design = frappe.get_doc("Design", res["name"])
+
+	targets = [bag.name] + (_cad_siblings(bag) if frappe.utils.cint(apply_to_siblings) else [])
+	for nm in targets:
+		b = frappe.get_doc("Order Bag", nm)
+		b.design = design.name
+		b.image = design.image
+		b.is_cad = 0
+		b.set("bag_bom", [])
+		for m in design.materials:
+			b.append("bag_bom", {"item": m.item, "qty": m.qty, "weight": m.weight})
+		b.save(ignore_permissions=True)  # validate() recomputes the plan from the new BOM
+	frappe.db.commit()
+	return {"design": design.name, "bags": targets, **res}
+
+
+@frappe.whitelist()
+def get_cad_jobs():
+	"""All bags still awaiting a CAD design — the CAD Jobs page."""
+	return frappe.get_all(
+		"Order Bag", filters={"is_cad": 1},
+		fields=["name", "job_order", "qty", "size", "location", "customer", "due_date",
+			"cad_design_type", "cad_karat", "cad_gold_weight", "cad_diamond_weight", "cad_stone_no", "cad_remarks"],
+		order_by="creation",
+	)
+
+
 @frappe.whitelist()
 def get_design_variants(design):
 	"""Purity-variant options for a design (the Place Order 'New' button).
@@ -872,6 +941,9 @@ def get_order_bag_cards(names):
 			"dmd_no": b.dmd_no, "dmd_weight": b.dmd_weight, "ps_no": b.ps_no, "ps_weight": b.ps_weight,
 			"cs_no": b.cs_no, "cs_weight": b.cs_weight, "narration": b.narration,
 			"materials": materials,
+			"is_cad": int(b.is_cad or 0), "cad_design_type": b.cad_design_type, "cad_karat": b.cad_karat,
+			"cad_gold_weight": b.cad_gold_weight, "cad_diamond_weight": b.cad_diamond_weight,
+			"cad_stone_no": b.cad_stone_no, "cad_remarks": b.cad_remarks,
 		})
 	return cards
 
@@ -1007,6 +1079,13 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 	from_location = bag.location or ""
 	if from_location == to_location:
 		frappe.throw(frappe._("{0} is already at {1}.").format(order_bag, to_location))
+	# CAD gate: an is_cad bag's ONLY legal move is INTO CAD; once there it's pinned until a
+	# real design is assigned (finalize clears the flag).
+	if bag.is_cad:
+		if from_location == "CAD":
+			frappe.throw(frappe._("{0} is a CAD job — finalize its design at CAD before moving it on.").format(order_bag))
+		if to_location != "CAD":
+			frappe.throw(frappe._("{0} is a CAD job — it must go to CAD first.").format(order_bag))
 	if not _transfer_allowed(set(frappe.get_roles()), from_location, to_location):
 		frappe.throw(frappe._("You don't have permission to move {0} from {1} to {2}.").format(order_bag, from_location or "—", to_location))
 	t = frappe.get_doc({
@@ -1537,7 +1616,7 @@ def get_bench_card(order_bag):
 	and the gold grams it holds (the 'weight out')."""
 	from jewelima.jewelima.benches import bench_doctype
 
-	bag = frappe.db.get_value("Order Bag", order_bag, ["location", "design", "qty"], as_dict=True)
+	bag = frappe.db.get_value("Order Bag", order_bag, ["location", "design", "qty", "is_cad", "cad_design_type"], as_dict=True)
 	if not bag:
 		return {}
 	dt = bench_doctype(bag.location)
@@ -1551,6 +1630,7 @@ def get_bench_card(order_bag):
 		rec = recs[0] if recs else None
 	return {
 		"order_bag": order_bag, "location": bag.location, "design": bag.design, "qty": bag.qty,
+		"is_cad": int(bag.is_cad or 0), "cad_design_type": bag.cad_design_type,
 		"doctype": dt, "record": rec, "status": (rec or {}).get("status"),
 		"gold": flt(get_bag_contents(order_bag)["gold_grams"]),
 	}
@@ -1652,6 +1732,11 @@ def collect_bench_cards(names, location):
 	done, errors = [], []
 	for nm in names or []:
 		try:
+			# CAD gate: a bag still awaiting its CAD design cannot be collected —
+			# finalize (assign the real design) first; that clears is_cad.
+			if frappe.db.get_value("Order Bag", nm, "is_cad"):
+				errors.append({"name": nm, "error": frappe._("CAD design not finalized — create the design first")})
+				continue
 			rec = _current_bench_record(dt, nm)
 			if not rec:
 				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})

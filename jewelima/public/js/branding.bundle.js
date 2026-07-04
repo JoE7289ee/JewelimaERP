@@ -121,3 +121,145 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	if (window.frappe && frappe.router && frappe.router.on) attach();
 	else $(document).on("app_ready", attach);
 })();
+
+// ---------------------------------------------------------------------------
+// jewelima.finalize_cad(order_bag, done) — the "CAD done" dialog.
+// Creates the REAL design from the bag's CAD targets (prefilled gold row at the
+// budget), attaches it to the bag + same-target siblings, clears is_cad.
+// Shared by Assign/Collect (collect gate) and the CAD Jobs page.
+// ---------------------------------------------------------------------------
+frappe.provide("jewelima");
+jewelima.finalize_cad = function (order_bag, done) {
+	frappe.call({ method: "jewelima.jewelima.api.get_cad_bag_info", args: { order_bag } }).then((r) => {
+		const info = r.message || {};
+		if (!info.is_cad) return frappe.msgprint(__("{0} is not awaiting a CAD design.", [order_bag]));
+		const esc = frappe.utils.escape_html;
+
+		function itemChanged() {
+			const row = this.doc || (this.grid_row && this.grid_row.doc);
+			if (!row) return;
+			if (!row.item) { row.purity = 0; row.uom = ""; row.pure = 0; row.stone_type = ""; d.fields_dict.materials.grid.refresh(); return; }
+			frappe.db.get_value("Item", row.item, ["purity_percentage", "weight_unit", "stone_type"]).then((res) => {
+				const v = res.message || {};
+				row.purity = flt(v.purity_percentage); row.uom = v.weight_unit || ""; row.stone_type = v.stone_type || "";
+				if (!v.stone_type) row.qty = 0;
+				row.pure = v.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
+				d.fields_dict.materials.grid.refresh();
+			});
+		}
+		function weightChanged() {
+			const row = this.doc || (this.grid_row && this.grid_row.doc);
+			if (!row) return;
+			row.pure = row.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
+			d.fields_dict.materials.grid.refresh();
+		}
+
+		const d = new frappe.ui.Dialog({
+			title: __("Finalize CAD design — {0}", [esc(order_bag)]),
+			size: "large",
+			fields: [
+				{ fieldname: "budget", fieldtype: "HTML" },
+				{ fieldname: "design_name", fieldtype: "Data", label: __("Design Name"), reqd: 1 },
+				{ fieldname: "name_tools", fieldtype: "HTML" },
+				{ fieldname: "cb1", fieldtype: "Column Break" },
+				{ fieldname: "design_style", fieldtype: "Link", label: __("Design Style"), options: "Design Style", default: "General" },
+				{ fieldname: "sb_img", fieldtype: "Section Break" },
+				{
+					fieldname: "image", fieldtype: "Attach Image", label: __("Design Image"),
+					onchange() {
+						const url = d.get_value("image");
+						d.fields_dict.image_preview.$wrapper.html(url
+							? `<div style="text-align:center;margin:4px 0 8px;"><img src="${encodeURI(url)}" style="max-height:200px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`
+							: "");
+					},
+				},
+				{ fieldname: "image_preview", fieldtype: "HTML" },
+				{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
+				{
+					fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item", data: [],
+					description: __("Gold row prefilled from the CAD budget — adjust to what CAD actually produced; add the stone rows."),
+					fields: [
+						{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: itemChanged },
+						{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
+						{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
+						{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
+						{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: weightChanged },
+						{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
+					],
+				},
+				...(info.siblings && info.siblings.length
+					? [{ fieldname: "apply_to_siblings", fieldtype: "Check", label: __("Also attach to {0} twin bag(s): {1}", [info.siblings.length, info.siblings.join(", ")]), default: 1 }]
+					: []),
+			],
+			primary_action_label: __("Create & Attach"),
+			primary_action(values) {
+				const raw = (values.materials || []).filter((m) => m.item);
+				if (!raw.length) return frappe.msgprint(__("Add at least one material."));
+				const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
+				if (bad) return frappe.msgprint(bad.stone_type ? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item]) : __("{0} needs a Weight (grams).", [bad.item]));
+				const materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0 }));
+				frappe.dom.freeze(__("Creating design…"));
+				frappe.call({
+					method: "jewelima.jewelima.api.finalize_cad_design",
+					args: {
+						order_bag, design_name: values.design_name, design_style: values.design_style,
+						image: values.image, materials: JSON.stringify(materials),
+						apply_to_siblings: values.apply_to_siblings == null ? 1 : values.apply_to_siblings,
+					},
+				}).then((res) => {
+					frappe.dom.unfreeze();
+					const m = res.message || {};
+					if (!m.design) return;
+					d.hide();
+					frappe.show_alert({ message: __("Design {0} created & attached to {1} bag(s).", [m.design, (m.bags || []).length]), indicator: "green" }, 7);
+					if (done) done(m);
+				}).catch(() => frappe.dom.unfreeze());
+			},
+		});
+
+		d.fields_dict.budget.$wrapper.html(`
+			<div style="border:1px solid var(--border-color);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12.5px;color:var(--text-muted);">
+				<b style="color:var(--text-color)">CAD budget</b> — ${esc(info.cad_design_type || "—")} · size ${esc(info.size || "—")} · qty ${info.qty || 1}
+				&nbsp;·&nbsp; ${esc(info.cad_karat || "—")} <b style="color:var(--text-color)">${flt(info.cad_gold_weight).toFixed(3)} g</b>
+				&nbsp;·&nbsp; DMD <b style="color:var(--text-color)">${flt(info.cad_diamond_weight).toFixed(2)} ct</b>${info.cad_stone_no ? " / " + info.cad_stone_no + " pcs" : ""}
+				${info.cad_remarks ? `<div style="margin-top:4px;">${esc(info.cad_remarks)}</div>` : ""}
+			</div>`);
+
+		// Check / Auto-number helpers for the new design name
+		d.fields_dict.name_tools.$wrapper.html(`
+			<div style="margin:-6px 0 8px;display:flex;gap:6px;">
+				<button class="btn btn-xs btn-default fc-check">✓ Check</button>
+				<button class="btn btn-xs btn-default fc-auto" title="Type a prefix (A, BA…) first — fills the next unused number">⚙ Auto-number</button>
+				<span class="fc-msg" style="font-size:12px;align-self:center;"></span>
+			</div>`);
+		const $msg = d.fields_dict.name_tools.$wrapper.find(".fc-msg");
+		d.fields_dict.name_tools.$wrapper.find(".fc-check").on("click", () => {
+			const v = (d.get_value("design_name") || "").trim();
+			if (!v) return $msg.css("color", "#9a6700").text(__("Type a name first."));
+			frappe.db.exists("Design", v).then((ex) => {
+				$msg.css("color", ex ? "#b00020" : "#1d7a33").text(ex ? __("✗ already exists") : __("✓ available"));
+			});
+		});
+		d.fields_dict.name_tools.$wrapper.find(".fc-auto").on("click", () => {
+			frappe.call({ method: "jewelima.jewelima.design_bank_api.next_design_no", args: { prefix: d.get_value("design_name") || "" } }).then((res) => {
+				const nm = (res.message || {}).design_no;
+				if (nm) { d.set_value("design_name", nm); $msg.css("color", "#1d7a33").text(__("✓ {0} — never used", [nm])); }
+			});
+		});
+
+		d.show();
+		// prefill the gold row from the budget
+		if (info.cad_karat) {
+			frappe.db.get_value("Item", info.cad_karat, "purity_percentage").then((res) => {
+				const pur = flt(((res || {}).message || {}).purity_percentage);
+				const grid = d.fields_dict.materials.grid;
+				grid.df.data = [{
+					idx: 1, name: "cad-gold-1", item: info.cad_karat, purity: pur, uom: "Gram",
+					stone_type: "", qty: 0, weight: flt(info.cad_gold_weight),
+					pure: (flt(info.cad_gold_weight) * pur) / 100,
+				}];
+				grid.refresh();
+			});
+		}
+	});
+};
