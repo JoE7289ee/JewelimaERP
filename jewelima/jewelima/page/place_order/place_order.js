@@ -344,19 +344,31 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				{ fieldname: "reference", fieldtype: "Data", label: __("Reference"), default: c.reference,
 					description: __("Free text — catalog code, customer photo ref, …") },
 				{ fieldname: "sb", fieldtype: "Section Break" },
+				{
+					fieldname: "image", fieldtype: "Attach Image", label: __("Reference Image"), default: c.image,
+					onchange() {
+						const url = d.get_value("image");
+						d.fields_dict.image_preview.$wrapper.html(url
+							? `<div style="text-align:center;margin:4px 0 8px;"><img src="${encodeURI(url)}" style="max-height:180px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`
+							: "");
+					},
+				},
+				{ fieldname: "image_preview", fieldtype: "HTML" },
 				{ fieldname: "remarks", fieldtype: "Small Text", label: __("CAD Remarks"), default: c.remarks },
 			],
 			primary_action_label: __("Set CAD Line"),
 			primary_action(v) {
 				if (!(v.gold_weight || "").trim()) return frappe.msgprint(__("Enter the gold weight target."));
 				row._cad = { design_type: v.design_type, size: v.size, karat: v.karat, gold_weight: (v.gold_weight || "").trim(),
-					diamond_weight: flt(v.diamond_weight), stone_no: cint(v.stone_no), reference: (v.reference || "").trim(), remarks: v.remarks || "" };
+					diamond_weight: flt(v.diamond_weight), stone_no: cint(v.stone_no), reference: (v.reference || "").trim(),
+					image: v.image || "", remarks: v.remarks || "" };
 				d.hide();
 				applyCadLine(row);
 			},
 		});
 		d.show();
 		if (c.design_type) d.fields_dict.design_type.df.onchange.call(d.fields_dict.design_type);
+		if (c.image && d.fields_dict.image.df.onchange) d.fields_dict.image.df.onchange();
 	}
 
 	function applyCadLine(row) {
@@ -777,6 +789,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 					is_cad: 1, cad_design_type: l.cad.design_type, cad_karat: l.cad.karat,
 					cad_gold_weight: l.cad.gold_weight, cad_diamond_weight: l.cad.diamond_weight,
 					cad_stone_no: l.cad.stone_no, cad_reference: l.cad.reference, cad_remarks: l.cad.remarks,
+					image: l.cad.image || undefined, // the reference photo — the bag's image until the design lands
 				} : {}),
 			});
 			made++;

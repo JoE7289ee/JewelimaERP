@@ -93,7 +93,8 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .kv .lb { font-weight: 400; }
 .kv span.val { font-weight: 800; font-size: 13px; }
 .kv .blank { display: inline-block; border-bottom: 1.5px solid #000; min-width: 34mm; }
-.sketch { border: 1.5px solid #000; height: 100%; min-height: 55mm; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 10px; }
+.sketch { border: 1.5px solid #000; height: 100%; min-height: 55mm; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 10px; overflow: hidden; }
+.sketch img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .bud { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; text-align: center; }
 .bud .bx { border: 1.5px solid #000; padding: 2mm 1mm; }
 .bud .bx .v { font-size: 15px; font-weight: 800; }
@@ -103,6 +104,8 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .ft .v { font-size: 12px; font-weight: 700; display: block; }
 .ft .l { font-size: 8.5px; color: #555; display: block; letter-spacing: .5px; }
 `;
+
+function pobSafe(u) { return encodeURI(u || ""); }
 
 function cjCardHTML(c) {
 	const esc = frappe.utils.escape_html;
@@ -120,7 +123,7 @@ function cjCardHTML(c) {
 				<div><span class="lb">QTY:</span> <span class="val">${esc(String(c.qty || ""))}</span></div>
 				<div><span class="lb">REF:</span> <span class="val">${esc(c.cad_reference || "")}</span></div>
 			</div>
-			<div class="sketch">D IMAGE</div>
+			<div class="sketch">${c.image ? `<img src="${pobSafe(c.image)}">` : "D IMAGE"}</div>
 		</div>
 		<div class="bud">
 			<div class="bx"><div class="v">${esc(c.cad_gold_weight || "—")}</div><div class="k">GOLD TARGET</div></div>

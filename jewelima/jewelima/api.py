@@ -398,7 +398,7 @@ def finalize_cad_design(order_bag, design_name, design_style=None, image=None, m
 	for nm in targets:
 		b = frappe.get_doc("Order Bag", nm)
 		b.design = design.name
-		b.image = design.image
+		b.image = design.image or b.image  # keep the CAD reference photo if the design has none
 		b.is_cad = 0
 		b.set("bag_bom", [])
 		for m in design.materials:
@@ -932,7 +932,7 @@ def get_order_bag_cards(names):
 				materials.append({"item": m.item, "purity": m.purity, "qty": m.qty, "weight": m.weight, "uom": m.uom})
 		cards.append({
 			"name": b.name, "job_order": b.job_order, "design": b.design,
-			"design_type": dtype, "design_style": dstyle, "image": dimg,
+			"design_type": dtype, "design_style": dstyle, "image": dimg or b.image,
 			"size": b.size, "qty": b.qty, "location": b.location,
 			"customer": b.customer, "salesman": b.salesman, "order_type": b.order_type,
 			"order_date": frappe.utils.formatdate(b.order_date, "dd-mm-yyyy") if b.order_date else "",
