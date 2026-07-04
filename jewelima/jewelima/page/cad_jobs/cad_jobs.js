@@ -3,7 +3,7 @@
 //
 // CAD Jobs — every Order Bag still awaiting its CAD design, with the target budgets.
 // Finalize opens the shared dialog (jewelima.finalize_cad). Print produces the CAD JOB
-// cards (4 per A4, QR code, big sketch space) — CAD bags are excluded from the normal
+// cards (4 per A4, Code-128 barcode, big sketch space) — CAD bags are excluded from the normal
 // Print Order Bags page to avoid confusion. Route: /app/cad-jobs
 
 frappe.pages["cad-jobs"].on_page_load = function (wrapper) {
@@ -75,7 +75,7 @@ frappe.pages["cad-jobs"].on_page_load = function (wrapper) {
 	load();
 };
 
-// ---- CAD JOB card print: 4 per A4 (2x2), QR code, bold text, big sketch space ----
+// ---- CAD JOB card print: 4 per A4 (2x2), barcode, bold text, big sketch space ----
 const CJ_PRINT_CSS = `
 @page { size: A4 portrait; margin: 8mm; }
 * { box-sizing: border-box; }
@@ -84,19 +84,19 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .page:last-child { page-break-after: auto; }
 .card { border: 1.5px solid #000; padding: 4mm; display: flex; flex-direction: column; overflow: hidden; font-size: 12px; line-height: 1.45; }
 .hd { display: flex; justify-content: space-between; align-items: flex-start; }
-.hd img.qr { width: 24mm; height: 24mm; }
+.hd .bc svg { width: 52mm; height: 13mm; }
 .hd .num { font-size: 15px; font-weight: 800; letter-spacing: 1px; margin-top: 1mm; }
 .tag { border: 2px solid #000; padding: 1mm 3mm; font-weight: 800; font-size: 14px; letter-spacing: 2px; }
-.mid { display: grid; grid-template-columns: 1fr 42mm; gap: 3mm; padding: 2.5mm 0; }
+.mid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 3mm; padding: 2.5mm 0; flex: 1 1 auto; min-height: 0; }
 .kv div { margin-bottom: 1.6mm; font-weight: 700; }
 .kv span { font-weight: 700; }
 .kv .blank { display: inline-block; border-bottom: 1.5px solid #000; min-width: 34mm; }
-.sketch { border: 1.5px solid #000; min-height: 40mm; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 10px; }
+.sketch { border: 1.5px solid #000; height: 100%; min-height: 55mm; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 10px; }
 .bud { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; text-align: center; }
 .bud .bx { border: 1.5px solid #000; padding: 2mm 1mm; }
 .bud .bx .v { font-size: 15px; font-weight: 800; }
 .bud .bx .k { font-size: 9px; letter-spacing: .5px; margin-top: 0.5mm; }
-.rem { flex: 1 1 auto; border-top: 1.5px solid #000; margin-top: 2.5mm; padding-top: 1.5mm; font-size: 11px; }
+.rem { border-top: 1.5px solid #000; margin-top: 2.5mm; padding-top: 1.5mm; font-size: 11px; min-height: 14mm; }
 .ft { display: flex; justify-content: space-between; border-top: 1.5px solid #000; padding-top: 1.5mm; font-size: 12px; font-weight: 700; }
 `;
 
@@ -105,7 +105,7 @@ function cjCardHTML(c) {
 	return `
 	<div class="card">
 		<div class="hd">
-			<div>${c.qr ? `<img class="qr" src="${c.qr}">` : ""}<div class="num">${esc(c.name)}</div></div>
+			<div class="bc">${cjBarcodeSVG(c.name)}<div class="num">${esc(c.name)}</div></div>
 			<div class="tag">CAD JOB</div>
 		</div>
 		<div class="mid">
@@ -138,4 +138,40 @@ function cjPrint(cards) {
 	w.document.close();
 	w.focus();
 	setTimeout(() => w.print(), 400);
+}
+
+
+// ---- self-contained Code 128-B barcode (offline, no deps) ----
+const CJ_C128 = [
+	"212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+	"221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+	"221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+	"212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+	"231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+	"231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+	"314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+	"112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+	"111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+	"214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+	"114131", "311141", "411131", "211412", "211214", "211232", "2331112",
+];
+
+function cjBarcodeSVG(text, module = 1.0, height = 42) {
+	text = String(text || "");
+	const codes = [104]; // Start B
+	for (let i = 0; i < text.length; i++) codes.push(text.charCodeAt(i) - 32);
+	let sum = 104;
+	for (let i = 1; i < codes.length; i++) sum += codes[i] * i;
+	codes.push(sum % 103, 106); // checksum + stop
+	let x = 0;
+	const bars = [];
+	codes.forEach((c) => {
+		const pat = CJ_C128[c];
+		for (let i = 0; i < pat.length; i++) {
+			const w = +pat[i] * module;
+			if (i % 2 === 0) bars.push(`<rect x="${x}" y="0" width="${w}" height="${height}"/>`);
+			x += w;
+		}
+	});
+	return `<svg viewBox="0 0 ${x} ${height}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${bars.join("")}</svg>`;
 }

@@ -944,7 +944,6 @@ def get_order_bag_cards(names):
 			"is_cad": int(b.is_cad or 0), "cad_design_type": b.cad_design_type, "cad_karat": b.cad_karat,
 			"cad_gold_weight": b.cad_gold_weight, "cad_diamond_weight": b.cad_diamond_weight,
 			"cad_stone_no": b.cad_stone_no, "cad_remarks": b.cad_remarks,
-			"qr": _qr_data_uri(b.name) if b.is_cad else None,  # CAD cards print a QR, not a barcode
 		})
 	return cards
 
