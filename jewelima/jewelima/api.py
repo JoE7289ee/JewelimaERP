@@ -1942,6 +1942,33 @@ def get_card_passport(order_bag):
 
 
 @frappe.whitelist()
+def get_cards_at_location(location):
+	"""All ACTIVE production cards currently at a location, with each card's current bench
+	status (In Queue / Issued / Completed …) — the Transfer page's Cards picker."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	loc = (location or "").strip().upper()
+	if not loc:
+		return []
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"location": loc, "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
+		fields=["name", "design", "qty", "due_date"], order_by="name",
+	)
+	dt = BENCH_DOCTYPE.get(loc)
+	smap = {}
+	if bags and dt and frappe.db.exists("DocType", dt):
+		for r in frappe.get_all(
+			dt, filters={"order_bag": ["in", [b.name for b in bags]], "bench": loc},
+			fields=["order_bag", "status"], order_by="creation asc",
+		):
+			smap[r.order_bag] = r.status  # last record per bag wins
+	for b in bags:
+		b["status"] = smap.get(b.name) or "In Queue"
+	return bags
+
+
+@frappe.whitelist()
 def transfer_order_bags(names, to_location, remarks=None):
 	"""Transfer a batch of Order Bags (all collected at one source) to a destination."""
 	if isinstance(names, str):

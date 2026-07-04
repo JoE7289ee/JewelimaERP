@@ -216,7 +216,94 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		}).catch(() => frappe.dom.unfreeze());
 	}
 
+	// ---- Cards picker: browse a location's cards and add them to the batch without scanning
+	function showCards() {
+		const S = { location: state.location || "", status: "All", rows: [], sel: new Set() };
+		const dlg = new frappe.ui.Dialog({
+			title: __("Cards by location"),
+			size: "extra-large",
+			primary_action_label: __("Add to batch"),
+			primary_action() {
+				if (!S.sel.size) return frappe.msgprint(__("Tick at least one card."));
+				if (state.rows.length && state.location && S.location !== state.location)
+					return frappe.msgprint(__("The batch is collecting from <b>{0}</b> — these cards are at <b>{1}</b>. Transfer or Reset the current batch first.", [state.location, S.location]));
+				dlg.hide();
+				S.sel.forEach((nm) => { if (!state.rows.find((r) => r.name === nm)) processScan(nm); });
+			},
+		});
+		const $b = $(dlg.body);
+		$b.html(`
+			<style>
+			.tc-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+			.tc-top select{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:13px;}
+			.tc-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 14px;font-size:12.5px;cursor:pointer;color:var(--text-muted);}
+			.tc-pill.on{background:var(--btn-primary,#171717);border-color:var(--btn-primary,#171717);color:#fff;font-weight:600;}
+			.tc-count{margin-left:auto;color:var(--text-muted);font-size:12px;}
+			.tc-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;height:calc(100vh - 320px);min-height:300px;}
+			table.tc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
+			table.tc-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
+			table.tc-tbl td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
+			table.tc-tbl tr.on td{background:var(--bg-light-gray,#eef3ee);}
+			table.tc-tbl input{width:15px;height:15px;cursor:pointer;}
+			.tc-empty{padding:18px;text-align:center;color:var(--text-muted);}
+			</style>
+			<div class="tc-top">
+				<select class="tc-loc"><option value="">— location —</option>${TOB_LOCATIONS.trim().split("\n").map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}</select>
+				<span class="tc-pill on" data-s="All">All</span>
+				<span class="tc-pill" data-s="In Queue">In Queue</span>
+				<span class="tc-pill" data-s="Completed">Completed</span>
+				<button class="btn btn-xs btn-default tc-all">Select all</button>
+				<button class="btn btn-xs btn-default tc-none">Clear</button>
+				<span class="tc-count"></span>
+			</div>
+			<div class="tc-box"><table class="tc-tbl">
+				<thead><tr><th style="width:34px"></th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th>Status</th></tr></thead>
+				<tbody class="tc-body"><tr><td colspan="6" class="tc-empty">Pick a location.</td></tr></tbody>
+			</table></div>`);
+
+		const esc = frappe.utils.escape_html;
+		const visible = () => S.rows.filter((r) => S.status === "All" || r.status === S.status);
+		function paint() {
+			const rows = visible();
+			const body = $b.find(".tc-body")[0];
+			body.innerHTML = rows.length
+				? rows.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
+					<td><input type="checkbox" data-nm="${esc(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${state.rows.find((x) => x.name === r.name) ? "disabled title='Already in the batch'" : ""}></td>
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${r.qty || ""}</td>
+					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td></tr>`).join("")
+				: `<tr><td colspan="6" class="tc-empty">${S.location ? "No cards here." : "Pick a location."}</td></tr>`;
+			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.rows.length} at location`);
+			$b.find(".tc-body input").on("change", function () {
+				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
+				paint();
+			});
+			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to batch", [S.sel.size]) : __("Add to batch"));
+		}
+		function loadLoc() {
+			if (!S.location) { S.rows = []; paint(); return; }
+			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
+				.then((r) => { S.rows = r.message || []; paint(); });
+		}
+		$b.find(".tc-loc").on("change", function () {
+			S.location = this.value;
+			S.sel.clear(); // one location -> one transfer: changing location deselects everything
+			loadLoc();
+		});
+		$b.find(".tc-pill").on("click", function () {
+			$b.find(".tc-pill").removeClass("on");
+			this.classList.add("on");
+			S.status = this.dataset.s;
+			paint();
+		});
+		$b.find(".tc-all").on("click", () => { visible().forEach((r) => { if (!state.rows.find((x) => x.name === r.name)) S.sel.add(r.name); }); paint(); });
+		$b.find(".tc-none").on("click", () => { S.sel.clear(); paint(); });
+
+		dlg.show();
+		if (S.location) loadLoc(); else paint();
+	}
+
 	page.set_primary_action(__("Transfer All"), transferAll, "arrow-right");
+	page.add_inner_button(__("Cards"), showCards);
 	page.add_inner_button(__("History"), showHistory);
 	page.add_inner_button(__("Reset"), resetPage);
 	focusScan();
