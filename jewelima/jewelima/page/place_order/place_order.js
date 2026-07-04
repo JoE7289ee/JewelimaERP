@@ -337,7 +337,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				{ fieldname: "karat", fieldtype: "Link", label: __("Purity (karat gold)"), options: "Item", reqd: 1, default: c.karat,
 					get_query: () => ({ filters: { item_group: "GOLD", metal_purity: ["!=", ""] } }) },
 				{ fieldname: "cb", fieldtype: "Column Break" },
-				{ fieldname: "gold_weight", fieldtype: "Float", label: __("Gold Weight Target (g)"), reqd: 1, default: c.gold_weight },
+				{ fieldname: "gold_weight", fieldtype: "Data", label: __("Gold Weight Target"), reqd: 1, default: c.gold_weight,
+				description: __("Free text — '8.5', 'MINIMUM 8', 'RANGE 8 to 9'…") },
 				{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Budget (ct)"), default: c.diamond_weight },
 				{ fieldname: "stone_no", fieldtype: "Int", label: __("Stone No (pcs)"), default: c.stone_no },
 				{ fieldname: "sb", fieldtype: "Section Break" },
@@ -345,8 +346,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			],
 			primary_action_label: __("Set CAD Line"),
 			primary_action(v) {
-				if (flt(v.gold_weight) <= 0) return frappe.msgprint(__("Enter the gold weight target."));
-				row._cad = { design_type: v.design_type, size: v.size, karat: v.karat, gold_weight: flt(v.gold_weight),
+				if (!(v.gold_weight || "").trim()) return frappe.msgprint(__("Enter the gold weight target."));
+				row._cad = { design_type: v.design_type, size: v.size, karat: v.karat, gold_weight: (v.gold_weight || "").trim(),
 					diamond_weight: flt(v.diamond_weight), stone_no: cint(v.stone_no), remarks: v.remarks || "" };
 				d.hide();
 				applyCadLine(row);

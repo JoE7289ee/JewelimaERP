@@ -209,11 +209,10 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Gold weight budget (g).",
+   "description": "Gold weight target — free text, e.g. '8.5' or 'MINIMUM 8' or 'RANGE 8 to 9'.",
    "fieldname": "cad_gold_weight",
-   "fieldtype": "Float",
-   "label": "CAD Gold Weight (g)",
-   "precision": "3",
+   "fieldtype": "Data",
+   "label": "CAD Gold Weight",
    "read_only": 1
   },
   {

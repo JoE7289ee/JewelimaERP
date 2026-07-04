@@ -220,7 +220,7 @@ jewelima.finalize_cad = function (order_bag, done) {
 		d.fields_dict.budget.$wrapper.html(`
 			<div style="border:1px solid var(--border-color);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12.5px;color:var(--text-muted);">
 				<b style="color:var(--text-color)">CAD budget</b> — ${esc(info.cad_design_type || "—")} · size ${esc(info.size || "—")} · qty ${info.qty || 1}
-				&nbsp;·&nbsp; ${esc(info.cad_karat || "—")} <b style="color:var(--text-color)">${flt(info.cad_gold_weight).toFixed(3)} g</b>
+				&nbsp;·&nbsp; ${esc(info.cad_karat || "—")} <b style="color:var(--text-color)">${esc(info.cad_gold_weight || "—")}</b>
 				&nbsp;·&nbsp; DMD <b style="color:var(--text-color)">${flt(info.cad_diamond_weight).toFixed(2)} ct</b>${info.cad_stone_no ? " / " + info.cad_stone_no + " pcs" : ""}
 				${info.cad_remarks ? `<div style="margin-top:4px;">${esc(info.cad_remarks)}</div>` : ""}
 			</div>`);

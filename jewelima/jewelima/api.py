@@ -359,7 +359,7 @@ def _cad_siblings(bag):
 		filters={
 			"job_order": bag.job_order, "is_cad": 1, "name": ["!=", bag.name],
 			"cad_design_type": bag.cad_design_type or "", "cad_karat": bag.cad_karat or "",
-			"cad_gold_weight": flt(bag.cad_gold_weight), "cad_diamond_weight": flt(bag.cad_diamond_weight),
+			"cad_gold_weight": bag.cad_gold_weight or "", "cad_diamond_weight": flt(bag.cad_diamond_weight),
 		},
 		pluck="name",
 	)
@@ -944,6 +944,7 @@ def get_order_bag_cards(names):
 			"is_cad": int(b.is_cad or 0), "cad_design_type": b.cad_design_type, "cad_karat": b.cad_karat,
 			"cad_gold_weight": b.cad_gold_weight, "cad_diamond_weight": b.cad_diamond_weight,
 			"cad_stone_no": b.cad_stone_no, "cad_remarks": b.cad_remarks,
+			"qr": _qr_data_uri(b.name) if b.is_cad else None,  # CAD cards print a QR, not a barcode
 		})
 	return cards
 
