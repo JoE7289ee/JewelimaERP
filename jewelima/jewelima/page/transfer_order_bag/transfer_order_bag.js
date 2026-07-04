@@ -104,7 +104,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		const qT = sum("qty"), gT = sum("gross"), nT = sum("nett"), dT = sum("dmd_weight"), pT = sum("ps_no"), cT = sum("cs_no");
 		$(page.main).find(".tob-foot-row").html(
 			state.rows.length
-				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">Totals</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td class="num">${dT ? dT.toFixed(3) : ""}</td><td class="num">${pT || ""}</td><td class="num">${cT || ""}</td><td></td></tr>`
+				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">Totals</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td class="num">${dT.toFixed(3)}</td><td class="num">${pT}</td><td class="num">${cT}</td><td></td></tr>`
 				: ""
 		);
 		$(page.main).find(".tob-count").text(state.rows.length);
