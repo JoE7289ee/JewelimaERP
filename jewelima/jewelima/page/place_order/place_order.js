@@ -341,6 +341,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 				description: __("Free text — '8.5', 'MINIMUM 8', 'RANGE 8 to 9'…") },
 				{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Budget (ct)"), default: c.diamond_weight },
 				{ fieldname: "stone_no", fieldtype: "Int", label: __("Stone No (pcs)"), default: c.stone_no },
+				{ fieldname: "reference", fieldtype: "Data", label: __("Reference"), default: c.reference,
+					description: __("Free text — catalog code, customer photo ref, …") },
 				{ fieldname: "sb", fieldtype: "Section Break" },
 				{ fieldname: "remarks", fieldtype: "Small Text", label: __("CAD Remarks"), default: c.remarks },
 			],
@@ -348,7 +350,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 			primary_action(v) {
 				if (!(v.gold_weight || "").trim()) return frappe.msgprint(__("Enter the gold weight target."));
 				row._cad = { design_type: v.design_type, size: v.size, karat: v.karat, gold_weight: (v.gold_weight || "").trim(),
-					diamond_weight: flt(v.diamond_weight), stone_no: cint(v.stone_no), remarks: v.remarks || "" };
+					diamond_weight: flt(v.diamond_weight), stone_no: cint(v.stone_no), reference: (v.reference || "").trim(), remarks: v.remarks || "" };
 				d.hide();
 				applyCadLine(row);
 			},
@@ -774,7 +776,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				...(l.cad ? {
 					is_cad: 1, cad_design_type: l.cad.design_type, cad_karat: l.cad.karat,
 					cad_gold_weight: l.cad.gold_weight, cad_diamond_weight: l.cad.diamond_weight,
-					cad_stone_no: l.cad.stone_no, cad_remarks: l.cad.remarks,
+					cad_stone_no: l.cad.stone_no, cad_reference: l.cad.reference, cad_remarks: l.cad.remarks,
 				} : {}),
 			});
 			made++;

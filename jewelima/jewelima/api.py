@@ -371,7 +371,7 @@ def get_cad_bag_info(order_bag):
 	bag = frappe.db.get_value(
 		"Order Bag", order_bag,
 		["name", "job_order", "is_cad", "qty", "size", "location", "cad_design_type", "cad_karat",
-		 "cad_gold_weight", "cad_diamond_weight", "cad_stone_no", "cad_remarks"],
+		 "cad_gold_weight", "cad_diamond_weight", "cad_stone_no", "cad_reference", "cad_remarks"],
 		as_dict=True,
 	)
 	if not bag:
@@ -414,7 +414,7 @@ def get_cad_jobs():
 	return frappe.get_all(
 		"Order Bag", filters={"is_cad": 1},
 		fields=["name", "job_order", "qty", "size", "location", "customer", "due_date",
-			"cad_design_type", "cad_karat", "cad_gold_weight", "cad_diamond_weight", "cad_stone_no", "cad_remarks"],
+			"cad_design_type", "cad_karat", "cad_gold_weight", "cad_diamond_weight", "cad_stone_no", "cad_reference", "cad_remarks"],
 		order_by="creation",
 	)
 
@@ -943,7 +943,7 @@ def get_order_bag_cards(names):
 			"materials": materials,
 			"is_cad": int(b.is_cad or 0), "cad_design_type": b.cad_design_type, "cad_karat": b.cad_karat,
 			"cad_gold_weight": b.cad_gold_weight, "cad_diamond_weight": b.cad_diamond_weight,
-			"cad_stone_no": b.cad_stone_no, "cad_remarks": b.cad_remarks,
+			"cad_stone_no": b.cad_stone_no, "cad_reference": b.cad_reference, "cad_remarks": b.cad_remarks,
 		})
 	return cards
 

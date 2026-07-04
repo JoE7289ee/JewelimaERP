@@ -29,6 +29,7 @@
   "cad_gold_weight",
   "cad_diamond_weight",
   "cad_stone_no",
+  "cad_reference",
   "cad_remarks",
   "stock_section",
   "stock_status",
@@ -227,6 +228,13 @@
    "fieldname": "cad_stone_no",
    "fieldtype": "Int",
    "label": "CAD Stone No",
+   "read_only": 1
+  },
+  {
+   "description": "Free-text reference (a catalog code, a customer's photo ref, …).",
+   "fieldname": "cad_reference",
+   "fieldtype": "Data",
+   "label": "CAD Reference",
    "read_only": 1
   },
   {

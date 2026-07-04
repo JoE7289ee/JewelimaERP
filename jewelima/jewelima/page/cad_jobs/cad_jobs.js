@@ -26,7 +26,7 @@ frappe.pages["cad-jobs"].on_page_load = function (wrapper) {
 		<div class="cj-box"><table class="cj-tbl">
 			<thead><tr><th style="width:34px"><input type="checkbox" class="cj-all cj-cb"></th>
 			<th>Order Bag</th><th>Type</th><th>Size</th><th>Qty</th><th>Purity</th>
-			<th>Gold Target</th><th class="num">DMD (ct)</th><th class="num">Pcs</th>
+			<th>Gold Target</th><th class="num">DMD (ct)</th><th class="num">Pcs</th><th>Ref</th>
 			<th>Location</th><th>Customer</th><th>Due</th><th style="width:90px"></th></tr></thead>
 			<tbody class="cj-body"></tbody>
 		</table></div>
@@ -48,11 +48,12 @@ frappe.pages["cad-jobs"].on_page_load = function (wrapper) {
 					<td>${esc(b.cad_gold_weight || "")}</td>
 					<td class="num">${flt(b.cad_diamond_weight) ? flt(b.cad_diamond_weight).toFixed(2) : ""}</td>
 					<td class="num">${b.cad_stone_no || ""}</td>
+					<td>${esc(b.cad_reference || "")}</td>
 					<td>${esc(b.location || "")}</td><td>${esc(b.customer || "")}</td>
 					<td>${b.due_date ? frappe.datetime.str_to_user(b.due_date) : ""}</td>
 					<td><button class="btn btn-xs btn-primary cj-fin" data-i="${i}">Finalize</button></td>
 				</tr>`).join("")
-				: '<tr><td colspan="13" class="cj-empty">No CAD jobs pending — everything has a design. 🎉</td></tr>';
+				: '<tr><td colspan="14" class="cj-empty">No CAD jobs pending — everything has a design. 🎉</td></tr>';
 			body.querySelectorAll(".cj-fin").forEach((btn) => {
 				btn.addEventListener("click", () => jewelima.finalize_cad(rows[+btn.getAttribute("data-i")].name, load));
 			});
@@ -84,20 +85,23 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .page:last-child { page-break-after: auto; }
 .card { border: 1.5px solid #000; padding: 4mm; display: flex; flex-direction: column; overflow: hidden; font-size: 12px; line-height: 1.45; }
 .hd { display: flex; justify-content: space-between; align-items: flex-start; }
-.hd .bc svg { width: 52mm; height: 13mm; }
-.hd .num { font-size: 15px; font-weight: 800; letter-spacing: 1px; margin-top: 1mm; }
+.hd .bc svg { width: 42mm; height: 11mm; }
+.hd .num { font-size: 12px; font-weight: 700; letter-spacing: 1px; margin-top: 0.5mm; }
 .tag { border: 2px solid #000; padding: 1mm 3mm; font-weight: 800; font-size: 14px; letter-spacing: 2px; }
 .mid { display: grid; grid-template-columns: 1fr 1.1fr; gap: 3mm; padding: 2.5mm 0; flex: 1 1 auto; min-height: 0; }
-.kv div { margin-bottom: 1.6mm; font-weight: 700; }
-.kv span { font-weight: 700; }
+.kv div { margin-bottom: 1.8mm; }
+.kv .lb { font-weight: 400; }
+.kv span.val { font-weight: 800; font-size: 13px; }
 .kv .blank { display: inline-block; border-bottom: 1.5px solid #000; min-width: 34mm; }
 .sketch { border: 1.5px solid #000; height: 100%; min-height: 55mm; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 10px; }
 .bud { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; text-align: center; }
 .bud .bx { border: 1.5px solid #000; padding: 2mm 1mm; }
 .bud .bx .v { font-size: 15px; font-weight: 800; }
 .bud .bx .k { font-size: 9px; letter-spacing: .5px; margin-top: 0.5mm; }
-.rem { border-top: 1.5px solid #000; margin-top: 2.5mm; padding-top: 1.5mm; font-size: 11px; min-height: 14mm; }
-.ft { display: flex; justify-content: space-between; border-top: 1.5px solid #000; padding-top: 1.5mm; font-size: 12px; font-weight: 700; }
+.rem { border-top: 1.5px solid #000; margin-top: 2.5mm; padding-top: 1.5mm; font-size: 13px; min-height: 14mm; }
+.ft { display: flex; justify-content: space-between; border-top: 1.5px solid #000; padding-top: 1.5mm; text-align: center; }
+.ft .v { font-size: 12px; font-weight: 700; display: block; }
+.ft .l { font-size: 8.5px; color: #555; display: block; letter-spacing: .5px; }
 `;
 
 function cjCardHTML(c) {
@@ -110,12 +114,13 @@ function cjCardHTML(c) {
 		</div>
 		<div class="mid">
 			<div class="kv">
-				<div>DESIGN TYPE: <span>${esc(c.cad_design_type || "")}</span></div>
-				<div>DESIGN NAME: <span class="blank">&nbsp;</span></div>
-				<div>DESIGN SIZE: <span>${esc(c.size || "NA")}</span></div>
-				<div>QTY: <span>${esc(String(c.qty || ""))}</span></div>
+				<div><span class="lb">D TYPE:</span> <span class="val">${esc(c.cad_design_type || "")}</span></div>
+				<div><span class="lb">D NAME:</span> <span class="blank">&nbsp;</span></div>
+				<div><span class="lb">D SIZE:</span> <span class="val">${esc(c.size || "NA")}</span></div>
+				<div><span class="lb">QTY:</span> <span class="val">${esc(String(c.qty || ""))}</span></div>
+				<div><span class="lb">REF:</span> <span class="val">${esc(c.cad_reference || "")}</span></div>
 			</div>
-			<div class="sketch">design</div>
+			<div class="sketch">D IMAGE</div>
 		</div>
 		<div class="bud">
 			<div class="bx"><div class="v">${esc(c.cad_gold_weight || "—")}</div><div class="k">GOLD TARGET</div></div>
@@ -123,7 +128,11 @@ function cjCardHTML(c) {
 			<div class="bx"><div class="v">${esc(c.cad_karat || "—")}</div><div class="k">PURITY</div></div>
 		</div>
 		<div class="rem"><b>Remarks:</b> ${esc(c.cad_remarks || "")}${c.narration ? "<br>" + esc(c.narration) : ""}</div>
-		<div class="ft"><span>${esc(c.order_date || "")}</span><span>${esc(c.customer || "")}</span><span>${esc(c.due_date || "")}</span></div>
+		<div class="ft">
+			<span><span class="v">${esc(c.order_date || "")}</span><span class="l">order</span></span>
+			<span><span class="v">${esc(c.customer || "")}</span></span>
+			<span><span class="v">${esc(c.due_date || "")}</span><span class="l">due</span></span>
+		</div>
 	</div>`;
 }
 
