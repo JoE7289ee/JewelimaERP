@@ -10,7 +10,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	const state = { data: null };
 
 	const CSS = `
-	.ci-wrap{max-width:760px;}
+	.ci-wrap{max-width:900px;}
+	.ci-img{height:84px;width:84px;object-fit:cover;border-radius:8px;border:1px solid #e2e6ea;margin:0 12px;}
 	.ci-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:8px;}
 	.ci-code{font-size:20px;font-weight:800;letter-spacing:.4px;}
 	.ci-sub{color:#6b7785;font-size:12px;margin-top:2px;}
@@ -64,10 +65,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		return p.join(" &middot; ");
 	}
 
-	function buildHTML(d) {
+	// forPrint = the concise one-pager (chain + slim tables); screen = everything.
+	function buildHTML(d, forPrint) {
 		const b = d.bag;
 		const kv = (k, v) => (v == null || v === "" ? "" : `<span><span class="k">${k}</span> ${esc("" + v)}</span>`);
 		const dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
+		const dtt = (v) => (v ? frappe.datetime.str_to_user(v) + " " + (("" + v).split(" ")[1] || "").slice(0, 5) : "—");
 		const finished = b.is_finished;
 
 		const act = wline({ gross: b.act_gross_weight, nett: b.act_nett_weight, pure: b.act_pure_weight, purity: b.act_purity, dmd_no: b.act_dmd_no, dmd_w: b.act_dmd_weight, ps_no: b.act_ps_no, ps_w: b.act_ps_weight, cs_no: b.act_cs_no, cs_w: b.act_cs_weight }, true);
@@ -75,17 +78,39 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 
 		const contents = (d.contents.items || []).map((m) => `${esc(m.item)} <b>${m.pcs ? m.pcs + " / " : ""}${m.qty} ${esc(m.uom || "")}</b>`).join(" &middot; ") || '<span class="ci-empty">Empty</span>';
 
-		let chain = '<span class="ci-empty">No transfers yet.</span>';
+		// travel: print = the compact location chain; screen = the full trail with when/who
+		let travel = '<span class="ci-empty">No transfers yet.</span>';
 		if ((d.transfers || []).length) {
-			const locs = [d.transfers[0].from_location || "—"].concat(d.transfers.map((t) => t.to_location || ""));
-			chain = locs.map((l) => `<b>${esc(l)}</b>`).join('<span class="ar">&rarr;</span>');
+			if (forPrint) {
+				const locs = [d.transfers[0].from_location || "—"].concat(d.transfers.map((t) => t.to_location || ""));
+				travel = locs.map((l) => `<b>${esc(l)}</b>`).join('<span class="ar">&rarr;</span>');
+			} else {
+				travel = `<table class="ci-tbl"><thead><tr><th>From</th><th>To</th><th>When</th><th>By</th></tr></thead><tbody>${d.transfers
+					.map((t) => `<tr><td>${esc(t.from_location || "—")}</td><td><b>${esc(t.to_location || "")}</b></td><td>${dtt(t.transfer_time)}</td><td>${esc(t.transferred_by || "")}</td></tr>`)
+					.join("")}</tbody></table>`;
+			}
 		}
 
-		const stages = (d.stages || []).filter((s) => s.employee_name || flt(s.loss) || (s.status && s.status !== "In Queue"));
-		const stageRows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
-		const stageTbl = stageRows
-			? `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${stageRows}</tbody></table>`
-			: '<span class="ci-empty">No bench work yet.</span>';
+		// bench work: print = slim (bench/employee/status/loss, active rows only);
+		// screen = every stage with in/out times and weights
+		let stageTbl = '<span class="ci-empty">No bench work yet.</span>';
+		if (forPrint) {
+			const stages = (d.stages || []).filter((s) => s.employee_name || flt(s.loss) || (s.status && s.status !== "In Queue"));
+			const rows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
+			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
+		} else if ((d.stages || []).length) {
+			const rows = d.stages.map((s) => `<tr>
+				<td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td>
+				<td>${dtt(s.issued_at || s.time_in)}</td><td>${dtt(s.receipted_at || s.time_out)}</td>
+				<td class="num">${flt(s.weight_out) ? g(s.weight_out) : ""}</td>
+				<td class="num">${flt(s.weight_in) ? g(s.weight_in) : ""}</td>
+				<td class="num">${flt(s.loss) ? "<b>" + g(s.loss) + "</b>" : ""}</td></tr>`).join("");
+			stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th>In</th><th>Out</th><th class="num">Wt Out</th><th class="num">Wt In</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
+		}
+
+		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
+		const extraKvs = forPrint ? "" : `${kv("Job Order", b.job_order)}${kv("Customer Date", dt(b.customer_date))}${kv("Held By", b.held_by)}`;
+		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
 
 		return `
 		<div class="ci-head">
@@ -94,11 +119,13 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item ? " &middot; " + esc(b.item) : ""}</div>
 				<span class="ci-badge ${finished ? "prod" : "wip"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : "IN PRODUCTION"}</span>
 			</div>
+			${img}
 			<div class="ci-loc">Location<b>${esc(b.location || "—")}</b></div>
 		</div>
 		<div class="ci-sec"><div class="ci-kvs">
-			${kv("Customer", b.customer || b.held_by)}${kv("Held By", b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
+			${kv("Customer", b.customer || b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
 			${kv("Qty", b.qty)}${kv("Size", b.size)}${kv("Ordered", dt(b.order_date))}${kv("Due", dt(b.due_date))}
+			${extraKvs}
 		</div></div>
 		<div class="ci-sec"><h4>Weights</h4>
 			${act ? `<div class="ci-line"><span class="tag">Actual</span> ${act}</div>` : ""}
@@ -106,7 +133,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
 		</div>
 		<div class="ci-sec"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
-		<div class="ci-sec"><h4>Where it travelled</h4><div class="ci-chain">${chain}</div></div>
+		${narration}
+		<div class="ci-sec"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
 		<div class="ci-sec"><h4>Who worked on it</h4>${stageTbl}</div>`;
 	}
 
@@ -129,12 +157,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		if (!state.data) return frappe.msgprint(__("Scan a card first."));
 		const title = "Card " + state.data.bag.name;
 		if (window.jewelima && jewelima.print_window) {
-			// shared branded header/footer + this page's CSS
-			jewelima.print_window(state.branding || {}, title, buildHTML(state.data), CSS);
+			// shared branded header/footer + this page's CSS — CONCISE print layout
+			jewelima.print_window(state.branding || {}, title, buildHTML(state.data, true), CSS);
 			return;
 		}
 		const w = window.open("", "_blank", "width=780,height=900");
-		w.document.write(`<html><head><title>${esc(state.data.bag.name)}</title><style>${CSS} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:14px;color:#222;}</style></head><body>${buildHTML(state.data)}</body></html>`);
+		w.document.write(`<html><head><title>${esc(state.data.bag.name)}</title><style>${CSS} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:14px;color:#222;}</style></head><body>${buildHTML(state.data, true)}</body></html>`);
 		w.document.close();
 		w.focus();
 		setTimeout(() => w.print(), 350);

@@ -1917,7 +1917,7 @@ def get_card_passport(order_bag):
 		"Order Bag", order_bag,
 		[
 			"name", "design", "qty", "size", "location", "stock_status", "held_by", "customer", "salesman",
-			"order_type", "order_date", "due_date", "is_finished", "narration",
+			"order_type", "order_date", "due_date", "customer_date", "is_finished", "narration", "image", "job_order",
 			"gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
 			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
 			"act_dmd_no", "act_dmd_weight", "act_ps_no", "act_ps_weight", "act_cs_no", "act_cs_weight",
