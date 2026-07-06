@@ -986,9 +986,11 @@ def get_order_bag_images(order_bag):
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def bench_employee_query(doctype, txt, searchfield, start, page_len, filters):
-	"""Link query for the Job Work employee picker — only employees allotted to the bench
-	(filters['bench']). Falls back to all active employees if that bench has no roster yet."""
+	"""Link query for the bench employee pickers — only employees allotted to the bench
+	(filters['bench']). Falls back to all active employees if that bench has no roster yet;
+	pass filters['strict'] to return NOBODY instead (roster-only, e.g. Make Tree)."""
 	bench = (filters or {}).get("bench")
+	strict = frappe.utils.cint((filters or {}).get("strict"))
 	roster = []
 	if bench and frappe.db.exists("Bench", bench):
 		roster = frappe.get_all("Bench Employee", filters={"parent": bench}, pluck="employee")
@@ -1001,6 +1003,8 @@ def bench_employee_query(doctype, txt, searchfield, start, page_len, filters):
 			    ORDER BY employee_name LIMIT %s, %s""",
 			[like, like, *roster, start, page_len],
 		)
+	if strict:
+		return []  # roster-only: an empty Bench roster means no one to pick
 	return frappe.db.sql(
 		"""SELECT name, employee_name FROM `tabEmployee`
 		   WHERE status = 'Active' AND (name LIKE %s OR employee_name LIKE %s)
