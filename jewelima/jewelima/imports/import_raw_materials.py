@@ -51,6 +51,16 @@ def _s(v):
 	return ("" if v is None else str(v)).strip()
 
 
+def _leaf_group(group, karat):
+	"""Map a sheet group to a LEAF item group in the new tree: GOLD rows land on their
+	karat leaf (GOLD 22K / GOLD STANDARD) since GOLD itself is now a parent node."""
+	if (group or "").upper() == "GOLD":
+		leaf = f"GOLD {karat}" if karat else "GOLD STANDARD"
+		if frappe.db.exists("Item Group", leaf):
+			return leaf
+	return group or "All Item Groups"
+
+
 def _karat_from_name(name):
 	"""'14KYG' -> '14K' for standard karats; None otherwise."""
 	import re
@@ -156,7 +166,7 @@ def run(file_path=None, dry_run=False):
 				"doctype": "Item",
 				"item_code": name,
 				"item_name": name,
-				"item_group": _s(r[C_GROUP]) or "All Item Groups",
+				"item_group": _leaf_group(_s(r[C_GROUP]), karat),
 				"stock_uom": unit,
 				"is_stock_item": 1,
 				"is_purchase_item": 1,

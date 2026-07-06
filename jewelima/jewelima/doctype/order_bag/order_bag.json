@@ -51,6 +51,15 @@
   "col_break_ps",
   "cs_no",
   "cs_weight",
+  "col_break_cvd",
+  "cvd_no",
+  "cvd_weight",
+  "col_break_pdmd",
+  "pdmd_no",
+  "pdmd_weight",
+  "col_break_poth",
+  "poth_no",
+  "poth_weight",
   "actual_tab",
   "act_weights_section",
   "act_gross_weight",
@@ -67,6 +76,15 @@
   "act_col_ps",
   "act_cs_no",
   "act_cs_weight",
+  "act_col_cvd",
+  "act_cvd_no",
+  "act_cvd_weight",
+  "act_col_pdmd",
+  "act_pdmd_no",
+  "act_pdmd_weight",
+  "act_col_poth",
+  "act_poth_no",
+  "act_poth_weight",
   "current_contents_section",
   "materials_html",
   "schedule_tab",
@@ -374,6 +392,57 @@
    "read_only": 1
   },
   {
+   "fieldname": "col_break_cvd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cvd_no",
+   "fieldtype": "Int",
+   "label": "CVD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cvd_weight",
+   "fieldtype": "Float",
+   "label": "CVD Weight (ct)",
+   "read_only": 1,
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_pdmd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pdmd_no",
+   "fieldtype": "Int",
+   "label": "PDMD (Party Diamond) No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pdmd_weight",
+   "fieldtype": "Float",
+   "label": "PDMD (Party Diamond) Weight (ct)",
+   "read_only": 1,
+   "precision": "3"
+  },
+  {
+   "fieldname": "col_break_poth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "poth_no",
+   "fieldtype": "Int",
+   "label": "POTH (Party Other) No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "poth_weight",
+   "fieldtype": "Float",
+   "label": "POTH (Party Other) Weight (ct)",
+   "read_only": 1,
+   "precision": "3"
+  },
+  {
    "fieldname": "actual_tab",
    "fieldtype": "Tab Break",
    "label": "Actual"
@@ -468,6 +537,57 @@
    "label": "CS Weight (ct)",
    "precision": "3",
    "read_only": 1
+  },
+  {
+   "fieldname": "act_col_cvd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_cvd_no",
+   "fieldtype": "Int",
+   "label": "Actual CVD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_cvd_weight",
+   "fieldtype": "Float",
+   "label": "Actual CVD Weight (ct)",
+   "read_only": 1,
+   "precision": "3"
+  },
+  {
+   "fieldname": "act_col_pdmd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_pdmd_no",
+   "fieldtype": "Int",
+   "label": "Actual PDMD (Party Diamond) No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_pdmd_weight",
+   "fieldtype": "Float",
+   "label": "Actual PDMD (Party Diamond) Weight (ct)",
+   "read_only": 1,
+   "precision": "3"
+  },
+  {
+   "fieldname": "act_col_poth",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_poth_no",
+   "fieldtype": "Int",
+   "label": "Actual POTH (Party Other) No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_poth_weight",
+   "fieldtype": "Float",
+   "label": "Actual POTH (Party Other) Weight (ct)",
+   "read_only": 1,
+   "precision": "3"
   },
   {
    "fieldname": "current_contents_section",

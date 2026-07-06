@@ -22,6 +22,9 @@
   "ps_no",
   "col_break_stone",
   "cs_no",
+  "poth_no",
+  "pdmd_no",
+  "cvd_no",
   "purity",
   "bom_section",
   "materials"
@@ -120,6 +123,24 @@
    "fieldname": "cs_no",
    "fieldtype": "Int",
    "label": "CS No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cvd_no",
+   "fieldtype": "Int",
+   "label": "CVD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pdmd_no",
+   "fieldtype": "Int",
+   "label": "PDMD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "poth_no",
+   "fieldtype": "Int",
+   "label": "POTH No",
    "read_only": 1
   },
   {

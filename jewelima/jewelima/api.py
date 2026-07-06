@@ -372,7 +372,7 @@ def _bag_karat(bag_name, karat_names):
 def get_tree_queues():
 	"""Cards waiting at TREE MAKING grouped by their casting karat — one queue (table)
 	per purity. Bags whose BOM has no karat gold fall into 'OTHER'."""
-	karat_names = set(frappe.get_all("Item", filters={"item_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
+	karat_names = set(frappe.get_all("Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
 	bags = frappe.get_all(
 		"Order Bag",
 		filters={"location": "TREE MAKING", "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]], "tree": ["in", ["", None]]},
@@ -399,7 +399,7 @@ def make_tree(karat, names, employee=None, wax_weight=None):
 	if not names:
 		frappe.throw(frappe._("Select at least one card."))
 
-	karat_names = set(frappe.get_all("Item", filters={"item_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
+	karat_names = set(frappe.get_all("Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
 	karat_val = karat if karat and karat != "OTHER" else None
 	cards = []
 	for nm in names:
@@ -531,7 +531,7 @@ def get_design_variants(design):
 	doc = frappe.get_doc("Design", design)
 
 	karats = frappe.get_all(
-		"Item", filters={"item_group": "GOLD", "metal_purity": ["!=", ""]},
+		"Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]},
 		fields=["name", "purity_percentage"], order_by="name desc",
 	)
 	karat_names = {k.name for k in karats}
@@ -725,8 +725,8 @@ def _profile_from_materials(mats):
 	(by item.stone_type) -> dmd/ps/cs counts + carat weights; metal -> nett grams +
 	gram-weighted purity. gross = metal grams; nett = gross - stone grams (1 ct = 0.2 g)."""
 	out = {
-		"dmd_no": 0, "ps_no": 0, "cs_no": 0,
-		"dmd_weight": 0.0, "ps_weight": 0.0, "cs_weight": 0.0,
+		"dmd_no": 0, "ps_no": 0, "cs_no": 0, "cvd_no": 0, "pdmd_no": 0, "poth_no": 0,
+		"dmd_weight": 0.0, "ps_weight": 0.0, "cs_weight": 0.0, "cvd_weight": 0.0, "pdmd_weight": 0.0, "poth_weight": 0.0,
 		"gross_weight": 0.0, "nett_weight": 0.0, "purity": 0.0,
 	}
 	rows = mats or []
@@ -736,8 +736,8 @@ def _profile_from_materials(mats):
 		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
 			stype[it.name] = it.stone_type
 			purity_map[it.name] = flt(it.purity_percentage)
-	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no"}
-	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight"}
+	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no", "CVD": "cvd_no", "Party Diamond": "pdmd_no", "Party Other": "poth_no"}
+	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight", "CVD": "cvd_weight", "Party Diamond": "pdmd_weight", "Party Other": "poth_weight"}
 	metal_g = 0.0
 	purity_num = 0.0
 	metal_purities = []
@@ -752,14 +752,14 @@ def _profile_from_materials(mats):
 			purity_num += flt(m.get("weight")) * pu
 			if pu:
 				metal_purities.append(pu)
-	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"]) * 0.2
+	stone_g = (out["dmd_weight"] + out["ps_weight"] + out["cs_weight"] + out["cvd_weight"] + out["pdmd_weight"] + out["poth_weight"]) * 0.2
 	out["gross_weight"] = round(metal_g, 3)
 	out["nett_weight"] = round(max(metal_g - stone_g, 0.0), 3)
 	if metal_g:
 		out["purity"] = round(purity_num / metal_g, 3)
 	elif metal_purities:
 		out["purity"] = round(sum(metal_purities) / len(metal_purities), 3)
-	for k in ("dmd_weight", "ps_weight", "cs_weight"):
+	for k in ("dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"):
 		out[k] = round(out[k], 3)
 	return out
 
@@ -772,15 +772,17 @@ def _plan_values(bag_bom, qty):
 	q = max(int(qty or 1), 1)
 	# match the ACTUAL convention: gross = gold + stones, nett = gold (metal)
 	metal = flt(p["gross_weight"])  # _profile_from_materials' "gross" is metal grams
-	stone_g = (flt(p["dmd_weight"]) + flt(p["ps_weight"]) + flt(p["cs_weight"])) * 0.2
-	return {
+	buckets = ("dmd", "ps", "cs", "cvd", "pdmd", "poth")
+	stone_g = sum(flt(p[f"{b}_weight"]) for b in buckets) * 0.2
+	vals = {
 		"gross_weight": round((metal + stone_g) * q, 3),
 		"nett_weight": round(metal * q, 3),
 		"purity": p["purity"],
-		"dmd_no": int(p["dmd_no"]) * q, "dmd_weight": round(p["dmd_weight"] * q, 3),
-		"ps_no": int(p["ps_no"]) * q, "ps_weight": round(p["ps_weight"] * q, 3),
-		"cs_no": int(p["cs_no"]) * q, "cs_weight": round(p["cs_weight"] * q, 3),
 	}
+	for b in buckets:
+		vals[f"{b}_no"] = int(p[f"{b}_no"]) * q
+		vals[f"{b}_weight"] = round(p[f"{b}_weight"] * q, 3)
+	return vals
 
 
 def _actual_profile(order_bag):
@@ -792,30 +794,30 @@ def _actual_profile(order_bag):
 	if codes:
 		for i in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
 			meta[i.name] = (i.stone_type, flt(i.purity_percentage))
-	dmd_w = ps_w = cs_w = gold = pnum = 0.0
-	dmd_n = ps_n = cs_n = 0
+	BUCKET = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs", "CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth"}
+	w = {b: 0.0 for b in BUCKET.values()}
+	n = {b: 0 for b in BUCKET.values()}
+	gold = pnum = 0.0
 	mp = []
 	for it in rows:
 		q = flt(it["qty"])
-		n = int(it.get("pcs") or 0)
+		pcs = int(it.get("pcs") or 0)
 		st, pu = meta.get(it["item"], (None, 0.0))
-		if st == "Diamond":
-			dmd_w += q; dmd_n += n
-		elif st == "Precious Stone":
-			ps_w += q; ps_n += n
-		elif st == "Color Stone":
-			cs_w += q; cs_n += n
+		b = BUCKET.get(st)
+		if b:
+			w[b] += q
+			n[b] += pcs
 		else:
 			gold += q
 			pnum += q * pu
 			if pu:
 				mp.append(pu)
 	purity = (pnum / gold) if gold else (sum(mp) / len(mp) if mp else 0.0)
-	return {
-		"gross": round(gold + (dmd_w + ps_w + cs_w) * 0.2, 3), "nett": round(gold, 3),
-		"purity": round(purity, 3), "dmd_weight": round(dmd_w, 3), "ps_weight": round(ps_w, 3), "cs_weight": round(cs_w, 3),
-		"dmd_no": dmd_n, "ps_no": ps_n, "cs_no": cs_n,
-	}
+	out = {"gross": round(gold + sum(w.values()) * 0.2, 3), "nett": round(gold, 3), "purity": round(purity, 3)}
+	for b in BUCKET.values():
+		out[f"{b}_weight"] = round(w[b], 3)
+		out[f"{b}_no"] = n[b]
+	return out
 
 
 @frappe.whitelist()
@@ -823,17 +825,18 @@ def refresh_actual_weights(order_bag):
 	"""Recompute + store the ACTUAL weight fields (act_*) from current contents,
 	including real stone counts (pcs) from the ledger. Once the piece is a finished
 	product its materials are consumed, so the actuals are FROZEN (just return them)."""
-	act_fields = ["act_gross_weight", "act_nett_weight", "act_purity", "act_pure_weight",
-		"act_dmd_weight", "act_ps_weight", "act_cs_weight", "act_dmd_no", "act_ps_no", "act_cs_no"]
+	act_fields = ["act_gross_weight", "act_nett_weight", "act_purity", "act_pure_weight"] + [
+		f"act_{b}_{k}" for b in ("dmd", "ps", "cs", "cvd", "pdmd", "poth") for k in ("weight", "no")]
 	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
 		return frappe.db.get_value("Order Bag", order_bag, act_fields, as_dict=True)
 	p = _actual_profile(order_bag)
 	vals = {
 		"act_gross_weight": p["gross"], "act_nett_weight": p["nett"], "act_purity": p["purity"],
 		"act_pure_weight": round(p["nett"] * p["purity"] / 100.0, 3),
-		"act_dmd_weight": p["dmd_weight"], "act_ps_weight": p["ps_weight"], "act_cs_weight": p["cs_weight"],
-		"act_dmd_no": p["dmd_no"], "act_ps_no": p["ps_no"], "act_cs_no": p["cs_no"],
 	}
+	for b in ("dmd", "ps", "cs", "cvd", "pdmd", "poth"):
+		vals[f"act_{b}_weight"] = p[f"{b}_weight"]
+		vals[f"act_{b}_no"] = p[f"{b}_no"]
 	frappe.db.set_value("Order Bag", order_bag, vals)
 	return vals
 
@@ -903,13 +906,39 @@ def get_design_materials(design):
 	return out
 
 
+def classify_item(doc):
+	"""Stamp the 4-level classification (main_type / material_type / material_group) from
+	the item group's ancestors in the Item Group tree: MAIN TYPE -> TYPE -> GROUP -> leaf.
+	A GROUP that is itself the leaf (ALLOY, CVD, …) classifies as its own group."""
+	doc.main_type = doc.material_type = doc.material_group = None
+	if not doc.get("item_group") or not frappe.db.exists("Item Group", doc.item_group):
+		return
+	# ancestors root -> leaf (excluding "All Item Groups"), then the leaf itself
+	chain = []
+	node = doc.item_group
+	seen = set()
+	while node and node not in seen:
+		seen.add(node)
+		chain.append(node)
+		node = frappe.db.get_value("Item Group", node, "parent_item_group")
+	chain = [n for n in reversed(chain) if n != "All Item Groups"]
+	# the root node may pre-exist in any case ("Raw Material" ships with ERPNext)
+	if not chain or chain[0].upper() not in ("RAW MATERIAL", "PRODUCT"):
+		return  # not classified under the tree (legacy flat group)
+	doc.main_type = chain[0].upper()
+	doc.material_type = chain[1] if len(chain) > 1 else None
+	doc.material_group = chain[2] if len(chain) > 2 else (chain[1] if len(chain) > 1 else None)
+
+
 def set_item_weight_uom(doc, method=None):
 	"""Keep the Weight UOM unambiguous: a stone (has stone_type) is weighed in
-	carats, everything else in grams. Hooked on Item validate."""
+	carats, everything else in grams. Hooked on Item validate — also stamps the
+	classification fields from the Item Group tree."""
 	if doc.get("stone_type"):
 		doc.weight_unit = "Carat"
 	elif not doc.get("weight_unit"):
 		doc.weight_unit = "Gram"
+	classify_item(doc)
 
 
 @frappe.whitelist()

@@ -22,6 +22,9 @@ const PO_COLUMNS = [
 	{ key: "dmd", label: "DMD (no/ct)", type: "stone", no: "dmd_no", wt: "dmd_weight", width: "105px" },
 	{ key: "ps", label: "PS (no/ct)", type: "stone", no: "ps_no", wt: "ps_weight", width: "105px" },
 	{ key: "cs", label: "CS (no/ct)", type: "stone", no: "cs_no", wt: "cs_weight", width: "105px" },
+	{ key: "cvd", label: "CVD (no/ct)", type: "stone", no: "cvd_no", wt: "cvd_weight", width: "105px" },
+	{ key: "pdmd", label: "PDMD (no/ct)", type: "stone", no: "pdmd_no", wt: "pdmd_weight", width: "105px" },
+	{ key: "poth", label: "POTH (no/ct)", type: "stone", no: "poth_no", wt: "poth_weight", width: "105px" },
 ];
 
 frappe.pages["place-order"].on_page_load = function (wrapper) {
@@ -154,17 +157,19 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	$footrow.append("<td></td>"); // actions (Split)
 	$footrow.append("<td></td>"); // remove
 	function recalcTotals() {
-		const s = { qty: 0, gross_weight: 0, nett_weight: 0, pure: 0, dmd_no: 0, dmd_weight: 0, ps_no: 0, ps_weight: 0, cs_no: 0, cs_weight: 0 };
+		const s = { qty: 0, gross_weight: 0, nett_weight: 0, pure: 0 };
+		["dmd", "ps", "cs", "cvd", "pdmd", "poth"].forEach((b) => { s[b + "_no"] = 0; s[b + "_weight"] = 0; });
 		state.rows.forEach((r) => {
 			s.qty += cint(r.f.qty.get()) || 0;
-			["gross_weight", "nett_weight", "pure", "dmd_weight", "ps_weight", "cs_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
-			["dmd_no", "ps_no", "cs_no"].forEach((k) => (s[k] += cint(r.f[k].get()) || 0));
+			["gross_weight", "nett_weight", "pure", "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
+			["dmd_no", "ps_no", "cs_no", "cvd_no", "pdmd_no", "poth_no"].forEach((k) => (s[k] += cint(r.f[k].get()) || 0));
 		});
 		totalCells.qty.text(s.qty || "");
 		totalCells.gross_weight.text(s.gross_weight ? s.gross_weight.toFixed(3) : "");
 		totalCells.nett_weight.text(s.nett_weight ? s.nett_weight.toFixed(3) : "");
 		totalCells.pure.text(s.pure ? s.pure.toFixed(3) : "");
-		[["dmd", "dmd_no", "dmd_weight"], ["ps", "ps_no", "ps_weight"], ["cs", "cs_no", "cs_weight"]].forEach(([gk, nk, wk]) => {
+		[["dmd", "dmd_no", "dmd_weight"], ["ps", "ps_no", "ps_weight"], ["cs", "cs_no", "cs_weight"],
+		 ["cvd", "cvd_no", "cvd_weight"], ["pdmd", "pdmd_no", "pdmd_weight"], ["poth", "poth_no", "poth_weight"]].forEach(([gk, nk, wk]) => {
 			totalCells[gk].text(s[nk] || s[wk] ? `${s[nk]} / ${s[wk].toFixed(3)}` : "");
 		});
 	}
@@ -335,7 +340,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 					} },
 				{ fieldname: "size", fieldtype: "Select", label: __("Size"), options: "\nNA", default: c.size },
 				{ fieldname: "karat", fieldtype: "Link", label: __("Purity (karat gold)"), options: "Item", reqd: 1, default: c.karat,
-					get_query: () => ({ filters: { item_group: "GOLD", metal_purity: ["!=", ""] } }) },
+					get_query: () => ({ filters: { material_group: "GOLD", metal_purity: ["!=", ""] } }) },
 				{ fieldname: "cb", fieldtype: "Column Break" },
 				{ fieldname: "gold_weight", fieldtype: "Data", label: __("Gold Weight Target"), reqd: 1, default: c.gold_weight,
 				description: __("Free text — '8.5', 'MINIMUM 8', 'RANGE 8 to 9'…") },
@@ -384,7 +389,9 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		if (c.size) row.f.size.set(c.size);
 		setTimeout(() => row.f.design.$input && row.f.design.$input.prop("disabled", true).attr("placeholder", "CAD JOB — design after CAD"), 50);
 		// no plan yet — budgets live on the bag's CAD fields, so the weight cells stay blank
-		["gross_weight", "nett_weight", "purity", "pure", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight"]
+		["gross_weight", "nett_weight", "purity", "pure",
+			"dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
+			"cvd_no", "cvd_weight", "pdmd_no", "pdmd_weight", "poth_no", "poth_weight"]
 			.forEach((k) => row.f[k] && row.f[k].set(""));
 		updateDesignBtn(row);
 		recalcTotals();
@@ -458,21 +465,21 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	// grams + stone grams (1 ct = 0.2 g), nett = metal grams, gram-weighted metal purity.
 	// Lets edited materials recompute the line's numbers instantly (no round-trip).
 	function planProfile(mats) {
-		let metal = 0, pnum = 0, dmd_no = 0, dmd_w = 0, ps_no = 0, ps_w = 0, cs_no = 0, cs_w = 0;
+		const BUCKET = { "Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs", "CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth" };
+		const w = {}, n = {};
+		Object.values(BUCKET).forEach((b) => { w[b] = 0; n[b] = 0; });
+		let metal = 0, pnum = 0;
 		const mp = [];
 		(mats || []).forEach((m) => {
-			const st = m.stone_type, wt = flt(m.weight), q = cint(m.qty);
-			if (st === "Diamond") { dmd_no += q; dmd_w += wt; }
-			else if (st === "Precious Stone") { ps_no += q; ps_w += wt; }
-			else if (st === "Color Stone") { cs_no += q; cs_w += wt; }
+			const b = BUCKET[m.stone_type], wt = flt(m.weight), q = cint(m.qty);
+			if (b) { n[b] += q; w[b] += wt; }
 			else { const pu = flt(m.purity); metal += wt; pnum += wt * pu; if (pu) mp.push(pu); }
 		});
-		const stone_g = (dmd_w + ps_w + cs_w) * 0.2;
+		const stone_g = Object.values(w).reduce((a, b) => a + b, 0) * 0.2;
 		const purity = metal ? pnum / metal : (mp.length ? mp.reduce((a, b) => a + b, 0) / mp.length : 0);
-		return {
-			gross_weight: +(metal + stone_g).toFixed(3), nett_weight: +metal.toFixed(3), purity: +purity.toFixed(3),
-			dmd_no, dmd_weight: +dmd_w.toFixed(3), ps_no, ps_weight: +ps_w.toFixed(3), cs_no, cs_weight: +cs_w.toFixed(3),
-		};
+		const out = { gross_weight: +(metal + stone_g).toFixed(3), nett_weight: +metal.toFixed(3), purity: +purity.toFixed(3) };
+		Object.values(BUCKET).forEach((b) => { out[b + "_no"] = n[b]; out[b + "_weight"] = +w[b].toFixed(3); });
+		return out;
 	}
 
 	// Pull the design's BOM into this line's editable working copy + recompute.
@@ -690,13 +697,13 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		const q = cint(row.f.qty.get()) || 1;
 		const set = (k, v) => { if (row.f[k]) row.f[k].set(v || ""); };
 		set("purity", p.purity);
-		["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight"].forEach((k) => {
+		["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => {
 			const v = flt(p[k]) * q;
 			set(k, v ? v.toFixed(3) : "");
 		});
 		const pure = (flt(p.nett_weight) * q * flt(p.purity)) / 100; // pure gold grams (scales with qty)
 		set("pure", pure ? pure.toFixed(3) : "");
-		["dmd_no", "ps_no", "cs_no"].forEach((k) => set(k, cint(p[k]) * q || ""));
+		["dmd_no", "ps_no", "cs_no", "cvd_no", "pdmd_no", "poth_no"].forEach((k) => set(k, cint(p[k]) * q || ""));
 		recalcTotals();
 	}
 
@@ -740,6 +747,9 @@ function po_readLine(r) {
 		dmd_no: cint(g("dmd_no")) || 0, dmd_weight: flt(g("dmd_weight")) || 0,
 		ps_no: cint(g("ps_no")) || 0, ps_weight: flt(g("ps_weight")) || 0,
 		cs_no: cint(g("cs_no")) || 0, cs_weight: flt(g("cs_weight")) || 0,
+		cvd_no: cint(g("cvd_no")) || 0, cvd_weight: flt(g("cvd_weight")) || 0,
+		pdmd_no: cint(g("pdmd_no")) || 0, pdmd_weight: flt(g("pdmd_weight")) || 0,
+		poth_no: cint(g("poth_no")) || 0, poth_weight: flt(g("poth_weight")) || 0,
 		narration: r._remark || undefined,
 		bag_bom: (r._materials || []).map((m) => ({ item: m.item, qty: flt(m.qty) || 0, weight: flt(m.weight) || 0 })),
 		cad: r._cad || null,
@@ -783,7 +793,9 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				doctype: "Order Bag", job_order: order.name, design: l.design, qty: l.qty || 1,
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
-				cs_no: l.cs_no, cs_weight: l.cs_weight, narration: l.narration,
+				cs_no: l.cs_no, cs_weight: l.cs_weight,
+				cvd_no: l.cvd_no, cvd_weight: l.cvd_weight, pdmd_no: l.pdmd_no, pdmd_weight: l.pdmd_weight,
+				poth_no: l.poth_no, poth_weight: l.poth_weight, narration: l.narration,
 				bag_bom: l.bag_bom && l.bag_bom.length ? l.bag_bom : undefined,
 				...(l.cad ? {
 					is_cad: 1, cad_design_type: l.cad.design_type, cad_karat: l.cad.karat,

@@ -17,6 +17,7 @@ def after_install():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	flag_melt_warehouses()
+	setup_item_group_tree()
 	seed_raw_materials()
 	seed_karat_golds()
 	seed_salesmen()
@@ -43,6 +44,7 @@ def after_migrate():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	flag_melt_warehouses()
+	setup_item_group_tree()
 	seed_raw_materials()
 	seed_karat_golds()
 	seed_salesmen()
@@ -213,7 +215,8 @@ def seed_karat_golds():
 			if frappe.db.exists("Item", code):
 				continue
 			frappe.get_doc({
-				"doctype": "Item", "item_code": code, "item_name": code, "item_group": "GOLD",
+				"doctype": "Item", "item_code": code, "item_name": code,
+				"item_group": f"GOLD {karat}" if frappe.db.exists("Item Group", f"GOLD {karat}") else "GOLD",
 				"stock_uom": "Gram", "weight_unit": "Gram", "is_stock_item": 1,
 				"is_purchase_item": 1, "is_sales_item": 0, "include_item_in_manufacturing": 1,
 				"metal_purity": karat, "purity_percentage": purity,
@@ -306,11 +309,99 @@ def seed_salesmen():
 	frappe.db.commit()
 
 
+ITEM_GROUP_TREE = {
+	# MAIN TYPE -> TYPE -> GROUP (-> leaves). A GROUP with no finer split is itself the leaf.
+	"RAW MATERIAL": {
+		"METAL": {
+			"GOLD": ["GOLD 22K", "GOLD 18K", "GOLD 14K", "GOLD STANDARD"],
+			"ALLOY": [],
+		},
+		"STONE": {
+			"DIAMOND": [],  # the existing quality groups (DIAMOND VVS-EF, …) are re-parented under this
+			"CVD": [],
+			"PRECIOUS STONE": [],
+			"COLOUR STONE": [],
+			"SWAROVSKI": [],
+			"CUBIC ZIRCONIA": [],
+		},
+	},
+	"PRODUCT": {},  # one leaf per Design Type is added dynamically
+}
+
+
+def setup_item_group_tree():
+	"""Build the 4-level Item Group tree (MAIN TYPE -> TYPE -> GROUP -> leaf) and
+	re-parent the existing flat groups into it. Idempotent. Items themselves are NOT
+	mass-migrated (the raw-material import gets reviewed against the new tree) — except
+	gold, whose items must move to the karat leaves so GOLD can become a parent node."""
+	root = "All Item Groups"
+
+	def ensure(name, parent, is_group):
+		if frappe.db.exists("Item Group", name):
+			cur = frappe.db.get_value("Item Group", name, ["parent_item_group", "is_group"], as_dict=True)
+			if cur.parent_item_group != parent or int(cur.is_group) != int(is_group):
+				doc = frappe.get_doc("Item Group", name)
+				doc.parent_item_group = parent
+				if int(cur.is_group) != int(is_group):
+					if is_group and frappe.db.count("Item", {"item_group": name}):
+						return  # can't become a parent while items sit on it
+					doc.is_group = int(is_group)
+				doc.save(ignore_permissions=True)
+			return
+		frappe.get_doc({
+			"doctype": "Item Group", "item_group_name": name,
+			"parent_item_group": parent, "is_group": int(is_group),
+		}).insert(ignore_permissions=True)
+
+	# gold first: move items to karat leaves so GOLD can turn into a group node
+	if frappe.db.exists("Item Group", "GOLD") and frappe.db.count("Item", {"item_group": "GOLD"}):
+		for leaf in ("GOLD 22K", "GOLD 18K", "GOLD 14K", "GOLD STANDARD"):
+			ensure(leaf, root, 0)  # temporary parent; re-homed below
+		for it in frappe.get_all("Item", filters={"item_group": "GOLD"}, fields=["name", "metal_purity"]):
+			leaf = f"GOLD {it.metal_purity}" if it.metal_purity in ("22K", "18K", "14K") else "GOLD STANDARD"
+			frappe.db.set_value("Item", it.name, "item_group", leaf)
+
+	for main, types in ITEM_GROUP_TREE.items():
+		ensure(main, root, 1)
+		for typ, groups in types.items():
+			ensure(typ, main, 1)
+			for grp, leaves in groups.items():
+				ensure(grp, typ, 1 if leaves else 0)
+				for leaf in leaves:
+					ensure(leaf, grp, 0)
+
+	# re-parent the existing diamond quality groups under DIAMOND
+	for g in frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name"):
+		ensure(g, "DIAMOND", 0)
+	# PRODUCT: one leaf per Design Type + the legacy Products leaf
+	for dt in frappe.get_all("Design Type", pluck="name"):
+		ensure(dt, "PRODUCT", 0)
+	if frappe.db.exists("Item Group", "Products"):
+		ensure("Products", "PRODUCT", 0)
+	# CVD items count in their OWN bucket (they shipped as stone_type=Diamond)
+	for nm in frappe.get_all("Item", filters={"item_group": "CVD", "stone_type": ["!=", "CVD"]}, pluck="name"):
+		frappe.db.set_value("Item", nm, "stone_type", "CVD", update_modified=False)
+	frappe.db.commit()
+	# stamp the classification on every item (same walk the Item hook does on save)
+	from jewelima.jewelima.api import classify_item
+
+	for nm in frappe.get_all("Item", filters={"is_stock_item": 1}, pluck="name"):
+		doc = frappe.get_doc("Item", nm)
+		before = (doc.main_type, doc.material_type, doc.material_group)
+		classify_item(doc)
+		if (doc.main_type, doc.material_type, doc.material_group) != before:
+			frappe.db.set_value("Item", nm, {
+				"main_type": doc.main_type, "material_type": doc.material_type, "material_group": doc.material_group,
+			}, update_modified=False)
+	frappe.db.commit()
+
+
 def seed_standard_golds():
 	"""Standard Gold 990–998 (purity 99.0–99.8 %) to sit alongside Standard Gold 999 (99.9 %),
 	and retire the legacy generic 'Standard Gold' (0 %). Idempotent; mirrors the GOLD item shape."""
 	if not frappe.db.exists("Item Group", "GOLD"):
 		return
+	std_leaf = "GOLD STANDARD" if frappe.db.exists("Item Group", "GOLD STANDARD") else "GOLD"
 	for n in range(990, 999):  # 990 … 998 (999 already ships)
 		code = f"Standard Gold {n}"
 		if frappe.db.exists("Item", code):
@@ -319,7 +410,7 @@ def seed_standard_golds():
 			"doctype": "Item",
 			"item_code": code,
 			"item_name": code,
-			"item_group": "GOLD",
+			"item_group": std_leaf,
 			"stock_uom": "Gram",
 			"is_stock_item": 1,
 			"is_purchase_item": 1,
@@ -347,7 +438,7 @@ def seed_raw_materials():
 	"""
 	if not frappe.db.exists("Item Group", "All Item Groups"):
 		return
-	if frappe.db.count("Item", {"item_group": "GOLD"}):
+	if frappe.db.count("Item", {"item_group": ["like", "GOLD%"]}):
 		return
 	try:
 		from jewelima.jewelima.imports.import_raw_materials import run
@@ -497,6 +588,40 @@ def get_item_custom_fields():
 				"label": "Stone Size",
 				"insert_after": "stone_type",
 			},
+			{
+				"fieldname": "classification_section",
+				"fieldtype": "Section Break",
+				"label": "Classification (auto from the Item Group tree)",
+				"insert_after": "stone_size",
+				"collapsible": 1,
+			},
+			{
+				"fieldname": "main_type",
+				"fieldtype": "Data",
+				"label": "Main Type",
+				"insert_after": "classification_section",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"description": "RAW MATERIAL / PRODUCT — derived from the item group's ancestors.",
+			},
+			{
+				"fieldname": "material_type",
+				"fieldtype": "Data",
+				"label": "Type",
+				"insert_after": "main_type",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"description": "METAL / STONE (raw material) or the design type (product).",
+			},
+			{
+				"fieldname": "material_group",
+				"fieldtype": "Data",
+				"label": "Group",
+				"insert_after": "material_type",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"description": "GOLD / DIAMOND / CVD / ALLOY / SWAROVSKI / …",
+			},
 		],
 		"Purchase Receipt Item": [
 			{
@@ -543,7 +668,7 @@ def get_item_custom_fields():
 
 def create_default_stone_types():
 	"""Seed the three base stone categories the business works with."""
-	for stone_type in ["Diamond", "Precious Stone", "Color Stone"]:
+	for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Party Diamond", "Party Other"]:
 		if not frappe.db.exists("Stone Type", stone_type):
 			frappe.get_doc(
 				{"doctype": "Stone Type", "stone_type_name": stone_type}

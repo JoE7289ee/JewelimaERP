@@ -111,7 +111,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	const fmt = (n) => flt(n).toFixed(3);
 
 	const whCtl = mk(".ml-wh", { fieldtype: "Link", label: "Gold Issue", fieldname: "warehouse", options: "Warehouse", reqd: 1, get_query: () => ({ filters: { is_melt_warehouse: 1, is_group: 0 } }) });
-	const outCtl = mk(".ml-out", { fieldtype: "Link", label: "Create (karat gold)", fieldname: "out", options: "Item", reqd: 1, get_query: () => ({ filters: { item_group: "GOLD", metal_purity: ["!=", ""] } }) });
+	const outCtl = mk(".ml-out", { fieldtype: "Link", label: "Create (karat gold)", fieldname: "out", options: "Item", reqd: 1, get_query: () => ({ filters: { material_group: "GOLD", metal_purity: ["!=", ""] } }) });
 	const reqCtl = mk(".ml-req", { fieldtype: "Float", label: "Required (g)", fieldname: "required", precision: "3" });
 	const strict = q(".ml-strict"), noLoss = q(".ml-noloss"), outWt = q(".ml-outwt");
 

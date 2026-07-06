@@ -183,9 +183,9 @@ function pob_cardHTML(c) {
 		)
 		.join("");
 	const stones = [];
-	if (c.dmd_no || c.dmd_weight) stones.push(`DMD ${c.dmd_no || 0}/${flt(c.dmd_weight)}ct`);
-	if (c.ps_no || c.ps_weight) stones.push(`PS ${c.ps_no || 0}/${flt(c.ps_weight)}ct`);
-	if (c.cs_no || c.cs_weight) stones.push(`CS ${c.cs_no || 0}/${flt(c.cs_weight)}ct`);
+	[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
+		if (c[b + "_no"] || c[b + "_weight"]) stones.push(`${lb} ${c[b + "_no"] || 0}/${flt(c[b + "_weight"])}ct`);
+	});
 	return `
 	<div class="card">
 		<div class="hd">
