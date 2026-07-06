@@ -376,7 +376,7 @@ def get_tree_queues():
 	bags = frappe.get_all(
 		"Order Bag",
 		filters={"location": "TREE MAKING", "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]], "tree": ["in", ["", None]]},
-		fields=["name", "design", "qty", "size", "due_date", "customer"],
+		fields=["name", "design", "qty", "size", "due_date", "customer", "nett_weight"],
 		order_by="name",
 	)
 	queues = {}
