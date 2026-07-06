@@ -124,6 +124,60 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 })();
 
 // ---------------------------------------------------------------------------
+// Sidebar: always load with only the section titles showing. Frappe persists
+// each section's last open/closed state in localStorage and applies it AFTER
+// keep_closed, so a reload re-opens whatever was left open — purge OUR
+// workspace's entry every time the sidebar builds so keep_closed governs.
+// (Fires before the items render; other workspaces keep their memory.)
+// ---------------------------------------------------------------------------
+(() => {
+	$(document).on("sidebar_setup", () => {
+		try {
+			const raw = localStorage.getItem("section-breaks-state");
+			if (!raw) return;
+			const st = JSON.parse(raw);
+			if (st && st.jewelima) {
+				delete st.jewelima;
+				localStorage.setItem("section-breaks-state", JSON.stringify(st));
+			}
+		} catch (e) {
+			/* corrupt state — harmless, frappe rebuilds it */
+		}
+	});
+})();
+
+// ---------------------------------------------------------------------------
+// Sidebar: sub-group headers (Records, Order Setup, …) are DATA-siblings of
+// their parent section, so core leaves them visible when the section is
+// closed — orphan headers floating between closed titles. Hide every
+// sub-section whose governing top section is collapsed. Jewelima sidebar only.
+// ---------------------------------------------------------------------------
+(() => {
+	function sync() {
+		const sb = document.querySelector('[data-title="Jewelima"]');
+		if (!sb) return;
+		let closed = false;
+		sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
+			const isSub = el.querySelector(":scope > .standard-sidebar-item.indent");
+			if (!isSub) {
+				const di = el.querySelector(".drop-icon");
+				closed = !!di && di.getAttribute("data-state") === "closed";
+				return;
+			}
+			el.classList.toggle("hidden", closed);
+		});
+	}
+	const later = () => {
+		setTimeout(sync, 0);
+		setTimeout(sync, 300); // asset/render races on dev bench
+	};
+	$(document).on("sidebar_setup sidebar-expand", later);
+	$(document).on("click", ".body-sidebar .standard-sidebar-item", later);
+	$(document).on("app_ready", later);
+	later();
+})();
+
+// ---------------------------------------------------------------------------
 // jewelima.finalize_cad(order_bag, done) — the "CAD done" dialog.
 // Creates the REAL design from the bag's CAD targets (prefilled gold row at the
 // budget), attaches it to the bag + same-target siblings, clears is_cad.

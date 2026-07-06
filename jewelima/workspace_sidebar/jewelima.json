@@ -22,9 +22,9 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "file-text",
    "indent": 0,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Orders",
    "link_to": "",
    "link_type": "",
@@ -35,7 +35,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "shopping-bag",
    "indent": 1,
    "keep_closed": 0,
    "label": "Place Order",
@@ -48,7 +48,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "pen-tool",
    "indent": 1,
    "keep_closed": 0,
    "label": "CAD Jobs",
@@ -61,7 +61,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "search",
    "indent": 1,
    "keep_closed": 0,
    "label": "Card Info",
@@ -74,7 +74,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "map-pin",
    "indent": 1,
    "keep_closed": 0,
    "label": "Job Order Status",
@@ -87,7 +87,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "archive",
    "indent": 1,
    "keep_closed": 1,
    "label": "Records",
@@ -100,7 +100,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "clipboard-list",
    "indent": 0,
    "keep_closed": 0,
    "label": "Job Order",
@@ -113,7 +113,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "credit-card",
    "indent": 0,
    "keep_closed": 0,
    "label": "Order Bag",
@@ -126,7 +126,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "printer",
    "indent": 1,
    "keep_closed": 1,
    "label": "Print & Photos",
@@ -139,7 +139,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "printer",
    "indent": 0,
    "keep_closed": 0,
    "label": "Print Order Bags",
@@ -152,7 +152,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "image",
    "indent": 0,
    "keep_closed": 0,
    "label": "Order Bag Photos",
@@ -165,9 +165,9 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "hammer",
    "indent": 0,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Production",
    "link_to": "",
    "link_type": "",
@@ -178,7 +178,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "user-check",
    "indent": 1,
    "keep_closed": 0,
    "label": "Assign / Collect",
@@ -191,7 +191,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "briefcase",
    "indent": 1,
    "keep_closed": 0,
    "label": "Job Work",
@@ -204,7 +204,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "network",
    "indent": 1,
    "keep_closed": 0,
    "label": "Tree Making",
@@ -217,7 +217,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "arrow-right",
    "indent": 1,
    "keep_closed": 0,
    "label": "Transfer Order Bag",
@@ -230,7 +230,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "git-branch",
    "indent": 1,
    "keep_closed": 0,
    "label": "Bag Extraction",
@@ -243,7 +243,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "printer",
    "indent": 1,
    "keep_closed": 0,
    "label": "Print Barcode",
@@ -256,9 +256,9 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "arrow-left-right",
    "indent": 0,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Stock",
    "link_to": "",
    "link_type": "",
@@ -269,7 +269,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "shopping-cart",
    "indent": 1,
    "keep_closed": 0,
    "label": "Purchase Raw Material",
@@ -282,7 +282,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
    "label": "Melting",
@@ -295,7 +295,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "arrow-left-right",
    "indent": 1,
    "keep_closed": 0,
    "label": "Stock Transfer",
@@ -308,7 +308,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "circle-plus",
    "indent": 1,
    "keep_closed": 0,
    "label": "Weight Add",
@@ -321,7 +321,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "circle-minus",
    "indent": 1,
    "keep_closed": 0,
    "label": "Weight Reduce",
@@ -334,7 +334,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "package",
    "indent": 1,
    "keep_closed": 1,
    "label": "Products",
@@ -347,7 +347,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "box",
    "indent": 0,
    "keep_closed": 0,
    "label": "Make Products",
@@ -360,7 +360,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "gem",
    "indent": 0,
    "keep_closed": 0,
    "label": "Finished Items",
@@ -373,9 +373,9 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "images",
    "indent": 0,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Design Bank",
    "link_to": "",
    "link_type": "",
@@ -386,7 +386,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "layout-grid",
    "indent": 1,
    "keep_closed": 0,
    "label": "Design Gallery",
@@ -399,7 +399,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "circle-plus",
    "indent": 1,
    "keep_closed": 0,
    "label": "Add Design",
@@ -412,7 +412,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
    "label": "Design Tags",
@@ -425,7 +425,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "trash-2",
    "indent": 1,
    "keep_closed": 0,
    "label": "Retire Design",
@@ -438,7 +438,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "images",
    "indent": 1,
    "keep_closed": 0,
    "label": "Design Bank",
@@ -451,7 +451,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "palette",
    "indent": 1,
    "keep_closed": 0,
    "label": "Design",
@@ -464,9 +464,9 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "chart-column",
    "indent": 0,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Dashboards",
    "link_to": "",
    "link_type": "",
@@ -477,7 +477,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "layout-dashboard",
    "indent": 1,
    "keep_closed": 0,
    "label": "All Benches",
@@ -490,7 +490,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "trophy",
    "indent": 1,
    "keep_closed": 0,
    "label": "Employee Performance",
@@ -503,7 +503,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "package",
    "indent": 1,
    "keep_closed": 0,
    "label": "Warehouse Stock",
@@ -516,7 +516,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "list",
    "indent": 1,
    "keep_closed": 0,
    "label": "Item Stock",
@@ -529,9 +529,9 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "settings",
    "indent": 0,
-   "keep_closed": 0,
+   "keep_closed": 1,
    "label": "Setup",
    "link_to": "",
    "link_type": "",
@@ -542,7 +542,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "warehouse",
    "indent": 1,
    "keep_closed": 0,
    "label": "Raw Materials",
@@ -555,7 +555,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "settings-2",
    "indent": 1,
    "keep_closed": 1,
    "label": "Order Setup",
@@ -568,7 +568,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "shapes",
    "indent": 0,
    "keep_closed": 0,
    "label": "Design Types",
@@ -581,7 +581,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "users",
    "indent": 0,
    "keep_closed": 0,
    "label": "Types & Salesmen",
@@ -594,7 +594,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "settings-2",
    "indent": 0,
    "keep_closed": 0,
    "label": "Order Settings",
@@ -607,7 +607,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "users",
    "indent": 1,
    "keep_closed": 1,
    "label": "Employee",
@@ -620,7 +620,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "users",
    "indent": 0,
    "keep_closed": 0,
    "label": "Bench",
@@ -633,7 +633,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "",
+   "icon": "warehouse",
    "indent": 1,
    "keep_closed": 1,
    "label": "Stock Setup",
@@ -646,7 +646,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
    "label": "Warehouse Management",
@@ -659,7 +659,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "",
+   "icon": "shapes",
    "indent": 0,
    "keep_closed": 0,
    "label": "Stone Type",
@@ -670,7 +670,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 01:11:59.081966",
+ "modified": "2026-07-07 01:17:54.228163",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
