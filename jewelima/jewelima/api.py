@@ -942,6 +942,77 @@ def set_item_weight_uom(doc, method=None):
 
 
 @frappe.whitelist()
+def get_raw_material_tree():
+	"""The RAW MATERIAL branch of the Item Group tree with every item under its
+	group — powers the read-only Raw Materials structure page. Items sort in
+	registry order (O-sizes first, then 1→22.5) with anything else natsorted after."""
+	import re
+
+	groups = frappe.get_all("Item Group", fields=["name", "parent_item_group", "is_group"])
+	root = next((g.name for g in groups if g.name.upper() == "RAW MATERIAL"), None)
+	if not root:
+		return {"tree": None, "total_groups": 0, "total_items": 0}
+	by_parent = {}
+	for g in groups:
+		by_parent.setdefault(g.parent_item_group, []).append(g)
+
+	# every group under the root (the root ships with ERPNext in title case)
+	subtree, queue = [], [root]
+	while queue:
+		n = queue.pop()
+		subtree.append(n)
+		queue += [g.name for g in by_parent.get(n, [])]
+
+	rows = frappe.get_all(
+		"Item",
+		filters={"item_group": ["in", subtree]},
+		fields=["name", "item_group", "stock_uom", "stone_type", "purity_percentage", "metal_purity", "disabled"],
+	)
+
+	def natkey(s):
+		return [(0, int(t)) if t.isdigit() else (1, t.upper()) for t in re.split(r"(\d+)", s or "") if t]
+
+	from jewelima.jewelima.raw_materials import RAW_MATERIALS
+	from jewelima.setup import GOLD_COLORS, KARAT_GOLDS
+
+	registry_order = {code: i for i, (code, *_rest) in enumerate(RAW_MATERIALS)}
+	in_registry = len(registry_order)
+	# karat + standard golds ship through their own seeders — part of the base set too
+	shipped = set(registry_order)
+	shipped.update(f"{k}{c}" for k in KARAT_GOLDS for c in GOLD_COLORS)
+	shipped.update(f"Standard Gold {n}" for n in range(990, 1000))
+
+	items_by_group = {}
+	for it in rows:
+		items_by_group.setdefault(it.item_group, []).append({
+			"name": it.name,
+			"uom": it.stock_uom or "",
+			"stone_type": it.stone_type or "",
+			"purity": it.purity_percentage or 0,
+			"metal_purity": it.metal_purity or "",
+			"disabled": int(it.disabled or 0),
+			"in_registry": it.name in shipped,
+		})
+
+	def build(name):
+		kids = sorted(by_parent.get(name, []), key=lambda g: natkey(g.name))
+		node_items = sorted(
+			items_by_group.get(name, []),
+			key=lambda i: (registry_order.get(i["name"], in_registry), natkey(i["name"])),
+		)
+		children = [build(k.name) for k in kids]
+		return {
+			"name": name,
+			"children": children,
+			"items": node_items,
+			"count": len(node_items) + sum(c["count"] for c in children),
+		}
+
+	tree = build(root)
+	return {"tree": tree, "total_groups": len(subtree), "total_items": tree["count"]}
+
+
+@frappe.whitelist()
 def get_item_stone_profile(item):
 	"""Given a finished item, read its (default) BOM and tally the stone counts by
 	stone type — Diamond -> dmd_no, Precious Stone -> ps_no, Color Stone -> cs_no.

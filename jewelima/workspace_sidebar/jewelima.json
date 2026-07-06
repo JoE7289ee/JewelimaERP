@@ -581,6 +581,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "warehouse",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Raw Materials",
+   "link_to": "raw-materials",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "shapes",
    "indent": 1,
    "keep_closed": 0,
@@ -618,7 +631,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-06 22:36:59.401071",
+ "modified": "2026-07-07 01:00:26.526357",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
