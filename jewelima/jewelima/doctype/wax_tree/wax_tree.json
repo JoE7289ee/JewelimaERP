@@ -10,6 +10,7 @@
   "column_break_1",
   "employee",
   "made_on",
+  "wax_weight",
   "cards_section",
   "cards"
  ],
@@ -53,6 +54,15 @@
    "read_only": 1
   },
   {
+   "description": "The mounted tree's weight in wax (g).",
+   "fieldname": "wax_weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight in Wax (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
    "fieldname": "cards_section",
    "fieldtype": "Section Break",
    "label": "Cards on this tree"
@@ -73,8 +83,28 @@
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
-  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
-  {"create": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Stock User", "share": 1, "write": 1}
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
  ],
  "sort_field": "creation",
  "sort_order": "DESC",

@@ -389,7 +389,7 @@ def get_tree_queues():
 
 
 @frappe.whitelist()
-def make_tree(karat, names, employee=None):
+def make_tree(karat, names, employee=None, wax_weight=None):
 	"""Mount the selected TREE MAKING cards onto ONE wax tree (a Wax Tree record,
 	numbered T-<karat>-###), stamp the tree + employee on their bench records, and
 	transfer every card to CASTING."""
@@ -426,6 +426,7 @@ def make_tree(karat, names, employee=None):
 		"karat": karat_val,
 		"employee": employee or None,
 		"made_on": frappe.utils.now_datetime(),
+		"wax_weight": flt(wax_weight) or None,
 		"cards": [{"order_bag": c.name, "design": c.design, "qty": c.qty} for c in cards],
 	}).insert(ignore_permissions=True)
 

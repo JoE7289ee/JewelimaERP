@@ -132,6 +132,7 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 			refreshCounts();
 			if (fromScan) {
 				const $c = chipOf(name);
+				$c.closest(".tm-col").prependTo($out); // scanned karat's table jumps to the front
 				$c.addClass("flash");
 				setTimeout(() => $c.removeClass("flash"), 800);
 				$c.get(0) && $c.get(0).scrollIntoView({ block: "center", behavior: "smooth" });
@@ -264,6 +265,8 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 					description: __("Only employees allotted to the TREE MAKING bench (Setup → Bench)."),
 					get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: "TREE MAKING", strict: 1 } }),
 				},
+				{ fieldname: "wax_weight", fieldtype: "Float", label: __("Weight in Wax (g)"), precision: "3",
+					description: __("The mounted tree's wax weight — weigh the tree and enter it here.") },
 			],
 			primary_action_label: __("Make Tree → Casting"),
 			primary_action(v) {
@@ -271,7 +274,7 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 				frappe.dom.freeze(__("Making tree…"));
 				frappe.call({
 					method: "jewelima.jewelima.api.make_tree",
-					args: { karat, names: JSON.stringify(names), employee: v.employee },
+					args: { karat, names: JSON.stringify(names), employee: v.employee, wax_weight: v.wax_weight || 0 },
 				}).then((r) => {
 					frappe.dom.unfreeze();
 					const res = r.message || {};
