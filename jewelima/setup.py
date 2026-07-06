@@ -25,6 +25,14 @@ def after_install():
 	sync_workspace_sidebar()
 	setup_roles()
 	seed_benches()
+	# bench rosters ship in data/bench_employees.csv — restore them so a refresh
+	# doesn't lose the team's allotments (never blocks install/migrate)
+	try:
+		from jewelima.jewelima.imports.import_bench_employees import run as import_bench_rosters
+
+		import_bench_rosters()
+	except Exception:
+		pass
 
 
 def after_migrate():
@@ -52,6 +60,14 @@ def after_migrate():
 	sync_workspace_sidebar()
 	setup_roles()
 	seed_benches()
+	# bench rosters ship in data/bench_employees.csv — restore them so a refresh
+	# doesn't lose the team's allotments (never blocks install/migrate)
+	try:
+		from jewelima.jewelima.imports.import_bench_employees import run as import_bench_rosters
+
+		import_bench_rosters()
+	except Exception:
+		pass
 
 
 # ---------------------------------------------------------------------------
