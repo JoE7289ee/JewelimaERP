@@ -333,7 +333,9 @@ ITEM_GROUP_TREE = {
 			"ALLOY": [],
 		},
 		"STONE": {
-			"DIAMOND": [],  # the existing quality groups (DIAMOND VVS-EF, …) are re-parented under this
+			# one leaf per registry quality — kept in lockstep with raw_materials.py
+			# (the old xlsx importer used to create these; now the tree owns them)
+			"DIAMOND": None,  # filled below from raw_materials.DIAMOND_QUALITIES
 			"CVD": [],
 			"PRECIOUS STONE": [],
 			"COLOUR STONE": [],
@@ -343,6 +345,10 @@ ITEM_GROUP_TREE = {
 	},
 	"PRODUCT": {},  # one leaf per Design Type is added dynamically
 }
+
+from jewelima.jewelima.raw_materials import DIAMOND_QUALITIES  # noqa: E402
+
+ITEM_GROUP_TREE["RAW MATERIAL"]["STONE"]["DIAMOND"] = [f"DIAMOND {q}" for q in DIAMOND_QUALITIES]
 
 
 def setup_item_group_tree():
