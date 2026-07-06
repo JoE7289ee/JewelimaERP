@@ -351,6 +351,8 @@ def setup_item_group_tree():
 	mass-migrated (the raw-material import gets reviewed against the new tree) — except
 	gold, whose items must move to the karat leaves so GOLD can become a parent node."""
 	root = "All Item Groups"
+	if not frappe.db.exists("Item Group", root):
+		return  # fresh install before the setup wizard — after_setup_wizard re-runs this
 
 	def ensure(name, parent, is_group):
 		if frappe.db.exists("Item Group", name):
