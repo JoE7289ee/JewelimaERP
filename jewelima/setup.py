@@ -445,23 +445,17 @@ def seed_standard_golds():
 
 
 def seed_raw_materials():
-	"""Load the raw-material master items (gold + stones) that SHIP WITH the app,
-	from the bundled spreadsheet jewelima/data/raw_material_report.xlsx.
-	Idempotent. Skips if:
-	  - the ERPNext item-group tree isn't ready yet (fresh install before the
-	    setup wizard) — after_setup_wizard re-runs this once it is; or
-	  - the items are already seeded (the GOLD group already has items).
-	"""
+	"""The BASE raw materials ship IN CODE (jewelima.jewelima.raw_materials) — no
+	spreadsheet. Idempotent: only creates what's missing. (The old xlsx importer is
+	retired; the registry is reviewed and extended category by category.)"""
 	if not frappe.db.exists("Item Group", "All Item Groups"):
 		return
-	if frappe.db.count("Item", {"item_group": ["like", "GOLD%"]}):
-		return
 	try:
-		from jewelima.jewelima.imports.import_raw_materials import run
+		from jewelima.jewelima.raw_materials import seed
 
-		run()
-	except FileNotFoundError:
-		pass
+		seed()
+	except Exception:
+		pass  # never block install/migrate on material seeding
 
 
 def after_setup_wizard(args=None):
@@ -723,9 +717,9 @@ def create_design_masters():
 		pass  # sizes are additive — never block install/migrate on them
 
 
-# NOTE: gold raw-material items are no longer seeded here. They come from the
-# client's master sheet via jewelima.jewelima.imports.import_raw_materials.run
-# (group GOLD / ALLOY). Seeding placeholder RM-* items here caused duplicates.
+# NOTE: base raw materials (alloy, diamonds, CVD/SW/CZ, colour + precious stones)
+# ship from the pure-code registry jewelima.jewelima.raw_materials — no spreadsheet.
+# Karat golds and Standard Golds keep their dedicated seeders below.
 
 
 # Manufacturing group: work-in-hand now lives in the single "In Bags" warehouse, so we
