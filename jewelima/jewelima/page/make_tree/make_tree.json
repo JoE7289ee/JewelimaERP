@@ -7,14 +7,20 @@
  "modified": "2026-07-05 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "tree-making",
+ "name": "make-tree",
  "owner": "Administrator",
- "page_name": "tree-making",
+ "page_name": "make-tree",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "Stock User"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  }
  ],
  "standard": "Yes",
- "title": "Tree Making"
+ "title": "Make Tree"
 }

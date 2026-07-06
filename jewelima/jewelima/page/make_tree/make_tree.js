@@ -6,9 +6,9 @@
 // white chips (☑ + Order No + gram) on the panel; tick the ones going onto the tree
 // and hit the single MAKE TREE button (top right) — one purity per tree, the system
 // numbers it T-<karat>-###, stamps everything and transfers the lot to CASTING.
-// Route: /app/tree-making
+// Route: /app/make-tree ("tree-making" collides with the Tree Making doctype list)
 
-frappe.pages["tree-making"].on_page_load = function (wrapper) {
+frappe.pages["make-tree"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Tree Making", single_column: true });
 	let queues = [];
 
