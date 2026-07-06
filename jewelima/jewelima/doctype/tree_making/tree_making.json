@@ -12,6 +12,7 @@
  "field_order": [
   "order_bag",
   "bench",
+  "tree",
   "employee",
   "status",
   "cb_times",
@@ -44,6 +45,14 @@
    "default": "Tree Making",
    "read_only": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "tree",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Tree",
+   "options": "Wax Tree",
+   "read_only": 1
   },
   {
    "fieldname": "employee",

@@ -1,0 +1,83 @@
+{
+ "actions": [],
+ "autoname": "field:tree_no",
+ "creation": "2026-07-05 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "tree_no",
+  "karat",
+  "column_break_1",
+  "employee",
+  "made_on",
+  "cards_section",
+  "cards"
+ ],
+ "fields": [
+  {
+   "fieldname": "tree_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tree No",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "The karat gold this tree casts into (one purity per tree).",
+   "fieldname": "karat",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Karat",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Who made the tree.",
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "made_on",
+   "fieldtype": "Datetime",
+   "label": "Made On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cards_section",
+   "fieldtype": "Section Break",
+   "label": "Cards on this tree"
+  },
+  {
+   "fieldname": "cards",
+   "fieldtype": "Table",
+   "label": "Cards",
+   "options": "Wax Tree Card",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-05 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Wax Tree",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Stock User", "share": 1, "write": 1}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "title_field": "tree_no",
+ "track_changes": 1
+}

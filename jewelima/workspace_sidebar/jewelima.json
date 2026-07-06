@@ -152,6 +152,19 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "network",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Tree Making",
+   "link_to": "tree-making",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "git-branch",
    "indent": 1,
    "keep_closed": 0,
@@ -605,7 +618,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-04 16:16:14.361141",
+ "modified": "2026-07-06 10:56:55.334003",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

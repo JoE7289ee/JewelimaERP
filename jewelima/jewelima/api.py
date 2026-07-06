@@ -350,6 +350,103 @@ def retire_order_master(kind, name, restore=0):
 	return {"name": name, "state": "retired"}
 
 
+# --- Tree Making: per-karat queues -> one wax tree -> off to CASTING ---------------
+
+def _karat_suffix(item):
+	"""18KPG -> 18P, 22KYG -> 22Y (same convention as design purity variants)."""
+	import re
+
+	m = re.match(r"^(\d+)K([A-Z])G$", item or "")
+	return f"{m.group(1)}{m.group(2)}" if m else "MIX"
+
+
+def _bag_karat(bag_name, karat_names):
+	"""The karat gold in the bag's OWN BOM (its casting metal); None if it has none."""
+	for it in frappe.get_all("Order Bag BOM Item", filters={"parent": bag_name, "parenttype": "Order Bag"}, pluck="item"):
+		if it in karat_names:
+			return it
+	return None
+
+
+@frappe.whitelist()
+def get_tree_queues():
+	"""Cards waiting at TREE MAKING grouped by their casting karat — one queue (table)
+	per purity. Bags whose BOM has no karat gold fall into 'OTHER'."""
+	karat_names = set(frappe.get_all("Item", filters={"item_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"location": "TREE MAKING", "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]], "tree": ["in", ["", None]]},
+		fields=["name", "design", "qty", "size", "due_date", "customer"],
+		order_by="name",
+	)
+	queues = {}
+	for b in bags:
+		karat = _bag_karat(b.name, karat_names)
+		key = karat or "OTHER"
+		b["karat"] = karat
+		queues.setdefault(key, []).append(b)
+	return [{"karat": k, "suffix": _karat_suffix(k if k != "OTHER" else None), "cards": rows} for k, rows in sorted(queues.items())]
+
+
+@frappe.whitelist()
+def make_tree(karat, names, employee=None):
+	"""Mount the selected TREE MAKING cards onto ONE wax tree (a Wax Tree record,
+	numbered T-<karat>-###), stamp the tree + employee on their bench records, and
+	transfer every card to CASTING."""
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	names = [n for n in names if n]
+	if not names:
+		frappe.throw(frappe._("Select at least one card."))
+
+	karat_names = set(frappe.get_all("Item", filters={"item_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
+	karat_val = karat if karat and karat != "OTHER" else None
+	cards = []
+	for nm in names:
+		bag = frappe.db.get_value("Order Bag", nm, ["name", "design", "qty", "location", "tree"], as_dict=True)
+		if not bag:
+			frappe.throw(frappe._("No Order Bag {0}").format(nm))
+		if bag.location != "TREE MAKING":
+			frappe.throw(frappe._("{0} is at {1}, not TREE MAKING.").format(nm, bag.location))
+		if bag.tree:
+			frappe.throw(frappe._("{0} is already on tree {1}.").format(nm, bag.tree))
+		bk = _bag_karat(nm, karat_names)
+		if (bk or None) != karat_val:
+			frappe.throw(frappe._("{0} is {1} — this tree is {2}. One purity per tree.").format(nm, bk or "OTHER", karat or "OTHER"))
+		cards.append(bag)
+
+	# next number in this karat's series: T-18P-001, T-18P-002, …
+	suffix = _karat_suffix(karat_val)
+	prefix = f"T-{suffix}-"
+	last = frappe.db.sql("SELECT name FROM `tabWax Tree` WHERE name LIKE %s ORDER BY name DESC LIMIT 1", (prefix + "%",))
+	nxt = (int(last[0][0].rsplit("-", 1)[1]) + 1) if last else 1
+	tree = frappe.get_doc({
+		"doctype": "Wax Tree",
+		"tree_no": f"{prefix}{nxt:03d}",
+		"karat": karat_val,
+		"employee": employee or None,
+		"made_on": frappe.utils.now_datetime(),
+		"cards": [{"order_bag": c.name, "design": c.design, "qty": c.qty} for c in cards],
+	}).insert(ignore_permissions=True)
+
+	# stamp the bags + their TREE MAKING records, then move everything to CASTING
+	errors = []
+	for c in cards:
+		frappe.db.set_value("Order Bag", c.name, "tree", tree.name)
+		rec = _current_bench_record("Tree Making", c.name)
+		if rec:
+			vals = {"tree": tree.name}
+			if employee:
+				vals["employee"] = employee
+			frappe.db.set_value("Tree Making", rec, vals)
+		try:
+			transfer_order_bag(c.name, "CASTING")
+		except Exception as e:
+			errors.append({"name": c.name, "error": str(e)})
+	frappe.db.commit()
+	return {"tree": tree.name, "karat": karat_val, "count": len(cards) - len(errors), "errors": errors}
+
+
 # --- CAD jobs: targets live on the bag until the real design is finalized ----------
 
 def _cad_siblings(bag):
@@ -2002,7 +2099,7 @@ def get_card_passport(order_bag):
 	bag = frappe.db.get_value(
 		"Order Bag", order_bag,
 		[
-			"name", "design", "qty", "size", "location", "stock_status", "held_by", "customer", "salesman",
+			"name", "design", "qty", "size", "location", "tree", "stock_status", "held_by", "customer", "salesman",
 			"order_type", "order_date", "due_date", "customer_date", "is_finished", "narration", "image", "job_order",
 			"gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
 			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
