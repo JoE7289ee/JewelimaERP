@@ -1,22 +1,23 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Tree Making — cards arriving at TREE MAKING queue up by their casting karat (one
-// purity per tree). One tinted panel per karat (pink/yellow/white gold), side by side:
-// tick the cards (Order No + Gram), pick who's making the tree, "MAKE TREE" creates a
-// Wax Tree (T-<karat>-###), stamps it everywhere and transfers the lot to CASTING.
+// Tree Making — cards at TREE MAKING queue up as tall COLOR PANELS, one per casting
+// karat (pink gold = lavender, yellow gold = yellow, white gold = silver). Cards are
+// white chips (☑ + Order No + gram) on the panel; tick the ones going onto the tree
+// and hit the single MAKE TREE button (top right) — one purity per tree, the system
+// numbers it T-<karat>-###, stamps everything and transfers the lot to CASTING.
 // Route: /app/tree-making
 
 frappe.pages["tree-making"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Tree Making", single_column: true });
 	let queues = [];
 
-	// per-color palette: panel tint, accent text, selected-row tint, border
+	// karat color letter -> panel palette (fill, border, accent text)
 	const TONES = {
-		P: { bg: "#f7f2fb", fg: "#5b2d8e", sel: "#efe3fa", bd: "#e2d5f0", label: "PINK GOLD" },
-		Y: { bg: "#fdf8e7", fg: "#8a6d1a", sel: "#faf0c8", bd: "#efe2b0", label: "YELLOW GOLD" },
-		W: { bg: "#f4f5f7", fg: "#4a5560", sel: "#e8ebef", bd: "#dde1e6", label: "WHITE GOLD" },
-		X: { bg: "#f7f7f7", fg: "#555555", sel: "#ededed", bd: "#e0e0e0", label: "NO KARAT GOLD" },
+		P: { bg: "#ecd4f0", bd: "#d9b6e3", fg: "#5b2d8e", label: "PINK GOLD" },
+		Y: { bg: "#f7ef9e", bd: "#e3d76e", fg: "#7a660f", label: "YELLOW GOLD" },
+		W: { bg: "#e4e8ee", bd: "#c9d1db", fg: "#3f4a57", label: "WHITE GOLD" },
+		X: { bg: "#ececec", bd: "#d5d5d5", fg: "#555555", label: "NO KARAT GOLD" },
 	};
 	const toneOf = (karat) => {
 		const m = /^(\d+)K([PWY])G$/.exec(karat || "");
@@ -25,119 +26,123 @@ frappe.pages["tree-making"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.tm-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(430px, 1fr));gap:20px;align-items:start;}
-		.tm-empty{border:1px dashed var(--border-color);border-radius:12px;padding:34px;text-align:center;color:var(--text-muted);grid-column:1/-1;}
-		.tm-q{border-radius:12px;overflow:hidden;border:1px solid;}
-		.tm-qh{padding:14px 18px 10px;}
-		.tm-karat{font-weight:800;font-size:20px;letter-spacing:.5px;}
-		.tm-kind{font-size:13px;font-weight:600;opacity:.75;margin-left:8px;}
-		table.tm-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13.5px;background:#fff;}
-		table.tm-tbl th{padding:9px 14px;text-align:left;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1.5px solid;}
-		table.tm-tbl th.num,table.tm-tbl td.num{text-align:right;}
-		table.tm-tbl td{padding:10px 14px;border-bottom:1px solid #f0f0f0;font-variant-numeric:tabular-nums;}
-		table.tm-tbl td.code{font-weight:700;letter-spacing:.3px;}
-		table.tm-tbl input{width:16px;height:16px;cursor:pointer;}
-		.tm-ft{display:flex;align-items:center;gap:12px;padding:10px 14px;flex-wrap:wrap;font-size:12.5px;}
-		.tm-tot{margin-right:auto;font-weight:600;}
-		.tm-emp{width:200px;}
+		.tm-top{display:flex;align-items:center;gap:12px;margin:2px 0 16px;}
+		.tm-headline{font-size:15px;font-weight:700;letter-spacing:.4px;color:var(--text-color);}
+		.tm-sub{color:var(--text-muted);font-size:12px;}
+		.tm-spacer{margin-left:auto;}
+		.tm-emp{width:220px;}
 		.tm-emp .frappe-control{margin:0;}
 		.tm-emp .control-label,.tm-emp .help-box{display:none !important;}
-		.tm-emp input{height:30px;}
-		.tm-mk{font-weight:700;letter-spacing:.5px;}
-		.tm-note{margin-top:14px;color:var(--text-muted);font-size:12px;}
+		.tm-emp input{height:34px;}
+		.tm-make{background:#b00020;border:none;color:#fff;font-weight:800;letter-spacing:2px;padding:8px 26px;border-radius:6px;font-size:14px;cursor:pointer;}
+		.tm-make:hover{background:#8f001a;}
+		.tm-board{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;}
+		.tm-col{width:330px;flex:0 0 330px;}
+		.tm-title{font-size:20px;font-weight:800;letter-spacing:.5px;text-align:center;margin:0 0 8px;}
+		.tm-title small{display:block;font-size:11px;font-weight:600;opacity:.65;letter-spacing:.12em;}
+		.tm-panel{border-radius:14px;min-height:420px;padding:12px;border:2px solid;display:flex;flex-direction:column;gap:8px;}
+		.tm-chip{display:flex;align-items:center;gap:10px;background:#fff;border:2px solid transparent;border-radius:9px;padding:9px 12px;cursor:pointer;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.06);}
+		.tm-chip .cb{width:16px;height:16px;pointer-events:none;}
+		.tm-chip .code{font-weight:800;letter-spacing:.4px;font-size:13.5px;}
+		.tm-chip .gram{margin-left:auto;font-variant-numeric:tabular-nums;font-size:12.5px;color:#6b7785;}
+		.tm-chip.on{border-color:currentColor;}
+		.tm-chip:hover{box-shadow:0 2px 6px rgba(0,0,0,.12);}
+		.tm-cnt{margin-top:auto;padding-top:8px;text-align:center;font-size:12px;font-weight:700;opacity:.8;}
+		.tm-none{border:1px dashed var(--border-color);border-radius:14px;padding:40px;text-align:center;color:var(--text-muted);width:100%;}
 		</style>
-		<div class="tm-grid tm-out"></div>
-		<div class="tm-note">One purity per tree. Ticked cards go onto a single tree (T-&lt;karat&gt;-###) and transfer to CASTING together. Gram = the card's planned gold weight.</div>
+		<div class="tm-top">
+			<div><div class="tm-headline">MAKE TREE</div><div class="tm-sub">one purity per tree · ticked cards → one tree → CASTING</div></div>
+			<span class="tm-spacer"></span>
+			<div class="tm-emp"></div>
+			<button class="tm-make">MAKE TREE</button>
+		</div>
+		<div class="tm-board tm-out"></div>
 	`);
 
 	const esc = frappe.utils.escape_html;
 	const $out = $(page.main).find(".tm-out");
 	const flt0 = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
+	const selected = new Set(); // order bag names (across panels; MAKE TREE enforces one panel)
+
+	// global tree-maker picker (roster-filtered to the TREE MAKING bench)
+	const emp = frappe.ui.form.make_control({
+		df: {
+			fieldtype: "Link", options: "Employee", fieldname: "employee", placeholder: "Tree maker…",
+			get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: "TREE MAKING" } }),
+		},
+		parent: $(page.main).find(".tm-emp").get(0), render_input: true,
+	});
+	emp.refresh();
 
 	function render() {
 		$out.empty();
+		selected.clear();
 		if (!queues.length) {
-			$out.html('<div class="tm-empty">No cards waiting at TREE MAKING.<br>Transfer cards here and they queue up by karat — one panel per purity.</div>');
+			$out.html('<div class="tm-none">No cards waiting at TREE MAKING.<br>Transfer cards here and they stack up as one colour panel per karat.</div>');
 			return;
 		}
 		queues.forEach((q) => {
 			const t = toneOf(q.karat === "OTHER" ? null : q.karat);
 			const title = q.karat === "OTHER" ? "OTHER" : q.karat;
-			const $q = $(`
-				<div class="tm-q" style="background:${t.bg};border-color:${t.bd};">
-					<div class="tm-qh" style="color:${t.fg};">
-						<span class="tm-karat">${esc(title)}</span><span class="tm-kind">(${t.label})</span>
-					</div>
-					<table class="tm-tbl">
-						<thead><tr style="color:${t.fg};">
-							<th style="width:44px;border-color:${t.bd};background:${t.bg};"><input type="checkbox" class="tm-all" checked></th>
-							<th style="border-color:${t.bd};background:${t.bg};">Order No</th>
-							<th class="num" style="border-color:${t.bd};background:${t.bg};">Gram</th>
-						</tr></thead>
-						<tbody>${q.cards.map((c, ci) => `
-							<tr style="background:${t.sel};"><td><input type="checkbox" class="tm-cb" data-ci="${ci}" checked></td>
-							<td class="code" title="${esc(c.design || "")} · qty ${c.qty || 1}${c.size ? " · " + esc(c.size) : ""}">${esc(c.name)}</td>
-							<td class="num">${flt0(c.nett_weight) ? flt0(c.nett_weight).toFixed(3) : "—"}</td></tr>`).join("")}
-						</tbody>
-					</table>
-					<div class="tm-ft" style="color:${t.fg};">
-						<span class="tm-tot"></span>
-						<div class="tm-emp"></div>
-						<button class="btn btn-sm btn-primary tm-mk" style="background:${t.fg};border-color:${t.fg};">MAKE TREE → CASTING</button>
+			const $col = $(`
+				<div class="tm-col">
+					<div class="tm-title" style="color:${t.fg};">${esc(title)}<small>${t.label}</small></div>
+					<div class="tm-panel" style="background:${t.bg};border-color:${t.bd};color:${t.fg};">
+						${q.cards.map((c, ci) => `
+							<div class="tm-chip" data-karat="${esc(q.karat)}" data-ci="${ci}" title="${esc(c.design || "")} · qty ${c.qty || 1}${c.size ? " · " + esc(c.size) : ""}">
+								<input type="checkbox" class="cb">
+								<span class="code">${esc(c.name)}</span>
+								<span class="gram">${flt0(c.nett_weight) ? flt0(c.nett_weight).toFixed(3) + " g" : ""}</span>
+							</div>`).join("")}
+						<div class="tm-cnt"></div>
 					</div>
 				</div>`);
-			$out.append($q);
-
-			// who's making this tree — picker filtered to the TREE MAKING bench roster
-			const emp = frappe.ui.form.make_control({
-				df: {
-					fieldtype: "Link", options: "Employee", fieldname: "employee", placeholder: "Tree maker…",
-					get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: "TREE MAKING" } }),
-				},
-				parent: $q.find(".tm-emp").get(0), render_input: true,
-			});
-			emp.refresh();
-
-			const refreshTotals = () => {
-				const picked = $q.find(".tm-cb:checked").map((i, el) => q.cards[+el.getAttribute("data-ci")]).get();
-				const grams = picked.reduce((s, c) => s + flt0(c.nett_weight), 0);
-				$q.find(".tm-tot").text(`${picked.length} of ${q.cards.length} selected · ${grams.toFixed(3)} g`);
+			$out.append($col);
+			const refresh = () => {
+				const on = $col.find(".tm-chip.on").length;
+				const grams = $col.find(".tm-chip.on").map((i, el) => flt0(q.cards[+el.getAttribute("data-ci")].nett_weight)).get()
+					.reduce((a, b) => a + b, 0);
+				$col.find(".tm-cnt").text(on ? `${on} of ${q.cards.length} selected · ${grams.toFixed(3)} g` : `${q.cards.length} card(s)`);
 			};
-			$q.find(".tm-all").on("change", function () {
-				$q.find(".tm-cb").prop("checked", $(this).is(":checked"));
-				$q.find("tbody tr").css("background", $(this).is(":checked") ? t.sel : "#fff");
-				refreshTotals();
+			$col.on("click", ".tm-chip", function () {
+				const nm = q.cards[+this.getAttribute("data-ci")].name;
+				const on = !this.classList.contains("on");
+				this.classList.toggle("on", on);
+				this.querySelector(".cb").checked = on;
+				on ? selected.add(nm) : selected.delete(nm);
+				refresh();
 			});
-			$q.on("change", ".tm-cb", function () {
-				$(this).closest("tr").css("background", this.checked ? t.sel : "#fff");
-				refreshTotals();
-			});
-			refreshTotals();
-
-			$q.find(".tm-mk").on("click", () => {
-				const names = $q.find(".tm-cb:checked").map((i, el) => q.cards[+el.getAttribute("data-ci")].name).get();
-				if (!names.length) return frappe.msgprint(__("Tick at least one card for this tree."));
-				frappe.confirm(
-					__("Mount <b>{0}</b> card(s) on one <b>{1}</b> tree and send them to CASTING?", [names.length, esc(title)]),
-					() => {
-						frappe.dom.freeze(__("Making tree…"));
-						frappe.call({
-							method: "jewelima.jewelima.api.make_tree",
-							args: { karat: q.karat, names: JSON.stringify(names), employee: emp.get_value() || null },
-						}).then((r) => {
-							frappe.dom.unfreeze();
-							const res = r.message || {};
-							frappe.show_alert({ message: __("Tree <b>{0}</b> made — {1} card(s) → CASTING.", [res.tree, res.count]), indicator: "green" }, 7);
-							if (res.errors && res.errors.length) {
-								frappe.msgprint({ title: __("Some not transferred"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
-							}
-							load();
-						}).catch(() => frappe.dom.unfreeze());
-					}
-				);
-			});
+			refresh();
 		});
 	}
+
+	$(page.main).find(".tm-make").on("click", () => {
+		if (!selected.size) return frappe.msgprint(__("Tick the cards going onto the tree."));
+		// all selections must live in ONE panel — one purity per tree
+		const karats = new Set();
+		let karat = null;
+		queues.forEach((q) => q.cards.forEach((c) => { if (selected.has(c.name)) { karats.add(q.karat); karat = q.karat; } }));
+		if (karats.size > 1) return frappe.msgprint(__("One purity per tree — your selection spans {0}. Untick the rest.", [[...karats].join(" + ")]));
+		const names = [...selected];
+		frappe.confirm(
+			__("Mount <b>{0}</b> card(s) on one <b>{1}</b> tree and send them to CASTING?", [names.length, esc(karat)]),
+			() => {
+				frappe.dom.freeze(__("Making tree…"));
+				frappe.call({
+					method: "jewelima.jewelima.api.make_tree",
+					args: { karat, names: JSON.stringify(names), employee: emp.get_value() || null },
+				}).then((r) => {
+					frappe.dom.unfreeze();
+					const res = r.message || {};
+					frappe.show_alert({ message: __("Tree <b>{0}</b> made — {1} card(s) → CASTING.", [res.tree, res.count]), indicator: "green" }, 7);
+					if (res.errors && res.errors.length) {
+						frappe.msgprint({ title: __("Some not transferred"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
+					}
+					load();
+				}).catch(() => frappe.dom.unfreeze());
+			}
+		);
+	});
 
 	function load() {
 		frappe.call({ method: "jewelima.jewelima.api.get_tree_queues" }).then((r) => {
