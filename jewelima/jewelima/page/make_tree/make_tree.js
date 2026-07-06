@@ -2,16 +2,19 @@
 // For license information, please see license.txt
 //
 // Make Tree — cards at TREE MAKING queue up as tall COLOUR PANELS, one per casting
-// karat. The colour follows the gold (pink/yellow/white) and the SHADE follows the
-// karat: 22K deepest, 18K medium, 14K lightest. Cards are white chips (☑ + Order No +
-// gram); tick the ones going onto the tree and hit MAKE TREE AND SEND TO CASTING QUEUE —
-// it asks WHO is making the tree (bench-roster only), creates the Wax Tree
-// (T-<karat>-###), stamps everything and transfers the lot to CASTING.
+// karat (shade deepens with karat: 22K > 18K > 14K). Cards are white chips (☑ + Order
+// No + gram). ONE TREE AT A TIME: selection is locked to a single karat panel — picking
+// a card from another panel asks for confirmation and clears the current selection.
+// Scan a barcode to select a card (a card that isn't in the queue reports where it
+// actually is); every scan is logged in the History dialog. MAKE TREE AND SEND TO
+// CASTING QUEUE asks who's making the tree (TREE MAKING bench roster only), creates the
+// Wax Tree (T-<karat>-###), stamps everything and transfers the lot to CASTING.
 // Route: /app/make-tree ("tree-making" collides with the Tree Making doctype list)
 
 frappe.pages["make-tree"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Make Tree", single_column: true });
 	let queues = [];
+	const state = { selected: new Set(), karat: null, history: [] };
 
 	// colour letter -> hue; karat number -> depth (22K darkest … 14K lightest)
 	const PALETTE = {
@@ -29,14 +32,22 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.tm-top{display:flex;align-items:center;gap:14px;margin:2px 0 18px;}
+		.tm-top{display:flex;align-items:center;gap:14px;margin:2px 0 18px;flex-wrap:wrap;}
 		.tm-mark{display:flex;align-items:center;gap:12px;}
 		.tm-mark svg{width:38px;height:38px;}
 		.tm-headline{font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:4px;color:#3d3425;}
 		.tm-sub{color:var(--text-muted);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;margin-top:1px;}
+		.tm-scan{width:250px;margin-left:14px;}
+		.tm-scan .frappe-control{margin:0;}
+		.tm-scan .control-label,.tm-scan .help-box{display:none !important;}
+		.tm-scan input{height:36px;border-radius:7px;}
 		.tm-spacer{margin-left:auto;}
 		.tm-make{background:#a3132e;border:none;color:#fff;font-weight:800;letter-spacing:1.2px;padding:10px 22px;border-radius:7px;font-size:12.5px;cursor:pointer;box-shadow:0 2px 6px rgba(163,19,46,.35);}
 		.tm-make:hover{background:#820f25;}
+		.tm-msg{display:none;margin:-6px 0 12px;padding:7px 12px;border-radius:7px;font-size:13px;}
+		.tm-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
+		.tm-msg.warn{display:block;background:#fdf3e3;color:#9a6700;border:1px solid #f0d9a8;}
+		.tm-msg.ok{display:block;background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		.tm-board{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;}
 		.tm-col{width:330px;flex:0 0 330px;}
 		.tm-title{font-size:20px;font-weight:800;letter-spacing:.5px;text-align:center;margin:0 0 8px;}
@@ -48,6 +59,8 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 		.tm-chip .gram{margin-left:auto;font-variant-numeric:tabular-nums;font-size:12.5px;color:#6b7785;}
 		.tm-chip.on{border-color:currentColor;}
 		.tm-chip:hover{box-shadow:0 2px 6px rgba(0,0,0,.12);}
+		@keyframes tmflash { 0%{transform:scale(1.04);box-shadow:0 0 0 4px currentColor;} 100%{transform:scale(1);} }
+		.tm-chip.flash{animation:tmflash .7s ease-out;}
 		.tm-cnt{margin-top:auto;padding-top:8px;text-align:center;font-size:12px;font-weight:700;opacity:.8;}
 		.tm-none{border:1px dashed var(--border-color);border-radius:14px;padding:40px;text-align:center;color:var(--text-muted);width:100%;}
 		</style>
@@ -57,22 +70,97 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 					<path d="M12 22v-6"/><path d="M12 16c-4 0-7-2.4-7-6 0-2.5 1.6-4.6 3.9-5.5C9.3 2.9 10.5 2 12 2s2.7.9 3.1 2.5C17.4 5.4 19 7.5 19 10c0 3.6-3 6-7 6z"/>
 					<path d="M9 9l3 3 3-3"/>
 				</svg>
-				<div><div class="tm-headline">MAKE TREE</div><div class="tm-sub">one purity per tree · cards → tree → casting</div></div>
+				<div><div class="tm-headline">MAKE TREE</div><div class="tm-sub">one tree at a time · one purity per tree</div></div>
 			</div>
+			<div class="tm-scan"></div>
 			<span class="tm-spacer"></span>
 			<button class="tm-make">MAKE TREE AND SEND TO CASTING QUEUE</button>
 		</div>
+		<div class="tm-msg"></div>
 		<div class="tm-board tm-out"></div>
 	`);
 
 	const esc = frappe.utils.escape_html;
 	const $out = $(page.main).find(".tm-out");
+	const $msg = $(page.main).find(".tm-msg");
 	const flt0 = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
-	const selected = new Set(); // order bag names (MAKE TREE enforces one panel)
+
+	const scan = frappe.ui.form.make_control({
+		df: { fieldtype: "Data", fieldname: "scan", placeholder: "Scan card barcode…" },
+		parent: $(page.main).find(".tm-scan").get(0), render_input: true,
+	});
+	scan.refresh();
+	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
+
+	function setMsg(html, kind) {
+		$msg.removeClass("err warn ok").html(html || "");
+		if (html) $msg.addClass(kind || "err");
+	}
+	function logHistory(code, result, kind) {
+		state.history.push({ time: frappe.datetime.now_datetime(), code, result, kind: kind || "ok" });
+	}
+
+	function chipOf(name) {
+		return $out.find(`.tm-chip[data-name="${(window.CSS && CSS.escape) ? CSS.escape(name) : name}"]`);
+	}
+	function refreshCounts() {
+		$out.find(".tm-col").each(function () {
+			const $col = $(this);
+			const total = $col.find(".tm-chip").length;
+			const on = $col.find(".tm-chip.on").length;
+			const grams = $col.find(".tm-chip.on .gram").map((i, el) => flt0(el.textContent)).get().reduce((a, b) => a + b, 0);
+			$col.find(".tm-cnt").text(on ? `${on} of ${total} selected · ${grams.toFixed(3)} g` : `${total} card(s)`);
+		});
+	}
+	function markChip(name, on) {
+		const $c = chipOf(name);
+		$c.toggleClass("on", on);
+		$c.find(".cb").prop("checked", on);
+	}
+	function clearSelection() {
+		state.selected.forEach((nm) => markChip(nm, false));
+		state.selected.clear();
+		state.karat = null;
+		refreshCounts();
+	}
+	// ONE TREE AT A TIME: adding a card from another karat asks first, then starts fresh.
+	function select(name, karat, fromScan) {
+		const add = () => {
+			state.selected.add(name);
+			state.karat = karat;
+			markChip(name, true);
+			refreshCounts();
+			if (fromScan) {
+				const $c = chipOf(name);
+				$c.addClass("flash");
+				setTimeout(() => $c.removeClass("flash"), 800);
+				$c.get(0) && $c.get(0).scrollIntoView({ block: "center", behavior: "smooth" });
+				setMsg(__("Selected <b>{0}</b> ({1}) · {2} on this tree.", [esc(name), esc(karat), state.selected.size]), "ok");
+				logHistory(name, __("Selected ({0})", [karat]), "ok");
+			}
+		};
+		if (state.karat && state.karat !== karat && state.selected.size) {
+			frappe.confirm(
+				__("You're building a <b>{0}</b> tree ({1} card(s) selected).<br>Switch to <b>{2}</b>? The current selection will be cleared — the karat is changing.",
+					[esc(state.karat), state.selected.size, esc(karat)]),
+				() => { clearSelection(); add(); },
+				() => { if (fromScan) { setMsg(__("Kept the {0} tree — <b>{1}</b> not selected.", [esc(state.karat), esc(name)]), "warn"); logHistory(name, __("Karat switch declined"), "warn"); } focusScan(); }
+			);
+			return;
+		}
+		add();
+	}
+	function deselect(name) {
+		state.selected.delete(name);
+		markChip(name, false);
+		if (!state.selected.size) state.karat = null;
+		refreshCounts();
+	}
 
 	function render() {
 		$out.empty();
-		selected.clear();
+		state.selected.clear();
+		state.karat = null;
 		if (!queues.length) {
 			$out.html('<div class="tm-none">No cards waiting at TREE MAKING.<br>Transfer cards here and they stack up as one colour panel per karat.</div>');
 			return;
@@ -84,8 +172,8 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 				<div class="tm-col">
 					<div class="tm-title" style="color:${t.fg};">${esc(title)}<small>${t.label}</small></div>
 					<div class="tm-panel" style="background:${t.bg};border-color:${t.bd};color:${t.fg};">
-						${q.cards.map((c, ci) => `
-							<div class="tm-chip" data-ci="${ci}" title="${esc(c.design || "")} · qty ${c.qty || 1}${c.size ? " · " + esc(c.size) : ""}">
+						${q.cards.map((c) => `
+							<div class="tm-chip" data-name="${esc(c.name)}" data-karat="${esc(q.karat)}" title="${esc(c.design || "")} · qty ${c.qty || 1}${c.size ? " · " + esc(c.size) : ""}">
 								<input type="checkbox" class="cb">
 								<span class="code">${esc(c.name)}</span>
 								<span class="gram">${flt0(c.nett_weight) ? flt0(c.nett_weight).toFixed(3) + " g" : ""}</span>
@@ -94,35 +182,77 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 					</div>
 				</div>`);
 			$out.append($col);
-			const refresh = () => {
-				const on = $col.find(".tm-chip.on").length;
-				const grams = $col.find(".tm-chip.on").map((i, el) => flt0(q.cards[+el.getAttribute("data-ci")].nett_weight)).get()
-					.reduce((a, b) => a + b, 0);
-				$col.find(".tm-cnt").text(on ? `${on} of ${q.cards.length} selected · ${grams.toFixed(3)} g` : `${q.cards.length} card(s)`);
-			};
-			$col.on("click", ".tm-chip", function () {
-				const nm = q.cards[+this.getAttribute("data-ci")].name;
-				const on = !this.classList.contains("on");
-				this.classList.toggle("on", on);
-				this.querySelector(".cb").checked = on;
-				on ? selected.add(nm) : selected.delete(nm);
-				refresh();
-			});
-			refresh();
 		});
+		$out.find(".tm-chip").on("click", function () {
+			const name = this.getAttribute("data-name");
+			const karat = this.getAttribute("data-karat");
+			this.classList.contains("on") ? deselect(name) : select(name, karat, false);
+		});
+		refreshCounts();
+	}
+
+	// ---- scan: select the card if it's in a queue; otherwise say where it really is ----
+	function processScan(code) {
+		code = (code || "").trim();
+		if (!code) return;
+		const safe = esc(code);
+		let hit = null;
+		queues.forEach((q) => q.cards.forEach((c) => { if (c.name === code) hit = { karat: q.karat }; }));
+		if (hit) {
+			if (state.selected.has(code)) {
+				setMsg(__("<b>{0}</b> is already on this tree.", [safe]), "warn");
+				logHistory(code, "Already selected", "warn");
+				return;
+			}
+			select(code, hit.karat, true);
+			return;
+		}
+		// not in the queue — find out where it actually is
+		frappe.call({ method: "frappe.client.get_value", args: { doctype: "Order Bag", filters: code, fieldname: ["location", "tree"] } }).then((r) => {
+			const v = (r.message || {});
+			if (!v.location) {
+				setMsg(__("No Order Bag <b>{0}</b>.", [safe]), "err");
+				logHistory(code, "Not found", "err");
+			} else if (v.tree) {
+				setMsg(__("<b>{0}</b> is already on tree <b>{1}</b> (at {2}).", [safe, esc(v.tree), esc(v.location)]), "err");
+				logHistory(code, __("On {0} · at {1}", [v.tree, v.location]), "err");
+			} else {
+				setMsg(__("<b>{0}</b> is at <b>{1}</b> — not in the TREE MAKING queue.", [safe, esc(v.location)]), "err");
+				logHistory(code, __("At {0}", [v.location]), "err");
+			}
+		});
+	}
+	scan.$input.on("keydown", (e) => {
+		if (e.which === 13 || e.key === "Enter") {
+			e.preventDefault();
+			const code = scan.$input.val();
+			scan.set_value("");
+			processScan(code);
+			focusScan();
+		}
+	});
+
+	function showHistory() {
+		const h = state.history;
+		const body = h.slice().reverse().map((e, idx) => {
+			const color = e.kind === "err" ? "#b00020" : e.kind === "warn" ? "#9a6700" : "#1d7a33";
+			return `<tr><td>${h.length - idx}</td><td>${e.time ? frappe.datetime.str_to_user(e.time) : ""}</td>
+				<td><b>${esc(e.code)}</b></td><td style="color:${color}">${esc(e.result)}</td></tr>`;
+		}).join("");
+		const d = new frappe.ui.Dialog({ title: __("Scan history ({0})", [h.length]), size: "large", fields: [{ fieldtype: "HTML", fieldname: "h" }] });
+		d.fields_dict.h.$wrapper.html(
+			h.length
+				? `<table class="table table-bordered" style="font-size:12px;"><thead><tr><th style="width:40px">#</th><th>Time</th><th>Order Bag</th><th>Result</th></tr></thead><tbody>${body}</tbody></table>`
+				: '<div class="text-muted" style="padding:12px;">No scans yet this session.</div>'
+		);
+		d.show();
 	}
 
 	$(page.main).find(".tm-make").on("click", () => {
-		if (!selected.size) return frappe.msgprint(__("Tick the cards going onto the tree."));
-		// all selections must live in ONE panel — one purity per tree
-		const karats = new Set();
-		let karat = null;
-		let grams = 0;
-		queues.forEach((q) => q.cards.forEach((c) => {
-			if (selected.has(c.name)) { karats.add(q.karat); karat = q.karat; grams += flt0(c.nett_weight); }
-		}));
-		if (karats.size > 1) return frappe.msgprint(__("One purity per tree — your selection spans {0}. Untick the rest.", [[...karats].join(" + ")]));
-		const names = [...selected];
+		if (!state.selected.size) return frappe.msgprint(__("Tick or scan the cards going onto the tree."));
+		const karat = state.karat;
+		const names = [...state.selected];
+		const grams = names.reduce((s, nm) => s + flt0(chipOf(nm).find(".gram").text()), 0);
 
 		// who is making the tree — the TREE MAKING bench roster ONLY (Setup → Bench)
 		const d = new frappe.ui.Dialog({
@@ -149,6 +279,8 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 					if (res.errors && res.errors.length) {
 						frappe.msgprint({ title: __("Some not transferred"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
 					}
+					logHistory("—", __("Tree {0} → CASTING ({1} cards)", [res.tree, res.count]), "ok");
+					setMsg("");
 					load();
 				}).catch(() => frappe.dom.unfreeze());
 			},
@@ -164,9 +296,11 @@ frappe.pages["make-tree"].on_page_load = function (wrapper) {
 		frappe.call({ method: "jewelima.jewelima.api.get_tree_queues" }).then((r) => {
 			queues = r.message || [];
 			render();
+			focusScan();
 		});
 	}
 
+	page.add_inner_button(__("History"), showHistory);
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };
