@@ -421,12 +421,13 @@ def setup_item_group_tree():
 
 
 def seed_standard_golds():
-	"""Standard Gold 990–998 (purity 99.0–99.8 %) to sit alongside Standard Gold 999 (99.9 %),
-	and retire the legacy generic 'Standard Gold' (0 %). Idempotent; mirrors the GOLD item shape."""
+	"""Standard Gold 990–999 (purity 99.0–99.9 %), and retire the legacy generic
+	'Standard Gold' (0 %). Idempotent; mirrors the GOLD item shape. (999 used to ship
+	from the retired xlsx import — the seeder owns the full run now.)"""
 	if not frappe.db.exists("Item Group", "GOLD"):
 		return
 	std_leaf = "GOLD STANDARD" if frappe.db.exists("Item Group", "GOLD STANDARD") else "GOLD"
-	for n in range(990, 999):  # 990 … 998 (999 already ships)
+	for n in range(990, 1000):  # 990 … 999
 		code = f"Standard Gold {n}"
 		if frappe.db.exists("Item", code):
 			continue
