@@ -991,7 +991,8 @@ def get_raw_material_tree():
 			"purity": it.purity_percentage or 0,
 			"metal_purity": it.metal_purity or "",
 			"disabled": int(it.disabled or 0),
-			"in_registry": it.name in shipped,
+			# party stones are created on demand — expected, not drift
+			"in_registry": it.name in shipped or it.stone_type in PARTY_BRACKETS,
 		})
 
 	def build(name):
@@ -1044,7 +1045,8 @@ def get_stone_buckets():
 			"group": it.item_group or "",
 			"uom": it.stock_uom or "",
 			"disabled": int(it.disabled or 0),
-			"in_registry": it.name in registry_order,
+			# party stones are created on demand — expected, not drift
+			"in_registry": it.name in registry_order or it.stone_type in PARTY_BRACKETS,
 		})
 
 	out = []
@@ -1052,6 +1054,120 @@ def get_stone_buckets():
 		items = sorted(by_type.get(st, []), key=lambda i: (registry_order.get(i["name"], in_registry), natkey(i["name"])))
 		out.append({"code": code, "stone_type": st, "items": items, "count": len(items)})
 	return {"buckets": out, "total_items": sum(b["count"] for b in out)}
+
+
+# --- Party stock (customer-given stones) -----------------------------------------
+# A party's 3-letter code prefixes every stone item it owns (EDI -> EDI-VS1).
+# Items are created ON DEMAND (no sieve runs) and only under an existing party.
+PARTY_BRACKETS = {"Party Diamond": "PARTY DIAMOND", "Party Other": "PARTY OTHER"}  # stone_type -> item group leaf
+
+
+def _party_code_candidates(party_name):
+	"""3-letter code candidates from the party name — first three letters first."""
+	import re
+
+	letters = re.sub(r"[^A-Z]", "", (party_name or "").upper())
+	seen, out = set(), []
+
+	def add(c):
+		if len(c) == 3 and c not in seen:
+			seen.add(c)
+			out.append(c)
+
+	add(letters[:3])
+	for i in range(3, len(letters)):
+		add(letters[:2] + letters[i])
+	for i in range(1, len(letters) - 1):
+		add(letters[0] + letters[i : i + 2])
+	return out[:30]
+
+
+@frappe.whitelist()
+def suggest_party_code(party_name):
+	"""First free 3-letter code for the name (EDIMINIKAL -> EDI; EDI taken -> EDM …)."""
+	for c in _party_code_candidates(party_name):
+		if not frappe.db.exists("Stone Party", c):
+			return c
+	return ""
+
+
+@frappe.whitelist()
+def create_stone_party(party_name, code):
+	"""Create a Stone Party — the doctype's validate enforces the 3-letter rule."""
+	doc = frappe.get_doc({"doctype": "Stone Party", "party_name": party_name, "code": code})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return doc.name
+
+
+@frappe.whitelist()
+def get_stone_parties():
+	"""All parties with how many stone items each owns."""
+	parties = frappe.get_all("Stone Party", fields=["name", "party_name"], order_by="party_name")
+	counts = dict(frappe.db.sql(
+		"select stone_party, count(*) from `tabItem` where ifnull(stone_party, '') != '' group by stone_party"
+	))
+	return [{"code": p.name, "party_name": p.party_name, "items": counts.get(p.name, 0)} for p in parties]
+
+
+@frappe.whitelist()
+def get_party_stones(party):
+	"""The stone items a party owns, newest first."""
+	rows = frappe.get_all(
+		"Item", filters={"stone_party": party},
+		fields=["name", "stone_type", "disabled"], order_by="creation desc",
+	)
+	return [{"name": r.name, "bracket": "PDMD" if r.stone_type == "Party Diamond" else "POTH",
+	         "stone_type": r.stone_type, "disabled": int(r.disabled or 0)} for r in rows]
+
+
+@frappe.whitelist()
+def check_party_stone(party, stone):
+	"""Preview + availability of the item code a party/stone pair would create."""
+	code = _party_stone_code(party, stone)
+	return {"item_code": code, "exists": bool(frappe.db.exists("Item", code))}
+
+
+def _party_stone_code(party, stone):
+	import re
+
+	if not frappe.db.exists("Stone Party", party):
+		frappe.throw(_("Create the party first — stones can only be added under a party."))
+	s = re.sub(r"\s+", " ", (stone or "").strip().upper())
+	if not re.fullmatch(r"[A-Z0-9][A-Z0-9 .\-/]*", s):
+		frappe.throw(_("Stone name: letters/numbers (and . - /) only, e.g. VS1 or RUBY."))
+	return f"{party}-{s}"
+
+
+@frappe.whitelist()
+def create_party_stone(party, bracket, stone):
+	"""Create ONE party stone item on demand: <CODE>-<STONE> under the party-bracket
+	group, typed so it tallies into the PDMD/POTH bucket. Everything derived —
+	the form only supplies party, bracket and the stone name."""
+	if bracket not in PARTY_BRACKETS:
+		frappe.throw(_("Bracket must be Party Diamond or Party Other."))
+	code = _party_stone_code(party, stone)
+	if frappe.db.exists("Item", code):
+		frappe.throw(_("{0} already exists.").format(code))
+	group = PARTY_BRACKETS[bracket]
+	if not frappe.db.exists("Item Group", group):
+		frappe.throw(_("Item group {0} is missing — run a migrate.").format(group))
+	frappe.get_doc({
+		"doctype": "Item",
+		"item_code": code,
+		"item_name": code,
+		"item_group": group,
+		"stock_uom": "Carat",
+		"is_stock_item": 1,
+		"is_purchase_item": 0,  # customer-given, never purchased
+		"is_sales_item": 0,
+		"include_item_in_manufacturing": 1,
+		"stone_type": bracket,
+		"weight_unit": "Carat",
+		"stone_party": party,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return code
 
 
 @frappe.whitelist()

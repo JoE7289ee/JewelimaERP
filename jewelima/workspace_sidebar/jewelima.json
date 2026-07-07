@@ -282,6 +282,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Party Stock",
+   "link_to": "party-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
@@ -683,7 +696,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 12:00:11.688195",
+ "modified": "2026-07-07 14:06:31.040019",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -86,7 +86,7 @@ frappe.pages["stone-buckets"].on_page_load = function (wrapper) {
 			);
 			if (!open) return;
 			if (!b.count) {
-				html.push(`<div class="sbk-note">${__("No items yet — party stones are customer-given and get created when an order brings them in.")}</div>`);
+				html.push(`<div class="sbk-note">${__("No items yet — party stones are customer-given and get created on demand from the Party Stock page.")}</div>`);
 				return;
 			}
 			list.forEach((it) => {

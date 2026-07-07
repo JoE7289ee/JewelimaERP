@@ -341,6 +341,9 @@ ITEM_GROUP_TREE = {
 			"COLOUR STONE": [],
 			"SWAROVSKI": [],
 			"CUBIC ZIRCONIA": [],
+			# customer-given stones, created on demand from the Party Stock page
+			"PARTY DIAMOND": [],
+			"PARTY OTHER": [],
 		},
 	},
 	"PRODUCT": {},  # one leaf per Design Type is added dynamically
@@ -606,6 +609,16 @@ def get_item_custom_fields():
 				"fieldtype": "Data",
 				"label": "Stone Size",
 				"insert_after": "stone_type",
+			},
+			{
+				"fieldname": "stone_party",
+				"fieldtype": "Link",
+				"label": "Stone Party",
+				"options": "Stone Party",
+				"insert_after": "stone_size",
+				"read_only": 1,
+				"in_standard_filter": 1,
+				"description": "Owner of a customer-given stone (set by the Party Stock page; the item code carries the party's prefix).",
 			},
 			{
 				"fieldname": "classification_section",
