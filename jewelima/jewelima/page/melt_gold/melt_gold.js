@@ -262,7 +262,8 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		const body = q(".ml-stock-body");
 		if (!wh) { body.innerHTML = '<tr><td colspan="7" class="ml-stock-empty">Pick a warehouse</td></tr>'; return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_melt_stock", args: { warehouse: wh } }).then((r) => {
-			S.stock = ((r.message || {}).rows || []).filter((x) => x.purity > 0 || x.item_group === "ALLOY"); // meltable only
+			// melting sources are STANDARD golds + alloy only — karat golds/stones never list here
+			S.stock = ((r.message || {}).rows || []).filter((x) => ["GOLD STANDARD", "ALLOY"].includes(x.item_group));
 			if (!S.stock.length) { body.innerHTML = '<tr><td colspan="7" class="ml-stock-empty">No gold/alloy stock here</td></tr>'; return; }
 			body.innerHTML = S.stock.map((x, i) => {
 				const picked = S.rows.some((r) => r.item === x.item);
