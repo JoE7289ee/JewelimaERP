@@ -44,6 +44,7 @@ const PO_COLUMNS = [
 		.po-head .control-input-wrapper .control-input,.po-head .control-input input,.po-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
 		.po-head .help-box,.po-head .description,.po-head p.help-box{display:none !important;}
 		.po-due{font-size:11px;color:var(--text-muted);margin:1px 0 0 2px;white-space:nowrap;}
+		.po-no-badge{font-weight:800;font-size:15px;letter-spacing:.6px;align-self:center;background:var(--control-bg);border:1px solid var(--border-color);border-radius:6px;padding:2px 13px;margin-right:8px;}
 		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
 		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.po-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
@@ -72,7 +73,7 @@ const PO_COLUMNS = [
 		</style>
 		<div class="po-wrap">
 			<div class="po-head">
-				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
+				${OPTS.mode === "request" ? '<div class="po-h-orderno"></div>' : ""}<div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
 				${OPTS.mode === "order" ? '<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-custdays"></div>' : ""}
 			</div>
 			<div class="po-gridbox">
@@ -106,11 +107,10 @@ const PO_COLUMNS = [
 	if (OPTS.mode === "request") {
 		state.header.notes = mk(".po-h-orderno", { fieldtype: "Data", label: __("Notes"), fieldname: "notes" });
 	} else {
-		state.header.order_no = mk(".po-h-orderno", {
-			fieldtype: "Data", label: "Job Order No", fieldname: "order_no", read_only: 1,
-			description: "Auto-assigned (E####) when you place the order.",
-		});
+		// the claimed order number sits at the LEFT of the action bar, always visible
+		state.$noBadge = $('<span class="po-no-badge">…</span>').prependTo($(page.wrapper).find(".page-actions").first());
 	}
+	state.showNo = (no) => state.$noBadge && state.$noBadge.text(no || "…");
 	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Customer", fieldname: "customer", options: "Customer" });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
 	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", get_query: () => ({ filters: { disabled: 0 } }) });
@@ -787,7 +787,7 @@ const PO_COLUMNS = [
 		if (state.header.days) state.header.days.set_value(0);
 		if (state.header.cust_days) state.header.cust_days.set_value(0);
 		if (state.showDue) state.showDue();
-		if (state.header.order_no) state.header.order_no.set_value(state.reservedNo || "");
+		state.showNo(state.reservedNo);
 		if (state.header.notes) state.header.notes.set_value("");
 		if (state.header.order_date) state.header.order_date.set_value(frappe.datetime.get_today());
 		addRow();
@@ -813,7 +813,7 @@ const PO_COLUMNS = [
 	if (OPTS.mode === "order") {
 		frappe.call({ method: "jewelima.jewelima.api.reserve_order_no" }).then((r) => {
 			state.reservedNo = r.message || "";
-			if (state.header.order_no && state.reservedNo) state.header.order_no.set_value(state.reservedNo);
+			state.showNo(state.reservedNo);
 		});
 	}
 
@@ -1121,10 +1121,10 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 			});
 			state.activeRequest = "";
 		}
-		state.header.order_no.set_value(order.name);
 		// claim the next number right away so the following order is ready to write
 		frappe.call({ method: "jewelima.jewelima.api.reserve_order_no" }).then((r) => {
 			state.reservedNo = r.message || "";
+			state.showNo(state.reservedNo);
 		});
 		frappe.show_alert({ message: __("Placed {0} with {1} card(s).", [order.name, made]), indicator: "green" }, 7);
 		frappe.msgprint({
