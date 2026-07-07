@@ -297,6 +297,17 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	noLoss.addEventListener("change", updateSummary);
 	outWt.addEventListener("input", updateSummary);
 
+	// handoff from the Gold Casting report: karat + required grams arrive pre-filled
+	const _ro = frappe.route_options || {};
+	if (_ro.jw_melt) {
+		frappe.route_options = null;
+		const m = _ro.jw_melt;
+		Promise.resolve(outCtl.set_value(m.karat || "")).then(() => {
+			pur(outCtl.get_value(), (p) => { S.out.purity = p; solve(); });
+		});
+		Promise.resolve(reqCtl.set_value(flt(m.grams) || 0)).then(() => solve());
+	}
+
 	page.add_inner_button(__("Re-balance"), () => { S.rows.forEach((r) => { r.locked = false; }); renderMaterials(); solve(); });
 	page.add_inner_button(__("Reset"), () => {
 		S.rows = []; S.out.purity = 0; outCtl.set_value(""); reqCtl.set_value(0); strict.checked = true; noLoss.checked = true;

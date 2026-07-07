@@ -41,7 +41,7 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 		<div class="gc-box"><table class="gc-tbl"><thead><tr>
 			<th>${__("Gold")}</th><th>${__("Purity %")}</th><th>${__("Trees")}</th>
 			<th>${__("Required (g)")}</th><th>${__("In Casting (g)")}</th><th>${__("To Melt (g)")}</th>
-			<th>${__("Pure Gold (g)")}</th><th>${__("Alloy (g)")}</th>
+			<th>${__("Pure Gold (g)")}</th><th>${__("Alloy (g)")}</th><th></th>
 		</tr></thead><tbody class="gc-karats"></tbody></table></div>
 		<div class="gc-h">${__("Trees awaiting cast")}</div>
 		<div class="gc-box"><table class="gc-tbl"><thead><tr>
@@ -84,8 +84,18 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 					<td class="${k.shortfall ? "bad" : "good"}">${k.shortfall ? fmt(k.shortfall) : __("covered")}</td>
 					<td>${fmt(k.pure_needed)}</td>
 					<td>${fmt(k.alloy_needed)}</td>
+					<td style="text-align:center">${k.shortfall
+						? `<button class="btn btn-primary btn-xs gc-melt-btn" data-karat="${esc(k.item)}" data-grams="${k.shortfall}">${__("Melt")}</button>`
+						: ""}</td>
 				</tr>`).join("")
-			: `<tr><td colspan="8" class="gc-empty">${__("No trees waiting at CASTING.")}</td></tr>`;
+			: `<tr><td colspan="9" class="gc-empty">${__("No trees waiting at CASTING.")}</td></tr>`;
+		kb.querySelectorAll(".gc-melt-btn").forEach((el) =>
+			el.addEventListener("click", function () {
+				// hand the shortfall to the Melting page — karat + grams arrive pre-filled
+				frappe.route_options = { jw_melt: { karat: this.getAttribute("data-karat"), grams: flt(this.getAttribute("data-grams")) } };
+				frappe.set_route("melt-gold");
+			})
+		);
 
 		const tb = root.querySelector(".gc-trees");
 		tb.innerHTML = (d.trees || []).length
