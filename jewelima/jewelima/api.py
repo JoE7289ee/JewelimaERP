@@ -1121,6 +1121,105 @@ def get_party_stones(party):
 	         "stone_type": r.stone_type, "disabled": int(r.disabled or 0)} for r in rows]
 
 
+# --- Order Requests + repeat orders ------------------------------------------------
+# A request = a saved Place Order page (header + basic lines) that hasn't gone
+# through. Any base-role user files one; the Order User pulls it up on the page
+# (Requests -> Use) and places it — which stamps the Job Order back on the request.
+
+
+@frappe.whitelist()
+def save_order_request(payload):
+	"""File an Order Request from the Place Order page. payload = {customer,
+	salesman, order_type, days, cust_days, notes, lines: [{design, qty, size, remark}]}."""
+	p = frappe.parse_json(payload)
+	lines = [l for l in (p.get("lines") or []) if l.get("design")]
+	if not lines:
+		frappe.throw(_("Add at least one line with a Design — CAD lines can't go on a request."))
+	doc = frappe.get_doc({
+		"doctype": "Order Request",
+		"customer": p.get("customer"),
+		"salesman": p.get("salesman"),
+		"order_type": p.get("order_type"),
+		"days": cint(p.get("days")),
+		"cust_days": cint(p.get("cust_days")),
+		"notes": p.get("notes"),
+		"items": [{"design": l["design"], "qty": cint(l.get("qty")) or 1,
+		           "size": l.get("size"), "remark": l.get("remark")} for l in lines],
+	})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return doc.name
+
+
+@frappe.whitelist()
+def get_order_requests():
+	"""Open requests, newest first, with a line summary for the picker dialog."""
+	reqs = frappe.get_all(
+		"Order Request", filters={"status": "Open"},
+		fields=["name", "request_date", "requested_by", "customer", "notes"],
+		order_by="creation desc", limit=50,
+	)
+	out = []
+	for r in reqs:
+		items = frappe.get_all("Order Request Item", filters={"parent": r.name},
+		                       fields=["design", "qty"], order_by="idx")
+		out.append({
+			"name": r.name,
+			"request_date": r.request_date,
+			"requested_by": frappe.utils.get_fullname(r.requested_by),
+			"customer": r.customer or "",
+			"notes": r.notes or "",
+			"lines": len(items),
+			"qty": sum(cint(i.qty) or 0 for i in items),
+			"designs": ", ".join(i.design for i in items[:4]) + ("…" if len(items) > 4 else ""),
+		})
+	return out
+
+
+@frappe.whitelist()
+def get_order_request(name):
+	"""Full payload of one request — what the page needs to fill itself."""
+	doc = frappe.get_doc("Order Request", name)
+	return {
+		"name": doc.name,
+		"status": doc.status,
+		"customer": doc.customer, "salesman": doc.salesman, "order_type": doc.order_type,
+		"days": doc.days, "cust_days": doc.cust_days, "notes": doc.notes,
+		"lines": [{"design": i.design, "qty": i.qty, "size": i.size, "remark": i.remark} for i in doc.items],
+	}
+
+
+@frappe.whitelist()
+def mark_order_request_placed(name, job_order):
+	"""Stamp a request once its order went through (called by the Place Order page)."""
+	if not frappe.db.exists("Order Request", name):
+		return
+	frappe.db.set_value("Order Request", name, {"status": "Placed", "job_order": job_order})
+	frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_job_order_fill(job_order):
+	"""Repeat an order: header + lines of an existing Job Order, shaped for the page.
+	CAD bags are skipped (no design to copy) and reported."""
+	if not frappe.db.exists("Job Order", job_order):
+		frappe.throw(_("Job Order {0} not found.").format(job_order))
+	jo = frappe.db.get_value("Job Order", job_order,
+	                         ["customer", "salesman", "order_type"], as_dict=True)
+	bags = frappe.get_all(
+		"Order Bag", filters={"job_order": job_order},
+		fields=["design", "qty", "size", "narration", "is_cad"], order_by="creation",
+	)
+	lines, skipped_cad = [], 0
+	for b in bags:
+		if not b.design:
+			skipped_cad += 1 if b.is_cad else 0
+			continue
+		lines.append({"design": b.design, "qty": cint(b.qty) or 1, "size": b.size, "remark": b.narration})
+	return {"customer": jo.customer, "salesman": jo.salesman, "order_type": jo.order_type,
+	        "lines": lines, "skipped_cad": skipped_cad}
+
+
 # --- Party metal (customer-given gold) --------------------------------------------
 # STRICT naming: the suffix must be one of OUR gold codes — the 9 karat golds
 # (JOS-22KYG) or a standard gold (JOS-Standard999). Grouped under METAL -> PARTY

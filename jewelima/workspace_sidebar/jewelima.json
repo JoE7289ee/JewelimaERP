@@ -124,6 +124,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "inbox",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Order Request",
+   "link_to": "Order Request",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "printer",
@@ -722,7 +735,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 14:24:45.788232",
+ "modified": "2026-07-07 15:41:24.456315",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

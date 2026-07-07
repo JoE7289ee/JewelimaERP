@@ -728,18 +728,20 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		recalcTotals();
 	}
 
-	// expose for the New Design dialog to drop a freshly-created design onto a row
+	// expose for the New Design dialog + the Requests/repeat fill
 	state.onDesignPicked = onDesignPicked;
 	state.addRow = addRow;
+	state.updateSplitBtn = updateSplitBtn;
+	state.updateRemarkBtn = updateRemarkBtn;
+	state.updateDesignBtn = updateDesignBtn;
+	state.updateNewBtn = updateNewBtn;
 
 	const addRows = (n) => { let last; for (let i = 0; i < n; i++) last = addRow(); return last; };
 
-	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
-	page.add_inner_button(__("Add Row"), () => addRow());
-	page.add_inner_button(__("Add 10 Rows"), () => addRows(10));
-	page.add_inner_button(__("Reset"), () => {
+	const resetPage = () => {
 		$body.empty();
 		state.rows = [];
+		state.activeRequest = "";
 		state.header.customer.set_value("");
 		state.header.salesman.set_value("");
 		state.header.order_type.set_value("");
@@ -749,12 +751,161 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		state.header.order_no.set_value("");
 		state.header.order_date.set_value(frappe.datetime.get_today());
 		addRow();
-	});
+	};
+	state.resetPage = resetPage;
+
+	page.add_inner_button(__("Requests"), () => openRequestsDialog(state));
+	page.add_inner_button(__("Save Request"), () => saveRequest(state));
+	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
+	page.add_inner_button(__("Add Row"), () => addRow());
+	page.add_inner_button(__("Add 10 Rows"), () => addRows(10));
+	page.add_inner_button(__("Reset"), resetPage);
 
 	addRow(); // start with a single line
 
 	page.set_primary_action(__("Place Order"), () => placeOrder(page, state, renumber, addRow, $body), "add");
 };
+
+// ---- Order Requests + repeat orders -------------------------------------------
+// fill the page from a request / an old Job Order: header first, then one row per
+// line. Qty lands BEFORE the design so the profile scales right when the BOM pull
+// resolves; the size is retried until the design type's size options have loaded.
+
+function po_trySetSize(row, size, tries) {
+	row.f.size.set(size);
+	if (row.f.size.get() === size || tries <= 0) return;
+	setTimeout(() => po_trySetSize(row, size, tries - 1), 300);
+}
+
+function po_fillPage(state, data) {
+	state.resetPage();
+	const H = state.header;
+	if (data.customer) H.customer.set_value(data.customer);
+	if (data.salesman) H.salesman.set_value(data.salesman);
+	if (data.order_type) H.order_type.set_value(data.order_type);
+	Promise.resolve(H.days.set_value(cint(data.days) || 0)).then(() => state.showDue && state.showDue());
+	Promise.resolve(H.cust_days.set_value(cint(data.cust_days) || 0)).then(() => state.showDue && state.showDue());
+	(data.lines || []).forEach((l, i) => {
+		const row = i === 0 ? state.rows[0] : state.addRow();
+		row.f.qty.set(l.qty || "");
+		row._remark = l.remark || "";
+		Promise.resolve(row.f.design.set(l.design)).then(() => {
+			state.onDesignPicked(row);
+			if (l.size) po_trySetSize(row, l.size, 12);
+			setTimeout(() => {
+				["updateSplitBtn", "updateRemarkBtn", "updateDesignBtn", "updateNewBtn"].forEach((f) => state[f] && state[f](row));
+				if (state.recalcTotals) state.recalcTotals();
+			}, 900);
+		});
+	});
+	if (data.lines && data.lines.length) state.addRow(); // trailing empty line
+}
+
+function saveRequest(state) {
+	const all = state.rows.map(po_readLine);
+	const lines = all.filter((l) => l.design);
+	const cads = all.filter((l) => !l.design && l.cad);
+	if (cads.length) {
+		frappe.msgprint(__("{0} CAD line(s) can't go on a request — requests carry designs only; place CAD lines directly.", [cads.length]));
+		return;
+	}
+	if (!lines.length) {
+		frappe.msgprint(__("Add at least one line with a Design to save a request."));
+		return;
+	}
+	const payload = {
+		customer: state.header.customer.get_value(),
+		salesman: state.header.salesman.get_value(),
+		order_type: state.header.order_type.get_value(),
+		days: cint(state.header.days.get_value()),
+		cust_days: cint(state.header.cust_days.get_value()),
+		lines: lines.map((l) => ({ design: l.design, qty: l.qty || 1, size: l.size, remark: l.narration })),
+	};
+	frappe.call({ method: "jewelima.jewelima.api.save_order_request", args: { payload } }).then((r) => {
+		frappe.show_alert({ message: __("Request {0} saved — the order has NOT been placed.", [r.message]), indicator: "blue" }, 7);
+		frappe.msgprint({
+			title: __("Request saved"), indicator: "blue",
+			message: __("{0} saved with {1} line(s). It shows under <b>Requests</b> until someone places it.", [r.message, lines.length]),
+		});
+		state.resetPage();
+	});
+}
+
+function openRequestsDialog(state) {
+	const esc = frappe.utils.escape_html;
+	const d = new frappe.ui.Dialog({
+		title: __("Order Requests"),
+		size: "extra-large",
+		fields: [
+			{ fieldtype: "HTML", fieldname: "repeat_html" },
+			{ fieldtype: "Section Break", label: __("Open Requests") },
+			{ fieldtype: "HTML", fieldname: "list_html" },
+		],
+	});
+	d.fields_dict.repeat_html.$wrapper.html(`
+		<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+			<b>${__("Repeat an order")}</b>
+			<input class="form-control po-req-jo" style="width:170px;height:28px;display:inline-block" placeholder="${__("Job Order e.g. E1234")}">
+			<button class="btn btn-default btn-sm po-req-load">${__("Load Order")}</button>
+			<span class="text-muted" style="font-size:12px">${__("pulls that exact order back into the page")}</span>
+		</div>`);
+	const loadJO = () => {
+		const jo = (d.$wrapper.find(".po-req-jo").val() || "").trim().toUpperCase();
+		if (!jo) return;
+		frappe.call({ method: "jewelima.jewelima.api.get_job_order_fill", args: { job_order: jo } }).then((r) => {
+			const m = r.message || {};
+			d.hide();
+			po_fillPage(state, m);
+			let msg = __("Loaded {0} line(s) from {1}.", [(m.lines || []).length, jo]);
+			if (m.skipped_cad) msg += " " + __("{0} CAD bag(s) skipped — re-enter those via the CAD button.", [m.skipped_cad]);
+			frappe.show_alert({ message: msg, indicator: "blue" }, 7);
+		});
+	};
+	d.$wrapper.find(".po-req-load").on("click", loadJO);
+	d.$wrapper.find(".po-req-jo").on("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); loadJO(); } });
+
+	frappe.call({ method: "jewelima.jewelima.api.get_order_requests" }).then((r) => {
+		const reqs = r.message || [];
+		if (!reqs.length) {
+			d.fields_dict.list_html.$wrapper.html(`<div class="text-muted" style="padding:8px 2px">${__("No open requests.")}</div>`);
+			return;
+		}
+		d.fields_dict.list_html.$wrapper.html(`
+			<div style="max-height:50vh;overflow:auto;">
+			<table class="table table-bordered" style="font-size:12.5px;margin:0;">
+				<thead><tr>
+					<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("By")}</th><th>${__("Customer")}</th>
+					<th style="text-align:center">${__("Lines")}</th><th style="text-align:center">${__("Qty")}</th>
+					<th>${__("Designs")}</th><th></th>
+				</tr></thead>
+				<tbody>${reqs.map((q) => `
+					<tr>
+						<td><a href="/app/order-request/${encodeURIComponent(q.name)}"><b>${esc(q.name)}</b></a></td>
+						<td>${esc(frappe.datetime.str_to_user(q.request_date) || "")}</td>
+						<td>${esc(q.requested_by)}</td>
+						<td>${esc(q.customer)}</td>
+						<td style="text-align:center">${q.lines}</td>
+						<td style="text-align:center">${q.qty}</td>
+						<td>${esc(q.designs)}${q.notes ? `<div class="text-muted">${esc(q.notes)}</div>` : ""}</td>
+						<td><button class="btn btn-primary btn-xs po-req-use" data-name="${esc(q.name)}">${__("Use")}</button></td>
+					</tr>`).join("")}
+				</tbody>
+			</table></div>`);
+		d.$wrapper.find(".po-req-use").on("click", function () {
+			const name = this.getAttribute("data-name");
+			frappe.call({ method: "jewelima.jewelima.api.get_order_request", args: { name } }).then((rr) => {
+				d.hide();
+				po_fillPage(state, rr.message || {});
+				state.activeRequest = name;
+				frappe.show_alert({
+					message: __("Filled from {0} — placing the order will mark it Placed.", [name]),
+					indicator: "blue",
+				}, 7);
+			});
+		});
+	});
+	d.show();
+}
 
 function po_readLine(r) {
 	const g = (k) => r.f[k].get();
@@ -828,6 +979,14 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 			made++;
 		}
 		frappe.dom.unfreeze();
+		if (state.activeRequest) {
+			// this order fulfils a saved request — stamp it Placed with the order no
+			frappe.call({
+				method: "jewelima.jewelima.api.mark_order_request_placed",
+				args: { name: state.activeRequest, job_order: order.name },
+			});
+			state.activeRequest = "";
+		}
 		state.header.order_no.set_value(order.name);
 		frappe.show_alert({ message: __("Placed {0} with {1} card(s).", [order.name, made]), indicator: "green" }, 7);
 		frappe.msgprint({
