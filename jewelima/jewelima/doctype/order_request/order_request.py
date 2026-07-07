@@ -12,9 +12,9 @@ from frappe.model.document import Document
 
 class OrderRequest(Document):
 	def validate(self):
-		rows = [r for r in (self.items or []) if r.design]
+		rows = [r for r in (self.items or []) if r.design or r.cad_json]
 		if not rows:
-			frappe.throw(_("Add at least one line with a Design."))
+			frappe.throw(_("Add at least one line with a Design (or a CAD line)."))
 		for r in rows:
 			if not r.qty or r.qty < 1:
 				r.qty = 1

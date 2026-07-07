@@ -8,7 +8,10 @@
   "design",
   "qty",
   "size",
-  "remark"
+  "remark",
+  "edited",
+  "bom_json",
+  "cad_json"
  ],
  "fields": [
   {
@@ -17,7 +20,7 @@
    "in_list_view": 1,
    "label": "Design",
    "options": "Design",
-   "reqd": 1,
+   "reqd": 0,
    "columns": 4
   },
   {
@@ -40,11 +43,32 @@
    "in_list_view": 1,
    "label": "Remark",
    "columns": 3
+  },
+  {
+   "fieldname": "edited",
+   "fieldtype": "Check",
+   "label": "BOM Edited",
+   "read_only": 1,
+   "description": "The requester hand-edited this line's materials — Use restores them over the design's BOM."
+  },
+  {
+   "fieldname": "bom_json",
+   "fieldtype": "Code",
+   "label": "Materials (JSON)",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "cad_json",
+   "fieldtype": "Code",
+   "label": "CAD (JSON)",
+   "read_only": 1,
+   "hidden": 1
   }
  ],
  "istable": 1,
  "links": [],
- "modified": "2026-07-07 23:00:00.000000",
+ "modified": "2026-07-08 11:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Request Item",

@@ -2,6 +2,8 @@
 // Shared Jewelima print branding — a letterhead-style header (logo + contact) and a clean
 // footer reused by every custom printout. Loaded app-wide via app_include_js.
 
+import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
+
 frappe.provide("jewelima");
 
 // small inline icons (lucide-style) for the contact line

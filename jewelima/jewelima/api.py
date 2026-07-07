@@ -1129,12 +1129,27 @@ def get_party_stones(party):
 
 @frappe.whitelist()
 def save_order_request(payload):
-	"""File an Order Request from the Place Order page. payload = {customer,
-	salesman, order_type, days, cust_days, notes, lines: [{design, qty, size, remark}]}."""
+	"""File an Order Request from the Order Requests page. payload = {customer,
+	salesman, order_type, days, cust_days, notes, lines}; a line is either
+	{design, qty, size, remark, edited, materials} or {cad: {...}, qty, size, remark}
+	— edited BOMs and CAD wishes travel whole so Use restores them 1:1."""
+	import json as _json
+
 	p = frappe.parse_json(payload)
-	lines = [l for l in (p.get("lines") or []) if l.get("design")]
+	lines = [l for l in (p.get("lines") or []) if l.get("design") or l.get("cad")]
 	if not lines:
-		frappe.throw(_("Add at least one line with a Design — CAD lines can't go on a request."))
+		frappe.throw(_("Add at least one line with a Design (or a CAD line)."))
+	items = []
+	for l in lines:
+		items.append({
+			"design": l.get("design"),
+			"qty": cint(l.get("qty")) or 1,
+			"size": l.get("size"),
+			"remark": l.get("remark"),
+			"edited": 1 if l.get("edited") else 0,
+			"bom_json": _json.dumps(l["materials"]) if l.get("edited") and l.get("materials") else None,
+			"cad_json": _json.dumps(l["cad"]) if l.get("cad") else None,
+		})
 	doc = frappe.get_doc({
 		"doctype": "Order Request",
 		"customer": p.get("customer"),
@@ -1143,8 +1158,7 @@ def save_order_request(payload):
 		"days": cint(p.get("days")),
 		"cust_days": cint(p.get("cust_days")),
 		"notes": p.get("notes"),
-		"items": [{"design": l["design"], "qty": cint(l.get("qty")) or 1,
-		           "size": l.get("size"), "remark": l.get("remark")} for l in lines],
+		"items": items,
 	})
 	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
@@ -1171,21 +1185,34 @@ def get_order_requests():
 			"notes": r.notes or "",
 			"lines": len(items),
 			"qty": sum(cint(i.qty) or 0 for i in items),
-			"designs": ", ".join(i.design for i in items[:4]) + ("…" if len(items) > 4 else ""),
+			"designs": ", ".join((i.design or "CAD") for i in items[:4]) + ("…" if len(items) > 4 else ""),
 		})
 	return out
 
 
 @frappe.whitelist()
 def get_order_request(name):
-	"""Full payload of one request — what the page needs to fill itself."""
+	"""Full payload of one request — what the page needs to fill itself
+	(edited BOMs and CAD lines come back parsed, ready to restore)."""
+	import json as _json
+
+	def loads(s):
+		try:
+			return _json.loads(s) if s else None
+		except Exception:
+			return None
+
 	doc = frappe.get_doc("Order Request", name)
 	return {
 		"name": doc.name,
 		"status": doc.status,
 		"customer": doc.customer, "salesman": doc.salesman, "order_type": doc.order_type,
 		"days": doc.days, "cust_days": doc.cust_days, "notes": doc.notes,
-		"lines": [{"design": i.design, "qty": i.qty, "size": i.size, "remark": i.remark} for i in doc.items],
+		"lines": [{
+			"design": i.design, "qty": i.qty, "size": i.size, "remark": i.remark,
+			"edited": cint(i.edited), "materials": loads(i.bom_json) or [],
+			"cad": loads(i.cad_json),
+		} for i in doc.items],
 	}
 
 
