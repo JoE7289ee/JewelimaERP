@@ -61,6 +61,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		table.po-grid td.po-act .btn{padding:1px 7px;font-size:11px;height:24px;line-height:1;margin:0 1px;}
 		table.po-grid td.po-act .btn:disabled{opacity:.4;cursor:not-allowed;}
 		table.po-grid td.po-act .btn.po-new.ready{background:#b00020;border-color:#b00020;color:#fff;font-weight:600;}
+		table.po-grid .po-hide{display:none;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="po-wrap">
@@ -143,7 +144,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
-	PO_COLUMNS.forEach((c) => $headrow.append(`<th style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
+	PO_COLUMNS.forEach((c) => $headrow.append(`<th class="po-c-${c.key}" style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
 	$headrow.append('<th style="width:285px;text-align:center">Functions</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
@@ -153,7 +154,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	const $footrow = $(page.main).find(".po-footrow");
 	$footrow.append('<td class="po-foot-label">Total</td>');
 	const totalCells = {};
-	PO_COLUMNS.forEach((c) => (totalCells[c.key] = $("<td></td>").appendTo($footrow)));
+	PO_COLUMNS.forEach((c) => (totalCells[c.key] = $(`<td class="po-c-${c.key}"></td>`).appendTo($footrow)));
 	$footrow.append("<td></td>"); // actions (Split)
 	$footrow.append("<td></td>"); // remove
 	function recalcTotals() {
@@ -168,9 +169,14 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		totalCells.gross_weight.text(s.gross_weight ? s.gross_weight.toFixed(3) : "");
 		totalCells.nett_weight.text(s.nett_weight ? s.nett_weight.toFixed(3) : "");
 		totalCells.pure.text(s.pure ? s.pure.toFixed(3) : "");
+		state.hiddenStones = state.hiddenStones || new Set();
 		[["dmd", "dmd_no", "dmd_weight"], ["ps", "ps_no", "ps_weight"], ["cs", "cs_no", "cs_weight"],
 		 ["cvd", "cvd_no", "cvd_weight"], ["pdmd", "pdmd_no", "pdmd_weight"], ["poth", "poth_no", "poth_weight"]].forEach(([gk, nk, wk]) => {
 			totalCells[gk].text(s[nk] || s[wk] ? `${s[nk]} / ${s[wk].toFixed(3)}` : "");
+			// stone columns only take space once some line actually carries that stone
+			const used = !!(s[nk] || s[wk]);
+			used ? state.hiddenStones.delete(gk) : state.hiddenStones.add(gk);
+			$(page.main).find(".po-c-" + gk).toggleClass("po-hide", !used);
 		});
 	}
 	state.recalcTotals = recalcTotals;
@@ -207,7 +213,8 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 		$tr.append('<td class="po-num"></td>');
 		const row = { $tr, f: {} };
 		PO_COLUMNS.forEach((col) => {
-			const $td = $("<td></td>").appendTo($tr);
+			const $td = $(`<td class="po-c-${col.key}"></td>`).appendTo($tr);
+			if (col.type === "stone" && state.hiddenStones && state.hiddenStones.has(col.key)) $td.addClass("po-hide");
 			if (col.type === "link") {
 				const df = { fieldtype: "Link", options: col.options, fieldname: col.key, placeholder: col.label };
 				if (col.key === "design") df.get_query = () => ({ filters: { status: "Active" } });
@@ -219,6 +226,12 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 					ctrl.$input.on("change awesomplete-selectcomplete", () =>
 						setTimeout(() => { onDesignPicked(row); updateDesignBtn(row); }, 50)
 					);
+					// deleting the text doesn't clear the control's VALUE (frappe Link keeps the
+					// last validated pick) — sync it to empty, then let the picked flow wipe the line
+					ctrl.$input.on("input", frappe.utils.debounce(() => {
+						if ((ctrl.$input.val() || "").trim()) return;
+						Promise.resolve(ctrl.set_value("")).then(() => { onDesignPicked(row); updateDesignBtn(row); });
+					}, 300));
 				}
 			} else if (col.type === "select") {
 				const $s = $("<select></select>").appendTo($td);
@@ -498,7 +511,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	function pullDesignBOM(row) {
 		const design = row.f.design.get();
 		if (row.f.design_type) row.f.design_type.set("");
-		if (!design) { row._materials = []; row._profile = null; applyProfile(row); return; }
+		if (!design) { row._materials = []; row._profile = null; row._image = ""; row._designType = ""; applyProfile(row); return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
 			const msg = r.message || {};
 			row._materials = (msg.materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
@@ -683,19 +696,26 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	}
 
 	function onDesignPicked(row) {
-		const design = row.f.design.get();
-		if (!design || row._lastDesign === design) return;
+		const design = row.f.design.get() || "";
+		if ((row._lastDesign || "") === design) return;
 		row._lastDesign = design;
-		pullDesignBOM(row); // copy the design's BOM into the line, then recompute
+		pullDesignBOM(row); // fills the line from the BOM — or wipes it when cleared
 	}
 
 	// Fill the line from the design's PER-PIECE profile, scaled by qty.
 	// Weights + stone counts are totals (per-piece × qty); purity is a ratio (unscaled).
 	function applyProfile(row) {
 		const p = row._profile;
-		if (!p) return;
-		const q = cint(row.f.qty.get()) || 1;
 		const set = (k, v) => { if (row.f[k]) row.f[k].set(v || ""); };
+		if (!p) {
+			// design cleared — wipe everything derived from it (was left stale before)
+			["design_type", "purity", "gross_weight", "nett_weight", "pure",
+			 "dmd_no", "ps_no", "cs_no", "cvd_no", "pdmd_no", "poth_no",
+			 "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => set(k, ""));
+			recalcTotals();
+			return;
+		}
+		const q = cint(row.f.qty.get()) || 1;
 		set("purity", p.purity);
 		["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => {
 			const v = flt(p[k]) * q;
