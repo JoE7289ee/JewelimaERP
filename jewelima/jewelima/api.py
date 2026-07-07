@@ -389,6 +389,104 @@ def get_tree_queues():
 
 
 @frappe.whitelist()
+def get_gold_casting_report():
+	"""The Gold Casting report (Reports > Casting): every tree awaiting cast (its
+	bags sit at CASTING), the karat-gold requirement per gold item, what the
+	Casting warehouse already holds (RULE: casting gold ALWAYS comes from there —
+	stems recycle back), the shortfall to melt, and whether the melt warehouses
+	hold enough Standard Gold (pure-equivalent) + Alloy to cover it."""
+	casting_wh = _wh("Casting")
+
+	tree_names = [r[0] for r in frappe.db.sql(
+		"""select distinct tree from `tabOrder Bag`
+		   where location = 'CASTING' and ifnull(tree, '') != ''""")]
+	trees, per_karat = [], {}
+	for t in sorted(tree_names):
+		doc = frappe.get_doc("Wax Tree", t)
+		sw, gr, pg = flt(doc.stone_weight), flt(doc.gold_required), flt(doc.pure_gold_needed)
+		if not gr and flt(doc.wax_weight) and doc.karat:
+			# tree made before the casting fields existed — compute on the fly
+			n = _tree_casting_numbers(doc.karat, doc.wax_weight, [c.order_bag for c in doc.cards])
+			sw, gr, pg = n["stone_weight"], n["gold_required"], n["pure_gold_needed"]
+		mp = frappe.db.get_value("Item", doc.karat, "metal_purity") if doc.karat else ""
+		trees.append({
+			"tree": t, "karat": doc.karat or "", "metal_purity": mp or "",
+			"cards": len(doc.cards), "employee": doc.employee or "",
+			"made_on": doc.made_on, "wax_weight": flt(doc.wax_weight),
+			"stone_weight": sw, "gold_required": gr, "pure_gold_needed": pg,
+		})
+		if doc.karat:
+			agg = per_karat.setdefault(doc.karat, {"trees": 0, "required": 0.0})
+			agg["trees"] += 1
+			agg["required"] += gr
+
+	karats, pure_needed_total, alloy_needed_total = [], 0.0, 0.0
+	for item in sorted(per_karat):
+		agg = per_karat[item]
+		purity = flt(frappe.db.get_value("Item", item, "purity_percentage"))
+		available = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": casting_wh}, "actual_qty"))
+		short = max(0.0, agg["required"] - available)
+		pure = short * purity / 100.0
+		alloy = short - pure
+		pure_needed_total += pure
+		alloy_needed_total += alloy
+		karats.append({
+			"item": item, "purity": purity, "trees": agg["trees"],
+			"required": round(agg["required"], 3), "available": round(available, 3),
+			"shortfall": round(short, 3), "pure_needed": round(pure, 3), "alloy_needed": round(alloy, 3),
+		})
+
+	# melt-side stock: Standard Gold as PURE-equivalent + Alloy, in the melt warehouses
+	melt_whs = frappe.get_all("Warehouse", filters={"is_melt_warehouse": 1}, pluck="name") or [_wh("Raw Materials Store")]
+	pure_available = 0.0
+	for it in frappe.get_all("Item", filters={"item_group": "GOLD STANDARD"}, fields=["name", "purity_percentage"]):
+		qty = sum(flt(b.actual_qty) for b in frappe.get_all(
+			"Bin", filters={"item_code": it.name, "warehouse": ["in", melt_whs]}, fields=["actual_qty"]))
+		pure_available += qty * flt(it.purity_percentage) / 100.0
+	alloy_available = 0.0
+	for it in frappe.get_all("Item", filters={"item_group": "ALLOY"}, pluck="name"):
+		alloy_available += sum(flt(b.actual_qty) for b in frappe.get_all(
+			"Bin", filters={"item_code": it, "warehouse": ["in", melt_whs]}, fields=["actual_qty"]))
+
+	return {
+		"casting_warehouse": casting_wh,
+		"trees": trees,
+		"karats": karats,
+		"melt": {
+			"pure_needed": round(pure_needed_total, 3),
+			"pure_available": round(pure_available, 3),
+			"pure_short": round(max(0.0, pure_needed_total - pure_available), 3),
+			"alloy_needed": round(alloy_needed_total, 3),
+			"alloy_available": round(alloy_available, 3),
+			"alloy_short": round(max(0.0, alloy_needed_total - alloy_available), 3),
+			"melt_warehouses": melt_whs,
+		},
+	}
+
+
+# wax -> metal casting conversion, per KARAT (same for all colors); stem is fixed
+CASTING_MULTIPLIER = {"14K": 13.5, "18K": 15.5, "22K": 18.5}
+CASTING_STEM_G = 3.0
+
+
+def _tree_casting_numbers(karat_item, wax_weight, bag_names):
+	"""stone_weight (issued stones only, ct x 0.2), gold_required, pure_gold_needed."""
+	stone_g = 0.0
+	for nm in bag_names or []:
+		for it in get_bag_contents(nm)["items"]:
+			if it["qty"] > 0 and frappe.db.get_value("Item", it["item"], "stone_type"):
+				stone_g += flt(it["qty"]) * 0.2
+	mp, purity = frappe.db.get_value("Item", karat_item, ["metal_purity", "purity_percentage"]) or (None, 0)
+	mult = CASTING_MULTIPLIER.get(mp or "", 0)
+	gold = max(0.0, flt(wax_weight) - CASTING_STEM_G - stone_g) * mult if flt(wax_weight) else 0.0
+	return {
+		"stone_weight": round(stone_g, 3),
+		"gold_required": round(gold, 3),
+		"pure_gold_needed": round(gold * flt(purity) / 100.0, 3),
+	}
+
+
+@frappe.whitelist()
 def make_tree(karat, names, employee=None, wax_weight=None):
 	"""Mount the selected TREE MAKING cards onto ONE wax tree (a Wax Tree record,
 	numbered T-<karat>-###), stamp the tree + employee on their bench records, and
@@ -420,6 +518,7 @@ def make_tree(karat, names, employee=None, wax_weight=None):
 	prefix = f"T-{suffix}-"
 	last = frappe.db.sql("SELECT name FROM `tabWax Tree` WHERE name LIKE %s ORDER BY name DESC LIMIT 1", (prefix + "%",))
 	nxt = (int(last[0][0].rsplit("-", 1)[1]) + 1) if last else 1
+	nums = _tree_casting_numbers(karat_val, wax_weight, [c.name for c in cards]) if karat_val else {}
 	tree = frappe.get_doc({
 		"doctype": "Wax Tree",
 		"tree_no": f"{prefix}{nxt:03d}",
@@ -428,6 +527,7 @@ def make_tree(karat, names, employee=None, wax_weight=None):
 		"made_on": frappe.utils.now_datetime(),
 		"wax_weight": flt(wax_weight) or None,
 		"cards": [{"order_bag": c.name, "design": c.design, "qty": c.qty} for c in cards],
+		**nums,
 	}).insert(ignore_permissions=True)
 
 	# stamp the bags + their TREE MAKING records, then move everything to CASTING

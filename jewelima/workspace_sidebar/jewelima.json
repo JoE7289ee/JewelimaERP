@@ -555,6 +555,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "flame",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Casting",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "flame",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Gold Casting",
+   "link_to": "gold-casting",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "settings",
    "indent": 0,
    "keep_closed": 1,
@@ -761,7 +787,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 22:27:02.787616",
+ "modified": "2026-07-07 23:05:18.595912",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

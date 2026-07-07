@@ -12,7 +12,10 @@
   "made_on",
   "wax_weight",
   "cards_section",
-  "cards"
+  "cards",
+  "stone_weight",
+  "gold_required",
+  "pure_gold_needed"
  ],
  "fields": [
   {
@@ -73,10 +76,34 @@
    "label": "Cards",
    "options": "Wax Tree Card",
    "read_only": 1
+  },
+  {
+   "fieldname": "stone_weight",
+   "fieldtype": "Float",
+   "label": "Stone Weight (g)",
+   "read_only": 1,
+   "precision": "3",
+   "description": "Issued stones on the tree's bags at make time — carats x 0.2. Nothing issued = 0."
+  },
+  {
+   "fieldname": "gold_required",
+   "fieldtype": "Float",
+   "label": "Gold Required (g)",
+   "read_only": 1,
+   "precision": "3",
+   "description": "(wax - 3g stem - stones) x karat multiplier (14K x13.5 / 18K x15.5 / 22K x18.5)."
+  },
+  {
+   "fieldname": "pure_gold_needed",
+   "fieldtype": "Float",
+   "label": "Pure Gold Needed (g)",
+   "read_only": 1,
+   "precision": "3",
+   "description": "Gold required x the karat's purity."
   }
  ],
  "links": [],
- "modified": "2026-07-05 10:00:00.000000",
+ "modified": "2026-07-08 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Wax Tree",
