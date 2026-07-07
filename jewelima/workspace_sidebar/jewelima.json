@@ -282,19 +282,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "users",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Party Stock",
-   "link_to": "party-stock",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
@@ -694,9 +681,35 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Party",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "users",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Party Stock Add",
+   "link_to": "party-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
   }
  ],
- "modified": "2026-07-07 14:06:31.040019",
+ "modified": "2026-07-07 14:15:16.263125",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

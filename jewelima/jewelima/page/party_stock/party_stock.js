@@ -11,13 +11,13 @@
 // Route: /app/party-stock
 
 frappe.pages["party-stock"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Party Stock", single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Party Stock Add", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const S = { parties: [], party: "", stones: [] };
 
 	$(page.main).append(`
 		<style>
-		.pst-wrap{max-width:1100px;display:flex;gap:14px;align-items:flex-start;}
+		.pst-wrap{display:flex;gap:14px;align-items:flex-start;}
 		.pst-col{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);}
 		.pst-parties{flex:0 0 340px;}
 		.pst-main{flex:1 1 auto;}
