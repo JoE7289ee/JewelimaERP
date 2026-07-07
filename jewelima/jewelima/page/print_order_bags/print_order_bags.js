@@ -157,6 +157,7 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .card { border: 1px solid #000; padding: 2mm 2.5mm; display: flex; flex-direction: column; overflow: hidden; font-size: 9px; line-height: 1.25; }
 .card .hd { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 4px; border-bottom: 1px solid #000; padding-bottom: 1.5mm; }
 .card .hd b { font-weight: 700; }
+.card .hd .pur { float: right; font-size: 13px; font-weight: 800; margin-left: 4px; }
 .card .md { display: grid; grid-template-columns: 34mm 1fr; gap: 3px; flex: 1 1 auto; min-height: 0; padding: 1.5mm 0; }
 .card .img { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #000; }
 .card .img img { max-width: 100%; max-height: 30mm; object-fit: contain; }
@@ -164,6 +165,11 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .card .it table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
 .card .it th, .card .it td { border: 1px solid #000; padding: 1px 3px; text-align: left; }
 .card .it th { background: #eee; }
+/* Qty + Weight stay EMPTY on print — the floor writes actual weights in; rows are
+   tall enough to write in by hand */
+.card .it td { height: 5mm; }
+.card .it th:nth-child(2), .card .it td:nth-child(2) { width: 17%; }
+.card .it th:nth-child(3), .card .it td:nth-child(3) { width: 30%; }
 .card .it .sum { margin-top: 1mm; font-size: 8.5px; }
 .card .ft { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; align-items: end; border-top: 1px solid #000; padding-top: 1mm; }
 .card .ft .bc svg { width: 100%; height: 12mm; }
@@ -176,11 +182,10 @@ function pob_esc(s) {
 }
 
 function pob_cardHTML(c) {
+	// Qty/Weight print as EMPTY boxes — the card collects the ACTUAL weights by hand;
+	// the planned targets stay on the summary line below the table.
 	const mats = (c.materials || [])
-		.map(
-			(m) => `<tr><td>${pob_esc(m.item)}${m.purity ? " - " + flt(m.purity) : ""}</td>
-				<td>${m.qty ? flt(m.qty) : ""}</td><td>${m.weight ? flt(m.weight) + " " + pob_esc(m.uom) : "NA"}</td></tr>`
-		)
+		.map((m) => `<tr><td>${pob_esc(m.item)}${m.purity ? " - " + flt(m.purity) : ""}</td><td></td><td></td></tr>`)
 		.join("");
 	const stones = [];
 	[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
@@ -191,7 +196,7 @@ function pob_cardHTML(c) {
 		<div class="hd">
 			<div><b>D TYPE:</b> ${pob_esc(c.design_type)}<br><b>D NAME:</b> ${pob_esc(c.design)}<br><b>D SIZE:</b> ${pob_esc(c.size || "NA")}</div>
 			<div>${pob_esc(c.customer)}<br><b>ORD:</b> ${pob_esc(c.order_date)}<br><b>DUE:</b> ${pob_esc(c.due_date)}</div>
-			<div><b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
+			<div>${c.purity ? `<span class="pur">${flt(c.purity)}%</span>` : ""}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
 		</div>
 		<div class="md">
 			<div class="img">${c.image ? `<img src="${pob_esc(c.image)}">` : ""}<div class="cap">${pob_esc(c.design)}</div></div>
