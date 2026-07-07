@@ -194,7 +194,7 @@
    "icon": "hammer",
    "indent": 0,
    "keep_closed": 1,
-   "label": "Production",
+   "label": "Manufacturing",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
@@ -493,7 +493,7 @@
    "icon": "chart-column",
    "indent": 0,
    "keep_closed": 1,
-   "label": "Dashboards",
+   "label": "Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
@@ -761,7 +761,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 19:34:44.307568",
+ "modified": "2026-07-07 22:27:02.787616",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
