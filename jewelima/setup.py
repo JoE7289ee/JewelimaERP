@@ -79,9 +79,12 @@ JEWELIMA_READ_ERPNEXT = [
 	"BOM", "Employee", "UOM", "Company", "Bin",
 ]
 # Order-flow doctypes the Ordering role fully manages.
-JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design"]
-# Desk pages the order-taker uses.
-JEWELIMA_ORDER_PAGES = ["place-order", "card-info", "job-order-status"]
+JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
+# Desk pages every Jewelima user can open (base role).
+JEWELIMA_ORDER_PAGES = ["card-info", "job-order-status", "order-requests"]
+# Desk pages ONLY the Ordering role opens — placing orders is restricted;
+# the wider team files wishes on order-requests instead.
+JEWELIMA_ORDERING_ONLY_PAGES = ["place-order"]
 
 
 def setup_roles():
@@ -122,19 +125,29 @@ def setup_roles():
 			perms.update({"submit": 1, "cancel": 1, "amend": 1})
 		grant(dt, "Jewelima Ordering", perms)
 
-	# order pages -> both roles (base can view, ordering can act)
-	for page in JEWELIMA_ORDER_PAGES:
+	# shared pages -> both roles; place-order -> Ordering ONLY (base users file
+	# requests on order-requests instead of placing orders)
+	def set_page_roles(page, wanted, strip=()):
 		if not frappe.db.exists("Page", page):
-			continue
+			return
 		pg = frappe.get_doc("Page", page)
+		changed = False
+		if strip and any(r.role in strip for r in pg.roles):
+			pg.set("roles", [r for r in pg.roles if r.role not in strip])
+			changed = True
 		have = {r.role for r in pg.roles}
-		added = False
-		for role in ("Jewelima", "Jewelima Ordering"):
+		for role in wanted:
 			if role not in have:
 				pg.append("roles", {"role": role})
-				added = True
-		if added:
+				changed = True
+		if changed:
 			pg.save(ignore_permissions=True)
+
+	for page in JEWELIMA_ORDER_PAGES:
+		set_page_roles(page, ("Jewelima", "Jewelima Ordering"))
+	for page in JEWELIMA_ORDERING_ONLY_PAGES:
+		set_page_roles(page, ("Jewelima Ordering",),
+		               strip=("Jewelima", "Manufacturing Manager", "Manufacturing User"))
 
 	# Role Profile bundle for easy assignment
 	if not frappe.db.exists("Role Profile", "Jewelima Order Taker"):

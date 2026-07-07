@@ -755,7 +755,6 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 	state.resetPage = resetPage;
 
 	page.add_inner_button(__("Requests"), () => openRequestsDialog(state));
-	page.add_inner_button(__("Save Request"), () => saveRequest(state));
 	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
 	page.add_inner_button(__("Add Row"), () => addRow());
 	page.add_inner_button(__("Add 10 Rows"), () => addRows(10));
@@ -799,36 +798,6 @@ function po_fillPage(state, data) {
 		});
 	});
 	if (data.lines && data.lines.length) state.addRow(); // trailing empty line
-}
-
-function saveRequest(state) {
-	const all = state.rows.map(po_readLine);
-	const lines = all.filter((l) => l.design);
-	const cads = all.filter((l) => !l.design && l.cad);
-	if (cads.length) {
-		frappe.msgprint(__("{0} CAD line(s) can't go on a request — requests carry designs only; place CAD lines directly.", [cads.length]));
-		return;
-	}
-	if (!lines.length) {
-		frappe.msgprint(__("Add at least one line with a Design to save a request."));
-		return;
-	}
-	const payload = {
-		customer: state.header.customer.get_value(),
-		salesman: state.header.salesman.get_value(),
-		order_type: state.header.order_type.get_value(),
-		days: cint(state.header.days.get_value()),
-		cust_days: cint(state.header.cust_days.get_value()),
-		lines: lines.map((l) => ({ design: l.design, qty: l.qty || 1, size: l.size, remark: l.narration })),
-	};
-	frappe.call({ method: "jewelima.jewelima.api.save_order_request", args: { payload } }).then((r) => {
-		frappe.show_alert({ message: __("Request {0} saved — the order has NOT been placed.", [r.message]), indicator: "blue" }, 7);
-		frappe.msgprint({
-			title: __("Request saved"), indicator: "blue",
-			message: __("{0} saved with {1} line(s). It shows under <b>Requests</b> until someone places it.", [r.message, lines.length]),
-		});
-		state.resetPage();
-	});
 }
 
 function openRequestsDialog(state) {

@@ -1190,6 +1190,20 @@ def get_order_request(name):
 
 
 @frappe.whitelist()
+def get_my_order_requests():
+	"""The session user's recent requests (any status) — the Order Requests page's
+	'My Requests' list, so requesters can see when theirs got placed."""
+	reqs = frappe.get_all(
+		"Order Request", filters={"requested_by": frappe.session.user},
+		fields=["name", "request_date", "customer", "status", "job_order"],
+		order_by="creation desc", limit=20,
+	)
+	for r in reqs:
+		r["lines"] = frappe.db.count("Order Request Item", {"parent": r.name})
+	return reqs
+
+
+@frappe.whitelist()
 def mark_order_request_placed(name, job_order):
 	"""Stamp a request once its order went through (called by the Place Order page)."""
 	if not frappe.db.exists("Order Request", name):
