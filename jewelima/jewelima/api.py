@@ -1217,6 +1217,42 @@ def get_order_request(name):
 
 
 @frappe.whitelist()
+def get_all_order_requests(status=None, customer=None, order_type=None, salesman=None, design=None):
+	"""Every request, filterable — the review board (Setup > Order Setup > All
+	Requests). The design filter matches requests CONTAINING that design."""
+	filters = {}
+	if status and status != "All":
+		filters["status"] = status
+	for k, v in (("customer", customer), ("order_type", order_type), ("salesman", salesman)):
+		if v:
+			filters[k] = v
+	if design:
+		parents = frappe.get_all("Order Request Item", filters={"design": design}, pluck="parent", distinct=True)
+		if not parents:
+			return []
+		filters["name"] = ["in", parents]
+	reqs = frappe.get_all(
+		"Order Request", filters=filters,
+		fields=["name", "request_date", "requested_by", "customer", "order_type", "salesman", "status", "job_order", "notes"],
+		order_by="creation desc", limit=200,
+	)
+	out = []
+	for r in reqs:
+		items = frappe.get_all("Order Request Item", filters={"parent": r.name},
+		                       fields=["design", "qty"], order_by="idx")
+		out.append({
+			"name": r.name, "request_date": r.request_date,
+			"requested_by": frappe.utils.get_fullname(r.requested_by),
+			"customer": r.customer or "", "order_type": r.order_type or "", "salesman": r.salesman or "",
+			"status": r.status, "job_order": r.job_order or "", "notes": r.notes or "",
+			"lines": len(items),
+			"qty": sum(cint(i.qty) or 0 for i in items),
+			"designs": ", ".join((i.design or "CAD") for i in items[:4]) + ("…" if len(items) > 4 else ""),
+		})
+	return out
+
+
+@frappe.whitelist()
 def get_my_order_requests():
 	"""The session user's recent requests (any status) — the Order Requests page's
 	'My Requests' list, so requesters can see when theirs got placed."""

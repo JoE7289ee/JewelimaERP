@@ -801,6 +801,13 @@ const PO_COLUMNS = [
 
 	addRow(); // start with a single line
 
+	// handoff from the All Requests board: route_options carry the request to place
+	const _ro = frappe.route_options || {};
+	if (OPTS.mode === "order" && _ro.order_request) {
+		frappe.route_options = null;
+		po_useRequest(state, _ro.order_request);
+	}
+
 	if (OPTS.mode === "order") {
 		page.set_primary_action(__("Place Order"), () => placeOrder(page, state, renumber, addRow, $body), "add");
 	} else {
@@ -998,18 +1005,22 @@ function openRequestsDialog(state) {
 			</table></div>`);
 		d.$wrapper.find(".po-req-use").on("click", function () {
 			const name = this.getAttribute("data-name");
-			frappe.call({ method: "jewelima.jewelima.api.get_order_request", args: { name } }).then((rr) => {
-				d.hide();
-				po_fillPage(state, rr.message || {});
-				state.activeRequest = name;
-				frappe.show_alert({
-					message: __("Filled from {0} — placing the order will mark it Placed.", [name]),
-					indicator: "blue",
-				}, 7);
-			});
+			po_useRequest(state, name).then(() => d.hide());
 		});
 	});
 	d.show();
+}
+
+// pull one request onto the page and remember it — placing stamps it Placed
+function po_useRequest(state, name) {
+	return frappe.call({ method: "jewelima.jewelima.api.get_order_request", args: { name } }).then((rr) => {
+		po_fillPage(state, rr.message || {});
+		state.activeRequest = name;
+		frappe.show_alert({
+			message: __("Filled from {0} — placing the order will mark it Placed.", [name]),
+			indicator: "blue",
+		}, 7);
+	});
 }
 
 function po_readLine(r) {
