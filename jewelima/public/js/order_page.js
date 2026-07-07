@@ -73,8 +73,8 @@ const PO_COLUMNS = [
 		</style>
 		<div class="po-wrap">
 			<div class="po-head">
-				${OPTS.mode === "request" ? '<div class="po-h-orderno"></div>' : ""}<div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
-				${OPTS.mode === "order" ? '<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-custdays"></div>' : ""}
+				${OPTS.mode === "order" ? '<div class="po-h-orderdate"></div>' : '<div class="po-h-orderno"></div>'}<div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
+				${OPTS.mode === "order" ? '<div class="po-h-days"></div><div class="po-h-custdays"></div>' : ""}
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
