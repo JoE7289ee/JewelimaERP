@@ -1013,6 +1013,48 @@ def get_raw_material_tree():
 
 
 @frappe.whitelist()
+def get_stone_buckets():
+	"""The six stone buckets (DMD/PS/CS/CVD/PDMD/POTH) with every item that feeds
+	each — powers the read-only Stone Buckets page. An item's bucket IS its
+	stone_type; the order matches the Order Bag stone columns."""
+	import re
+
+	buckets = [
+		("DMD", "Diamond"), ("PS", "Precious Stone"), ("CS", "Color Stone"),
+		("CVD", "CVD"), ("PDMD", "Party Diamond"), ("POTH", "Party Other"),
+	]
+	rows = frappe.get_all(
+		"Item",
+		filters={"stone_type": ["in", [b[1] for b in buckets]]},
+		fields=["name", "item_group", "stock_uom", "stone_type", "disabled"],
+	)
+
+	def natkey(s):
+		return [(0, int(t)) if t.isdigit() else (1, t.upper()) for t in re.split(r"(\d+)", s or "") if t]
+
+	from jewelima.jewelima.raw_materials import RAW_MATERIALS
+
+	registry_order = {code: i for i, (code, *_rest) in enumerate(RAW_MATERIALS)}
+	in_registry = len(registry_order)
+
+	by_type = {}
+	for it in rows:
+		by_type.setdefault(it.stone_type, []).append({
+			"name": it.name,
+			"group": it.item_group or "",
+			"uom": it.stock_uom or "",
+			"disabled": int(it.disabled or 0),
+			"in_registry": it.name in registry_order,
+		})
+
+	out = []
+	for code, st in buckets:
+		items = sorted(by_type.get(st, []), key=lambda i: (registry_order.get(i["name"], in_registry), natkey(i["name"])))
+		out.append({"code": code, "stone_type": st, "items": items, "count": len(items)})
+	return {"buckets": out, "total_items": sum(b["count"] for b in out)}
+
+
+@frappe.whitelist()
 def get_item_stone_profile(item):
 	"""Given a finished item, read its (default) BOM and tally the stone counts by
 	stone type — Diamond -> dmd_no, Precious Stone -> ps_no, Color Stone -> cs_no.

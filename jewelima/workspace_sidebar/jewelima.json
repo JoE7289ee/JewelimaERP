@@ -542,14 +542,14 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "warehouse",
-   "indent": 1,
+   "icon": "",
+   "indent": 0,
    "keep_closed": 0,
-   "label": "Raw Materials",
-   "link_to": "raw-materials",
-   "link_type": "Page",
+   "label": "",
+   "link_to": "",
+   "link_type": "",
    "show_arrow": 0,
-   "type": "Link",
+   "type": "Spacer",
    "url": ""
   },
   {
@@ -649,6 +649,32 @@
    "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
+   "label": "Raw Materials",
+   "link_to": "raw-materials",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stone Buckets",
+   "link_to": "stone-buckets",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "warehouse",
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Warehouse Management",
    "link_to": "warehouse-management",
    "link_type": "Page",
@@ -670,7 +696,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 01:17:54.228163",
+ "modified": "2026-07-07 11:56:11.823903",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

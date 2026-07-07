@@ -89,7 +89,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 		"stock-transfer", "make-products", "finished-items", "card-info", "job-order-status",
 		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
 		"order-masters", "warehouse-management", "print-order-bags", "order-bag-photos",
-		"cad-jobs", "make-tree", "raw-materials",
+		"cad-jobs", "make-tree", "raw-materials", "stone-buckets",
 		"bench-dashboard", "employee-performance", "warehouse-stock", "item-stock",
 	]);
 	let last = null;
@@ -167,6 +167,10 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 			el.classList.toggle("hidden", closed);
 		});
 	}
+	// the Setup section holds only sub-groups; core refuses to render a section
+	// with no direct links, so the JSON gives it an invisible Spacer child — hide
+	// the blank row it produces (label-less container inside our sidebar)
+	$("<style>").text('[data-title="Jewelima"] .nested-container .sidebar-item-container[title=""]{display:none;}').appendTo("head");
 	const later = () => {
 		setTimeout(sync, 0);
 		setTimeout(sync, 300); // asset/render races on dev bench
