@@ -681,22 +681,9 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "shapes",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Stone Type",
-   "link_to": "Stone Type",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
   }
  ],
- "modified": "2026-07-07 11:56:11.823903",
+ "modified": "2026-07-07 12:00:11.688195",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

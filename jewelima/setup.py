@@ -686,12 +686,18 @@ def get_item_custom_fields():
 
 
 def create_default_stone_types():
-	"""Seed the three base stone categories the business works with."""
-	for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Party Diamond", "Party Other"]:
-		if not frappe.db.exists("Stone Type", stone_type):
-			frappe.get_doc(
-				{"doctype": "Stone Type", "stone_type_name": stone_type}
-			).insert(ignore_permissions=True)
+	"""Seed the six stone buckets. This is the ONLY place Stone Types come from —
+	the controller blocks UI create/rename/delete (bucket maps + the Order Bag
+	stone columns are keyed to these exact names)."""
+	frappe.flags.allow_stone_type_edit = True
+	try:
+		for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Party Diamond", "Party Other"]:
+			if not frappe.db.exists("Stone Type", stone_type):
+				frappe.get_doc(
+					{"doctype": "Stone Type", "stone_type_name": stone_type}
+				).insert(ignore_permissions=True)
+	finally:
+		frappe.flags.allow_stone_type_edit = False
 	frappe.db.commit()
 
 
