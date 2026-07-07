@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "format:R{####}",
+ "autoname": "R.####",
  "creation": "2026-07-07 23:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -120,7 +120,7 @@
   }
  ],
  "links": [],
- "modified": "2026-07-08 14:00:00.000000",
+ "modified": "2026-07-08 14:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Request",
@@ -158,5 +158,6 @@
  "sort_order": "DESC",
  "states": [],
  "title_field": "customer",
- "track_changes": 1
+ "track_changes": 1,
+ "naming_rule": "Expression (old style)"
 }
