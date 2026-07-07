@@ -315,7 +315,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		renderMaterials(); solve(); loadStock();
 	});
 
-	page.set_primary_action(__("Melt"), () => {
+	function doMelt(sendToCasting) {
 		const warehouse = whCtl.get_value(), output_item = outCtl.get_value();
 		if (!warehouse) return frappe.msgprint(__("Pick the Gold Issue warehouse."));
 		if (!output_item) return frappe.msgprint(__("Pick what to create."));
@@ -326,18 +326,30 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		const over = S.rows.filter((r) => flt(r.weight) > flt(r.available) + 0.0005);
 		if (over.length) return frappe.msgprint(__("Not enough stock: {0}. Use “Full” or lower the weight.", [over.map((r) => `${r.item} (need ${fmt(r.weight)}, have ${fmt(r.available)})`).join("; ")]));
 
-		frappe.dom.freeze(__("Melting…"));
+		frappe.dom.freeze(sendToCasting ? __("Melting + sending to Casting…") : __("Melting…"));
 		frappe.call({
 			method: "jewelima.jewelima.api.melt_gold",
-			args: { warehouse, output_item, output_weight, inputs: JSON.stringify(inputs) },
+			args: { warehouse, output_item, output_weight, inputs: JSON.stringify(inputs), send_to_casting: sendToCasting ? 1 : 0 },
 		}).then((r) => {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
 			if (!res.name) return;
 			frappe.show_alert({ message: __("Melted {0} g → {1} g of {2} (loss {3} g)", [res.total_in, res.output, output_item, res.loss]), indicator: "green" }, 7);
-			frappe.msgprint({ title: __("Melt complete"), indicator: "green", message: __("Stock Entry {0} posted. <a href='/app/stock-entry/{0}'>Open</a>", [res.name]) });
+			frappe.msgprint({
+				title: sendToCasting ? __("Melted + sent to Casting") : __("Melt complete"),
+				indicator: "green",
+				message: __("Stock Entry {0} posted. <a href='/app/stock-entry/{0}'>Open</a>", [res.name])
+					+ (res.casting_transfer
+						? "<br>" + __("{0} g of {1} moved on to {2} (<a href='/app/stock-entry/{3}'>{3}</a>).", [res.output, output_item, res.casting_warehouse, res.casting_transfer])
+						: ""),
+			});
 			S.rows = []; renderMaterials(); solve(); loadStock();
 		}).catch(() => frappe.dom.unfreeze());
+	}
+
+	page.set_secondary_action(__("Melt and Send to Casting"), () => doMelt(true));
+	page.set_primary_action(__("Melt"), () => {
+		doMelt(false);
 	}, "add");
 
 	renderMaterials();

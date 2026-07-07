@@ -52,11 +52,13 @@ def _stock_move(item, qty, source, target):
 
 
 @frappe.whitelist()
-def melt_gold(warehouse, output_item, output_weight, inputs):
+def melt_gold(warehouse, output_item, output_weight, inputs, send_to_casting=0):
 	"""Convert fine gold + alloy into a karat gold (e.g. 999 -> 18KPG) in ONE warehouse.
 	Repack Stock Entry: consume each input (gold, alloy) and produce `output_weight` grams
 	of `output_item` in the same warehouse. inputs = [{item, weight}, ...]. Output weight
-	may be less than total input (the difference is melt loss)."""
+	may be less than total input (the difference is melt loss). With `send_to_casting`
+	the repack fires first, then the fresh karat gold transfers straight on to the
+	Casting warehouse (rule 1: casting gold lives there)."""
 	if isinstance(inputs, str):
 		inputs = json.loads(inputs or "[]")
 	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
@@ -100,8 +102,12 @@ def melt_gold(warehouse, output_item, output_weight, inputs):
 	se.flags.ignore_permissions = True
 	se.insert()
 	se.submit()
+	out = {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3), "loss": round(total_in - out_w, 3)}
+	if cint(send_to_casting):
+		out["casting_transfer"] = _stock_move(output_item, out_w, warehouse, _wh("Casting"))
+		out["casting_warehouse"] = _wh("Casting")
 	frappe.db.commit()
-	return {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3), "loss": round(total_in - out_w, 3)}
+	return out
 
 
 @frappe.whitelist()
