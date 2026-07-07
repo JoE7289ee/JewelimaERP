@@ -167,13 +167,13 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .card .it th { background: #eee; }
 /* Qty + Weight stay EMPTY on print — the floor writes actual weights in; rows are
    tall enough to write in by hand */
-.card .it td { height: 5mm; }
+.card .it td { height: 6.5mm; }
 .card .it th:nth-child(2), .card .it td:nth-child(2) { width: 17%; }
 .card .it th:nth-child(3), .card .it td:nth-child(3) { width: 30%; }
 .card .it .sum { margin-top: 1mm; font-size: 8.5px; }
 .card .ft { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; align-items: end; border-top: 1px solid #000; padding-top: 1mm; }
-.card .ft .bc svg { width: 100%; height: 12mm; }
-.card .ft .num { font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+.card .ft .bc svg { width: 88%; height: 9mm; }
+.card .ft .num { font-size: 10px; font-weight: 700; letter-spacing: 1px; }
 .card .ft .rm { font-size: 8.5px; align-self: start; }
 `;
 
