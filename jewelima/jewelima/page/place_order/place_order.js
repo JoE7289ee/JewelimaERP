@@ -11,9 +11,10 @@
 const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
 
 const PO_COLUMNS = [
-	{ key: "design", label: "Design", type: "link", options: "Design", width: "220px" },
-	{ key: "qty", label: "Qty", type: "int", width: "60px" },
-	{ key: "size", label: "Size", type: "select", options: PO_SIZES, width: "90px" },
+	// shrink: hug the min-width (width:1%) instead of soaking up the free space
+	{ key: "design", label: "Design", type: "link", options: "Design", width: "165px", shrink: 1 },
+	{ key: "qty", label: "Qty", type: "int", width: "46px", shrink: 1 },
+	{ key: "size", label: "Size", type: "select", options: PO_SIZES, width: "92px", shrink: 1 },
 	{ key: "design_type", label: "Type", type: "ro", width: "120px" },
 	{ key: "gross_weight", label: "Gross (g)", type: "ro", width: "85px" },
 	{ key: "nett_weight", label: "Nett (g)", type: "ro", width: "85px" },
@@ -144,7 +145,7 @@ frappe.pages["place-order"].on_page_load = function (wrapper) {
 
 	const $headrow = $(page.main).find(".po-headrow");
 	$headrow.append('<th class="po-num">#</th>');
-	PO_COLUMNS.forEach((c) => $headrow.append(`<th class="po-c-${c.key}" style="min-width:${c.width}">${frappe.utils.escape_html(c.label)}</th>`));
+	PO_COLUMNS.forEach((c) => $headrow.append(`<th class="po-c-${c.key}" style="min-width:${c.width}${c.shrink ? ";width:1%" : ""}">${frappe.utils.escape_html(c.label)}</th>`));
 	$headrow.append('<th style="width:285px;text-align:center">Functions</th>');
 	$headrow.append('<th style="width:34px"></th>');
 
