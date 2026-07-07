@@ -818,7 +818,7 @@ const PO_COLUMNS = [
 			box.html(`
 				<table><thead><tr>
 					<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("Customer")}</th>
-					<th style="text-align:center">${__("Lines")}</th><th>${__("Status")}</th><th>${__("Order")}</th>
+					<th style="text-align:center">${__("Lines")}</th><th>${__("Status")}</th><th>${__("Order")}</th><th></th>
 				</tr></thead><tbody>${reqs.map((q) => `
 					<tr>
 						<td><a href="/app/order-request/${encodeURIComponent(q.name)}"><b>${esc(q.name)}</b></a></td>
@@ -827,8 +827,18 @@ const PO_COLUMNS = [
 						<td style="text-align:center">${q.lines}</td>
 						<td><span class="po-badge ${q.status.toLowerCase()}">${esc(q.status)}</span></td>
 						<td>${q.job_order ? `<a href="/app/job-order/${encodeURIComponent(q.job_order)}">${esc(q.job_order)}</a>` : "—"}</td>
+						<td style="text-align:center">${q.status === "Placed" ? "" : `<button class="btn btn-xs btn-danger po-req-del" data-name="${esc(q.name)}">${__("Delete")}</button>`}</td>
 					</tr>`).join("")}
 				</tbody></table>`);
+			box.find(".po-req-del").on("click", function () {
+				const name = this.getAttribute("data-name");
+				frappe.confirm(__("Delete {0}? This can't be undone.", [name]), () => {
+					frappe.call({ method: "jewelima.jewelima.api.delete_order_request", args: { name } }).then(() => {
+						frappe.show_alert({ message: __("{0} deleted.", [name]), indicator: "orange" }, 4);
+						loadMyRequests();
+					});
+				});
+			});
 		});
 	}
 

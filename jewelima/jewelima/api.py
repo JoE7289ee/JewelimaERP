@@ -1231,6 +1231,15 @@ def get_my_order_requests():
 
 
 @frappe.whitelist()
+def delete_order_request(name):
+	"""Delete a request from the My Requests list. The controller's on_trash
+	enforces the rules: never once Placed, and only by the requester (or SM)."""
+	doc = frappe.get_doc("Order Request", name)
+	doc.delete(ignore_permissions=True)
+	frappe.db.commit()
+
+
+@frappe.whitelist()
 def mark_order_request_placed(name, job_order):
 	"""Stamp a request once its order went through (called by the Place Order page)."""
 	if not frappe.db.exists("Order Request", name):

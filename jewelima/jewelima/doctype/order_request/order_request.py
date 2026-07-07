@@ -23,3 +23,7 @@ class OrderRequest(Document):
 		if self.status == "Placed":
 			frappe.throw(_("{0} was already placed as {1} — placed requests are history, not deletable.").format(
 				self.name, self.job_order or _("an order")))
+		# only the requester (or a System Manager) may delete — enforced here so the
+		# rule holds on every path: the page button, the list view, the API
+		if frappe.session.user != self.requested_by and "System Manager" not in frappe.get_roles():
+			frappe.throw(_("Only the requester ({0}) can delete this request.").format(self.requested_by))
