@@ -1883,9 +1883,14 @@ def add_weight(order_bag, item, qty, bench=None, remarks=None):
 
 
 @frappe.whitelist()
-def issue_stones(order_bag, item, qty, pcs=0, bench=None, remarks=None):
-	"""Issue stones into a bag (qty = carats, pcs = number of stones) — before work."""
+def issue_stones(order_bag, item, qty, pcs=0, bench=None, remarks=None, from_warehouse=None):
+	"""Issue stones into a bag (qty = carats, pcs = number of stones) — before work.
+	Moves real stock too: source warehouse (default Stone Issue) -> In Bags pool."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, STONE_ISSUE_WAREHOUSE
+
+	src = from_warehouse if (from_warehouse and frappe.db.exists("Warehouse", from_warehouse)) else _wh(STONE_ISSUE_WAREHOUSE)
 	name = _bag_ledger(order_bag, item, "In", qty, "Stone Issue", bench=bench, remarks=remarks, pcs=pcs)
+	_stock_move(item, flt(qty), src, _wh(IN_PRODUCTION_WAREHOUSE))
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
@@ -2582,9 +2587,10 @@ def convert_to_ornament(order_bag):
 	in_bags, fg = _wh(IN_PRODUCTION_WAREHOUSE), _wh("Finished Goods")
 	for it in held:
 		_bag_ledger(order_bag, it["item"], "Out", it["qty"], "Convert")
-		# gold drains from the In Bags pool into Finished Goods (stones aren't pooled)
-		if not frappe.db.get_value("Item", it["item"], "stone_type"):
-			_stock_move(it["item"], it["qty"], in_bags, fg)
+		# EVERYTHING the piece holds drains from the In Bags pool into Finished Goods —
+		# the warehouse book stays raw-material-denominated (grams + carats); the
+		# piece dimension rides on top via the bag's Convert rows + frozen actuals
+		_stock_move(it["item"], it["qty"], in_bags, fg)
 	frappe.db.set_value("Order Bag", order_bag, "is_finished", 1)  # locks the BOM (plan)
 	frappe.db.commit()
 	return {"order_bag": order_bag, "consumed": held}
