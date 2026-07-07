@@ -1121,6 +1121,85 @@ def get_party_stones(party):
 	         "stone_type": r.stone_type, "disabled": int(r.disabled or 0)} for r in rows]
 
 
+# --- Order number reservations ------------------------------------------------------
+# The Place Order page CLAIMS its E#### the moment it opens, so the number is
+# known before placing. Rules: a user re-opening the page gets their own unused
+# claim back (no burn); claims idle past the recycle window return to a pool and
+# new sessions drain the pool OLDEST FIRST (gaps fill later); otherwise a fresh
+# number is minted off the same E series. Placing consumes the claim atomically —
+# if it was recycled away in the meantime, placement self-heals with a fresh one.
+ORDER_NO_RECYCLE_HOURS = 2
+
+
+def _mint_order_no():
+	from frappe.model.naming import make_autoname
+
+	return make_autoname("E.####")  # the Job Order series — one counter for both paths
+
+
+@frappe.whitelist()
+def reserve_order_no():
+	"""Claim an order number for this session (called when Place Order opens)."""
+	me = frappe.session.user
+	now = frappe.utils.now_datetime()
+	cutoff = frappe.utils.add_to_date(now, hours=-ORDER_NO_RECYCLE_HOURS)
+
+	# 1. my own unused claim — same number every time I come back
+	mine = frappe.get_all("Order No Reservation", filters={"reserved_by": me},
+	                      order_by="reserved_on desc", pluck="name", limit=1)
+	if mine:
+		frappe.db.set_value("Order No Reservation", mine[0], "reserved_on", now, update_modified=False)
+		frappe.db.commit()
+		return mine[0]
+
+	# 2. the pool: abandoned claims, oldest first (this is what fills the gaps)
+	for no in frappe.get_all("Order No Reservation", filters={"reserved_on": ["<", cutoff]},
+	                         order_by="reserved_on asc", pluck="name", limit=5):
+		frappe.db.sql(
+			"""update `tabOrder No Reservation` set reserved_by = %s, reserved_on = %s
+			   where name = %s and reserved_on < %s""",
+			(me, now, no, cutoff),
+		)
+		if frappe.db._cursor.rowcount:  # atomic — only one session wins a recycled number
+			frappe.db.commit()
+			return no
+
+	# 3. mint fresh off the series
+	no = _mint_order_no()
+	frappe.get_doc({
+		"doctype": "Order No Reservation", "order_no": no, "reserved_by": me, "reserved_on": now,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return no
+
+
+@frappe.whitelist()
+def create_job_order(payload):
+	"""Create the Job Order under the session's reserved number (autoname would
+	override an explicit name client-side). If the claim was recycled away — or
+	the number somehow exists — self-heal with a freshly minted one."""
+	p = frappe.parse_json(payload)
+	no = (p.get("order_no") or "").strip()
+	claimed = False
+	if no:
+		frappe.db.sql("delete from `tabOrder No Reservation` where name = %s", no)
+		claimed = bool(frappe.db._cursor.rowcount)
+	if not claimed or not no or frappe.db.exists("Job Order", no):
+		no = _mint_order_no()
+	doc = frappe.get_doc({
+		"doctype": "Job Order",
+		"order_date": p.get("order_date") or frappe.utils.today(),
+		"due_date": p.get("due_date") or None,
+		"customer_date": p.get("customer_date") or None,
+		"customer": p.get("customer") or None,
+		"salesman": p.get("salesman") or None,
+		"order_type": p.get("order_type") or None,
+	})
+	doc.insert(ignore_permissions=True, set_name=no)
+	frappe.db.commit()
+	return doc.name
+
+
 # --- Order Requests + repeat orders ------------------------------------------------
 # A request = a saved Place Order page (header + basic lines) that hasn't gone
 # through. Any base-role user files one; the Order User pulls it up on the page

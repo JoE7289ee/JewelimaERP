@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "autoname": "field:order_no",
+ "creation": "2026-07-08 17:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "order_no",
+  "reserved_by",
+  "reserved_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Order No",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "reserved_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Reserved By",
+   "options": "User"
+  },
+  {
+   "fieldname": "reserved_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Reserved On"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-08 17:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Order No Reservation",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

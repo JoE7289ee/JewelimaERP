@@ -787,7 +787,7 @@ const PO_COLUMNS = [
 		if (state.header.days) state.header.days.set_value(0);
 		if (state.header.cust_days) state.header.cust_days.set_value(0);
 		if (state.showDue) state.showDue();
-		if (state.header.order_no) state.header.order_no.set_value("");
+		if (state.header.order_no) state.header.order_no.set_value(state.reservedNo || "");
 		if (state.header.notes) state.header.notes.set_value("");
 		if (state.header.order_date) state.header.order_date.set_value(frappe.datetime.get_today());
 		addRow();
@@ -806,6 +806,15 @@ const PO_COLUMNS = [
 	if (OPTS.mode === "order" && _ro.order_request) {
 		frappe.route_options = null;
 		po_useRequest(state, _ro.order_request);
+	}
+
+	// claim the order number up front — the same claim comes back if you re-open;
+	// abandoned claims recycle to other sessions after a while (gaps fill later)
+	if (OPTS.mode === "order") {
+		frappe.call({ method: "jewelima.jewelima.api.reserve_order_no" }).then((r) => {
+			state.reservedNo = r.message || "";
+			if (state.header.order_no && state.reservedNo) state.header.order_no.set_value(state.reservedNo);
+		});
 	}
 
 	if (OPTS.mode === "order") {
@@ -1071,15 +1080,19 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 
 	frappe.dom.freeze(__("Placing order…"));
 	try {
-		const order = await frappe.db.insert({
-			doctype: "Job Order",
-			order_date: order_date || frappe.datetime.get_today(),
-			due_date: due_date || undefined,
-			customer_date: customer_date || undefined,
-			customer: customer || undefined,
-			salesman: salesman || undefined,
-			order_type: order_type || undefined,
+		const jr = await frappe.call({
+			method: "jewelima.jewelima.api.create_job_order",
+			args: { payload: {
+				order_no: state.reservedNo || "",
+				order_date: order_date || frappe.datetime.get_today(),
+				due_date, customer_date, customer, salesman, order_type,
+			} },
 		});
+		const order = { name: jr.message };
+		if (state.reservedNo && order.name !== state.reservedNo) {
+			frappe.show_alert({ message: __("{0} was recycled meanwhile — placed as {1} instead.", [state.reservedNo, order.name]), indicator: "orange" }, 8);
+		}
+		state.reservedNo = "";
 		let made = 0;
 		for (const l of lines) {
 			await frappe.db.insert({
@@ -1109,6 +1122,10 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 			state.activeRequest = "";
 		}
 		state.header.order_no.set_value(order.name);
+		// claim the next number right away so the following order is ready to write
+		frappe.call({ method: "jewelima.jewelima.api.reserve_order_no" }).then((r) => {
+			state.reservedNo = r.message || "";
+		});
 		frappe.show_alert({ message: __("Placed {0} with {1} card(s).", [order.name, made]), indicator: "green" }, 7);
 		frappe.msgprint({
 			title: __("Order placed"), indicator: "green",
