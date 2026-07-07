@@ -71,7 +71,7 @@ const PO_COLUMNS = [
 		<div class="po-wrap">
 			<div class="po-head">
 				<div class="po-h-orderno"></div><div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
-				<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-custdays"></div>
+				${OPTS.mode === "order" ? '<div class="po-h-orderdate"></div><div class="po-h-days"></div><div class="po-h-custdays"></div>' : ""}
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
@@ -112,6 +112,7 @@ const PO_COLUMNS = [
 	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Customer", fieldname: "customer", options: "Customer" });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
 	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", get_query: () => ({ filters: { disabled: 0 } }) });
+	if (OPTS.mode === "order") {
 	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date", read_only: 1 });
 	state.header.days = mk(".po-h-days", {
 		fieldtype: "Int", label: "Days (Due Date)", fieldname: "days",
@@ -154,13 +155,14 @@ const PO_COLUMNS = [
 		if (cint(state.header.cust_days.get_value()) < 0) state.header.cust_days.set_value(0);
 		showDue();
 	});
+	} // end order-mode dates block
 
 	// Pre-fill Days / Type / Salesman from the global Order Settings (Setup → Order Settings).
 	frappe.call({ method: "jewelima.jewelima.api.get_order_defaults" }).then((r) => {
 		const d = r.message || {};
-		if (cint(d.days) && !cint(state.header.days.get_value())) {
+		if (state.header.days && cint(d.days) && !cint(state.header.days.get_value())) {
 			// set_value resolves async — show the date only once the value has landed
-			Promise.resolve(state.header.days.set_value(cint(d.days))).then(() => showDue());
+			Promise.resolve(state.header.days.set_value(cint(d.days))).then(() => state.showDue && state.showDue());
 		}
 		if (d.order_type && !state.header.order_type.get_value()) state.header.order_type.set_value(d.order_type);
 		if (d.salesman && !state.header.salesman.get_value()) state.header.salesman.set_value(d.salesman);
@@ -762,8 +764,6 @@ const PO_COLUMNS = [
 	state.updateDesignBtn = updateDesignBtn;
 	state.updateNewBtn = updateNewBtn;
 
-	const addRows = (n) => { let last; for (let i = 0; i < n; i++) last = addRow(); return last; };
-
 	const resetPage = () => {
 		$body.empty();
 		state.rows = [];
@@ -771,12 +771,12 @@ const PO_COLUMNS = [
 		state.header.customer.set_value("");
 		state.header.salesman.set_value("");
 		state.header.order_type.set_value("");
-		state.header.days.set_value(0);
-		state.header.cust_days.set_value(0);
+		if (state.header.days) state.header.days.set_value(0);
+		if (state.header.cust_days) state.header.cust_days.set_value(0);
 		if (state.showDue) state.showDue();
 		if (state.header.order_no) state.header.order_no.set_value("");
 		if (state.header.notes) state.header.notes.set_value("");
-		state.header.order_date.set_value(frappe.datetime.get_today());
+		if (state.header.order_date) state.header.order_date.set_value(frappe.datetime.get_today());
 		addRow();
 	};
 	state.resetPage = resetPage;
@@ -784,7 +784,6 @@ const PO_COLUMNS = [
 	if (OPTS.mode === "order") page.add_inner_button(__("Requests"), () => openRequestsDialog(state));
 	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
 	page.add_inner_button(__("Add Row"), () => addRow());
-	page.add_inner_button(__("Add 10 Rows"), () => addRows(10));
 	page.add_inner_button(__("Reset"), resetPage);
 
 	addRow(); // start with a single line
@@ -845,8 +844,8 @@ const PO_COLUMNS = [
 			customer: state.header.customer.get_value(),
 			salesman: state.header.salesman.get_value(),
 			order_type: state.header.order_type.get_value(),
-			days: cint(state.header.days.get_value()),
-			cust_days: cint(state.header.cust_days.get_value()),
+			days: state.header.days ? cint(state.header.days.get_value()) : 0,
+			cust_days: state.header.cust_days ? cint(state.header.cust_days.get_value()) : 0,
 			notes: state.header.notes ? state.header.notes.get_value() : "",
 			lines,
 		};
@@ -874,8 +873,8 @@ function po_fillPage(state, data) {
 	if (data.customer) H.customer.set_value(data.customer);
 	if (data.salesman) H.salesman.set_value(data.salesman);
 	if (data.order_type) H.order_type.set_value(data.order_type);
-	Promise.resolve(H.days.set_value(cint(data.days) || 0)).then(() => state.showDue && state.showDue());
-	Promise.resolve(H.cust_days.set_value(cint(data.cust_days) || 0)).then(() => state.showDue && state.showDue());
+	if (H.days) Promise.resolve(H.days.set_value(cint(data.days) || 0)).then(() => state.showDue && state.showDue());
+	if (H.cust_days) Promise.resolve(H.cust_days.set_value(cint(data.cust_days) || 0)).then(() => state.showDue && state.showDue());
 	(data.lines || []).forEach((l, i) => {
 		const row = i === 0 ? state.rows[0] : state.addRow();
 		row.f.qty.set(l.qty || "");
