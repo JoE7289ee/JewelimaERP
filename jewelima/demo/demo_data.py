@@ -1,24 +1,36 @@
 # Copyright (c) 2026, efeone and contributors
 # For license information, please see license.txt
 """
-Jewelima demo data — packs the system with realistic volume (designs+BOMs, job orders,
-order bags, material issues/loss, transfers, employee balances) so the whole flow can be
-tested. Customers and employees are loaded from the REAL bundled import lists (the demo
-auto-runs import_customers + import_employees), so orders link to real masters — no fake
-customers/employees are created, and clear_demo never deletes them.
+Jewelima demo data — REBUILT for the current structure (code registry items, six
+stone buckets, karat-gold leaves, type-linked sizes, warehouse dimension flow,
+order requests, CAD, party stock). Fills the system with enough of everything to
+try every page:
 
-Run on any site (Mac or server):
+  designs      one karat gold each ("only purity") + 0-4 stone lines from the REAL registry
+  stock        zero-valuation receipts: golds -> Raw Materials Store, stones -> Stone Issue
+  orders       Job Orders + Order Bags (plan auto-stamps from bag BOM), real customers/salesmen
+  production   transfers along the bench path (real trail), gold+stone issues (warehouse->In
+               Bags), some booked losses, a TREE MAKING queue ready for make-tree
+  finished     a few qty-1 bags run through make_products (In Bags -> Finished Goods)
+  requests     open Order Requests (incl. one CAD wish) for the Requests/All Requests flows
+  party        one Stone Party (DMO) with a PDMD + POTH stone and a party metal
+  CAD          is_cad bags pinned at CAD for the cad-jobs page
+
+Customers/employees/salesmen are the REAL masters — nothing fake is created there
+and clear_demo never touches them.
+
+Run (Mac or server):
 
   bench --site <site> execute jewelima.demo.demo_data.make_demo
   bench --site <site> execute jewelima.demo.demo_data.clear_demo
 
 Bigger / smaller:
-  bench --site <site> execute jewelima.demo.demo_data.make_demo --kwargs "{'orders': 400, 'designs': 100}"
+  bench --site <site> execute jewelima.demo.demo_data.make_demo --kwargs "{'orders': 60, 'designs': 80}"
 
-Idempotent: make_demo refuses to run while a manifest exists (run clear_demo first).
-Everything created is recorded in a manifest at sites/<site>/jewelima_demo_manifest.json
-so clear_demo removes exactly what was made (plus the activity tied to those bags).
-NOTE: a big run touches thousands of rows and can take a few minutes.
+make_demo refuses to run while a manifest exists (clear first). Everything created —
+including every Stock Entry the flows post — is recorded in
+sites/<site>/jewelima_demo_manifest.json and clear_demo removes exactly that.
+NOT part of any build/update script; demo data is always an explicit decision.
 """
 import json
 import os
@@ -28,198 +40,265 @@ import frappe
 from frappe.utils import add_days, flt, nowdate
 
 MANIFEST = "jewelima_demo_manifest.json"
-SIZES = ["-2.2/16", "2.0/16", "NA"]
-PRE_BENCHES = ["CAD", "CAM", "WAX INJECTING", "TREE MAKING", "CASTING"]
-WORK_BENCHES = ["GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"]
+WORK_PATH = ["CASTING", "GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"]
+LOSS_BENCHES = {"FILING", "FINAL POLISH", "GRINDING", "SETTING"}  # stages with -LOSS warehouses
 
 
 def _mpath():
 	return frappe.get_site_path(MANIFEST)
 
 
-def _leaf(doctype):
-	return frappe.db.get_value(doctype, {"is_group": 0}, "name")
+def _receipt(item, qty, warehouse):
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Material Receipt",
+		"company": frappe.get_all("Company", pluck="name")[0],
+		"items": [{"item_code": item, "qty": flt(qty), "t_warehouse": warehouse, "allow_zero_valuation_rate": 1}],
+	})
+	se.insert(ignore_permissions=True)
+	se.submit()
 
 
-def make_demo(orders=200, designs=60, salesmen=10, seed=42):
-	if os.path.exists(_mpath()):
-		return "Demo already loaded — run clear_demo first."
-
-	random.seed(seed)
-	m = {
-		"sales_persons": [], "designs": [], "design_items": [], "design_boms": [],
-		"job_orders": [], "order_bags": [], "work_employees": [],
-	}
-	company = frappe.defaults.get_defaults().get("company")
-
-	# auto-load the REAL customer + employee lists first, so demo orders link to real
-	# masters (no fake DEMO customers/employees are created).
-	from jewelima.jewelima.imports import import_customers, import_employees
-	import_customers.run()
-	import_employees.run()
-	customers = frappe.get_all("Customer", filters={"disabled": 0}, pluck="name")
-	employees = frappe.get_all("Employee", filters={"status": "Active"}, pluck="name")
-	if not customers:
-		frappe.throw("No customers found after import — check import_customers.")
-	if not employees:
-		frappe.throw("No employees found after import — check import_employees.")
-
-	# designs use ONLY karat golds (14/18/22 K, any colour) — no bullion / standard gold
-	golds = frappe.get_all("Item", filters={"weight_unit": "Gram", "is_stock_item": 1, "metal_purity": ["in", ["14K", "18K", "22K"]]}, pluck="name")
-	stones = frappe.get_all("Item", filters={"stone_type": ["in", ["Diamond", "Precious Stone", "Color Stone"]]}, pluck="name")
-	if not golds:
-		frappe.throw("No karat golds — run seed_karat_golds / the raw-material import first.")
-
-	dtypes = frappe.get_all("Design Type", pluck="name") or ["Rings"]
-	dstyles = frappe.get_all("Design Style", pluck="name") or ["General"]
-	otypes = frappe.get_all("Order Type", pluck="name") or ["BULK", "CUSTOMER"]
-	sp_root = frappe.db.get_value("Sales Person", {"is_group": 1}, "name")
-	used_emp = set()
-
-	try:
-		# ---- demo salesmen (no real source for these) ----
-		for i in range(salesmen):
-			m["sales_persons"].append(frappe.get_doc({
-				"doctype": "Sales Person", "sales_person_name": f"DEMO Salesman {i + 1:02d}",
-				"parent_sales_person": sp_root, "is_group": 0,
-			}).insert(ignore_permissions=True).name)
-
-		# ---- designs (each provisions an Item + BOM) ----
-		from jewelima.jewelima.api import create_design
-		for i in range(designs):
-			mats = [{"item": random.choice(golds), "qty": 0, "weight": round(random.uniform(4, 20), 2)}]
-			for _ in range(random.randint(0, 3)):
-				if stones:
-					mats.append({"item": random.choice(stones), "qty": random.randint(1, 12), "weight": round(random.uniform(0.05, 2.0), 3)})
-			res = create_design(f"DEMO-DSN-{i + 1:03d}", random.choice(dtypes), random.choice(dstyles), None, json.dumps(mats))
-			d = frappe.db.get_value("Design", res["name"], ["name", "item", "bom"], as_dict=True)
-			m["designs"].append(d.name)
-			if d.item:
-				m["design_items"].append(d.item)
-			if d.bom:
-				m["design_boms"].append(d.bom)
-
-		# ---- orders + bags + activity ----
-		today = nowdate()
-		for i in range(orders):
-			od = add_days(today, -random.randint(0, 45))
-			jo = frappe.get_doc({
-				"doctype": "Job Order", "order_date": od, "due_date": add_days(od, random.randint(7, 30)),
-				"customer": random.choice(customers), "salesman": random.choice(m["sales_persons"]),
-				"order_type": random.choice(otypes),
-			}).insert(ignore_permissions=True)
-			m["job_orders"].append(jo.name)
-			for _ in range(random.randint(1, 5)):
-				bag = frappe.get_doc({
-					"doctype": "Order Bag", "job_order": jo.name, "design": random.choice(m["designs"]),
-					"qty": random.randint(1, 8), "size": random.choice(SIZES),
-				}).insert(ignore_permissions=True)
-				m["order_bags"].append(bag.name)
-				_simulate(bag.name, golds, stones, employees, used_emp)
-	finally:
-		# always persist what we made so clear_demo can clean even a partial run
-		m["work_employees"] = sorted(used_emp)
-		with open(_mpath(), "w") as f:
-			json.dump(m, f)
-		frappe.db.commit()
-
-	return {k: len(v) for k, v in m.items()}
-
-
-def _simulate(bag, golds, stones, employees, used_emp):
-	"""Walk a bag through a random slice of the flow so states are spread out."""
-	import json
-
-	from jewelima.jewelima.api import (
-		add_weight, convert_to_ornament, get_bag_contents, issue_bench_cards,
-		issue_stones, receipt_bench_cards, transfer_order_bag,
+def _karat_golds():
+	return frappe.get_all(
+		"Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]},
+		fields=["name", "purity_percentage"],
 	)
-	r = random.random()
-	if r < 0.18:
-		return  # left sitting at ORDERING, empty
 
-	grams = round(random.uniform(4, 20), 3)
-	add_weight(bag, random.choice(golds), grams, bench="CASTING")
-	for loc in PRE_BENCHES[: random.randint(1, len(PRE_BENCHES))]:
-		try:
-			transfer_order_bag(bag, loc)
-		except Exception:
-			pass
-	if r < 0.4:
-		return
 
-	if stones and random.random() < 0.7:
-		issue_stones(bag, random.choice(stones), round(random.uniform(0.1, 2.0), 3), pcs=random.randint(1, 12), bench="SETTING")
+def _stone_pool():
+	"""A curated slice of the shipped registry — every bucket represented."""
+	names = (
+		[f"{q} {s}" for q in ("SI-IJ", "VS-FG", "VVS-EF", "VVS2") for s in ("O-1", "1-1.5", "2-2.5", "3-3.5", "5-5.5")]
+		+ ["CVD 1-1.5", "CVD 2-2.5", "SW 2-2.5", "SW 4-4.5", "CZ 1-1.5", "CZ 3-3.5", "CS",
+		   "RUBY", "EMERALD", "BLUE SAP", "GARNET", "PEARL"]
+	)
+	pool = []
+	for n in names:
+		st = frappe.db.get_value("Item", n, "stone_type")
+		if st:
+			pool.append({"item": n, "stone_type": st})
+	return pool
 
-	for bench in random.sample(WORK_BENCHES, random.randint(1, 3)):
-		try:
-			transfer_order_bag(bag, bench)  # creates the bench record (In Queue)
-			emp = random.choice(employees)
-			used_emp.add(emp)
-			issue_bench_cards(json.dumps([bag]), bench, employee=emp)  # -> Issued, weight_out snapshot
-			gold = flt(get_bag_contents(bag).get("gold_grams")) or grams
-			win = round(max(gold - random.uniform(0.01, 0.15), 0), 3)
-			receipt_bench_cards(json.dumps([{"order_bag": bag, "weight_in": win}]), bench, employee=emp)  # -> Receipted + loss
-		except Exception:
-			pass
 
-	if r > 0.8:
-		try:
-			transfer_order_bag(bag, "BAG EXTRACTION")
-			convert_to_ornament(bag)
-		except Exception:
-			pass
+def _type_sizes():
+	out = {}
+	for dt in frappe.get_all("Design Type", pluck="name"):
+		rows = frappe.get_all("Design Type Size", filters={"parent": dt}, fields=["size"], order_by="idx")
+		out[dt] = [r.size for r in rows] or ["NA"]
+	return out
+
+
+def make_demo(designs=40, orders=30, requests=5, finished=8, seed=7):
+	from jewelima.jewelima import api as japi
+
+	if os.path.exists(_mpath()):
+		frappe.throw("Demo data already loaded — run jewelima.demo.demo_data.clear_demo first.")
+	random.seed(seed)
+	pre_ses = set(frappe.get_all("Stock Entry", pluck="name", limit=0))
+	man = {"designs": [], "job_orders": [], "bags": [], "requests": [], "party": None,
+	       "party_items": [], "stock_entries": []}
+
+	def _save():
+		man["stock_entries"] = [x for x in frappe.get_all("Stock Entry", pluck="name", limit=0) if x not in pre_ses]
+		with open(_mpath(), "w") as f:
+			json.dump(man, f, indent=1)
+
+	golds = _karat_golds()
+	pool = _stone_pool()
+	tsizes = _type_sizes()
+	customers = frappe.get_all("Customer", filters={"name": ["!=", "JD Stock"]}, pluck="name") or [None]
+	salesmen = frappe.get_all("Sales Person", filters={"is_group": 0}, pluck="name") or [None]
+	otypes = frappe.get_all("Order Type", filters={"disabled": 0}, pluck="name") or [None]
+	if not golds:
+		frappe.throw("No karat golds found — run a migrate first.")
+
+	# ---- designs: ONE gold ("only purity") + 0-4 stone lines --------------------------
+	dtypes = [t for t in tsizes if t != "MIX(10-16)"] or list(tsizes)
+	for i in range(1, designs + 1):
+		name = f"DEMO {i:04d}"
+		if frappe.db.exists("Design", name):
+			man["designs"].append(name)
+			continue
+		gold = random.choice(golds)
+		mats = [{"item": gold.name, "qty": 0, "weight": round(random.uniform(2.0, 16.0), 3),
+		         "purity": gold.purity_percentage, "uom": "Gram"}]
+		for _ in range(0 if random.random() < 0.15 else random.randint(1, 4)):
+			st = random.choice(pool)
+			pcs = random.randint(1, 24)
+			mats.append({"item": st["item"], "qty": pcs, "weight": round(pcs * random.uniform(0.01, 0.06), 3),
+			             "uom": "Carat", "stone_type": st["stone_type"]})
+		frappe.get_doc({"doctype": "Design", "design_name": name, "design_type": random.choice(dtypes),
+		                "status": "Active", "materials": mats}).insert(ignore_permissions=True)
+		man["designs"].append(name)
+	frappe.db.commit()
+	_save()
+
+	# ---- stock: generous play quantities ---------------------------------------------
+	store, sissue = japi._wh("Raw Materials Store"), japi._wh("Stone Issue")
+	for g in golds:
+		_receipt(g.name, 500, store)
+	for n in ("Standard Gold 999", "Standard Gold 995"):
+		if frappe.db.exists("Item", n):
+			_receipt(n, 250, store)
+	for st in pool:
+		_receipt(st["item"], 80, sissue)
+	frappe.db.commit()
+	_save()
+
+	# ---- orders + bags (plan stamps itself from the bag BOM) --------------------------
+	dmat = {d: [{"item": m.item, "qty": m.qty, "weight": m.weight}
+	            for m in frappe.get_doc("Design", d).materials] for d in man["designs"]}
+	dtype = {d: frappe.db.get_value("Design", d, "design_type") for d in man["designs"]}
+	bags = []
+	for _ in range(orders):
+		jo = frappe.get_doc({
+			"doctype": "Job Order",
+			"order_date": add_days(nowdate(), -random.randint(0, 25)),
+			"due_date": add_days(nowdate(), random.randint(7, 30)),
+			"customer": random.choice(customers), "salesman": random.choice(salesmen),
+			"order_type": random.choice(otypes),
+		})
+		jo.insert(ignore_permissions=True)
+		man["job_orders"].append(jo.name)
+		for _b in range(random.randint(1, 4)):
+			d = random.choice(man["designs"])
+			bag = frappe.get_doc({
+				"doctype": "Order Bag", "job_order": jo.name, "design": d,
+				"qty": 1 if random.random() < 0.7 else random.randint(2, 3),
+				"size": random.choice(tsizes.get(dtype[d], ["NA"])),
+				"bag_bom": dmat[d],
+				"narration": random.choice(["", "", "", "polish bright", "urgent", "no rhodium", "match pair"]),
+			})
+			bag.insert(ignore_permissions=True)
+			bags.append(bag.name)
+	man["bags"] = list(bags)
+	frappe.db.commit()
+	_save()
+
+	# ---- production: trail + issues + losses ------------------------------------------
+	random.shuffle(bags)
+	n = len(bags)
+	idle, tree_n = int(n * 0.2), min(6, n)
+	tree_bags = bags[idle:idle + tree_n]
+	floor_bags = bags[idle + tree_n:]
+	if tree_bags:
+		japi.transfer_order_bags(json.dumps(tree_bags), "TREE MAKING", remarks="demo")
+	issued_q1 = []
+	for b in floor_bags:
+		japi.transfer_order_bags(json.dumps([b]), "CASTING", remarks="demo")
+		doc = frappe.db.get_value("Order Bag", b, ["design", "qty"], as_dict=True)
+		for m in dmat[doc.design]:
+			item, wt = m["item"], flt(m["weight"]) * (doc.qty or 1)
+			if wt <= 0:
+				continue
+			is_stone = bool(frappe.db.get_value("Item", item, "stone_type"))
+			japi.weight_add(b, json.dumps([{"item": item, "weight": round(wt, 3)}]),
+			                from_warehouse=sissue if is_stone else store)
+		if doc.qty == 1:
+			issued_q1.append(b)
+		# walk part of the bench path for a real transfer trail
+		for loc in WORK_PATH[1:random.randint(1, len(WORK_PATH))]:
+			japi.transfer_order_bags(json.dumps([b]), loc, remarks="demo")
+			if loc in LOSS_BENCHES and random.random() < 0.3:
+				gold_item = dmat[doc.design][0]["item"]
+				try:
+					japi.book_loss(b, gold_item, round(random.uniform(0.02, 0.12), 3), bench=loc)
+				except Exception:
+					pass  # loss warehouse variations never block the demo
+	frappe.db.commit()
+	_save()
+
+	# ---- finished products -------------------------------------------------------------
+	to_finish = issued_q1[:finished]
+	if to_finish:
+		japi.make_products(json.dumps(to_finish))
+
+	# ---- CAD bags ----------------------------------------------------------------------
+	jo = frappe.get_doc({"doctype": "Job Order", "order_date": nowdate(),
+	                     "due_date": add_days(nowdate(), 20), "customer": random.choice(customers)})
+	jo.insert(ignore_permissions=True)
+	man["job_orders"].append(jo.name)
+	for i in range(2):
+		bag = frappe.get_doc({
+			"doctype": "Order Bag", "job_order": jo.name, "qty": 1, "is_cad": 1,
+			"cad_design_type": random.choice(dtypes), "cad_karat": random.choice(golds).name,
+			"cad_gold_weight": random.choice(["RANGE 8 to 9", "MINIMUM 6", "12.5"]),
+			"cad_diamond_weight": round(random.uniform(0.2, 1.5), 2),
+			"cad_stone_no": random.randint(4, 40), "cad_reference": f"DEMO REF {i + 1}",
+			"cad_remarks": "demo CAD job",
+		})
+		bag.insert(ignore_permissions=True)
+		man["bags"].append(bag.name)
+		japi.transfer_order_bags(json.dumps([bag.name]), "CAD", remarks="demo")
+	frappe.db.commit()
+	_save()
+
+	# ---- open order requests (incl. one CAD wish) ---------------------------------------
+	for i in range(requests):
+		lines = [{"design": random.choice(man["designs"]), "qty": random.randint(1, 3),
+		          "size": "NA", "remark": "demo request"} for _ in range(random.randint(1, 3))]
+		if i == 0:
+			lines.append({"cad": {"design_type": random.choice(dtypes), "karat": random.choice(golds).name,
+			                      "gold_weight": "RANGE 5 to 6", "diamond_weight": 0.8, "stone_no": 12,
+			                      "reference": "DEMO CAD WISH", "image": "", "remarks": "demo"}, "qty": 1})
+		man["requests"].append(japi.save_order_request(json.dumps({
+			"customer": random.choice(customers), "notes": "demo", "lines": lines})))
+		_save()
+
+	# ---- party stock ---------------------------------------------------------------------
+	if not frappe.db.exists("Stone Party", "DMO"):
+		japi.create_stone_party("DEMO PARTY", "DMO")
+		man["party"] = "DMO"
+		man["party_items"] = [
+			japi.create_party_stone("DMO", "Party Diamond", "VS1"),
+			japi.create_party_stone("DMO", "Party Other", "RUBY"),
+			japi.create_party_metal("DMO", "22KYG"),
+		]
+
+	_save()
+	frappe.db.commit()
+	out = {"designs": len(man["designs"]), "job_orders": len(man["job_orders"]), "bags": len(man["bags"]),
+	       "finished": len(to_finish), "requests": len(man["requests"]), "stock_entries": len(man["stock_entries"])}
+	print("Demo loaded:", out)
+	return out
 
 
 def clear_demo():
 	if not os.path.exists(_mpath()):
-		return "No demo manifest — nothing to clear."
+		print("No demo manifest — nothing to clear.")
+		return
 	with open(_mpath()) as f:
-		m = json.load(f)
+		man = json.load(f)
 
-	# Each frappe.delete_doc enqueues a 'delete_dynamic_links' background job; a big clear
-	# would flood the queue and trip QueueOverloaded. Running with in_test makes that
-	# cleanup inline (delete_doc uses now=frappe.in_test), so nothing piles up.
-	prev_in_test = frappe.flags.in_test
-	frappe.flags.in_test = True
+	# trees the user made from demo bags while playing
+	trees = set(frappe.get_all("Wax Tree Card", filters={"order_bag": ["in", man["bags"] or [""]]}, pluck="parent"))
+	for t in trees:
+		frappe.delete_doc("Wax Tree", t, ignore_permissions=True, force=True)
 
-	bags = m.get("order_bags") or []
-	# activity tied to the demo bags / employees
-	for dt in ["Employee Issue", "Bag Material Ledger", "Order Bag Transfer"]:
-		for nm in frappe.get_all(dt, filters={"order_bag": ["in", bags or ["__none__"]]}, pluck="name"):
-			frappe.delete_doc(dt, nm, force=1, ignore_permissions=True)
-	# reset metal balances for employees that did demo work (real ones — kept) and any
-	# legacy demo-created employees (old manifests)
-	for emp in (m.get("work_employees") or []) + (m.get("employees") or []):
-		if frappe.db.exists("Employee Metal Balance", emp):
-			frappe.delete_doc("Employee Metal Balance", emp, force=1, ignore_permissions=True)
-
-	def _drop(dt, names):
-		for nm in names or []:
-			if frappe.db.exists(dt, nm):
-				try:
-					frappe.delete_doc(dt, nm, force=1, ignore_permissions=True)
-				except Exception:
-					pass
-
-	_drop("Order Bag", bags)
-	_drop("Job Order", m.get("job_orders"))
-	for bom in m.get("design_boms", []):
-		if frappe.db.exists("BOM", bom):
-			bd = frappe.get_doc("BOM", bom)
-			if bd.docstatus == 1:
-				try:
-					bd.cancel()
-				except Exception:
-					pass
-			frappe.delete_doc("BOM", bom, force=1, ignore_permissions=True)
-	_drop("Design", m.get("designs"))
-	_drop("Item", m.get("design_items"))
-	_drop("Customer", m.get("customers"))
-	_drop("Sales Person", m.get("sales_persons"))
-	_drop("Employee", m.get("employees"))
-
-	frappe.flags.in_test = prev_in_test
+	for b in man["bags"]:
+		frappe.db.delete("Bag Material Ledger", {"order_bag": b})
+		frappe.db.delete("Order Bag Transfer", {"order_bag": b})
+		frappe.delete_doc("Order Bag", b, ignore_permissions=True, force=True)
+	for j in man["job_orders"]:
+		frappe.delete_doc("Job Order", j, ignore_permissions=True, force=True)
+	for r in man["requests"]:
+		if frappe.db.exists("Order Request", r):
+			frappe.db.set_value("Order Request", r, "status", "Open")  # unlock the Placed guard
+			frappe.delete_doc("Order Request", r, ignore_permissions=True, force=True)
+	for it in man.get("party_items") or []:
+		frappe.delete_doc("Item", it, ignore_permissions=True, force=True)
+	if man.get("party"):
+		frappe.delete_doc("Stone Party", man["party"], ignore_permissions=True, force=True)
+	for d in man["designs"]:
+		frappe.delete_doc("Design", d, ignore_permissions=True, force=True)
+	for se in man["stock_entries"]:
+		if frappe.db.exists("Stock Entry", se):
+			doc = frappe.get_doc("Stock Entry", se)
+			if doc.docstatus == 1:
+				doc.cancel()
+			frappe.delete_doc("Stock Entry", se, ignore_permissions=True, force=True)
 	os.remove(_mpath())
 	frappe.db.commit()
-	return "Demo cleared."
+	print("Demo cleared:", {"bags": len(man["bags"]), "job_orders": len(man["job_orders"]),
+	                        "designs": len(man["designs"]), "stock_entries": len(man["stock_entries"]),
+	                        "trees": len(trees)})
