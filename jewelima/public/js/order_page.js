@@ -50,6 +50,8 @@ const PO_COLUMNS = [
 			border-right:1px solid var(--border-color);border-bottom:1px solid var(--gray-400, #aeb6bf);padding:3px 6px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.po-grid td{border-right:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:0 2px;vertical-align:middle;background:var(--fg-color);height:30px;}
 		table.po-grid td.po-num{color:var(--text-muted);text-align:center;width:30px;background:var(--control-bg);}
+		table.po-grid td.po-num.ok{background:#2e7d32;color:#fff;font-weight:700;}
+		table.po-grid td.po-num.bad{background:#b00020;color:#fff;font-weight:700;}
 		table.po-grid tfoot td{position:sticky;bottom:0;z-index:2;background:var(--control-bg, var(--fg-color));border-top:2px solid var(--gray-400, #aeb6bf);border-right:1px solid var(--border-color);font-weight:700;padding:3px 6px;text-align:right;white-space:nowrap;}
 		table.po-grid tfoot td.po-foot-label{text-align:left;}
 		table.po-grid input,table.po-grid select{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
@@ -183,7 +185,18 @@ const PO_COLUMNS = [
 	PO_COLUMNS.forEach((c) => (totalCells[c.key] = $(`<td class="po-c-${c.key}"></td>`).appendTo($footrow)));
 	$footrow.append("<td></td>"); // actions (Split)
 	$footrow.append("<td></td>"); // remove
+	// green = line goes into the order (Design/CAD + Qty); red = half-filled, won't go in
+	function paintRowStatus(row) {
+		const hasWork = !!(row._cad || (row.f.design.get() || "").trim());
+		const q = cint(row.f.qty.get());
+		const $n = row.$tr.find(".po-num");
+		$n.removeClass("ok bad");
+		if (hasWork && q > 0) $n.addClass("ok");
+		else if (hasWork || q > 0) $n.addClass("bad");
+	}
+
 	function recalcTotals() {
+		state.rows.forEach(paintRowStatus);
 		const s = { qty: 0, gross_weight: 0, nett_weight: 0, pure: 0 };
 		["dmd", "ps", "cs", "cvd", "pdmd", "poth"].forEach((b) => { s[b + "_no"] = 0; s[b + "_weight"] = 0; });
 		state.rows.forEach((r) => {
@@ -825,12 +838,15 @@ const PO_COLUMNS = [
 		const all = state.rows.map((r) => ({ r, l: po_readLine(r) }));
 		const lines = [];
 		let ghosts = 0;
+		let noQty = 0;
 		all.forEach(({ r, l }) => {
-			if (r._cad) {
-				lines.push({ cad: r._cad, qty: l.qty || 1, size: l.size, remark: l.narration });
+			if ((r._cad || l.design) && !(l.qty > 0)) {
+				noQty++;
+			} else if (r._cad) {
+				lines.push({ cad: r._cad, qty: l.qty, size: l.size, remark: l.narration });
 			} else if (l.design) {
 				lines.push({
-					design: l.design, qty: l.qty || 1, size: l.size, remark: l.narration,
+					design: l.design, qty: l.qty, size: l.size, remark: l.narration,
 					edited: r._edited ? 1 : 0,
 					materials: r._edited ? (r._materials || []) : [],
 				});
@@ -839,6 +855,7 @@ const PO_COLUMNS = [
 			}
 		});
 		if (ghosts) { frappe.msgprint(__("{0} line(s) have a Qty but no Design — add a Design (or set CAD) or clear the Qty.", [ghosts])); return; }
+		if (noQty) { frappe.msgprint(__("{0} line(s) have no Qty — every line needs at least Qty 1 (red rows won't go in).", [noQty])); return; }
 		if (!lines.length) { frappe.msgprint(__("Add at least one line with a Design (or a CAD line).")); return; }
 		const payload = {
 			customer: state.header.customer.get_value(),
@@ -1015,10 +1032,15 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	const customer_date = (state.custFromDays ? state.custFromDays() : "") || due_date; // empty -> copies due date
 
 	const all = state.rows.map(po_readLine);
-	const lines = all.filter((l) => l.design || l.cad); // a line needs a Design OR CAD targets
+	const lines = all.filter((l) => (l.design || l.cad) && l.qty > 0); // Design/CAD + Qty — the green rows
 	const ghosts = all.filter((l) => !l.design && !l.cad && l.qty); // qty typed but neither set
 	if (ghosts.length) {
 		frappe.msgprint(__("{0} line(s) have a Qty but no Design — add a Design (or set CAD) or clear the Qty.", [ghosts.length]));
+		return;
+	}
+	const noQty = all.filter((l) => (l.design || l.cad) && !(l.qty > 0)).length;
+	if (noQty) {
+		frappe.msgprint(__("{0} line(s) have no Qty — every line needs at least Qty 1 (red rows won't go in).", [noQty]));
 		return;
 	}
 	if (!lines.length) {
