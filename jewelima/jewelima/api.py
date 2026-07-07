@@ -966,7 +966,7 @@ def get_raw_material_tree():
 	rows = frappe.get_all(
 		"Item",
 		filters={"item_group": ["in", subtree]},
-		fields=["name", "item_group", "stock_uom", "stone_type", "purity_percentage", "metal_purity", "disabled"],
+		fields=["name", "item_group", "stock_uom", "stone_type", "purity_percentage", "metal_purity", "disabled", "stone_party"],
 	)
 
 	def natkey(s):
@@ -991,8 +991,8 @@ def get_raw_material_tree():
 			"purity": it.purity_percentage or 0,
 			"metal_purity": it.metal_purity or "",
 			"disabled": int(it.disabled or 0),
-			# party stones are created on demand — expected, not drift
-			"in_registry": it.name in shipped or it.stone_type in PARTY_BRACKETS,
+			# party stones/metals are created on demand — expected, not drift
+			"in_registry": it.name in shipped or bool(it.stone_party),
 		})
 
 	def build(name):
@@ -1112,13 +1112,91 @@ def get_stone_parties():
 
 @frappe.whitelist()
 def get_party_stones(party):
-	"""The stone items a party owns, newest first."""
+	"""The stone items a party owns, newest first (metals live on their own page)."""
 	rows = frappe.get_all(
-		"Item", filters={"stone_party": party},
+		"Item", filters={"stone_party": party, "stone_type": ["in", list(PARTY_BRACKETS)]},
 		fields=["name", "stone_type", "disabled"], order_by="creation desc",
 	)
 	return [{"name": r.name, "bracket": "PDMD" if r.stone_type == "Party Diamond" else "POTH",
 	         "stone_type": r.stone_type, "disabled": int(r.disabled or 0)} for r in rows]
+
+
+# --- Party metal (customer-given gold) --------------------------------------------
+# STRICT naming: the suffix must be one of OUR gold codes — the 9 karat golds
+# (JOS-22KYG) or a standard gold (JOS-Standard999). Grouped under METAL -> PARTY
+# METAL, outside the GOLD branch, so karat/melt pickers never mix party gold in.
+PARTY_METAL_GROUP = "PARTY METAL"
+
+
+def _party_metal_options():
+	"""suffix -> {label, purity, metal_purity}; karats first, then standards."""
+	from jewelima.setup import GOLD_COLORS, KARAT_GOLDS
+
+	out = {}
+	for karat, purity in KARAT_GOLDS.items():
+		for color in GOLD_COLORS:
+			out[f"{karat}{color}"] = {"kind": "Karat", "purity": purity, "metal_purity": karat}
+	for n in range(990, 1000):
+		out[f"Standard{n}"] = {"kind": "Standard", "purity": round(n / 10.0, 2), "metal_purity": ""}
+	return out
+
+
+@frappe.whitelist()
+def get_party_metal_options():
+	"""The allowed metal suffixes for the Party Metal Add page."""
+	return [{"suffix": s, **m} for s, m in _party_metal_options().items()]
+
+
+@frappe.whitelist()
+def get_party_metals(party):
+	"""The metal items a party owns, newest first."""
+	rows = frappe.get_all(
+		"Item", filters={"stone_party": party, "item_group": PARTY_METAL_GROUP},
+		fields=["name", "metal_purity", "purity_percentage", "disabled"], order_by="creation desc",
+	)
+	return [{"name": r.name, "metal_purity": r.metal_purity or "", "purity": r.purity_percentage or 0,
+	         "disabled": int(r.disabled or 0)} for r in rows]
+
+
+@frappe.whitelist()
+def check_party_metal(party, metal):
+	"""Preview + availability of the item code a party/metal pair would create."""
+	if not frappe.db.exists("Stone Party", party):
+		frappe.throw(_("Create the party first — metal can only come in under a party."))
+	if metal not in _party_metal_options():
+		frappe.throw(_("Metal must be one of the standard gold codes."))
+	code = f"{party}-{metal}"
+	return {"item_code": code, "exists": bool(frappe.db.exists("Item", code))}
+
+
+@frappe.whitelist()
+def create_party_metal(party, metal):
+	"""Create ONE party gold item on demand: <CODE>-<METAL> where METAL follows OUR
+	standard exactly (22KYG… / Standard990…999). Purity derived, Gram, no stone
+	bucket — it's metal."""
+	chk = check_party_metal(party, metal)
+	if chk["exists"]:
+		frappe.throw(_("{0} already exists.").format(chk["item_code"]))
+	if not frappe.db.exists("Item Group", PARTY_METAL_GROUP):
+		frappe.throw(_("Item group {0} is missing — run a migrate.").format(PARTY_METAL_GROUP))
+	m = _party_metal_options()[metal]
+	frappe.get_doc({
+		"doctype": "Item",
+		"item_code": chk["item_code"],
+		"item_name": chk["item_code"],
+		"item_group": PARTY_METAL_GROUP,
+		"stock_uom": "Gram",
+		"is_stock_item": 1,
+		"is_purchase_item": 0,  # customer-given, never purchased
+		"is_sales_item": 0,
+		"include_item_in_manufacturing": 1,
+		"weight_unit": "Gram",
+		"metal_purity": m["metal_purity"],
+		"purity_percentage": m["purity"],
+		"stone_party": party,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return chk["item_code"]
 
 
 @frappe.whitelist()

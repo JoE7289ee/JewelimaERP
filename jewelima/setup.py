@@ -331,6 +331,10 @@ ITEM_GROUP_TREE = {
 		"METAL": {
 			"GOLD": ["GOLD 22K", "GOLD 18K", "GOLD 14K", "GOLD STANDARD"],
 			"ALLOY": [],
+			# customer-given gold, created on demand from the Party Metal Add page.
+			# Deliberately OUTSIDE the GOLD branch so material_group filters
+			# (melt pickers, karat queries) never mix party gold with our own.
+			"PARTY METAL": [],
 		},
 		"STONE": {
 			# one leaf per registry quality — kept in lockstep with raw_materials.py

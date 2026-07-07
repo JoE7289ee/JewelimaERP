@@ -11,7 +11,7 @@
 // Route: /app/party-stock
 
 frappe.pages["party-stock"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Party Stock Add", single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Party Stone Add", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const S = { parties: [], party: "", stones: [] };
 
@@ -70,7 +70,7 @@ frappe.pages["party-stock"].on_page_load = function (wrapper) {
 				<div class="pst-list pst-stones"></div>
 			</div>
 		</div>
-		<div class="pst-hint">${__("Customer-given stones only — created on demand, never in sieve runs. Weights land in the PDMD/POTH columns of the bag; regular stock stays on Purchase Raw Material.")}</div>
+		<div class="pst-hint">${__("Customer-given stones only — created on demand, never in sieve runs. Weights land in the PDMD/POTH columns of the bag; customer gold goes through Party Metal Add.")}</div>
 	`);
 
 	const root = $(page.main)[0];

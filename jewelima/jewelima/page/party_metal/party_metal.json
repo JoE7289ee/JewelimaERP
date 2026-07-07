@@ -1,15 +1,15 @@
 {
  "content": null,
- "creation": "2026-07-07 20:00:00.000000",
+ "creation": "2026-07-07 22:00:00.000000",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
  "modified": "2026-07-07 22:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "party-stock",
+ "name": "party-metal",
  "owner": "Administrator",
- "page_name": "party-stock",
+ "page_name": "party-metal",
  "roles": [
   {
    "role": "System Manager"
@@ -22,5 +22,5 @@
   }
  ],
  "standard": "Yes",
- "title": "Party Stone Add"
+ "title": "Party Metal Add"
 }
