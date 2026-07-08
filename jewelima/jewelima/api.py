@@ -417,7 +417,8 @@ def get_gold_casting_report():
 		mp = frappe.db.get_value("Item", doc.karat, "metal_purity") if doc.karat else ""
 		trees.append({
 			"tree": t, "karat": doc.karat or "", "metal_purity": mp or "",
-			"cards": len(doc.cards), "employee": doc.employee or "",
+			"cards": len(doc.cards),
+			"employee": (frappe.db.get_value("Employee", doc.employee, "employee_name") if doc.employee else "") or "",
 			"made_on": doc.made_on, "wax_weight": flt(doc.wax_weight),
 			"stone_weight": sw, "gold_required": gr, "pure_gold_needed": pg,
 		})
