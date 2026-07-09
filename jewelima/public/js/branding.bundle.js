@@ -132,21 +132,10 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // workspace's entry every time the sidebar builds so keep_closed governs.
 // (Fires before the items render; other workspaces keep their memory.)
 // ---------------------------------------------------------------------------
-(() => {
-	$(document).on("sidebar_setup", () => {
-		try {
-			const raw = localStorage.getItem("section-breaks-state");
-			if (!raw) return;
-			const st = JSON.parse(raw);
-			if (st && st.jewelima) {
-				delete st.jewelima;
-				localStorage.setItem("section-breaks-state", JSON.stringify(st));
-			}
-		} catch (e) {
-			/* corrupt state — harmless, frappe rebuilds it */
-		}
-	});
-})();
+// NOTE: sections use keep_closed so a FRESH browser starts with titles only,
+// but the user's own open/closed choices persist across reloads (frappe's
+// section-breaks-state). An earlier purge of that state snapped every section
+// shut on each refresh — "the items keep going missing" — so it is gone.
 
 // ---------------------------------------------------------------------------
 // Sidebar: sub-group headers (Records, Order Setup, …) are DATA-siblings of
@@ -156,17 +145,17 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // ---------------------------------------------------------------------------
 (() => {
 	function sync() {
-		const sb = document.querySelector('[data-title="Jewelima"]');
-		if (!sb) return;
-		let closed = false;
-		sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
-			const isSub = el.querySelector(":scope > .standard-sidebar-item.indent");
-			if (!isSub) {
-				const di = el.querySelector(".drop-icon");
-				closed = !!di && di.getAttribute("data-state") === "closed";
-				return;
-			}
-			el.classList.toggle("hidden", closed);
+		document.querySelectorAll('[data-title="Jewelima"]').forEach((sb) => {
+			let closed = false;
+			sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
+				const isSub = el.querySelector(":scope > .standard-sidebar-item.indent");
+				if (!isSub) {
+					const di = el.querySelector(".drop-icon");
+					closed = !!di && di.getAttribute("data-state") === "closed";
+					return;
+				}
+				el.classList.toggle("hidden", closed);
+			});
 		});
 	}
 	// the Setup section holds only sub-groups; core refuses to render a section
@@ -175,10 +164,35 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	$("<style>").text('[data-title="Jewelima"] .nested-container .sidebar-item-container[title=""]{display:none;}').appendTo("head");
 	const later = () => {
 		setTimeout(sync, 0);
-		setTimeout(sync, 300); // asset/render races on dev bench
+		setTimeout(sync, 300);
+		setTimeout(sync, 900); // late pass — saved open-states apply during render
 	};
+	// frappe's own per-section state save CLOBBERS the map (each section holds a
+	// stale build-time copy, so the last click wins and every other section snaps
+	// shut on reload). After every toggle, write the COMPLETE truthful state from
+	// the DOM — sections AND sub-groups, keyed by their (unique) titles.
+	function saveAll() {
+		const sb = [...document.querySelectorAll('[data-title="Jewelima"]')].find((x) => x.offsetParent);
+		if (!sb) return;
+		try {
+			const st = JSON.parse(localStorage.getItem("section-breaks-state") || "{}");
+			const m = {};
+			sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
+				const di = el.querySelector(".drop-icon");
+				const t = el.getAttribute("title");
+				if (di && t) m[t] = di.getAttribute("data-state") === "closed";
+			});
+			st.jewelima = m;
+			localStorage.setItem("section-breaks-state", JSON.stringify(st));
+		} catch (e) {
+			/* never break the sidebar over storage */
+		}
+	}
 	$(document).on("sidebar_setup sidebar-expand", later);
-	$(document).on("click", ".body-sidebar .standard-sidebar-item", later);
+	$(document).on("click", ".body-sidebar .standard-sidebar-item", () => {
+		later();
+		setTimeout(saveAll, 80);
+	});
 	$(document).on("app_ready", later);
 	later();
 })();

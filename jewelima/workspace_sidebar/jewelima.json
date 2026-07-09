@@ -558,7 +558,7 @@
    "icon": "inbox",
    "indent": 1,
    "keep_closed": 1,
-   "label": "Orders",
+   "label": "Order Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
@@ -813,7 +813,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-10 00:39:50.756769",
+ "modified": "2026-07-10 00:51:09.930667",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
