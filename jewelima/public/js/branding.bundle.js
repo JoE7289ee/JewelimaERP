@@ -184,10 +184,31 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	// the blank row it produces (label-less container inside our sidebar)
 	$("<style>").text('[data-title="Jewelima"] .nested-container .sidebar-item-container[title=""]{display:none;}').appendTo("head");
 	const later = () => {
+		setTimeout(orphanNet, 0);
 		setTimeout(sync, 0);
 		setTimeout(sync, 300);
 		setTimeout(sync, 900); // late pass — saved open-states apply during render
 	};
+	// pages reached by BUTTON only (no sidebar link) can't be mapped to a
+	// workspace by core's resolver — a deep link or reload renders a NULL
+	// sidebar. Pre-seed core's own remembered-choice map, plus a direct net.
+	const ORPHAN_ROUTES = ["casting-weigh"];
+	try {
+		const m = JSON.parse(localStorage.getItem("sidebar_item_map") || "{}");
+		let dirty = false;
+		ORPHAN_ROUTES.forEach((r) => {
+			if (!(m[r] || [])[0]) { m[r] = ["Jewelima"]; dirty = true; }
+		});
+		if (dirty) localStorage.setItem("sidebar_item_map", JSON.stringify(m));
+	} catch (e) { /* storage unavailable — the net below still covers it */ }
+	function orphanNet() {
+		const r = (frappe.get_route() || [])[0];
+		if (ORPHAN_ROUTES.includes(r) && frappe.app && frappe.app.sidebar
+			&& frappe.app.sidebar.sidebar_title !== "Jewelima") {
+			try { frappe.app.sidebar.setup("Jewelima"); } catch (e) { /* noop */ }
+		}
+	}
+
 	// frappe's own per-section state save CLOBBERS the map (each section holds a
 	// stale build-time copy, so the last click wins and every other section snaps
 	// shut on reload). After every toggle, write the COMPLETE truthful state from
