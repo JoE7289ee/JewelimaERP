@@ -144,18 +144,39 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // sub-section whose governing top section is collapsed. Jewelima sidebar only.
 // ---------------------------------------------------------------------------
 (() => {
+	// core's sidebar render is fragile: prepare() swallows exceptions and a failed
+	// pass leaves section headers with open carets and NO items ("the lines go
+	// missing"). The boot data stays intact, so: realign any caret/content
+	// mismatch, and if sections rendered without children, rebuild once.
+	let _rebuilds = 0, _lastRebuild = 0;
 	function sync() {
 		document.querySelectorAll('[data-title="Jewelima"]').forEach((sb) => {
-			let closed = false;
+			if (sb.offsetParent === null) return;
+			let closed = false, emptySections = 0;
 			sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
 				const isSub = el.querySelector(":scope > .standard-sidebar-item.indent");
+				const di = el.querySelector(".drop-icon");
+				const nested = el.querySelector(":scope > .nested-container");
+				if (di && nested) {
+					// caret and content must agree — a broken render leaves them apart
+					nested.classList.toggle("hidden", di.getAttribute("data-state") === "closed");
+				}
 				if (!isSub) {
-					const di = el.querySelector(".drop-icon");
 					closed = !!di && di.getAttribute("data-state") === "closed";
+					if (nested && nested.children.length === 0) emptySections++;
 					return;
 				}
 				el.classList.toggle("hidden", closed);
 			});
+			if (emptySections >= 2 && _rebuilds < 3 && Date.now() - _lastRebuild > 5000
+				&& frappe.app && frappe.app.sidebar && frappe.app.sidebar.make_sidebar) {
+				_rebuilds++;
+				_lastRebuild = Date.now();
+				console.warn("[jewelima] sidebar rendered without items — rebuilding");
+				try { frappe.app.sidebar.make_sidebar(); } catch (e) { /* keep the page alive */ }
+				setTimeout(sync, 80);
+				setTimeout(sync, 500);
+			}
 		});
 	}
 	// the Setup section holds only sub-groups; core refuses to render a section
@@ -189,6 +210,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 		}
 	}
 	$(document).on("sidebar_setup sidebar-expand", later);
+	$(document).on("app_ready", () => frappe.router && frappe.router.on && frappe.router.on("change", later));
 	$(document).on("click", ".body-sidebar .standard-sidebar-item", () => {
 		later();
 		setTimeout(saveAll, 80);
