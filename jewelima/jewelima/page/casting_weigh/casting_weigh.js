@@ -33,7 +33,9 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 		.cw-card .btn{margin-left:auto;}
 		.cw-held{background:#e6f4ea;color:#2e7d32;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700;}
 		.cw-stone{background:#e8f2fd;color:#1c5da8;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700;}
-		.cw-gross{width:110px;text-align:right;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:2px 8px;height:30px;border-radius:4px;box-sizing:border-box;font-size:13.5px;font-weight:600;}
+		.cw-name{flex:1 1 auto;min-width:0;}
+		.cw-stoneslot{flex:0 0 92px;text-align:right;}
+		.cw-gross{flex:0 0 110px;width:110px;text-align:right;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:2px 8px;height:30px;border-radius:4px;box-sizing:border-box;font-size:13.5px;font-weight:600;}
 		.cw-gold{min-width:90px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
 		.cw-gold.bad{color:#b00020;}
 		.cw-empty{padding:16px;text-align:center;color:var(--text-muted);font-size:13px;}
@@ -96,8 +98,8 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 				const gross = S.selected[bag];
 				const gold = flt(gross) - flt(c.stone_g);
 				return `<div class="cw-card">
-					<div><div class="nm">${esc(bag)}</div><div class="meta">${esc(c.design || "")}</div></div>
-					${c.stone_g ? `<span class="cw-stone">− ${fmt(c.stone_g)} g</span>` : ""}
+					<div class="cw-name"><div class="nm">${esc(bag)}</div><div class="meta">${esc(c.design || "")}</div></div>
+					<span class="cw-stoneslot">${c.stone_g ? `<span class="cw-stone">− ${fmt(c.stone_g)} g</span>` : ""}</span>
 					<input type="number" min="0" step="0.001" class="cw-gross" data-bag="${esc(bag)}"
 						placeholder="${__("gross g")}" value="${gross || ""}">
 					<span class="cw-gold ${gross && gold <= 0 ? "bad" : ""}" data-gold="${esc(bag)}">${gross ? "→ " + fmt(gold) + " g" : ""}</span>
