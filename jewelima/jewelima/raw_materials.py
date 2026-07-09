@@ -50,7 +50,9 @@ CANONICAL = O_SIZES + _half_steps(1, 22.5)  # the standard 48-size run
 # every quality ships the SAME canonical run (reviewed 2026-07-05) — unused sizes
 # simply sit at zero stock. No baguettes in the base registry. Each quality also
 # gets a GENERIC base item (just the quality name) for unsized stock.
-DIAMOND_QUALITIES = ["SI-IJ", "VS-FG", "VS-IJ", "VS1-FG", "VS2-FG", "VVS-EF", "VVS/VS-GH", "VVS1-EF", "VVS1-FG", "VVS2"]
+# 2026-07-09: VS1-FG, VS2-FG and VVS1-FG retired (no longer used) — existing sites
+# keep them until a fresh rebuild; the registry only ADDS, never deletes.
+DIAMOND_QUALITIES = ["SI-IJ", "VS-FG", "VS-IJ", "VVS-EF", "VVS/VS-GH", "VVS1-EF", "VVS2"]
 
 for _q in DIAMOND_QUALITIES:
 	RAW_MATERIALS.append((_q, f"DIAMOND {_q}", "Diamond", 0))  # generic base
