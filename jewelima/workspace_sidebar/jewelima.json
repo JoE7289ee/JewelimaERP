@@ -555,6 +555,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "inbox",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Orders",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "chart-column",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stock Analysis",
+   "link_to": "stock-analysis",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 1,
@@ -787,7 +813,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-07 23:05:18.595912",
+ "modified": "2026-07-10 00:39:50.756769",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

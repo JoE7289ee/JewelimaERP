@@ -395,6 +395,64 @@ def get_tree_queues():
 
 
 @frappe.whitelist()
+def get_order_stock_analysis():
+	"""Stock Analysis (Reports > Orders): per raw material, what the ACTIVE order
+	book still needs vs what the issue warehouses hold.
+	  plan        = Σ over active bags (not finished / Cancelled / Sold) of bag-BOM weight × qty
+	  issued      = what those bags already received (ledger In − Out)
+	  outstanding = max(0, plan − issued)
+	  available   = stock across the issue-side warehouses (Raw Materials Store,
+	                Gold Issue, Stone Issue)
+	Balance = available − outstanding; anything negative is called out SHORT."""
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
+		fields=["name", "qty"],
+	)
+	if not bags:
+		return {"rows": [], "bags": 0, "short": 0}
+	qty_of = {b.name: max(cint(b.qty) or 1, 1) for b in bags}
+	names = list(qty_of)
+
+	plan = {}
+	for r in frappe.get_all("Order Bag BOM Item", filters={"parent": ["in", names]},
+	                        fields=["parent", "item", "weight"]):
+		if r.item and flt(r.weight) > 0:
+			plan[r.item] = plan.get(r.item, 0.0) + flt(r.weight) * qty_of[r.parent]
+
+	issued = {}
+	for r in frappe.db.sql(
+		"""select item, sum(case when direction = 'In' then qty else -qty end)
+		   from `tabBag Material Ledger` where order_bag in %(bags)s group by item""",
+		{"bags": names},
+	):
+		issued[r[0]] = flt(r[1])
+
+	issue_whs = [w for w in (_wh("Raw Materials Store"), _wh("Gold Issue"), _wh("Stone Issue"))
+	             if w and frappe.db.exists("Warehouse", w)]
+	rows, short = [], 0
+	for item in sorted(plan):
+		p = plan[item]
+		iss = max(0.0, issued.get(item, 0.0))
+		outstanding = max(0.0, p - iss)
+		available = sum(flt(b.actual_qty) for b in frappe.get_all(
+			"Bin", filters={"item_code": item, "warehouse": ["in", issue_whs]}, fields=["actual_qty"]))
+		balance = available - outstanding
+		meta = frappe.db.get_value("Item", item, ["item_group", "stock_uom", "stone_type"], as_dict=True) or {}
+		is_short = outstanding > 0 and balance < -0.0005
+		short += 1 if is_short else 0
+		rows.append({
+			"item": item, "group": meta.get("item_group") or "", "uom": meta.get("stock_uom") or "",
+			"is_stone": bool(meta.get("stone_type")),
+			"plan": round(p, 3), "issued": round(iss, 3), "outstanding": round(outstanding, 3),
+			"available": round(available, 3), "balance": round(balance, 3), "short": is_short,
+		})
+	# the ones in trouble first, biggest outstanding next
+	rows.sort(key=lambda r: (not r["short"], -r["outstanding"]))
+	return {"rows": rows, "bags": len(names), "short": short, "issue_warehouses": issue_whs}
+
+
+@frappe.whitelist()
 def get_gold_casting_report():
 	"""The Gold Casting report (Reports > Casting): every tree awaiting cast (its
 	bags sit at CASTING), the karat-gold requirement per gold item, what the
