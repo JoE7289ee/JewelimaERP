@@ -108,6 +108,13 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 			}).join("")
 			: `<div class="cw-empty">${__("Scan a card or Add from the left.")}</div>`;
 		sel.querySelectorAll(".cw-gross").forEach((el) => {
+			// weight typed, Enter pressed -> hand control back to the scanner
+			el.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					$scan.focus();
+				}
+			});
 			el.addEventListener("input", function () {
 				S.selected[this.getAttribute("data-bag")] = this.value;
 				const bag = this.getAttribute("data-bag");
