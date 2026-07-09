@@ -599,12 +599,13 @@ def get_tree_for_weighing(card=None, tree=None):
 	doc = frappe.get_doc("Wax Tree", tree)
 	cards = []
 	for c in doc.cards:
-		loc = frappe.db.get_value("Order Bag", c.order_bag, "location")
+		bagv = frappe.db.get_value("Order Bag", c.order_bag, ["location", "nett_weight"], as_dict=True) or {}
 		gold, stone = _bag_gold_and_stone(c.order_bag)
 		cards.append({
 			"order_bag": c.order_bag, "design": c.design or "", "qty": c.qty or 1,
-			"location": loc or "—", "stone_g": stone, "gold_held": gold,
-			"weighable": loc == "CASTING",
+			"location": bagv.get("location") or "—", "stone_g": stone, "gold_held": gold,
+			"plan_gold": round(flt(bagv.get("nett_weight")), 3),  # the design BOM's gold, qty-scaled
+			"weighable": bagv.get("location") == "CASTING",
 		})
 	karat_stock = flt(frappe.db.get_value("Bin", {"item_code": doc.karat, "warehouse": _wh("Casting")}, "actual_qty"))
 	return {
