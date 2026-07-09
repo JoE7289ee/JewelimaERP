@@ -15,7 +15,9 @@
   "cards",
   "stone_weight",
   "gold_required",
-  "pure_gold_needed"
+  "pure_gold_needed",
+  "casting_date",
+  "cast"
  ],
  "fields": [
   {
@@ -100,10 +102,24 @@
    "read_only": 1,
    "precision": "3",
    "description": "Gold required x the karat's purity."
+  },
+  {
+   "fieldname": "casting_date",
+   "fieldtype": "Date",
+   "label": "Casting Date",
+   "in_list_view": 1,
+   "description": "Planned from the Casting queue; auto-stamped when the last card gets its weight."
+  },
+  {
+   "fieldname": "cast",
+   "fieldtype": "Check",
+   "label": "Cast",
+   "read_only": 1,
+   "description": "Set automatically once EVERY card on the tree holds gold."
   }
  ],
  "links": [],
- "modified": "2026-07-08 21:00:00.000000",
+ "modified": "2026-07-09 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Wax Tree",

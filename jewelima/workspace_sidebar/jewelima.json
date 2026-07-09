@@ -243,6 +243,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "flame",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Casting",
+   "link_to": "casting-queue",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "arrow-right",
    "indent": 1,
    "keep_closed": 0,
@@ -813,7 +826,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-10 00:51:09.930667",
+ "modified": "2026-07-10 01:06:53.633695",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

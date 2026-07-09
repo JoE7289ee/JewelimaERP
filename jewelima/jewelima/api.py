@@ -462,8 +462,9 @@ def get_gold_casting_report():
 	casting_wh = _wh("Casting")
 
 	tree_names = [r[0] for r in frappe.db.sql(
-		"""select distinct tree from `tabOrder Bag`
-		   where location = 'CASTING' and ifnull(tree, '') != ''""")]
+		"""select distinct ob.tree from `tabOrder Bag` ob
+		   join `tabWax Tree` wt on wt.name = ob.tree
+		   where ob.location = 'CASTING' and ifnull(ob.tree, '') != '' and ifnull(wt.cast, 0) = 0""")]
 	trees, per_karat = [], {}
 	for t in sorted(tree_names):
 		doc = frappe.get_doc("Wax Tree", t)
@@ -527,6 +528,148 @@ def get_gold_casting_report():
 			"melt_warehouses": melt_whs,
 		},
 	}
+
+
+# --- Casting bench (Manufacturing > Casting) ---------------------------------------
+def _bag_gold_and_stone(order_bag):
+	"""(gold grams held, stone grams held = issued carats x 0.2) for one bag."""
+	gold = stone = 0.0
+	for it in get_bag_contents(order_bag)["items"]:
+		if it["qty"] <= 0:
+			continue
+		if frappe.db.get_value("Item", it["item"], "stone_type"):
+			stone += flt(it["qty"]) * 0.2
+		else:
+			gold += flt(it["qty"])
+	return round(gold, 3), round(stone, 3)
+
+
+@frappe.whitelist()
+def get_casting_queue():
+	"""Trees awaiting cast (cast=0, still holding cards at CASTING) + the stock the
+	Casting warehouse holds — the Casting bench page."""
+	tree_names = [r[0] for r in frappe.db.sql(
+		"""select distinct ob.tree from `tabOrder Bag` ob
+		   join `tabWax Tree` wt on wt.name = ob.tree
+		   where ob.location = 'CASTING' and ifnull(ob.tree, '') != '' and ifnull(wt.cast, 0) = 0""")]
+	trees = []
+	for t in sorted(tree_names):
+		doc = frappe.get_doc("Wax Tree", t)
+		weighted = sum(1 for c in doc.cards if _bag_gold_and_stone(c.order_bag)[0] > 0.0005)
+		trees.append({
+			"tree": t, "karat": doc.karat or "", "cards": len(doc.cards), "weighted": weighted,
+			"wax_weight": flt(doc.wax_weight), "gold_required": flt(doc.gold_required),
+			"casting_date": doc.casting_date,
+			"employee": (frappe.db.get_value("Employee", doc.employee, "employee_name") if doc.employee else "") or "",
+			"made_on": doc.made_on,
+		})
+	stock = [{"item": r[0], "purity": flt(r[1]), "qty": flt(r[2])} for r in frappe.db.sql(
+		"""select b.item_code, i.purity_percentage, b.actual_qty from tabBin b
+		   join tabItem i on i.name = b.item_code
+		   where b.warehouse = %s and abs(b.actual_qty) > 0.0005 order by b.item_code""", _wh("Casting"))]
+	return {"trees": trees, "stock": stock, "casting_warehouse": _wh("Casting")}
+
+
+@frappe.whitelist()
+def set_tree_casting_date(tree, date=None):
+	"""Plan (or clear) a tree's casting date from the queue."""
+	frappe.db.set_value("Wax Tree", tree, "casting_date", date or None)
+	frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_tree_for_weighing(card=None, tree=None):
+	"""The weigh page's loader: scan a CARD (must sit at CASTING, on a tree) or
+	come straight from the queue with a tree. Returns the tree + every card with
+	its issued-stone grams and gold already held."""
+	if card:
+		bag = frappe.db.get_value("Order Bag", card,
+		                          ["name", "location", "tree", "is_finished", "stock_status"], as_dict=True)
+		if not bag:
+			frappe.throw(frappe._("No card {0}.").format(card))
+		if bag.is_finished or bag.stock_status in ("Cancelled", "Sold"):
+			frappe.throw(frappe._("{0} is {1} — nothing to cast.").format(card, "finished" if bag.is_finished else bag.stock_status))
+		if not bag.tree:
+			frappe.throw(frappe._("{0} is not on any wax tree — make the tree first.").format(card))
+		if bag.location != "CASTING":
+			frappe.throw(frappe._("{0} is at {1}, not CASTING — it can't be cast-weighed from there.").format(card, bag.location or "—"))
+		tree = bag.tree
+	if not tree or not frappe.db.exists("Wax Tree", tree):
+		frappe.throw(frappe._("Scan a card (or pick a tree from the queue)."))
+	doc = frappe.get_doc("Wax Tree", tree)
+	cards = []
+	for c in doc.cards:
+		loc = frappe.db.get_value("Order Bag", c.order_bag, "location")
+		gold, stone = _bag_gold_and_stone(c.order_bag)
+		cards.append({
+			"order_bag": c.order_bag, "design": c.design or "", "qty": c.qty or 1,
+			"location": loc or "—", "stone_g": stone, "gold_held": gold,
+			"weighable": loc == "CASTING",
+		})
+	karat_stock = flt(frappe.db.get_value("Bin", {"item_code": doc.karat, "warehouse": _wh("Casting")}, "actual_qty"))
+	return {
+		"tree": tree, "karat": doc.karat or "", "cast": cint(doc.cast),
+		"casting_date": doc.casting_date, "wax_weight": flt(doc.wax_weight),
+		"gold_required": flt(doc.gold_required), "karat_stock": round(karat_stock, 3),
+		"scanned": card or "", "cards": cards,
+	}
+
+
+@frappe.whitelist()
+def cast_weigh(tree, entries):
+	"""Book cast weights onto a tree's cards. Each entry = {order_bag, gross}: the
+	machine reads GROSS; gold booked = gross − issued stones (ct x 0.2), pulled
+	from the CASTING warehouse (one move per card). Cards stay at CASTING. When
+	every card on the tree holds gold, the tree is marked Cast and the casting
+	date stamps itself."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	if isinstance(entries, str):
+		entries = json.loads(entries or "[]")
+	doc = frappe.get_doc("Wax Tree", tree)
+	if not doc.karat:
+		frappe.throw(frappe._("{0} has no karat — can't weigh.").format(tree))
+	tree_cards = {c.order_bag for c in doc.cards}
+	cast_wh, in_bags = _wh("Casting"), _wh(IN_PRODUCTION_WAREHOUSE)
+
+	lines, total_gold = [], 0.0
+	for e in entries or []:
+		bag, gross = e.get("order_bag"), flt(e.get("gross"))
+		if not bag or gross <= 0:
+			continue
+		if bag not in tree_cards:
+			frappe.throw(frappe._("{0} is not on tree {1}.").format(bag, tree))
+		loc = frappe.db.get_value("Order Bag", bag, "location")
+		if loc != "CASTING":
+			frappe.throw(frappe._("{0} is at {1}, not CASTING.").format(bag, loc or "—"))
+		stone = _bag_gold_and_stone(bag)[1]
+		gold = round(gross - stone, 3)
+		if gold <= 0:
+			frappe.throw(frappe._("{0}: gross {1} g ≤ its stones ({2} g) — nothing left as gold.").format(bag, gross, stone))
+		lines.append({"bag": bag, "gross": gross, "stone": stone, "gold": gold})
+		total_gold += gold
+	if not lines:
+		frappe.throw(frappe._("Enter at least one gross weight."))
+
+	avail = flt(frappe.db.get_value("Bin", {"item_code": doc.karat, "warehouse": cast_wh}, "actual_qty"))
+	if total_gold > avail + 0.0005:
+		frappe.throw(frappe._("Only {0} g of {1} in the Casting warehouse — these weights need {2} g. Melt first.")
+		             .format(round(avail, 3), doc.karat, round(total_gold, 3)))
+
+	for ln in lines:
+		_bag_ledger(ln["bag"], doc.karat, "In", ln["gold"], "Casting",
+		            remarks=f"cast gross {ln['gross']} g − stones {ln['stone']} g")
+		_stock_move(doc.karat, ln["gold"], cast_wh, in_bags)  # reduced one by one
+		_recompute_bag_from_contents(ln["bag"])
+
+	tree_cast = all(_bag_gold_and_stone(c.order_bag)[0] > 0.0005 for c in doc.cards)
+	if tree_cast and not cint(doc.cast):
+		frappe.db.set_value("Wax Tree", tree, {
+			"cast": 1, "casting_date": doc.casting_date or frappe.utils.today()})
+	frappe.db.commit()
+	remaining = flt(frappe.db.get_value("Bin", {"item_code": doc.karat, "warehouse": cast_wh}, "actual_qty"))
+	return {"booked": lines, "total_gold": round(total_gold, 3),
+	        "tree_cast": tree_cast, "remaining_stock": round(remaining, 3)}
 
 
 # wax -> metal casting conversion, per KARAT (same for all colors); stem is fixed
