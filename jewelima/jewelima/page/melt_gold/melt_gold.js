@@ -74,6 +74,9 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 					<label><input type="checkbox" class="ml-strict" checked> Strict out <span class="ml-help">lock the required grams</span></label>
 					<label><input type="checkbox" class="ml-noloss" checked> No loss</label>
 				</div>
+				<div class="ml-manual" style="display:none;margin:-6px 2px 10px;color:#9a6700;font-size:12px;">
+					Manual mode — your typed weights are kept and the output floats. Hit <b>Re-balance</b> (top) to auto-calculate everything, or a row's <b>⚖</b> to balance around that row.
+				</div>
 				<div class="ml-card">
 					<table class="ml-tbl">
 						<thead><tr><th style="width:40%">Material</th><th class="num" style="width:18%">Purity %</th><th class="num" style="width:24%">Weight (g)</th><th class="num" style="width:16%">Available</th><th style="width:30px"></th></tr></thead>
@@ -214,12 +217,20 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 				+ `<td class="num pur">${purTxt}</td>`
 				+ `<td class="num"><input type="number" min="0" step="0.001" class="ml-wt"></td>`
 				+ `<td class="num avail">${fmt(r.available)}</td>`
-				+ `<td class="num"><button class="btn btn-xs btn-default ml-rm" title="Remove">&times;</button></td>`;
+				+ `<td class="num" style="white-space:nowrap"><button class="btn btn-xs btn-default ml-bal" title="Balance the blend around THIS row's weight — everything else recalculates">⚖</button>`
+				+ ` <button class="btn btn-xs btn-default ml-rm" title="Remove">&times;</button></td>`;
 			body.appendChild(tr);
 			r.$tr = tr; r.$wt = tr.querySelector(".ml-wt");
 			r.$wt.value = r.weight ? fmt(r.weight) : "";
 			tr.classList.toggle("locked", !!r.locked);
-			r.$wt.addEventListener("input", () => { r.locked = true; r.weight = flt(r.$wt.value); tr.classList.add("locked"); solve(); });
+			r.$wt.addEventListener("input", () => {
+				r.locked = true; r.weight = flt(r.$wt.value); tr.classList.add("locked");
+				// hand input = the user is driving — stop forcing the required grams
+				if (strict.checked) strict.checked = false;
+				q(".ml-manual").style.display = "";
+				solve();
+			});
+			tr.querySelector(".ml-bal").addEventListener("click", () => balanceAround(r));
 			tr.querySelector(".ml-rm").addEventListener("click", () => removeSource(r.item));
 		});
 	}
@@ -309,9 +320,26 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		Promise.resolve(reqCtl.set_value(flt(m.grams) || 0)).then(() => solve());
 	}
 
-	page.add_inner_button(__("Re-balance"), () => { S.rows.forEach((r) => { r.locked = false; }); renderMaterials(); solve(); });
+	// anchor one row: keep ITS weight, unlock everything else and re-solve to the
+	// required grams at the target purity
+	function balanceAround(row) {
+		S.rows.forEach((r) => { r.locked = r === row; });
+		strict.checked = true;
+		q(".ml-manual").style.display = "none";
+		renderMaterials();
+		solve();
+	}
+
+	page.add_inner_button(__("Re-balance"), () => {
+		S.rows.forEach((r) => { r.locked = false; });
+		strict.checked = true;
+		q(".ml-manual").style.display = "none";
+		renderMaterials();
+		solve();
+	});
 	page.add_inner_button(__("Reset"), () => {
 		S.rows = []; S.out.purity = 0; outCtl.set_value(""); reqCtl.set_value(0); strict.checked = true; noLoss.checked = true;
+		q(".ml-manual").style.display = "none";
 		renderMaterials(); solve(); loadStock();
 	});
 
