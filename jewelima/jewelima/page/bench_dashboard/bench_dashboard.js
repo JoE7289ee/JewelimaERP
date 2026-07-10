@@ -34,6 +34,14 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		.bd-pill-q{background:#eef2f7;color:#5a6b7b;}
 		.bd-pill-i{background:#fdf3e3;color:#9a6700;}
 		.bd-pill-r{background:#eaf6ec;color:#1d7a33;}
+		.bd-pill-o{background:#b00020;color:#fff;font-weight:700;}
+		.bd-pill-w{background:#fdf3d8;color:#8a6d1a;font-weight:600;}
+		.bd-pill-l{background:#f3e8fd;color:#6b2fa8;}
+		.bd-card .name{display:flex;justify-content:space-between;align-items:baseline;gap:6px;}
+		.bd-card .roster{font-size:11px;color:var(--text-muted);font-weight:400;white-space:nowrap;}
+		.bd-card .mats{font-size:12px;color:var(--text-color);margin-top:4px;font-variant-numeric:tabular-nums;}
+		.bd-card .mats b{font-weight:700;}
+		.bd-tile.overdue .val{color:#b00020;}
 		.bd-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;}
 		table.bd-list{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.bd-list th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
@@ -67,22 +75,39 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		return `<div class="bd-tile ${cls || ""}"><div class="lbl">${lbl}</div><div class="val">${val}</div></div>`;
 	}
 
-	function renderOverview(rows) {
+	function renderOverview(rows, totals) {
 		page.set_title(__("Bench Dashboard"));
 		sel.set_value("");
+		const t = totals || {};
+		const tiles =
+			tile(__("Cards on floor"), t.cards || 0) +
+			tile(__("Pieces"), t.pieces || 0) +
+			tile(__("Gold in bags (g)"), (t.gold || 0).toFixed(1)) +
+			tile(__("Stones (ct)"), (t.stones || 0).toFixed(1)) +
+			tile(__("Overdue"), t.overdue || 0, t.overdue ? "overdue" : "") +
+			tile(__("Booked loss (g)"), (t.loss || 0).toFixed(2));
 		const cards = rows
 			.map((s) => {
-				const irPills = s.has_ir
-					? `<span class="pill bd-pill-i">Issued ${s.issued}</span><span class="pill bd-pill-r">Recd ${s.receipted}</span>`
-					: "";
-				const sub = `<div class="sub"><span class="pill bd-pill-q">Queue ${s.in_queue}</span>${irPills}</div>`;
+				const pills = [];
+				if (s.overdue) pills.push(`<span class="pill bd-pill-o">${s.overdue} overdue</span>`);
+				if (s.due_week) pills.push(`<span class="pill bd-pill-w">${s.due_week} due 7d</span>`);
+				if (s.oldest_days > 7) pills.push(`<span class="pill bd-pill-w">oldest ${s.oldest_days}d</span>`);
+				if (s.loss) pills.push(`<span class="pill bd-pill-l">loss ${s.loss.toFixed(2)} g</span>`);
+				pills.push(`<span class="pill bd-pill-q">Queue ${s.in_queue}</span>`);
+				if (s.has_ir) pills.push(`<span class="pill bd-pill-i">Issued ${s.issued}</span><span class="pill bd-pill-r">Recd ${s.receipted}</span>`);
+				const mats = (s.gold || s.stones)
+					? `<div class="mats"><b>${(s.gold || 0).toFixed(1)}</b> g · <b>${(s.stones || 0).toFixed(1)}</b> ct</div>`
+					: `<div class="mats" style="color:var(--text-muted)">${__("no material held")}</div>`;
 				return `<div class="bd-card" data-slug="${bd_slug(s.label)}">
-					<div class="name">${frappe.utils.escape_html(s.label)}</div>
-					<div class="big">${s.present}</div><div class="sub">cards present</div>
-					${sub}</div>`;
+					<div class="name">${frappe.utils.escape_html(s.label)}
+						<span class="roster">👥 ${s.roster || 0}</span></div>
+					<div class="big">${s.present}</div>
+					<div class="sub">${s.present === 1 ? __("card") : __("cards")} · ${s.pieces || 0} ${__("pcs")}</div>
+					${mats}
+					<div class="sub">${pills.join("")}</div></div>`;
 			})
 			.join("");
-		$body.html(`<div class="bd-grid">${cards}</div>`);
+		$body.html(`<div class="bd-tiles">${tiles}</div><div class="bd-grid">${cards}</div>`);
 		$body.find(".bd-card").on("click", function () {
 			frappe.set_route(["bench-dashboard", $(this).data("slug")]);
 		});
@@ -93,6 +118,8 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		{ f: "design", label: "Design", t: "str" },
 		{ f: "qty", label: "Qty", t: "num" },
 		{ f: "due_date", label: "Due", t: "date" },
+		{ f: "days_here", label: "Days Here", t: "num" },
+		{ f: "held_gold", label: "Gold Held (g)", t: "num" },
 		{ f: "status", label: "Status", t: "str" },
 		{ f: "employee", label: "Employee", t: "str" },
 		{ f: "weight_out", label: "Wt Out", t: "num" },
@@ -123,22 +150,27 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 				<td>${frappe.utils.escape_html(c.design || "")}</td>
 				<td class="num">${c.qty || ""}</td>
 				<td>${dtu(c.due_date)}</td>
+				<td class="num">${c.days_here == null ? "—" : c.days_here}</td>
+				<td class="num">${num(c.held_gold)}</td>
 				<td>${frappe.utils.escape_html(c.status || "")}</td>
 				<td>${frappe.utils.escape_html(c.employee || "")}</td>
 				<td class="num">${num(c.weight_out)}</td>
 			</tr>`
 			)
 			.join("");
-		$body.find(".bd-list tbody").html(rows || `<tr><td colspan="7"><div class="bd-empty">No cards at this bench right now.</div></td></tr>`);
+		$body.find(".bd-list tbody").html(rows || `<tr><td colspan="9"><div class="bd-empty">No cards at this bench right now.</div></td></tr>`);
 	}
 	function renderBench(s) {
 		page.set_title(s.label || __("Bench"));
 		sel.set_value(s.label || "");
-		let tiles = tile(__("Cards Present"), s.present) + tile(__("In Queue"), s.in_queue);
+		let tiles = tile(__("Cards Present"), s.present) + tile(__("Pieces"), s.pieces || 0)
+			+ tile(__("Gold Held (g)"), (s.gold || 0).toFixed(1)) + tile(__("Stones (ct)"), (s.stones || 0).toFixed(1))
+			+ tile(__("Overdue"), s.overdue || 0, s.overdue ? "overdue" : "") + tile(__("In Queue"), s.in_queue);
 		if (s.has_ir) {
 			tiles += tile(__("Issued"), s.issued, "issued");
 			tiles += tile(__("Receipted"), s.receipted, "receipted");
 		}
+		if (s.loss) tiles += tile(__("Booked Loss (g)"), s.loss.toFixed(2));
 		bdCards = s.cards || [];
 		bdSort = { field: null, dir: 1 };
 		const ths = BD_COLS.map((c) => `<th class="bd-sort ${c.t === "num" ? "num" : ""}" data-f="${c.f}">${__(c.label)}<span class="bd-arrow"></span></th>`).join("");
@@ -168,7 +200,7 @@ frappe.pages["bench-dashboard"].on_page_load = function (wrapper) {
 		const bench = frappe.get_route()[1] || null;
 		frappe.call({ method: "jewelima.jewelima.api.get_bench_dashboard", args: { bench } }).then((r) => {
 			const d = r.message || {};
-			if (d.overview) renderOverview(d.overview);
+			if (d.overview) renderOverview(d.overview, d.totals);
 			else if (d.label) renderBench(d);
 			else $body.html(`<div class="bd-empty">${__("Unknown bench.")}</div>`);
 		});

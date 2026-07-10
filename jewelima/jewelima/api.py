@@ -1997,26 +1997,107 @@ def allowed_to_locations(from_location):
 
 @frappe.whitelist()
 def get_bench_dashboard(bench=None):
-	"""Bench dashboard data. No bench -> overview of all benches (cards present +
-	Issued/Receipted for work benches). With a bench -> that bench's counts plus the
-	list of cards currently there."""
+	"""Bench dashboard. Overview: every bench with cards/pieces, the gold + stones
+	physically held there (bag ledgers), overdue / due-this-week, the oldest card's
+	age at the bench, booked loss (the "<Stage> -LOSS" warehouse balance) and the
+	roster size — plus floor-wide totals. With a bench: the same numbers and the
+	card list (held gold + days-here + employee names per card)."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE, ISSUE_RECEIPT_LOCATIONS, resolve_location
+
+	locs = list(BENCH_DOCTYPE)
+	today = frappe.utils.getdate()
+	week = frappe.utils.add_days(today, 7)
+	now = frappe.utils.now_datetime()
+
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"location": ["in", locs], "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
+		fields=["name", "location", "qty", "due_date"],
+	)
+	by_loc = {}
+	for b in bags:
+		by_loc.setdefault(b.location, []).append(b)
+	names = [b.name for b in bags]
+
+	held_loc, held_bag, arrived = {}, {}, {}
+	if names:
+		for loc, gold, stones in frappe.db.sql(
+			"""select ob.location,
+			          sum(case when ifnull(i.stone_type, '') = '' then (case when l.direction = 'In' then l.qty else -l.qty end) else 0 end),
+			          sum(case when ifnull(i.stone_type, '') != '' then (case when l.direction = 'In' then l.qty else -l.qty end) else 0 end)
+			   from `tabBag Material Ledger` l
+			   join `tabOrder Bag` ob on ob.name = l.order_bag
+			   join `tabItem` i on i.name = l.item
+			   where l.order_bag in %(names)s group by ob.location""",
+			{"names": names},
+		):
+			held_loc[loc] = {"gold": flt(gold), "stones": flt(stones)}
+		for bag, gold in frappe.db.sql(
+			"""select l.order_bag,
+			          sum(case when ifnull(i.stone_type, '') = '' then (case when l.direction = 'In' then l.qty else -l.qty end) else 0 end)
+			   from `tabBag Material Ledger` l join `tabItem` i on i.name = l.item
+			   where l.order_bag in %(names)s group by l.order_bag""",
+			{"names": names},
+		):
+			held_bag[bag] = flt(gold)
+		for bag, t in frappe.db.sql(
+			"""select order_bag, max(transfer_time) from `tabOrder Bag Transfer`
+			   where order_bag in %(names)s group by order_bag""",
+			{"names": names},
+		):
+			arrived[bag] = t
+
+	loss_whs = {w.warehouse_name: w.name for w in frappe.get_all(
+		"Warehouse", filters={"warehouse_name": ["like", "% -LOSS"]}, fields=["name", "warehouse_name"])}
+	loss_bal = dict(frappe.db.sql(
+		"select warehouse, sum(actual_qty) from tabBin where warehouse in %(whs)s group by warehouse",
+		{"whs": list(loss_whs.values()) or [""]},
+	)) if loss_whs else {}
+	roster = dict(frappe.db.sql("select parent, count(*) from `tabBench Employee` group by parent"))
+
+	def days_here(bag):
+		t = arrived.get(bag)
+		return max((now - t).days, 0) if t else None
 
 	def stats(loc):
 		dt = BENCH_DOCTYPE.get(loc)
-		has_ir = loc in ISSUE_RECEIPT_LOCATIONS
-		# cards CURRENTLY at this bench (a card that moved on no longer counts)
-		bags = frappe.get_all("Order Bag", filters={"location": loc}, pluck="name")
-		o = {"location": loc, "label": dt, "has_ir": has_ir, "present": len(bags), "in_queue": 0, "issued": 0, "receipted": 0}
-		if dt and bags and frappe.db.exists("DocType", dt):
-			o["in_queue"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "In Queue"})
-			if has_ir:  # Issued/Received only at benches that actually issue & receipt
-				o["issued"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Issued"})
-				o["receipted"] = frappe.db.count(dt, {"order_bag": ["in", bags], "status": "Receipted"})
+		rows = by_loc.get(loc, [])
+		bnames = [b.name for b in rows]
+		h = held_loc.get(loc, {})
+		ages = [d for d in (days_here(b.name) for b in rows) if d is not None]
+		o = {
+			"location": loc, "label": dt, "has_ir": loc in ISSUE_RECEIPT_LOCATIONS,
+			"present": len(rows),
+			"pieces": sum(max(cint(b.qty) or 1, 1) for b in rows),
+			"gold": round(max(flt(h.get("gold")), 0), 3),
+			"stones": round(max(flt(h.get("stones")), 0), 3),
+			"overdue": sum(1 for b in rows if b.due_date and frappe.utils.getdate(b.due_date) < today),
+			"due_week": sum(1 for b in rows if b.due_date and today <= frappe.utils.getdate(b.due_date) <= week),
+			"oldest_days": max(ages) if ages else 0,
+			"loss": round(flt(loss_bal.get(loss_whs.get(f"{dt} -LOSS"))), 3),
+			"roster": cint(roster.get(dt)),
+			"in_queue": 0, "issued": 0, "receipted": 0,
+		}
+		if dt and bnames and frappe.db.exists("DocType", dt):
+			o["in_queue"] = frappe.db.count(dt, {"order_bag": ["in", bnames], "status": "In Queue"})
+			if o["has_ir"]:
+				o["issued"] = frappe.db.count(dt, {"order_bag": ["in", bnames], "status": "Issued"})
+				o["receipted"] = frappe.db.count(dt, {"order_bag": ["in", bnames], "status": "Receipted"})
 		return o
 
 	if not bench:
-		return {"overview": [stats(loc) for loc in BENCH_DOCTYPE]}
+		rows = [stats(loc) for loc in BENCH_DOCTYPE]
+		return {
+			"overview": rows,
+			"totals": {
+				"cards": sum(r["present"] for r in rows),
+				"pieces": sum(r["pieces"] for r in rows),
+				"gold": round(sum(r["gold"] for r in rows), 3),
+				"stones": round(sum(r["stones"] for r in rows), 3),
+				"overdue": sum(r["overdue"] for r in rows),
+				"loss": round(sum(r["loss"] for r in rows), 3),
+			},
+		}
 
 	loc = resolve_location(bench)
 	if not loc:
@@ -2024,17 +2105,25 @@ def get_bench_dashboard(bench=None):
 	out = stats(loc)
 	dt = BENCH_DOCTYPE.get(loc)
 	cards = []
-	for b in frappe.get_all("Order Bag", filters={"location": loc}, fields=["name", "design", "qty", "due_date"], order_by="due_date asc"):
+	for b in sorted(by_loc.get(loc, []), key=lambda x: (x.due_date is None, x.due_date)):
 		rec = None
 		if dt and frappe.db.exists("DocType", dt):
 			r = frappe.get_all(dt, filters={"order_bag": b.name}, fields=["status", "employee", "weight_out"], order_by="creation desc", limit=1)
 			rec = r[0] if r else None
 		cards.append({
-			"name": b.name, "design": b.design, "qty": b.qty, "due_date": b.due_date,
+			"name": b.name, "design": frappe.db.get_value("Order Bag", b.name, "design"), "qty": b.qty, "due_date": b.due_date,
 			"status": (rec or {}).get("status") or "—",
 			"employee": (rec or {}).get("employee") or "",
 			"weight_out": (rec or {}).get("weight_out") or 0,
+			"held_gold": round(held_bag.get(b.name, 0), 3),
+			"days_here": days_here(b.name),
 		})
+	# employee IDs -> names, in one lookup
+	emp_ids = {c["employee"] for c in cards if c["employee"]}
+	if emp_ids:
+		emap = {e.name: e.employee_name for e in frappe.get_all("Employee", filters={"name": ["in", list(emp_ids)]}, fields=["name", "employee_name"])}
+		for c in cards:
+			c["employee"] = emap.get(c["employee"], c["employee"])
 	out["cards"] = cards
 	return out
 
