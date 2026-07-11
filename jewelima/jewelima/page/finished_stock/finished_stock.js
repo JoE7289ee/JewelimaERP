@@ -2,20 +2,16 @@
 // For license information, please see license.txt
 //
 // Finished Stock (Reports > Stock Reports) — the finished pool (Finished Goods +
-// At Certification warehouses) exploded HOLDER-wise: rows = materials (gold g /
-// stones ct, heat-shaded, from the finished bags' Convert rows), columns = the
-// customer each piece is reserved to (held_by), with per-holder status chips
-// (S in stock · C at certification). Sibling of the In Bags page.
+// At Certification warehouses) grouped by PRODUCT: rows = designs, columns = the
+// customer each piece is reserved to (held_by), cells = piece counts (weights +
+// barcodes in the tooltip), per-holder status chips (S in stock · C at
+// certification). Raw materials never show loose here — that's In Bags' job.
 // Route: /app/finished-stock
 
 frappe.pages["finished-stock"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Finished Stock", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { d: null, term: "", mode: "All", sub: "" };
-	const BUCKETS = [
-		["Diamond", "DMD"], ["Precious Stone", "PRECIOUS"], ["Color Stone", "CS"],
-		["CVD", "CVD"], ["Party Diamond", "PDMD"], ["Party Other", "POTH"],
-	];
+	const S = { d: null, term: "", type: "" };
 
 	$(page.main).append(`
 		<style>
@@ -30,9 +26,6 @@ frappe.pages["finished-stock"].on_page_load = function (wrapper) {
 		.fs-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 13px;font-size:12px;cursor:pointer;}
 		.fs-pill.on{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600;}
 		.fs-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
-		.fs-subrow{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px;}
-		.fs-sub{border:1px solid var(--border-color);background:var(--control-bg,var(--fg-color));border-radius:12px;padding:1px 11px;font-size:11.5px;cursor:pointer;color:var(--text-muted);}
-		.fs-sub.on{background:var(--text-color);color:var(--fg-color);border-color:var(--text-color);font-weight:600;}
 		.fs-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 250px);background:var(--fg-color);}
 		table.fs-tbl{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%;}
 		table.fs-tbl th{position:sticky;top:0;z-index:2;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 10px;text-align:right;white-space:nowrap;font-weight:700;vertical-align:bottom;}
@@ -46,25 +39,26 @@ frappe.pages["finished-stock"].on_page_load = function (wrapper) {
 		.fs-st{display:inline-block;border-radius:8px;padding:0 6px;font-size:10px;font-weight:700;margin-left:3px;}
 		.fs-st.s{background:#eaf6ec;color:#1d7a33;}
 		.fs-st.c{background:#fdf3e3;color:#9a6700;}
-		.fs-item{font-weight:700;}
-		.fs-grp{display:block;font-size:10.5px;color:var(--text-muted);font-weight:400;}
-		td.fs-gold-cell{background:rgba(184,134,11,var(--a,0));}
-		td.fs-stone-cell{background:rgba(28,93,168,var(--a,0));}
+		.fs-prod{display:flex;align-items:center;gap:8px;}
+		.fs-prod img{width:28px;height:28px;border-radius:4px;object-fit:cover;border:1px solid var(--border-color);}
+		.fs-prod .noimg{width:28px;height:28px;border-radius:4px;background:var(--control-bg);border:1px solid var(--border-color);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;}
+		.fs-name{font-weight:700;}
+		.fs-sub{display:block;font-size:10.5px;color:var(--text-muted);font-weight:400;}
+		td.fs-cell{background:rgba(29,122,51,var(--a,0));cursor:default;}
+		.fs-pc{font-weight:700;}
 		.fs-unit{color:var(--text-muted);font-size:10px;margin-left:2px;}
+		.fs-wt{display:block;font-size:10px;color:var(--text-muted);}
 		.fs-empty{padding:18px;text-align:center;color:var(--text-muted);}
 		.fs-hint{margin:10px 2px 0;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="fs-cards"></div>
 		<div class="fs-top">
-			<input class="fs-search" type="text" placeholder="${__("Search materials…")}">
-			<span class="fs-pills">
-				${["All", "Gold", "Stones"].map((m) => `<span class="fs-pill${m === "All" ? " on" : ""}" data-m="${m}">${__(m)}</span>`).join("")}
-			</span>
+			<input class="fs-search" type="text" placeholder="${__("Search products…")}">
+			<span class="fs-pills"></span>
 			<span class="fs-count"></span>
 		</div>
-		<div class="fs-subrow" style="display:none;"></div>
 		<div class="fs-box"><table class="fs-tbl"><thead class="fs-head"></thead><tbody class="fs-body"></tbody></table></div>
-		<div class="fs-hint">${__("Every material inside finished pieces (Finished Goods + At Certification warehouses), split by the customer holding them (piece composition from the bags' Convert rows). Darker cells hold more. Chips per holder: S in stock · C at certification.")}</div>
+		<div class="fs-hint">${__("Finished pieces (Finished Goods + At Certification warehouses) grouped by product, split by the customer holding them. Cells count pieces — hover for weights and card numbers. Chips per holder: S in stock · C at certification.")}</div>
 	`);
 
 	const root = $(page.main)[0];
@@ -75,39 +69,25 @@ frappe.pages["finished-stock"].on_page_load = function (wrapper) {
 		const d = S.d || {};
 		const t = d.totals || {};
 		root.querySelector(".fs-cards").innerHTML = `
-			<div class="fs-card gold"><div class="lb">${__("Gold in pieces")}</div><div class="v">${fmt(t.gold || 0)} g</div></div>
-			<div class="fs-card stone"><div class="lb">${__("Stones in pieces")}</div><div class="v">${fmt(t.stones || 0)} ct</div></div>
 			<div class="fs-card"><div class="lb">${__("Pieces")}</div><div class="v">${t.pieces || 0}</div></div>
+			<div class="fs-card"><div class="lb">${__("Products")}</div><div class="v">${t.products || 0}</div></div>
 			<div class="fs-card"><div class="lb">${__("Holders")}</div><div class="v">${t.holders || 0}</div></div>
-			<div class="fs-card"><div class="lb">${__("Materials")}</div><div class="v">${t.materials || 0}</div></div>`;
+			<div class="fs-card gold"><div class="lb">${__("Gold in pieces")}</div><div class="v">${fmt(t.gold || 0)} g</div></div>
+			<div class="fs-card stone"><div class="lb">${__("Stones in pieces")}</div><div class="v">${fmt(t.stones || 0)} ct</div></div>`;
 
-		const sub = root.querySelector(".fs-subrow");
-		if (S.mode === "All") {
-			sub.style.display = "none";
-		} else {
-			let opts;
-			if (S.mode === "Gold") {
-				opts = (d.items || []).filter((r) => !r.is_stone).map((r) => [r.item, r.item])
-					.sort((a, b) => b[0].localeCompare(a[0]));
-			} else {
-				const present = new Set((d.items || []).filter((r) => r.is_stone).map((r) => r.bucket));
-				opts = BUCKETS.filter(([k]) => present.has(k));
-				present.forEach((k) => { if (!BUCKETS.some(([b]) => b === k)) opts.push([k, k]); });
-			}
-			if (!opts.some(([k]) => k === S.sub)) S.sub = "";
-			sub.style.display = "flex";
-			sub.innerHTML = [["", __("All")]].concat(opts)
-				.map(([k, lb]) => `<span class="fs-sub${k === S.sub ? " on" : ""}" data-s="${esc(k)}" title="${esc(k || "")}">${esc(lb)}</span>`)
-				.join("");
-		}
+		// design-type pills, from the data
+		const types = [...new Set((d.products || []).map((p) => p.design_type).filter(Boolean))].sort();
+		if (!types.includes(S.type)) S.type = "";
+		root.querySelector(".fs-pills").innerHTML = [["", __("All")]].concat(types.map((x) => [x, x]))
+			.map(([k, lb]) => `<span class="fs-pill${k === S.type ? " on" : ""}" data-t="${esc(k)}">${esc(lb)}</span>`)
+			.join("");
 
 		const term = S.term.toLowerCase().trim();
-		const items = (d.items || []).filter((r) =>
-			(S.mode === "All" || (S.mode === "Gold" ? !r.is_stone : r.is_stone)) &&
-			(!S.sub || S.mode === "All" || (S.mode === "Gold" ? r.item === S.sub : r.bucket === S.sub)) &&
-			(!term || r.item.toLowerCase().includes(term) || r.group.toLowerCase().includes(term)));
+		const rows = (d.products || []).filter((p) =>
+			(!S.type || p.design_type === S.type) &&
+			(!term || p.design.toLowerCase().includes(term) || (p.design_type || "").toLowerCase().includes(term)));
 		const locs = d.locations || [];
-		root.querySelector(".fs-count").textContent = __("{0} material(s)", [items.length]);
+		root.querySelector(".fs-count").textContent = __("{0} product(s)", [rows.length]);
 
 		const ST = { "In Stock": ["s", "S"], "At Certification": ["c", "C"] };
 		const stChip = (sts) =>
@@ -118,29 +98,35 @@ frappe.pages["finished-stock"].on_page_load = function (wrapper) {
 					return `<span class="fs-st ${cls}" title="${esc(k)}: ${sts[k].cards} ${__("piece(s)")} · ${fmt(sts[k].gold)} g · ${fmt(sts[k].stones)} ct">${lb}${sts[k].cards}</span>`;
 				}).join("");
 		root.querySelector(".fs-head").innerHTML = `<tr>
-			<th>${__("Material")}</th>
+			<th>${__("Product")}</th>
 			${locs.map((l) => `<th><span class="fs-holder">${esc(l.label)}</span>${stChip(l.statuses)}<br>
 				<span class="fs-holder-sub">${l.cards} ${__("pc")} · ${fmt(l.gold)} g · ${fmt(l.stones)} ct</span></th>`).join("")}
 			<th class="tot">${__("Total")}</th>
 		</tr>`;
 
 		const body = root.querySelector(".fs-body");
-		body.innerHTML = items.length
-			? items.map((r) => {
-				const max = Math.max(...Object.values(r.cells), 0.0001);
-				const unit = r.is_stone ? "ct" : "g";
-				const cls = r.is_stone ? "fs-stone-cell" : "fs-gold-cell";
+		body.innerHTML = rows.length
+			? rows.map((p) => {
+				const max = Math.max(...Object.values(p.cells).map((c) => c.pc), 1);
 				return `<tr>
-					<td><span class="fs-item">${esc(r.item)}</span><span class="fs-grp">${esc(r.group)}</span></td>
+					<td><span class="fs-prod">
+						${p.image ? `<img src="${esc(p.image)}" loading="lazy">` : `<span class="noimg">◇</span>`}
+						<span><span class="fs-name">${esc(p.design)}</span>
+						<span class="fs-sub">${esc(p.design_type || "")} · ${fmt(p.gold)} g · ${fmt(p.stones)} ct</span></span>
+					</span></td>
 					${locs.map((l) => {
-						const v = r.cells[l.location];
-						const a = v ? (0.08 + 0.3 * (v / max)).toFixed(2) : 0;
-						return `<td class="${v ? cls : ""}" style="--a:${a}">${v ? fmt(v) + `<span class="fs-unit">${unit}</span>` : "·"}</td>`;
+						const c = p.cells[l.location];
+						if (!c) return `<td>·</td>`;
+						const a = (0.10 + 0.32 * (c.pc / max)).toFixed(2);
+						const tip = `${c.pc} ${__("piece(s)")} · ${fmt(c.gold)} g · ${fmt(c.stones)} ct\n${(c.bags || []).join(" · ")}`;
+						return `<td class="fs-cell" style="--a:${a}" title="${esc(tip)}">
+							<span class="fs-pc">${c.pc}</span><span class="fs-unit">pc</span>
+							<span class="fs-wt">${fmt(c.gold)} g · ${fmt(c.stones)} ct</span></td>`;
 					}).join("")}
-					<td class="tot">${fmt(r.total)}<span class="fs-unit">${unit}</span></td>
+					<td class="tot">${p.pieces}<span class="fs-unit">pc</span></td>
 				</tr>`;
 			}).join("")
-			: `<tr><td colspan="${locs.length + 2}" class="fs-empty">${(d.items || []).length ? __("Nothing matches.") : __("No finished pieces in stock yet — make products or import stock first.")}</td></tr>`;
+			: `<tr><td colspan="${locs.length + 2}" class="fs-empty">${(d.products || []).length ? __("Nothing matches.") : __("No finished pieces in stock yet — make products or import stock first.")}</td></tr>`;
 	}
 
 	function load() {
@@ -153,15 +139,8 @@ frappe.pages["finished-stock"].on_page_load = function (wrapper) {
 		S.term = this.value || "";
 		render();
 	}, 200));
-	$(page.main).find(".fs-pill").on("click", function () {
-		$(page.main).find(".fs-pill").removeClass("on");
-		this.classList.add("on");
-		S.mode = this.getAttribute("data-m");
-		S.sub = "";
-		render();
-	});
-	$(page.main).on("click", ".fs-sub", function () {
-		S.sub = this.getAttribute("data-s") || "";
+	$(page.main).on("click", ".fs-pill", function () {
+		S.type = this.getAttribute("data-t") || "";
 		render();
 	});
 	page.add_inner_button(__("Refresh"), load);
