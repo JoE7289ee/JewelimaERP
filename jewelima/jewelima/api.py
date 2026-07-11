@@ -2906,10 +2906,11 @@ def receive_from_employee(issue, weight_in, remarks=None):
 
 
 @frappe.whitelist()
-def convert_to_ornament(order_bag):
+def convert_to_ornament(order_bag, move_stock=True):
 	"""The piece is finished: consume the bag's remaining materials (zero it out),
 	one Convert (Out) row per held item. Finished-good stock posting is added with
-	the coarse-stock wiring."""
+	the coarse-stock wiring. move_stock=False when the caller already landed the
+	materials in Finished Goods itself (stock import)."""
 	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
 
 	c = get_bag_contents(order_bag)
@@ -2923,7 +2924,8 @@ def convert_to_ornament(order_bag):
 		# EVERYTHING the piece holds drains from the In Bags pool into Finished Goods —
 		# the warehouse book stays raw-material-denominated (grams + carats); the
 		# piece dimension rides on top via the bag's Convert rows + frozen actuals
-		_stock_move(it["item"], it["qty"], in_bags, fg)
+		if move_stock:
+			_stock_move(it["item"], it["qty"], in_bags, fg)
 	frappe.db.set_value("Order Bag", order_bag, "is_finished", 1)  # locks the BOM (plan)
 	frappe.db.commit()
 	return {"order_bag": order_bag, "consumed": held}
@@ -2984,6 +2986,163 @@ def make_products(bags):
 			errors.append({"name": nm, "error": str(e)})
 	frappe.db.commit()
 	return {"count": len(done), "done": done, "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Import Stock (Delivery) — bring pre-existing finished pieces into the system.
+# ---------------------------------------------------------------------------
+# Stone Type -> the bag's plan/actual bucket prefix.
+_BUCKET_OF_STONE_TYPE = {
+	"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs",
+	"CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth",
+}
+
+
+@frappe.whitelist()
+def import_finished_stock(payload):
+	"""Delivery > Import Stock: vault/opening pieces become finished products in one
+	shot — Job Order (type Import) + one Order Bag per piece, ledger In + Convert
+	rows, frozen actuals, In Stock + held_by, HUID/cert/charge tags.
+
+	The weight coming in MUST be backed by a stock entry (no unbacked bags):
+	  mode "issue"    — materials consumed from Gold Issue / Stone Issue (already
+	                    purchased there); one Material Transfer moves them to
+	                    Finished Goods. Shortfalls abort with a per-item list.
+	  mode "purchase" — a submitted Purchase Receipt straight into Finished Goods.
+
+	payload = {mode, customer, supplier?, remarks?, pieces: [{design, karat,
+	gold (g), gross (g), size?, huid?, certificate_no?, tags?: [category],
+	stones?: [{item, pcs, ct}]}]}"""
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE
+
+	p = frappe.parse_json(payload)
+	mode = (p.get("mode") or "issue").lower()
+	if mode not in ("issue", "purchase"):
+		frappe.throw(frappe._("Unknown mode: {0}").format(mode))
+	customer = p.get("customer")
+	if not customer or not frappe.db.exists("Customer", customer):
+		frappe.throw(frappe._("Pick the customer holding these pieces (JD Stock = ourselves)."))
+	pieces = p.get("pieces") or []
+	if not pieces:
+		frappe.throw(frappe._("Add at least one piece."))
+
+	# ---- validate everything BEFORE touching stock or creating anything -------
+	totals = {}  # item -> {"qty": weight, "pcs": n, "is_stone": bool}
+	for i, pc in enumerate(pieces, 1):
+		tag = frappe._("Row {0}").format(i)
+		design, karat = pc.get("design"), pc.get("karat")
+		if not design or not frappe.db.exists("Design", design):
+			frappe.throw(frappe._("{0}: Design {1} not found — create it first.").format(tag, design or "?"))
+		if not karat or not frappe.db.exists("Item", karat):
+			frappe.throw(frappe._("{0}: gold item {1} not found.").format(tag, karat or "?"))
+		if frappe.db.get_value("Item", karat, "stone_type"):
+			frappe.throw(frappe._("{0}: {1} is a stone — pick the karat gold item.").format(tag, karat))
+		gold, gross = flt(pc.get("gold")), flt(pc.get("gross"))
+		if gold <= 0 or gross <= 0:
+			frappe.throw(frappe._("{0}: enter the gold weight and the gross weight.").format(tag))
+		if gross + 0.0005 < gold:
+			frappe.throw(frappe._("{0}: gross ({1} g) can't be below the gold weight ({2} g).").format(tag, gross, gold))
+		for s in pc.get("stones") or []:
+			it, ct, pcs = s.get("item"), flt(s.get("ct")), cint(s.get("pcs"))
+			if not it or not frappe.db.exists("Item", it):
+				frappe.throw(frappe._("{0}: stone item {1} not found.").format(tag, it or "?"))
+			if not frappe.db.get_value("Item", it, "stone_type"):
+				frappe.throw(frappe._("{0}: {1} is not a stone.").format(tag, it))
+			if ct <= 0 or pcs <= 0:
+				frappe.throw(frappe._("{0}: {1} needs carats and a piece count.").format(tag, it))
+			t = totals.setdefault(it, {"qty": 0.0, "pcs": 0, "is_stone": True})
+			t["qty"] += ct
+			t["pcs"] += pcs
+		for tname in pc.get("tags") or []:
+			if not frappe.db.exists("Charge Category", tname):
+				frappe.throw(frappe._("{0}: unknown charge category {1}.").format(tag, tname))
+		t = totals.setdefault(karat, {"qty": 0.0, "pcs": 0, "is_stone": False})
+		t["qty"] += gold
+
+	fg = _wh("Finished Goods")
+	if not fg:
+		frappe.throw(frappe._("Finished Goods warehouse is missing."))
+
+	# ---- the backing stock entry (the gate: no entry, no bags) ----------------
+	if mode == "issue":
+		gold_wh, stone_wh = _wh(GOLD_ISSUE_WAREHOUSE), _wh(STONE_ISSUE_WAREHOUSE)
+		short = []
+		for it, t in totals.items():
+			src = stone_wh if t["is_stone"] else gold_wh
+			have = flt(frappe.db.get_value("Bin", {"item_code": it, "warehouse": src}, "actual_qty"))
+			if have + 0.0005 < t["qty"]:
+				short.append("{0}: need {1}, have {2} in {3}".format(it, round(t["qty"], 3), round(have, 3), src))
+		if short:
+			frappe.throw(frappe._("Not enough stock in the issue warehouses:<br>{0}<br><br>Purchase it first, or use New Purchase mode.").format("<br>".join(short)))
+		se = frappe.get_doc({
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Transfer",
+			"company": _company(),
+			"items": [{
+				"item_code": it, "qty": t["qty"],
+				"uom": frappe.db.get_value("Item", it, "stock_uom") or "Gram",
+				"s_warehouse": stone_wh if t["is_stone"] else gold_wh,
+				"t_warehouse": fg,
+				"allow_zero_valuation_rate": 1,
+			} for it, t in totals.items()],
+		})
+		se.flags.ignore_permissions = True
+		se.insert()
+		se.submit()
+		stock_doc = se.name
+	else:
+		supplier = p.get("supplier") or "JD Stock"
+		items = [{
+			"item": it, "weight": round(t["qty"], 3), "count": t["pcs"],
+			"purity": flt(frappe.db.get_value("Item", it, "purity_percentage")) if not t["is_stone"] else 0,
+			"rate": 0,
+		} for it, t in totals.items()]
+		stock_doc = post_raw_material_purchase(supplier, fg, items=items)["name"]
+
+	# ---- Job Order (type Import) + one finished bag per piece -----------------
+	if not frappe.db.exists("Order Type", "Import"):
+		frappe.get_doc({"doctype": "Order Type", "order_type_name": "Import"}).insert(ignore_permissions=True)
+	jo = frappe.get_doc({
+		"doctype": "Job Order",
+		"order_date": frappe.utils.today(),
+		"customer": customer,
+		"order_type": "Import",
+	})
+	jo.insert(ignore_permissions=True)
+
+	made = []
+	for pc in pieces:
+		karat, gold, gross = pc.get("karat"), flt(pc.get("gold")), flt(pc.get("gross"))
+		purity = flt(frappe.db.get_value("Item", karat, "purity_percentage"))
+		plan = {"gross_weight": gross, "nett_weight": gold, "purity": purity}
+		for s in pc.get("stones") or []:
+			b = _BUCKET_OF_STONE_TYPE.get(frappe.db.get_value("Item", s["item"], "stone_type") or "")
+			if b:
+				plan[f"{b}_no"] = cint(plan.get(f"{b}_no")) + cint(s.get("pcs"))
+				plan[f"{b}_weight"] = flt(plan.get(f"{b}_weight")) + flt(s.get("ct"))
+		bag = frappe.get_doc({
+			"doctype": "Order Bag",
+			"job_order": jo.name, "design": pc.get("design"), "qty": 1,
+			"size": pc.get("size"), "customer": customer, "order_type": "Import",
+			"order_date": jo.order_date, "narration": p.get("remarks"),
+			"huid": (pc.get("huid") or "").strip(), "certificate_no": (pc.get("certificate_no") or "").strip(),
+			"charge_categories": [{"charge_category": t} for t in pc.get("tags") or []],
+			**plan,
+		})
+		bag.insert(ignore_permissions=True)
+		_bag_ledger(bag.name, karat, "In", gold, "Gold Issue", remarks="Import", reference=stock_doc)
+		for s in pc.get("stones") or []:
+			_bag_ledger(bag.name, s["item"], "In", flt(s.get("ct")), "Stone Issue",
+			            remarks="Import", reference=stock_doc, pcs=cint(s.get("pcs")))
+		convert_to_ornament(bag.name, move_stock=False)  # the batch entry already landed stock in FG
+		frappe.db.set_value("Order Bag", bag.name, {
+			"stock_status": "In Stock", "held_by": customer,
+			"act_gross_weight": gross,  # the physical scale weight wins over the material sum
+		})
+		made.append(bag.name)
+
+	frappe.db.commit()
+	return {"job_order": jo.name, "bags": made, "stock_doc": stock_doc, "mode": mode}
 
 
 @frappe.whitelist()

@@ -280,7 +280,7 @@ def show_employee_names_in_links():
 	frappe.clear_cache(doctype="Employee")
 
 
-ORDER_TYPES = ["BULK", "CUSTOMER"]
+ORDER_TYPES = ["BULK", "CUSTOMER", "Import"]
 
 
 def create_order_types():
