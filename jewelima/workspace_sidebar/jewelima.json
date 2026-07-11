@@ -436,6 +436,32 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "tag",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Certification",
+   "link_to": "certify",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "clipboard-list",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Certification Records",
+   "link_to": "Certification",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "images",
@@ -878,7 +904,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-11 22:54:46.102493",
+ "modified": "2026-07-11 23:56:11.134814",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

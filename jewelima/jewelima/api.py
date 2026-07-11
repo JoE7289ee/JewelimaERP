@@ -3228,6 +3228,190 @@ def import_finished_stock(payload):
 	return {"job_order": jo.name, "bags": made, "stock_doc": stock_doc, "mode": mode}
 
 
+# ---------------------------------------------------------------------------
+# Certification (Delivery > Certification) — send finished pieces to IGI /
+# hallmarking, receive them back with HUID / certificate numbers.
+# ---------------------------------------------------------------------------
+def _bag_convert_materials(bags):
+	"""{bag: {item: qty}} from the finished bags' Convert (Out) rows — the frozen
+	composition every finished-piece stock move is denominated in."""
+	out = {b: {} for b in bags}
+	if not bags:
+		return out
+	for bag, item, qty in frappe.db.sql(
+		"""select order_bag, item, sum(qty) from `tabBag Material Ledger`
+		   where order_bag in %(bags)s and entry_type = 'Convert' and direction = 'Out'
+		   group by order_bag, item""",
+		{"bags": bags},
+	):
+		if flt(qty) > 0:
+			out[bag][item] = flt(qty)
+	return out
+
+
+def _stock_move_many(item_qty, source, target):
+	"""One Material Transfer moving {item: qty} from source -> target. Returns the
+	SE name (None when there is nothing to move)."""
+	rows = [{
+		"item_code": it, "qty": q,
+		"uom": frappe.db.get_value("Item", it, "stock_uom") or "Gram",
+		"s_warehouse": source, "t_warehouse": target,
+		"allow_zero_valuation_rate": 1,
+	} for it, q in item_qty.items() if flt(q) > 0]
+	if not rows or not source or not target:
+		return None
+	se = frappe.get_doc({"doctype": "Stock Entry", "stock_entry_type": "Material Transfer",
+	                     "company": _company(), "items": rows})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+	return se.name
+
+
+@frappe.whitelist()
+def get_certifiable_pieces(search=None):
+	"""Finished pieces In Stock — the pool the Certification desk picks from."""
+	bags = frappe.get_all(
+		"Order Bag", filters={"is_finished": 1, "stock_status": "In Stock"},
+		fields=["name", "design", "held_by", "act_gross_weight", "act_dmd_weight", "act_dmd_no", "huid"],
+		order_by="modified desc", limit=500,
+	)
+	designs = list({b.design for b in bags if b.design})
+	dtype = {d.name: (d.design_type or "") for d in frappe.get_all(
+		"Design", filters={"name": ["in", designs or [""]]}, fields=["name", "design_type"])}
+	out = []
+	s = (search or "").strip().lower()
+	for b in bags:
+		row = {
+			"order_bag": b.name, "design": b.design or "", "design_type": dtype.get(b.design, ""),
+			"held_by": b.held_by or "", "gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight),
+			"dmd_no": cint(b.act_dmd_no), "huid": b.huid or "",
+		}
+		if s and s not in " ".join([row["order_bag"], row["design"], row["design_type"], row["held_by"]]).lower():
+			continue
+		out.append(row)
+	return out
+
+
+@frappe.whitelist()
+def send_certification(payload):
+	"""Create a Certification batch: snapshot the pieces, move their materials
+	Finished Goods -> At Certification (one Stock Entry), flip the bags to
+	At Certification. payload = {certification_type, lab, remarks, bags: [...]}"""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+
+	p = frappe.parse_json(payload)
+	ctype = (p.get("certification_type") or "").upper()
+	if ctype not in ("IGI", "HALLMARKING"):
+		frappe.throw(frappe._("Unknown certification type: {0}").format(ctype or "?"))
+	bags = [b for b in (p.get("bags") or []) if b]
+	if not bags:
+		frappe.throw(frappe._("Pick at least one piece."))
+	rows = []
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm,
+		                        ["is_finished", "stock_status", "design", "act_gross_weight", "act_dmd_weight"], as_dict=True)
+		if not b:
+			frappe.throw(frappe._("{0} not found.").format(nm))
+		if not b.is_finished or b.stock_status != "In Stock":
+			frappe.throw(frappe._("{0} is {1} — only finished pieces In Stock can be sent.").format(
+				nm, "not a product yet" if not b.is_finished else b.stock_status))
+		rows.append({
+			"order_bag": nm, "design": b.design,
+			"design_type": frappe.db.get_value("Design", b.design, "design_type") if b.design else "",
+			"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight),
+		})
+
+	# the batch's stock move backs the send — everything the pieces hold
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh("Finished Goods"), _wh(CERTIFICATION_WAREHOUSE))
+
+	doc = frappe.get_doc({
+		"doctype": "Certification",
+		"certification_type": ctype, "status": "Sent", "sent_on": frappe.utils.today(),
+		"lab": p.get("lab"), "remarks": p.get("remarks"), "stock_entry": se,
+		"items": rows,
+	})
+	doc.insert(ignore_permissions=True)
+	for nm in bags:
+		frappe.db.set_value("Order Bag", nm, "stock_status", "At Certification")
+	frappe.db.commit()
+	return {"name": doc.name, "count": len(bags), "stock_entry": se}
+
+
+@frappe.whitelist()
+def receive_certification(name, rows):
+	"""Receive pieces back from a Certification batch: stamp HUID / certificate no
+	on the row AND the Order Bag, move their materials At Certification ->
+	Finished Goods (one Stock Entry per receive), flip the bags back In Stock.
+	rows = [{row (child name), huid, certificate_no}]"""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	doc = frappe.get_doc("Certification", name)
+	by_name = {r.name: r for r in doc.items}
+	picked = []
+	for r in rows or []:
+		child = by_name.get(r.get("row"))
+		if not child:
+			frappe.throw(frappe._("Row {0} not found on {1}.").format(r.get("row") or "?", name))
+		if child.received:
+			frappe.throw(frappe._("{0} is already received.").format(child.order_bag))
+		picked.append((child, (r.get("huid") or "").strip().upper(), (r.get("certificate_no") or "").strip()))
+	if not picked:
+		frappe.throw(frappe._("Pick at least one piece to receive."))
+
+	totals = {}
+	for mats in _bag_convert_materials([c.order_bag for c, _, _ in picked]).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
+
+	now = frappe.utils.now_datetime()
+	for child, huid, cert in picked:
+		child.received = 1
+		child.huid = huid
+		child.certificate_no = cert
+		child.received_on = now
+		vals = {"stock_status": "In Stock"}
+		if huid:
+			vals["huid"] = huid
+		if cert:
+			vals["certificate_no"] = cert
+		frappe.db.set_value("Order Bag", child.order_bag, vals)
+	doc.status = "Received" if all(r.received for r in doc.items) else "Partially Received"
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "received": len(picked), "status": doc.status, "stock_entry": se}
+
+
+@frappe.whitelist()
+def get_certification_batches():
+	"""Open batches (plus the freshest few received) for the Certification desk."""
+	names = frappe.get_all("Certification", filters={"status": ["!=", "Received"]},
+	                       order_by="creation desc", pluck="name")
+	names += frappe.get_all("Certification", filters={"status": "Received"},
+	                        order_by="modified desc", limit=3, pluck="name")
+	out = []
+	for nm in names:
+		d = frappe.get_doc("Certification", nm)
+		out.append({
+			"name": d.name, "certification_type": d.certification_type, "status": d.status,
+			"sent_on": str(d.sent_on or ""), "lab": d.lab or "", "remarks": d.remarks or "",
+			"total": len(d.items), "back": sum(1 for r in d.items if r.received),
+			"items": [{
+				"row": r.name, "order_bag": r.order_bag, "design": r.design or "", "design_type": r.design_type or "",
+				"gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct), "received": cint(r.received),
+				"huid": r.huid or "", "certificate_no": r.certificate_no or "",
+			} for r in d.items],
+		})
+	return out
+
+
 @frappe.whitelist()
 def get_finished_items(status=None, held_by=None):
 	"""The finished-goods register: every bag made into a product, with its frozen

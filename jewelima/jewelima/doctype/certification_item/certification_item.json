@@ -1,0 +1,105 @@
+{
+ "actions": [],
+ "creation": "2026-07-12 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_bag",
+  "design",
+  "design_type",
+  "gross",
+  "dmd_ct",
+  "received",
+  "huid",
+  "certificate_no",
+  "received_on"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Card",
+   "options": "Order Bag",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Design",
+   "options": "Design",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "design_type",
+   "fieldtype": "Data",
+   "label": "Type",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "gross",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Gross (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "dmd_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "DMD (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "received",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Received",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "huid",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "HUID"
+  },
+  {
+   "columns": 2,
+   "fieldname": "certificate_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Certificate No"
+  },
+  {
+   "fieldname": "received_on",
+   "fieldtype": "Datetime",
+   "label": "Received On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-12 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Certification Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
