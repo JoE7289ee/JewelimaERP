@@ -527,19 +527,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "list",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Item Stock",
-   "link_to": "item-stock",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "inbox",
@@ -586,6 +573,45 @@
    "keep_closed": 0,
    "label": "Gold Casting",
    "link_to": "gold-casting",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "warehouse",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Stock Reports",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "list",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Item Stock",
+   "link_to": "item-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "shopping-bag",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "In Bags",
+   "link_to": "in-bags",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -800,7 +826,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-10 01:06:53.633695",
+ "modified": "2026-07-11 10:17:11.700980",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

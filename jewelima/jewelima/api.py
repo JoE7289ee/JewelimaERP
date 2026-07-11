@@ -2288,6 +2288,105 @@ def save_bag_bom(order_bag, rows):
 	return {"ok": 1, "rows": len(bag.bag_bom)}
 
 
+@frappe.whitelist()
+def get_in_bags_matrix():
+	"""The In Bags pool, exploded: WHERE each material physically sits. Rows =
+	items (gold in g, stones in ct), columns = benches holding material (from bag
+	ledgers x current bag locations), plus a per-bench status split (the bench
+	record's In Queue / Issued / Receipted) so you see what's out with workers."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	locs = list(BENCH_DOCTYPE)
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"location": ["in", locs], "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
+		fields=["name", "location"],
+	)
+	if not bags:
+		return {"items": [], "locations": [], "totals": {}}
+	bag_loc = {b.name: b.location for b in bags}
+	names = list(bag_loc)
+
+	# item x location material sums
+	cells, meta = {}, {}
+	for item, loc, qty, stone_type, group in frappe.db.sql(
+		"""select l.item, ob.location,
+		          sum(case when l.direction = 'In' then l.qty else -l.qty end),
+		          ifnull(i.stone_type, ''), i.item_group
+		   from `tabBag Material Ledger` l
+		   join `tabOrder Bag` ob on ob.name = l.order_bag
+		   join `tabItem` i on i.name = l.item
+		   where l.order_bag in %(names)s
+		   group by l.item, ob.location""",
+		{"names": names},
+	):
+		if flt(qty) <= 0.0005:
+			continue
+		cells.setdefault(item, {})[loc] = round(flt(qty), 3)
+		meta[item] = {"is_stone": bool(stone_type), "group": group or ""}
+
+	# per-bag gold/stone totals -> the per (location, status) split
+	bag_mat = {}
+	for bag, gold, stones in frappe.db.sql(
+		"""select l.order_bag,
+		          sum(case when ifnull(i.stone_type, '') = '' then (case when l.direction = 'In' then l.qty else -l.qty end) else 0 end),
+		          sum(case when ifnull(i.stone_type, '') != '' then (case when l.direction = 'In' then l.qty else -l.qty end) else 0 end)
+		   from `tabBag Material Ledger` l join `tabItem` i on i.name = l.item
+		   where l.order_bag in %(names)s group by l.order_bag""",
+		{"names": names},
+	):
+		bag_mat[bag] = (max(flt(gold), 0), max(flt(stones), 0))
+
+	# latest bench-record status per bag at its CURRENT location
+	bag_status, by_loc_names = {}, {}
+	for b, loc in bag_loc.items():
+		by_loc_names.setdefault(loc, []).append(b)
+	for loc, bnames in by_loc_names.items():
+		dt = BENCH_DOCTYPE.get(loc)
+		if not dt or not frappe.db.exists("DocType", dt):
+			continue
+		for r in frappe.get_all(dt, filters={"order_bag": ["in", bnames]},
+		                        fields=["order_bag", "status"], order_by="creation asc"):
+			bag_status[r.order_bag] = r.status  # ascending scan -> the latest record wins
+
+	loc_stats = {}
+	for bag, (gold, stones) in bag_mat.items():
+		if gold <= 0.0005 and stones <= 0.0005:
+			continue
+		loc = bag_loc[bag]
+		st = bag_status.get(bag) or "In Queue"
+		d = loc_stats.setdefault(loc, {"gold": 0.0, "stones": 0.0, "statuses": {}})
+		d["gold"] += gold
+		d["stones"] += stones
+		sd = d["statuses"].setdefault(st, {"gold": 0.0, "stones": 0.0, "cards": 0})
+		sd["gold"] += gold
+		sd["stones"] += stones
+		sd["cards"] += 1
+
+	live_locs = [loc for loc in locs if loc in loc_stats]
+	items = [{
+		"item": item, "group": meta[item]["group"], "is_stone": meta[item]["is_stone"],
+		"total": round(sum(cells[item].values()), 3),
+		"cells": cells[item],
+	} for item in sorted(cells, key=lambda i: (meta[i]["is_stone"], i))]
+	locations = [{
+		"location": loc, "label": BENCH_DOCTYPE.get(loc, loc),
+		"gold": round(loc_stats[loc]["gold"], 3), "stones": round(loc_stats[loc]["stones"], 3),
+		"statuses": {k: {"gold": round(v["gold"], 3), "stones": round(v["stones"], 3), "cards": v["cards"]}
+		             for k, v in loc_stats[loc]["statuses"].items()},
+	} for loc in live_locs]
+	return {
+		"items": items,
+		"locations": locations,
+		"totals": {
+			"gold": round(sum(x["gold"] for x in locations), 3),
+			"stones": round(sum(x["stones"] for x in locations), 3),
+			"benches": len(locations),
+			"materials": len(items),
+		},
+	}
+
+
 # ---------------------------------------------------------------------------
 # Warehouse Stock dashboard — live balances straight from the stock ledger (Bin).
 # ---------------------------------------------------------------------------
