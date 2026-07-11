@@ -3389,6 +3389,106 @@ def receive_certification(name, rows):
 	return {"name": name, "received": len(picked), "status": doc.status, "stock_entry": se}
 
 
+# IGI bulk-submission export — the user's own template shipped in-app; we only
+# type values into it, so IGI's formatting/validation sheet ride along untouched.
+_IGI_METAL_COLOR = {"YG": "Yellow Gold", "WG": "White Gold", "PG": "Pink Gold"}
+# our diamond quality group -> (Color Criteria, Clarity Criteria) in IGI's wording
+_IGI_QUALITY = {
+	"SI-IJ": ("IJ", "SI"), "VS-FG": ("FG", "VS"), "VS-IJ": ("IJ", "VS"),
+	"VVS-EF": ("EF", "VVS"), "VVS/VS-GH": ("GH", "VS/VVS"), "VVS1-EF": ("EF", "VVS1"),
+	"VVS2": ("", "VVS2"),
+}
+
+
+@frappe.whitelist()
+def export_igi_xlsx(bags, metal_type=None):
+	"""Download the IGI bulk-submission workbook for the selected finished pieces —
+	the shipped template filled from row 3. Style Number = design + card barcode;
+	Diamond Weight = natural DMD + party diamonds (CVD excluded — lab-grown goes
+	on its own submission); Jewelry Description via the IGI Description Map."""
+	import re
+	from io import BytesIO
+
+	import openpyxl
+
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	bags = [b for b in bags if b]
+	if not bags:
+		frappe.throw(frappe._("Pick at least one piece."))
+
+	rows_out, unmapped = [], set()
+	mats = _bag_convert_materials(bags)
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm, [
+			"is_finished", "stock_status", "design", "huid", "act_gross_weight",
+			"act_dmd_weight", "act_dmd_no", "act_pdmd_weight", "act_pdmd_no"], as_dict=True)
+		if not b or not b.is_finished or b.stock_status not in ("In Stock", "At Certification"):
+			frappe.throw(frappe._("{0} is not a finished piece In Stock / At Certification.").format(nm))
+		dtype = frappe.db.get_value("Design", b.design, "design_type") if b.design else ""
+		desc = frappe.db.get_value("IGI Description Map", dtype, "igi_description") if dtype else None
+		if not desc:
+			unmapped.add(dtype or "(no design type)")
+
+		# walk the piece's frozen materials: gold -> metal color/karat; diamonds ->
+		# dominant quality; coloured/precious -> names + carats
+		karat = color = ""
+		qual_ct, colored_names, colored_ct = {}, [], 0.0
+		items = mats.get(nm, {})
+		imeta = {i.name: i for i in frappe.get_all(
+			"Item", filters={"name": ["in", list(items) or [""]]}, fields=["name", "stone_type", "item_group"])}
+		for it, qty in items.items():
+			m = imeta.get(it)
+			if not m:
+				continue
+			if not m.stone_type:
+				g = re.search(r"(\d{2}K)(YG|WG|PG)$", it)
+				if g:
+					karat, color = g.group(1), _IGI_METAL_COLOR[g.group(2)]
+				elif not color:
+					color = "Gold"
+			elif m.stone_type in ("Diamond", "Party Diamond"):
+				q = (m.item_group or "").replace("DIAMOND ", "") if m.stone_type == "Diamond" else ""
+				if q:
+					qual_ct[q] = qual_ct.get(q, 0) + qty
+			elif m.stone_type in ("Color Stone", "Precious Stone", "Party Other"):
+				colored_names.append(it.split(" ")[0] if it[-1].isdigit() else it)
+				colored_ct += qty
+		best_q = max(qual_ct, key=qual_ct.get) if qual_ct else ""
+		jk = _IGI_QUALITY.get(best_q, ("", ""))
+		dmd_ct = round(flt(b.act_dmd_weight) + flt(b.act_pdmd_weight), 3)
+		dmd_no = cint(b.act_dmd_no) + cint(b.act_pdmd_no)
+		has_dmd = dmd_ct > 0 or dmd_no > 0
+		rows_out.append({
+			"B": "{0} / {1}".format(b.design or "", nm), "C": flt(b.act_gross_weight),
+			"D": dmd_ct, "E": dmd_no, "F": desc or "",
+			"G": color, "H": metal_type or "", "I": "Round Brilliant" if has_dmd else "",
+			"J": jk[0] if has_dmd else "", "K": jk[1] if has_dmd else "", "L": "Very Good" if has_dmd else "",
+			"M": ("{0} Hallmarked".format(karat) if b.huid else karat) if karat else "",
+			"V": ", ".join(sorted(set(colored_names))), "Z": round(colored_ct, 3) or "",
+		})
+	if unmapped:
+		frappe.throw(frappe._("No IGI wording mapped for design type(s): {0}.<br>Add them in the IGI Description Map list first.").format(
+			", ".join(sorted(unmapped))))
+
+	wb = openpyxl.load_workbook(frappe.get_app_path("jewelima", "data", "igi_template.xlsx"))
+	ws = wb["Sheet1"]
+	# wipe the template's sample rows, then fill ours from row 3
+	# (ws.cell(..., value=None) would be a no-op — assign .value explicitly)
+	for r in range(3, max(10, 3 + len(rows_out) + 3)):
+		for c in range(1, 29):
+			ws.cell(row=r, column=c).value = None
+	for i, row in enumerate(rows_out):
+		for col, val in row.items():
+			if val != "" and val is not None:
+				ws[f"{col}{3 + i}"] = val
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "IGI-{0}-{1}pc.xlsx".format(frappe.utils.today(), len(rows_out))
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "binary"
+
+
 @frappe.whitelist()
 def get_certification_batches():
 	"""Open batches (plus the freshest few received) for the Certification Out

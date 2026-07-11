@@ -127,6 +127,25 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	});
 
 	page.set_primary_action(__("Batches Out"), () => frappe.set_route("certification-out"));
+	page.add_inner_button(__("Export IGI"), () => {
+		if (!S.sel.size) {
+			frappe.msgprint(__("Pick the pieces to export first."));
+			return;
+		}
+		const d = new frappe.ui.Dialog({
+			title: __("Export IGI submission ({0} pieces)", [S.sel.size]),
+			fields: [{ fieldname: "metal_type", fieldtype: "Data", label: __("Metal Type (all rows)"),
+				description: __("Optional — IGI's wording, e.g. Partly Rhodium Plated. Leave blank to skip.") }],
+			primary_action_label: __("Download"),
+			primary_action: (v) => {
+				d.hide();
+				window.open("/api/method/jewelima.jewelima.api.export_igi_xlsx?bags=" +
+					encodeURIComponent(JSON.stringify([...S.sel])) +
+					"&metal_type=" + encodeURIComponent(v.metal_type || ""));
+			},
+		});
+		d.show();
+	});
 	page.add_inner_button(__("Refresh"), loadAll);
 	loadAll();
 };

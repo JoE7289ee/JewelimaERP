@@ -95,7 +95,8 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 							<span class="code">${esc(r.order_bag)}</span><span class="ty">${esc(r.design_type)}</span>
 							<span class="wt">${fmt(r.gross)} g${r.stones_ct ? ` · ${fmt(r.stones_ct)} ct` : ""}<br>
 							<span style="font-size:10px;">${__("pure")} ${fmt(r.pure)} g</span></span></div>`).join("")}
-					<div class="co-cnt">${b.back}/${b.total} ${__("back")}${b.status === "Received" ? " · " + __("complete") : ""}</div>
+					<div class="co-cnt">${b.back}/${b.total} ${__("back")}${b.status === "Received" ? " · " + __("complete") : ""}
+						· <a class="co-igi" data-bags='${esc(JSON.stringify(b.items.map((r) => r.order_bag)))}' style="cursor:pointer;">${__("IGI xlsx")} ⬇</a></div>
 				</div>
 			</div>`;
 		}).join(""));
@@ -109,6 +110,13 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 			render();
 		});
 	}
+
+	// batch footer -> download its IGI submission workbook
+	$(root).on("click", ".co-igi", function (e) {
+		e.stopPropagation();
+		window.open("/api/method/jewelima.jewelima.api.export_igi_xlsx?bags=" +
+			encodeURIComponent(this.getAttribute("data-bags")));
+	});
 
 	// click a pending piece -> receive it (numbers dialog)
 	$(root).on("click", ".co-chip.pend", function () {

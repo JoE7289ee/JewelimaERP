@@ -12,6 +12,7 @@ def after_install():
 	create_design_masters()
 	create_order_types()
 	create_charge_categories()
+	create_igi_description_maps()
 	create_default_supplier()
 	create_jd_stock_customer()
 	create_manufacturing_warehouses()
@@ -48,6 +49,7 @@ def after_migrate():
 	create_design_masters()
 	create_order_types()
 	create_charge_categories()
+	create_igi_description_maps()
 	create_default_supplier()
 	create_jd_stock_customer()
 	create_manufacturing_warehouses()
@@ -294,6 +296,34 @@ def create_order_types():
 # Pricing categories from the real rate charts that aren't design types —
 # tagged on odd Order Bags so the buyer's chart rule resolves itself at sale.
 CHARGE_CATEGORIES = ["Back Chain", "Navaratna", "Plain Gold / CZ", "Name Ring"]
+
+# Our design types -> IGI's exact "Jewelry Description" vocabulary (their bulk
+# submission template). Extend via the IGI Description Map list as types grow.
+IGI_DESCRIPTION_SEED = {
+	"ANKLET": "Anklet",
+	"BACK CHAIN": "Chain",
+	"BANGLE": "Bangle",
+	"BRACELET": "Bracelet",
+	"CHAIN": "Chain",
+	"CHAIN BRACELET": "Bracelet",
+	"CHAIN NECKLACE": "Necklace",
+	"NECKLACE": "Necklace",
+	"NOSEPIN": "Nosepin",
+	"PENDANT": "Pendant",
+	"PIPE BANGLE": "Bangle",
+	"RING": "Ring",
+	"STUD": "Pair of Earrings",
+}
+
+
+def create_igi_description_maps():
+	"""Seed the Design Type -> IGI wording map (only for types that exist)."""
+	if not frappe.db.exists("DocType", "IGI Description Map"):
+		return
+	for dt, desc in IGI_DESCRIPTION_SEED.items():
+		if frappe.db.exists("Design Type", dt) and not frappe.db.exists("IGI Description Map", dt):
+			frappe.get_doc({"doctype": "IGI Description Map", "design_type": dt, "igi_description": desc}).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def create_charge_categories():
