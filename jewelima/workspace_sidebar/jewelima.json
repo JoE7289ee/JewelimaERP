@@ -644,6 +644,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Finished Stock",
+   "link_to": "finished-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "settings",
@@ -852,7 +865,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-11 15:32:29.745608",
+ "modified": "2026-07-11 22:42:00.233526",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

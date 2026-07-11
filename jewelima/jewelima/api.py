@@ -2388,6 +2388,80 @@ def get_in_bags_matrix():
 	}
 
 
+@frappe.whitelist()
+def get_finished_stock_matrix():
+	"""The finished pool (Finished Goods + At Certification warehouses), exploded:
+	WHERE each material sits, holder-wise. Rows = items (gold g / stones ct),
+	columns = the customer holding the pieces (held_by), plus a per-holder status
+	split (In Stock / At Certification) — the piece dimension comes from the
+	finished bags' Convert rows. Same shape as get_in_bags_matrix."""
+	bags = frappe.get_all(
+		"Order Bag",
+		filters={"is_finished": 1, "stock_status": ["in", ["In Stock", "At Certification"]]},
+		fields=["name", "held_by", "stock_status"],
+	)
+	if not bags:
+		return {"items": [], "locations": [], "totals": {}}
+	bag_holder = {b.name: (b.held_by or "—") for b in bags}
+	bag_status = {b.name: b.stock_status for b in bags}
+	names = list(bag_holder)
+
+	# item x holder cells + per-bag gold/stone totals — from the Convert (Out) rows
+	cells, meta, bag_mat = {}, {}, {}
+	for bag, item, qty, stone_type, group in frappe.db.sql(
+		"""select l.order_bag, l.item, sum(l.qty), ifnull(i.stone_type, ''), i.item_group
+		   from `tabBag Material Ledger` l join `tabItem` i on i.name = l.item
+		   where l.order_bag in %(names)s and l.entry_type = 'Convert' and l.direction = 'Out'
+		   group by l.order_bag, l.item""",
+		{"names": names},
+	):
+		qty = flt(qty)
+		if qty <= 0.0005:
+			continue
+		holder = bag_holder[bag]
+		cells.setdefault(item, {})[holder] = round(cells.get(item, {}).get(holder, 0) + qty, 3)
+		meta[item] = {"is_stone": bool(stone_type), "group": group or "", "bucket": stone_type or ""}
+		g, s = bag_mat.get(bag, (0.0, 0.0))
+		bag_mat[bag] = (g + (0 if stone_type else qty), s + (qty if stone_type else 0))
+
+	holder_stats = {}
+	for bag, (gold, stones) in bag_mat.items():
+		d = holder_stats.setdefault(bag_holder[bag], {"gold": 0.0, "stones": 0.0, "cards": 0, "statuses": {}})
+		d["gold"] += gold
+		d["stones"] += stones
+		d["cards"] += 1
+		sd = d["statuses"].setdefault(bag_status[bag], {"gold": 0.0, "stones": 0.0, "cards": 0})
+		sd["gold"] += gold
+		sd["stones"] += stones
+		sd["cards"] += 1
+
+	# JD Stock (our own shelf) first, then holders by material held
+	order = sorted(holder_stats, key=lambda h: (h != "JD Stock", -(holder_stats[h]["gold"] + holder_stats[h]["stones"])))
+	items = [{
+		"item": item, "group": meta[item]["group"], "is_stone": meta[item]["is_stone"],
+		"bucket": meta[item]["bucket"],
+		"total": round(sum(cells[item].values()), 3),
+		"cells": cells[item],
+	} for item in sorted(cells, key=lambda i: (meta[i]["is_stone"], i))]
+	locations = [{
+		"location": h, "label": h, "cards": holder_stats[h]["cards"],
+		"gold": round(holder_stats[h]["gold"], 3), "stones": round(holder_stats[h]["stones"], 3),
+		"statuses": {k: {"gold": round(v["gold"], 3), "stones": round(v["stones"], 3), "cards": v["cards"]}
+		             for k, v in holder_stats[h]["statuses"].items()},
+	} for h in order]
+	return {
+		"items": items,
+		"locations": locations,
+		"totals": {
+			"gold": round(sum(x["gold"] for x in locations), 3),
+			"stones": round(sum(x["stones"] for x in locations), 3),
+			"pieces": sum(x["cards"] for x in locations),
+			"holders": len(locations),
+			"materials": len(items),
+		},
+	}
+
+
 # ---------------------------------------------------------------------------
 # Warehouse Stock dashboard — live balances straight from the stock ledger (Bin).
 # ---------------------------------------------------------------------------
