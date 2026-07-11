@@ -3391,25 +3391,52 @@ def receive_certification(name, rows):
 
 @frappe.whitelist()
 def get_certification_batches():
-	"""Open batches (plus the freshest few received) for the Certification desk."""
+	"""Open batches (plus the freshest few received) for the Certification Out
+	board. Items carry pure gold + total stone ct (frozen actuals) so the header
+	can total what's physically out; summary covers UNRECEIVED pieces only."""
 	names = frappe.get_all("Certification", filters={"status": ["!=", "Received"]},
 	                       order_by="creation desc", pluck="name")
 	names += frappe.get_all("Certification", filters={"status": "Received"},
 	                        order_by="modified desc", limit=3, pluck="name")
-	out = []
+	all_bags = set()
+	docs = []
 	for nm in names:
 		d = frappe.get_doc("Certification", nm)
+		docs.append(d)
+		all_bags.update(r.order_bag for r in d.items)
+	acts = {b.name: b for b in frappe.get_all(
+		"Order Bag", filters={"name": ["in", list(all_bags) or [""]]},
+		fields=["name", "act_pure_weight", "act_dmd_weight", "act_ps_weight", "act_cs_weight",
+		        "act_cvd_weight", "act_pdmd_weight", "act_poth_weight"])}
+
+	def stones_of(bag):
+		a = acts.get(bag)
+		return round(sum(flt(a.get(f"act_{x}_weight")) for x in ("dmd", "ps", "cs", "cvd", "pdmd", "poth")), 3) if a else 0
+
+	out, summary = [], {"pieces_out": 0, "pure_gold": 0.0, "stones_ct": 0.0, "batches_out": 0}
+	for d in docs:
+		items = [{
+			"row": r.name, "order_bag": r.order_bag, "design": r.design or "", "design_type": r.design_type or "",
+			"gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct), "received": cint(r.received),
+			"pure": flt((acts.get(r.order_bag) or {}).get("act_pure_weight")), "stones_ct": stones_of(r.order_bag),
+			"huid": r.huid or "", "certificate_no": r.certificate_no or "",
+		} for r in d.items]
+		if d.status != "Received":
+			summary["batches_out"] += 1
+			for it in items:
+				if not it["received"]:
+					summary["pieces_out"] += 1
+					summary["pure_gold"] += it["pure"]
+					summary["stones_ct"] += it["stones_ct"]
 		out.append({
 			"name": d.name, "certification_type": d.certification_type, "status": d.status,
 			"sent_on": str(d.sent_on or ""), "lab": d.lab or "", "remarks": d.remarks or "",
 			"total": len(d.items), "back": sum(1 for r in d.items if r.received),
-			"items": [{
-				"row": r.name, "order_bag": r.order_bag, "design": r.design or "", "design_type": r.design_type or "",
-				"gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct), "received": cint(r.received),
-				"huid": r.huid or "", "certificate_no": r.certificate_no or "",
-			} for r in d.items],
+			"items": items,
 		})
-	return out
+	summary["pure_gold"] = round(summary["pure_gold"], 3)
+	summary["stones_ct"] = round(summary["stones_ct"], 3)
+	return {"batches": out, "summary": summary}
 
 
 @frappe.whitelist()
