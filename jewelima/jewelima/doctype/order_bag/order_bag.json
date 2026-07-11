@@ -35,6 +35,10 @@
   "stock_section",
   "stock_status",
   "held_by",
+  "stock_col_break",
+  "huid",
+  "certificate_no",
+  "charge_categories",
   "bom_tab",
   "bag_bom",
   "weights_section",
@@ -141,7 +145,7 @@
    "label": "Qty"
   },
   {
-   "description": "Options come from the design type's size list (Setup \u2192 Design Types).",
+   "description": "Options come from the design type's size list (Setup → Design Types).",
    "fieldname": "size",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -173,7 +177,7 @@
   },
   {
    "default": "0",
-   "description": "Set when the ornament is made \u2014 locks the BOM (Plan).",
+   "description": "Set when the ornament is made — locks the BOM (Plan).",
    "fieldname": "is_finished",
    "fieldtype": "Check",
    "label": "Ornament Made",
@@ -211,7 +215,7 @@
   },
   {
    "default": "0",
-   "description": "Awaiting a CAD design \u2014 must go to CAD first; can't be collected there until a real design is assigned (the flag then clears).",
+   "description": "Awaiting a CAD design — must go to CAD first; can't be collected there until a real design is assigned (the flag then clears).",
    "fieldname": "is_cad",
    "fieldtype": "Check",
    "in_standard_filter": 1,
@@ -226,7 +230,7 @@
    "read_only": 1
   },
   {
-   "description": "Target karat gold (22KYG, 18KPG, \u2026).",
+   "description": "Target karat gold (22KYG, 18KPG, …).",
    "fieldname": "cad_karat",
    "fieldtype": "Link",
    "label": "CAD Purity",
@@ -238,7 +242,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Gold weight target \u2014 free text, e.g. '8.5' or 'MINIMUM 8' or 'RANGE 8 to 9'.",
+   "description": "Gold weight target — free text, e.g. '8.5' or 'MINIMUM 8' or 'RANGE 8 to 9'.",
    "fieldname": "cad_gold_weight",
    "fieldtype": "Data",
    "label": "CAD Gold Weight",
@@ -259,7 +263,7 @@
    "read_only": 1
   },
   {
-   "description": "Free-text reference (a catalog code, a customer's photo ref, \u2026).",
+   "description": "Free-text reference (a catalog code, a customer's photo ref, …).",
    "fieldname": "cad_reference",
    "fieldtype": "Data",
    "label": "CAD Reference",
@@ -288,7 +292,7 @@
    "read_only": 1
   },
   {
-   "description": "Who holds this piece \u2014 the order's customer, or JD Stock if it has none.",
+   "description": "Who holds this piece — the order's customer, or JD Stock if it has none.",
    "fieldname": "held_by",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -297,12 +301,35 @@
    "read_only": 1
   },
   {
+   "fieldname": "stock_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "huid",
+   "fieldtype": "Data",
+   "label": "HUID",
+   "description": "BIS Hallmark Unique ID — filled when the piece returns from hallmarking (certification flow)."
+  },
+  {
+   "fieldname": "certificate_no",
+   "fieldtype": "Data",
+   "label": "Certificate No",
+   "description": "Certification / hallmarking certificate number — filled by the certification flow."
+  },
+  {
+   "fieldname": "charge_categories",
+   "fieldtype": "Table MultiSelect",
+   "label": "Charge Categories",
+   "options": "Order Bag Charge Category",
+   "description": "Extra price-chart categories that apply to this piece (Back Chain, Navaratna, Plain Gold / CZ, ...). The design type covers the normal case — tag only the odd ones. Extendable: add new Charge Category records as new charges appear (e.g. CAD Rate)."
+  },
+  {
    "fieldname": "bom_tab",
    "fieldtype": "Tab Break",
    "label": "BOM (Plan)"
   },
   {
-   "description": "Working BOM for this bag \u2014 seeded from the design, editable until the ornament is made (then locked). This is the PLAN; the weights below are derived from it.",
+   "description": "Working BOM for this bag — seeded from the design, editable until the ornament is made (then locked). This is the PLAN; the weights below are derived from it.",
    "fieldname": "bag_bom",
    "fieldtype": "Table",
    "label": "Bill of Materials",
@@ -311,7 +338,7 @@
   {
    "fieldname": "weights_section",
    "fieldtype": "Section Break",
-   "label": "Plan \u2014 Weights & Purity"
+   "label": "Plan — Weights & Purity"
   },
   {
    "description": "Derived from the BOM x qty.",
@@ -342,7 +369,7 @@
   {
    "fieldname": "stones_section",
    "fieldtype": "Section Break",
-   "label": "Plan \u2014 Stones"
+   "label": "Plan — Stones"
   },
   {
    "fieldname": "dmd_no",
@@ -450,7 +477,7 @@
   {
    "fieldname": "act_weights_section",
    "fieldtype": "Section Break",
-   "label": "Actual \u2014 Weights & Purity"
+   "label": "Actual — Weights & Purity"
   },
   {
    "description": "Derived live from the materials actually in the bag (Current Contents).",
@@ -489,7 +516,7 @@
   {
    "fieldname": "act_stones_section",
    "fieldtype": "Section Break",
-   "label": "Actual \u2014 Stones"
+   "label": "Actual — Stones"
   },
   {
    "fieldname": "act_dmd_no",
@@ -684,7 +711,7 @@
    "label": "Attachments"
   },
   {
-   "description": "Product photos and any other files for this bag \u2014 add as many as you like.",
+   "description": "Product photos and any other files for this bag — add as many as you like.",
    "fieldname": "attachments",
    "fieldtype": "Table",
    "label": "Attachments",

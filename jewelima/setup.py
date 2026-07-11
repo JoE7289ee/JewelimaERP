@@ -11,6 +11,7 @@ def after_install():
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
+	create_charge_categories()
 	create_default_supplier()
 	create_jd_stock_customer()
 	create_manufacturing_warehouses()
@@ -46,6 +47,7 @@ def after_migrate():
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
+	create_charge_categories()
 	create_default_supplier()
 	create_jd_stock_customer()
 	create_manufacturing_warehouses()
@@ -286,6 +288,21 @@ def create_order_types():
 	for name in ORDER_TYPES:
 		if not frappe.db.exists("Order Type", name):
 			frappe.get_doc({"doctype": "Order Type", "order_type_name": name}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+# Pricing categories from the real rate charts that aren't design types —
+# tagged on odd Order Bags so the buyer's chart rule resolves itself at sale.
+CHARGE_CATEGORIES = ["Back Chain", "Navaratna", "Plain Gold / CZ", "Name Ring"]
+
+
+def create_charge_categories():
+	"""Seed the Charge Category master (price-chart extras; extensible)."""
+	if not frappe.db.exists("DocType", "Charge Category"):
+		return
+	for name in CHARGE_CATEGORIES:
+		if not frappe.db.exists("Charge Category", name):
+			frappe.get_doc({"doctype": "Charge Category", "category_name": name}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
