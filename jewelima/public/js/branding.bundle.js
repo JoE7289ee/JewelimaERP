@@ -3,6 +3,7 @@
 // footer reused by every custom printout. Loaded app-wide via app_include_js.
 
 import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
+import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finished-stock + at-certification
 
 frappe.provide("jewelima");
 
@@ -91,7 +92,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 		"stock-transfer", "make-products", "finished-items", "card-info", "job-order-status",
 		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
 		"order-masters", "warehouse-management", "print-order-bags", "order-bag-photos",
-		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh", "in-bags", "import-stock", "finished-stock",
+		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh", "in-bags", "import-stock", "finished-stock", "at-certification",
 		"employee-performance", "item-stock",
 	]);
 	let last = null;
