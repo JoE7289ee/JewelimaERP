@@ -516,19 +516,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "layout-dashboard",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "All Benches",
-   "link_to": "bench-dashboard",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "trophy",
    "indent": 1,
    "keep_closed": 0,

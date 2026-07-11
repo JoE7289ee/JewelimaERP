@@ -92,7 +92,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
 		"order-masters", "warehouse-management", "print-order-bags", "order-bag-photos",
 		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh",
-		"bench-dashboard", "employee-performance", "warehouse-stock", "item-stock",
+		"employee-performance", "warehouse-stock", "item-stock",
 	]);
 	let last = null;
 
