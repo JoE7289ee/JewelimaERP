@@ -2323,7 +2323,7 @@ def get_in_bags_matrix():
 		if flt(qty) <= 0.0005:
 			continue
 		cells.setdefault(item, {})[loc] = round(flt(qty), 3)
-		meta[item] = {"is_stone": bool(stone_type), "group": group or ""}
+		meta[item] = {"is_stone": bool(stone_type), "group": group or "", "bucket": stone_type or ""}
 
 	# per-bag gold/stone totals -> the per (location, status) split
 	bag_mat = {}
@@ -2366,6 +2366,7 @@ def get_in_bags_matrix():
 	live_locs = [loc for loc in locs if loc in loc_stats]
 	items = [{
 		"item": item, "group": meta[item]["group"], "is_stone": meta[item]["is_stone"],
+		"bucket": meta[item]["bucket"],
 		"total": round(sum(cells[item].values()), 3),
 		"cells": cells[item],
 	} for item in sorted(cells, key=lambda i: (meta[i]["is_stone"], i))]

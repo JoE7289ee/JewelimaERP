@@ -10,7 +10,12 @@
 frappe.pages["in-bags"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "In Bags", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { d: null, term: "", mode: "All" };
+	const S = { d: null, term: "", mode: "All", sub: "" };
+	// stone buckets (Stone Type names) -> the floor's short codes, in bucket order
+	const BUCKETS = [
+		["Diamond", "DMD"], ["Precious Stone", "PRECIOUS"], ["Color Stone", "CS"],
+		["CVD", "CVD"], ["Party Diamond", "PDMD"], ["Party Other", "POTH"],
+	];
 
 	$(page.main).append(`
 		<style>
@@ -25,6 +30,9 @@ frappe.pages["in-bags"].on_page_load = function (wrapper) {
 		.ib-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 13px;font-size:12px;cursor:pointer;}
 		.ib-pill.on{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600;}
 		.ib-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
+		.ib-subrow{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px;}
+		.ib-sub{border:1px solid var(--border-color);background:var(--control-bg,var(--fg-color));border-radius:12px;padding:1px 11px;font-size:11.5px;cursor:pointer;color:var(--text-muted);}
+		.ib-sub.on{background:var(--text-color);color:var(--fg-color);border-color:var(--text-color);font-weight:600;}
 		.ib-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 250px);background:var(--fg-color);}
 		table.ib-tbl{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%;}
 		table.ib-tbl th{position:sticky;top:0;z-index:2;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 10px;text-align:right;white-space:nowrap;font-weight:700;vertical-align:bottom;}
@@ -58,6 +66,7 @@ frappe.pages["in-bags"].on_page_load = function (wrapper) {
 			</span>
 			<span class="ib-count"></span>
 		</div>
+		<div class="ib-subrow" style="display:none;"></div>
 		<div class="ib-box"><table class="ib-tbl"><thead class="ib-head"></thead><tbody class="ib-body"></tbody></table></div>
 		<div class="ib-hint">${__("Everything inside the In Bags pool, split by the bench each card currently sits at (bag ledgers × locations). Darker cells hold more. Status chips per bench: Q in queue · H on hold · I issued · O ongoing · R receipted · ✓ completed.")}</div>
 	`);
@@ -75,9 +84,31 @@ frappe.pages["in-bags"].on_page_load = function (wrapper) {
 			<div class="ib-card"><div class="lb">${__("Benches holding")}</div><div class="v">${t.benches || 0}</div></div>
 			<div class="ib-card"><div class="lb">${__("Materials")}</div><div class="v">${t.materials || 0}</div></div>`;
 
+		// sub-category pills: Gold -> its items (22KYG...), Stones -> the buckets
+		const sub = root.querySelector(".ib-subrow");
+		if (S.mode === "All") {
+			sub.style.display = "none";
+		} else {
+			let opts;
+			if (S.mode === "Gold") {
+				opts = (d.items || []).filter((r) => !r.is_stone).map((r) => [r.item, r.item])
+					.sort((a, b) => b[0].localeCompare(a[0]));
+			} else {
+				const present = new Set((d.items || []).filter((r) => r.is_stone).map((r) => r.bucket));
+				opts = BUCKETS.filter(([k]) => present.has(k));
+				present.forEach((k) => { if (!BUCKETS.some(([b]) => b === k)) opts.push([k, k]); });
+			}
+			if (!opts.some(([k]) => k === S.sub)) S.sub = "";
+			sub.style.display = "flex";
+			sub.innerHTML = [["", __("All")]].concat(opts)
+				.map(([k, lb]) => `<span class="ib-sub${k === S.sub ? " on" : ""}" data-s="${esc(k)}" title="${esc(k || "")}">${esc(lb)}</span>`)
+				.join("");
+		}
+
 		const term = S.term.toLowerCase().trim();
 		const items = (d.items || []).filter((r) =>
 			(S.mode === "All" || (S.mode === "Gold" ? !r.is_stone : r.is_stone)) &&
+			(!S.sub || S.mode === "All" || (S.mode === "Gold" ? r.item === S.sub : r.bucket === S.sub)) &&
 			(!term || r.item.toLowerCase().includes(term) || r.group.toLowerCase().includes(term)));
 		const locs = d.locations || [];
 		root.querySelector(".ib-count").textContent = __("{0} material(s)", [items.length]);
@@ -134,6 +165,11 @@ frappe.pages["in-bags"].on_page_load = function (wrapper) {
 		$(page.main).find(".ib-pill").removeClass("on");
 		this.classList.add("on");
 		S.mode = this.getAttribute("data-m");
+		S.sub = "";
+		render();
+	});
+	$(page.main).on("click", ".ib-sub", function () {
+		S.sub = this.getAttribute("data-s") || "";
 		render();
 	});
 	page.add_inner_button(__("Refresh"), load);
