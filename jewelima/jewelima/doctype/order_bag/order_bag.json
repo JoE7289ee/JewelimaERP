@@ -38,6 +38,7 @@
   "stock_col_break",
   "huid",
   "certificate_no",
+  "in_stock_on",
   "charge_categories",
   "bom_tab",
   "bag_bom",
@@ -315,6 +316,13 @@
    "fieldtype": "Data",
    "label": "Certificate No",
    "description": "Certification / hallmarking certificate number — filled by the certification flow."
+  },
+  {
+   "fieldname": "in_stock_on",
+   "fieldtype": "Datetime",
+   "label": "In Stock Since",
+   "read_only": 1,
+   "description": "When the piece (re)entered stock — set at Make Product / Import, refreshed when certification brings it back."
   },
   {
    "fieldname": "charge_categories",

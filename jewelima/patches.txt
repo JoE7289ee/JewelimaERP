@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 jewelima.patches.remove_bench_dashboard
 jewelima.patches.remove_warehouse_stock
+jewelima.patches.set_in_stock_on

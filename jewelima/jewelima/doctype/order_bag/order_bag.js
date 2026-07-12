@@ -102,6 +102,40 @@ function render_transfers(frm) {
 					<thead><tr><th style="width:40px">#</th><th>From</th><th>To</th><th>Time</th><th>By</th></tr></thead>
 					<tbody>${body}</tbody>
 				</table>`);
+		})
+		.then(() => render_holder_moves(frm));
+}
+
+function render_holder_moves(frm) {
+	// reservation history (Holder Transfer records) appended under the location moves
+	const $w = frm.get_field("transfers_html").$wrapper;
+	frappe.db
+		.get_list("Holder Transfer", {
+			filters: { order_bag: frm.doc.name },
+			fields: ["from_holder", "to_holder", "transfer_time", "transferred_by", "reason"],
+			order_by: "transfer_time asc",
+			limit: 200,
+		})
+		.then((rows) => {
+			if (!rows.length) return;
+			const body = rows
+				.map(
+					(r, i) => `<tr>
+						<td>${i + 1}</td>
+						<td>${frappe.utils.escape_html(r.from_holder || "—")}</td>
+						<td><b>${frappe.utils.escape_html(r.to_holder || "")}</b></td>
+						<td>${r.transfer_time ? frappe.datetime.str_to_user(r.transfer_time) : ""}</td>
+						<td>${frappe.utils.escape_html(r.transferred_by || "")}</td>
+						<td>${frappe.utils.escape_html(r.reason || "")}</td>
+					</tr>`
+				)
+				.join("");
+			$w.append(`
+				<div style="font-weight:700;margin:14px 0 4px;">Holder / Reservation Moves</div>
+				<table class="table table-bordered" style="font-size:12px;">
+					<thead><tr><th style="width:40px">#</th><th>From Holder</th><th>To Holder</th><th>Time</th><th>By</th><th>Reason</th></tr></thead>
+					<tbody>${body}</tbody>
+				</table>`);
 		});
 }
 

@@ -3063,7 +3063,10 @@ def make_products(bags):
 				errors.append({"name": nm, "error": frappe._("Qty must be 1 — extract/split it first")})
 				continue
 			convert_to_ornament(nm)  # consume materials -> product + freeze actuals + is_finished
-			frappe.db.set_value("Order Bag", nm, {"stock_status": "In Stock", "held_by": bag.customer or jd})
+			frappe.db.set_value("Order Bag", nm, {
+				"stock_status": "In Stock", "held_by": bag.customer or jd,
+				"in_stock_on": frappe.utils.now_datetime(),
+			})
 			done.append(nm)
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
@@ -3220,6 +3223,7 @@ def import_finished_stock(payload):
 		convert_to_ornament(bag.name, move_stock=False)  # the batch entry already landed stock in FG
 		frappe.db.set_value("Order Bag", bag.name, {
 			"stock_status": "In Stock", "held_by": customer,
+			"in_stock_on": frappe.utils.now_datetime(),
 			"act_gross_weight": gross,  # the physical scale weight wins over the material sum
 		})
 		made.append(bag.name)
@@ -3266,6 +3270,82 @@ def _stock_move_many(item_qty, source, target):
 	se.insert()
 	se.submit()
 	return se.name
+
+
+# ---------------------------------------------------------------------------
+# Transfer Holder (Delivery) — move a piece's reservation to another customer,
+# every move written to a Holder Transfer record (the full paper trail).
+# ---------------------------------------------------------------------------
+_BUCKET_LABELS = ("dmd", "ps", "cs", "cvd", "pdmd", "poth")
+
+
+@frappe.whitelist()
+def get_holder_piece(barcode):
+	"""Resolve a scanned card for the Transfer Holder page: current holder, when it
+	(re)entered stock, and its frozen weights (gross / pure / per stone bucket)."""
+	nm = (barcode or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
+	b = frappe.db.get_value("Order Bag", nm, [
+		"name", "design", "held_by", "stock_status", "is_finished", "in_stock_on",
+		"act_gross_weight", "act_pure_weight",
+	] + [f"act_{x}_weight" for x in _BUCKET_LABELS], as_dict=True)
+	if not b.is_finished:
+		frappe.throw(frappe._("{0} is not a product yet — it's still on the floor.").format(nm))
+	if b.stock_status != "In Stock":
+		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can change holder.").format(nm, b.stock_status))
+	return {
+		"order_bag": b.name, "design": b.design or "",
+		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+		"held_by": b.held_by or "", "in_stock_on": str(b.in_stock_on or ""),
+		"gross": flt(b.act_gross_weight), "pure": flt(b.act_pure_weight),
+		"buckets": {x: flt(b.get(f"act_{x}_weight")) for x in _BUCKET_LABELS},
+	}
+
+
+@frappe.whitelist()
+def transfer_holder(bags, to_customer, reason=None):
+	"""Move the hold on the given pieces to `to_customer` (JD Stock = release to
+	free stock). One Holder Transfer record per piece; held_by updated."""
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	bags = [b for b in bags if b]
+	if not bags:
+		frappe.throw(frappe._("Scan at least one piece."))
+	if not to_customer or not frappe.db.exists("Customer", to_customer):
+		frappe.throw(frappe._("Pick the new holder (JD Stock = our own shelf)."))
+	rows = []
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status", "held_by"], as_dict=True)
+		if not b or not b.is_finished or b.stock_status != "In Stock":
+			frappe.throw(frappe._("{0} is not a piece In Stock.").format(nm))
+		if (b.held_by or "") == to_customer:
+			frappe.throw(frappe._("{0} is already held by {1}.").format(nm, to_customer))
+		rows.append((nm, b.held_by or None))
+	now = frappe.utils.now_datetime()
+	made = []
+	for nm, from_holder in rows:
+		ht = frappe.get_doc({
+			"doctype": "Holder Transfer",
+			"order_bag": nm, "from_holder": from_holder, "to_holder": to_customer,
+			"transfer_time": now, "transferred_by": frappe.session.user, "reason": reason,
+		})
+		ht.flags.ignore_permissions = True
+		ht.insert()
+		frappe.db.set_value("Order Bag", nm, "held_by", to_customer)
+		made.append(ht.name)
+	frappe.db.commit()
+	return {"count": len(made), "transfers": made, "to": to_customer}
+
+
+@frappe.whitelist()
+def get_recent_holder_transfers(limit=25):
+	"""Freshest holder moves — the Transfer Holder page's side feed."""
+	return frappe.get_all(
+		"Holder Transfer",
+		fields=["name", "order_bag", "from_holder", "to_holder", "transfer_time", "reason"],
+		order_by="transfer_time desc", limit=cint(limit) or 25,
+	)
 
 
 @frappe.whitelist()
@@ -3377,7 +3457,7 @@ def receive_certification(name, rows):
 		child.huid = huid
 		child.certificate_no = cert
 		child.received_on = now
-		vals = {"stock_status": "In Stock"}
+		vals = {"stock_status": "In Stock", "in_stock_on": now}
 		if huid:
 			vals["huid"] = huid
 		if cert:

@@ -464,6 +464,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Transfer Holder",
+   "link_to": "transfer-holder",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "clipboard-list",
    "indent": 1,
    "keep_closed": 0,
