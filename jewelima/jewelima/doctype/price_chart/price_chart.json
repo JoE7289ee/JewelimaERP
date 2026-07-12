@@ -46,6 +46,7 @@
    "reqd": 1
   },
   {
+   "default": "Today",
    "fieldname": "chart_date",
    "fieldtype": "Date",
    "in_list_view": 1,
