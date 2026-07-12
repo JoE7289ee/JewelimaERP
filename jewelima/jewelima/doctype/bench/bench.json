@@ -8,14 +8,14 @@
  "engine": "InnoDB",
  "field_order": [
   "bench_name",
-  "employees"
+  "employees",
+  "roster"
  ],
  "fields": [
   {
    "bold": 1,
    "fieldname": "bench_name",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "label": "Bench",
    "reqd": 1,
    "unique": 1
@@ -26,6 +26,14 @@
    "fieldtype": "Table MultiSelect",
    "label": "Employees",
    "options": "Bench Employee"
+  },
+  {
+   "fieldname": "roster",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Employees",
+   "read_only": 1,
+   "description": "Who's allotted to this bench — kept in sync from the Employees table."
   }
  ],
  "index_web_pages_for_search": 1,

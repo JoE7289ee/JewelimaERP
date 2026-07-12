@@ -185,6 +185,13 @@ def seed_benches():
 	for loc in BENCH_DOCTYPE:
 		if not frappe.db.exists("Bench", loc):
 			frappe.get_doc({"doctype": "Bench", "bench_name": loc}).insert(ignore_permissions=True)
+	# keep the list view's Employees column truthful
+	try:
+		from jewelima.jewelima.doctype.bench.bench import refresh_all_rosters
+
+		refresh_all_rosters()
+	except Exception:
+		pass
 	frappe.db.commit()
 
 
