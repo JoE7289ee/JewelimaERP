@@ -2,12 +2,12 @@
 // For license information, please see license.txt
 //
 // Loss Collection (Stock) — book a refining recovery WITHOUT sending gold away.
-// Everything speaks PURE GOLD: one row per -LOSS warehouse (materials stay
-// hidden), tick where the recovery came from, and the needed pure splits
-// EQUALLY across the ticked benches (capped by what each holds; overflow
-// re-spreads). Per-bench takes stay editable. Confirm posts ONE Repack — the
-// take expands to item grams behind the scenes (taking X% of a bench's pure =
-// X% of each of its items' grams). Route: /app/loss-collection
+// Everything speaks PURE GOLD. One row per -LOSS warehouse; each row carries
+// KARAT checkboxes (14K / 18K / 22K ... — whatever that bench holds, all
+// checked by default). Rows start untaken — type a pure weight on a row and it
+// activates; that pure splits across the row's TICKED karats (proportional to
+// their pure content) and expands to item grams underneath. Confirm posts ONE
+// Repack: dust out, recovered standard gold in. Route: /app/loss-collection
 
 frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Loss Collection", single_column: true });
@@ -37,20 +37,23 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		.lc-wh-name{font-weight:800;font-size:13.5px;}
 		.lc-sub{color:var(--text-muted);font-size:11px;}
 		.lc-pure{color:#8a6d1a;font-weight:800;}
+		.lc-k{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border-color);border-radius:12px;padding:2px 10px 2px 6px;margin-right:6px;font-size:11.5px;font-weight:700;cursor:pointer;user-select:none;background:var(--control-bg);}
+		.lc-k input{margin:0;cursor:pointer;}
+		.lc-k .kp{color:#8a6d1a;font-weight:700;}
+		.lc-k.off{opacity:.45;text-decoration:line-through;}
 		.lc-empty{padding:20px;text-align:center;color:var(--text-muted);}
 		</style>
 		<div class="lc-top">
 			<div class="lc-item"></div><div class="lc-got"></div><div class="lc-wh"></div><div class="lc-remarks"></div>
 			<span style="margin-left:auto;"></span>
-			<button class="btn btn-sm lc-eq">${__("Split Equally")}</button>
 			<button class="btn btn-primary lc-go">${__("Collect")}</button>
 		</div>
 		<div class="lc-bal off"></div>
 		<div class="lc-box"><table class="lc-tbl">
-			<thead><tr><th style="width:30px"><input type="checkbox" class="lc-all"></th>
+			<thead><tr><th style="width:26px"></th>
 			<th>${__("Loss Warehouse")}</th>
-			<th class="r">${__("Pure Gold Available (g)")}</th>
-			<th class="r">${__("Dust (g)")}</th>
+			<th>${__("Take From (karats)")}</th>
+			<th class="r">${__("Pure Available (g)")}</th>
 			<th class="r">${__("Take Pure (g)")}</th></tr></thead>
 			<tbody class="lc-rows"></tbody></table></div>
 	`);
@@ -67,7 +70,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 			const v = outItem.get_value();
 			if (v) frappe.db.get_value("Item", v, "purity_percentage").then((r) => {
 				S.outPurity = flt((r.message || {}).purity_percentage) || 100;
-				allocate();
+				strip();
 			});
 		} });
 	const got = mk(".lc-got", { fieldtype: "Float", label: __("Got (g)"), fieldname: "got" });
@@ -80,7 +83,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 	frappe.db.get_value("Warehouse", { warehouse_name: "Gold Issue" }, "name").then((r) => {
 		if (r.message && r.message.name) outWh.set_value(r.message.name);
 	});
-	got.$input.on("input change", () => allocate());
+	got.$input.on("input change", () => strip());
 
 	function gotGrams() {
 		// read the raw input — the Float control's get_value() lags live typing
@@ -91,54 +94,11 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		return gotGrams() * S.outPurity / 100.0;
 	}
 
-	// EQUAL split of the needed pure across ticked benches, capped by what each
-	// holds; whatever a full bench can't take re-spreads equally over the rest.
-	function allocate() {
-		const need = needPure();
-		S.whs.forEach((w) => (w.take = 0));
-		let rest = need;
-		let open = S.whs.filter((w) => w.sel);
-		while (rest > 0.0005 && open.length) {
-			const share = rest / open.length;
-			let leftover = 0;
-			const next = [];
-			open.forEach((w) => {
-				const room = w.pure - w.take;
-				if (room <= share + 0.0005) {
-					w.take = w.pure;
-					leftover += share - room;
-				} else {
-					w.take = flt((w.take + share).toFixed(3));
-					next.push(w);
-				}
-			});
-			rest = leftover;
-			if (next.length === open.length) rest = 0; // everyone absorbed their share
-			open = next;
-		}
-		paint(false);
+	function selPure(w) {
+		return w.karats.filter((k) => k.sel).reduce((s, k) => s + k.pure, 0);
 	}
 
-	function paint(rebuild = true) {
-		const $b = $(root).find(".lc-rows");
-		if (rebuild) {
-			$b.html(S.whs.length ? S.whs.map((w, i) => `
-				<tr data-i="${i}" class="${w.sel ? "on" : ""}">
-					<td><input type="checkbox" class="lc-cb" ${w.sel ? "checked" : ""}></td>
-					<td><span class="lc-wh-name">${esc(w.label)}</span>
-						<div class="lc-sub">${w.items.length} ${__("material(s)")}</div></td>
-					<td class="r lc-pure">${fmt(w.pure)}</td>
-					<td class="r">${fmt(w.gross)}</td>
-					<td class="r"><input class="lc-g" type="number" step="0.001" min="0" max="${w.pure}" value="${fmt(w.take)}" ${w.sel ? "" : "disabled"}></td>
-				</tr>`).join("")
-				: `<tr><td colspan="5" class="lc-empty">${__("The loss warehouses are empty.")}</td></tr>`);
-		} else {
-			S.whs.forEach((w, i) => {
-				const $tr = $b.find(`tr[data-i="${i}"]`);
-				$tr.toggleClass("on", !!w.sel);
-				$tr.find(".lc-g").prop("disabled", !w.sel).val(fmt(w.take));
-			});
-		}
+	function strip() {
 		const give = S.whs.reduce((s, w) => s + w.take, 0);
 		const need = needPure();
 		const ok = need > 0 && Math.abs(need - give) <= 0.01;
@@ -148,54 +108,94 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 			 <span>${ok ? "✓ " + __("balanced") : __("difference {0} g pure", [fmt(need - give)])}</span>`);
 	}
 
+	function refreshRow(i) {
+		const w = S.whs[i];
+		const $tr = $(root).find(`.lc-rows tr[data-i="${i}"]`);
+		const avail = selPure(w);
+		if (w.take > avail) w.take = flt(avail.toFixed(3));
+		$tr.toggleClass("on", w.take > 0);
+		$tr.find(".lc-rowcb").prop("checked", w.take > 0);
+		$tr.find(".lc-avail").text(fmt(avail));
+		$tr.find(".lc-g").attr("max", avail);
+		if (document.activeElement !== $tr.find(".lc-g").get(0)) $tr.find(".lc-g").val(w.take ? fmt(w.take) : "");
+		w.karats.forEach((k, j) => $tr.find(`.lc-k[data-j="${j}"]`).toggleClass("off", !k.sel));
+		strip();
+	}
+
+	function paint() {
+		const $b = $(root).find(".lc-rows");
+		$b.html(S.whs.length ? S.whs.map((w, i) => `
+			<tr data-i="${i}">
+				<td><input type="checkbox" class="lc-rowcb" disabled></td>
+				<td><span class="lc-wh-name">${esc(w.label)}</span>
+					<div class="lc-sub">${__("dust")} ${fmt(w.gross)} g</div></td>
+				<td>${w.karats.map((k, j) => `
+					<label class="lc-k" data-j="${j}"><input type="checkbox" class="lc-kcb" checked>
+					${esc(k.label)} <span class="kp">${fmt(k.pure)} g</span></label>`).join("")}</td>
+				<td class="r lc-pure lc-avail">${fmt(selPure(w))}</td>
+				<td class="r"><input class="lc-g" type="number" step="0.001" min="0" max="${selPure(w)}" placeholder="0.000"></td>
+			</tr>`).join("")
+			: `<tr><td colspan="5" class="lc-empty">${__("The loss warehouses are empty.")}</td></tr>`);
+		strip();
+	}
+
 	function load() {
 		frappe.call({ method: API + ".get_loss_report" }).then((r) => {
 			const d = r.message || {};
-			S.whs = (d.warehouses || []).map((w) => ({
-				warehouse: w.warehouse, label: w.label, gross: w.gross, pure: w.pure,
-				sel: true, take: 0, // everything present starts CHECKED — just enter the weight
-				items: (d.items || []).filter((it) => it.cells[w.warehouse]).map((it) => ({
-					item: it.item, qty: it.cells[w.warehouse], purity: it.purity,
-				})),
-			}));
+			S.whs = (d.warehouses || []).map((w) => {
+				const groups = {};
+				(d.items || []).forEach((it) => {
+					const qty = it.cells[w.warehouse];
+					if (!qty) return;
+					// karat bucket from the item group: GOLD 14K -> 14K; anything else keeps its group
+					const label = (it.group || "").startsWith("GOLD ") ? it.group.replace("GOLD ", "") : (it.group || "?");
+					const g = groups[label] = groups[label] || { label, pure: 0, sel: true, items: [] };
+					g.pure += qty * it.purity / 100;
+					g.items.push({ item: it.item, qty, purity: it.purity });
+				});
+				const karats = Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
+				karats.forEach((k) => (k.pure = flt(k.pure.toFixed(3))));
+				return { warehouse: w.warehouse, label: w.label, gross: w.gross, take: 0, karats };
+			});
 			paint();
-			$(root).find(".lc-all").prop("checked", S.whs.length > 0);
-			allocate();
 		});
 	}
 
-	$(root).on("change", ".lc-cb", function () {
-		S.whs[+$(this).closest("tr").attr("data-i")].sel = this.checked;
-		allocate();
+	// karat checkbox: include/exclude that karat's dust for this bench
+	$(root).on("change", ".lc-kcb", function () {
+		const $tr = $(this).closest("tr");
+		const i = +$tr.attr("data-i");
+		const j = +$(this).closest(".lc-k").attr("data-j");
+		S.whs[i].karats[j].sel = this.checked;
+		refreshRow(i);
 	});
-	$(root).on("click", ".lc-all", function (e) {
-		e.stopPropagation();
-		S.whs.forEach((w) => (w.sel = this.checked));
-		allocate();
-	});
+	// typing a pure weight on the row activates it
 	$(root).on("input", ".lc-g", function () {
-		const w = S.whs[+$(this).closest("tr").attr("data-i")];
-		w.take = Math.min(w.pure, flt(this.value));
-		paint(false);
+		const i = +$(this).closest("tr").attr("data-i");
+		const w = S.whs[i];
+		w.take = Math.min(selPure(w), flt(this.value));
+		refreshRow(i);
 	});
-	$(root).find(".lc-eq").on("click", () => allocate());
 
 	$(root).find(".lc-go").on("click", () => {
-		// expand each bench's pure take into item grams: factor = take/purePool,
-		// grams per item = qty x factor
+		// each row's take splits across its TICKED karats proportional to their
+		// pure; grams per item = qty x (row factor) inside those karats
 		const lines = [];
 		S.whs.filter((w) => w.take > 0).forEach((w) => {
-			const f = Math.min(1, w.take / w.pure);
-			w.items.forEach((it) => {
-				const grams = flt((it.qty * f).toFixed(3));
-				if (grams > 0) lines.push({ item: it.item, warehouse: w.warehouse, grams });
+			const pool = selPure(w);
+			const f = Math.min(1, w.take / pool);
+			w.karats.filter((k) => k.sel).forEach((k) => {
+				k.items.forEach((it) => {
+					const grams = flt((it.qty * f).toFixed(3));
+					if (grams > 0) lines.push({ item: it.item, warehouse: w.warehouse, grams });
+				});
 			});
 		});
 		if (!lines.length) {
-			frappe.show_alert({ message: __("Tick the benches the recovery came from."), indicator: "orange" }, 4);
+			frappe.show_alert({ message: __("Enter a pure weight on at least one bench."), indicator: "orange" }, 4);
 			return;
 		}
-		const benches = S.whs.filter((w) => w.take > 0).map((w) => w.label).join(", ");
+		const benches = S.whs.filter((w) => w.take > 0).map((w) => `${w.label} ${fmt(w.take)}g`).join(", ");
 		frappe.confirm(__("Book {0} g {1} recovered from: {2}?", [fmt(gotGrams()), esc(outItem.get_value() || ""), esc(benches)]), () => {
 			frappe.dom.freeze(__("Booking recovery..."));
 			frappe.call({
