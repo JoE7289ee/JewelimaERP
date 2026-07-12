@@ -935,6 +935,19 @@
    "icon": "user-check",
    "indent": 0,
    "keep_closed": 0,
+   "label": "Add Employee",
+   "link_to": "add-employee",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "user-check",
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Add User",
    "link_to": "add-user",
    "link_type": "Page",
@@ -1073,7 +1086,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-12 17:55:15.134795",
+ "modified": "2026-07-12 18:22:46.760558",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

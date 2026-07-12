@@ -3454,6 +3454,63 @@ def create_employee_users(payload):
 
 
 # ---------------------------------------------------------------------------
+# Add Employee (Setup > Employee) — a lean intake matching the importer's
+# conventions: full name into first_name, department/designation created on the
+# fly, DOB/DOJ stay optional. Benches picked here land on the rosters.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_employee_form_data():
+	frappe.only_for(("System Manager",))
+	return {
+		"departments": sorted({d.department_name for d in frappe.get_all(
+			"Department", filters={"is_group": 0}, fields=["department_name"])
+			if d.department_name and d.department_name != "All Departments"}),
+		"designations": frappe.get_all("Designation", pluck="name", order_by="name"),
+		"genders": frappe.get_all("Gender", pluck="name", order_by="name"),
+		"benches": frappe.get_all("Bench", pluck="name", order_by="name"),
+	}
+
+
+@frappe.whitelist()
+def create_employee(payload):
+	frappe.only_for(("System Manager",))
+	from jewelima.jewelima.imports.import_employees import _company, _ensure_department, _ensure_designation
+
+	p = frappe.parse_json(payload)
+	full_name = (p.get("full_name") or "").strip()
+	if not full_name:
+		frappe.throw(frappe._("Enter the employee's name."))
+	if not (p.get("gender") or "").strip():
+		frappe.throw(frappe._("Pick the gender — Employee requires it."))
+	if frappe.db.exists("Employee", {"employee_name": full_name, "status": "Active"}):
+		frappe.throw(frappe._("An active employee named {0} already exists.").format(full_name))
+	company = _company()
+	dept = (p.get("department") or "").strip()
+	desig = (p.get("designation") or "").strip()
+	emp = frappe.get_doc({
+		"doctype": "Employee",
+		"first_name": full_name,  # full name — matches the importer's convention
+		"gender": (p.get("gender") or "").strip() or None,
+		"department": _ensure_department(dept, company) if dept else None,
+		"designation": _ensure_designation(desig) if desig else None,
+		"company": company,
+		"status": "Active",
+	}).insert(ignore_permissions=True)
+
+	allotted = []
+	for bench in p.get("benches") or []:
+		if not frappe.db.exists("Bench", bench):
+			continue
+		b = frappe.get_doc("Bench", bench)
+		if not any(r.employee == emp.name for r in b.employees):
+			b.append("employees", {"employee": emp.name})
+			b.save(ignore_permissions=True)  # validate refreshes the roster
+			allotted.append(bench)
+	frappe.db.commit()
+	return {"employee": emp.name, "employee_name": emp.employee_name, "benches": allotted}
+
+
+# ---------------------------------------------------------------------------
 # Reset Password (Setup > Employee, SYSTEM MANAGER only) — no real mailboxes on
 # the floor accounts, so the admin sets passwords directly and hands them over.
 # ---------------------------------------------------------------------------
