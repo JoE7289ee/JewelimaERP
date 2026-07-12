@@ -956,6 +956,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "settings-2",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Reset Password",
+   "link_to": "reset-password",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "warehouse",
@@ -1060,7 +1073,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-12 17:37:55.012793",
+ "modified": "2026-07-12 17:55:15.134795",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

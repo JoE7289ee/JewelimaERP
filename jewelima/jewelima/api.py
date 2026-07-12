@@ -3408,6 +3408,8 @@ def create_employee_users(payload):
 	p = frappe.parse_json(payload)
 	rows = p.get("rows") or []
 	roles = [r for r in (p.get("roles") or []) if frappe.db.exists("Role", r)]
+	if not roles:
+		roles = ["Jewelima"]  # a role-less user gets demoted to Website User and can't log in to the desk
 	if not rows:
 		frappe.throw(frappe._("Pick at least one employee."))
 	frappe.db.set_single_value("System Settings", "allow_login_using_user_name", 1)
@@ -3449,6 +3451,32 @@ def create_employee_users(payload):
 		made.append({"employee": emp.employee_name, "username": user.username, "email": email})
 	frappe.db.commit()
 	return {"created": made, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# Reset Password (Setup > Employee, SYSTEM MANAGER only) — no real mailboxes on
+# the floor accounts, so the admin sets passwords directly and hands them over.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def admin_reset_password(user, new_password):
+	frappe.only_for(("System Manager",))
+	if not user or not frappe.db.exists("User", user) or user == "Guest":
+		frappe.throw(frappe._("Pick a real user."))
+	pwd = (new_password or "").strip()
+	if len(pwd) < 6:
+		frappe.throw(frappe._("Password must be at least 6 characters."))
+	from frappe.utils.password import update_password
+
+	update_password(user=user, pwd=pwd)
+	# old sessions die with the old password
+	from frappe.sessions import clear_sessions
+
+	clear_sessions(user=user, force=True)
+	# audit trail on the User record (never the password itself)
+	frappe.get_doc("User", user).add_comment(
+		"Comment", frappe._("Password reset by {0} via the Reset Password page.").format(frappe.session.user))
+	frappe.db.commit()
+	return {"user": user, "username": frappe.db.get_value("User", user, "username")}
 
 
 # ---------------------------------------------------------------------------
