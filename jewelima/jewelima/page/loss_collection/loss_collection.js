@@ -153,12 +153,14 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 			const d = r.message || {};
 			S.whs = (d.warehouses || []).map((w) => ({
 				warehouse: w.warehouse, label: w.label, gross: w.gross, pure: w.pure,
-				sel: false, take: 0,
+				sel: true, take: 0, // everything present starts CHECKED — just enter the weight
 				items: (d.items || []).filter((it) => it.cells[w.warehouse]).map((it) => ({
 					item: it.item, qty: it.cells[w.warehouse], purity: it.purity,
 				})),
 			}));
 			paint();
+			$(root).find(".lc-all").prop("checked", S.whs.length > 0);
+			allocate();
 		});
 	}
 
