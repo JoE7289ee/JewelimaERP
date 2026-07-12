@@ -3273,6 +3273,193 @@ def _stock_move_many(item_qty, source, target):
 
 
 # ---------------------------------------------------------------------------
+# Sell (Sales) — price scanned pieces against a Price Chart, record the sale,
+# write the stock off. The verified costing math: gold = nett x effective rate;
+# diamonds = ct x cents-bracket rate; labour per rule (gram+min / piece /
+# purity-percent); pass-through charges per piece.
+# ---------------------------------------------------------------------------
+def _resolve_labour(chart, design_type, tags):
+	"""The making rule that applies: a charge-category tag wins, then the design
+	type, then the chart's default (blank/blank) rule. Returns the rule or None."""
+	rules = chart.making_rules or []
+	for t in tags or []:
+		for r in rules:
+			if r.charge_category == t:
+				return r
+	for r in rules:
+		if design_type and r.design_type == design_type:
+			return r
+	for r in rules:
+		if not r.design_type and not r.charge_category:
+			return r
+	return None
+
+
+@frappe.whitelist()
+def get_sale_piece(barcode, price_chart, gold_rate=0):
+	"""Price one scanned piece against the chart. Guards: finished + In Stock;
+	every diamond quality in the piece must have a chart row (quality-blank rows
+	accept any). Values are suggestions — the Sell page keeps them editable."""
+	nm = (barcode or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
+	b = frappe.db.get_value("Order Bag", nm, [
+		"name", "design", "held_by", "stock_status", "is_finished", "huid",
+		"act_gross_weight", "act_nett_weight", "act_dmd_weight", "act_dmd_no",
+		"act_ps_weight", "act_cs_weight", "act_cvd_weight", "act_pdmd_weight", "act_poth_weight",
+	], as_dict=True)
+	if not b.is_finished:
+		frappe.throw(frappe._("{0} is not a product yet.").format(nm))
+	if b.stock_status != "In Stock":
+		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can be sold.").format(nm, b.stock_status))
+	chart = frappe.get_doc("Price Chart", price_chart)
+	gold_rate = flt(gold_rate)
+
+	design_type = (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or ""
+	tags = [r.charge_category for r in frappe.get_all(
+		"Order Bag Charge Category", filters={"parent": nm}, fields=["charge_category"])]
+
+	# ---- diamonds: every quality present must be on the chart -----------------
+	qual_ct = {}
+	for item, qty in _bag_convert_materials([nm])[nm].items():
+		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
+		if st == "Diamond":
+			q = (grp or "").replace("DIAMOND ", "")
+			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+	diamond_value = 0.0
+	dmd_detail = []
+	per_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
+	for q, ct in qual_ct.items():
+		rows = [r for r in chart.diamond_rates if (r.quality or "") in (q, "")]
+		if not rows:
+			frappe.throw(frappe._("{0}: quality {1} is not on chart {2} — scan denied.").format(nm, q, chart.chart_name))
+		exact = [r for r in rows if (r.quality or "") == q] or rows
+		row = None
+		if per_stone:
+			for r in exact:
+				if flt(r.from_ct) <= per_stone and (not flt(r.to_ct) or per_stone < flt(r.to_ct)):
+					row = r
+					break
+		row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
+		diamond_value += ct * flt(row.rate)
+		dmd_detail.append({"quality": q, "ct": round(ct, 3), "rate": flt(row.rate)})
+
+	# ---- other stones + party job work ----------------------------------------
+	stone_value = flt(b.act_cs_weight) * flt(chart.colour_stone_rate) + flt(b.act_ps_weight) * flt(chart.precious_stone_rate)
+	ostone_ct = flt(b.act_cs_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
+	job_work = flt(b.act_pdmd_weight) * flt(chart.job_work_pty_rate)
+
+	# ---- gold + labour ---------------------------------------------------------
+	nett = flt(b.act_nett_weight)
+	gold_value = nett * gold_rate
+	labour = 0.0
+	rule = _resolve_labour(chart, design_type, tags)
+	rule_desc = ""
+	if rule:
+		rule_desc = "{0} {1}".format(rule.basis, rule.rate)
+		if rule.basis == "Per Gram":
+			labour = max(nett * flt(rule.rate), flt(rule.min_per_piece))
+		elif rule.basis == "Per Piece":
+			labour = flt(rule.rate)
+		elif rule.basis == "Purity Percent" and flt(chart.gold_purity_factor):
+			# gold billed at the fatter purity, making included
+			gold_value = nett * (gold_rate / flt(chart.gold_purity_factor) * flt(rule.rate))
+			rule_desc = "Purity {0}% (making incl.)".format(rule.rate)
+	labour += job_work
+	charges = flt(chart.hallmark_charge) + flt(chart.certification_charge)
+
+	return {
+		"order_bag": nm, "design": b.design or "", "design_type": design_type,
+		"held_by": b.held_by or "", "huid": b.huid or "",
+		"gross": flt(b.act_gross_weight), "nett": nett,
+		"dmd_ct": flt(b.act_dmd_weight) + flt(b.act_pdmd_weight), "ostone_ct": round(ostone_ct, 3),
+		"gold_value": round(gold_value, 2), "diamond_value": round(diamond_value, 2),
+		"stone_value": round(stone_value, 2), "labour_value": round(labour, 2),
+		"charges_value": round(charges, 2),
+		"dmd_detail": dmd_detail, "labour_rule": rule_desc,
+	}
+
+
+@frappe.whitelist()
+def create_product_sale(payload):
+	"""Record the sale: Product Sale doc + ONE Material Issue writing the pieces'
+	materials out of Finished Goods + bags -> Sold (kept for returns), held_by ->
+	the buyer (logged as a Holder Transfer)."""
+	p = frappe.parse_json(payload)
+	customer = p.get("customer")
+	if not customer or not frappe.db.exists("Customer", customer):
+		frappe.throw(frappe._("Pick who you are selling to."))
+	lines = p.get("lines") or []
+	if not lines:
+		frappe.throw(frappe._("Scan at least one piece."))
+	bags = [l.get("order_bag") for l in lines]
+	if len(set(bags)) != len(bags):
+		frappe.throw(frappe._("Duplicate pieces on the bill."))
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status"], as_dict=True)
+		if not b or not b.is_finished or b.stock_status != "In Stock":
+			frappe.throw(frappe._("{0} is not a piece In Stock.").format(nm))
+
+	# the write-off: everything the pieces hold leaves Finished Goods
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	fg = _wh("Finished Goods")
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Material Issue", "company": _company(),
+		"items": [{
+			"item_code": it, "qty": q,
+			"uom": frappe.db.get_value("Item", it, "stock_uom") or "Gram",
+			"s_warehouse": fg, "allow_zero_valuation_rate": 1,
+		} for it, q in totals.items() if flt(q) > 0],
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+
+	sums = {k: 0.0 for k in ("gold_value", "diamond_value", "stone_value", "labour_value", "charges_value")}
+	rows = []
+	for l in lines:
+		nm = l["order_bag"]
+		vals = {k: flt(l.get(k)) for k in sums}
+		total = round(sum(vals.values()), 2)
+		for k in sums:
+			sums[k] += vals[k]
+		rows.append({
+			"order_bag": nm, "design": l.get("design"), "design_type": l.get("design_type"),
+			"holder_at_sale": l.get("held_by") or None,
+			"nett": flt(l.get("nett")), "dmd_ct": flt(l.get("dmd_ct")), "ostone_ct": flt(l.get("ostone_ct")),
+			**vals, "piece_total": total,
+		})
+	sale = frappe.get_doc({
+		"doctype": "Product Sale",
+		"customer": customer, "sale_date": frappe.utils.today(), "status": "Completed",
+		"price_chart": p.get("price_chart"), "gold_rate": flt(p.get("gold_rate")),
+		"remarks": p.get("remarks"), "stock_entry": se.name, "items": rows,
+		**{k: round(v, 2) for k, v in sums.items()},
+		"grand_total": round(sum(sums.values()), 2),
+	})
+	sale.insert(ignore_permissions=True)
+
+	now = frappe.utils.now_datetime()
+	for l in lines:
+		nm = l["order_bag"]
+		old_holder = frappe.db.get_value("Order Bag", nm, "held_by")
+		if (old_holder or "") != customer:
+			ht = frappe.get_doc({
+				"doctype": "Holder Transfer", "order_bag": nm, "from_holder": old_holder,
+				"to_holder": customer, "transfer_time": now, "transferred_by": frappe.session.user,
+				"reason": "Sold via {0}".format(sale.name),
+			})
+			ht.flags.ignore_permissions = True
+			ht.insert()
+		frappe.db.set_value("Order Bag", nm, {"stock_status": "Sold", "held_by": customer})
+	frappe.db.commit()
+	return {"name": sale.name, "grand_total": sale.grand_total, "stock_entry": se.name, "count": len(rows)}
+
+
+# ---------------------------------------------------------------------------
 # Transfer Holder (Delivery) — move a piece's reservation to another customer,
 # every move written to a Holder Transfer record (the full paper trail).
 # ---------------------------------------------------------------------------

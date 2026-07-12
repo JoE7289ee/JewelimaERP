@@ -1,0 +1,191 @@
+{
+ "actions": [],
+ "autoname": "S-.####",
+ "creation": "2026-07-12 15:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "sale_date",
+  "status",
+  "col_break_head",
+  "price_chart",
+  "gold_rate",
+  "stock_entry",
+  "remarks",
+  "items_section",
+  "items",
+  "totals_section",
+  "gold_value",
+  "diamond_value",
+  "stone_value",
+  "col_break_tot",
+  "labour_value",
+  "charges_value",
+  "grand_total"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sold To",
+   "options": "Customer",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "sale_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Sale Date",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Completed",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Completed\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "price_chart",
+   "fieldtype": "Link",
+   "label": "Price Chart",
+   "options": "Price Chart",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gold_rate",
+   "fieldtype": "Float",
+   "label": "Gold Rate (₹/g)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "description": "The Material Issue that wrote the pieces' materials out of Finished Goods.",
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry (write-off)",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Pieces"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Pieces",
+   "options": "Product Sale Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "totals_section",
+   "fieldtype": "Section Break",
+   "label": "Totals"
+  },
+  {
+   "fieldname": "gold_value",
+   "fieldtype": "Float",
+   "label": "Gold (₹)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "diamond_value",
+   "fieldtype": "Float",
+   "label": "Diamonds (₹)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_value",
+   "fieldtype": "Float",
+   "label": "Stones (₹)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_tot",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "labour_value",
+   "fieldtype": "Float",
+   "label": "Labour (₹)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "charges_value",
+   "fieldtype": "Float",
+   "label": "Charges (₹)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "grand_total",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Grand Total (₹)",
+   "precision": "2",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-12 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Product Sale",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

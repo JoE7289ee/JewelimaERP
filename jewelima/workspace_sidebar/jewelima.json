@@ -503,6 +503,32 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "shopping-cart",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Sell",
+   "link_to": "sell",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "clipboard-list",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Sale Records",
+   "link_to": "Product Sale",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "file-text",
    "indent": 1,
    "keep_closed": 0,
@@ -956,7 +982,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-12 07:55:58.023506",
+ "modified": "2026-07-12 08:42:19.880414",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

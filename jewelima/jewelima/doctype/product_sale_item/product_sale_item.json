@@ -1,0 +1,147 @@
+{
+ "actions": [],
+ "creation": "2026-07-12 15:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_bag",
+  "design",
+  "design_type",
+  "holder_at_sale",
+  "nett",
+  "dmd_ct",
+  "ostone_ct",
+  "gold_value",
+  "diamond_value",
+  "stone_value",
+  "labour_value",
+  "charges_value",
+  "piece_total"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Card",
+   "options": "Order Bag",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "label": "Design",
+   "options": "Design",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "design_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Type",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "holder_at_sale",
+   "fieldtype": "Link",
+   "label": "Was Held By",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "nett",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Gold (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "dmd_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "DMD (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "ostone_ct",
+   "fieldtype": "Float",
+   "label": "Other Stones (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "gold_value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Gold ₹",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "diamond_value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "DMD ₹",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "stone_value",
+   "fieldtype": "Float",
+   "label": "Stones ₹",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "labour_value",
+   "fieldtype": "Float",
+   "label": "Labour ₹",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "charges_value",
+   "fieldtype": "Float",
+   "label": "Charges ₹",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "piece_total",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Total ₹",
+   "precision": "2",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-12 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Product Sale Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
