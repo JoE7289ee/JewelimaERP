@@ -126,7 +126,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		const $b = $(root).find(".lc-rows");
 		$b.html(S.whs.length ? S.whs.map((w, i) => `
 			<tr data-i="${i}">
-				<td><input type="checkbox" class="lc-rowcb" disabled></td>
+				<td><input type="checkbox" class="lc-rowcb"></td>
 				<td><span class="lc-wh-name">${esc(w.label)}</span>
 					<div class="lc-sub">${__("dust")} ${fmt(w.gross)} g</div></td>
 				<td>${w.karats.map((k, j) => `
@@ -169,11 +169,25 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		S.whs[i].karats[j].sel = this.checked;
 		refreshRow(i);
 	});
-	// typing a pure weight on the row activates it
+	// typing a pure weight on the row activates it (checkmark follows the weight)
 	$(root).on("input", ".lc-g", function () {
 		const i = +$(this).closest("tr").attr("data-i");
 		const w = S.whs[i];
 		w.take = Math.min(selPure(w), flt(this.value));
+		refreshRow(i);
+	});
+	// the row checkbox is live too: check -> auto-fill the still-needed pure
+	// (capped by the row); uncheck -> clear the row's take
+	$(root).on("change", ".lc-rowcb", function () {
+		const i = +$(this).closest("tr").attr("data-i");
+		const w = S.whs[i];
+		if (this.checked) {
+			const others = S.whs.reduce((s, x, k) => s + (k === i ? 0 : x.take), 0);
+			w.take = flt(Math.max(0, Math.min(selPure(w), needPure() - others)).toFixed(3));
+			if (!w.take) $(this).closest("tr").find(".lc-g").focus();
+		} else {
+			w.take = 0;
+		}
 		refreshRow(i);
 	});
 
