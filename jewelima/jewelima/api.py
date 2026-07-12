@@ -3370,6 +3370,88 @@ def get_user_roles():
 
 
 # ---------------------------------------------------------------------------
+# Add User (Setup > Employee) — desk logins are created ONLY from the Employee
+# list, following the import_users conventions: username from the name, email =
+# username@jewelima.local (record id only — login is by USERNAME), Jewelima Only
+# module profile, Employee.user_id linked. Passwords are NEVER set here.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_employees_without_user():
+	"""Active employees who don't have a working desk login yet."""
+	frappe.only_for(("System Manager",))
+	from jewelima.jewelima.imports.import_users import _username
+
+	rows = frappe.get_all("Employee", filters={"status": "Active"},
+	                      fields=["name", "employee_name", "designation", "user_id"], order_by="employee_name")
+	out = []
+	for e in rows:
+		if e.user_id and frappe.db.exists("User", e.user_id):
+			continue
+		uname = _username(e.employee_name)
+		out.append({
+			"employee": e.name, "employee_name": e.employee_name, "designation": e.designation or "",
+			"username": uname, "email": uname.lower() + "@jewelima.local",
+		})
+	return {
+		"employees": out,
+		"roles": sorted(frappe.get_all("Role", filters={"role_name": ["like", "Jewelima%"]}, pluck="name")),
+	}
+
+
+@frappe.whitelist()
+def create_employee_users(payload):
+	"""Create desk users for the picked employees (no passwords — set those with
+	your own set_passwords step). rows = [{employee, username}], roles = [...]"""
+	frappe.only_for(("System Manager",))
+	from jewelima.jewelima.imports.import_users import _free_username, _username
+
+	p = frappe.parse_json(payload)
+	rows = p.get("rows") or []
+	roles = [r for r in (p.get("roles") or []) if frappe.db.exists("Role", r)]
+	if not rows:
+		frappe.throw(frappe._("Pick at least one employee."))
+	frappe.db.set_single_value("System Settings", "allow_login_using_user_name", 1)
+
+	made, skipped = [], []
+	for row in rows:
+		emp = frappe.db.get_value("Employee", row.get("employee"), ["name", "employee_name", "user_id"], as_dict=True)
+		if not emp:
+			frappe.throw(frappe._("Employee {0} not found.").format(row.get("employee") or "?"))
+		if emp.user_id and frappe.db.exists("User", emp.user_id):
+			skipped.append(emp.employee_name)
+			continue
+		base = (row.get("username") or "").strip().upper() or _username(emp.employee_name)
+		base = _username(base)
+		if not base:
+			frappe.throw(frappe._("{0}: username came out empty.").format(emp.employee_name))
+		email = base.lower() + "@jewelima.local"
+		if frappe.db.exists("User", email):
+			user = frappe.get_doc("User", email)
+		else:
+			full = (emp.employee_name or base).split()
+			user = frappe.get_doc({
+				"doctype": "User", "email": email,
+				"first_name": (full[0].title() if full else base),
+				"last_name": " ".join(x.title() for x in full[1:]),
+				"user_type": "System User", "send_welcome_email": 0,
+			}).insert(ignore_permissions=True)
+		user.username = _free_username(base, user.name)
+		have = {x.role for x in user.get("roles")}
+		for r in roles:
+			if r not in have:
+				user.append("roles", {"role": r})
+		if frappe.db.exists("Module Profile", "Jewelima Only") and user.module_profile != "Jewelima Only":
+			user.module_profile = "Jewelima Only"
+			mp = frappe.get_doc("Module Profile", "Jewelima Only")
+			user.set("block_modules", [{"module": m.module} for m in mp.block_modules])
+		user.save(ignore_permissions=True)
+		frappe.db.set_value("Employee", emp.name, "user_id", email)
+		made.append({"employee": emp.employee_name, "username": user.username, "email": email})
+	frappe.db.commit()
+	return {"created": made, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
 # Loss Collection / Write-off (Stock) — Option B: recovered pure gold is minused
 # from the loss warehouses per purity (grams = pure ÷ purity%); the dust never
 # leaves the house. Residue is only removed by management on the write-off page.
