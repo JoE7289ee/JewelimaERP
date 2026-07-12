@@ -3330,6 +3330,104 @@ def get_loss_report():
 
 
 # ---------------------------------------------------------------------------
+# Loss Collection / Write-off (Stock) — Option B: recovered pure gold is minused
+# from the loss warehouses per purity (grams = pure ÷ purity%); the dust never
+# leaves the house. Residue is only removed by management on the write-off page.
+# ---------------------------------------------------------------------------
+def _validate_loss_lines(lines):
+	"""Common guard: every line must be real loss-warehouse stock with enough qty.
+	Returns [(item, warehouse, grams, purity)]."""
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	out = []
+	for l in lines or []:
+		item, wh, grams = l.get("item"), l.get("warehouse"), flt(l.get("grams"))
+		if grams <= 0:
+			continue
+		if not frappe.db.get_value("Warehouse", wh, "custom_is_loss"):
+			frappe.throw(frappe._("{0} is not a loss warehouse.").format(wh))
+		have = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": wh}, "actual_qty"))
+		if have + 0.0005 < grams:
+			frappe.throw(frappe._("{0} at {1}: only {2} g there (asked {3} g).").format(item, wh, round(have, 3), grams))
+		purity = flt(frappe.db.get_value("Item", item, "purity_percentage"))
+		out.append((item, wh, grams, purity))
+	if not out:
+		frappe.throw(frappe._("Pick at least one loss line."))
+	return out
+
+
+@frappe.whitelist()
+def collect_loss(payload):
+	"""Book a refining recovery: consume loss-warehouse dust (grams per line, as
+	allocated on the page) and produce the recovered standard gold — ONE Repack
+	Stock Entry. Conservation enforced: the dust's pure content must equal the
+	recovered gold's pure content (small rounding tolerance)."""
+	p = frappe.parse_json(payload)
+	out_item, got, out_wh = p.get("output_item"), flt(p.get("got_grams")), p.get("warehouse")
+	if not out_item or not frappe.db.exists("Item", out_item):
+		frappe.throw(frappe._("Pick the recovered gold item."))
+	if frappe.db.get_value("Item", out_item, "item_group") != "GOLD STANDARD":
+		frappe.throw(frappe._("{0} is not a standard gold — recoveries land as Standard gold.").format(out_item))
+	if got <= 0:
+		frappe.throw(frappe._("Enter the recovered grams."))
+	if not out_wh or not frappe.db.exists("Warehouse", out_wh):
+		frappe.throw(frappe._("Pick the warehouse the recovered gold goes to."))
+	lines = _validate_loss_lines(p.get("lines"))
+	out_purity = flt(frappe.db.get_value("Item", out_item, "purity_percentage"))
+	need_pure = got * out_purity / 100.0
+	give_pure = sum(g * pur / 100.0 for _, _, g, pur in lines)
+	if abs(need_pure - give_pure) > 0.01:
+		frappe.throw(frappe._("Pure gold doesn't balance: recovering {0} g pure but deducting {1} g pure from loss.").format(
+			round(need_pure, 3), round(give_pure, 3)))
+
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Repack", "company": _company(),
+		"items": [{
+			"item_code": item, "qty": grams,
+			"uom": frappe.db.get_value("Item", item, "stock_uom") or "Gram",
+			"s_warehouse": wh, "allow_zero_valuation_rate": 1,
+		} for item, wh, grams, _ in lines] + [{
+			"item_code": out_item, "qty": got,
+			"uom": frappe.db.get_value("Item", out_item, "stock_uom") or "Gram",
+			"t_warehouse": out_wh, "allow_zero_valuation_rate": 1, "is_finished_item": 1,
+		}],
+		"remarks": "Loss collection: {0} g {1} recovered from dust. {2}".format(got, out_item, p.get("remarks") or "").strip(),
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+	frappe.db.commit()
+	return {"stock_entry": se.name, "pure": round(need_pure, 3), "lines": len(lines)}
+
+
+@frappe.whitelist()
+def writeoff_loss(payload):
+	"""MANAGEMENT ONLY: write unrecoverable dust out of the loss warehouses —
+	one Material Issue, reason required."""
+	frappe.only_for("System Manager")
+	p = frappe.parse_json(payload)
+	reason = (p.get("reason") or "").strip()
+	if not reason:
+		frappe.throw(frappe._("A reason is required to write loss off."))
+	lines = _validate_loss_lines(p.get("lines"))
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Material Issue", "company": _company(),
+		"items": [{
+			"item_code": item, "qty": grams,
+			"uom": frappe.db.get_value("Item", item, "stock_uom") or "Gram",
+			"s_warehouse": wh, "allow_zero_valuation_rate": 1,
+		} for item, wh, grams, _ in lines],
+		"remarks": "Loss write-off: {0}".format(reason),
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+	frappe.db.commit()
+	pure = round(sum(g * pur / 100.0 for _, _, g, pur in lines), 3)
+	return {"stock_entry": se.name, "pure": pure, "lines": len(lines)}
+
+
+# ---------------------------------------------------------------------------
 # Parties (Setup > Party) — review the imported parties and group them.
 # "Party" is our word for ERPNext's Customer; the Individual default group
 # counts as UNGROUPED until the review assigns a real one.
