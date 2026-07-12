@@ -70,7 +70,7 @@ frappe.pages["party-stock"].on_page_load = function (wrapper) {
 				<div class="pst-list pst-stones"></div>
 			</div>
 		</div>
-		<div class="pst-hint">${__("Customer-given stones only — created on demand, never in sieve runs. Weights land in the PDMD/POTH columns of the bag; customer gold goes through Party Metal Add.")}</div>
+		<div class="pst-hint">${__("Party-given stones only — created on demand, never in sieve runs. Weights land in the PDMD/POTH columns of the bag; party gold goes through Party Metal Add.")}</div>
 	`);
 
 	const root = $(page.main)[0];

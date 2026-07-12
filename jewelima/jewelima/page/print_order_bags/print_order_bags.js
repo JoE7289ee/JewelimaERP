@@ -34,7 +34,7 @@ frappe.pages["print-order-bags"].on_page_load = function (wrapper) {
 			<table class="pob-grid">
 				<thead><tr>
 					<th style="width:30px"><input type="checkbox" class="pob-all"></th>
-					<th>Order Bag</th><th>Design</th><th>Location</th><th>Customer</th><th>Type</th><th>Qty</th><th>Due</th>
+					<th>Order Bag</th><th>Design</th><th>Location</th><th>Party</th><th>Type</th><th>Qty</th><th>Due</th>
 				</tr></thead>
 				<tbody class="pob-body"></tbody>
 			</table>

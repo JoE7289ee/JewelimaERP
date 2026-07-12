@@ -47,7 +47,7 @@ frappe.pages["all-requests"].on_page_load = function (wrapper) {
 			<span class="arq-count"></span>
 		</div>
 		<div class="arq-box"><table class="arq-tbl"><thead><tr>
-			<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("By")}</th><th>${__("Customer")}</th>
+			<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("By")}</th><th>${__("Party")}</th>
 			<th>${__("Type")}</th><th>${__("Salesman")}</th>
 			<th style="text-align:center">${__("Lines")}</th><th style="text-align:center">${__("Qty")}</th>
 			<th>${__("Designs")}</th><th>${__("Status")}</th><th>${__("Order")}</th><th></th>
@@ -64,7 +64,7 @@ frappe.pages["all-requests"].on_page_load = function (wrapper) {
 		return c;
 	};
 	const F = {
-		customer: mk(".arq-f-customer", { fieldtype: "Link", label: __("Customer"), fieldname: "customer", options: "Customer" }),
+		customer: mk(".arq-f-customer", { fieldtype: "Link", label: __("Party"), fieldname: "customer", options: "Customer" }),
 		order_type: mk(".arq-f-type", { fieldtype: "Link", label: __("Type"), fieldname: "order_type", options: "Order Type" }),
 		salesman: mk(".arq-f-salesman", { fieldtype: "Link", label: __("Salesman"), fieldname: "salesman", options: "Sales Person", get_query: () => ({ filters: { is_group: 0 } }) }),
 		design: mk(".arq-f-design", { fieldtype: "Link", label: __("Design"), fieldname: "design", options: "Design" }),

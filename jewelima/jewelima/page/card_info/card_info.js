@@ -114,7 +114,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		}
 
 		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
-		const extraKvs = forPrint ? "" : `${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Customer Date", dt(b.customer_date))}${kv("Held By", b.held_by)}`;
+		const extraKvs = forPrint ? "" : `${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Party Date", dt(b.customer_date))}${kv("Held By", b.held_by)}`;
 		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
 
 		return `
@@ -128,7 +128,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			<div class="ci-loc">Location<b>${esc(b.location || "—")}</b></div>
 		</div>
 		<div class="ci-sec"><div class="ci-kvs">
-			${kv("Customer", b.customer || b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
+			${kv("Party", b.customer || b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
 			${kv("Qty", b.qty)}${kv("Size", b.size)}${kv("Ordered", dt(b.order_date))}${kv("Due", dt(b.due_date))}
 			${extraKvs}
 		</div></div>

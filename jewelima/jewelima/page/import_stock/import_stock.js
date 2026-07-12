@@ -82,7 +82,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 			{ label: __("New Purchase → Finished Goods"), value: "purchase" },
 		],
 	});
-	state.header.holder = mk(".is-h-holder", { fieldtype: "Link", label: __("Held By (Customer)"), fieldname: "customer", options: "Customer" });
+	state.header.holder = mk(".is-h-holder", { fieldtype: "Link", label: __("Held By (Party)"), fieldname: "customer", options: "Customer" });
 	state.header.supplier = mk(".is-h-supplier", { fieldtype: "Link", label: __("Supplier (purchase mode)"), fieldname: "supplier", options: "Supplier" });
 	state.header.remarks = mk(".is-h-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "remarks" });
 	state.header.mode.set_value("issue");

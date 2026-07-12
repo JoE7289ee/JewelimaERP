@@ -37,7 +37,7 @@
  ],
  "fields": [
   {
-   "description": "Free text — usually the customer's name (e.g. KAVITHA), or GENERAL for the house chart.",
+   "description": "Free text — usually the party's name (e.g. KAVITHA), or GENERAL for the house chart.",
    "fieldname": "chart_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -55,7 +55,7 @@
   },
   {
    "default": "Active",
-   "description": "Saving an Active chart supersedes the customer's previous Active one — old charts stay for history.",
+   "description": "Saving an Active chart supersedes the previous Active chart with the same name — old charts stay for history.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,

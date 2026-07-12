@@ -961,6 +961,19 @@
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
+   "label": "Parties",
+   "link_to": "parties",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "users",
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Party Stone Add",
    "link_to": "party-stock",
    "link_type": "Page",
@@ -982,7 +995,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-12 08:42:19.880414",
+ "modified": "2026-07-12 09:27:25.236320",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

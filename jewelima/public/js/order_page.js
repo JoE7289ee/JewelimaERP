@@ -111,7 +111,7 @@ const PO_COLUMNS = [
 		state.$noBadge = $('<span class="po-no-badge">…</span>').prependTo($(page.wrapper).find(".page-actions").first());
 	}
 	state.showNo = (no) => state.$noBadge && state.$noBadge.text(no || "…");
-	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Customer", fieldname: "customer", options: "Customer" });
+	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer" });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
 	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", get_query: () => ({ filters: { disabled: 0 } }) });
 	if (OPTS.mode === "order") {
@@ -121,7 +121,7 @@ const PO_COLUMNS = [
 		description: "Due date = today + N days.",
 	});
 	state.header.cust_days = mk(".po-h-custdays", {
-		fieldtype: "Int", label: "Days (Customer Date)", fieldname: "cust_days",
+		fieldtype: "Int", label: "Days (Party Date)", fieldname: "cust_days",
 		description: "Date promised to the customer — empty copies the Due Date.",
 	});
 	state.header.order_date.set_value(frappe.datetime.get_today());
@@ -146,7 +146,7 @@ const PO_COLUMNS = [
 		$(page.main).find(".po-due").not(".po-custdue").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
 		const cd = custFromDays();
 		const copied = !cint(state.header.cust_days.get_value());
-		$(page.main).find(".po-custdue").text(cd ? __("Customer {0}{1}", [frappe.datetime.str_to_user(cd), copied ? " (= due date)" : ""]) : "");
+		$(page.main).find(".po-custdue").text(cd ? __("Party {0}{1}", [frappe.datetime.str_to_user(cd), copied ? " (= due date)" : ""]) : "");
 	};
 	state.showDue = showDue;
 	state.header.days.$input.on("input change", () => {
@@ -833,7 +833,7 @@ const PO_COLUMNS = [
 			if (!reqs.length) { box.html(`<div class="po-empty">${__("No requests filed yet.")}</div>`); return; }
 			box.html(`
 				<table><thead><tr>
-					<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("Customer")}</th>
+					<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("Party")}</th>
 					<th style="text-align:center">${__("Lines")}</th><th>${__("Status")}</th><th>${__("Order")}</th><th></th>
 				</tr></thead><tbody>${reqs.map((q) => `
 					<tr>
@@ -995,7 +995,7 @@ function openRequestsDialog(state) {
 			<div style="max-height:50vh;overflow:auto;">
 			<table class="table table-bordered" style="font-size:12.5px;margin:0;">
 				<thead><tr>
-					<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("By")}</th><th>${__("Customer")}</th>
+					<th>${__("Request")}</th><th>${__("Date")}</th><th>${__("By")}</th><th>${__("Party")}</th>
 					<th style="text-align:center">${__("Lines")}</th><th style="text-align:center">${__("Qty")}</th>
 					<th>${__("Designs")}</th><th></th>
 				</tr></thead>

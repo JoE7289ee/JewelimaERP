@@ -69,7 +69,7 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	function render() {
 		$head.html(`<tr>
 			<th style="width:32px"><input type="checkbox" class="mp-all"></th>
-			<th>Order Bag</th><th>Design</th><th>Customer</th><th>Location</th>
+			<th>Order Bag</th><th>Design</th><th>Party</th><th>Location</th>
 			<th class="num">Gold (g)</th><th class="num">Nett (g)</th>
 		</tr>`);
 		$body.html(

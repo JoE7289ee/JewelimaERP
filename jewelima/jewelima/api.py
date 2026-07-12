@@ -3107,7 +3107,7 @@ def import_finished_stock(payload):
 		frappe.throw(frappe._("Unknown mode: {0}").format(mode))
 	customer = p.get("customer")
 	if not customer or not frappe.db.exists("Customer", customer):
-		frappe.throw(frappe._("Pick the customer holding these pieces (JD Stock = ourselves)."))
+		frappe.throw(frappe._("Pick the party holding these pieces (JD Stock = ourselves)."))
 	pieces = p.get("pieces") or []
 	if not pieces:
 		frappe.throw(frappe._("Add at least one piece."))
@@ -3270,6 +3270,44 @@ def _stock_move_many(item_qty, source, target):
 	se.insert()
 	se.submit()
 	return se.name
+
+
+# ---------------------------------------------------------------------------
+# Parties (Setup > Party) — review the imported parties and group them.
+# "Party" is our word for ERPNext's Customer; the Individual default group
+# counts as UNGROUPED until the review assigns a real one.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_parties():
+	"""Every party with its group; Individual (the import default) = ungrouped."""
+	rows = frappe.get_all("Customer", fields=["name", "customer_group", "disabled"],
+	                      order_by="name", limit=2000)
+	groups = sorted({r.customer_group for r in rows if r.customer_group and r.customer_group != "Individual"})
+	return {"parties": rows, "groups": groups}
+
+
+@frappe.whitelist()
+def set_party_group(names, group):
+	"""Put the given parties under a Customer Group (created if new)."""
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	names = [n for n in names if n]
+	if not names:
+		frappe.throw(frappe._("Pick at least one party."))
+	group = (group or "").strip()
+	if not group:
+		frappe.throw(frappe._("Type the group name."))
+	if not frappe.db.exists("Customer Group", group):
+		frappe.get_doc({
+			"doctype": "Customer Group", "customer_group_name": group,
+			"parent_customer_group": "All Customer Groups", "is_group": 0,
+		}).insert(ignore_permissions=True)
+	for nm in names:
+		if not frappe.db.exists("Customer", nm):
+			frappe.throw(frappe._("{0} not found.").format(nm))
+		frappe.db.set_value("Customer", nm, "customer_group", group)
+	frappe.db.commit()
+	return {"count": len(names), "group": group}
 
 
 # ---------------------------------------------------------------------------

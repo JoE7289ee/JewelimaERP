@@ -1,7 +1,7 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Transfer Holder (Delivery) — move a piece's reservation to another customer.
+// Transfer Holder (Delivery) — move a piece's reservation to another party.
 // Scan cards -> they stack in the left table (current holder, in stock since,
 // weights); pick the new holder on top; Transfer moves them all, one Holder
 // Transfer record per piece. Bottom strip totals gross / pure / stone buckets.

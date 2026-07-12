@@ -60,7 +60,7 @@ frappe.pages["party-metal"].on_page_load = function (wrapper) {
 				<div class="pmt-list pmt-metals"></div>
 			</div>
 		</div>
-		<div class="pmt-hint">${__("Customer-given gold only — the name always follows our standard (22KYG… / Standard990–999), created when it actually comes in. Stones go through Party Stone Add.")}</div>
+		<div class="pmt-hint">${__("Party-given gold only — the name always follows our standard (22KYG… / Standard990–999), created when it actually comes in. Stones go through Party Stone Add.")}</div>
 	`);
 
 	const root = $(page.main)[0];

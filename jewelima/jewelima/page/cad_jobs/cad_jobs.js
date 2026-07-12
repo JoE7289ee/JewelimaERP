@@ -27,7 +27,7 @@ frappe.pages["cad-jobs"].on_page_load = function (wrapper) {
 			<thead><tr><th style="width:34px"><input type="checkbox" class="cj-all cj-cb"></th>
 			<th>Order Bag</th><th>Type</th><th>Size</th><th>Qty</th><th>Purity</th>
 			<th>Gold Target</th><th class="num">DMD (ct)</th><th class="num">Pcs</th><th>Ref</th>
-			<th>Location</th><th>Customer</th><th>Due</th><th style="width:90px"></th></tr></thead>
+			<th>Location</th><th>Party</th><th>Due</th><th style="width:90px"></th></tr></thead>
 			<tbody class="cj-body"></tbody>
 		</table></div>
 	`);
