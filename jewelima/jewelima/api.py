@@ -3330,6 +3330,46 @@ def get_loss_report():
 
 
 # ---------------------------------------------------------------------------
+# User Roles (Setup > Employee) — who holds which roles, at a glance.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_user_roles():
+	"""Every enabled system user with their roles. Jewelima roles (+ the two
+	ERPNext roles that gate our pages) come as matrix columns; the rest as chips."""
+	frappe.only_for(("System Manager",))
+	users = frappe.get_all(
+		"User",
+		filters={"enabled": 1, "user_type": "System User", "name": ["not in", ["Guest"]]},
+		fields=["name", "full_name", "role_profile_name", "last_active"],
+		order_by="full_name",
+	)
+	role_rows = frappe.get_all("Has Role", filters={"parenttype": "User", "parent": ["in", [u.name for u in users] or [""]]},
+	                           fields=["parent", "role"])
+	by_user = {}
+	for r in role_rows:
+		by_user.setdefault(r.parent, set()).add(r.role)
+	# employee names, where the user account belongs to one
+	emp = {e.user_id: e.employee_name for e in frappe.get_all(
+		"Employee", filters={"user_id": ["in", [u.name for u in users] or [""]]},
+		fields=["user_id", "employee_name"])}
+
+	ours = sorted(frappe.get_all("Role", filters={"role_name": ["like", "Jewelima%"]}, pluck="name"))
+	columns = ours + ["System Manager", "Stock Manager"]
+	hide = set(columns) | {"All", "Guest", "Desk User"}
+	out = []
+	for u in users:
+		roles = by_user.get(u.name, set())
+		out.append({
+			"user": u.name, "full_name": u.full_name or u.name,
+			"employee": emp.get(u.name, ""), "role_profile": u.role_profile_name or "",
+			"last_active": str(u.last_active or ""),
+			"has": {c: (c in roles) for c in columns},
+			"others": sorted(r for r in roles if r not in hide),
+		})
+	return {"columns": columns, "users": out}
+
+
+# ---------------------------------------------------------------------------
 # Loss Collection / Write-off (Stock) — Option B: recovered pure gold is minused
 # from the loss warehouses per purity (grams = pure ÷ purity%); the dust never
 # leaves the house. Residue is only removed by management on the write-off page.
