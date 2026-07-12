@@ -50,7 +50,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		</div>
 		<div class="lc-bal off"></div>
 		<div class="lc-box"><table class="lc-tbl">
-			<thead><tr><th style="width:26px"></th>
+			<thead><tr>
 			<th>${__("Loss Warehouse")}</th>
 			<th>${__("Take From (karats)")}</th>
 			<th class="r">${__("Pure Available (g)")}</th>
@@ -114,7 +114,6 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		const avail = selPure(w);
 		if (w.take > avail) w.take = flt(avail.toFixed(3));
 		$tr.toggleClass("on", w.take > 0);
-		$tr.find(".lc-rowcb").prop("checked", w.take > 0);
 		$tr.find(".lc-avail").text(fmt(avail));
 		$tr.find(".lc-g").attr("max", avail);
 		if (document.activeElement !== $tr.find(".lc-g").get(0)) $tr.find(".lc-g").val(w.take ? fmt(w.take) : "");
@@ -126,7 +125,6 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		const $b = $(root).find(".lc-rows");
 		$b.html(S.whs.length ? S.whs.map((w, i) => `
 			<tr data-i="${i}">
-				<td><input type="checkbox" class="lc-rowcb"></td>
 				<td><span class="lc-wh-name">${esc(w.label)}</span>
 					<div class="lc-sub">${__("dust")} ${fmt(w.gross)} g</div></td>
 				<td>${w.karats.map((k, j) => `
@@ -135,7 +133,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 				<td class="r lc-pure lc-avail">${fmt(selPure(w))}</td>
 				<td class="r"><input class="lc-g" type="number" step="0.001" min="0" max="${selPure(w)}" placeholder="0.000"></td>
 			</tr>`).join("")
-			: `<tr><td colspan="5" class="lc-empty">${__("The loss warehouses are empty.")}</td></tr>`);
+			: `<tr><td colspan="4" class="lc-empty">${__("The loss warehouses are empty.")}</td></tr>`);
 		strip();
 	}
 
@@ -174,20 +172,6 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		const i = +$(this).closest("tr").attr("data-i");
 		const w = S.whs[i];
 		w.take = Math.min(selPure(w), flt(this.value));
-		refreshRow(i);
-	});
-	// the row checkbox is live too: check -> auto-fill the still-needed pure
-	// (capped by the row); uncheck -> clear the row's take
-	$(root).on("change", ".lc-rowcb", function () {
-		const i = +$(this).closest("tr").attr("data-i");
-		const w = S.whs[i];
-		if (this.checked) {
-			const others = S.whs.reduce((s, x, k) => s + (k === i ? 0 : x.take), 0);
-			w.take = flt(Math.max(0, Math.min(selPure(w), needPure() - others)).toFixed(3));
-			if (!w.take) $(this).closest("tr").find(".lc-g").focus();
-		} else {
-			w.take = 0;
-		}
 		refreshRow(i);
 	});
 
