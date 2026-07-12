@@ -50,7 +50,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		</div>
 		<div class="lc-bal off"></div>
 		<div class="lc-box"><table class="lc-tbl">
-			<thead><tr>
+			<thead><tr><th style="width:26px"><input type="checkbox" class="lc-all"></th>
 			<th>${__("Loss Warehouse")}</th>
 			<th>${__("Take From (karats)")}</th>
 			<th class="r">${__("Pure Available (g)")}</th>
@@ -83,7 +83,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 	frappe.db.get_value("Warehouse", { warehouse_name: "Gold Issue" }, "name").then((r) => {
 		if (r.message && r.message.name) outWh.set_value(r.message.name);
 	});
-	got.$input.on("input change", () => strip());
+	got.$input.on("input change", () => allocate());
 
 	function gotGrams() {
 		// read the raw input — the Float control's get_value() lags live typing
@@ -98,6 +98,48 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		return w.karats.filter((k) => k.sel).reduce((s, k) => s + k.pure, 0);
 	}
 
+	// AUTO-BALANCE: manual (typed) rows stay pinned; the remaining needed pure
+	// splits EQUALLY across the other ticked rows, capped by each row's ticked
+	// karats (overflow re-spreads).
+	function allocate() {
+		S.whs.forEach((w) => {
+			if (!w.sel) {
+				w.take = 0;
+				w.manual = false;
+			} else if (w.manual) {
+				w.take = Math.min(w.take, flt(selPure(w).toFixed(3)));
+			} else {
+				w.take = 0;
+			}
+		});
+		let rest = Math.max(0, needPure() - S.whs.reduce((s, w) => s + (w.manual ? w.take : 0), 0));
+		let open = S.whs.filter((w) => w.sel && !w.manual);
+		while (rest > 0.0005 && open.length) {
+			const share = rest / open.length;
+			let leftover = 0;
+			const next = [];
+			open.forEach((w) => {
+				const room = selPure(w) - w.take;
+				if (room <= share + 0.0005) {
+					w.take = flt(selPure(w).toFixed(3));
+					leftover += share - room;
+				} else {
+					w.take = flt((w.take + share).toFixed(3));
+					next.push(w);
+				}
+			});
+			rest = leftover;
+			if (next.length === open.length) rest = 0;
+			open = next;
+		}
+		refreshAll();
+	}
+
+	function refreshAll() {
+		S.whs.forEach((_, i) => refreshRow(i, true));
+		strip();
+	}
+
 	function strip() {
 		const give = S.whs.reduce((s, w) => s + w.take, 0);
 		const need = needPure();
@@ -108,23 +150,25 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 			 <span>${ok ? "✓ " + __("balanced") : __("difference {0} g pure", [fmt(need - give)])}</span>`);
 	}
 
-	function refreshRow(i) {
+	function refreshRow(i, skipStrip) {
 		const w = S.whs[i];
 		const $tr = $(root).find(`.lc-rows tr[data-i="${i}"]`);
 		const avail = selPure(w);
 		if (w.take > avail) w.take = flt(avail.toFixed(3));
 		$tr.toggleClass("on", w.take > 0);
+		$tr.find(".lc-rowcb").prop("checked", !!w.sel);
 		$tr.find(".lc-avail").text(fmt(avail));
 		$tr.find(".lc-g").attr("max", avail);
 		if (document.activeElement !== $tr.find(".lc-g").get(0)) $tr.find(".lc-g").val(w.take ? fmt(w.take) : "");
 		w.karats.forEach((k, j) => $tr.find(`.lc-k[data-j="${j}"]`).toggleClass("off", !k.sel));
-		strip();
+		if (!skipStrip) strip();
 	}
 
 	function paint() {
 		const $b = $(root).find(".lc-rows");
 		$b.html(S.whs.length ? S.whs.map((w, i) => `
 			<tr data-i="${i}">
+				<td><input type="checkbox" class="lc-rowcb"></td>
 				<td><span class="lc-wh-name">${esc(w.label)}</span>
 					<div class="lc-sub">${__("dust")} ${fmt(w.gross)} g</div></td>
 				<td>${w.karats.map((k, j) => `
@@ -133,7 +177,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 				<td class="r lc-pure lc-avail">${fmt(selPure(w))}</td>
 				<td class="r"><input class="lc-g" type="number" step="0.001" min="0" max="${selPure(w)}" placeholder="0.000"></td>
 			</tr>`).join("")
-			: `<tr><td colspan="4" class="lc-empty">${__("The loss warehouses are empty.")}</td></tr>`);
+			: `<tr><td colspan="5" class="lc-empty">${__("The loss warehouses are empty.")}</td></tr>`);
 		strip();
 	}
 
@@ -153,26 +197,43 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 				});
 				const karats = Object.values(groups).sort((a, b) => a.label.localeCompare(b.label));
 				karats.forEach((k) => (k.pure = flt(k.pure.toFixed(3))));
-				return { warehouse: w.warehouse, label: w.label, gross: w.gross, take: 0, karats };
+				return { warehouse: w.warehouse, label: w.label, gross: w.gross, take: 0, sel: false, manual: false, karats };
 			});
 			paint();
 		});
 	}
 
-	// karat checkbox: include/exclude that karat's dust for this bench
+	// karat checkbox: include/exclude that karat's dust -> rebalance
 	$(root).on("change", ".lc-kcb", function () {
 		const $tr = $(this).closest("tr");
 		const i = +$tr.attr("data-i");
 		const j = +$(this).closest(".lc-k").attr("data-j");
 		S.whs[i].karats[j].sel = this.checked;
-		refreshRow(i);
+		allocate();
 	});
-	// typing a pure weight on the row activates it (checkmark follows the weight)
+	// typing a pure weight PINS the row; the others auto-rebalance around it
 	$(root).on("input", ".lc-g", function () {
 		const i = +$(this).closest("tr").attr("data-i");
 		const w = S.whs[i];
 		w.take = Math.min(selPure(w), flt(this.value));
-		refreshRow(i);
+		w.manual = true;
+		w.sel = true;
+		allocate();
+	});
+	// tick a bench in / out of the auto-balance
+	$(root).on("change", ".lc-rowcb", function () {
+		const i = +$(this).closest("tr").attr("data-i");
+		S.whs[i].sel = this.checked;
+		if (!this.checked) S.whs[i].manual = false;
+		allocate();
+	});
+	$(root).on("click", ".lc-all", function (e) {
+		e.stopPropagation();
+		S.whs.forEach((w) => {
+			w.sel = this.checked;
+			if (!this.checked) w.manual = false;
+		});
+		allocate();
 	});
 
 	$(root).find(".lc-go").on("click", () => {
