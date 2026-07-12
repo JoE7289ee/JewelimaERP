@@ -10,7 +10,7 @@
 
 frappe.pages["import-stock"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Import Stock", single_column: true });
-	const state = { rows: [], header: {}, cats: [] };
+	const state = { rows: [], header: {}, cats: [], typeSizes: {} };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -32,6 +32,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		table.is-grid input{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
 			padding:1px 4px;font-size:12px;color:var(--text-color);border-radius:3px;height:26px;line-height:1.1;box-sizing:border-box;}
 		table.is-grid input:focus{box-shadow:inset 0 0 0 1px var(--primary);outline:none;}
+		table.is-grid select{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);padding:1px 4px;font-size:12px;color:var(--text-color);border-radius:3px;height:26px;box-sizing:border-box;}
 		table.is-grid .frappe-control,table.is-grid .frappe-control .form-group{margin:0;}
 		table.is-grid .frappe-control .help-box,table.is-grid .frappe-control .description,table.is-grid .frappe-control .control-label{display:none !important;}
 		table.is-grid .frappe-control .control-input-wrapper,table.is-grid .frappe-control .control-input{margin:0;padding:0;min-height:0;}
@@ -99,6 +100,10 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 
 	frappe.db.get_list("Charge Category", { filters: { disabled: 0 }, pluck: "name", limit: 100 })
 		.then((names) => { state.cats = names || []; });
+	// Size dropdown follows the design's TYPE (Setup -> Design Types size lists)
+	frappe.call({ method: "jewelima.jewelima.api.get_design_types_with_sizes" }).then((r) => {
+		(r.message || []).forEach((t) => (state.typeSizes[t.design_type] = { sizes: t.sizes || [], default: t.default || "" }));
+	});
 
 	const $body = $(page.main).find(".is-body");
 
@@ -142,15 +147,33 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 			<td><span class="is-chipbtn c-stones"></span></td>
 			<td><input class="c-huid" maxlength="12"></td>
 			<td><input class="c-cert"></td>
-			<td><input class="c-size"></td>
+			<td><select class="c-size"></select></td>
 			<td><span class="is-chipbtn c-works"></span></td>
 			<td style="white-space:nowrap"><button class="is-dup" title="${__("Duplicate row")}">⧉</button><button class="is-x" title="${__("Remove")}">✕</button></td>
 		</tr>`).appendTo($body);
 		row.$tr = $tr;
 
+		function setSizeOptions(keep) {
+			const t = state.typeSizes[row.designType] || { sizes: [], default: "" };
+			const opts = t.sizes.length ? t.sizes : ["NA"];
+			const $s = $tr.find(".c-size");
+			$s.html(['<option value=""></option>'].concat(opts.map((o) => `<option>${esc(o)}</option>`)).join(""));
+			row.size = keep && opts.includes(keep) ? keep : (t.default || "");
+			$s.val(row.size);
+		}
 		row.cDesign = frappe.ui.form.make_control({
 			df: { fieldtype: "Link", fieldname: "design", options: "Design", placeholder: __("Design"),
-				onchange: () => { row.design = row.cDesign.get_value(); paint(row); maybeGrow(); } },
+				onchange: () => {
+					row.design = row.cDesign.get_value();
+					if (row.design) {
+						frappe.db.get_value("Design", row.design, "design_type").then((r) => {
+							row.designType = (r.message || {}).design_type || "";
+							setSizeOptions(row.size);
+						});
+					}
+					paint(row);
+					maybeGrow();
+				} },
 			parent: $tr.find(".c-design").get(0), render_input: true,
 		});
 		row.cKarat = frappe.ui.form.make_control({
@@ -165,11 +188,13 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		$tr.find(".c-gross").val(row.gross).on("input", function () { row.gross = this.value; recalcGold(row); paint(row); });
 		$tr.find(".c-huid").val(row.huid).on("input", function () { row.huid = this.value.toUpperCase(); this.value = row.huid; });
 		$tr.find(".c-cert").val(row.cert).on("input", function () { row.cert = this.value; });
-		$tr.find(".c-size").val(row.size).on("input", function () { row.size = this.value; });
+		setSizeOptions(row.size);
+		$tr.find(".c-size").on("change", function () { row.size = this.value; });
 		$tr.find(".c-stones").html(stoneChip(row)).on("click", () => stonesDialog(row));
 		$tr.find(".c-works").html(worksChip(row)).on("click", () => worksDialog(row));
 		$tr.find(".is-dup").on("click", () => {
 			addRow({ design: row.design, karat: row.karat, gold: row.gold, gross: row.gross, size: row.size,
+				designType: row.designType,
 				stones: (row.stones || []).map((s) => Object.assign({}, s)), tags: (row.tags || []).slice() });
 		});
 		$tr.find(".is-x").on("click", () => {
