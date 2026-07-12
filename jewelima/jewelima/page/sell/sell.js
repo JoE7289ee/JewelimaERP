@@ -18,12 +18,13 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
+		.sl-wrap{display:flex;flex-direction:column;height:calc(100vh - 100px);min-height:0;}
 		.sl-top{display:flex;align-items:flex-end;gap:12px;margin:2px 0 10px;flex-wrap:wrap;}
 		.sl-top .frappe-control{margin:0;}
 		.sl-top .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.sl-top .help-box,.sl-top .description{display:none !important;}
 		.sl-buyer{width:230px;}.sl-chart{width:200px;}.sl-rate{width:130px;}.sl-scan{width:200px;}.sl-remarks{width:200px;}
-		.sl-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 285px);}
+		.sl-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;flex:1 1 auto;min-height:120px;}
 		table.sl-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;}
 		table.sl-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:4px 8px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.sl-tbl td{border-bottom:1px solid var(--border-color);padding:3px 8px;white-space:nowrap;font-variant-numeric:tabular-nums;}
@@ -39,7 +40,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-x:hover{color:#b02a2a;}
 		.sl-empty{padding:24px;text-align:center;color:var(--text-muted);}
 		.sl-warn{margin:8px 0 0;font-size:12px;color:#9a6700;display:none;}
-		.sl-strip{position:sticky;bottom:0;z-index:5;margin-top:12px;border:1px solid var(--gray-400,#aeb6bf);border-radius:10px;
+		.sl-strip{flex:0 0 auto;z-index:1;margin-top:12px;border:1px solid var(--gray-400,#aeb6bf);border-radius:10px;
 			background:var(--fg-color);box-shadow:0 -3px 14px rgba(0,0,0,.10);padding:10px 16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
 		.sl-strip .k{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;}
 		.sl-strip .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
@@ -48,6 +49,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-sell{margin-left:auto;background:#1d7a33;border:none;color:#fff;font-weight:800;letter-spacing:.8px;padding:12px 30px;border-radius:8px;font-size:14px;cursor:pointer;box-shadow:0 2px 6px rgba(29,122,51,.35);}
 		.sl-sell:hover{background:#155e26;}
 		</style>
+		<div class="sl-wrap">
 		<div class="sl-top">
 			<div class="sl-buyer"></div><div class="sl-chart"></div><div class="sl-rate"></div>
 			<div class="sl-scan"></div><div class="sl-remarks"></div>
@@ -68,6 +70,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			<span><span class="k">${__("Charges")}</span><span class="v sl-t-chg">₹0.00</span></span>
 			<span class="grand"><span class="k">${__("Grand Total")}</span><span class="v sl-t-grand">₹0.00</span></span>
 			<button class="sl-sell">${__("SELL")}</button>
+		</div>
 		</div>
 	`);
 	const root = $(page.main)[0];
