@@ -3273,6 +3273,63 @@ def _stock_move_many(item_qty, source, target):
 
 
 # ---------------------------------------------------------------------------
+# Loss Report (Reports > Stock Reports) — the '<Stage> -LOSS' warehouses rolled
+# up: what recoverable loss sits where, and how much PURE gold it holds
+# (qty x the item's purity%). Mostly karat golds; anything else shows honestly.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_loss_report():
+	whs = frappe.get_all("Warehouse", filters={"custom_is_loss": 1, "is_group": 0},
+	                     fields=["name", "warehouse_name"], order_by="warehouse_name")
+	if not whs:
+		return {"items": [], "warehouses": [], "totals": {}}
+	label_of = {w.name: (w.warehouse_name or w.name).replace(" -LOSS", "") for w in whs}
+
+	cells, meta = {}, {}
+	for b in frappe.get_all("Bin", filters={"warehouse": ["in", [w.name for w in whs]]},
+	                        fields=["item_code", "warehouse", "actual_qty"]):
+		qty = flt(b.actual_qty)
+		if qty <= 0.0005:
+			continue
+		cells.setdefault(b.item_code, {})[b.warehouse] = round(cells.get(b.item_code, {}).get(b.warehouse, 0) + qty, 3)
+	for it in frappe.get_all("Item", filters={"name": ["in", list(cells) or [""]]},
+	                         fields=["name", "item_group", "purity_percentage", "stone_type"]):
+		meta[it.name] = it
+
+	wh_stats = {}
+	items = []
+	for item in sorted(cells, key=lambda i: ((meta.get(i) or {}).get("item_group") or "", i)):
+		m = meta.get(item) or {}
+		purity = flt(m.get("purity_percentage"))
+		total = round(sum(cells[item].values()), 3)
+		pure = round(total * purity / 100.0, 3)
+		items.append({
+			"item": item, "group": m.get("item_group") or "", "purity": purity,
+			"is_stone": bool(m.get("stone_type")),
+			"total": total, "pure": pure, "cells": cells[item],
+		})
+		for wh, qty in cells[item].items():
+			d = wh_stats.setdefault(wh, {"gross": 0.0, "pure": 0.0})
+			d["gross"] += qty
+			d["pure"] += qty * purity / 100.0
+
+	warehouses = [{
+		"warehouse": w.name, "label": label_of[w.name],
+		"gross": round(wh_stats[w.name]["gross"], 3), "pure": round(wh_stats[w.name]["pure"], 3),
+	} for w in whs if w.name in wh_stats]
+	return {
+		"items": items,
+		"warehouses": warehouses,
+		"totals": {
+			"gross": round(sum(x["gross"] for x in warehouses), 3),
+			"pure": round(sum(x["pure"] for x in warehouses), 3),
+			"warehouses": len(warehouses),
+			"materials": len(items),
+		},
+	}
+
+
+# ---------------------------------------------------------------------------
 # Parties (Setup > Party) — review the imported parties and group them.
 # "Party" is our word for ERPNext's Customer; the Individual default group
 # counts as UNGROUPED until the review assigns a real one.
