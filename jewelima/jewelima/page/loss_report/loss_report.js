@@ -106,6 +106,55 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 		S.term = this.value || "";
 		render();
 	}, 200));
+
+	// ---- print (B&W friendly: borders + weights only, no colour shading) -----
+	frappe.call({ method: "jewelima.jewelima.api.get_print_branding" }).then((r) => (S.branding = r.message || {}));
+
+	const PRINT_CSS = `
+		.lrp-date{font-size:11px;color:#333;margin:-6px 0 12px;}
+		table.lrp{width:100%;border-collapse:collapse;font-size:11.5px;}
+		table.lrp th,table.lrp td{border:1px solid #444;padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;}
+		table.lrp th{background:#eee;font-weight:700;}
+		table.lrp th:first-child,table.lrp td:first-child{text-align:left;}
+		table.lrp .sub{display:block;font-size:9.5px;color:#555;font-weight:400;}
+		table.lrp .pure{display:block;font-size:9.5px;color:#111;font-weight:700;}
+		table.lrp tfoot td{background:#eee;font-weight:800;}
+		.lrp-sum{margin:12px 0 0;font-size:12px;}
+		.lrp-sum b{font-variant-numeric:tabular-nums;}
+		@media print{table.lrp th,table.lrp tfoot td{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+	`;
+
+	function buildPrintHTML() {
+		const d = S.d || {};
+		const t = d.totals || {};
+		const whs = d.warehouses || [];
+		const items = d.items || [];
+		const head = `<tr><th>${__("Material")}</th>
+			${whs.map((w) => `<th>${esc(w.label)}<span class="sub">${fmt(w.gross)} g · ${__("pure")} ${fmt(w.pure)} g</span></th>`).join("")}
+			<th>${__("Total")}</th></tr>`;
+		const body = items.map((r) => `<tr>
+			<td>${esc(r.item)}<span class="sub">${esc(r.group)}${r.purity ? ` · ${r.purity}%` : ""}</span></td>
+			${whs.map((w) => `<td>${r.cells[w.warehouse] ? fmt(r.cells[w.warehouse]) : "—"}</td>`).join("")}
+			<td><b>${fmt(r.total)}</b>${r.purity ? `<span class="pure">${__("pure")} ${fmt(r.pure)} g</span>` : ""}</td>
+		</tr>`).join("");
+		const foot = `<tr><td>${__("TOTAL")}</td>
+			${whs.map((w) => `<td>${fmt(w.gross)}<span class="pure">${__("pure")} ${fmt(w.pure)} g</span></td>`).join("")}
+			<td>${fmt(t.gross || 0)}<span class="pure">${__("pure")} ${fmt(t.pure || 0)} g</span></td></tr>`;
+		return `
+			<div class="lrp-date">${__("Exported")}: ${frappe.datetime.str_to_user(frappe.datetime.now_datetime())}</div>
+			<table class="lrp"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>
+			<div class="lrp-sum">${__("Loss gold (gross)")} <b>${fmt(t.gross || 0)} g</b> &nbsp;·&nbsp;
+				${__("Pure gold in loss")} <b>${fmt(t.pure || 0)} g</b> &nbsp;·&nbsp;
+				${t.warehouses || 0} ${__("warehouse(s)")} &nbsp;·&nbsp; ${t.materials || 0} ${__("material(s)")}</div>`;
+	}
+
+	page.add_inner_button(__("Print"), () => {
+		if (!S.d || !(S.d.items || []).length) {
+			frappe.show_alert({ message: __("Nothing to print — the loss warehouses are empty."), indicator: "orange" }, 4);
+			return;
+		}
+		jewelima.print_window(S.branding || {}, __("Loss Report"), buildPrintHTML(), PRINT_CSS);
+	});
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };
