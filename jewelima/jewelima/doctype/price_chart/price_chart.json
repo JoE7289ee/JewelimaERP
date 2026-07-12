@@ -1,0 +1,240 @@
+{
+ "actions": [],
+ "autoname": "PCH-.####",
+ "creation": "2026-07-12 13:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "chart_date",
+  "status",
+  "col_break_head",
+  "gold_purity_factor",
+  "diamond_quality_note",
+  "diamond_section",
+  "diamond_rates",
+  "stones_section",
+  "colour_stone_rate",
+  "precious_stone_rate",
+  "col_break_stones",
+  "job_work_pty_rate",
+  "making_section",
+  "making_rules",
+  "setting_section",
+  "setting_rates",
+  "special_section",
+  "special_works",
+  "charges_section",
+  "hallmark_charge",
+  "certification_charge",
+  "terms_section",
+  "payment_terms",
+  "terms",
+  "col_break_sign",
+  "signatory",
+  "signatory_phone"
+ ],
+ "fields": [
+  {
+   "description": "Blank = the HOUSE chart (fallback when a buyer has no chart of their own).",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "chart_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Chart Date",
+   "reqd": 1
+  },
+  {
+   "default": "Active",
+   "description": "Saving an Active chart supersedes the customer's previous Active one — old charts stay for history.",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nSuperseded"
+  },
+  {
+   "fieldname": "col_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The negotiated billing purity: gold value = day's rate × this % × net grams (75, 75.5, 80 ...).",
+   "fieldname": "gold_purity_factor",
+   "fieldtype": "Float",
+   "label": "Gold Purity Factor (%)",
+   "precision": "2"
+  },
+  {
+   "description": "The letter's quality line, e.g. VVS, Colour-E/F.",
+   "fieldname": "diamond_quality_note",
+   "fieldtype": "Data",
+   "label": "Diamond Purity (note)"
+  },
+  {
+   "fieldname": "diamond_section",
+   "fieldtype": "Section Break",
+   "label": "Diamond Cents Brackets (per-STONE weight → ₹/ct)"
+  },
+  {
+   "fieldname": "diamond_rates",
+   "fieldtype": "Table",
+   "label": "Diamond Rates",
+   "options": "Price Chart Diamond Rate"
+  },
+  {
+   "fieldname": "stones_section",
+   "fieldtype": "Section Break",
+   "label": "Other Stones"
+  },
+  {
+   "fieldname": "colour_stone_rate",
+   "fieldtype": "Float",
+   "label": "Colour Stone Rate (₹/ct)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "precious_stone_rate",
+   "fieldtype": "Float",
+   "label": "Precious Stone Rate (₹/ct)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "col_break_stones",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Setting charge when the customer supplies their own diamonds (party stones are never sold).",
+   "fieldname": "job_work_pty_rate",
+   "fieldtype": "Float",
+   "label": "Job Work — Party Diamond (₹/ct)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "making_section",
+   "fieldtype": "Section Break",
+   "label": "Making Charges"
+  },
+  {
+   "fieldname": "making_rules",
+   "fieldtype": "Table",
+   "label": "Making Rules",
+   "options": "Price Chart Making Rule"
+  },
+  {
+   "fieldname": "setting_section",
+   "fieldtype": "Section Break",
+   "label": "Setting Ladder (₹ per stone, by stone size)"
+  },
+  {
+   "fieldname": "setting_rates",
+   "fieldtype": "Table",
+   "label": "Setting Rates",
+   "options": "Price Chart Setting Rate"
+  },
+  {
+   "fieldname": "special_section",
+   "fieldtype": "Section Break",
+   "label": "Special Works"
+  },
+  {
+   "fieldname": "special_works",
+   "fieldtype": "Table",
+   "label": "Special Works",
+   "options": "Price Chart Special Work"
+  },
+  {
+   "fieldname": "charges_section",
+   "fieldtype": "Section Break",
+   "label": "Pass-through Charges"
+  },
+  {
+   "fieldname": "hallmark_charge",
+   "fieldtype": "Float",
+   "label": "Hallmarking (₹/pc)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "certification_charge",
+   "fieldtype": "Float",
+   "label": "Certification (₹/pc)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "terms_section",
+   "fieldtype": "Section Break",
+   "label": "Terms & Signature"
+  },
+  {
+   "fieldname": "payment_terms",
+   "fieldtype": "Small Text",
+   "label": "Payment Terms"
+  },
+  {
+   "default": "*Rate for Diamond may vary according to the present market situation. We will notify accordingly.\nCertification charges, Value added tax, Hallmarking will be charged extra.",
+   "fieldname": "terms",
+   "fieldtype": "Text",
+   "label": "Terms & Conditions"
+  },
+  {
+   "fieldname": "col_break_sign",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "signatory",
+   "fieldtype": "Data",
+   "label": "Signatory"
+  },
+  {
+   "fieldname": "signatory_phone",
+   "fieldtype": "Data",
+   "label": "Signatory Phone"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-12 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Price Chart",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "customer"
+}

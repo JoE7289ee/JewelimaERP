@@ -1,0 +1,69 @@
+{
+ "actions": [],
+ "creation": "2026-07-12 13:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sieve_label",
+  "from_ct",
+  "to_ct",
+  "quality",
+  "rate"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "fieldname": "sieve_label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Sieve"
+  },
+  {
+   "columns": 2,
+   "fieldname": "from_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "From (ct/stone)",
+   "precision": "3"
+  },
+  {
+   "columns": 2,
+   "fieldname": "to_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Below (ct/stone)",
+   "precision": "3",
+   "description": "Blank = and above."
+  },
+  {
+   "columns": 2,
+   "fieldname": "quality",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Quality",
+   "description": "Our diamond quality group (VVS-EF, VS-FG, VVS/VS-GH ...). Blank = any diamond."
+  },
+  {
+   "columns": 2,
+   "fieldname": "rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Rate (₹/ct)",
+   "precision": "2",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-12 13:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Price Chart Diamond Rate",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
