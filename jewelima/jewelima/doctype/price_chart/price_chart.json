@@ -6,7 +6,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "customer",
+  "chart_name",
   "chart_date",
   "status",
   "col_break_head",
@@ -37,13 +37,13 @@
  ],
  "fields": [
   {
-   "description": "Blank = the HOUSE chart (fallback when a buyer has no chart of their own).",
-   "fieldname": "customer",
-   "fieldtype": "Link",
+   "description": "Free text — usually the customer's name (e.g. KAVITHA), or GENERAL for the house chart.",
+   "fieldname": "chart_name",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Customer",
-   "options": "Customer"
+   "label": "Name",
+   "reqd": 1
   },
   {
    "fieldname": "chart_date",
@@ -236,5 +236,5 @@
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
- "title_field": "customer"
+ "title_field": "chart_name"
 }
