@@ -114,6 +114,15 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		return t.length ? `<span class="on">${esc(t.join(", "))}</span>` : __("+ works");
 	}
 
+	function recalcGold(row) {
+		// gold = gross − stones (ct × 0.2) — the same conversion used everywhere
+		const gross = parseFloat(row.gross);
+		if (isNaN(gross)) return;
+		const stoneG = (row.stones || []).reduce((t, x) => t + (parseFloat(x.ct) || 0) * 0.2, 0);
+		row.gold = Math.max(0, gross - stoneG).toFixed(3);
+		row.$tr.find(".c-gold").val(row.gold);
+	}
+
 	function paint(row) {
 		const ok = row.design && row.karat && parseFloat(row.gold) > 0 && parseFloat(row.gross) > 0 &&
 			parseFloat(row.gross) + 0.0005 >= parseFloat(row.gold);
@@ -128,7 +137,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		const $tr = $(`<tr>
 			<td class="is-num">${state.rows.length + 1}</td>
 			<td class="c-design"></td><td class="c-karat"></td>
-			<td><input class="c-gold" type="number" step="0.001" min="0"></td>
+			<td><input class="c-gold" type="number" step="0.001" min="0" placeholder="auto"></td>
 			<td><input class="c-gross" type="number" step="0.001" min="0"></td>
 			<td><span class="is-chipbtn c-stones"></span></td>
 			<td><input class="c-huid" maxlength="12"></td>
@@ -153,7 +162,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		if (row.design) row.cDesign.set_value(row.design);
 		if (row.karat) row.cKarat.set_value(row.karat);
 		$tr.find(".c-gold").val(row.gold).on("input", function () { row.gold = this.value; paint(row); });
-		$tr.find(".c-gross").val(row.gross).on("input", function () { row.gross = this.value; paint(row); });
+		$tr.find(".c-gross").val(row.gross).on("input", function () { row.gross = this.value; recalcGold(row); paint(row); });
 		$tr.find(".c-huid").val(row.huid).on("input", function () { row.huid = this.value.toUpperCase(); this.value = row.huid; });
 		$tr.find(".c-cert").val(row.cert).on("input", function () { row.cert = this.value; });
 		$tr.find(".c-size").val(row.size).on("input", function () { row.size = this.value; });
@@ -202,6 +211,8 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 				row.stones = (v.stones || []).filter((s) => s.item && flt(s.ct) > 0 && cint(s.pcs) > 0)
 					.map((s) => ({ item: s.item, pcs: cint(s.pcs), ct: flt(s.ct) }));
 				row.$tr.find(".c-stones").html(stoneChip(row));
+				recalcGold(row);
+				paint(row);
 				d.hide();
 			},
 		});
