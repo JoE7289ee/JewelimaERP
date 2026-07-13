@@ -188,7 +188,9 @@ const PO_COLUMNS = [
 	$footrow.append("<td></td>"); // remove
 	// green = line goes into the order (Design/CAD + Qty); red = half-filled, won't go in
 	function paintRowStatus(row) {
-		const hasWork = !!(row._cad || (row.f.design.get() || "").trim());
+		// _lastDesign covers rows filled programmatically (Split, request pull-back):
+		// the Link control's set_value validates async, so get_value lags a beat
+		const hasWork = !!(row._cad || (row.f.design.get() || "").trim() || (row._lastDesign || "").trim());
 		const q = cint(row.f.qty.get());
 		const $n = row.$tr.find(".po-num");
 		$n.removeClass("ok bad");
@@ -733,6 +735,7 @@ const PO_COLUMNS = [
 					prev = nr;
 				}
 				recalcTotals();
+				setTimeout(recalcTotals, 600); // repaint once the async design set_values land
 				frappe.show_alert({ message: __("Split into {0} bags: {1}", [n, qtys.join(" + ")]), indicator: "green" });
 			},
 			__("Split Line"),
