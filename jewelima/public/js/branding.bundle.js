@@ -4,6 +4,7 @@
 
 import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
 import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finished-stock + at-certification
+import "./quick_menu"; // Ctrl+Q — quick palette of everyday pages
 
 frappe.provide("jewelima");
 
