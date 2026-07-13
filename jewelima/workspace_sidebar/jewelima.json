@@ -722,6 +722,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "activity",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Usage",
+   "link_to": "usage",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "inbox",
@@ -1138,7 +1151,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-13 23:55:41.394220",
+ "modified": "2026-07-14 00:08:56.492605",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

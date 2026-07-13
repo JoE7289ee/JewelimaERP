@@ -2320,6 +2320,60 @@ def get_stone_issuer_today(employee):
 	}
 
 
+@frappe.whitelist()
+def get_usage_report():
+	"""Reports > Usage (SM only): DB size + top tables, core document counts,
+	bags-per-day trend, users/sessions, and server disk — the capacity dashboard."""
+	frappe.only_for(("System Manager",))
+	import shutil
+
+	db_rows = frappe.db.sql("""
+		SELECT table_name, table_rows, ROUND((data_length+index_length)/1024/1024, 2) mb
+		FROM information_schema.tables WHERE table_schema = DATABASE()
+		ORDER BY (data_length+index_length) DESC LIMIT 10
+	""", as_dict=True)
+	total_mb = flt(frappe.db.sql("""
+		SELECT ROUND(SUM(data_length+index_length)/1024/1024, 1)
+		FROM information_schema.tables WHERE table_schema = DATABASE()
+	""")[0][0])
+
+	def cnt(dt, filters=None):
+		return frappe.db.count(dt, filters or {})
+
+	docs = {
+		"Order Bags (total)": cnt("Order Bag"),
+		"Order Bags on the floor": cnt("Order Bag", {"stock_status": "In Production", "is_finished": 0}),
+		"Job Orders": cnt("Job Order"),
+		"Bag Material Ledger rows": cnt("Bag Material Ledger"),
+		"Stock Ledger Entries": cnt("Stock Ledger Entry"),
+		"Material Issues": cnt("Material Issue"),
+		"Product Sales": cnt("Product Sale"),
+		"Designs": cnt("Design"),
+	}
+
+	trend = frappe.db.sql("""
+		SELECT DATE(creation) d, COUNT(*) n FROM `tabOrder Bag`
+		WHERE creation > DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+		GROUP BY DATE(creation) ORDER BY d
+	""", as_dict=True)
+
+	sessions = frappe.db.sql("""
+		SELECT user, MAX(lastupdate) last_seen FROM tabSessions
+		WHERE user NOT IN ('Guest') GROUP BY user ORDER BY last_seen DESC LIMIT 25
+	""", as_dict=True)
+	enabled_users = frappe.db.count("User", {"enabled": 1, "user_type": "System User"})
+
+	du = shutil.disk_usage("/")
+	return {
+		"db": {"total_mb": total_mb, "tables": db_rows},
+		"docs": docs,
+		"trend": [{"date": str(r.d), "n": r.n} for r in trend],
+		"users": {"enabled": enabled_users,
+			"sessions": [{"user": r.user, "last_seen": str(r.last_seen)} for r in sessions]},
+		"disk": {"total_gb": round(du.total / 1e9, 1), "free_gb": round(du.free / 1e9, 1)},
+	}
+
+
 _STONE_AUDIT_TOL = 0.005  # carats below this are rounding dust, treated as zero
 
 
