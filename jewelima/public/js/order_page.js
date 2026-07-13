@@ -66,6 +66,7 @@ const PO_COLUMNS = [
 		table.po-grid td.po-ro{padding:0 8px;text-align:right;white-space:nowrap;color:var(--text-color);font-variant-numeric:tabular-nums;}
 		table.po-grid td.po-act{text-align:center;padding:0 4px;}
 		table.po-grid td.po-act .btn{padding:1px 7px;font-size:11px;height:24px;line-height:1;margin:0 1px;}
+		table.po-grid td.po-act .btn.po-mat-edited{background:#ffc107;border-color:#d39e00;color:#3d3000;font-weight:700;}
 		table.po-grid td.po-act .btn:disabled{opacity:.4;cursor:not-allowed;}
 		table.po-grid td.po-act .btn.po-new.ready{background:#b00020;border-color:#b00020;color:#fff;font-weight:600;}
 		table.po-grid .po-hide{display:none;}
@@ -111,13 +112,13 @@ const PO_COLUMNS = [
 		state.$noBadge = $('<span class="po-no-badge">…</span>').prependTo($(page.wrapper).find(".page-actions").first());
 	}
 	state.showNo = (no) => state.$noBadge && state.$noBadge.text(no || "…");
-	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer" });
+	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer", reqd: OPTS.mode === "order" ? 1 : 0 });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
 	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", get_query: () => ({ filters: { disabled: 0 } }) });
 	if (OPTS.mode === "order") {
 	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date", read_only: 1 });
 	state.header.days = mk(".po-h-days", {
-		fieldtype: "Int", label: "Days (Due Date)", fieldname: "days",
+		fieldtype: "Int", label: "Days (Due Date)", fieldname: "days", reqd: 1,
 		description: "Due date = today + N days.",
 	});
 	state.header.cust_days = mk(".po-h-custdays", {
@@ -320,6 +321,9 @@ const PO_COLUMNS = [
 		// actions cell — Split (enabled only when qty > 1); more buttons can live here later
 		const $act = $('<td class="po-act"></td>').appendTo($tr);
 		row.$design = $('<button class="btn btn-xs btn-default" title="Edit this bag\'s materials (BOM)">Materials</button>').appendTo($act);
+		// yellow = this line's BOM was hand-edited (differs from the design's)
+		row.markEdited = () => row.$design.toggleClass("po-mat-edited", !!row._edited)
+			.attr("title", row._edited ? __("BOM edited on this line — Reset restores the design's") : __("Edit this bag's materials (BOM)"));
 		row.$design.on("click", () => editMaterials(row));
 		row.$split = $('<button class="btn btn-xs btn-default" title="Split this line into multiple bags">Split</button>').appendTo($act);
 		row.$split.on("click", () => doSplit(row));
@@ -559,6 +563,7 @@ const PO_COLUMNS = [
 			if (row.f.design_type) row.f.design_type.set(row._designType);
 			applyTypeSizes(row);
 			row._edited = false;
+			if (row.markEdited) row.markEdited();
 			row._profile = planProfile(row._materials);
 			applyProfile(row);
 		});
@@ -642,6 +647,7 @@ const PO_COLUMNS = [
 				if (bad) return frappe.msgprint(bad.stone_type ? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item]) : __("{0} needs a Weight (grams).", [bad.item]));
 				row._materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0, purity: flt(m.purity) || 0, uom: m.uom || "", stone_type: m.stone_type || "" }));
 				row._edited = true;
+				if (row.markEdited) row.markEdited();
 				row._profile = planProfile(row._materials);
 				applyProfile(row);
 				dd.hide();
@@ -939,6 +945,7 @@ function po_fillPage(state, data) {
 				// the request carried a hand-edited BOM — restore it over the design's
 				row._materials = l.materials;
 				row._edited = true;
+				if (row.markEdited) row.markEdited();
 				row._profile = state.planProfile(l.materials);
 				state.applyProfile(row);
 			}
@@ -1060,6 +1067,15 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	const order_date = state.header.order_date.get_value() || frappe.datetime.get_today();
 	const due_date = state.dueFromDays ? state.dueFromDays() : "";
 	const customer_date = (state.custFromDays ? state.custFromDays() : "") || due_date; // empty -> copies due date
+
+	if (!customer) {
+		frappe.msgprint(__("Pick the Party — every order needs one."));
+		return;
+	}
+	if (!(cint(state.header.days.get_value()) > 0)) {
+		frappe.msgprint(__("Days must be more than 0 — the order needs a due date."));
+		return;
+	}
 
 	const all = state.rows.map(po_readLine);
 	const lines = all.filter((l) => (l.design || l.cad) && l.qty > 0); // Design/CAD + Qty — the green rows
