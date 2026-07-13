@@ -1,7 +1,7 @@
-// Ctrl+Q — the Jewelima quick menu. A tiny palette of the everyday pages:
-// press Ctrl+Q anywhere on the desk, then hit the item's number (or arrows +
+// Ctrl+Space — the Jewelima quick menu. A tiny palette of the everyday pages:
+// press Ctrl+Space anywhere on the desk, then hit the item's number (or arrows +
 // Enter, or click). Edit QUICK_ITEMS to change what's on it.
-// (Deliberately Ctrl even on Mac — Cmd+Q quits the browser.)
+// (Ctrl+Space is unbound in every major browser on every platform.)
 
 const QUICK_ITEMS = [
 	{ label: __("Transfer Order Bag"), route: "transfer-order-bag" },
@@ -71,8 +71,8 @@ function openMenu() {
 }
 
 $(document).on("keydown", (e) => {
-	// literal Ctrl (never Cmd) + Q, and not while typing in a field with the menu closed
-	if (!e.ctrlKey || e.metaKey || e.altKey || (e.key || "").toLowerCase() !== "q") return;
+	// literal Ctrl (never Cmd) + Space
+	if (!e.ctrlKey || e.metaKey || e.altKey || e.code !== "Space") return;
 	e.preventDefault();
 	$menu ? closeMenu() : openMenu();
 });
