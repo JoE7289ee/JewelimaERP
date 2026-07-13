@@ -2141,7 +2141,8 @@ def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employe
 	if not item or not frappe.db.exists("Item", item):
 		frappe.throw(frappe._("Item {0} not found.").format(item))
 	qty = flt(qty)
-	if qty <= 0:
+	if qty <= 0 and not (entry_type == "Adjustment" and cint(pcs) > 0):
+		# Adjustment rows may carry ONLY a piece-count correction (Stone Audit)
 		frappe.throw(frappe._("Weight / qty must be greater than zero."))
 	doc = frappe.get_doc({
 		"doctype": "Bag Material Ledger",
@@ -2319,6 +2320,80 @@ def get_stone_issuer_today(employee):
 	}
 
 
+_STONE_AUDIT_TOL = 0.005  # carats below this are rounding dust, treated as zero
+
+
+@frappe.whitelist()
+def get_stone_audit():
+	"""Per-card stone lines whose net PIECES and net CARATS tell different stories
+	(cards still on the floor). Weight is the stock truth — the audit exists to
+	make the piece story match it."""
+	rows = frappe.db.sql("""
+		SELECT l.order_bag, l.item,
+			SUM(IF(l.direction='Out', -l.qty, l.qty)) net_ct,
+			SUM(IF(l.direction='Out', -l.pcs, l.pcs)) net_pcs,
+			b.design, b.location
+		FROM `tabBag Material Ledger` l
+		JOIN `tabOrder Bag` b ON b.name = l.order_bag
+		JOIN `tabItem` i ON i.name = l.item
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+			AND IFNULL(i.stone_type, '') != ''
+		GROUP BY l.order_bag, l.item
+	""", as_dict=True)
+	out = []
+	for r in rows:
+		ct, pcs = flt(r.net_ct), cint(r.net_pcs)
+		if abs(ct) < _STONE_AUDIT_TOL and pcs == 0:
+			continue  # clean (or pure rounding dust on both axes)
+		problem = None
+		if ct < -_STONE_AUDIT_TOL or pcs < 0:
+			problem = "negative"  # books went below zero — data error
+		elif pcs > 0 and abs(ct) < _STONE_AUDIT_TOL:
+			problem = "count_without_weight"  # pcs left, carats gone
+		elif pcs == 0 and ct >= _STONE_AUDIT_TOL:
+			problem = "weight_without_count"  # residual carats, no stones
+		if problem:
+			out.append({"order_bag": r.order_bag, "design": r.design or "", "location": r.location or "",
+				"item": r.item, "net_pcs": pcs, "net_ct": round(ct, 3), "problem": problem})
+	loss_benches = [w.replace(" -LOSS", "") for w in frappe.get_all("Warehouse",
+		filters={"warehouse_name": ["like", "% -LOSS"]}, pluck="warehouse_name")]
+	return {"rows": out, "loss_benches": sorted(loss_benches)}
+
+
+@frappe.whitelist()
+def stone_audit_fix(order_bag, item, action, bench=None):
+	"""Resolve one audit line. 'zero_pcs': corrective Adjustment row so the count
+	matches the (zero) weight. 'sweep': residual carats go to a stage's -LOSS
+	bucket (Option B — residue is collected, never vanishes)."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	net = frappe.db.sql("""
+		SELECT SUM(IF(direction='Out', -qty, qty)) ct, SUM(IF(direction='Out', -pcs, pcs)) pcs
+		FROM `tabBag Material Ledger` WHERE order_bag = %s AND item = %s
+	""", (order_bag, item), as_dict=True)[0]
+	ct, pcs = flt(net.ct), cint(net.pcs)
+
+	if action == "zero_pcs":
+		if abs(ct) >= _STONE_AUDIT_TOL:
+			frappe.throw(frappe._("{0} still nets {1} ct — only counts orphaned from weight can be zeroed.").format(item, round(ct, 3)))
+		if pcs == 0:
+			frappe.throw(frappe._("Nothing to correct — the count is already zero."))
+		_bag_ledger(order_bag, item, "Out" if pcs > 0 else "In", 0, "Adjustment",
+			pcs=abs(pcs), remarks="Stone audit: count corrected to match weight")
+	elif action == "sweep":
+		if ct < _STONE_AUDIT_TOL:
+			frappe.throw(frappe._("No residual carats to sweep on {0}.").format(item))
+		if pcs != 0:
+			frappe.throw(frappe._("{0} still counts {1} pcs — zero the count first if the stones are truly gone.").format(item, pcs))
+		# ledger benches are the UPPERCASE locations; the -LOSS warehouse uses the Title
+		if not bench or not _wh("{0} -LOSS".format(bench)):
+			frappe.throw(frappe._("Pick which stage's -LOSS bucket takes the residue."))
+		book_loss(order_bag, item, ct, bench=bench.upper(), remarks="Stone audit: residual carats swept")
+	else:
+		frappe.throw(frappe._("Unknown action."))
+	frappe.db.commit()
+	return get_stone_audit()
+
+
 @frappe.whitelist()
 def get_stone_issue_stock():
 	"""Everything sitting in the Stone Issue warehouse right now (side panel)."""
@@ -2442,6 +2517,7 @@ def get_card_for_weight(order_bag):
 			"item": r.item, "item_name": r.item_name, "purity": r.purity, "uom": r.uom, "stone_type": r.stone_type,
 			"bom_qty": r.qty, "bom_weight": r.weight,
 			"cur_qty": 0, "cur_weight": flt((cur.get(r.item) or {}).get("qty")),
+			"cur_pcs": cint((cur.get(r.item) or {}).get("pcs")),
 		})
 	return {"bag": bag, "item": item, "item_name": item_name, "materials": mats}
 
@@ -2493,7 +2569,8 @@ def weight_reduce(order_bag, lines, to_warehouse=None):
 		item, wt = ln.get("item"), flt(ln.get("weight"))
 		if not item or wt <= 0:
 			continue
-		_bag_ledger(order_bag, item, "Out", wt, "Weight Reduce", remarks=ln.get("remarks"))
+		# stones leave with their COUNT too — pcs keep the per-card story honest
+		_bag_ledger(order_bag, item, "Out", wt, "Weight Reduce", pcs=cint(ln.get("pcs")), remarks=ln.get("remarks"))
 		_stock_move(item, wt, src, tgt)
 		removed += wt
 	_recompute_bag_from_contents(order_bag)

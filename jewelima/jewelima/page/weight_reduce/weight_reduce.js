@@ -83,10 +83,10 @@ frappe.pages["weight-reduce"].on_page_load = function (wrapper) {
 	}
 
 	function renderTable() {
-		$head.html(`<tr><th style="width:30px">#</th><th>Item</th><th style="width:80px">Purity</th><th class="num" style="width:130px">Current Wt</th><th class="num" style="width:130px">Reduce Wt</th></tr>`);
+		$head.html(`<tr><th style="width:30px">#</th><th>Item</th><th style="width:80px">Purity</th><th class="num" style="width:130px">Current Wt</th><th class="num" style="width:130px">Reduce Wt</th><th class="num" style="width:110px">Reduce Pcs</th></tr>`);
 		$body.empty();
 		if (!state.materials.length) {
-			$body.html(`<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:14px;">This card holds no materials to reduce.</td></tr>`);
+			$body.html(`<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:14px;">This card holds no materials to reduce.</td></tr>`);
 			return;
 		}
 		state.materials.forEach((m, i) => {
@@ -94,8 +94,11 @@ frappe.pages["weight-reduce"].on_page_load = function (wrapper) {
 				<td>${i + 1}</td>
 				<td><b>${frappe.utils.escape_html(m.item || "")}</b></td>
 				<td>${(m.purity || 0)}%</td>
-				<td class="num">${flt(m.cur_weight).toFixed(3)}</td>
+				<td class="num">${flt(m.cur_weight).toFixed(3)}${m.stone_type && m.cur_pcs ? ` <span class="text-muted">(${m.cur_pcs} pcs)</span>` : ""}</td>
 				<td class="num"><input type="number" step="0.001" max="${flt(m.cur_weight)}" class="form-control input-xs wt-redwt" data-i="${i}" value=""></td>
+				<td class="num">${m.stone_type
+					? `<input type="number" step="1" min="0" class="form-control input-xs wt-redpcs" data-i="${i}" value="" title="How many stones leave with this weight">`
+					: '<span class="text-muted">—</span>'}</td>
 			</tr>`);
 		});
 		$body.find(".wt-redwt").on("input", function () {
@@ -104,6 +107,9 @@ frappe.pages["weight-reduce"].on_page_load = function (wrapper) {
 			if (v > max) { v = max; this.value = max; }
 			state.materials[$(this).data("i")].reduce_wt = v;
 			recalcTotal();
+		});
+		$body.find(".wt-redpcs").on("input", function () {
+			state.materials[$(this).data("i")].reduce_pcs = cint(this.value);
 		});
 	}
 	function recalcTotal() {
@@ -125,7 +131,9 @@ frappe.pages["weight-reduce"].on_page_load = function (wrapper) {
 
 	function doReduce() {
 		if (!state.bag) return;
-		const lines = state.materials.filter((m) => flt(m.reduce_wt) > 0).map((m) => ({ item: m.item, weight: flt(m.reduce_wt) }));
+		const lines = state.materials.filter((m) => flt(m.reduce_wt) > 0).map((m) => ({ item: m.item, weight: flt(m.reduce_wt), pcs: cint(m.reduce_pcs) }));
+		const stoneNoPcs = state.materials.find((m) => m.stone_type && flt(m.reduce_wt) > 0 && !cint(m.reduce_pcs));
+		if (stoneNoPcs) return frappe.msgprint(__("{0} is a stone — enter how many pcs leave with the weight (the count keeps the card's story honest).", [stoneNoPcs.item]));
 		if (!lines.length) return frappe.msgprint(__("Enter a Reduce Wt on at least one line."));
 		frappe.dom.freeze(__("Reducing…"));
 		frappe.call({ method: "jewelima.jewelima.api.weight_reduce", args: { order_bag: state.bag.bag.name, lines: JSON.stringify(lines), to_warehouse: whCtl.get_value() || null } })
