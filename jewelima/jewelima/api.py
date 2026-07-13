@@ -2264,11 +2264,22 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	mi = _material_issue_record("Stone", order_bag, wh, issued_by=issued_by, items=[
 		{"item": l.get("item"), "pcs": cint(l.get("pcs")), "qty": flt(l.get("ct")), "uom": "Carat"} for l in lines
 	])
+	bag_qty = bag.qty or 1
+	plan_dirty = False
 	for l in lines:
 		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
 		_bag_ledger(order_bag, item, "In", ct, "Stone Issue", pcs=pcs, employee=issued_by,
 			remarks="Stone Issue station", reference=mi.name)
 		_stock_move(item, ct, wh, _wh(IN_PRODUCTION_WAREHOUSE))
+		# a freshly added line may carry a BLANK plan — the actual fills it in
+		row = next((r for r in bag.bag_bom if r.item == item), None)
+		if row and flt(row.weight) <= 0:
+			row.weight = ct / bag_qty
+			if cint(row.qty) <= 0:
+				row.qty = pcs / bag_qty
+			plan_dirty = True
+	if plan_dirty:
+		bag.save(ignore_permissions=True)
 	frappe.db.commit()
 	out = get_stone_issue_card(order_bag)
 	out["material_issue"] = mi.name
@@ -2287,40 +2298,93 @@ def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, ite
 
 @frappe.whitelist()
 def get_stone_issuer_today(employee):
-	"""What the picked issuer has handed out TODAY (Stone Issue station header):
-	total pcs, total carats, number of cards touched."""
+	"""What the picked issuer has handed out TODAY (Stone Issue station side panel):
+	totals + the line-by-line history (item, pcs, ct, card, time), newest first."""
 	if not employee:
-		return {"pcs": 0, "ct": 0.0, "cards": 0}
+		return {"pcs": 0, "ct": 0.0, "cards": 0, "lines": []}
 	rows = frappe.db.sql("""
-		SELECT i.pcs, i.qty, m.order_bag
+		SELECT i.item, i.pcs, i.qty, m.order_bag, m.posting
 		FROM `tabMaterial Issue Item` i
 		JOIN `tabMaterial Issue` m ON m.name = i.parent
 		WHERE m.issue_type = 'Stone' AND m.issued_by = %s AND DATE(m.posting) = CURDATE()
+		ORDER BY m.posting DESC
 	""", employee, as_dict=True)
 	return {
 		"pcs": sum(cint(r.pcs) for r in rows),
 		"ct": round(sum(flt(r.qty) for r in rows), 3),
 		"cards": len({r.order_bag for r in rows}),
+		"lines": [{"item": r.item, "pcs": cint(r.pcs), "ct": flt(r.qty),
+			"order_bag": r.order_bag, "time": str(r.posting)} for r in rows],
 	}
 
 
 @frappe.whitelist()
-def stone_issue_swap(order_bag, from_item, to_item):
-	"""Swap one stone on the card's BOM for another (the sieve size on plan doesn't
-	work — setter picks the neighbouring size). Plan pcs/ct carry over unchanged."""
+def get_stone_issue_stock():
+	"""Everything sitting in the Stone Issue warehouse right now (side panel)."""
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+	rows = frappe.get_all("Bin", filters={"warehouse": wh, "actual_qty": [">", 0]},
+		fields=["item_code", "actual_qty"], order_by="item_code")
+	return {"warehouse": wh, "items": [
+		{"item": r.item_code, "ct": flt(r.actual_qty)} for r in rows
+	], "total_ct": round(sum(flt(r.actual_qty) for r in rows), 3)}
+
+
+@frappe.whitelist()
+def stone_issue_edit(order_bag, from_item, to_item=None, pcs=None):
+	"""Edit one stone line on the card's BOM: swap the item (sieve size doesn't
+	work) and/or change the piece count. When PIECES change, the plan carats scale
+	by the line's average per-piece weight (weight/qty x new pcs) — the design
+	weight follows the count."""
 	if not frappe.db.exists("Order Bag", order_bag):
 		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
 	bag = frappe.get_doc("Order Bag", order_bag)
 	if bag.is_finished or bag.stock_status != "In Production":
 		frappe.throw(frappe._("{0} is not on the floor anymore.").format(order_bag))
-	if not frappe.db.get_value("Item", to_item, "stone_type"):
-		frappe.throw(frappe._("{0} is not a stone.").format(to_item))
-	if any(r.item == to_item for r in bag.bag_bom):
-		frappe.throw(frappe._("{0} is already on this card's BOM.").format(to_item))
 	row = next((r for r in bag.bag_bom if r.item == from_item), None)
 	if not row:
 		frappe.throw(frappe._("{0} is not on this card's BOM.").format(from_item))
-	row.item = to_item
+
+	to_item = (to_item or "").strip()
+	if to_item and to_item != from_item:
+		if not frappe.db.get_value("Item", to_item, "stone_type"):
+			frappe.throw(frappe._("{0} is not a stone.").format(to_item))
+		if any(r.item == to_item for r in bag.bag_bom):
+			frappe.throw(frappe._("{0} is already on this card's BOM.").format(to_item))
+		row.item = to_item
+
+	# the station shows TOTALS (per-unit x bag qty) — convert back to per-unit
+	bag_qty = bag.qty or 1
+	if pcs is not None and cint(pcs) != cint(flt(row.qty) * bag_qty):
+		new_total = cint(pcs)
+		if new_total <= 0:
+			frappe.throw(frappe._("Pieces must be at least 1."))
+		if flt(row.qty) > 0 and flt(row.weight) > 0:
+			avg = flt(row.weight) / flt(row.qty)  # per-piece design weight
+			row.weight = round(avg * new_total / bag_qty, 4)
+		row.qty = new_total / bag_qty
+
+	bag.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_stone_issue_card(order_bag)
+
+
+@frappe.whitelist()
+def stone_issue_add(order_bag, item, pcs=0, weight=0):
+	"""Add a NEW stone line to the card's BOM from the issue station. Weight may be
+	left blank — the plan gets filled from the ACTUAL carats when they're issued."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	bag = frappe.get_doc("Order Bag", order_bag)
+	if bag.is_finished or bag.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is not on the floor anymore.").format(order_bag))
+	if not frappe.db.get_value("Item", item, "stone_type"):
+		frappe.throw(frappe._("{0} is not a stone — only stones are added here.").format(item))
+	if any(r.item == item for r in bag.bag_bom):
+		frappe.throw(frappe._("{0} is already on this card's BOM.").format(item))
+	bag_qty = bag.qty or 1
+	bag.append("bag_bom", {"item": item, "qty": cint(pcs) / bag_qty, "weight": flt(weight) / bag_qty})
 	bag.save(ignore_permissions=True)
 	frappe.db.commit()
 	return get_stone_issue_card(order_bag)

@@ -2,10 +2,12 @@
 // For license information, please see license.txt
 //
 // Stone Issue (Manufacturing > Issue) — the stone-issuing control station.
-// Scan a card to start; the card's BOM stone lines appear (metals never do).
-// Enter Qty (pcs) + Carat weight per line and hit Issue: each line writes a
-// Bag Material Ledger 'Stone Issue' row and moves the real stock
-// Stone Issue warehouse -> In Bags. Route: /app/stone-issue
+// LEFT: scan a card, its BOM stone lines (metals never show), edit a line
+// (sieve swap / piece count — plan carats follow the per-piece average), add a
+// brand-new stone (blank plan fills from the actual on issue), enter pcs + ct
+// and Issue (Bag Material Ledger row + stock Stone Issue -> In Bags + a
+// Material Issue record). RIGHT: what the picked issuer handed out today, and
+// the Stone Issue warehouse stock. Route: /app/stone-issue
 
 frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Stone Issue", single_column: true });
@@ -15,9 +17,11 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.si-wrap{max-width:980px;}
+		.si-cols{display:flex;gap:20px;align-items:flex-start;}
+		.si-main{flex:1;min-width:0;}
+		.si-side{flex:0 0 340px;display:flex;flex-direction:column;gap:16px;}
 		.si-scan{display:flex;gap:10px;align-items:end;margin-bottom:14px;}
-		.si-scan .frappe-control{margin:0;flex:0 0 300px;}
+		.si-scan .frappe-control{margin:0;flex:0 0 260px;}
 		.si-scan .control-label{font-size:11px;color:var(--text-muted);}
 		.si-head{display:none;gap:26px;flex-wrap:wrap;background:var(--control-bg);border:1px solid var(--border-color);border-radius:8px;padding:10px 16px;margin-bottom:12px;}
 		.si-head .k{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
@@ -32,30 +36,48 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		table.si-grid input{width:76px;border:1px solid var(--border-color);border-radius:4px;padding:2px 6px;text-align:right;background:var(--control-bg);}
 		.si-foot{display:none;margin-top:14px;gap:12px;align-items:center;}
 		.si-note{color:var(--text-muted);font-size:12px;margin-top:12px;}
+		.si-panel{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
+		.si-panel .p-head{background:var(--control-bg);padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;justify-content:space-between;}
+		.si-panel .p-body{max-height:340px;overflow-y:auto;}
+		.si-panel table{width:100%;border-collapse:collapse;font-size:12px;}
+		.si-panel td{padding:4px 12px;border-top:1px solid var(--border-color);}
+		.si-panel td.r{text-align:right;white-space:nowrap;}
+		.si-panel .p-empty{padding:14px;text-align:center;color:var(--text-muted);font-size:12px;}
+		.si-panel .p-total{font-weight:700;background:var(--control-bg);}
 		</style>
-		<div class="si-wrap">
-			<div class="si-scan">
-				<div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button>
-				<div class="si-today" style="display:none;margin-left:auto;text-align:right;background:var(--control-bg);border:1px solid var(--border-color);border-radius:8px;padding:6px 14px;">
-					<div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">${__("Issued Today")}</div>
-					<div class="si-today-v" style="font-size:14px;font-weight:700;"></div>
+		<div class="si-cols">
+			<div class="si-main">
+				<div class="si-scan"><div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
+				<div class="si-head">
+					<div><div class="k">${__("Card")}</div><div class="v si-bag"></div></div>
+					<div><div class="k">${__("Design")}</div><div class="v si-design"></div></div>
+					<div><div class="k">${__("Type")}</div><div class="v si-type"></div></div>
+					<div><div class="k">${__("Location")}</div><div class="v si-loc"></div></div>
+					<div><div class="k">${__("From Warehouse")}</div><div class="v si-wh"></div></div>
+				</div>
+				<table class="si-grid">
+					<thead><tr>
+						<th>${__("Stone")}</th><th>${__("Plan (pcs / ct)")}</th><th>${__("Issued (pcs / ct)")}</th>
+						<th>${__("Available (ct)")}</th><th>${__("Issue Pcs")}</th><th>${__("Issue Ct")}</th>
+					</tr></thead><tbody></tbody>
+				</table>
+				<div class="si-foot">
+					<button class="btn btn-primary si-go">${__("Issue Stones")}</button>
+					<button class="btn btn-default si-add">${__("Add Stone")}</button>
+					<span class="si-sum text-muted"></span>
+				</div>
+				<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. ✎ edits a line (swap the sieve size or change the piece count — the plan carats follow the per-piece average). Add Stone puts a brand-new material on the card; leave its weight blank and the actual issued carats become the plan. Issuing moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger.")}</div>
+			</div>
+			<div class="si-side">
+				<div class="si-panel si-today-panel" style="display:none;">
+					<div class="p-head"><span>${__("Issued Today")}</span><span class="si-today-t"></span></div>
+					<div class="p-body si-today-b"></div>
+				</div>
+				<div class="si-panel">
+					<div class="p-head"><span>${__("Stone Issue Stock")}</span><span class="si-stock-t"></span></div>
+					<div class="p-body si-stock-b"></div>
 				</div>
 			</div>
-			<div class="si-head">
-				<div><div class="k">${__("Card")}</div><div class="v si-bag"></div></div>
-				<div><div class="k">${__("Design")}</div><div class="v si-design"></div></div>
-				<div><div class="k">${__("Type")}</div><div class="v si-type"></div></div>
-				<div><div class="k">${__("Location")}</div><div class="v si-loc"></div></div>
-				<div><div class="k">${__("From Warehouse")}</div><div class="v si-wh"></div></div>
-			</div>
-			<table class="si-grid">
-				<thead><tr>
-					<th>${__("Stone")}</th><th>${__("Plan (pcs / ct)")}</th><th>${__("Issued (pcs / ct)")}</th>
-					<th>${__("Available (ct)")}</th><th>${__("Issue Pcs")}</th><th>${__("Issue Ct")}</th>
-				</tr></thead><tbody></tbody>
-			</table>
-			<div class="si-foot"><button class="btn btn-primary si-go">${__("Issue Stones")}</button><span class="si-sum text-muted"></span></div>
-			<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. Issuing moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger.")}</div>
 		</div>
 	`);
 	const root = $(page.main);
@@ -75,17 +97,37 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	});
 	issuedBy.refresh();
 
-	// the picked issuer's day so far — refreshed on pick and after every issue
+	// RIGHT PANEL 1 — the picked issuer's day, line by line
 	function refreshToday() {
 		const emp = issuedBy.get_value();
-		if (!emp) { root.find(".si-today").hide(); return; }
+		if (!emp) { root.find(".si-today-panel").hide(); return; }
 		frappe.call({ method: API + ".get_stone_issuer_today", args: { employee: emp } }).then((r) => {
 			const t = r.message || {};
-			root.find(".si-today-v").text(__("{0} pcs · {1} ct · {2} card(s)", [t.pcs || 0, (t.ct || 0).toFixed(3), t.cards || 0]));
-			root.find(".si-today").show();
+			root.find(".si-today-t").text(__("{0} pcs · {1} ct", [t.pcs || 0, (t.ct || 0).toFixed(3)]));
+			const rows = (t.lines || []).map((l) => `
+				<tr><td>${esc(l.item)}</td><td class="r">${l.pcs} / ${l.ct.toFixed(3)}</td>
+				<td class="r">${esc(l.order_bag)}</td>
+				<td class="r text-muted">${frappe.datetime.str_to_user(l.time).split(" ").slice(1).join(" ")}</td></tr>`).join("");
+			root.find(".si-today-b").html(rows
+				? `<table><tbody>${rows}</tbody></table>`
+				: `<div class="p-empty">${__("Nothing issued today yet.")}</div>`);
+			root.find(".si-today-panel").show();
 		});
 	}
 	issuedBy.$input.on("change awesomplete-selectcomplete", () => setTimeout(refreshToday, 100));
+
+	// RIGHT PANEL 2 — everything in the Stone Issue warehouse
+	function refreshStock() {
+		frappe.call({ method: API + ".get_stone_issue_stock" }).then((r) => {
+			const s = r.message || {};
+			root.find(".si-stock-t").text(__("{0} ct", [(s.total_ct || 0).toFixed(3)]));
+			const rows = (s.items || []).map((l) => `
+				<tr><td>${esc(l.item)}</td><td class="r">${l.ct.toFixed(3)} ct</td></tr>`).join("");
+			root.find(".si-stock-b").html(rows
+				? `<table><tbody>${rows}</tbody></table>`
+				: `<div class="p-empty">${__("The warehouse is empty.")}</div>`);
+		});
+	}
 
 	function clearAll() {
 		S.card = null;
@@ -114,7 +156,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find("table.si-grid tbody").html(c.lines.map((l, i) => `
 			<tr data-i="${i}">
 				<td>${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span>
-					<button class="btn btn-xs btn-default si-swap" title="${__("Sieve size doesn't work? Swap this stone on the card's BOM")}">✎</button></td>
+					<button class="btn btn-xs btn-default si-edit" title="${__("Edit this line — swap the stone or change the piece count")}">✎</button></td>
 				<td class="mut">${l.plan_pcs} / ${l.plan_ct.toFixed(3)}</td>
 				<td class="mut">${l.issued_pcs} / ${l.issued_ct.toFixed(3)}</td>
 				<td class="${l.available_ct <= 0 ? "low" : ""}">${l.available_ct.toFixed(3)}</td>
@@ -146,29 +188,60 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	}
 	root.on("input", ".si-pcs,.si-ct", sum);
 
-	// sieve size on plan doesn't work — swap the BOM line to the size that does
-	root.on("click", ".si-swap", function () {
+	// ✎ — swap the stone (sieve size doesn't work) and/or change the piece count;
+	// when pieces change, the plan carats scale by the line's per-piece average
+	root.on("click", ".si-edit", function () {
 		const i = cint($(this).closest("tr").attr("data-i"));
-		const from = S.card.lines[i].item;
+		const l = S.card.lines[i];
 		const d = new frappe.ui.Dialog({
-			title: __("Swap {0}", [from]),
-			fields: [{
-				fieldname: "to_item", fieldtype: "Link", label: __("Use instead"), options: "Item", reqd: 1,
-				get_query: () => ({ filters: { stone_type: ["is", "set"] } }),
-				description: __("Changes the card's BOM — the plan pcs/ct stay the same."),
-			}],
-			primary_action_label: __("Swap"),
+			title: __("Edit {0}", [l.item]),
+			fields: [
+				{ fieldname: "to_item", fieldtype: "Link", label: __("Stone"), options: "Item", default: l.item, reqd: 1,
+					get_query: () => ({ filters: { stone_type: ["is", "set"] } }),
+					description: __("Pick a different size if the plan's doesn't work.") },
+				{ fieldname: "pcs", fieldtype: "Int", label: __("Pieces (plan)"), default: l.plan_pcs, reqd: 1,
+					description: __("Changing the count scales the plan carats by the per-piece average.") },
+			],
+			primary_action_label: __("Save"),
 			primary_action(v) {
 				d.hide();
-				frappe.dom.freeze(__("Swapping..."));
-				frappe.call({ method: API + ".stone_issue_swap", args: { order_bag: S.card.order_bag, from_item: from, to_item: v.to_item } })
-					.then((r) => {
-						frappe.dom.unfreeze();
-						frappe.show_alert({ message: __("{0} → {1} on the card's BOM.", [from, v.to_item]), indicator: "green" }, 5);
-						S.card = r.message;
-						paint();
-					})
-					.catch(() => frappe.dom.unfreeze());
+				frappe.dom.freeze(__("Saving..."));
+				frappe.call({ method: API + ".stone_issue_edit", args: {
+					order_bag: S.card.order_bag, from_item: l.item, to_item: v.to_item, pcs: v.pcs,
+				} }).then((r) => {
+					frappe.dom.unfreeze();
+					frappe.show_alert({ message: __("Line updated on the card's BOM."), indicator: "green" }, 4);
+					S.card = r.message;
+					paint();
+				}).catch(() => frappe.dom.unfreeze());
+			},
+		});
+		d.show();
+	});
+
+	// a stone the design never had — new BOM line; blank weight = plan fills from the actual
+	root.on("click", ".si-add", () => {
+		const d = new frappe.ui.Dialog({
+			title: __("Add Stone — {0}", [S.card.order_bag]),
+			fields: [
+				{ fieldname: "item", fieldtype: "Link", label: __("Stone"), options: "Item", reqd: 1,
+					get_query: () => ({ filters: { stone_type: ["is", "set"] } }) },
+				{ fieldname: "pcs", fieldtype: "Int", label: __("Pieces (plan)") },
+				{ fieldname: "weight", fieldtype: "Float", label: __("Weight ct (plan)"), precision: 3,
+					description: __("Leave blank — the actual carats you issue become the plan.") },
+			],
+			primary_action_label: __("Add"),
+			primary_action(v) {
+				d.hide();
+				frappe.dom.freeze(__("Adding..."));
+				frappe.call({ method: API + ".stone_issue_add", args: {
+					order_bag: S.card.order_bag, item: v.item, pcs: v.pcs || 0, weight: v.weight || 0,
+				} }).then((r) => {
+					frappe.dom.unfreeze();
+					frappe.show_alert({ message: __("{0} added to the card's BOM.", [v.item]), indicator: "green" }, 4);
+					S.card = r.message;
+					paint();
+				}).catch(() => frappe.dom.unfreeze());
 			},
 		});
 		d.show();
@@ -191,10 +264,12 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 					S.card = r.message; // refreshed issued/available numbers
 					paint();
 					refreshToday();
+					refreshStock();
 				})
 				.catch(() => frappe.dom.unfreeze());
 		});
 	});
 
 	clearAll();
+	refreshStock();
 };
