@@ -151,7 +151,12 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	// missing"). The boot data stays intact, so: realign any caret/content
 	// mismatch, and if sections rendered without children, rebuild once.
 	let _rebuilds = 0, _lastRebuild = 0;
+	// collapsed (mini) mode is core's own regime: it hides section-breaks and
+	// force-opens sections for the icon rail. Our repair pass must stand down
+	// there — realigning/rebuilding a mini sidebar is what "loses everything".
+	const sidebarCollapsed = () => localStorage.getItem("sidebar-expanded") === "false";
 	function sync() {
+		if (sidebarCollapsed()) return;
 		document.querySelectorAll('[data-title="Jewelima"]').forEach((sb) => {
 			if (sb.offsetParent === null) return;
 			let closed = false, emptySections = 0;
@@ -183,13 +188,22 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	}
 	// the Setup section holds only sub-groups; core refuses to render a section
 	// with no direct links, so the JSON gives it an invisible Spacer child — hide
-	// the blank row it produces (label-less container inside our sidebar)
-	$("<style>").text('[data-title="Jewelima"] .nested-container .sidebar-item-container[title=""]{display:none;}').appendTo("head");
+	// the blank row it produces. NOT via CSS [title=""]: Bootstrap tooltips (armed
+	// when the sidebar is collapsed to the icon rail) STEAL every item's title
+	// attribute, leaving title="" on all of them — that rule then hid the whole
+	// menu until refresh. Match the spacer by its empty text instead.
+	function hideSpacers() {
+		document.querySelectorAll('[data-title="Jewelima"] .nested-container .sidebar-item-container').forEach((el) => {
+			if (!(el.textContent || "").trim()) el.style.display = "none";
+		});
+	}
 	const later = () => {
 		setTimeout(orphanNet, 0);
+		setTimeout(hideSpacers, 0);
 		setTimeout(sync, 0);
 		setTimeout(sync, 300);
 		setTimeout(sync, 900); // late pass — saved open-states apply during render
+		setTimeout(hideSpacers, 900);
 	};
 	// pages reached by BUTTON only (no sidebar link) can't be mapped to a
 	// workspace by core's resolver — a deep link or reload renders a NULL
@@ -216,6 +230,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	// shut on reload). After every toggle, write the COMPLETE truthful state from
 	// the DOM — sections AND sub-groups, keyed by their (unique) titles.
 	function saveAll() {
+		if (sidebarCollapsed()) return; // mini-mode states are core's, not the user's
 		const sb = [...document.querySelectorAll('[data-title="Jewelima"]')].find((x) => x.offsetParent);
 		if (!sb) return;
 		try {
@@ -223,7 +238,9 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 			const m = {};
 			sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
 				const di = el.querySelector(".drop-icon");
-				const t = el.getAttribute("title");
+				// Bootstrap tooltips steal `title` into data-original-title once the
+				// sidebar has been icon-collapsed — read whichever survives
+				const t = el.getAttribute("title") || el.getAttribute("data-original-title");
 				if (di && t) m[t] = di.getAttribute("data-state") === "closed";
 			});
 			st.jewelima = m;
