@@ -2177,6 +2177,93 @@ def issue_stones(order_bag, item, qty, pcs=0, bench=None, remarks=None, from_war
 
 
 @frappe.whitelist()
+def get_stone_issue_card(barcode):
+	"""Stone Issue station: resolve a scanned card into its BOM's STONE lines with
+	plan / already-issued / available-at-Stone-Issue numbers. Metals never show here."""
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+
+	nm = (barcode or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
+	bag = frappe.get_doc("Order Bag", nm)
+	if bag.is_finished or bag.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is {1} — stones only go into cards still on the floor.").format(
+			nm, "a product" if bag.is_finished else (bag.stock_status or "?")))
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+
+	# already issued through THIS station (entry_type Stone Issue), per item
+	issued = {}
+	for r in frappe.get_all("Bag Material Ledger",
+			filters={"order_bag": nm, "entry_type": "Stone Issue"},
+			fields=["item", "qty", "pcs", "direction"]):
+		sign = 1 if (r.direction or "In") == "In" else -1
+		e = issued.setdefault(r.item, {"ct": 0.0, "pcs": 0})
+		e["ct"] += sign * flt(r.qty)
+		e["pcs"] += sign * int(r.pcs or 0)
+
+	lines = []
+	for r in bag.bag_bom:
+		stone_type = frappe.db.get_value("Item", r.item, "stone_type")
+		if not stone_type:
+			continue  # metals are issued at Casting, never here
+		got = issued.get(r.item, {"ct": 0.0, "pcs": 0})
+		lines.append({
+			"item": r.item, "stone_type": stone_type,
+			"plan_pcs": int(flt(r.qty) * (bag.qty or 1)), "plan_ct": round(flt(r.weight) * (bag.qty or 1), 3),
+			"issued_pcs": got["pcs"], "issued_ct": round(got["ct"], 3),
+			"available_ct": flt(frappe.db.get_value("Bin", {"item_code": r.item, "warehouse": wh}, "actual_qty")),
+		})
+	if not lines:
+		frappe.throw(frappe._("{0} has no stones on its BOM — nothing to issue here.").format(nm))
+	return {
+		"order_bag": bag.name, "design": bag.design or "", "qty": bag.qty or 1,
+		"location": bag.location or "", "warehouse": wh,
+		"design_type": (frappe.db.get_value("Design", bag.design, "design_type") if bag.design else "") or "",
+		"lines": lines,
+	}
+
+
+@frappe.whitelist()
+def stone_issue_apply(order_bag, lines):
+	"""Issue several stone lines into one card (pcs + carats each). Per line: a Bag
+	Material Ledger 'Stone Issue' row + real stock Stone Issue -> In Bags. Only
+	items on the card's BOM that ARE stones; availability checked up front."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, STONE_ISSUE_WAREHOUSE
+
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	lines = [l for l in (lines or []) if flt(l.get("ct")) > 0 or cint(l.get("pcs"))]
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	if not lines:
+		frappe.throw(frappe._("Enter a Qty + Carat weight on at least one stone line."))
+
+	bag = frappe.get_doc("Order Bag", order_bag)
+	if bag.is_finished or bag.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is not on the floor anymore.").format(order_bag))
+	bom_items = {r.item for r in bag.bag_bom}
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+
+	for l in lines:
+		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
+		if item not in bom_items:
+			frappe.throw(frappe._("{0} is not on this card's BOM.").format(item))
+		if not frappe.db.get_value("Item", item, "stone_type"):
+			frappe.throw(frappe._("{0} is not a stone — only stones are issued here.").format(item))
+		if ct <= 0 or pcs <= 0:
+			frappe.throw(frappe._("{0}: enter both a Qty (pcs) and a Carat weight.").format(item))
+		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": wh}, "actual_qty"))
+		if ct > avail + 0.0005:
+			frappe.throw(frappe._("Only {0} ct of {1} at {2} — can't issue {3} ct.").format(avail, item, wh, ct))
+
+	for l in lines:
+		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
+		_bag_ledger(order_bag, item, "In", ct, "Stone Issue", pcs=pcs, remarks="Stone Issue station")
+		_stock_move(item, ct, wh, _wh(IN_PRODUCTION_WAREHOUSE))
+	return get_stone_issue_card(order_bag)
+
+
+@frappe.whitelist()
 def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	"""Record metal loss out of a bag (the out-minus-in difference at a bench).
 	Per-bag ledger row AND real stock: In Bags pool -> '<bench> -LOSS' warehouse.
