@@ -44,7 +44,17 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-panel td.r{text-align:right;white-space:nowrap;}
 		.si-panel .p-empty{padding:14px;text-align:center;color:var(--text-muted);font-size:12px;}
 		.si-panel .p-total{font-weight:700;background:var(--control-bg);}
+		.si-wrap2{display:flex;flex-direction:column;height:calc(100vh - 110px);}
+		.si-wrap2 > .si-cols{flex:1 1 auto;overflow:auto;min-height:0;}
+		.si-strip{flex:0 0 auto;display:none;align-items:center;gap:14px;border-top:2px solid var(--border-color);background:var(--fg-color);padding:10px 16px;z-index:1;}
+		.si-strip .b{border:1px solid var(--border-color);border-radius:8px;padding:5px 14px;text-align:center;background:var(--control-bg);min-width:96px;}
+		.si-strip .b .bk{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
+		.si-strip .b .bv{font-size:14px;font-weight:700;}
+		.si-strip .b.zero .bv{color:var(--text-muted);font-weight:400;}
+		.si-strip .b.tot{background:var(--fg-color);border-width:2px;}
+		.si-strip .si-go{margin-left:auto;font-size:14px;padding:7px 26px;}
 		</style>
+		<div class="si-wrap2">
 		<div class="si-cols">
 			<div class="si-main">
 				<div class="si-scan"><div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
@@ -62,7 +72,6 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 					</tr></thead><tbody></tbody>
 				</table>
 				<div class="si-foot">
-					<button class="btn btn-primary si-go">${__("Issue Stones")}</button>
 					<button class="btn btn-default si-add">${__("Add Stone")}</button>
 					<span class="si-sum text-muted"></span>
 				</div>
@@ -78,6 +87,12 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 					<div class="p-body si-stock-b"></div>
 				</div>
 			</div>
+		</div>
+		<div class="si-strip">
+			<div class="si-buckets" style="display:flex;gap:10px;"></div>
+			<div class="b tot"><div class="bk">${__("TOTAL")}</div><div class="bv si-strip-tot">0 / 0.000</div></div>
+			<button class="btn btn-primary si-go">${__("Issue Stones")}</button>
+		</div>
 		</div>
 	`);
 	const root = $(page.main);
@@ -132,7 +147,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	function clearAll() {
 		S.card = null;
 		scan.set_value("");
-		root.find(".si-head, table.si-grid, .si-foot").hide();
+		root.find(".si-head, table.si-grid, .si-foot, .si-strip").hide();
 		scan.$input.focus();
 	}
 	root.find(".si-clear").on("click", clearAll);
@@ -166,6 +181,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find(".si-head").css("display", "flex");
 		root.find("table.si-grid").show();
 		root.find(".si-foot").css("display", "flex");
+		root.find(".si-strip").css("display", "flex");
 		sum();
 		root.find("table.si-grid tbody tr:first .si-pcs").focus();
 	}
@@ -181,10 +197,27 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		return out;
 	}
 
+	const BUCKET_ORDER = ["DMD", "PS", "CS", "CVD", "PDMD", "POTH"];
 	function sum() {
 		const ls = readLines();
 		const pcs = ls.reduce((a, l) => a + l.pcs, 0), ct = ls.reduce((a, l) => a + l.ct, 0);
 		root.find(".si-sum").text(ls.length ? __("{0} line(s) — {1} pcs, {2} ct", [ls.length, pcs, ct.toFixed(3)]) : "");
+		// bottom strip: what's being issued right now, bucket by bucket
+		if (!S.card) return;
+		const agg = {};
+		root.find("table.si-grid tbody tr").each(function () {
+			const i = cint(this.getAttribute("data-i"));
+			const b = S.card.lines[i].bucket || "POTH";
+			const e = agg[b] || (agg[b] = { pcs: 0, ct: 0 });
+			e.pcs += cint($(this).find(".si-pcs").val());
+			e.ct += flt($(this).find(".si-ct").val());
+		});
+		const present = BUCKET_ORDER.filter((b) => b in agg);
+		root.find(".si-buckets").html(present.map((b) => `
+			<div class="b ${agg[b].pcs || agg[b].ct ? "" : "zero"}">
+				<div class="bk">${b}</div><div class="bv">${agg[b].pcs} / ${agg[b].ct.toFixed(3)}</div>
+			</div>`).join(""));
+		root.find(".si-strip-tot").text(`${pcs} / ${ct.toFixed(3)}`);
 	}
 	root.on("input", ".si-pcs,.si-ct", sum);
 

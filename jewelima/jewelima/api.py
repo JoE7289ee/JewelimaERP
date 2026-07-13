@@ -2211,6 +2211,7 @@ def get_stone_issue_card(barcode):
 		got = issued.get(r.item, {"ct": 0.0, "pcs": 0})
 		lines.append({
 			"item": r.item, "stone_type": stone_type,
+			"bucket": (_BUCKET_OF_STONE_TYPE.get(stone_type) or "poth").upper(),
 			"plan_pcs": int(flt(r.qty) * (bag.qty or 1)), "plan_ct": round(flt(r.weight) * (bag.qty or 1), 3),
 			"issued_pcs": got["pcs"], "issued_ct": round(got["ct"], 3),
 			"available_ct": flt(frappe.db.get_value("Bin", {"item_code": r.item, "warehouse": wh}, "actual_qty")),
