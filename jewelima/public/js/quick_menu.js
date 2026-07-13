@@ -14,18 +14,21 @@ const QUICK_ITEMS = [
 	{ label: __("Item Stock"), route: "item-stock" },
 ];
 
-// pages the user has no role for are dropped from the menu (checked once per load)
-let items = null; // resolved list
+// STABLE numbers: every item keeps its slot (n = its QUICK_ITEMS position) for
+// every user, so "Ctrl+Space, 4" means the same page on every machine. Pages the
+// user has no role for are hidden — their number is simply skipped.
+let items = null; // resolved list, each with its fixed .n
 function loadItems() {
 	if (items) return Promise.resolve(items);
+	const numbered = QUICK_ITEMS.map((it, i) => ({ ...it, n: i + 1 }));
 	return frappe
 		.call({ method: "jewelima.jewelima.api.get_allowed_quick_pages", args: { routes: QUICK_ITEMS.map((i) => i.route) } })
 		.then((r) => {
 			const ok = new Set(r.message || []);
-			items = QUICK_ITEMS.filter((i) => ok.has(i.route));
+			items = numbered.filter((i) => ok.has(i.route));
 			return items;
 		})
-		.catch(() => (items = QUICK_ITEMS));
+		.catch(() => (items = numbered));
 }
 
 let $menu = null;
@@ -69,7 +72,7 @@ function renderMenu() {
 			<div class="jqm-box">
 				<div class="jqm-head">${__("Quick Menu")}</div>
 				${items.map((it, i) => `
-					<div class="jqm-item" data-i="${i}"><span class="jqm-n">${i + 1}</span>${frappe.utils.escape_html(it.label)}</div>`).join("")}
+					<div class="jqm-item" data-i="${i}"><span class="jqm-n">${it.n}</span>${frappe.utils.escape_html(it.label)}</div>`).join("")}
 				<div class="jqm-foot">${__("number / ↑↓ + Enter / click — Esc closes")}</div>
 			</div>
 		</div>
@@ -84,7 +87,7 @@ function renderMenu() {
 		else if (e.key === "ArrowDown") { selected = (selected + 1) % items.length; paint(); }
 		else if (e.key === "ArrowUp") { selected = (selected + items.length - 1) % items.length; paint(); }
 		else if (e.key === "Enter") { go(selected); }
-		else if (/^[1-9]$/.test(e.key) && cint(e.key) <= items.length) { go(cint(e.key) - 1); }
+		else if (/^[1-9]$/.test(e.key)) { const i = items.findIndex((it) => it.n === cint(e.key)); if (i >= 0) go(i); }
 		else return;
 		e.preventDefault();
 		e.stopPropagation();
