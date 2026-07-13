@@ -324,8 +324,12 @@ const PO_COLUMNS = [
 		const $act = $('<td class="po-act"></td>').appendTo($tr);
 		row.$design = $('<button class="btn btn-xs btn-default" title="Edit this bag\'s materials (BOM)">Materials</button>').appendTo($act);
 		// yellow = this line's BOM was hand-edited (differs from the design's)
-		row.markEdited = () => row.$design.toggleClass("po-mat-edited", !!row._edited)
-			.attr("title", row._edited ? __("BOM edited on this line — Reset restores the design's") : __("Edit this bag's materials (BOM)"));
+		row.markEdited = () => {
+			row.$design.toggleClass("po-mat-edited", !!row._edited)
+				.attr("title", row._edited ? __("BOM edited on this line — Reset restores the design's") : __("Edit this bag's materials (BOM)"));
+			// Reset only matters once the BOM differs from the design's
+			if (row.$reset) row.$reset.toggle(!!row._edited);
+		};
 		row.$design.on("click", () => editMaterials(row));
 		row.$split = $('<button class="btn btn-xs btn-default" title="Split this line into multiple bags">Split</button>').appendTo($act);
 		row.$split.on("click", () => doSplit(row));
@@ -333,7 +337,7 @@ const PO_COLUMNS = [
 		row.$remark = $('<button class="btn btn-xs btn-default" title="Add a remark">Remark</button>').appendTo($act);
 		row.$remark.on("click", () => editRemark(row));
 		row.$reset = $('<button class="btn btn-xs btn-default" title="Reset this line to the design\'s BOM">Reset</button>').appendTo($act);
-		row.$reset.on("click", () => resetLine(row));
+		row.$reset.on("click", () => resetLine(row)).hide(); // appears once the BOM is edited (Materials yellow)
 		row.$new = $('<button class="btn btn-xs btn-default po-new" title="Create a purity variant of this design (e.g. 22KYG → 18KPG)">New</button>').appendTo($act);
 		row.$new.on("click", () => openVariantPicker(row));
 		row.$cad = $('<button class="btn btn-xs btn-default" title="CAD job — no design yet; order with target budgets">CAD</button>').appendTo($act);
@@ -719,6 +723,8 @@ const PO_COLUMNS = [
 					} else {
 						nr._profile = row._profile;
 						nr._materials = (row._materials || []).map((m) => ({ ...m }));
+						nr._edited = row._edited; // an edited BOM travels to every bag of the split
+						if (nr.markEdited) nr.markEdited();
 						nr._designType = row._designType;
 						nr._lastDesign = design;
 						nr.f.design.set(design);
