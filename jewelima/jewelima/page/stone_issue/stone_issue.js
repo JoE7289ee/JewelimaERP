@@ -188,6 +188,15 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	}
 	root.on("input", ".si-pcs,.si-ct", sum);
 
+	// Enter walks the grid: Pcs -> Ct -> next row's Pcs -> … -> Issue button
+	root.on("keydown", ".si-pcs,.si-ct", function (e) {
+		if (e.key !== "Enter") return;
+		e.preventDefault();
+		const inputs = root.find("table.si-grid tbody input").toArray();
+		const next = inputs[inputs.indexOf(this) + 1];
+		next ? $(next).focus().select() : root.find(".si-go").focus();
+	});
+
 	// ✎ — swap the stone (sieve size doesn't work) and/or change the piece count;
 	// when pieces change, the plan carats scale by the line's per-piece average
 	root.on("click", ".si-edit", function () {
