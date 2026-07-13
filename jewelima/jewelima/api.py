@@ -2286,6 +2286,25 @@ def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, ite
 
 
 @frappe.whitelist()
+def get_stone_issuer_today(employee):
+	"""What the picked issuer has handed out TODAY (Stone Issue station header):
+	total pcs, total carats, number of cards touched."""
+	if not employee:
+		return {"pcs": 0, "ct": 0.0, "cards": 0}
+	rows = frappe.db.sql("""
+		SELECT i.pcs, i.qty, m.order_bag
+		FROM `tabMaterial Issue Item` i
+		JOIN `tabMaterial Issue` m ON m.name = i.parent
+		WHERE m.issue_type = 'Stone' AND m.issued_by = %s AND DATE(m.posting) = CURDATE()
+	""", employee, as_dict=True)
+	return {
+		"pcs": sum(cint(r.pcs) for r in rows),
+		"ct": round(sum(flt(r.qty) for r in rows), 3),
+		"cards": len({r.order_bag for r in rows}),
+	}
+
+
+@frappe.whitelist()
 def stone_issue_swap(order_bag, from_item, to_item):
 	"""Swap one stone on the card's BOM for another (the sieve size on plan doesn't
 	work — setter picks the neighbouring size). Plan pcs/ct carry over unchanged."""

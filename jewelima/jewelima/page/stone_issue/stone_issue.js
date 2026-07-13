@@ -34,7 +34,13 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-note{color:var(--text-muted);font-size:12px;margin-top:12px;}
 		</style>
 		<div class="si-wrap">
-			<div class="si-scan"><div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
+			<div class="si-scan">
+				<div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button>
+				<div class="si-today" style="display:none;margin-left:auto;text-align:right;background:var(--control-bg);border:1px solid var(--border-color);border-radius:8px;padding:6px 14px;">
+					<div style="font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">${__("Issued Today")}</div>
+					<div class="si-today-v" style="font-size:14px;font-weight:700;"></div>
+				</div>
+			</div>
 			<div class="si-head">
 				<div><div class="k">${__("Card")}</div><div class="v si-bag"></div></div>
 				<div><div class="k">${__("Design")}</div><div class="v si-design"></div></div>
@@ -68,6 +74,18 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		parent: root.find(".si-by-box").get(0), render_input: true,
 	});
 	issuedBy.refresh();
+
+	// the picked issuer's day so far — refreshed on pick and after every issue
+	function refreshToday() {
+		const emp = issuedBy.get_value();
+		if (!emp) { root.find(".si-today").hide(); return; }
+		frappe.call({ method: API + ".get_stone_issuer_today", args: { employee: emp } }).then((r) => {
+			const t = r.message || {};
+			root.find(".si-today-v").text(__("{0} pcs · {1} ct · {2} card(s)", [t.pcs || 0, (t.ct || 0).toFixed(3), t.cards || 0]));
+			root.find(".si-today").show();
+		});
+	}
+	issuedBy.$input.on("change awesomplete-selectcomplete", () => setTimeout(refreshToday, 100));
 
 	function clearAll() {
 		S.card = null;
@@ -172,6 +190,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 					frappe.show_alert({ message: __("Stones issued into {0}.", [S.card.order_bag]), indicator: "green" }, 5);
 					S.card = r.message; // refreshed issued/available numbers
 					paint();
+					refreshToday();
 				})
 				.catch(() => frappe.dom.unfreeze());
 		});
