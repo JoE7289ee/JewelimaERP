@@ -12,7 +12,8 @@ frappe.pages["usage"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.us-wrap{max-width:1100px;}
+		#page-usage .container{max-width:100%;} /* whole page, even on wide monitors */
+		.us-wrap{width:100%;}
 		.us-tiles{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
 		.us-tile{border:1px solid var(--border-color);border-radius:10px;padding:12px 20px;background:var(--control-bg);min-width:150px;}
 		.us-tile .k{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
