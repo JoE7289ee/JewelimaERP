@@ -52,7 +52,8 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-strip .b .bv{font-size:14px;font-weight:700;}
 		.si-strip .b.zero .bv{color:var(--text-muted);font-weight:400;}
 		.si-strip .b.tot{background:var(--fg-color);border-width:2px;}
-		.si-strip .si-go{margin-left:auto;font-size:14px;padding:7px 26px;}
+		.si-strip .si-go{margin-left:auto;font-size:15px;font-weight:700;padding:10px 34px;background:#2e7d32;border-color:#2e7d32;color:#fff;}
+		.si-strip .si-go:hover{background:#256628;border-color:#256628;}
 		</style>
 		<div class="si-wrap2">
 		<div class="si-cols">
