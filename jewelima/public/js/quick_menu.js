@@ -5,12 +5,28 @@
 
 const QUICK_ITEMS = [
 	{ label: __("Transfer Order Bag"), route: "transfer-order-bag" },
+	{ label: __("Assign / Collect"), route: "assign-collect" },
+	{ label: __("Job Work"), route: "job-work" },
 	{ label: __("Place Order"), route: "place-order" },
 	{ label: __("Card Info"), route: "card-info" },
 	{ label: __("Sell"), route: "sell" },
 	{ label: __("Transfer Holder"), route: "transfer-holder" },
 	{ label: __("Item Stock"), route: "item-stock" },
 ];
+
+// pages the user has no role for are dropped from the menu (checked once per load)
+let items = null; // resolved list
+function loadItems() {
+	if (items) return Promise.resolve(items);
+	return frappe
+		.call({ method: "jewelima.jewelima.api.get_allowed_quick_pages", args: { routes: QUICK_ITEMS.map((i) => i.route) } })
+		.then((r) => {
+			const ok = new Set(r.message || []);
+			items = QUICK_ITEMS.filter((i) => ok.has(i.route));
+			return items;
+		})
+		.catch(() => (items = QUICK_ITEMS));
+}
 
 let $menu = null;
 let selected = 0;
@@ -21,7 +37,7 @@ function closeMenu() {
 }
 
 function go(i) {
-	const item = QUICK_ITEMS[i];
+	const item = (items || [])[i];
 	closeMenu();
 	if (item) frappe.set_route(item.route);
 }
@@ -31,7 +47,12 @@ function paint() {
 }
 
 function openMenu() {
+	loadItems().then(renderMenu);
+}
+
+function renderMenu() {
 	closeMenu();
+	if (!items.length) return;
 	selected = 0;
 	$menu = $(`
 		<div class="jqm-wrap">
@@ -47,7 +68,7 @@ function openMenu() {
 			</style>
 			<div class="jqm-box">
 				<div class="jqm-head">${__("Quick Menu")}</div>
-				${QUICK_ITEMS.map((it, i) => `
+				${items.map((it, i) => `
 					<div class="jqm-item" data-i="${i}"><span class="jqm-n">${i + 1}</span>${frappe.utils.escape_html(it.label)}</div>`).join("")}
 				<div class="jqm-foot">${__("number / ↑↓ + Enter / click — Esc closes")}</div>
 			</div>
@@ -60,10 +81,10 @@ function openMenu() {
 
 	$(document).on("keydown.jqm", (e) => {
 		if (e.key === "Escape") { closeMenu(); }
-		else if (e.key === "ArrowDown") { selected = (selected + 1) % QUICK_ITEMS.length; paint(); }
-		else if (e.key === "ArrowUp") { selected = (selected + QUICK_ITEMS.length - 1) % QUICK_ITEMS.length; paint(); }
+		else if (e.key === "ArrowDown") { selected = (selected + 1) % items.length; paint(); }
+		else if (e.key === "ArrowUp") { selected = (selected + items.length - 1) % items.length; paint(); }
 		else if (e.key === "Enter") { go(selected); }
-		else if (/^[1-9]$/.test(e.key) && cint(e.key) <= QUICK_ITEMS.length) { go(cint(e.key) - 1); }
+		else if (/^[1-9]$/.test(e.key) && cint(e.key) <= items.length) { go(cint(e.key) - 1); }
 		else return;
 		e.preventDefault();
 		e.stopPropagation();

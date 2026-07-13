@@ -893,6 +893,23 @@ def get_design_variants(design):
 
 
 @frappe.whitelist()
+def get_allowed_quick_pages(routes):
+	"""Which of these desk-page routes may the current user open? (Ctrl+Space quick
+	menu — items the user has no role for are dropped, not shown dead.)"""
+	import json
+
+	if isinstance(routes, str):
+		routes = json.loads(routes)
+	out = []
+	for r in routes or []:
+		if not frappe.db.exists("Page", r):
+			continue
+		if frappe.get_cached_doc("Page", r).is_permitted():
+			out.append(r)
+	return out
+
+
+@frappe.whitelist()
 def get_design_types_with_sizes():
 	"""All Design Types with their size lists — the Setup page grid + the Place Order
 	Size dropdown (sizes follow the picked design's type)."""
