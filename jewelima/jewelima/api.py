@@ -2159,7 +2159,9 @@ def add_weight(order_bag, item, qty, bench=None, remarks=None):
 	per-bag ledger row AND moves the gold as real stock: Store -> In Bags pool."""
 	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
 
-	name = _bag_ledger(order_bag, item, "In", qty, "Gold Issue", bench=bench, remarks=remarks)
+	mi = _material_issue_record("Metal", order_bag, _wh(RAW_MATERIALS_STORE),
+		items=[{"item": item, "pcs": 0, "qty": flt(qty), "uom": "Gram"}])
+	name = _bag_ledger(order_bag, item, "In", qty, "Gold Issue", bench=bench, remarks=remarks, reference=mi.name)
 	_stock_move(item, qty, _wh(RAW_MATERIALS_STORE), _wh(IN_PRODUCTION_WAREHOUSE))
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
@@ -2224,10 +2226,11 @@ def get_stone_issue_card(barcode):
 
 
 @frappe.whitelist()
-def stone_issue_apply(order_bag, lines):
+def stone_issue_apply(order_bag, lines, issued_by=None):
 	"""Issue several stone lines into one card (pcs + carats each). Per line: a Bag
-	Material Ledger 'Stone Issue' row + real stock Stone Issue -> In Bags. Only
-	items on the card's BOM that ARE stones; availability checked up front."""
+	Material Ledger 'Stone Issue' row + real stock Stone Issue -> In Bags, plus one
+	Material Issue record (the who/what/when paper trail). Only items on the card's
+	BOM that ARE stones; availability checked up front."""
 	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, STONE_ISSUE_WAREHOUSE
 
 	if isinstance(lines, str):
@@ -2237,6 +2240,8 @@ def stone_issue_apply(order_bag, lines):
 		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
 	if not lines:
 		frappe.throw(frappe._("Enter a Qty + Carat weight on at least one stone line."))
+	if not issued_by or not frappe.db.exists("Employee", issued_by):
+		frappe.throw(frappe._("Pick who is issuing these stones."))
 
 	bag = frappe.get_doc("Order Bag", order_bag)
 	if bag.is_finished or bag.stock_status != "In Production":
@@ -2256,10 +2261,49 @@ def stone_issue_apply(order_bag, lines):
 		if ct > avail + 0.0005:
 			frappe.throw(frappe._("Only {0} ct of {1} at {2} — can't issue {3} ct.").format(avail, item, wh, ct))
 
+	mi = _material_issue_record("Stone", order_bag, wh, issued_by=issued_by, items=[
+		{"item": l.get("item"), "pcs": cint(l.get("pcs")), "qty": flt(l.get("ct")), "uom": "Carat"} for l in lines
+	])
 	for l in lines:
 		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
-		_bag_ledger(order_bag, item, "In", ct, "Stone Issue", pcs=pcs, remarks="Stone Issue station")
+		_bag_ledger(order_bag, item, "In", ct, "Stone Issue", pcs=pcs, employee=issued_by,
+			remarks="Stone Issue station", reference=mi.name)
 		_stock_move(item, ct, wh, _wh(IN_PRODUCTION_WAREHOUSE))
+	frappe.db.commit()
+	out = get_stone_issue_card(order_bag)
+	out["material_issue"] = mi.name
+	return out
+
+
+def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, items=None):
+	"""One Material Issue record — the who/what/when paper trail, fully built."""
+	return frappe.get_doc({
+		"doctype": "Material Issue", "issue_type": issue_type, "order_bag": order_bag,
+		"issued_by": issued_by or None, "warehouse": warehouse,
+		"posting": frappe.utils.now_datetime(), "recorded_by": frappe.session.user,
+		"items": items or [],
+	}).insert(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def stone_issue_swap(order_bag, from_item, to_item):
+	"""Swap one stone on the card's BOM for another (the sieve size on plan doesn't
+	work — setter picks the neighbouring size). Plan pcs/ct carry over unchanged."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	bag = frappe.get_doc("Order Bag", order_bag)
+	if bag.is_finished or bag.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is not on the floor anymore.").format(order_bag))
+	if not frappe.db.get_value("Item", to_item, "stone_type"):
+		frappe.throw(frappe._("{0} is not a stone.").format(to_item))
+	if any(r.item == to_item for r in bag.bag_bom):
+		frappe.throw(frappe._("{0} is already on this card's BOM.").format(to_item))
+	row = next((r for r in bag.bag_bom if r.item == from_item), None)
+	if not row:
+		frappe.throw(frappe._("{0} is not on this card's BOM.").format(from_item))
+	row.item = to_item
+	bag.save(ignore_permissions=True)
+	frappe.db.commit()
 	return get_stone_issue_card(order_bag)
 
 

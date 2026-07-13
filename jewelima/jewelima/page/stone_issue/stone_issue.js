@@ -34,7 +34,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-note{color:var(--text-muted);font-size:12px;margin-top:12px;}
 		</style>
 		<div class="si-wrap">
-			<div class="si-scan"><div class="si-scan-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
+			<div class="si-scan"><div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
 			<div class="si-head">
 				<div><div class="k">${__("Card")}</div><div class="v si-bag"></div></div>
 				<div><div class="k">${__("Design")}</div><div class="v si-design"></div></div>
@@ -60,6 +60,14 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	});
 	scan.refresh();
 	scan.$input.on("keydown", (e) => { if (e.key === "Enter") loadCard((scan.$input.val() || "").trim()); });
+
+	// who physically hands the stones over — lands on the ledger + Material Issue record
+	const issuedBy = frappe.ui.form.make_control({
+		df: { fieldtype: "Link", label: __("Issued By"), fieldname: "issued_by", options: "Employee", reqd: 1,
+			get_query: () => ({ filters: { status: "Active" } }) },
+		parent: root.find(".si-by-box").get(0), render_input: true,
+	});
+	issuedBy.refresh();
 
 	function clearAll() {
 		S.card = null;
@@ -87,7 +95,8 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find(".si-wh").text(c.warehouse);
 		root.find("table.si-grid tbody").html(c.lines.map((l, i) => `
 			<tr data-i="${i}">
-				<td>${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span></td>
+				<td>${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span>
+					<button class="btn btn-xs btn-default si-swap" title="${__("Sieve size doesn't work? Swap this stone on the card's BOM")}">✎</button></td>
 				<td class="mut">${l.plan_pcs} / ${l.plan_ct.toFixed(3)}</td>
 				<td class="mut">${l.issued_pcs} / ${l.issued_ct.toFixed(3)}</td>
 				<td class="${l.available_ct <= 0 ? "low" : ""}">${l.available_ct.toFixed(3)}</td>
@@ -119,15 +128,45 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	}
 	root.on("input", ".si-pcs,.si-ct", sum);
 
+	// sieve size on plan doesn't work — swap the BOM line to the size that does
+	root.on("click", ".si-swap", function () {
+		const i = cint($(this).closest("tr").attr("data-i"));
+		const from = S.card.lines[i].item;
+		const d = new frappe.ui.Dialog({
+			title: __("Swap {0}", [from]),
+			fields: [{
+				fieldname: "to_item", fieldtype: "Link", label: __("Use instead"), options: "Item", reqd: 1,
+				get_query: () => ({ filters: { stone_type: ["is", "set"] } }),
+				description: __("Changes the card's BOM — the plan pcs/ct stay the same."),
+			}],
+			primary_action_label: __("Swap"),
+			primary_action(v) {
+				d.hide();
+				frappe.dom.freeze(__("Swapping..."));
+				frappe.call({ method: API + ".stone_issue_swap", args: { order_bag: S.card.order_bag, from_item: from, to_item: v.to_item } })
+					.then((r) => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({ message: __("{0} → {1} on the card's BOM.", [from, v.to_item]), indicator: "green" }, 5);
+						S.card = r.message;
+						paint();
+					})
+					.catch(() => frappe.dom.unfreeze());
+			},
+		});
+		d.show();
+	});
+
 	root.find(".si-go").on("click", () => {
 		const lines = readLines();
 		if (!lines.length) return frappe.msgprint(__("Enter a Qty + Carat weight on at least one stone line."));
 		const bad = lines.find((l) => !(l.pcs > 0) || !(l.ct > 0));
 		if (bad) return frappe.msgprint(__("{0}: enter both a Qty (pcs) and a Carat weight.", [bad.item]));
+		const by = issuedBy.get_value();
+		if (!by) return frappe.msgprint(__("Pick who is issuing these stones."));
 		const ct = lines.reduce((a, l) => a + l.ct, 0);
 		frappe.confirm(__("Issue <b>{0} ct</b> across {1} line(s) into <b>{2}</b>?", [ct.toFixed(3), lines.length, S.card.order_bag]), () => {
 			frappe.dom.freeze(__("Issuing..."));
-			frappe.call({ method: API + ".stone_issue_apply", args: { order_bag: S.card.order_bag, lines } })
+			frappe.call({ method: API + ".stone_issue_apply", args: { order_bag: S.card.order_bag, lines, issued_by: by } })
 				.then((r) => {
 					frappe.dom.unfreeze();
 					frappe.show_alert({ message: __("Stones issued into {0}.", [S.card.order_bag]), indicator: "green" }, 5);

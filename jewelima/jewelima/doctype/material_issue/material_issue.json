@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "autoname": "MI-.#####",
+ "creation": "2026-07-13 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "issue_type",
+  "order_bag",
+  "issued_by",
+  "col_break",
+  "warehouse",
+  "posting",
+  "recorded_by",
+  "sec_items",
+  "items"
+ ],
+ "fields": [
+  {
+   "fieldname": "issue_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Stone\nMetal",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Card",
+   "options": "Order Bag",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "The employee who physically issued the material.",
+   "fieldname": "issued_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Issued By",
+   "options": "Employee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "From Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "posting",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "When",
+   "read_only": 1
+  },
+  {
+   "description": "The login that recorded the issue.",
+   "fieldname": "recorded_by",
+   "fieldtype": "Link",
+   "label": "Recorded By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_items",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Material Issue Item",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-13 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Material Issue",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Jewelima"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

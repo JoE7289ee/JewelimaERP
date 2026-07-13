@@ -103,7 +103,43 @@ function render_transfers(frm) {
 					<tbody>${body}</tbody>
 				</table>`);
 		})
-		.then(() => render_holder_moves(frm));
+		.then(() => render_holder_moves(frm))
+		.then(() => render_material_moves(frm));
+}
+
+function render_material_moves(frm) {
+	// who put in / took out WHAT and WHEN — the Bag Material Ledger, human-readable
+	const $w = frm.get_field("transfers_html").$wrapper;
+	frappe.db
+		.get_list("Bag Material Ledger", {
+			filters: { order_bag: frm.doc.name },
+			fields: ["item", "direction", "qty", "pcs", "uom", "entry_type", "employee", "datetime", "owner", "remarks"],
+			order_by: "datetime asc",
+			limit: 500,
+		})
+		.then((rows) => {
+			if (!rows.length) return;
+			const body = rows
+				.map(
+					(r, i) => `<tr>
+						<td>${i + 1}</td>
+						<td>${r.direction === "Out" ? '<span style="color:var(--red-600,#c0392b);font-weight:700;">Out</span>' : "In"}</td>
+						<td>${frappe.utils.escape_html(r.entry_type || "")}</td>
+						<td>${frappe.utils.escape_html(r.item || "")}</td>
+						<td style="text-align:right;">${(r.pcs ? r.pcs + " pcs / " : "") + (frappe.utils.flt(r.qty) || 0).toFixed(3)} ${frappe.utils.escape_html(r.uom || "")}</td>
+						<td>${frappe.utils.escape_html(r.employee || r.owner || "")}</td>
+						<td>${r.datetime ? frappe.datetime.str_to_user(r.datetime) : ""}</td>
+						<td>${frappe.utils.escape_html(r.remarks || "")}</td>
+					</tr>`
+				)
+				.join("");
+			$w.append(`
+				<div style="font-weight:700;margin:14px 0 4px;">Material In / Out</div>
+				<table class="table table-bordered" style="font-size:12px;">
+					<thead><tr><th style="width:40px">#</th><th>Dir</th><th>Type</th><th>Item</th><th style="text-align:right;">Qty</th><th>Who</th><th>When</th><th>Remarks</th></tr></thead>
+					<tbody>${body}</tbody>
+				</table>`);
+		});
 }
 
 function render_holder_moves(frm) {
