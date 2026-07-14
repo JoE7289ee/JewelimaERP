@@ -11,11 +11,14 @@ frappe.provide("jewelima");
 const BB_STATUSES = ["In Queue", "On Hold", "Issued", "Ongoing", "Receipted", "Completed"];
 const BB_BUCKETS = ["DMD", "PS", "CS", "CVD", "PDMD", "POTH"];
 const BB_COLKEY = "jw-bench-cols"; // per-user column choice
-const BB_COLS = [
+const BB_CORE_COLS = [
 	["name", "Card"], ["design", "Design"], ["design_type", "Type"], ["qty", "Qty"],
 	["party", "Party"], ["salesman", "Salesman"], ["order_type", "Order Type"],
 	["due", "Due"], ["gold_g", "Gold g"], ["pure_g", "Pure g"], ["status", "Status"],
 ];
+// stone buckets as OPT-IN columns (off by default): pcs / ct per bucket
+const BB_BUCKET_COLS = BB_BUCKETS.map((b) => [b.toLowerCase(), b + " (no/ct)"]);
+const BB_COLS = BB_CORE_COLS.concat(BB_BUCKET_COLS);
 const BB_FILTER_FIELDS = [
 	{ key: "party", label: "Party", type: "select" },
 	{ key: "salesman", label: "Salesman", type: "select" },
@@ -27,7 +30,7 @@ const BB_FILTER_FIELDS = [
 	{ key: "due", label: "Due Date", type: "date" },
 	{ key: "gold_g", label: "Gold (g)", type: "number" },
 	{ key: "pure_g", label: "Pure Gold (g)", type: "number" },
-];
+].concat(BB_BUCKETS.map((b) => ({ key: b.toLowerCase(), label: b + " (ct)", type: "number" })));
 
 jewelima.buildBenchBoard = function (wrapper, bench) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Bench — {0}", [bench]), single_column: true });
@@ -39,7 +42,7 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 			const v = JSON.parse(localStorage.getItem(BB_COLKEY));
 			if (Array.isArray(v) && v.length) return new Set(v.filter((k) => BB_COLS.some((c) => c[0] === k)));
 		} catch (e) { /* fall through to default */ }
-		return new Set(BB_COLS.map((c) => c[0]));
+		return new Set(BB_CORE_COLS.map((c) => c[0]));
 	}
 	const S = { all: [], sort: "name", dir: 1, cols: loadCols() };
 
@@ -56,6 +59,12 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		pure_g: (r) => (r.pure_g || 0).toFixed(3),
 		status: (r) => `<span class="bb-st">${esc(r.status)}</span>`,
 	};
+	BB_BUCKETS.forEach((b) => {
+		BB_CELL[b.toLowerCase()] = (r) => {
+			const v = (r.buckets || {})[b];
+			return v ? `${v.pcs} / ${v.ct.toFixed(3)}` : "";
+		};
+	});
 
 	$(page.main).append(`
 		<style>
@@ -90,7 +99,10 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 
 	function load() {
 		frappe.call({ method: API + ".get_bench_board", args: { bench } }).then((r) => {
-			S.all = (r.message || {}).rows || [];
+			S.all = ((r.message || {}).rows || []).map((row) => {
+				BB_BUCKETS.forEach((b) => { row[b.toLowerCase()] = ((row.buckets || {})[b] || {}).ct || 0; });
+				return row;
+			});
 			recompute();
 		});
 	}
