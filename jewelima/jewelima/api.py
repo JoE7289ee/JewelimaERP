@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 """Whitelisted server endpoints the Jewelima pages call over AJAX."""
 
+import re
 import json
 
 import frappe
@@ -4189,8 +4190,9 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		if nett < min_g:
 			rule_desc += " (min {0} g)".format(min_g)
 	labour += job_work
-	# hallmark is per pc / HUID — a stud pair (qty 2) pays twice
-	pieces = max(cint(b.qty), 1)
+	# hallmark is per HUID — a stud pair carries two HUIDs and pays twice
+	huids = [x for x in re.split(r"[,/\s]+", b.huid or "") if x]
+	pieces = max(len(huids), 1)
 	charges = flt(chart.hallmark_charge) * pieces + flt(chart.certification_charge)
 
 	return {

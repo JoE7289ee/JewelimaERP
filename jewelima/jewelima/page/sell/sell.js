@@ -108,7 +108,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const to = buyer.get_value() || "";
 		const $b = $(root).find(".sl-rows");
 		$b.html(S.rows.length ? S.rows.map((r, i) => `
-			<tr class="${r.held_by && to && r.held_by !== to ? "mismatch" : ""}" data-i="${i}">
+			<tr class="${r.held_by && to && r.held_by !== to && r.held_by !== "JD Stock" ? "mismatch" : ""}" data-i="${i}">
 				<td><span class="sl-bar">${esc(r.order_bag)}</span>${r.huid ? `<div class="sl-sub">HUID ${esc(r.huid)}</div>` : ""}</td>
 				<td>${esc(r.design)}<div class="sl-sub">${esc(r.design_type)}${r.labour_rule ? " · " + esc(r.labour_rule) : ""}</div></td>
 				<td class="sl-holder">${esc(r.held_by || "—")}</td>
