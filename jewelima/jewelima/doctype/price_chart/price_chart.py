@@ -19,9 +19,8 @@ class PriceChart(Document):
 			if flt(r.to_ct) and flt(r.from_ct) >= flt(r.to_ct):
 				frappe.throw(frappe._("Diamond bracket row {0}: 'From' ({1}) must be below 'Below' ({2}).").format(
 					r.idx, r.from_ct, r.to_ct))
-		for r in self.making_rules:
-			if r.design_type and r.charge_category:
-				frappe.throw(frappe._("Making rule row {0}: pick a Design Type OR a Charge Category, not both.").format(r.idx))
+		if flt(self.making_rate) and flt(self.making_min_grams) <= 0:
+			self.making_min_grams = 1  # the "1 gram is the cost" floor
 
 	def on_update(self):
 		# one Active chart per name

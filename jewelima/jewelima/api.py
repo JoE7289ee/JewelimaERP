@@ -4123,23 +4123,6 @@ def set_party_group(names, group):
 # diamonds = ct x cents-bracket rate; labour per rule (gram+min / piece /
 # purity-percent); pass-through charges per piece.
 # ---------------------------------------------------------------------------
-def _resolve_labour(chart, design_type, tags):
-	"""The making rule that applies: a charge-category tag wins, then the design
-	type, then the chart's default (blank/blank) rule. Returns the rule or None."""
-	rules = chart.making_rules or []
-	for t in tags or []:
-		for r in rules:
-			if r.charge_category == t:
-				return r
-	for r in rules:
-		if design_type and r.design_type == design_type:
-			return r
-	for r in rules:
-		if not r.design_type and not r.charge_category:
-			return r
-	return None
-
-
 @frappe.whitelist()
 def get_sale_piece(barcode, price_chart, gold_rate=0):
 	"""Price one scanned piece against the chart. Guards: finished + In Stock;
@@ -4149,7 +4132,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
 	b = frappe.db.get_value("Order Bag", nm, [
-		"name", "design", "held_by", "stock_status", "is_finished", "huid",
+		"name", "design", "held_by", "stock_status", "is_finished", "huid", "qty",
 		"act_gross_weight", "act_nett_weight", "act_dmd_weight", "act_dmd_no",
 		"act_ps_weight", "act_cs_weight", "act_cvd_weight", "act_pdmd_weight", "act_poth_weight",
 	], as_dict=True)
@@ -4194,24 +4177,21 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	ostone_ct = flt(b.act_cs_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
 	job_work = flt(b.act_pdmd_weight) * flt(chart.job_work_pty_rate)
 
-	# ---- gold + labour ---------------------------------------------------------
+	# ---- gold + making (flat rule: under the minimum grams bills AS the minimum)
 	nett = flt(b.act_nett_weight)
 	gold_value = nett * gold_rate
-	labour = 0.0
-	rule = _resolve_labour(chart, design_type, tags)
+	min_g = flt(chart.making_min_grams) or 1
+	billed_g = max(nett, min_g) if flt(chart.making_rate) else 0
+	labour = billed_g * flt(chart.making_rate)
 	rule_desc = ""
-	if rule:
-		rule_desc = "{0} {1}".format(rule.basis, rule.rate)
-		if rule.basis == "Per Gram":
-			labour = max(nett * flt(rule.rate), flt(rule.min_per_piece))
-		elif rule.basis == "Per Piece":
-			labour = flt(rule.rate)
-		elif rule.basis == "Purity Percent" and flt(chart.gold_purity_factor):
-			# gold billed at the fatter purity, making included
-			gold_value = nett * (gold_rate / flt(chart.gold_purity_factor) * flt(rule.rate))
-			rule_desc = "Purity {0}% (making incl.)".format(rule.rate)
+	if flt(chart.making_rate):
+		rule_desc = "{0} g x {1}/g".format(round(billed_g, 3), flt(chart.making_rate))
+		if nett < min_g:
+			rule_desc += " (min {0} g)".format(min_g)
 	labour += job_work
-	charges = flt(chart.hallmark_charge) + flt(chart.certification_charge)
+	# hallmark is per pc / HUID — a stud pair (qty 2) pays twice
+	pieces = max(cint(b.qty), 1)
+	charges = flt(chart.hallmark_charge) * pieces + flt(chart.certification_charge)
 
 	return {
 		"order_bag": nm, "design": b.design or "", "design_type": design_type,

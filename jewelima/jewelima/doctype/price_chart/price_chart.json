@@ -10,7 +10,6 @@
   "chart_date",
   "status",
   "col_break_head",
-  "gold_purity_factor",
   "diamond_quality_note",
   "diamond_section",
   "diamond_rates",
@@ -20,7 +19,9 @@
   "col_break_stones",
   "job_work_pty_rate",
   "making_section",
-  "making_rules",
+  "making_rate",
+  "col_break_making",
+  "making_min_grams",
   "setting_section",
   "setting_rates",
   "special_section",
@@ -37,7 +38,7 @@
  ],
  "fields": [
   {
-   "description": "Free text — usually the party's name (e.g. KAVITHA), or GENERAL for the house chart.",
+   "description": "Free text \u2014 usually the party's name (e.g. KAVITHA), or GENERAL for the house chart.",
    "fieldname": "chart_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -55,7 +56,7 @@
   },
   {
    "default": "Active",
-   "description": "Saving an Active chart supersedes the previous Active chart with the same name — old charts stay for history.",
+   "description": "Saving an Active chart supersedes the previous Active chart with the same name \u2014 old charts stay for history.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -68,13 +69,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "The negotiated billing purity: gold value = day's rate × this % × net grams (75, 75.5, 80 ...).",
-   "fieldname": "gold_purity_factor",
-   "fieldtype": "Float",
-   "label": "Gold Purity Factor (%)",
-   "precision": "2"
-  },
-  {
    "description": "The letter's quality line, e.g. VVS, Colour-E/F.",
    "fieldname": "diamond_quality_note",
    "fieldtype": "Data",
@@ -83,7 +77,7 @@
   {
    "fieldname": "diamond_section",
    "fieldtype": "Section Break",
-   "label": "Diamond Cents Brackets (per-STONE weight → ₹/ct)"
+   "label": "Diamond Cents Brackets (per-STONE weight \u2192 \u20b9/ct)"
   },
   {
    "fieldname": "diamond_rates",
@@ -99,13 +93,13 @@
   {
    "fieldname": "colour_stone_rate",
    "fieldtype": "Float",
-   "label": "Colour Stone Rate (₹/ct)",
+   "label": "Colour Stone Rate (\u20b9/ct)",
    "precision": "2"
   },
   {
    "fieldname": "precious_stone_rate",
    "fieldtype": "Float",
-   "label": "Precious Stone Rate (₹/ct)",
+   "label": "Precious Stone Rate (\u20b9/ct)",
    "precision": "2"
   },
   {
@@ -116,24 +110,37 @@
    "description": "Setting charge when the customer supplies their own diamonds (party stones are never sold).",
    "fieldname": "job_work_pty_rate",
    "fieldtype": "Float",
-   "label": "Job Work — Party Diamond (₹/ct)",
+   "label": "Job Work \u2014 Party Diamond (\u20b9/ct)",
    "precision": "2"
   },
   {
+   "description": "Flat rule: pieces under the minimum grams are billed AS the minimum; above it, nett weight \u00d7 rate.",
    "fieldname": "making_section",
    "fieldtype": "Section Break",
    "label": "Making Charges"
   },
   {
-   "fieldname": "making_rules",
-   "fieldtype": "Table",
-   "label": "Making Rules",
-   "options": "Price Chart Making Rule"
+   "fieldname": "making_rate",
+   "fieldtype": "Float",
+   "label": "Making Charge (\u20b9 / g on nett)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "col_break_making",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Anything lighter is billed as this many grams (usually 1).",
+   "fieldname": "making_min_grams",
+   "fieldtype": "Float",
+   "label": "Minimum grams",
+   "precision": "3"
   },
   {
    "fieldname": "setting_section",
    "fieldtype": "Section Break",
-   "label": "Setting Ladder (₹ per stone, by stone size)"
+   "label": "Setting Ladder (\u20b9 per stone, by stone size)"
   },
   {
    "fieldname": "setting_rates",
@@ -158,15 +165,16 @@
    "label": "Pass-through Charges"
   },
   {
+   "description": "Multiplied by the piece count \u2014 a stud pair (qty 2, two HUIDs) is charged twice.",
    "fieldname": "hallmark_charge",
    "fieldtype": "Float",
-   "label": "Hallmarking (₹/pc)",
+   "label": "Hallmarking (\u20b9 per pc / HUID)",
    "precision": "2"
   },
   {
    "fieldname": "certification_charge",
    "fieldtype": "Float",
-   "label": "Certification (₹/pc)",
+   "label": "Certification (\u20b9/pc)",
    "precision": "2"
   },
   {
@@ -202,7 +210,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-12 13:00:00.000000",
+ "modified": "2026-07-14 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",

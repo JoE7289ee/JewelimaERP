@@ -7,3 +7,4 @@
 jewelima.patches.remove_bench_dashboard
 jewelima.patches.remove_warehouse_stock
 jewelima.patches.set_in_stock_on
+jewelima.patches.flatten_making_rules
