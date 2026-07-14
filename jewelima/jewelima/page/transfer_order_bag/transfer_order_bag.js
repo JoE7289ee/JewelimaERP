@@ -133,12 +133,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		});
 
 		const qT = sum("qty"), gT = sum("gross"), nT = sum("nett");
-		$(page.main).find(".tob-foot-row").html(
-			state.rows.length
-				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">${__("Totals")}</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td>
-					${active.map((b) => `<td class="num">${sum(b + "_no")} / ${sum(b + "_weight").toFixed(3)}</td>`).join("")}<td></td></tr>`
-				: ""
-		);
+		$(page.main).find(".tob-foot-row").empty(); // totals live in the pinned strip only
 		$(page.main).find(".tob-count").text(state.rows.length);
 
 		// pinned strip: bags + pieces + weights + the LIVE buckets only
