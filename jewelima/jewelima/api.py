@@ -2535,11 +2535,10 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 
 
 @frappe.whitelist()
-def get_bench_board(bench, party=None, design_type=None, order_type=None):
-	"""One bench's info board (no actions): KPI status counts (from the bench's
-	work records), piece totals, and the stock physically sitting there — stone
-	buckets + pure gold — summed from the cards' ledgers. Filterable by party,
-	design type and order type."""
+def get_bench_board(bench):
+	"""One bench's info board (no actions). Returns every card sitting there with
+	its OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —
+	the page filters + rolls up client-side, so any filter is instant."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
 	bench = (bench or "").upper()
@@ -2547,73 +2546,61 @@ def get_bench_board(bench, party=None, design_type=None, order_type=None):
 		frappe.throw(frappe._("Unknown bench: {0}").format(bench or "?"))
 
 	bags = frappe.db.sql("""
-		SELECT b.name, b.design, b.qty, b.due_date, jo.customer, jo.order_type,
+		SELECT b.name, b.design, b.qty, b.due_date, jo.customer, jo.salesman, jo.order_type,
 			IFNULL(d.design_type, IFNULL(b.cad_design_type, '')) design_type
 		FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		LEFT JOIN `tabDesign` d ON d.name = b.design
 		WHERE b.location = %s AND b.stock_status = 'In Production' AND b.is_finished = 0
 	""", bench, as_dict=True)
-
-	parties = sorted({b.customer for b in bags if b.customer})
-	dtypes = sorted({b.design_type for b in bags if b.design_type})
-	otypes = sorted({b.order_type for b in bags if b.order_type})
-	if party:
-		bags = [b for b in bags if b.customer == party]
-	if design_type:
-		bags = [b for b in bags if b.design_type == design_type]
-	if order_type:
-		bags = [b for b in bags if b.order_type == order_type]
 	names = [b.name for b in bags]
 
-	# KPI: each card's LATEST work record at this bench decides its status;
-	# a card with no record yet is In Queue
-	status = {}
+	# each card's LATEST work record decides its status; no record yet = In Queue
 	dt = BENCH_DOCTYPE[bench]
+	got = {}
 	if names and frappe.db.exists("DocType", dt):
-		rows = frappe.db.sql("""
+		for r in frappe.db.sql("""
 			SELECT t.order_bag, t.status FROM `tab{0}` t
 			JOIN (SELECT order_bag, MAX(creation) mc FROM `tab{0}`
 				WHERE order_bag IN %(bags)s GROUP BY order_bag) x
 			ON x.order_bag = t.order_bag AND x.mc = t.creation
-		""".format(dt), {"bags": tuple(names)}, as_dict=True)
-		got = {r.order_bag: r.status or "In Queue" for r in rows}
-	else:
-		got = {}
-	for b in bags:
-		st = got.get(b.name, "In Queue")
-		status[st] = status.get(st, 0) + 1
+		""".format(dt), {"bags": tuple(names)}, as_dict=True):
+			got[r.order_bag] = r.status or "In Queue"
 
-	# stock sitting at the bench: buckets (pcs/ct) + gold g + pure g from ledgers
-	buckets = {k: {"pcs": 0, "ct": 0.0} for k in ("dmd", "ps", "cs", "cvd", "pdmd", "poth")}
-	gold_g = pure_g = 0.0
+	# per-card stock from the ledgers
+	stock = {n: {"gold_g": 0.0, "pure_g": 0.0, "buckets": {}} for n in names}
 	if names:
 		for r in frappe.db.sql("""
-			SELECT IFNULL(i.stone_type,'') st,
+			SELECT l.order_bag bag, IFNULL(i.stone_type,'') st,
 				SUM(IF(l.direction='Out',-l.qty,l.qty)) q,
 				SUM(IF(l.direction='Out',-l.pcs,l.pcs)) pcs,
 				SUM(IF(IFNULL(i.stone_type,'')='', IF(l.direction='Out',-l.qty,l.qty) * IFNULL(i.purity_percentage,0)/100, 0)) pure
 			FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
-			WHERE l.order_bag IN %(bags)s GROUP BY i.stone_type
+			WHERE l.order_bag IN %(bags)s GROUP BY l.order_bag, i.stone_type
 		""", {"bags": tuple(names)}, as_dict=True):
+			sc = stock[r.bag]
 			if r.st:
-				bk = _BUCKET_OF_STONE_TYPE.get(r.st) or "poth"
-				buckets[bk]["pcs"] += cint(r.pcs)
-				buckets[bk]["ct"] += flt(r.q)
+				bk = (_BUCKET_OF_STONE_TYPE.get(r.st) or "poth").upper()
+				e = sc["buckets"].setdefault(bk, {"pcs": 0, "ct": 0.0})
+				e["pcs"] += cint(r.pcs)
+				e["ct"] += flt(r.q)
 			else:
-				gold_g += flt(r.q)
-				pure_g += flt(r.pure)
+				sc["gold_g"] += flt(r.q)
+				sc["pure_g"] += flt(r.pure)
 
-	return {
-		"bench": bench, "bags": len(bags), "pieces": sum(cint(b.qty) or 1 for b in bags),
-		"status": status, "parties": parties, "design_types": dtypes, "order_types": otypes,
-		"gold_g": round(gold_g, 3), "pure_g": round(pure_g, 3),
-		"buckets": {k.upper(): {"pcs": v["pcs"], "ct": round(v["ct"], 3)}
-			for k, v in buckets.items() if v["pcs"] or abs(v["ct"]) > 0.0005},
-		"rows": [{"name": b.name, "design": b.design or "", "design_type": b.design_type or "",
-			"qty": cint(b.qty) or 1, "party": b.customer or "", "order_type": b.order_type or "",
-			"due": str(b.due_date or ""), "status": got.get(b.name, "In Queue")} for b in bags],
-	}
+	rows = []
+	for b in bags:
+		sc = stock[b.name]
+		rows.append({
+			"name": b.name, "design": b.design or "", "design_type": b.design_type or "",
+			"qty": cint(b.qty) or 1, "party": b.customer or "", "salesman": b.salesman or "",
+			"order_type": b.order_type or "", "due": str(b.due_date or ""),
+			"status": got.get(b.name, "In Queue"),
+			"gold_g": round(sc["gold_g"], 3), "pure_g": round(sc["pure_g"], 3),
+			"buckets": {k: {"pcs": v["pcs"], "ct": round(v["ct"], 3)}
+				for k, v in sc["buckets"].items() if v["pcs"] or abs(v["ct"]) > 0.0005},
+		})
+	return {"bench": bench, "rows": rows}
 
 
 @frappe.whitelist()

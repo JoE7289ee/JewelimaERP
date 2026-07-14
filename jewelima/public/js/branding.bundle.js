@@ -5,6 +5,7 @@
 import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
 import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finished-stock + at-certification
 import "./quick_menu"; // Ctrl+Q — quick palette of everyday pages
+import "./filter_bar"; // jewelima.buildFilterBar — generic reusable filter engine
 import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
 
 frappe.provide("jewelima");
