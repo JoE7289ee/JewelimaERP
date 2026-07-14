@@ -23,7 +23,15 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		.tob-loc{font-size:13px;}
 		.tob-loc .lbl{color:var(--text-muted);font-size:11px;}
 		.tob-loc .val{font-weight:700;font-size:18px;}
-		.tob-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 260px);}
+		.tob-wrap{display:flex;flex-direction:column;height:calc(100vh - 110px);}
+		.tob-wrap > .tob-head,.tob-wrap > .tob-msg{flex:0 0 auto;}
+		.tob-wrap > .tob-mid{flex:1 1 auto;overflow:auto;min-height:0;}
+		.tob-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;}
+		.tob-strip{flex:0 0 auto;display:flex;align-items:center;gap:12px;border-top:2px solid var(--border-color);background:var(--fg-color);padding:9px 14px;z-index:1;flex-wrap:wrap;}
+		.tob-strip .b{border:1px solid var(--border-color);border-radius:8px;padding:4px 14px;text-align:center;background:var(--control-bg);min-width:92px;}
+		.tob-strip .b .bk{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
+		.tob-strip .b .bv{font-size:14px;font-weight:700;}
+		.tob-strip .b.tot{background:var(--fg-color);border-width:2px;}
 		table.tob-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.tob-grid th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.tob-grid td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
@@ -35,20 +43,31 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		.tob-msg.warn{display:block;background:#fdf3e3;color:#9a6700;border:1px solid #f0d9a8;}
 		.tob-msg.ok{display:block;background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		</style>
+		<div class="tob-wrap">
 		<div class="tob-head">
 			<div class="tob-scan"></div>
 			<div class="tob-loc"><div class="lbl">Batch location</div><div class="val tob-locval">—</div></div>
 			<div class="tob-to"></div>
 		</div>
 		<div class="tob-msg"></div>
+		<div class="tob-mid">
 		<div class="tob-box">
 			<table class="tob-grid">
-				<thead><tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th class="num">Gross (g)</th><th class="num">Nett (g)</th><th class="num">DMD (ct)</th><th class="num">PS No</th><th class="num">CS No</th><th style="width:34px"></th></tr></thead>
+				<thead class="tob-head-row"></thead>
 				<tbody class="tob-body"></tbody>
 				<tfoot class="tob-foot-row"></tfoot>
 			</table>
 		</div>
 		<div class="tob-foot"><span class="tob-count">0</span> bag(s) collected.</div>
+		</div>
+		<div class="tob-strip">
+			<div class="b tot"><div class="bk">${__("BAGS")}</div><div class="bv tob-s-bags">0</div></div>
+			<div class="b tot"><div class="bk">${__("PIECES")}</div><div class="bv tob-s-pcs">0</div></div>
+			<div class="b"><div class="bk">${__("GROSS g")}</div><div class="bv tob-s-gross">0.000</div></div>
+			<div class="b"><div class="bk">${__("NETT g")}</div><div class="bv tob-s-nett">0.000</div></div>
+			<div class="tob-s-buckets" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+		</div>
+		</div>
 	`);
 
 	const mk = (sel, df) => {
@@ -82,32 +101,54 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			if (!allowed.length) setMsg(__("You have no transfer rights from <b>{0}</b>.", [frappe.utils.escape_html(fromLoc)]), "err");
 		});
 	}
+	// stone columns appear only when the batch actually carries that bucket
+	const TOB_BUCKETS = ["dmd", "ps", "cs", "cvd", "pdmd", "poth"];
 	function renderRows() {
+		const sum = (k) => state.rows.reduce((s, r) => s + flt(r[k]), 0);
+		const active = TOB_BUCKETS.filter((b) => state.rows.some((r) => flt(r[b + "_weight"]) || flt(r[b + "_no"])));
+		const esc = frappe.utils.escape_html;
+
+		$(page.main).find(".tob-head-row").html(`<tr>
+			<th style="width:40px">#</th><th>${__("Order Bag")}</th><th>${__("Design")}</th><th>${__("Qty")}</th><th>${__("Due")}</th>
+			<th class="num">${__("Gross (g)")}</th><th class="num">${__("Nett (g)")}</th>
+			${active.map((b) => `<th class="num">${b.toUpperCase()} (${__("no / ct")})</th>`).join("")}
+			<th style="width:34px"></th></tr>`);
+
 		$body.empty();
 		state.rows.forEach((r, i) => {
-			const $tr = $(`<tr>
+			$body.append($(`<tr>
 				<td>${i + 1}</td>
-				<td><b>${frappe.utils.escape_html(r.name)}</b></td>
-				<td>${frappe.utils.escape_html(r.design || "")}</td>
+				<td><b>${esc(r.name)}</b></td>
+				<td>${esc(r.design || "")}</td>
 				<td>${r.qty || ""}</td>
 				<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td>
 				<td class="num">${flt(r.gross) ? flt(r.gross).toFixed(3) : ""}</td>
 				<td class="num">${flt(r.nett) ? flt(r.nett).toFixed(3) : ""}</td>
-				<td class="num">${flt(r.dmd_weight) ? flt(r.dmd_weight).toFixed(3) : ""}</td>
-				<td class="num">${r.ps_no || ""}</td>
-				<td class="num">${r.cs_no || ""}</td>
-				<td><button class="btn btn-xs btn-default tob-rm" data-name="${frappe.utils.escape_html(r.name)}" title="Remove">&times;</button></td>
-			</tr>`);
-			$body.append($tr);
+				${active.map((b) => {
+					const no = flt(r[b + "_no"]), wt = flt(r[b + "_weight"]);
+					return `<td class="num">${no || wt ? `${no || 0} / ${wt.toFixed(3)}` : ""}</td>`;
+				}).join("")}
+				<td><button class="btn btn-xs btn-default tob-rm" data-name="${esc(r.name)}" title="Remove">&times;</button></td>
+			</tr>`));
 		});
-		const sum = (k) => state.rows.reduce((s, r) => s + flt(r[k]), 0);
-		const qT = sum("qty"), gT = sum("gross"), nT = sum("nett"), dT = sum("dmd_weight"), pT = sum("ps_no"), cT = sum("cs_no");
+
+		const qT = sum("qty"), gT = sum("gross"), nT = sum("nett");
 		$(page.main).find(".tob-foot-row").html(
 			state.rows.length
-				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">Totals</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td><td class="num">${dT.toFixed(3)}</td><td class="num">${pT}</td><td class="num">${cT}</td><td></td></tr>`
+				? `<tr style="font-weight:700;background:var(--control-bg);"><td colspan="3" style="text-align:right">${__("Totals")}</td><td>${qT}</td><td></td><td class="num">${gT.toFixed(3)}</td><td class="num">${nT.toFixed(3)}</td>
+					${active.map((b) => `<td class="num">${sum(b + "_no")} / ${sum(b + "_weight").toFixed(3)}</td>`).join("")}<td></td></tr>`
 				: ""
 		);
 		$(page.main).find(".tob-count").text(state.rows.length);
+
+		// pinned strip: bags + pieces + weights + the LIVE buckets only
+		$(page.main).find(".tob-s-bags").text(state.rows.length);
+		$(page.main).find(".tob-s-pcs").text(qT);
+		$(page.main).find(".tob-s-gross").text(gT.toFixed(3));
+		$(page.main).find(".tob-s-nett").text(nT.toFixed(3));
+		$(page.main).find(".tob-s-buckets").html(active.map((b) => `
+			<div class="b"><div class="bk">${b.toUpperCase()}</div>
+			<div class="bv">${sum(b + "_no")} / ${sum(b + "_weight").toFixed(3)} ct</div></div>`).join(""));
 	}
 	$body.on("click", ".tob-rm", function () {
 		const nm = $(this).data("name");
@@ -143,7 +184,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			state.rows.push({ name: code, design: v.design, qty: v.qty, due_date: v.due_date, gross: v.gross, nett: v.nett, dmd_weight: v.dmd_weight, ps_no: v.ps_no, cs_no: v.cs_no });
+			state.rows.push({ name: code, ...v });
 			renderRows();
 			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
@@ -304,6 +345,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		if (S.location) loadLoc(); else paint();
 	}
 
+	renderRows(); // paint the (empty) header + strip
 	page.set_primary_action(__("Transfer All"), transferAll, "arrow-right");
 	page.add_inner_button(__("Cards"), showCards);
 	page.add_inner_button(__("History"), showHistory);

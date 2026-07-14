@@ -2047,11 +2047,14 @@ def get_bag_transfer_info(order_bag):
 	if not bag:
 		return {}
 	p = _actual_profile(order_bag)  # everything from what the bag ACTUALLY holds
-	return {
+	out = {
 		"location": bag.location, "design": bag.design, "qty": bag.qty, "due_date": bag.due_date,
 		"gross": p["gross"], "nett": p["nett"],
-		"dmd_weight": p["dmd_weight"], "ps_no": p["ps_no"], "cs_no": p["cs_no"],
 	}
+	for bk in ("dmd", "ps", "cs", "cvd", "pdmd", "poth"):
+		out[bk + "_weight"] = p[bk + "_weight"]
+		out[bk + "_no"] = p[bk + "_no"]
+	return out
 
 
 @frappe.whitelist()
