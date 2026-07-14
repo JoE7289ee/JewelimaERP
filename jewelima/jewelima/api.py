@@ -2539,9 +2539,10 @@ def get_stone_issues_day(date, stone_type=None, item_group=None):
 	d = str(date or frappe.utils.today())
 	rows = frappe.db.sql("""
 		SELECT l.item, i.stone_type, i.item_group, l.order_bag, l.pcs, l.qty ct,
-			IFNULL(l.employee, '') who, l.datetime
+			IFNULL(e.employee_name, IFNULL(l.employee, '')) who, l.datetime
 		FROM `tabBag Material Ledger` l
 		JOIN `tabItem` i ON i.name = l.item
+		LEFT JOIN `tabEmployee` e ON e.name = l.employee
 		WHERE l.entry_type = 'Stone Issue' AND l.direction = 'In' AND DATE(l.datetime) = %s
 		ORDER BY l.datetime""", d, as_dict=True)
 	types = sorted({r.stone_type for r in rows if r.stone_type})
