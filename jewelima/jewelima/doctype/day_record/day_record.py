@@ -112,38 +112,60 @@ def build_day_record(date):
 		line("Issued By", "%s (%s)" % (r.who, r.issue_type), pcs=r.pcs, weight=r.qty,
 			uom="ct" if r.issue_type == "Stone" else "g")
 
-	# ---- Bench work: per stage — issued vs done, grams actually worked -------
-	# (stone work itself = the Stones Issued section; benches account in grams)
+	# ---- Bench flows: per stage — what came IN (issued) and went OUT (receipted)
+	# each side: cards, piece qty, gross grams, pure gold grams, stone carats
+	def _bag_comp(bags):
+		"""bag -> (qty, pure g, stones ct) from the material ledger nets."""
+		if not bags:
+			return {}
+		rows = frappe.db.sql("""
+			SELECT l.order_bag bag, b.qty bq,
+				SUM(IF(IFNULL(i.stone_type,'')='', IF(l.direction='Out',-l.qty,l.qty) * IFNULL(i.purity_percentage,0)/100, 0)) pure,
+				SUM(IF(IFNULL(i.stone_type,'')='', 0, IF(l.direction='Out',-l.qty,l.qty))) st
+			FROM `tabBag Material Ledger` l
+			JOIN `tabItem` i ON i.name = l.item
+			JOIN `tabOrder Bag` b ON b.name = l.order_bag
+			WHERE l.order_bag IN %(bags)s GROUP BY l.order_bag""", {"bags": tuple(bags)}, as_dict=True)
+		return {r.bag: (cint(r.bq) or 1, flt(r.pure), flt(r.st)) for r in rows}
+
 	workers = set()
-	emp_score = {}  # employee -> {done, g} for the day's top-employee mini report
 	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
 		if not frappe.db.exists("DocType", dt):
 			continue
-		issued_n = frappe.db.sql(
-			"SELECT COUNT(*) FROM `tab{0}` WHERE DATE(issued_at)=%s".format(dt), d)[0][0]
-		done = frappe.db.sql("""
-			SELECT IFNULL(employee,'—') emp, COUNT(*) n,
-				SUM(IFNULL(weight_in,0)) g, SUM(IFNULL(loss,0)) loss
-			FROM `tab{0}` WHERE DATE(receipted_at)=%s GROUP BY employee""".format(dt), d, as_dict=True)
-		done_n = sum(cint(r.n) for r in done)
-		if not issued_n and not done_n:
-			continue
-		line("Bench Work", dt, pcs=done_n, weight=sum(flt(r.g) for r in done), uom="g worked",
-			value=0, extra="issued %s · loss %.3f g" % (issued_n, sum(flt(r.loss) for r in done)))
-		for r in done:
-			if r.emp != "—":
-				workers.add(r.emp)
-				e = emp_score.setdefault(r.emp, {"done": 0, "g": 0.0})
-				e["done"] += cint(r.n)
-				e["g"] += flt(r.g)
-				line("Bench Work", "%s — %s" % (dt, r.emp), pcs=r.n, weight=r.g, uom="g worked")
+		for label, datefield, wfield in (("IN", "issued_at", "weight_out"), ("OUT", "receipted_at", "weight_in")):
+			rows = frappe.db.sql("""
+				SELECT order_bag, IFNULL({1},0) w, IFNULL(employee,'') emp
+				FROM `tab{0}` WHERE DATE({2})=%s""".format(dt, wfield, datefield), d, as_dict=True)
+			if not rows:
+				continue
+			workers.update(r.emp for r in rows if r.emp)
+			comp = _bag_comp(list({r.order_bag for r in rows}))
+			qty = sum(comp.get(r.order_bag, (1, 0, 0))[0] for r in rows)
+			pure = sum(comp.get(r.order_bag, (0, 0, 0))[1] for r in rows)
+			st = sum(comp.get(r.order_bag, (0, 0, 0))[2] for r in rows)
+			line("Bench Work", "%s — %s" % (dt, label), pcs=len(rows),
+				weight=round(sum(flt(r.w) for r in rows), 3), uom="g gross",
+				extra="qty %d · pure %.3f g · stones %.3f ct" % (qty, pure, st))
 	doc.employees_worked = len(workers)
 
-	# top employees of the day (cards collected + grams handled)
-	top = sorted(emp_score.items(), key=lambda kv: (-kv[1]["done"], -kv[1]["g"]))[:5]
-	for rank, (emp, s) in enumerate(top, 1):
-		nm = frappe.db.get_value("Employee", emp, "employee_name") or emp
-		line("Top Employees", nm, pcs=s["done"], weight=round(s["g"], 3), uom="g", extra="#%d" % rank)
+	# ---- Production: trees, casting, melting ---------------------------------
+	trees_made = frappe.db.sql("""
+		SELECT IFNULL(karat,'—') k, COUNT(*) n, SUM(IFNULL(wax_weight,0)) w
+		FROM `tabWax Tree` WHERE DATE(made_on)=%s GROUP BY karat""", d, as_dict=True)
+	for r in trees_made:
+		line("Production", "Trees made — %s" % r.k, pcs=r.n, weight=r.w, uom="g wax")
+	trees_cast = frappe.db.sql("""
+		SELECT IFNULL(karat,'—') k, COUNT(*) n, SUM(IFNULL(gold_required,0)) g
+		FROM `tabWax Tree` WHERE cast=1 AND DATE(casting_date)=%s GROUP BY karat""", d, as_dict=True)
+	for r in trees_cast:
+		line("Production", "Trees cast — %s" % r.k, pcs=r.n, weight=r.g, uom="g gold")
+	melted = frappe.db.sql("""
+		SELECT d2.item_code item, SUM(d2.qty) g FROM `tabStock Entry` se
+		JOIN `tabStock Entry Detail` d2 ON d2.parent = se.name
+		WHERE se.stock_entry_type='Repack' AND se.docstatus=1 AND DATE(se.posting_date)=%s
+			AND IFNULL(d2.t_warehouse,'') != '' GROUP BY d2.item_code""", d, as_dict=True)
+	for r in melted:
+		line("Production", "Melted / repacked → %s" % r.item, weight=r.g, uom="g")
 
 	# ---- Losses --------------------------------------------------------------
 	loss = frappe.db.sql("""
