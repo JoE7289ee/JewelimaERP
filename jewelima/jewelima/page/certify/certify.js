@@ -2,7 +2,7 @@
 // For license information, please see license.txt
 //
 // Certification desk (Delivery) — pick finished pieces In Stock and send them to
-// IGI / HALLMARKING (creates a Certification batch, moves stock Finished Goods →
+// HALLMARKING or a stone lab — IGL/DHSC/SGL/IDT/GIG (creates a Certification batch, moves stock Finished Goods →
 // At Certification). What's OUT lives on its own board: /app/certification-out.
 // Route: /app/certify
 
@@ -49,7 +49,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				<tbody class="ct-pieces"></tbody></table></div>
 			<div class="ct-foot ct-ctl">
 				<span style="white-space:nowrap;"><b class="ct-selcount">0</b> ${__("selected")}</span>
-				<select class="ct-type-sel"><option>HALLMARKING</option><option>IGI</option></select>
+				<select class="ct-type-sel"><option>HALLMARKING</option><option>IGL</option><option>DHSC</option><option>SGL</option><option>IDT</option><option>GIG</option></select>
 				<input class="ct-lab" type="text" placeholder="${__("Lab / Centre")}">
 				<input class="ct-remarks" type="text" placeholder="${__("Remarks")}">
 				<button class="btn btn-primary btn-sm ct-send">${__("Send")}</button>

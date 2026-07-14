@@ -2,7 +2,7 @@
 // For license information, please see license.txt
 //
 // Certification Out (Delivery) — the board of pieces OUT at certification, batch
-// by batch (make-tree style): one panel per batch (IGI blue / HALLMARKING amber),
+// by batch (make-tree style): one panel per batch (stone labs blue / HALLMARKING amber),
 // a chip per piece with its weights, sent date + days out on the panel. Header
 // totals what's physically out: pieces, pure gold, stone weight. Clicking a
 // pending chip receives that piece back (HUID / certificate number dialog).
@@ -81,7 +81,7 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 			return;
 		}
 		$b.html(S.batches.map((b) => {
-			const cls = b.certification_type === "IGI" ? "igi" : "hm";
+			const cls = b.certification_type === "HALLMARKING" ? "hm" : "igi"; // amber = hallmark, blue = any stone lab
 			const d = daysOut(b.sent_on);
 			return `<div class="co-col" data-name="${esc(b.name)}">
 				<div class="co-title">${esc(b.name)}

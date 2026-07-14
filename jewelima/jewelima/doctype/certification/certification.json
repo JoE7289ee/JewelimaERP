@@ -18,12 +18,13 @@
  ],
  "fields": [
   {
+   "description": "Stone labs (IGL / DHSC / SGL / IDT / GIG) \u2014 a piece goes to ONE of them. HALLMARKING is separate; nearly every piece gets it.",
    "fieldname": "certification_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Certification Type",
-   "options": "IGI\nHALLMARKING",
+   "options": "HALLMARKING\nIGL\nDHSC\nSGL\nIDT\nGIG",
    "reqd": 1
   },
   {
@@ -53,7 +54,7 @@
    "label": "Lab / Centre"
   },
   {
-   "description": "The stock move Finished Goods → At Certification that backed this batch.",
+   "description": "The stock move Finished Goods \u2192 At Certification that backed this batch.",
    "fieldname": "stock_entry",
    "fieldtype": "Link",
    "label": "Stock Entry (send)",
@@ -80,7 +81,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-12 10:00:00.000000",
+ "modified": "2026-07-14 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Certification",
