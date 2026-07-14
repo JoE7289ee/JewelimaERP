@@ -2374,6 +2374,75 @@ def get_usage_report():
 	}
 
 
+# --- Data retention (prune BY CHOICE — the Day Record keeps the day's story) -------
+# Only informative/monitoring rows of CLOSED bags (Sold / Cancelled) ever qualify;
+# Stock Ledger Entries are valuation truth and are never touched.
+
+def _prune_candidates(months):
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	cutoff = frappe.utils.add_months(frappe.utils.today(), -cint(months or 3))
+	closed = "SELECT name FROM `tabOrder Bag` WHERE stock_status IN ('Sold','Cancelled')"
+	kinds = {}
+	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
+		if frappe.db.exists("DocType", dt):
+			n = frappe.db.sql("""SELECT COUNT(*) FROM `tab{0}`
+				WHERE creation < %s AND order_bag IN ({1})""".format(dt, closed), cutoff)[0][0]
+			if n:
+				kinds["bench:" + dt] = n
+	kinds["ledger"] = frappe.db.sql("""SELECT COUNT(*) FROM `tabBag Material Ledger`
+		WHERE datetime < %s AND order_bag IN ({0})""".format(closed), cutoff)[0][0]
+	kinds["material_issue"] = frappe.db.sql("""SELECT COUNT(*) FROM `tabMaterial Issue`
+		WHERE posting < %s AND order_bag IN ({0})""".format(closed), cutoff)[0][0]
+	unsealed = frappe.db.sql("""
+		SELECT COUNT(DISTINCT DATE(l.datetime)) FROM `tabBag Material Ledger` l
+		WHERE l.datetime < %s AND l.order_bag IN ({0})
+		AND DATE(l.datetime) NOT IN (SELECT date FROM `tabDay Record`)""".format(closed), cutoff)[0][0]
+	return cutoff, kinds, unsealed
+
+
+@frappe.whitelist()
+def get_prune_preview(months=3):
+	"""DRY RUN: what a prune would delete. Nothing is touched."""
+	frappe.only_for(("System Manager",))
+	cutoff, kinds, unsealed = _prune_candidates(months)
+	return {"cutoff": str(cutoff), "kinds": kinds, "total": sum(kinds.values()),
+		"unsealed_days": unsealed}
+
+
+@frappe.whitelist()
+def prune_execute(months=3, confirm_text=None):
+	"""Actually delete the preview's rows. Demands the literal confirmation text —
+	this is the one destructive button in the app, used only when space runs out."""
+	frappe.only_for(("System Manager",))
+	if (confirm_text or "").strip().upper() != "PRUNE":
+		frappe.throw(frappe._('Type PRUNE to confirm — this permanently deletes old monitoring rows.'))
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	cutoff, kinds, _un = _prune_candidates(months)
+	closed = "SELECT name FROM `tabOrder Bag` WHERE stock_status IN ('Sold','Cancelled')"
+	deleted = {}
+	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
+		if ("bench:" + dt) in kinds:
+			frappe.db.sql("""DELETE FROM `tab{0}` WHERE creation < %s
+				AND order_bag IN ({1})""".format(dt, closed), cutoff)
+			deleted[dt] = kinds["bench:" + dt]
+	frappe.db.sql("""DELETE FROM `tabBag Material Ledger` WHERE datetime < %s
+		AND order_bag IN ({0})""".format(closed), cutoff)
+	deleted["Bag Material Ledger"] = kinds.get("ledger", 0)
+	mi = frappe.get_all("Material Issue", filters={"posting": ["<", cutoff]}, pluck="name")
+	mi = [m for m in mi if frappe.db.get_value("Material Issue", m, "order_bag") in
+		set(frappe.get_all("Order Bag", filters={"stock_status": ["in", ["Sold", "Cancelled"]]}, pluck="name"))]
+	for m in mi:
+		frappe.delete_doc("Material Issue", m, force=True, ignore_permissions=True)
+	deleted["Material Issue"] = len(mi)
+	frappe.db.commit()
+	frappe.get_doc({"doctype": "Comment", "comment_type": "Info", "reference_doctype": "User",
+		"reference_name": frappe.session.user,
+		"content": "Prune executed: cutoff {0}, deleted {1}".format(cutoff, deleted)}).insert(ignore_permissions=True)
+	return {"cutoff": str(cutoff), "deleted": deleted}
+
+
 _STONE_AUDIT_TOL = 0.005  # carats below this are rounding dust, treated as zero
 
 

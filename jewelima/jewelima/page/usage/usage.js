@@ -39,6 +39,15 @@ frappe.pages["usage"].on_page_load = function (wrapper) {
 				<div class="us-panel"><div class="p-head">${__("Users — last seen")}</div><div class="us-users"></div></div>
 			</div>
 			<div class="us-panel" style="margin-top:18px;"><div class="p-head">${__("Order Bags created — last 14 days")}</div><div class="us-trend"></div></div>
+			<div class="us-panel" style="margin-top:18px;">
+				<div class="p-head">${__("Data Retention — prune BY CHOICE")}</div>
+				<div style="padding:12px 14px;font-size:12.5px;">
+					<div style="color:var(--text-muted);margin-bottom:10px;">${__("Monitoring rows of CLOSED bags (Sold / Cancelled) older than the window can be deleted once their days are sealed in Day Records. Stock Ledger Entries are never touched. Preview first — nothing is deleted without typing PRUNE.")}</div>
+					${__("Older than")} <input type="number" class="us-pr-months" value="3" min="1" style="width:54px;border:1px solid var(--border-color);border-radius:4px;padding:2px 6px;text-align:right;"> ${__("months")}
+					<button class="btn btn-xs btn-default us-pr-preview" style="margin-left:10px;">${__("Preview")}</button>
+					<div class="us-pr-out" style="margin-top:10px;"></div>
+				</div>
+			</div>
 			<div class="us-note">${__("Deeper plumbing (workers, queues, failing jobs): open frappe's own")} <a href="/app/system-health-report">${__("System Health Report")}</a>. ${__("Full table breakdown:")} <a href="/app/query-report/Database Storage Usage By Tables">${__("Database Storage Usage")}</a>.</div>
 		</div>
 	`);
@@ -69,6 +78,40 @@ frappe.pages["usage"].on_page_load = function (wrapper) {
 				: `<div class="text-muted" style="padding:10px;">${__("No bags created in the last 14 days.")}</div>`);
 		});
 	}
+	// prune: preview (dry-run) -> typed PRUNE -> execute
+	root.on("click", ".us-pr-preview", () => {
+		const months = cint(root.find(".us-pr-months").val()) || 3;
+		frappe.call({ method: "jewelima.jewelima.api.get_prune_preview", args: { months } }).then((r) => {
+			const m = r.message || {};
+			const rows = Object.entries(m.kinds || {}).map(([k, v]) =>
+				`<tr><td>${esc(k.replace("bench:", ""))}</td><td class="r"><b>${Number(v).toLocaleString()}</b></td></tr>`).join("");
+			root.find(".us-pr-out").html(`
+				<table style="font-size:12px;"><tbody>${rows || `<tr><td class="text-muted">${__("Nothing qualifies.")}</td></tr>`}</tbody></table>
+				<div style="margin-top:8px;">${__("Total: {0} row(s) before {1}.", [`<b>${Number(m.total || 0).toLocaleString()}</b>`, m.cutoff])}
+				${m.unsealed_days ? `<span style="color:var(--red-600,#c0392b);font-weight:700;"> ${__("{0} day(s) NOT sealed in Day Records yet — backfill first!", [m.unsealed_days])}</span>` : ""}</div>
+				${m.total ? `<button class="btn btn-xs btn-danger us-pr-go" style="margin-top:8px;">${__("Delete these rows…")}</button>` : ""}`);
+		});
+	});
+	root.on("click", ".us-pr-go", () => {
+		const months = cint(root.find(".us-pr-months").val()) || 3;
+		frappe.prompt(
+			{ fieldname: "confirm_text", fieldtype: "Data", label: __("Type PRUNE to confirm"), reqd: 1 },
+			(v) => {
+				frappe.dom.freeze(__("Pruning..."));
+				frappe.call({ method: "jewelima.jewelima.api.prune_execute", args: { months, confirm_text: v.confirm_text } })
+					.then((r) => {
+						frappe.dom.unfreeze();
+						const del = (r.message || {}).deleted || {};
+						frappe.msgprint({ title: __("Pruned"), indicator: "green",
+							message: Object.entries(del).map(([k, n]) => `${esc(k)}: ${n}`).join("<br>") || __("Nothing deleted.") });
+						root.find(".us-pr-out").empty();
+						load();
+					})
+					.catch(() => frappe.dom.unfreeze());
+			},
+			__("This permanently deletes old monitoring rows"), __("Delete"));
+	});
+
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };

@@ -153,6 +153,15 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
+# 23:45 every night: seal the day into a Day Record (the printable day sheet).
+scheduler_events = {
+	"cron": {
+		"45 23 * * *": [
+			"jewelima.jewelima.doctype.day_record.day_record.build_today",
+		],
+	},
+}
+
 # scheduler_events = {
 # 	"all": [
 # 		"jewelima.tasks.all"

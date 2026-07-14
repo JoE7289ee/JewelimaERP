@@ -735,6 +735,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "calendar",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Day Records",
+   "link_to": "Day Record",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "inbox",
@@ -1151,7 +1164,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-14 00:08:56.492605",
+ "modified": "2026-07-14 09:44:32.630231",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
