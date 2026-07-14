@@ -2,17 +2,19 @@
 // Pure INFO, no actions. The server hands over every card at the bench WITH its
 // own stock; a generic filter bar (jewelima.buildFilterBar) narrows the set and
 // KPIs / stock tiles / the sortable table all recompute client-side, instantly.
-// Filter by party, salesman, design type, order type, status, card, design, due
-// date, gold or pure gold — any combination.
+// The "Columns" button lets each user choose which table columns show (kept in
+// their own browser, not global). Filter by party, salesman, design type, order
+// type, status, card, design, due date, gold or pure gold — any combination.
 
 frappe.provide("jewelima");
 
 const BB_STATUSES = ["In Queue", "On Hold", "Issued", "Ongoing", "Receipted", "Completed"];
 const BB_BUCKETS = ["DMD", "PS", "CS", "CVD", "PDMD", "POTH"];
+const BB_COLKEY = "jw-bench-cols"; // per-user column choice
 const BB_COLS = [
 	["name", "Card"], ["design", "Design"], ["design_type", "Type"], ["qty", "Qty"],
 	["party", "Party"], ["salesman", "Salesman"], ["order_type", "Order Type"],
-	["due", "Due"], ["pure_g", "Pure g"], ["status", "Status"],
+	["due", "Due"], ["gold_g", "Gold g"], ["pure_g", "Pure g"], ["status", "Status"],
 ];
 const BB_FILTER_FIELDS = [
 	{ key: "party", label: "Party", type: "select" },
@@ -30,8 +32,30 @@ const BB_FILTER_FIELDS = [
 jewelima.buildBenchBoard = function (wrapper, bench) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Bench — {0}", [bench]), single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { all: [], sort: "name", dir: 1 };
 	const esc = frappe.utils.escape_html;
+
+	function loadCols() {
+		try {
+			const v = JSON.parse(localStorage.getItem(BB_COLKEY));
+			if (Array.isArray(v) && v.length) return new Set(v.filter((k) => BB_COLS.some((c) => c[0] === k)));
+		} catch (e) { /* fall through to default */ }
+		return new Set(BB_COLS.map((c) => c[0]));
+	}
+	const S = { all: [], sort: "name", dir: 1, cols: loadCols() };
+
+	const BB_CELL = {
+		name: (r) => `<a href="/app/order-bag/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`,
+		design: (r) => esc(r.design),
+		design_type: (r) => esc(r.design_type),
+		qty: (r) => r.qty,
+		party: (r) => esc(r.party),
+		salesman: (r) => esc(r.salesman),
+		order_type: (r) => esc(r.order_type),
+		due: (r) => (r.due ? frappe.datetime.str_to_user(r.due) : ""),
+		gold_g: (r) => (r.gold_g || 0).toFixed(3),
+		pure_g: (r) => (r.pure_g || 0).toFixed(3),
+		status: (r) => `<span class="bb-st">${esc(r.status)}</span>`,
+	};
 
 	$(page.main).append(`
 		<style>
@@ -74,7 +98,6 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 	function recompute() {
 		const rows = filterBar.apply(S.all);
 
-		// KPI
 		const st = {};
 		rows.forEach((r) => (st[r.status] = (st[r.status] || 0) + 1));
 		const pieces = rows.reduce((s, r) => s + (r.qty || 0), 0);
@@ -84,7 +107,6 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 			BB_STATUSES.filter((x) => st[x]).map((x) => `
 				<div class="bb-tile"><div class="k">${esc(x)}</div><div class="v">${st[x]}</div></div>`).join(""));
 
-		// stock — sum gold/pure/buckets over the filtered cards
 		let gold = 0, pure = 0;
 		const bk = {};
 		rows.forEach((r) => {
@@ -105,6 +127,7 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 	}
 
 	function renderTable(rows) {
+		const cols = BB_COLS.filter(([k]) => S.cols.has(k));
 		const sorted = rows.slice().sort((a, b) => {
 			const x = a[S.sort], y = b[S.sort];
 			if (typeof x === "number" || typeof y === "number") return ((x || 0) - (y || 0)) * S.dir;
@@ -114,16 +137,10 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		root.find(".bb-body").html(sorted.length ? `
 			<div class="bb-sec">${__("Cards")} (${sorted.length})</div>
 			<table class="bb-t"><thead><tr><th style="width:34px">#</th>
-				${BB_COLS.map(([k, l]) => `<th data-sort="${k}">${__(l)}${arr(k)}</th>`).join("")}
+				${cols.map(([k, l]) => `<th data-sort="${k}">${__(l)}${arr(k)}</th>`).join("")}
 			</tr></thead>
 			<tbody>${sorted.map((r, i) => `
-				<tr><td>${i + 1}</td>
-				<td><a href="/app/order-bag/${encodeURIComponent(r.name)}">${esc(r.name)}</a></td>
-				<td>${esc(r.design)}</td><td>${esc(r.design_type)}</td><td>${r.qty}</td>
-				<td>${esc(r.party)}</td><td>${esc(r.salesman)}</td><td>${esc(r.order_type)}</td>
-				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
-				<td>${(r.pure_g || 0).toFixed(3)}</td>
-				<td><span class="bb-st">${esc(r.status)}</span></td></tr>`).join("")}</tbody></table>`
+				<tr><td>${i + 1}</td>${cols.map(([k]) => `<td>${BB_CELL[k](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
 			: `<div class="bb-none">${filterBar.count() ? __("No cards match the filters.") : __("Nothing at {0}.", [bench])}</div>`);
 	}
 	root.on("click", "th[data-sort]", function () {
@@ -133,6 +150,24 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		recompute();
 	});
 
+	// per-user column chooser — remembered in this browser only
+	function openColumns() {
+		const d = new frappe.ui.Dialog({ title: __("Show columns"), fields: [{ fieldtype: "HTML", fieldname: "c" }] });
+		d.fields_dict.c.$wrapper.html(
+			`<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${__("Your choice is remembered on this device.")}</div>` +
+			BB_COLS.map(([k, l]) => `<label style="display:block;padding:4px 0;font-size:13px;cursor:pointer;">
+				<input type="checkbox" class="bb-colcb" value="${k}" ${S.cols.has(k) ? "checked" : ""}> ${__(l)}</label>`).join(""));
+		d.$wrapper.find(".bb-colcb").on("change", function () {
+			if (this.checked) S.cols.add(this.value);
+			else if (S.cols.size > 1) S.cols.delete(this.value);
+			else { this.checked = true; return; } // keep at least one column
+			localStorage.setItem(BB_COLKEY, JSON.stringify([...S.cols]));
+			recompute();
+		});
+		d.show();
+	}
+
+	page.add_inner_button(__("Columns"), openColumns);
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };
