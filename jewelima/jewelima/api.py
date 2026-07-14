@@ -2532,6 +2532,46 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 
 
 @frappe.whitelist()
+def get_stone_issues_day(date, stone_type=None, item_group=None):
+	"""Stone Issues report: everything issued on one day, line by line (item, card,
+	who, when) + totals, filterable by stone type and item group. Also returns the
+	distinct types/groups seen that day so the page can build its filter pills."""
+	d = str(date or frappe.utils.today())
+	rows = frappe.db.sql("""
+		SELECT l.item, i.stone_type, i.item_group, l.order_bag, l.pcs, l.qty ct,
+			IFNULL(l.employee, '') who, l.datetime
+		FROM `tabBag Material Ledger` l
+		JOIN `tabItem` i ON i.name = l.item
+		WHERE l.entry_type = 'Stone Issue' AND l.direction = 'In' AND DATE(l.datetime) = %s
+		ORDER BY l.datetime""", d, as_dict=True)
+	types = sorted({r.stone_type for r in rows if r.stone_type})
+	groups = sorted({r.item_group for r in rows if r.item_group})
+	if stone_type:
+		rows = [r for r in rows if r.stone_type == stone_type]
+	if item_group:
+		rows = [r for r in rows if r.item_group == item_group]
+	agg = {}
+	for r in rows:
+		e = agg.setdefault(r.item, {"item": r.item, "stone_type": r.stone_type,
+			"item_group": r.item_group, "pcs": 0, "ct": 0.0, "lines": 0})
+		e["pcs"] += cint(r.pcs)
+		e["ct"] += flt(r.ct)
+		e["lines"] += 1
+	for e in agg.values():
+		e["ct"] = round(e["ct"], 3)
+	return {
+		"date": d, "types": types, "groups": groups,
+		"rows": [{"item": r.item, "stone_type": r.stone_type, "item_group": r.item_group,
+			"order_bag": r.order_bag, "pcs": cint(r.pcs), "ct": flt(r.ct), "who": r.who,
+			"datetime": str(r.datetime)} for r in rows],
+		"items": sorted(agg.values(), key=lambda x: -x["ct"]),
+		"total_pcs": sum(cint(r.pcs) for r in rows),
+		"total_ct": round(sum(flt(r.ct) for r in rows), 3),
+		"cards": len({r.order_bag for r in rows}),
+	}
+
+
+@frappe.whitelist()
 def get_stone_issue_stock():
 	"""Everything sitting in the Stone Issue warehouse right now (side panel)."""
 	from jewelima.setup import STONE_ISSUE_WAREHOUSE
