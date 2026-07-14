@@ -251,11 +251,60 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 			/* never break the sidebar over storage */
 		}
 	}
-	$(document).on("sidebar_setup sidebar-expand", later);
-	$(document).on("app_ready", () => frappe.router && frappe.router.on && frappe.router.on("change", later));
-	$(document).on("click", ".body-sidebar .standard-sidebar-item", () => {
+	// clicking Home snaps every section (and sub-group) shut — a one-click "tidy up"
+	function collapseAll() {
+		if (sidebarCollapsed()) return;
+		const sb = frappe.app && frappe.app.sidebar;
+		if (!sb || !sb.items) return;
+		// Close each section via frappe's OWN SectionBreak object (updates its live
+		// DOM + in-memory state), collecting titles as we go...
+		const titles = [];
+		(function walk(items) {
+			(items || []).forEach((it) => {
+				if (it && it.nested_items && it.nested_items.length && typeof it.close === "function") {
+					try { if (!it.collapsed) it.close(); } catch (e) { /* keep going */ }
+					const t = it.wrapper && it.wrapper.attr && it.wrapper.attr("title");
+					if (t) titles.push(t);
+				}
+				if (it && it.items) walk(it.items);
+			});
+		})(sb.items);
+		// ...then persist all-closed in ONE write (per-item saves clobber each other)
+		// under frappe's key = workspace title lower-cased, so any rebuild stays tidy.
+		try {
+			const st = JSON.parse(localStorage.getItem("section-breaks-state") || "{}");
+			const m = st.jewelima || {};
+			titles.forEach((t) => (m[t] = true)); // true = collapsed
+			st.jewelima = m;
+			localStorage.setItem("section-breaks-state", JSON.stringify(st));
+		} catch (e) { /* storage unavailable — the DOM closes above still apply */ }
+		setTimeout(sync, 60);
+	}
+
+	// clicking Home navigates to the workspace, which re-renders the sidebar AFTER
+	// our collapse — so arm a flag and collapse again on each post-render event too.
+	let pendingCollapse = false;
+	const consumeCollapse = () => { if (pendingCollapse) { pendingCollapse = false; collapseAll(); } };
+
+	// the Home workspace route — re-collapse whenever we land on it (the render can
+	// finish well after the click, so event hooks + a retry window both cover it)
+	const onHome = () => {
+		const r = frappe.get_route() || [];
+		return !r.length || (r[0] === "Workspaces" && (r[1] || "").toLowerCase() === "jewelima") || (r[0] || "").toLowerCase() === "jewelima";
+	};
+	$(document).on("sidebar_setup sidebar-expand", () => { later(); if (onHome() || pendingCollapse) setTimeout(consumeCollapse, 60); });
+	$(document).on("app_ready", () => frappe.router && frappe.router.on && frappe.router.on("change", () => {
 		later();
-		setTimeout(saveAll, 80);
+		if (onHome()) { pendingCollapse = true; [60, 300, 700].forEach((t) => setTimeout(consumeCollapse, t)); }
+	}));
+	$(document).on("click", ".body-sidebar .standard-sidebar-item", function () {
+		later();
+		if (((this.textContent || "").trim() === "Home")) {
+			pendingCollapse = true;
+			[60, 250, 600, 1000, 1600, 2400].forEach((t) => setTimeout(() => { pendingCollapse = true; consumeCollapse(); }, t));
+		} else {
+			setTimeout(saveAll, 80);
+		}
 	});
 	$(document).on("app_ready", later);
 	later();
