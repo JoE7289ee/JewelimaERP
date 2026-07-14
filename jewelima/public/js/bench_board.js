@@ -145,6 +145,8 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 			if (typeof x === "number" || typeof y === "number") return ((x || 0) - (y || 0)) * S.dir;
 			return String(x || "").localeCompare(String(y || "")) * S.dir;
 		});
+		S.cols_shown = cols;       // Export uses exactly what's on screen:
+		S.rows_shown = sorted;     // visible columns, current filter + sort
 		const arr = (k) => (S.sort === k ? `<span class="arr">${S.dir > 0 ? "▲" : "▼"}</span>` : "");
 		root.find(".bb-body").html(sorted.length ? `
 			<div class="bb-sec">${__("Cards")} (${sorted.length})</div>
@@ -179,6 +181,30 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		d.show();
 	}
 
+	// plain-text cell value for export (the table cells carry HTML/links)
+	const BB_TEXT = {
+		name: (r) => r.name, design: (r) => r.design, design_type: (r) => r.design_type,
+		qty: (r) => r.qty, party: (r) => r.party, salesman: (r) => r.salesman,
+		order_type: (r) => r.order_type, due: (r) => r.due || "",
+		gold_g: (r) => (r.gold_g || 0), pure_g: (r) => (r.pure_g || 0), status: (r) => r.status,
+	};
+	BB_BUCKETS.forEach((b) => {
+		BB_TEXT[b.toLowerCase()] = (r) => {
+			const v = (r.buckets || {})[b];
+			return v ? `${v.pcs} / ${v.ct.toFixed(3)}` : "";
+		};
+	});
+	function exportXlsx() {
+		const cols = S.cols_shown || BB_COLS.filter(([k]) => S.cols.has(k));
+		const rows = S.rows_shown || [];
+		if (!rows.length) return frappe.msgprint(__("Nothing to export."));
+		const data = [["#", ...cols.map(([k, l]) => __(l))]];
+		rows.forEach((r, i) => data.push([i + 1, ...cols.map(([k]) => BB_TEXT[k](r))]));
+		open_url_post("/api/method/jewelima.jewelima.api.export_table_xlsx",
+			{ title: `Bench-${bench}-${frappe.datetime.get_today()}`, data: JSON.stringify(data) });
+	}
+
+	page.add_inner_button(__("Export"), exportXlsx);
 	page.add_inner_button(__("Columns"), openColumns);
 	page.add_inner_button(__("Refresh"), load);
 	load();

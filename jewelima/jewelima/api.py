@@ -2535,6 +2535,17 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 
 
 @frappe.whitelist()
+def export_table_xlsx(title, data):
+	"""Generic table -> xlsx download. `data` = [[header...], [row...], ...] exactly
+	as the page shows it (visible columns, current filter + sort). Streams the file."""
+	from frappe.utils.xlsxutils import build_xlsx_response
+
+	if isinstance(data, str):
+		data = json.loads(data or "[]")
+	build_xlsx_response(data, (title or "export"))
+
+
+@frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with
 	its OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —
