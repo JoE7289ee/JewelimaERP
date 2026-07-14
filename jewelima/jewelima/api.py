@@ -4846,6 +4846,15 @@ def get_card_passport(order_bag):
 		d = frappe.db.get_value("Design", bag.design, ["design_type", "item"], as_dict=True) or {}
 		bag["design_type"] = d.get("design_type")
 		bag["item"] = d.get("item")
+	# material issues into the card — who issued what stones/gold and when
+	issues = frappe.db.sql("""
+		SELECT l.item, i.stone_type, l.entry_type, l.direction, l.qty, l.pcs, l.datetime,
+			IFNULL(e.employee_name, IFNULL(l.employee, '')) who, l.remarks
+		FROM `tabBag Material Ledger` l
+		JOIN `tabItem` i ON i.name = l.item
+		LEFT JOIN `tabEmployee` e ON e.name = l.employee
+		WHERE l.order_bag = %s AND l.entry_type IN ('Stone Issue', 'Gold Issue')
+		ORDER BY l.datetime""", order_bag, as_dict=True)
 	return {
 		"bag": bag,
 		"contents": get_bag_contents(order_bag),
@@ -4854,6 +4863,9 @@ def get_card_passport(order_bag):
 			fields=["from_location", "to_location", "transfer_time", "transferred_by"], order_by="transfer_time asc",
 		),
 		"stages": get_bag_stage_history(order_bag),
+		"issues": [{"item": r.item, "stone_type": r.stone_type or "", "entry_type": r.entry_type,
+			"direction": r.direction, "qty": flt(r.qty), "pcs": cint(r.pcs),
+			"datetime": str(r.datetime or ""), "who": r.who, "remarks": r.remarks or ""} for r in issues],
 	}
 
 

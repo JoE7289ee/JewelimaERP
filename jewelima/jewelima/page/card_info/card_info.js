@@ -113,6 +113,21 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th>In</th><th>Out</th><th class="num">Wt Out</th><th class="num">Wt In</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
 		}
 
+		// issue details — who issued what stones/gold into this card and when
+		let issueTbl = '<span class="ci-empty">Nothing issued yet.</span>';
+		if ((d.issues || []).length) {
+			const rows = d.issues.map((r) => {
+				const sign = r.direction === "Out" ? "−" : "";
+				const uom = r.stone_type ? "ct" : "g";
+				return `<tr>
+					<td>${r.entry_type === "Stone Issue" ? "Stone" : "Gold"}</td>
+					<td><b>${esc(r.item)}</b>${r.stone_type ? ` <span class="muted">(${esc(r.stone_type)})</span>` : ""}</td>
+					<td class="num">${r.pcs ? r.pcs + " / " : ""}${sign}${flt(r.qty).toFixed(3)} ${uom}</td>
+					<td>${esc(r.who || "—")}</td><td>${r.datetime ? frappe.datetime.str_to_user(r.datetime) : "—"}</td></tr>`;
+			}).join("");
+			issueTbl = `<table class="ci-tbl"><thead><tr><th>What</th><th>Item</th><th class="num">Qty</th><th>Issued By</th><th>When</th></tr></thead><tbody>${rows}</tbody></table>`;
+		}
+
 		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
 		const extraKvs = forPrint ? "" : `${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Party Date", dt(b.customer_date))}${kv("Held By", b.held_by)}`;
 		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
@@ -138,6 +153,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
 		</div>
 		<div class="ci-sec"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
+		<div class="ci-sec"><h4>Issue details</h4>${issueTbl}</div>
 		${narration}
 		<div class="ci-sec"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
 		<div class="ci-sec"><h4>Who worked on it</h4>${stageTbl}</div>`;
