@@ -2321,6 +2321,19 @@ def get_stone_issuer_today(employee):
 
 
 @frappe.whitelist()
+def get_day_sheet_html(date):
+	"""Day Sheet page: the rendered 4-page sheet for a date (single source of
+	truth = the 'Day Sheet' print format), or exists=False when no record yet."""
+	d = str(date or "").strip()
+	if not d or not frappe.db.exists("Day Record", d):
+		return {"exists": False, "name": d}
+	# render ONLY the sheet markup (get_print wraps it in the whole print-view page)
+	pf = frappe.get_doc("Print Format", "Day Sheet")
+	html = frappe.render_template(pf.html, {"doc": frappe.get_doc("Day Record", d)})
+	return {"exists": True, "name": d, "html": html}
+
+
+@frappe.whitelist()
 def get_usage_report():
 	"""Reports > Usage (SM only): DB size + top tables, core document counts,
 	bags-per-day trend, users/sessions, and server disk — the capacity dashboard."""

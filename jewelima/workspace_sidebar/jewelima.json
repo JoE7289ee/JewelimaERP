@@ -737,6 +737,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "file-text",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Day Sheet",
+   "link_to": "day-sheet",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "calendar",
    "indent": 1,
    "keep_closed": 0,
@@ -1164,7 +1177,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-14 09:44:32.630231",
+ "modified": "2026-07-14 09:57:04.516199",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
