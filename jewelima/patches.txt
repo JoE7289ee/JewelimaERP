@@ -9,3 +9,4 @@ jewelima.patches.remove_warehouse_stock
 jewelima.patches.set_in_stock_on
 jewelima.patches.flatten_making_rules
 jewelima.patches.rename_igi_to_igl
+jewelima.patches.backfill_certifications

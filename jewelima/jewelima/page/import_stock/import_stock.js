@@ -61,7 +61,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 					<th style="min-width:85px">${__("Gross g")}</th>
 					<th style="min-width:150px">${__("Stones")}</th>
 					<th style="min-width:100px">${__("HUID")}</th>
-					<th style="min-width:110px">${__("Cert No")}</th>
+					<th style="min-width:110px">${__("Certifications")}</th>
 					<th style="min-width:70px">${__("Size")}</th>
 					<th style="min-width:130px">${__("Special Works")}</th>
 					<th style="width:64px"></th>
@@ -266,7 +266,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 	function doImport() {
 		const pieces = state.rows.filter((r) => r.ok).map((r) => ({
 			design: r.design, karat: r.karat, gold: flt(r.gold), gross: flt(r.gross),
-			size: r.size || "", huid: r.huid || "", certificate_no: r.cert || "",
+			size: r.size || "", huid: r.huid || "", certifications: r.cert || "",
 			stones: r.stones || [], tags: r.tags || [],
 		}));
 		if (!pieces.length) {

@@ -12,7 +12,6 @@
   "dmd_ct",
   "received",
   "huid",
-  "certificate_no",
   "received_on"
  ],
  "fields": [
@@ -77,13 +76,6 @@
    "label": "HUID"
   },
   {
-   "columns": 2,
-   "fieldname": "certificate_no",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Certificate No"
-  },
-  {
    "fieldname": "received_on",
    "fieldtype": "Datetime",
    "label": "Received On",
@@ -93,7 +85,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-12 10:00:00.000000",
+ "modified": "2026-07-14 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Certification Item",

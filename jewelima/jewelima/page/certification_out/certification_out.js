@@ -90,13 +90,14 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 				<div class="co-panel ${cls}${b.status === "Received" ? " done" : ""}">
 					${b.items.map((r) => r.received ? `
 						<div class="co-chip back"><span class="code">✓ ${esc(r.order_bag)}</span><span class="ty">${esc(r.design_type)}</span>
-							<span class="wt"><span class="nums">${r.huid ? "HUID " + esc(r.huid) : ""}${r.huid && r.certificate_no ? " · " : ""}${esc(r.certificate_no || "")}</span></span></div>` : `
-						<div class="co-chip pend" data-row="${esc(r.row)}" data-bag="${esc(r.order_bag)}">
+							<span class="wt"><span class="nums">${r.huid ? "HUID " + esc(r.huid) : ""}</span></span></div>` : `
+						<div class="co-chip ${b.certification_type === "HALLMARKING" ? "pend" : "lab"}" data-row="${esc(r.row)}" data-bag="${esc(r.order_bag)}">
 							<span class="code">${esc(r.order_bag)}</span><span class="ty">${esc(r.design_type)}</span>
 							<span class="wt">${fmt(r.gross)} g${r.stones_ct ? ` · ${fmt(r.stones_ct)} ct` : ""}<br>
 							<span style="font-size:10px;">${__("pure")} ${fmt(r.pure)} g</span></span></div>`).join("")}
 					<div class="co-cnt">${b.back}/${b.total} ${__("back")}${b.status === "Received" ? " · " + __("complete") : ""}
-						· <a class="co-igi" data-bags='${esc(JSON.stringify(b.items.map((r) => r.order_bag)))}' style="cursor:pointer;">${__("IGI xlsx")} ⬇</a></div>
+						${b.certification_type !== "HALLMARKING" && b.status !== "Received" ? `· <a class="co-collect" data-name="${esc(b.name)}" data-n="${b.total - b.back}" style="cursor:pointer;font-weight:700;">${__("Collect all")} (${b.total - b.back}) ✓</a> ` : ""}
+						· <a class="co-igi" data-bags='${esc(JSON.stringify(b.items.map((r) => r.order_bag)))}' style="cursor:pointer;">${__("Lab xlsx")} ⬇</a></div>
 				</div>
 			</div>`;
 		}).join(""));
@@ -118,7 +119,24 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 			encodeURIComponent(this.getAttribute("data-bags")));
 	});
 
-	// click a pending piece -> receive it (numbers dialog)
+	// stone-lab batches: COUNT the packet, one click collects the lot
+	$(root).on("click", ".co-collect", function (e) {
+		e.stopPropagation();
+		const batch = this.getAttribute("data-name");
+		const n = this.getAttribute("data-n");
+		frappe.confirm(__("Counted <b>{0}</b> piece(s) back from <b>{1}</b>? All of them are marked collected.", [n, batch]), () => {
+			frappe.dom.freeze(__("Collecting..."));
+			frappe.call({ method: API + ".receive_certification_all", args: { name: batch } })
+				.then(() => {
+					frappe.dom.unfreeze();
+					frappe.show_alert({ message: __("{0} collected — {1} piece(s) back In Stock.", [batch, n]), indicator: "green" }, 5);
+					load();
+				})
+				.catch(() => frappe.dom.unfreeze());
+		});
+	});
+
+	// hallmark pieces come back one by one — each brings its HUID
 	$(root).on("click", ".co-chip.pend", function () {
 		const row = this.getAttribute("data-row");
 		const bag = this.getAttribute("data-bag");
@@ -126,8 +144,7 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 		const d = new frappe.ui.Dialog({
 			title: __("Receive {0}", [bag]),
 			fields: [
-				{ fieldname: "huid", fieldtype: "Data", label: "HUID", description: __("From hallmarking — leave blank if none.") },
-				{ fieldname: "certificate_no", fieldtype: "Data", label: __("Certificate No") },
+				{ fieldname: "huid", fieldtype: "Data", label: "HUID", description: __("From hallmarking.") },
 			],
 			primary_action_label: __("Receive"),
 			primary_action: (v) => {
@@ -135,7 +152,7 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 				frappe.dom.freeze(__("Receiving..."));
 				frappe.call({
 					method: API + ".receive_certification",
-					args: { name: batch, rows: [{ row, huid: v.huid, certificate_no: v.certificate_no }] },
+					args: { name: batch, rows: [{ row, huid: v.huid }] },
 				}).then((r) => {
 					frappe.dom.unfreeze();
 					frappe.show_alert({ message: __("{0} received back ({1}).", [bag, (r.message || {}).status]), indicator: "green" }, 5);

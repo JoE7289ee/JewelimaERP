@@ -3543,7 +3543,7 @@ def import_finished_stock(payload):
 	  mode "purchase" — a submitted Purchase Receipt straight into Finished Goods.
 
 	payload = {mode, customer, supplier?, remarks?, pieces: [{design, karat,
-	gold (g), gross (g), size?, huid?, certificate_no?, tags?: [category],
+	gold (g), gross (g), size?, huid?, certifications?, tags?: [category],
 	stones?: [{item, pcs, ct}]}]}"""
 	from jewelima.setup import GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE
 
@@ -3657,7 +3657,7 @@ def import_finished_stock(payload):
 			"job_order": jo.name, "design": pc.get("design"), "qty": 1,
 			"size": pc.get("size"), "customer": customer, "order_type": "Import",
 			"order_date": jo.order_date, "narration": p.get("remarks"),
-			"huid": (pc.get("huid") or "").strip(), "certificate_no": (pc.get("certificate_no") or "").strip(),
+			"huid": (pc.get("huid") or "").strip(), "certifications": (pc.get("certifications") or "").strip(),
 			"charge_categories": [{"charge_category": t} for t in pc.get("tags") or []],
 			**plan,
 		})
@@ -4396,7 +4396,7 @@ def send_certification(payload):
 
 	p = frappe.parse_json(payload)
 	ctype = (p.get("certification_type") or "").upper()
-	if ctype not in ("IGI", "HALLMARKING"):
+	if ctype not in ("HALLMARKING", "IGL", "DHSC", "SGL", "IDT", "GIG"):
 		frappe.throw(frappe._("Unknown certification type: {0}").format(ctype or "?"))
 	bags = [b for b in (p.get("bags") or []) if b]
 	if not bags:
@@ -4441,7 +4441,8 @@ def receive_certification(name, rows):
 	"""Receive pieces back from a Certification batch: stamp HUID / certificate no
 	on the row AND the Order Bag, move their materials At Certification ->
 	Finished Goods (one Stock Entry per receive), flip the bags back In Stock.
-	rows = [{row (child name), huid, certificate_no}]"""
+	rows = [{row (child name), huid}] — HUIDs only come from HALLMARKING; stone
+	labs are received by count via receive_certification_all."""
 	from jewelima.setup import CERTIFICATION_WAREHOUSE
 
 	if isinstance(rows, str):
@@ -4455,32 +4456,49 @@ def receive_certification(name, rows):
 			frappe.throw(frappe._("Row {0} not found on {1}.").format(r.get("row") or "?", name))
 		if child.received:
 			frappe.throw(frappe._("{0} is already received.").format(child.order_bag))
-		picked.append((child, (r.get("huid") or "").strip().upper(), (r.get("certificate_no") or "").strip()))
+		picked.append((child, (r.get("huid") or "").strip().upper()))
 	if not picked:
 		frappe.throw(frappe._("Pick at least one piece to receive."))
 
 	totals = {}
-	for mats in _bag_convert_materials([c.order_bag for c, _, _ in picked]).values():
+	for mats in _bag_convert_materials([c.order_bag for c, _ in picked]).values():
 		for it, q in mats.items():
 			totals[it] = totals.get(it, 0) + q
 	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
 
 	now = frappe.utils.now_datetime()
-	for child, huid, cert in picked:
+	for child, huid in picked:
 		child.received = 1
 		child.huid = huid
-		child.certificate_no = cert
 		child.received_on = now
-		vals = {"stock_status": "In Stock", "in_stock_on": now}
+		vals = {"stock_status": "In Stock", "in_stock_on": now,
+			"certifications": _stamp_certification(child.order_bag, doc.certification_type)}
 		if huid:
 			vals["huid"] = huid
-		if cert:
-			vals["certificate_no"] = cert
 		frappe.db.set_value("Order Bag", child.order_bag, vals)
 	doc.status = "Received" if all(r.received for r in doc.items) else "Partially Received"
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": name, "received": len(picked), "status": doc.status, "stock_entry": se}
+
+
+def _stamp_certification(order_bag, cert_type):
+	"""Append the batch's type to the bag's certifications trail (no duplicates)."""
+	cur = [x.strip() for x in (frappe.db.get_value("Order Bag", order_bag, "certifications") or "").split(",") if x.strip()]
+	if cert_type and cert_type not in cur:
+		cur.append(cert_type)
+	return ", ".join(cur)
+
+
+@frappe.whitelist()
+def receive_certification_all(name):
+	"""Stone-lab collection: we COUNT the packet and mark the whole batch
+	collected — no per-piece scanning, no certificate numbers."""
+	doc = frappe.get_doc("Certification", name)
+	rows = [{"row": r.name, "huid": ""} for r in doc.items if not r.received]
+	if not rows:
+		frappe.throw(frappe._("Everything on {0} is already received.").format(name))
+	return receive_certification(name, rows)
 
 
 # IGI bulk-submission export — the user's own template shipped in-app; we only
@@ -4613,7 +4631,7 @@ def get_certification_batches():
 			"row": r.name, "order_bag": r.order_bag, "design": r.design or "", "design_type": r.design_type or "",
 			"gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct), "received": cint(r.received),
 			"pure": flt((acts.get(r.order_bag) or {}).get("act_pure_weight")), "stones_ct": stones_of(r.order_bag),
-			"huid": r.huid or "", "certificate_no": r.certificate_no or "",
+			"huid": r.huid or "",
 		} for r in d.items]
 		if d.status != "Received":
 			summary["batches_out"] += 1
