@@ -5,6 +5,7 @@
 import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
 import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finished-stock + at-certification
 import "./quick_menu"; // Ctrl+Q — quick palette of everyday pages
+import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
 
 frappe.provide("jewelima");
 
@@ -93,7 +94,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 		"stock-transfer", "make-products", "finished-items", "card-info", "job-order-status",
 		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
 		"order-masters", "warehouse-management", "print-order-bags", "order-bag-photos",
-		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh", "in-bags", "import-stock", "finished-stock", "at-certification", "certify", "certification-out", "transfer-holder", "sell", "parties", "loss-report", "loss-collection", "loss-writeoff", "user-roles", "add-user", "reset-password", "add-employee", "stone-issue", "stone-issues", "stone-audit", "usage", "day-sheet",
+		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh", "in-bags", "import-stock", "finished-stock", "at-certification", "certify", "certification-out", "transfer-holder", "sell", "parties", "loss-report", "loss-collection", "loss-writeoff", "user-roles", "add-user", "reset-password", "add-employee", "stone-issue", "stone-issues", "stone-audit", "usage", "day-sheet", "bench-cad", "bench-cam", "bench-wax-injecting", "bench-tree-making", "bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish", "bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction",
 		"employee-performance", "item-stock",
 	]);
 	let last = null;
