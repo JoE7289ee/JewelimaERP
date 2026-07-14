@@ -91,6 +91,8 @@
   "act_poth_weight",
   "current_contents_section",
   "materials_html",
+  "issue_details_section",
+  "issue_details_html",
   "schedule_tab",
   "order_date",
   "due_date",
@@ -635,6 +637,15 @@
    "label": "Materials"
   },
   {
+   "fieldname": "issue_details_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "issue_details_html",
+   "fieldtype": "HTML",
+   "label": "Issue Details"
+  },
+  {
    "fieldname": "schedule_tab",
    "fieldtype": "Tab Break",
    "label": "Schedule"
@@ -729,7 +740,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-14 17:00:00.000000",
+ "modified": "2026-07-15 13:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Bag",

@@ -4,6 +4,7 @@
 frappe.ui.form.on("Order Bag", {
 	refresh(frm) {
 		render_contents(frm);
+		render_issue_details(frm);
 		render_transfers(frm);
 		render_stages(frm);
 		if (!frm.is_new()) {
@@ -65,6 +66,47 @@ function render_contents(frm) {
 				</tr></tfoot>
 			</table>
 			<div class="text-muted" style="font-size:11px;">Gold ${c.gold_grams} g + Stones ${c.stone_carats} ct (×0.2) = ${c.gross_weight} g gross.</div>`);
+	});
+}
+
+function render_issue_details(frm) {
+	// who issued what stones/gold into this card and when. The Actual tab renders
+	// lazily, so paint whenever the field's wrapper is actually visible (D-verified
+	// that painting after the tab is shown sticks). get_card_passport resolves names.
+	if (frm.is_new()) return;
+	frappe.call({ method: "jewelima.jewelima.api.get_card_passport", args: { order_bag: frm.doc.name } }).then((r) => {
+		const issues = (r.message || {}).issues || [];
+		const esc = frappe.utils.escape_html;
+		let html = '<div style="font-weight:700;margin:2px 0 6px;">Issue Details</div>';
+		if (!issues.length) {
+			html += '<div class="text-muted" style="font-size:12px;">Nothing issued into this card yet.</div>';
+		} else {
+			const body = issues.map((it) => {
+				const stone = it.entry_type === "Stone Issue";
+				const sign = it.direction === "Out" ? "−" : "";
+				return `<tr>
+					<td>${stone ? "Stone" : "Gold"}</td>
+					<td><b>${esc(it.item || "")}</b>${it.stone_type ? ` <span class="text-muted">(${esc(it.stone_type)})</span>` : ""}</td>
+					<td style="text-align:right">${(it.pcs ? it.pcs + " / " : "") + sign + (Number(it.qty) || 0).toFixed(3)} ${stone ? "ct" : "g"}</td>
+					<td>${esc(it.who || "")}</td>
+					<td>${it.datetime ? frappe.datetime.str_to_user(it.datetime) : ""}</td></tr>`;
+			}).join("");
+			html += `<table class="table table-bordered ci-issue-tbl" style="font-size:12px;max-width:640px;">
+				<thead><tr><th>What</th><th>Item</th><th style="text-align:right">Qty</th><th>Issued By</th><th>When</th></tr></thead>
+				<tbody>${body}</tbody></table>`;
+		}
+		frm.__issue_html = html;
+		// poll: paint the moment the (lazy) Actual tab wrapper is visible + unpainted
+		let tries = 0;
+		const iv = setInterval(() => {
+			const f = frm.get_field("issue_details_html");
+			if (f && f.$wrapper.is(":visible") && !f.$wrapper.find(".ci-issue-marker").length) {
+				f.$wrapper.html(`<div class="ci-issue-marker">${frm.__issue_html}</div>`);
+			}
+			if (++tries > 40) clearInterval(iv); // ~20s guard
+		}, 500);
+		frm.__issue_iv && clearInterval(frm.__issue_iv);
+		frm.__issue_iv = iv;
 	});
 }
 
