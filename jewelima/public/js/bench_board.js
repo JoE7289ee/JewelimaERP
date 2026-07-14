@@ -11,7 +11,7 @@ const BB_STATUSES = ["In Queue", "On Hold", "Issued", "Ongoing", "Receipted", "C
 jewelima.buildBenchBoard = function (wrapper, bench) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Bench — {0}", [bench]), single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { party: "", dtype: "", otype: "" };
+	const S = { party: "", dtype: "", otype: "", sort: "name", dir: 1, data: null };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -28,6 +28,9 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		.bb-pill.on{background:var(--primary);border-color:var(--primary);color:#fff;}
 		table.bb-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);}
 		table.bb-t th{background:var(--control-bg);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 10px;border:1px solid var(--border-color);text-align:left;}
+		table.bb-t th[data-sort]{cursor:pointer;user-select:none;}
+		table.bb-t th[data-sort]:hover{color:var(--text-color);}
+		table.bb-t th .arr{font-size:9px;margin-left:3px;}
 		table.bb-t td{border:1px solid var(--border-color);padding:4px 10px;}
 		.bb-none{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.bb-st{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:var(--control-bg);}
@@ -73,12 +76,27 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		pills(root.find(".bb-dtype"), __("Design type"), m.design_types || [], S.dtype, "dtype");
 		pills(root.find(".bb-otype"), __("Order type"), m.order_types || [], S.otype, "otype");
 
-		const rows = m.rows || [];
+		S.data = m;
+		renderTable();
+	}
+
+	// click a header to sort; click again to flip
+	const BB_COLS = [
+		["name", "Card"], ["design", "Design"], ["design_type", "Type"], ["qty", "Qty"],
+		["party", "Party"], ["order_type", "Order Type"], ["due", "Due"], ["status", "Status"],
+	];
+	function renderTable() {
+		const rows = (S.data && S.data.rows || []).slice().sort((a, b) => {
+			const x = a[S.sort], y = b[S.sort];
+			if (typeof x === "number" || typeof y === "number") return ((x || 0) - (y || 0)) * S.dir;
+			return String(x || "").localeCompare(String(y || "")) * S.dir;
+		});
+		const arr = (k) => (S.sort === k ? `<span class="arr">${S.dir > 0 ? "▲" : "▼"}</span>` : "");
 		root.find(".bb-body").html(rows.length ? `
 			<div class="bb-sec">${__("Cards")}</div>
-			<table class="bb-t"><thead><tr><th style="width:34px">#</th><th>${__("Card")}</th><th>${__("Design")}</th>
-				<th>${__("Type")}</th><th>${__("Qty")}</th><th>${__("Party")}</th><th>${__("Order Type")}</th>
-				<th>${__("Due")}</th><th>${__("Status")}</th></tr></thead>
+			<table class="bb-t"><thead><tr><th style="width:34px">#</th>
+				${BB_COLS.map(([k, l]) => `<th data-sort="${k}">${__(l)}${arr(k)}</th>`).join("")}
+			</tr></thead>
 			<tbody>${rows.map((r, i) => `
 				<tr><td>${i + 1}</td>
 				<td><a href="/app/order-bag/${encodeURIComponent(r.name)}">${esc(r.name)}</a></td>
@@ -88,6 +106,12 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 				<td><span class="bb-st">${esc(r.status)}</span></td></tr>`).join("")}</tbody></table>`
 			: `<div class="bb-none">${__("Nothing at {0}{1}.", [bench, S.party || S.dtype || S.otype ? " " + __("with these filters") : ""])}</div>`);
 	}
+	root.on("click", "th[data-sort]", function () {
+		const k = this.getAttribute("data-sort");
+		if (S.sort === k) S.dir = -S.dir;
+		else { S.sort = k; S.dir = 1; }
+		renderTable();
+	});
 
 	root.on("click", ".bb-pill", function () {
 		const k = this.getAttribute("data-k"), v = this.getAttribute("data-v");
