@@ -5,7 +5,7 @@ User import set — desk login users + Jewelima roles, linked to their Employee.
 
 Ships with the app at jewelima/data/users.csv. Columns: employee_name, roles (';'-separated);
 optional username, email. If username is blank it's derived from the name (REENA ALEX ->
-REENAALEX); if email is blank it's derived (reenaalex@jewelima.local) — the email is only the
+REENAALEX); if email is blank it's derived (reenaalex@jd.in) — the email is only the
 record id, your team logs in with the USERNAME (we enable "Allow Login using User Name").
 
 Run (ships with the app, run on command):
@@ -46,7 +46,7 @@ def _free_username(base, for_user):
 def _resolve(row):
 	ename = (row.get("employee_name") or "").strip()
 	username = (row.get("username") or "").strip() or _username(ename)
-	email = (row.get("email") or "").strip() or (username.lower() + "@jewelima.local")
+	email = (row.get("email") or "").strip() or (username.lower() + "@jd.in")
 	roles = [x.strip() for x in (row.get("roles") or "").split(";") if x.strip()]
 	return ename, username, email, roles
 

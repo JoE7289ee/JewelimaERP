@@ -3942,7 +3942,7 @@ def get_user_roles():
 # ---------------------------------------------------------------------------
 # Add User (Setup > Employee) — desk logins are created ONLY from the Employee
 # list, following the import_users conventions: username from the name, email =
-# username@jewelima.local (record id only — login is by USERNAME), Jewelima Only
+# username@jd.in (record id only — login is by USERNAME), Jewelima Only
 # module profile, Employee.user_id linked. Passwords are NEVER set here.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
@@ -3960,7 +3960,7 @@ def get_employees_without_user():
 		uname = _username(e.employee_name)
 		out.append({
 			"employee": e.name, "employee_name": e.employee_name, "designation": e.designation or "",
-			"username": uname, "email": uname.lower() + "@jewelima.local",
+			"username": uname, "email": uname.lower() + "@jd.in",
 		})
 	return {
 		"employees": out,
@@ -3996,7 +3996,7 @@ def create_employee_users(payload):
 		base = _username(base)
 		if not base:
 			frappe.throw(frappe._("{0}: username came out empty.").format(emp.employee_name))
-		email = base.lower() + "@jewelima.local"
+		email = base.lower() + "@jd.in"
 		if frappe.db.exists("User", email):
 			user = frappe.get_doc("User", email)
 		else:
