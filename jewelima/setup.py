@@ -80,8 +80,11 @@ def after_migrate():
 # ERPNext masters a Jewelima user needs to READ (we don't own these doctypes).
 JEWELIMA_READ_ERPNEXT = [
 	"Customer", "Item", "Item Group", "Sales Person", "Warehouse",
-	"BOM", "Employee", "UOM", "Company", "Bin",
+	"BOM", "Employee", "UOM", "Company", "Bin", "Order Type",
 ]
+# Masters the Ordering role must READ to place an order (Party / Salesman / Type
+# dropdowns) — granted directly so the role stands alone without the base role.
+JEWELIMA_ORDERING_READ = ["Customer", "Sales Person", "Order Type"]
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
@@ -129,6 +132,10 @@ def setup_roles():
 			perms.update({"submit": 1, "cancel": 1, "amend": 1})
 		grant(dt, "Jewelima Ordering", perms)
 
+	# Ordering must READ the order masters (Party / Salesman / Type) on its own
+	for dt in JEWELIMA_ORDERING_READ:
+		grant(dt, "Jewelima Ordering", {"read": 1, "report": 1})
+
 	# shared pages -> both roles; place-order -> Ordering ONLY (base users file
 	# requests on order-requests instead of placing orders)
 	def set_page_roles(page, wanted, strip=()):
@@ -152,6 +159,15 @@ def setup_roles():
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
 		               strip=("Jewelima", "Manufacturing Manager", "Manufacturing User"))
+
+	# Strip Jewelima Ordering from any page it shouldn't reach (e.g. import-stock was
+	# authored with it). The Ordering role only opens the order-flow pages above.
+	ordering_ok = set(JEWELIMA_ORDER_PAGES) | set(JEWELIMA_ORDERING_ONLY_PAGES) | {"all-requests"}
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Ordering"}, fields=["parent"], pluck="parent"):
+		if page not in ordering_ok:
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != "Jewelima Ordering"])
+			pg.save(ignore_permissions=True)
 
 	# Role Profile bundle for easy assignment
 	if not frappe.db.exists("Role Profile", "Jewelima Order Taker"):
