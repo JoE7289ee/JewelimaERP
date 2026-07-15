@@ -82,9 +82,14 @@ JEWELIMA_READ_ERPNEXT = [
 	"Customer", "Item", "Item Group", "Sales Person", "Warehouse",
 	"BOM", "Employee", "UOM", "Company", "Bin", "Order Type",
 ]
-# Masters the Ordering role must READ to place an order (Party / Salesman / Type
-# dropdowns) — granted directly so the role stands alone without the base role.
-JEWELIMA_ORDERING_READ = ["Customer", "Sales Person", "Order Type"]
+# Masters the Ordering role must READ. Party / Salesman / Type feed the order
+# header; Design Type + Design Style + Item (raw materials, incl. the karat golds)
+# feed the New Design dialog — the order-taker CREATES designs from Place Order
+# (create_design writes with ignore_permissions, so read is all the role needs).
+JEWELIMA_ORDERING_READ = [
+	"Customer", "Sales Person", "Order Type",
+	"Design Type", "Design Style", "Item", "Item Group", "UOM",
+]
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
