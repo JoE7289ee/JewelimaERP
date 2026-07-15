@@ -2534,6 +2534,53 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 	return get_stone_audit()
 
 
+# --- Selection: pick photos from the catalog, keep the record ----------------------
+
+@frappe.whitelist()
+def get_selection_photos(batch=None, search=None, limit=500):
+	"""The photo catalog for the Selection page + the batches to choose from."""
+	batches = [b.batch for b in frappe.db.sql(
+		"SELECT DISTINCT batch FROM `tabSelection Photo` WHERE IFNULL(batch,'') != '' ORDER BY batch DESC", as_dict=True)]
+	filters = {"active": 1}
+	if batch:
+		filters["batch"] = batch
+	if search:
+		filters["code"] = ["like", "%{0}%".format(search)]
+	rows = frappe.get_all("Selection Photo", filters=filters,
+		fields=["name", "code", "image", "gold_gms", "cts", "batch"],
+		order_by="code", limit_page_length=cint(limit) or 500)
+	return {"batches": batches, "photos": rows, "total": len(rows)}
+
+
+@frappe.whitelist()
+def create_selection(payload):
+	"""Record what a party picked: one Selection with a line per photo."""
+	p = frappe.parse_json(payload)
+	party = p.get("party")
+	codes = p.get("photos") or []
+	if not party or not frappe.db.exists("Customer", party):
+		frappe.throw(frappe._("Pick the Party."))
+	if not codes:
+		frappe.throw(frappe._("Select at least one photo."))
+	doc = frappe.get_doc({
+		"doctype": "Selection", "party": party,
+		"selection_date": p.get("selection_date") or frappe.utils.today(),
+		"batch": p.get("batch") or None, "remarks": p.get("remarks"),
+		"items": [{"photo": c} for c in codes],
+	})
+	doc.insert(ignore_permissions=True)   # controller fills code/image/weights + totals
+	frappe.db.commit()
+	return {"name": doc.name, "total_photos": doc.total_photos,
+		"total_gold": doc.total_gold, "total_cts": doc.total_cts}
+
+
+@frappe.whitelist()
+def get_recent_selections(limit=15):
+	"""Latest selection records for the page's side list."""
+	return frappe.get_all("Selection", fields=["name", "party", "selection_date", "batch", "total_photos", "total_gold", "total_cts"],
+		order_by="creation desc", limit_page_length=cint(limit) or 15)
+
+
 @frappe.whitelist()
 def export_table_xlsx(title, data):
 	"""Generic table -> xlsx download. `data` = [[header...], [row...], ...] exactly

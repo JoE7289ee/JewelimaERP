@@ -1,0 +1,117 @@
+{
+ "actions": [],
+ "autoname": "field:code",
+ "creation": "2026-07-15 16:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "code",
+  "batch",
+  "image",
+  "col_sp",
+  "gold_gms",
+  "cts",
+  "active",
+  "source_file"
+ ],
+ "fields": [
+  {
+   "fieldname": "code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Code",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "The folder/day the photos came from, e.g. 14-07-26.",
+   "fieldname": "batch",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Batch"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Photo"
+  },
+  {
+   "fieldname": "col_sp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gold_gms",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Gold (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "cts",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Diamond (ct)",
+   "precision": "3"
+  },
+  {
+   "default": "1",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active"
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source File",
+   "unique": 1
+  }
+ ],
+ "image_field": "image",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-15 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Selection Photo",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Jewelima"
+  }
+ ],
+ "sort_field": "code",
+ "sort_order": "ASC",
+ "states": []
+}

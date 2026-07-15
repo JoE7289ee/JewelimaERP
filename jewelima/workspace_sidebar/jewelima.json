@@ -880,6 +880,58 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "image",
+   "indent": 0,
+   "keep_closed": 1,
+   "label": "Selection",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "image",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Selection",
+   "link_to": "select-photos",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "archive",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Selection Records",
+   "link_to": "Selection",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "image",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Selection Photos",
+   "link_to": "Selection Photo",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "chart-column",
    "indent": 0,
    "keep_closed": 1,
@@ -1372,7 +1424,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-14 23:37:26.328925",
+ "modified": "2026-07-15 12:16:56.408532",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

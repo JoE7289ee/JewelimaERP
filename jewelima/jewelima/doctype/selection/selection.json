@@ -1,0 +1,139 @@
+{
+ "actions": [],
+ "autoname": "SEL-.#####",
+ "creation": "2026-07-15 16:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "party",
+  "selection_date",
+  "batch",
+  "col_head",
+  "total_photos",
+  "total_gold",
+  "total_cts",
+  "sec_items",
+  "items",
+  "sec_remarks",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "party",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Party",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fieldname": "selection_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Batch"
+  },
+  {
+   "fieldname": "col_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_photos",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Photos",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_gold",
+   "fieldtype": "Float",
+   "label": "Total Gold (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_cts",
+   "fieldtype": "Float",
+   "label": "Total Diamond (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_items",
+   "fieldtype": "Section Break",
+   "label": "Selected Photos"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Items",
+   "options": "Selection Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_remarks",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-15 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Selection",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Jewelima",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
