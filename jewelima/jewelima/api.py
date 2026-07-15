@@ -2575,6 +2575,53 @@ def create_selection(payload):
 
 
 @frappe.whitelist()
+def get_selected_pieces(party=None, batch=None, from_date=None, to_date=None, selection=None):
+	"""Selected Pieces board: the selection records that match + every picked photo
+	(with which record/party it came from), plus headline totals."""
+	cond, vals = ["1=1"], {}
+	if party:
+		cond.append("s.party = %(party)s")
+		vals["party"] = party
+	if batch:
+		cond.append("s.batch = %(batch)s")
+		vals["batch"] = batch
+	if from_date:
+		cond.append("s.selection_date >= %(fd)s")
+		vals["fd"] = from_date
+	if to_date:
+		cond.append("s.selection_date <= %(td)s")
+		vals["td"] = to_date
+	if selection:
+		cond.append("s.name = %(sel)s")
+		vals["sel"] = selection
+	where = " AND ".join(cond)
+
+	sels = frappe.db.sql("""
+		SELECT s.name, s.party, s.selection_date, s.batch, s.total_photos, s.total_gold, s.total_cts, s.remarks
+		FROM `tabSelection` s WHERE {0} ORDER BY s.selection_date DESC, s.creation DESC
+	""".format(where), vals, as_dict=True)
+
+	items = frappe.db.sql("""
+		SELECT i.photo, i.code, i.image, i.gold_gms, i.cts,
+			s.name AS selection, s.party, s.selection_date, s.batch
+		FROM `tabSelection Item` i JOIN `tabSelection` s ON s.name = i.parent
+		WHERE {0} ORDER BY s.selection_date DESC, s.creation DESC, i.idx
+	""".format(where), vals, as_dict=True)
+
+	parties = [r.party for r in frappe.db.sql("SELECT DISTINCT party FROM `tabSelection` ORDER BY party", as_dict=True) if r.party]
+	batches = [r.batch for r in frappe.db.sql("SELECT DISTINCT batch FROM `tabSelection` WHERE IFNULL(batch,'') != '' ORDER BY batch DESC", as_dict=True)]
+	return {
+		"selections": [{**r, "selection_date": str(r.selection_date or "")} for r in sels],
+		"items": [{**r, "selection_date": str(r.selection_date or "")} for r in items],
+		"parties": parties, "batches": batches,
+		"total_selections": len(sels), "total_photos": len(items),
+		"total_gold": round(sum(flt(r.gold_gms) for r in items), 3),
+		"total_cts": round(sum(flt(r.cts) for r in items), 3),
+		"unique_photos": len({r.photo for r in items}),
+	}
+
+
+@frappe.whitelist()
 def get_recent_selections(limit=15):
 	"""Latest selection records for the page's side list."""
 	return frappe.get_all("Selection", fields=["name", "party", "selection_date", "batch", "total_photos", "total_gold", "total_cts"],

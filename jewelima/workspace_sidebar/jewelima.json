@@ -906,6 +906,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "grid",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Selected Pieces",
+   "link_to": "selected-pieces",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "archive",
    "indent": 1,
    "keep_closed": 0,
@@ -1424,7 +1437,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-15 12:16:56.408532",
+ "modified": "2026-07-15 12:27:23.546103",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
