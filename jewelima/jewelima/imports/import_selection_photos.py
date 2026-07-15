@@ -36,7 +36,8 @@ def run(batch):
 		frappe.throw("No such folder: {0}".format(d))
 	made = skipped = 0
 	for fn in sorted(os.listdir(d)):
-		if not fn.lower().endswith(IMAGE_EXTS):
+		# skip macOS AppleDouble/hidden siblings (._SM-05.jpeg) — they are not photos
+		if fn.startswith(".") or not fn.lower().endswith(IMAGE_EXTS):
 			continue
 		code = os.path.splitext(fn)[0].strip()
 		src = "{0}/{1}/{2}".format(FOLDER, batch, fn)
