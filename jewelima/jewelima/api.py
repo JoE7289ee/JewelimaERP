@@ -2622,6 +2622,26 @@ def get_selected_pieces(party=None, batch=None, from_date=None, to_date=None, se
 
 
 @frappe.whitelist()
+def update_selection(name, photos):
+	"""Second pass: keep only these photos on an existing Selection. Totals
+	recompute from the remaining lines (controller). Empty is refused — delete the
+	record instead if the party dropped everything."""
+	if isinstance(photos, str):
+		photos = json.loads(photos or "[]")
+	photos = [p for p in photos if p]
+	if not frappe.db.exists("Selection", name):
+		frappe.throw(frappe._("Selection {0} not found.").format(name))
+	if not photos:
+		frappe.throw(frappe._("Nothing left — remove the whole Selection instead."))
+	doc = frappe.get_doc("Selection", name)
+	doc.set("items", [{"photo": p} for p in photos])
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "total_photos": doc.total_photos,
+		"total_gold": doc.total_gold, "total_cts": doc.total_cts}
+
+
+@frappe.whitelist()
 def get_recent_selections(limit=15):
 	"""Latest selection records for the page's side list."""
 	return frappe.get_all("Selection", fields=["name", "party", "selection_date", "batch", "total_photos", "total_gold", "total_cts"],

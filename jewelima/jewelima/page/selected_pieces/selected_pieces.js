@@ -9,7 +9,7 @@
 frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selected Pieces", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { party: "", batch: "", sel: "", data: null };
+	const S = { party: "", batch: "", sel: "", data: null, keep: null, view: 0 };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -40,6 +40,30 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		.sp-card .cap{padding:4px 7px;font-size:11.5px;font-weight:700;}
 		.sp-card .sub{padding:0 7px 5px;font-size:10.5px;color:var(--text-muted);}
 		.sp-none{padding:40px;text-align:center;color:var(--text-muted);grid-column:1/-1;}
+		.sp-card.pick{cursor:pointer;}
+		.sp-card.gone{opacity:.35;}
+		.sp-card.gone .cap:after{content:" — removed";color:var(--red-600,#c0392b);font-weight:700;}
+		.sp-editbar{flex:0 0 auto;display:none;align-items:center;gap:12px;background:var(--control-bg);border:1px solid var(--border-color);
+			border-radius:9px;padding:7px 14px;margin-bottom:8px;}
+		.sp-editbar.on{display:flex;}
+		.sp-editbar .msg{font-size:12.5px;}
+		.sp-editbar .sp-update{margin-left:auto;font-weight:700;background:#2e7d32;border-color:#2e7d32;color:#fff;}
+		.sp-view{position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,.92);display:none;flex-direction:column;}
+		.sp-view.on{display:flex;}
+		.sp-vhead{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px;color:#fff;}
+		.sp-vhead .code{font-size:19px;font-weight:800;letter-spacing:.5px;}
+		.sp-vhead .meta{font-size:13px;color:#bfc7cf;}
+		.sp-vhead .count{margin-left:auto;font-size:13px;color:#bfc7cf;}
+		.sp-vhead .x{cursor:pointer;font-size:24px;line-height:1;color:#fff;padding:0 6px;}
+		.sp-vbody{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0;position:relative;}
+		.sp-vbody img{max-width:92%;max-height:100%;object-fit:contain;}
+		.sp-nav{position:absolute;top:50%;transform:translateY(-50%);font-size:34px;color:#fff;cursor:pointer;background:rgba(0,0,0,.35);
+			border-radius:50%;width:52px;height:52px;display:flex;align-items:center;justify-content:center;user-select:none;}
+		.sp-nav:hover{background:rgba(0,0,0,.6);} .sp-nav.prev{left:14px;} .sp-nav.next{right:14px;}
+		.sp-vfoot{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:14px;}
+		.sp-keep{font-size:16px;font-weight:800;padding:11px 40px;border-radius:8px;cursor:pointer;border:2px solid #2e7d32;background:#2e7d32;color:#fff;}
+		.sp-keep.out{border-color:#c0392b;background:#fff;color:#c0392b;}
+		.sp-vhint{color:#8c959d;font-size:11.5px;}
 		</style>
 		<div class="sp-wrap">
 			<div class="sp-top">
@@ -48,6 +72,26 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 			</div>
 			<div class="sp-pills sp-batches"></div>
 			<div class="sp-tiles"></div>
+			<div class="sp-editbar">
+				<span class="msg sp-emsg"></span>
+				<button class="btn btn-xs btn-default sp-reset">${__("Reset")}</button>
+				<button class="btn btn-sm sp-update">${__("Update Selection")}</button>
+			</div>
+			<div class="sp-view">
+				<div class="sp-vhead">
+					<span class="code sp-vcode"></span><span class="meta sp-vmeta"></span>
+					<span class="count sp-vcount"></span><span class="x sp-vclose">&times;</span>
+				</div>
+				<div class="sp-vbody">
+					<span class="sp-nav prev">&#8249;</span>
+					<img class="sp-vimg" src="">
+					<span class="sp-nav next">&#8250;</span>
+				</div>
+				<div class="sp-vfoot">
+					<button class="sp-keep"></button>
+					<span class="sp-vhint">${__("← → browse · Space keeps/removes · Esc closes")}</span>
+				</div>
+			</div>
 			<div class="sp-cols">
 				<div class="sp-rail"></div>
 				<div class="sp-grid"></div>
@@ -97,22 +141,121 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 			</div>`).join("") : `<div class="sp-none" style="padding:24px;">${__("No selections.")}</div>`);
 
 		const items = m.items || [];
-		root.find(".sp-grid").html(items.length ? items.map((p) => `
-			<div class="sp-card">
+		// focusing ONE record turns the grid into a review pass: click to open big,
+		// unselect what the party dropped, then Update Selection.
+		const editing = !!S.sel && !!S.keep;
+		root.find(".sp-grid").html(items.length ? items.map((p, i) => `
+			<div class="sp-card ${editing ? "pick" : ""} ${editing && !S.keep.has(p.photo) ? "gone" : ""}" data-i="${i}" data-p="${esc(p.photo)}">
 				<img src="${encodeURI(p.image || "")}" loading="lazy" onerror="this.style.visibility='hidden'">
 				<div class="cap">${esc(p.code || p.photo)}</div>
 				<div class="sub">${esc(p.party || "")} · <a href="/app/selection/${encodeURIComponent(p.selection)}">${esc(p.selection)}</a></div>
 			</div>`).join("") : `<div class="sp-none">${__("Nothing selected for these filters.")}</div>`);
+		paintEditBar();
 	}
+
+	function paintEditBar() {
+		const editing = !!S.sel && !!S.keep;
+		root.find(".sp-editbar").toggleClass("on", editing);
+		if (!editing) return;
+		const total = (S.data.items || []).length;
+		const dropped = total - S.keep.size;
+		root.find(".sp-emsg").html(dropped
+			? __("<b>{0}</b>: keeping <b>{1}</b> of {2} — {3} removed.", [S.sel, S.keep.size, total, dropped])
+			: __("<b>{0}</b>: {1} photo(s). Click a photo to review it.", [S.sel, total]));
+		root.find(".sp-update").prop("disabled", !dropped || !S.keep.size);
+	}
+
+	// ---- fullscreen review: open big, keep or remove ---------------------------
+	function openViewer(i) {
+		const items = (S.data || {}).items || [];
+		if (!items[i]) return;
+		S.view = i;
+		const p = items[i];
+		root.find(".sp-vimg").attr("src", encodeURI(p.image || ""));
+		root.find(".sp-vcode").text(p.code || p.photo);
+		root.find(".sp-vmeta").text([p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "", p.cts ? p.cts.toFixed(2) + " ct" : ""].filter(Boolean).join(" · "));
+		paintKeep();
+		root.find(".sp-view").addClass("on");
+	}
+	function paintKeep() {
+		const items = (S.data || {}).items || [];
+		const p = items[S.view];
+		if (!p) return;
+		const kept = S.keep ? S.keep.has(p.photo) : true;
+		root.find(".sp-keep").toggleClass("out", !kept)
+			.text(kept ? __("✓ Selected — click to remove") : __("✕ Removed — click to keep"));
+		root.find(".sp-vcount").text(__("{0} of {1} · keeping {2}", [S.view + 1, items.length, S.keep ? S.keep.size : items.length]));
+	}
+	function toggleKeep() {
+		if (!S.keep) return;
+		const p = ((S.data || {}).items || [])[S.view];
+		if (!p) return;
+		S.keep.has(p.photo) ? S.keep.delete(p.photo) : S.keep.add(p.photo);
+		root.find(`.sp-card[data-p="${p.photo}"]`).toggleClass("gone", !S.keep.has(p.photo));
+		paintKeep();
+		paintEditBar();
+	}
+	const stepV = (d) => {
+		const n = ((S.data || {}).items || []).length;
+		if (n) openViewer((S.view + d + n) % n);
+	};
+	const closeViewer = () => root.find(".sp-view").removeClass("on");
+
+	root.on("click", ".sp-card.pick", function () { openViewer(cint(this.getAttribute("data-i"))); });
+	root.find(".sp-keep").on("click", toggleKeep);
+	root.find(".sp-vclose").on("click", closeViewer);
+	root.find(".sp-nav.prev").on("click", () => stepV(-1));
+	root.find(".sp-nav.next").on("click", () => stepV(1));
+	root.find(".sp-view").on("click", (e) => { if (e.target === root.find(".sp-view").get(0)) closeViewer(); });
+	$(document).on("keydown.sp", (e) => {
+		if (!root.find(".sp-view").hasClass("on")) return;
+		if (e.key === "Escape") closeViewer();
+		else if (e.key === "ArrowLeft") stepV(-1);
+		else if (e.key === "ArrowRight") stepV(1);
+		else if (e.key === " " || e.key === "Enter") toggleKeep();
+		else return;
+		e.preventDefault();
+	});
+
+	root.find(".sp-reset").on("click", () => {
+		S.keep = new Set(((S.data || {}).items || []).map((p) => p.photo));
+		paint();
+	});
+	root.find(".sp-update").on("click", () => {
+		if (!S.sel || !S.keep) return;
+		const dropped = ((S.data || {}).items || []).length - S.keep.size;
+		frappe.confirm(__("Update <b>{0}</b> — keep {1} photo(s), remove {2}?", [S.sel, S.keep.size, dropped]), () => {
+			frappe.dom.freeze(__("Updating..."));
+			frappe.call({ method: API + ".update_selection", args: { name: S.sel, photos: [...S.keep] } })
+				.then((r) => {
+					frappe.dom.unfreeze();
+					const m = r.message || {};
+					frappe.show_alert({ message: __("{0} updated — {1} photo(s).", [m.name, m.total_photos]), indicator: "green" }, 6);
+					S.keep = null;
+					load();   // reload the record, fresh keep-set on focus
+				})
+				.catch(() => frappe.dom.unfreeze());
+		});
+	});
 
 	root.on("click", ".sp-pill", function () { S.batch = this.getAttribute("data-b"); S.sel = ""; load(); });
 	root.on("click", ".sp-rec", function () {
 		const n = this.getAttribute("data-n");
 		S.sel = S.sel === n ? "" : n;   // click again to show everything
-		load();
+		S.keep = null;                  // seeded once the focused record loads
+		frappe.call({ method: API + ".get_selected_pieces", args: {
+			party: party.get_value() || null, batch: S.batch || null,
+			from_date: fd.get_value() || null, to_date: td.get_value() || null,
+			selection: S.sel || null,
+		} }).then((r) => {
+			S.data = r.message || {};
+			if (S.sel) S.keep = new Set((S.data.items || []).map((p) => p.photo));
+			paint();
+		});
 	});
 	root.find(".sp-clear").on("click", () => {
 		S.party = S.batch = S.sel = "";
+		S.keep = null;
 		party.set_value("");
 		fd.set_value("");
 		td.set_value("");
