@@ -9,7 +9,7 @@
 frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selection", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { photos: [], batch: "", sel: new Set() };
+	const S = { photos: [], batch: "", sel: new Set(), view: 0 };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -32,6 +32,23 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.sl2-card .tick{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:#2e7d32;color:#fff;display:none;align-items:center;justify-content:center;font-size:13px;font-weight:800;}
 		.sl2-card.on .tick{display:flex;}
 		.sl2-none{padding:40px;text-align:center;color:var(--text-muted);grid-column:1/-1;}
+		.sl2-view{position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,.92);display:none;flex-direction:column;}
+		.sl2-view.on{display:flex;}
+		.sl2-vhead{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px;color:#fff;}
+		.sl2-vhead .code{font-size:19px;font-weight:800;letter-spacing:.5px;}
+		.sl2-vhead .meta{font-size:13px;color:#bfc7cf;}
+		.sl2-vhead .count{margin-left:auto;font-size:13px;color:#bfc7cf;}
+		.sl2-vhead .x{cursor:pointer;font-size:24px;line-height:1;color:#fff;padding:0 6px;}
+		.sl2-vbody{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0;position:relative;}
+		.sl2-vbody img{max-width:92%;max-height:100%;object-fit:contain;}
+		.sl2-nav{position:absolute;top:50%;transform:translateY(-50%);font-size:34px;color:#fff;cursor:pointer;
+			background:rgba(0,0,0,.35);border-radius:50%;width:52px;height:52px;display:flex;align-items:center;justify-content:center;user-select:none;}
+		.sl2-nav:hover{background:rgba(0,0,0,.6);}
+		.sl2-nav.prev{left:14px;} .sl2-nav.next{right:14px;}
+		.sl2-vfoot{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:14px;}
+		.sl2-pick{font-size:16px;font-weight:800;padding:11px 44px;border-radius:8px;border:2px solid #2e7d32;background:#2e7d32;color:#fff;cursor:pointer;}
+		.sl2-pick.picked{background:#fff;color:#2e7d32;}
+		.sl2-vhint{color:#8c959d;font-size:11.5px;}
 		.sl2-strip{flex:0 0 auto;display:flex;align-items:center;gap:12px;border-top:2px solid var(--border-color);background:var(--fg-color);padding:9px 14px;flex-wrap:wrap;}
 		.sl2-strip .b{border:1px solid var(--border-color);border-radius:8px;padding:4px 16px;text-align:center;background:var(--control-bg);min-width:96px;}
 		.sl2-strip .b .bk{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
@@ -47,6 +64,21 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 			</div>
 			<div class="sl2-pills sl2-batches"></div>
 			<div class="sl2-grid"></div>
+			<div class="sl2-view">
+				<div class="sl2-vhead">
+					<span class="code sl2-vcode"></span><span class="meta sl2-vmeta"></span>
+					<span class="count sl2-vcount"></span><span class="x sl2-vclose">&times;</span>
+				</div>
+				<div class="sl2-vbody">
+					<span class="sl2-nav prev">&#8249;</span>
+					<img class="sl2-vimg" src="">
+					<span class="sl2-nav next">&#8250;</span>
+				</div>
+				<div class="sl2-vfoot">
+					<button class="sl2-pick"></button>
+					<span class="sl2-vhint">${__("← → browse · Space picks · Esc closes")}</span>
+				</div>
+			</div>
 			<div class="sl2-strip">
 				<div class="b tot"><div class="bk">${__("SELECTED")}</div><div class="bv sl2-n">0</div></div>
 				<div class="b"><div class="bk">${__("OF")}</div><div class="bv sl2-of">0</div></div>
@@ -107,11 +139,56 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		root.find(".sl2-cts").text(picked.reduce((a, p) => a + (p.cts || 0), 0).toFixed(3));
 	}
 
+	// a card opens the photo full screen — picking happens in there
 	root.on("click", ".sl2-card", function () {
-		const n = this.getAttribute("data-n");
-		S.sel.has(n) ? S.sel.delete(n) : S.sel.add(n);
-		$(this).toggleClass("on", S.sel.has(n));
+		openViewer(S.photos.findIndex((p) => p.name === this.getAttribute("data-n")));
+	});
+
+	function openViewer(i) {
+		if (i < 0 || !S.photos[i]) return;
+		S.view = i;
+		const p = S.photos[i];
+		root.find(".sl2-vimg").attr("src", encodeURI(p.image || ""));
+		root.find(".sl2-vcode").text(p.code);
+		root.find(".sl2-vmeta").text([
+			p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "",
+			p.cts ? p.cts.toFixed(2) + " ct" : "",
+		].filter(Boolean).join(" · "));
+		root.find(".sl2-vcount").text(__("{0} of {1} · {2} picked", [i + 1, S.photos.length, S.sel.size]));
+		paintPick();
+		root.find(".sl2-view").addClass("on");
+	}
+	function paintPick() {
+		const p = S.photos[S.view];
+		const picked = p && S.sel.has(p.name);
+		root.find(".sl2-pick").toggleClass("picked", !!picked)
+			.text(picked ? __("✓ Selected — click to remove") : __("Select this"));
+	}
+	function togglePick() {
+		const p = S.photos[S.view];
+		if (!p) return;
+		S.sel.has(p.name) ? S.sel.delete(p.name) : S.sel.add(p.name);
+		root.find(`.sl2-card[data-n="${p.name}"]`).toggleClass("on", S.sel.has(p.name));
+		paintPick();
+		root.find(".sl2-vcount").text(__("{0} of {1} · {2} picked", [S.view + 1, S.photos.length, S.sel.size]));
 		sum();
+	}
+	const step = (d) => openViewer((S.view + d + S.photos.length) % S.photos.length);
+	const closeViewer = () => root.find(".sl2-view").removeClass("on");
+
+	root.find(".sl2-pick").on("click", togglePick);
+	root.find(".sl2-vclose").on("click", closeViewer);
+	root.find(".sl2-nav.prev").on("click", () => step(-1));
+	root.find(".sl2-nav.next").on("click", () => step(1));
+	root.find(".sl2-view").on("click", (e) => { if (e.target === root.find(".sl2-view").get(0)) closeViewer(); });
+	$(document).on("keydown.sl2", (e) => {
+		if (!root.find(".sl2-view").hasClass("on")) return;
+		if (e.key === "Escape") closeViewer();
+		else if (e.key === "ArrowLeft") step(-1);
+		else if (e.key === "ArrowRight") step(1);
+		else if (e.key === " " || e.key === "Enter") togglePick();
+		else return;
+		e.preventDefault();
 	});
 	root.on("click", ".sl2-pill", function () {
 		S.batch = this.getAttribute("data-b");
