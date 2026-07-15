@@ -8,6 +8,7 @@ def after_install():
 	show_employee_names_in_links()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_employee_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
@@ -45,6 +46,7 @@ def after_migrate():
 	show_employee_names_in_links()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_employee_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
@@ -635,6 +637,30 @@ def run_initial_setup(
 	if frappe.is_setup_complete():
 		return f"Setup completed for company '{company_name}'."
 	return "setup_complete ran but System Settings still shows incomplete — check error log."
+
+
+def get_employee_custom_fields():
+	"""Login Details on the Employee form — the desk account behind the person
+	(login name, last login, live sessions, reset). Painted by public/js/employee.js;
+	System Manager only, and only once the Employee is linked to a User."""
+	return {
+		"Employee": [
+			{
+				"fieldname": "jw_login_section",
+				"fieldtype": "Section Break",
+				"label": "Login Details",
+				"insert_after": "user_id",
+				"collapsible": 0,
+				"depends_on": "eval:!doc.__islocal",
+			},
+			{
+				"fieldname": "jw_login_html",
+				"fieldtype": "HTML",
+				"label": "Login",
+				"insert_after": "jw_login_section",
+			},
+		],
+	}
 
 
 def get_warehouse_custom_fields():

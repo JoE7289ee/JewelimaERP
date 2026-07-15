@@ -4199,6 +4199,69 @@ def create_employee(payload):
 # the floor accounts, so the admin sets passwords directly and hands them over.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
+def get_login_accounts(user=None):
+	"""Every desk account with its login handle, last login and live session count.
+	`user` narrows it to one account (the Employee form's Login Details section)."""
+	frappe.only_for(("System Manager",))
+	filters = {"user_type": "System User", "name": ["!=", "Guest"]}
+	if user:
+		filters["name"] = user
+	users = frappe.get_all("User", filters=filters,
+		fields=["name", "username", "full_name", "enabled", "last_login", "last_active"],
+		order_by="enabled desc, username asc, name asc", limit_page_length=0)
+
+	# tabSessions is a plain table, not a DocType — count the live ones per user
+	live = {}
+	for r in frappe.db.sql("""SELECT user, COUNT(*) n, MAX(lastupdate) seen
+		FROM tabSessions WHERE status='Active' GROUP BY user""", as_dict=True):
+		live[r.user] = r
+
+	emps = {}
+	for e in frappe.get_all("Employee", filters={"user_id": ["is", "set"]},
+		fields=["name", "employee_name", "user_id", "designation", "department"], limit_page_length=0):
+		emps[e.user_id] = e
+
+	roles = {}
+	for r in frappe.get_all("Has Role", filters={"parenttype": "User"},
+		fields=["parent", "role"], limit_page_length=0):
+		roles.setdefault(r.parent, []).append(r.role)
+
+	out = []
+	for u in users:
+		s = live.get(u.name) or {}
+		e = emps.get(u.name) or {}
+		out.append({
+			"user": u.name,
+			"username": u.username or "",
+			"full_name": e.get("employee_name") or u.full_name or "",
+			"employee": e.get("name") or "",
+			"designation": e.get("designation") or "",
+			"department": e.get("department") or "",
+			"enabled": u.enabled,
+			"last_login": u.last_login,
+			"last_active": u.last_active,
+			"sessions": s.get("n") or 0,
+			"session_seen": s.get("seen"),
+			"roles": sorted(r for r in roles.get(u.name, []) if r),
+			"never_logged_in": 0 if u.last_login else 1,
+		})
+	return out
+
+
+@frappe.whitelist()
+def end_user_sessions(user):
+	"""Log a user out of every device. Doesn't touch their password."""
+	frappe.only_for(("System Manager",))
+	if not user or not frappe.db.exists("User", user) or user == "Guest":
+		frappe.throw(frappe._("Pick a real user."))
+	from frappe.sessions import clear_sessions
+
+	clear_sessions(user=user, force=True)
+	frappe.db.commit()
+	return {"user": user}
+
+
+@frappe.whitelist()
 def admin_reset_password(user, new_password):
 	frappe.only_for(("System Manager",))
 	if not user or not frappe.db.exists("User", user) or user == "Guest":

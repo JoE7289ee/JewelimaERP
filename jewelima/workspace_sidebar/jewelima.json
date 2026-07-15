@@ -1338,7 +1338,7 @@
    "icon": "settings-2",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Reset Password",
+   "label": "Login Accounts",
    "link_to": "reset-password",
    "link_type": "Page",
    "show_arrow": 0,
@@ -1450,7 +1450,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-15 14:45:41.350849",
+ "modified": "2026-07-15 15:28:56.359254",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
