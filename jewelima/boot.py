@@ -46,3 +46,11 @@ def boot_session(bootinfo):
 	ws = bootinfo.get("workspace_sidebar_item")
 	if isinstance(ws, dict):
 		bootinfo.workspace_sidebar_item = {k: v for k, v in ws.items() if k.lower() == "jewelima"}
+
+	# the desktop icon grid (Desktop Icon records: Organization, Accounting, …) is
+	# likewise role-blind — leave only Jewelima's tile.
+	icons = bootinfo.get("desktop_icons")
+	if isinstance(icons, list):
+		bootinfo.desktop_icons = [
+			i for i in icons if (i.get("label") or "").strip().lower() == "jewelima"
+		]
