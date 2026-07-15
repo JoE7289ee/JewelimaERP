@@ -36,4 +36,13 @@ def boot_session(bootinfo):
 	_patch_erpnext_gate()
 	if _erpnext_for_admins_only():
 		return  # admins keep the full set
+
+	# the app switcher
 	bootinfo.app_data = [a for a in (bootinfo.app_data or []) if a.get("app_name") == "jewelima"]
+
+	# the apps screen tiles: every Workspace Sidebar (real ones like "Organization"
+	# AND module auto-generated ones like "Accounting") ships in the boot regardless
+	# of roles — keep only Jewelima's.
+	ws = bootinfo.get("workspace_sidebar_item")
+	if isinstance(ws, dict):
+		bootinfo.workspace_sidebar_item = {k: v for k, v in ws.items() if k.lower() == "jewelima"}
