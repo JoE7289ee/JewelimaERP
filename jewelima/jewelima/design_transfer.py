@@ -59,6 +59,60 @@ def _payload(designs=None, design_type=None, status=None):
 
 
 @frappe.whitelist()
+def list_designs(design_type=None, status=None, search=None):
+	"""The pick-list for export: every design with what it carries."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	filters = {}
+	if design_type:
+		filters["design_type"] = design_type
+	if status:
+		filters["status"] = status
+	if search:
+		filters["design_name"] = ["like", "%{0}%".format(search)]
+	rows = frappe.get_all("Design", filters=filters,
+		fields=["name", "design_name", "design_type", "design_style", "status", "image"],
+		order_by="design_name", limit_page_length=0)
+	counts = {}
+	for r in frappe.db.sql("""SELECT parent, COUNT(*) n FROM `tabDesign BOM Item`
+		WHERE parenttype='Design' GROUP BY parent""", as_dict=True):
+		counts[r.parent] = r.n
+	for r in rows:
+		r["materials"] = counts.get(r.name, 0)
+		r["has_photo"] = 1 if r.get("image") else 0
+	return rows
+
+
+@frappe.whitelist()
+def inspect_import(file_url):
+	"""Read an export .zip WITHOUT writing anything: what's inside, and for each
+	design whether it's new here, already exists, or can't land (missing material)."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	parts = (file_url or "").lstrip("/").split("/")
+	path = frappe.get_site_path("public" if parts[0] == "files" else "", *parts)
+	if not os.path.exists(path):
+		frappe.throw(frappe._("Upload the export .zip first."))
+	with zipfile.ZipFile(path) as z:
+		if "designs.json" not in z.namelist():
+			frappe.throw(frappe._("Not a design export — designs.json is missing."))
+		manifest = json.loads(z.read("manifest.json")) if "manifest.json" in z.namelist() else {}
+		rows = json.loads(z.read("designs.json"))
+		out = []
+		for r in rows:
+			nm = (r.get("design_name") or "").strip()
+			mats = [m for m in (r.get("materials") or []) if m.get("item")]
+			missing = sorted({m["item"] for m in mats if not frappe.db.exists("Item", m["item"])})
+			out.append({
+				"design_name": nm, "design_type": r.get("design_type"),
+				"design_style": r.get("design_style"), "status": r.get("status"),
+				"materials": len(mats), "has_photo": 1 if r.get("image") else 0,
+				"exists": bool(frappe.db.exists("Design", nm)),
+				"missing": missing,
+				"blocked": bool(missing) or not mats,
+			})
+	return {"manifest": manifest, "designs": out}
+
+
+@frappe.whitelist()
 def export_designs(designs=None, design_type=None, status=None):
 	"""Stream a .zip of the chosen designs (photo + BOM + masters)."""
 	frappe.only_for(("System Manager", "Stock Manager"))
@@ -125,10 +179,13 @@ def _ensure(doctype, value):
 
 
 @frappe.whitelist()
-def import_designs(file_url, mode="skip"):
+def import_designs(file_url, mode="skip", designs=None):
 	"""Upsert designs from an exported .zip. Keyed on design_name.
-	mode: skip (default) | update"""
+	mode: skip (default) | update. `designs` = only import these names (all if empty)."""
 	frappe.only_for(("System Manager", "Stock Manager"))
+	if isinstance(designs, str):
+		designs = json.loads(designs or "[]")
+	wanted = set(designs or [])
 	parts = (file_url or "").lstrip("/").split("/")
 	path = frappe.get_site_path("public" if parts[0] == "files" else "", *parts)
 	if not os.path.exists(path):
@@ -142,7 +199,7 @@ def import_designs(file_url, mode="skip"):
 		rows = json.loads(z.read("designs.json"))
 		for r in rows:
 			nm = (r.get("design_name") or "").strip()
-			if not nm:
+			if not nm or (wanted and nm not in wanted):
 				continue
 			try:
 				mats = [m for m in (r.get("materials") or []) if m.get("item")]
@@ -184,5 +241,6 @@ def import_designs(file_url, mode="skip"):
 			except Exception as e:
 				errors.append({"design": nm, "error": str(e)[:160]})
 	frappe.db.commit()
+	total = len([r for r in rows if not wanted or (r.get("design_name") or "").strip() in wanted])
 	return {"created": created, "updated": updated, "skipped": skipped,
-		"errors": errors, "total": len(rows)}
+		"errors": errors, "total": total}
