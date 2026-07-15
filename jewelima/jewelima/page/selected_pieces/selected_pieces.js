@@ -161,7 +161,7 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		const dropped = total - S.keep.size;
 		root.find(".sp-emsg").html(dropped
 			? __("<b>{0}</b>: keeping <b>{1}</b> of {2} — {3} removed.", [S.sel, S.keep.size, total, dropped])
-			: __("<b>{0}</b>: {1} photo(s). Click a photo to review it.", [S.sel, total]));
+			: __("<b>{0}</b>: {1} photo(s). Click a photo to review it · PDF is in the top bar.", [S.sel, total]));
 		root.find(".sp-update").prop("disabled", !dropped || !S.keep.size);
 	}
 
@@ -262,6 +262,12 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		load();
 	});
 
+	function pdf() {
+		if (!S.sel) return frappe.msgprint(__("Pick a selection from the list first."));
+		window.open("/api/method/frappe.utils.print_format.download_pdf?doctype=" + encodeURIComponent("Selection") +
+			"&name=" + encodeURIComponent(S.sel) + "&format=" + encodeURIComponent("Selection Sheet") + "&no_letterhead=1", "_blank");
+	}
+	page.add_inner_button(__("PDF"), pdf);
 	page.add_inner_button(__("New Selection"), () => frappe.set_route("select-photos"));
 	page.add_inner_button(__("Refresh"), load);
 	load();
