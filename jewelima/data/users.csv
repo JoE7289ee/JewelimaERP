@@ -1,3 +1,4 @@
-employee_name,email,roles
-REENA ALEX,reena.alex@jewelima.local,Jewelima;Jewelima Ordering
-ANOOP ASOKAN,anoop.asokan@jewelima.local,Jewelima
+employee_name,username,email,roles
+REENA ALEX,REENA,,Jewelima Ordering
+SANGEETHA,SANGEETHA,,Jewelima Ordering
+ANAKHA K JAYAN,ANAKHA,,Jewelima Ordering

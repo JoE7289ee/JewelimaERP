@@ -10,8 +10,12 @@ record id, your team logs in with the USERNAME (we enable "Allow Login using Use
 
 Run (ships with the app, run on command):
 
+  bench --site <site> execute jewelima.jewelima.imports.import_users.preview   # writes nothing
   bench --site <site> execute jewelima.jewelima.imports.import_users.run
-  bench --site <site> execute jewelima.jewelima.imports.import_users.run --kwargs "{'dry_run': True}"
+
+The preview walks every row read-only and prints, per person, whether the user would be
+created or already exists, which roles would be added, and whether the Employee is on this
+site — so you see exactly what `run` will do before it does it. Both are idempotent.
 
 Passwords are NOT stored in the repo. Set the same password for everyone yourself with:
 
@@ -51,22 +55,83 @@ def _resolve(row):
 	return ename, username, email, roles
 
 
+def _plan_row(row):
+	"""Read-only: what THIS row would do to the site. Writes nothing."""
+	ename, username, email, roles = _resolve(row)
+	emp = (
+		frappe.db.get_value("Employee", {"employee_name": ename}, ["name", "employee_name"], as_dict=True)
+		if ename else None
+	)
+	user_exists = bool(frappe.db.exists("User", email))
+	have = {r.role for r in frappe.get_doc("User", email).get("roles")} if user_exists else set()
+	known = [r for r in roles if frappe.db.exists("Role", r)]
+	return {
+		"employee_name": ename,
+		"username": username,
+		"email": email,
+		"roles": roles,
+		"employee": emp.name if emp else None,
+		"user_exists": user_exists,
+		"new_roles": [r for r in known if r not in have],
+		"unknown_roles": [r for r in roles if r not in known],
+		"will_link": bool(emp and not frappe.db.get_value("Employee", emp.name, "user_id")),
+	}
+
+
+def preview(file_path=None):
+	"""What `run` would do, without touching anything. Same as run(dry_run=True)."""
+	return run(file_path=file_path, dry_run=True)
+
+
+def _print_plan(plans):
+	print(f"\nDRY RUN — nothing written. {len(plans)} row(s) in the file:\n")
+	for p in plans:
+		act = "exists" if p["user_exists"] else "CREATE"
+		emp = p["employee"] or "!! NO EMPLOYEE"
+		bits = [f"  {act:6}  {p['employee_name']:<18} login={p['username']:<12} {p['email']:<22} emp={emp}"]
+		if p["new_roles"]:
+			bits.append("    + roles: " + ", ".join(p["new_roles"]))
+		if p["unknown_roles"]:
+			bits.append("    !! role does not exist on this site: " + ", ".join(p["unknown_roles"]))
+		if p["will_link"]:
+			bits.append("    + link to Employee")
+		print("\n".join(bits))
+	would_create = len([p for p in plans if not p["user_exists"]])
+	problems = [p for p in plans if not p["employee"] or p["unknown_roles"]]
+	print(
+		f"\nWould create: {would_create}   already there: {len(plans) - would_create}   "
+		f"role adds: {sum(len(p['new_roles']) for p in plans)}   "
+		f"employee links: {len([p for p in plans if p['will_link']])}   "
+		f"needs attention: {len(problems)}\n"
+	)
+	return {
+		"rows": len(plans),
+		"would_create": would_create,
+		"would_exist": len(plans) - would_create,
+		"role_adds": sum(len(p["new_roles"]) for p in plans),
+		"links": len([p for p in plans if p["will_link"]]),
+		"problems": [p["employee_name"] for p in problems],
+		"plan": plans,
+	}
+
+
 def run(file_path=None, dry_run=False):
 	file_path = file_path or _bundled_file()
 	with open(file_path) as fh:
 		rows = list(csv.DictReader(fh))
+	rows = [r for r in rows if (r.get("employee_name") or r.get("username") or r.get("email") or "").strip()]
+
+	if dry_run:
+		return _print_plan([_plan_row(r) for r in rows])
 
 	# users log in by username, not email
-	if not dry_run:
-		frappe.db.set_single_value("System Settings", "allow_login_using_user_name", 1)
+	frappe.db.set_single_value("System Settings", "allow_login_using_user_name", 1)
 
 	created = exists = role_adds = linked = failed = 0
 	errors = []
 	for row in rows:
 		ename, username, email, roles = _resolve(row)
 		if not email:
-			continue
-		if dry_run:
 			continue
 		try:
 			emp = (
