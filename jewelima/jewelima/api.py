@@ -4518,7 +4518,7 @@ def create_product_sale(payload):
 				"reason": "Sold via {0}".format(sale.name),
 			})
 			ht.flags.ignore_permissions = True
-			ht.insert()
+			ht.insert(ignore_permissions=True)
 		frappe.db.set_value("Order Bag", nm, {"stock_status": "Sold", "held_by": customer})
 	frappe.db.commit()
 	return {"name": sale.name, "grand_total": sale.grand_total, "stock_entry": se.name, "count": len(rows)}
@@ -4583,7 +4583,7 @@ def transfer_holder(bags, to_customer, reason=None):
 			"transfer_time": now, "transferred_by": frappe.session.user, "reason": reason,
 		})
 		ht.flags.ignore_permissions = True
-		ht.insert()
+		ht.insert(ignore_permissions=True)
 		frappe.db.set_value("Order Bag", nm, "held_by", to_customer)
 		made.append(ht.name)
 	frappe.db.commit()

@@ -136,6 +136,21 @@ def setup_roles():
 	for dt in JEWELIMA_ORDERING_READ:
 		grant(dt, "Jewelima Ordering", {"read": 1, "report": 1})
 
+	# ---- RECORDS ARE VIEW-ONLY ------------------------------------------------
+	# Every Jewelima record is created/changed through our PAGES, whose APIs write
+	# with ignore_permissions. In the desk the records are history only: no create,
+	# edit, delete, submit or cancel for anyone. System Manager keeps full rights as
+	# the admin escape hatch. (Runs AFTER the grants above so it wins.)
+	MUTATING = ("write", "create", "delete", "submit", "cancel", "amend")
+	for dt in our_doctypes:
+		roles_on = {p.role for p in frappe.get_all(
+			"Custom DocPerm", filters={"parent": dt}, fields=["role"])}
+		for role in roles_on:
+			if role == "System Manager":
+				continue
+			for ptype in MUTATING:
+				update_permission_property(dt, role, 0, ptype, 0, validate=False)
+
 	# shared pages -> both roles; place-order -> Ordering ONLY (base users file
 	# requests on order-requests instead of placing orders)
 	def set_page_roles(page, wanted, strip=()):
