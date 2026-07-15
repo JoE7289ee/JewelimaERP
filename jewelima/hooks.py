@@ -21,6 +21,9 @@ add_to_apps_screen = [
 	}
 ]
 
+# shop staff see ONLY the Jewelima app (ERPNext's own check lets every system user in)
+extend_bootinfo = "jewelima.boot.boot_session"
+
 # Includes in <head>
 # ------------------
 
