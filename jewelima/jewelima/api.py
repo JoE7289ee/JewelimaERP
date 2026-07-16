@@ -2537,19 +2537,81 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 # --- Selection: pick photos from the catalog, keep the record ----------------------
 
 @frappe.whitelist()
-def get_selection_photos(batch=None, search=None, limit=500):
-	"""The photo catalog for the Selection page + the batches to choose from."""
+def get_selection_photos(batch=None, search=None, design_type=None, provider=None, tag=None,
+		in_stock=None, limit=500):
+	"""The photo catalog for the Selection page + everything there is to filter by
+	(batches, design types, providers, tags)."""
 	batches = [b.batch for b in frappe.db.sql(
 		"SELECT DISTINCT batch FROM `tabSelection Photo` WHERE IFNULL(batch,'') != '' ORDER BY batch DESC", as_dict=True)]
+	design_types = frappe.db.sql_list(
+		"SELECT DISTINCT design_type FROM `tabSelection Photo` WHERE IFNULL(design_type,'') != '' ORDER BY design_type")
+	providers = frappe.db.sql_list(
+		"SELECT DISTINCT provider FROM `tabSelection Photo` WHERE IFNULL(provider,'') != '' ORDER BY provider")
+	tags_all = frappe.db.sql_list(
+		"""SELECT DISTINCT tag FROM `tabSelection Photo Tag` WHERE parenttype='Selection Photo' ORDER BY tag""")
+
 	filters = {"active": 1}
 	if batch:
 		filters["batch"] = batch
+	if design_type:
+		filters["design_type"] = design_type
+	if provider:
+		filters["provider"] = provider
 	if search:
 		filters["code"] = ["like", "%{0}%".format(search)]
+	if cint(in_stock):
+		filters["stock_pcs"] = [">", 0]
 	rows = frappe.get_all("Selection Photo", filters=filters,
-		fields=["name", "code", "image", "gold_gms", "cts", "batch"],
+		fields=["name", "code", "image", "gold_gms", "cts", "batch", "design_type", "provider", "stock_pcs"],
 		order_by="code", limit_page_length=cint(limit) or 500)
-	return {"batches": batches, "photos": rows, "total": len(rows)}
+
+	# tags per photo, painted on the cards + used for the tag filter
+	photo_tags = {}
+	for r in frappe.db.sql("""SELECT parent, tag FROM `tabSelection Photo Tag`
+		WHERE parenttype='Selection Photo' ORDER BY idx""", as_dict=True):
+		photo_tags.setdefault(r.parent, []).append(r.tag)
+	for r in rows:
+		r["tags"] = photo_tags.get(r.name, [])
+	if tag:
+		rows = [r for r in rows if tag in r["tags"]]
+	return {"batches": batches, "design_types": design_types, "providers": providers,
+		"tags": tags_all, "photos": rows, "total": len(rows)}
+
+
+@frappe.whitelist()
+def update_selection_photo(name, design_type=None, provider=None, stock_pcs=None, tags=None):
+	"""Edit one catalog photo from the Selection page's viewer: assign the design
+	type, who makes it, the pieces in stock, and its tags. Unknown tags are created
+	on the fly (Design Tag is a plain master, shared with the Design Bank)."""
+	if not frappe.db.exists("Selection Photo", name):
+		frappe.throw(frappe._("Photo {0} not found.").format(name))
+	if isinstance(tags, str):
+		tags = json.loads(tags or "[]")
+	doc = frappe.get_doc("Selection Photo", name)
+	if design_type is not None:
+		if design_type and not frappe.db.exists("Design Type", design_type):
+			frappe.throw(frappe._("Design Type {0} does not exist.").format(design_type))
+		doc.design_type = design_type or None
+	if provider is not None:
+		if provider and not frappe.db.exists("Supplier", provider):
+			frappe.throw(frappe._("Provider (Supplier) {0} does not exist.").format(provider))
+		doc.provider = provider or None
+	if stock_pcs is not None:
+		doc.stock_pcs = max(cint(stock_pcs), 0)
+	if tags is not None:
+		clean = []
+		for t in tags:
+			t = (t or "").strip().upper()
+			if not t or t in clean:
+				continue
+			if not frappe.db.exists("Design Tag", t):
+				frappe.get_doc({"doctype": "Design Tag", "tag_name": t}).insert(ignore_permissions=True)
+			clean.append(t)
+		doc.set("tags", [{"tag": t} for t in clean])
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "design_type": doc.design_type, "provider": doc.provider,
+		"stock_pcs": doc.stock_pcs, "tags": [t.tag for t in doc.tags]}
 
 
 @frappe.whitelist()

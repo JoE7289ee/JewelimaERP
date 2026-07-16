@@ -9,7 +9,7 @@
 frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selection", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { photos: [], batch: "", sel: new Set(), view: 0 };
+	const S = { photos: [], batch: "", dtp: "", provider: "", tag: "", sel: new Set(), view: 0 };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -26,8 +26,15 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.sl2-grid{flex:1 1 auto;overflow-y:auto;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px;padding:4px 2px 10px;align-content:start;grid-auto-rows:min-content;}
 		.sl2-card{border:2px solid var(--border-color);border-radius:9px;overflow:hidden;background:var(--fg-color);cursor:pointer;position:relative;}
 		.sl2-card img{width:100%;height:230px;object-fit:contain;display:block;background:#111;}
-		.sl2-card .cap{padding:4px 7px;font-size:11.5px;font-weight:700;}
+		.sl2-card .cap{padding:4px 7px;font-size:11.5px;font-weight:700;display:flex;align-items:center;gap:5px;}
 		.sl2-card .sub{padding:0 7px 5px;font-size:10.5px;color:var(--text-muted);}
+		.sl2-card .stk{margin-left:auto;font-size:9.5px;font-weight:800;padding:1px 7px;border-radius:9px;background:#e8f5e9;color:#2e7d32;}
+		.sl2-card .tgs{padding:0 7px 6px;display:flex;gap:4px;flex-wrap:wrap;}
+		.sl2-card .tg{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--subtle-accent);color:var(--text-muted);letter-spacing:.03em;}
+		.sl2-vedit{cursor:pointer;font-size:13px;color:#8fd0ff;border:1px solid #35566e;border-radius:6px;padding:3px 14px;}
+		.sl2-vedit:hover{background:rgba(143,208,255,.12);}
+		.sl2-vtags{display:flex;gap:5px;}
+		.sl2-vtags .tg{font-size:10px;font-weight:700;padding:1px 8px;border-radius:9px;background:rgba(255,255,255,.14);color:#dfe6ec;}
 		.sl2-card.on{border-color:#2e7d32;box-shadow:0 0 0 2px rgba(46,125,50,.25);}
 		.sl2-card .tick{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:#2e7d32;color:#fff;display:none;align-items:center;justify-content:center;font-size:13px;font-weight:800;}
 		.sl2-card.on .tick{display:flex;}
@@ -62,11 +69,15 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<div class="sl2-party"></div><div class="sl2-date"></div><div class="sl2-search"></div>
 				<button class="btn btn-default sl2-clear">${__("Clear picks")}</button>
 			</div>
+			<div class="sl2-pills sl2-dtypes"></div>
 			<div class="sl2-pills sl2-batches"></div>
+			<div class="sl2-pills sl2-more"></div>
 			<div class="sl2-grid"></div>
 			<div class="sl2-view">
 				<div class="sl2-vhead">
 					<span class="code sl2-vcode"></span><span class="meta sl2-vmeta"></span>
+					<span class="sl2-vtags"></span>
+					<span class="sl2-vedit">${__("Edit")}</span>
 					<span class="count sl2-vcount"></span><span class="x sl2-vclose">&times;</span>
 				</div>
 				<div class="sl2-vbody">
@@ -103,20 +114,28 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 
 	function load() {
 		frappe.call({ method: API + ".get_selection_photos",
-			args: { batch: S.batch || null, search: (search.get_value() || "").trim() || null } }).then((r) => {
+			args: { batch: S.batch || null, design_type: S.dtp || null, provider: S.provider || null,
+				tag: S.tag || null, search: (search.get_value() || "").trim() || null } }).then((r) => {
 			const m = r.message || {};
 			S.photos = m.photos || [];
-			paintBatches(m.batches || []);
+			paintPills(m);
 			paintGrid();
 		});
 	}
 
-	function paintBatches(batches) {
-		root.find(".sl2-batches").html(batches.length
-			? `<span class="lbl">${__("Batch")}</span>
-			   <span class="sl2-pill ${S.batch ? "" : "on"}" data-b="">${__("All")}</span>` +
-			  batches.map((b) => `<span class="sl2-pill ${S.batch === b ? "on" : ""}" data-b="${esc(b)}">${esc(b)}</span>`).join("")
-			: "");
+	const pillRow = (lbl, list, cur, key) => (list.length
+		? `<span class="lbl">${lbl}</span>
+		   <span class="sl2-pill ${cur ? "" : "on"}" data-k="${key}" data-v="">${__("All")}</span>` +
+		  list.map((b) => `<span class="sl2-pill ${cur === b ? "on" : ""}" data-k="${key}" data-v="${esc(b)}">${esc(b)}</span>`).join("")
+		: "");
+
+	function paintPills(m) {
+		root.find(".sl2-dtypes").html(pillRow(__("Design Type"), m.design_types || [], S.dtp, "dtp"));
+		root.find(".sl2-batches").html(pillRow(__("Batch"), m.batches || [], S.batch, "batch"));
+		root.find(".sl2-more").html(
+			pillRow(__("Provider"), m.providers || [], S.provider, "provider") +
+			((m.providers || []).length && (m.tags || []).length ? `<span class="lbl" style="margin-left:14px;"></span>` : "") +
+			pillRow(__("Tag"), m.tags || [], S.tag, "tag"));
 	}
 
 	function paintGrid() {
@@ -124,8 +143,13 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 			<div class="sl2-card ${S.sel.has(p.name) ? "on" : ""}" data-n="${esc(p.name)}">
 				<div class="tick">✓</div>
 				<img src="${encodeURI(p.image || "")}" loading="lazy" onerror="this.style.visibility='hidden'">
-				<div class="cap">${esc(p.code)}</div>
-				<div class="sub">${p.gold_gms ? p.gold_gms.toFixed(2) + " g" : ""}${p.gold_gms && p.cts ? " · " : ""}${p.cts ? p.cts.toFixed(2) + " ct" : ""}</div>
+				<div class="cap">${esc(p.code)}${p.stock_pcs ? `<span class="stk">${p.stock_pcs} ${__("in stock")}</span>` : ""}</div>
+				<div class="sub">${[
+					p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "",
+					p.cts ? p.cts.toFixed(2) + " ct" : "",
+					p.design_type ? esc(p.design_type) : "",
+				].filter(Boolean).join(" · ")}</div>
+				${(p.tags || []).length ? `<div class="tgs">${p.tags.map((t) => `<span class="tg">${esc(t)}</span>`).join("")}</div>` : ""}
 			</div>`).join("") : `<div class="sl2-none">${__("No photos. Import a batch first.")}</div>`);
 		sum();
 	}
@@ -153,7 +177,11 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		root.find(".sl2-vmeta").text([
 			p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "",
 			p.cts ? p.cts.toFixed(2) + " ct" : "",
+			p.design_type || "",
+			p.provider || "",
+			p.stock_pcs ? __("{0} pcs in stock", [p.stock_pcs]) : "",
 		].filter(Boolean).join(" · "));
+		root.find(".sl2-vtags").html((p.tags || []).map((t) => `<span class="tg">${esc(t)}</span>`).join(""));
 		root.find(".sl2-vcount").text(__("{0} of {1} · {2} picked", [i + 1, S.photos.length, S.sel.size]));
 		paintPick();
 		root.find(".sl2-view").addClass("on");
@@ -191,8 +219,43 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		e.preventDefault();
 	});
 	root.on("click", ".sl2-pill", function () {
-		S.batch = this.getAttribute("data-b");
+		S[this.getAttribute("data-k")] = this.getAttribute("data-v");
 		load();
+	});
+
+	// --- Edit from the viewer: design type / provider / stock / tags ----------
+	root.find(".sl2-vedit").on("click", () => {
+		const p = S.photos[S.view];
+		if (!p) return;
+		const d = new frappe.ui.Dialog({
+			title: __("Edit {0}", [p.code]),
+			fields: [
+				{ fieldtype: "Link", fieldname: "design_type", label: __("Design Type"),
+					options: "Design Type", default: p.design_type || "" },
+				{ fieldtype: "Link", fieldname: "provider", label: __("Provider"),
+					options: "Supplier", default: p.provider || "" },
+				{ fieldtype: "Int", fieldname: "stock_pcs", label: __("Stock (pcs)"),
+					default: p.stock_pcs || 0 },
+				{ fieldtype: "Data", fieldname: "tags", label: __("Tags"),
+					default: (p.tags || []).join(", "),
+					description: __("comma separated — new tags are created automatically") },
+			],
+			primary_action_label: __("Save"),
+			primary_action: (v) => {
+				d.hide();
+				frappe.call({ method: API + ".update_selection_photo", args: {
+					name: p.name, design_type: v.design_type || "", provider: v.provider || "",
+					stock_pcs: v.stock_pcs || 0,
+					tags: (v.tags || "").split(",").map((t) => t.trim()).filter(Boolean),
+				} }).then((r) => {
+					Object.assign(p, r.message || {});
+					frappe.show_alert({ message: __("Saved."), indicator: "green" }, 3);
+					paintGrid();
+					openViewer(S.view);
+				});
+			},
+		});
+		d.show();
 	});
 	root.find(".sl2-clear").on("click", () => { S.sel.clear(); paintGrid(); });
 
@@ -217,6 +280,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	});
 
 	page.add_inner_button(__("Records"), () => frappe.set_route("List", "Selection"));
+	page.add_inner_button(__("Export / Import"), () => frappe.set_route("selection-transfer"));
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };

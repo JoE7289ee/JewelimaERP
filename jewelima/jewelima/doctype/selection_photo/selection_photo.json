@@ -7,13 +7,18 @@
  "engine": "InnoDB",
  "field_order": [
   "code",
+  "design_type",
+  "provider",
   "batch",
   "image",
   "col_sp",
   "gold_gms",
   "cts",
+  "stock_pcs",
   "active",
-  "source_file"
+  "source_file",
+  "sec_tags",
+  "tags"
  ],
  "fields": [
   {
@@ -26,10 +31,26 @@
    "unique": 1
   },
   {
+   "description": "Which design family this photo belongs to.",
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Design Type",
+   "options": "Design Type"
+  },
+  {
+   "description": "Who is making these pieces.",
+   "fieldname": "provider",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Provider",
+   "options": "Supplier"
+  },
+  {
    "description": "The folder/day the photos came from, e.g. 14-07-26.",
    "fieldname": "batch",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Batch"
   },
@@ -57,6 +78,14 @@
    "precision": "3"
   },
   {
+   "default": "0",
+   "description": "Pieces of this design available in stock right now.",
+   "fieldname": "stock_pcs",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Stock (pcs)"
+  },
+  {
    "default": "1",
    "fieldname": "active",
    "fieldtype": "Check",
@@ -68,12 +97,23 @@
    "hidden": 1,
    "label": "Source File",
    "unique": 1
+  },
+  {
+   "fieldname": "sec_tags",
+   "fieldtype": "Section Break",
+   "label": "Photo Tags"
+  },
+  {
+   "fieldname": "tags",
+   "fieldtype": "Table MultiSelect",
+   "label": "Tags",
+   "options": "Selection Photo Tag"
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-15 16:00:00.000000",
+ "modified": "2026-07-16 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Selection Photo",

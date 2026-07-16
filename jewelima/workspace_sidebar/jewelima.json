@@ -956,6 +956,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "upload",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Export / Import",
+   "link_to": "selection-transfer",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "chart-column",
@@ -1450,7 +1463,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-15 15:28:56.359254",
+ "modified": "2026-07-16 10:21:03.459467",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
