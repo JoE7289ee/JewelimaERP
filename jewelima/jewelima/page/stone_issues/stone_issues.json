@@ -4,16 +4,19 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-14 18:00:00.000000",
+ "modified": "2026-07-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "stone-issues",
  "owner": "Administrator",
  "page_name": "stone-issues",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "Jewelima"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
  ],
  "standard": "Yes",
  "title": "Stone Issues"

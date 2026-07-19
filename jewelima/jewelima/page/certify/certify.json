@@ -4,16 +4,19 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-12 10:00:00.000000",
+ "modified": "2026-07-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "certify",
  "owner": "Administrator",
  "page_name": "certify",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "Jewelima"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
  ],
  "standard": "Yes",
  "title": "Certification"

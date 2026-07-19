@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-14 20:00:00.000000",
+ "modified": "2026-07-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "bench-cad",
@@ -16,9 +16,6 @@
   },
   {
    "role": "Stock Manager"
-  },
-  {
-   "role": "Jewelima"
   }
  ],
  "standard": "Yes",

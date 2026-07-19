@@ -107,20 +107,30 @@ JEWELIMA_TRANSFER_READ = ["Order Bag", "Order Bag Transfer"]
 
 
 def setup_roles():
-	"""Create the Jewelima role hierarchy + permissions. Idempotent (runs on after_migrate).
+	"""Create the Jewelima roles + permissions. Idempotent (runs on after_migrate).
 
-	  Jewelima          — base for every user: desk access + READ-ONLY on our doctypes and the
-	                      ERPNext masters we use; nothing from other modules.
-	  Jewelima Ordering — sits on top: full control of the order flow (Job Order, Order Bag,
-	                      Ordering, Design) + the order pages. Frappe roles are additive, so an
-	                      order-taker simply holds BOTH roles.
-	  Role Profile 'Jewelima Order Taker' = Jewelima + Jewelima Ordering.
+	Two standalone roles — the old base 'Jewelima' role is retired (scrubbed on
+	every run so stragglers can't come back):
+
+	  Jewelima Ordering — the order desk: the order pages (place-order, card-info,
+	                      job-order-status, order-requests) + read-only on our
+	                      doctypes and the ERPNext masters their pages paint from.
+	                      Writes happen through page APIs (ignore_permissions).
+	  Jewelima Transfer — the runner: ONE page (transfer-order-bag) + read on the
+	                      bag and its movement history. Nothing else.
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for name in ("Jewelima", "Jewelima Ordering", "Jewelima Transfer"):
+	for name in ("Jewelima Ordering", "Jewelima Transfer"):
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
+
+	# the old base 'Jewelima' role is RETIRED — only Ordering and Transfer exist now.
+	# Scrub every trace (users, pages, role profiles, doc perms), then the role itself.
+	if frappe.db.exists("Role", "Jewelima"):
+		frappe.db.delete("Has Role", {"role": "Jewelima"})
+		frappe.db.delete("Custom DocPerm", {"role": "Jewelima"})
+		frappe.delete_doc("Role", "Jewelima", force=True, ignore_permissions=True)
 
 	def grant(doctype, role, ptypes):
 		if not frappe.db.exists("DocType", doctype):
@@ -129,10 +139,11 @@ def setup_roles():
 		for ptype, val in ptypes.items():
 			update_permission_property(doctype, role, 0, ptype, val, validate=False)
 
-	# base Jewelima — read-only on our doctypes + the ERPNext masters
+	# Ordering inherits what the old base role used to carry: read-only on our
+	# doctypes + the ERPNext masters (their pages need these to paint)
 	our_doctypes = frappe.get_all("DocType", filters={"module": "Jewelima", "istable": 0}, pluck="name")
 	for dt in our_doctypes + JEWELIMA_READ_ERPNEXT:
-		grant(dt, "Jewelima", {"read": 1, "report": 1, "export": 1})
+		grant(dt, "Jewelima Ordering", {"read": 1, "report": 1, "export": 1})
 
 	# Jewelima Ordering — full control of the order flow
 	base = {"read": 1, "write": 1, "create": 1, "delete": 1, "print": 1, "export": 1, "email": 1, "share": 1}
@@ -182,10 +193,10 @@ def setup_roles():
 			pg.save(ignore_permissions=True)
 
 	for page in JEWELIMA_ORDER_PAGES:
-		set_page_roles(page, ("Jewelima", "Jewelima Ordering"))
+		set_page_roles(page, ("Jewelima Ordering",))
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
-		               strip=("Jewelima", "Manufacturing Manager", "Manufacturing User"))
+		               strip=("Manufacturing Manager", "Manufacturing User"))
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so
@@ -214,11 +225,11 @@ def setup_roles():
 			pg.set("roles", [r for r in pg.roles if r.role != "Jewelima Ordering"])
 			pg.save(ignore_permissions=True)
 
-	# Role Profile bundle for easy assignment
+	# Role Profile bundle for easy assignment (Ordering stands alone now)
 	if not frappe.db.exists("Role Profile", "Jewelima Order Taker"):
 		frappe.get_doc({
 			"doctype": "Role Profile", "role_profile": "Jewelima Order Taker",
-			"roles": [{"role": "Jewelima"}, {"role": "Jewelima Ordering"}],
+			"roles": [{"role": "Jewelima Ordering"}],
 		}).insert(ignore_permissions=True)
 
 	# Module Profile: hide every module except Jewelima from the desk (assigned to users by
