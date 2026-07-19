@@ -12,14 +12,20 @@ from frappe import _
 
 @frappe.whitelist()
 def get_tags(with_counts=1):
-	"""All Design Tags (name + colour), optionally with how many designs carry each."""
+	"""All Design Tags (name + colour). The master is SHARED: the Design Bank and the
+	Selection catalog both tag with it, so the counts come back per use — `count`
+	(designs, kept for old callers) and `sel_count` (selection photos)."""
 	tags = frappe.get_all("Design Tag", fields=["name as tag", "color"], order_by="tag_name asc")
 	if int(with_counts or 0):
 		counts = dict(
 			frappe.db.sql("SELECT tag, COUNT(*) FROM `tabDesign Bank Tag` GROUP BY tag")
 		)
+		sel_counts = dict(
+			frappe.db.sql("SELECT tag, COUNT(*) FROM `tabSelection Photo Tag` GROUP BY tag")
+		)
 		for t in tags:
 			t["count"] = int(counts.get(t["tag"], 0))
+			t["sel_count"] = int(sel_counts.get(t["tag"], 0))
 	return tags
 
 
@@ -51,7 +57,9 @@ def rename_tag(old, new):
 
 @frappe.whitelist()
 def delete_tag(tag_name):
+	# the master is shared — clear it off BOTH catalogs, not just the bank
 	frappe.db.delete("Design Bank Tag", {"tag": tag_name})
+	frappe.db.delete("Selection Photo Tag", {"tag": tag_name})
 	frappe.delete_doc("Design Tag", tag_name, force=True, ignore_permissions=True)
 	frappe.db.commit()
 	return {"ok": 1}

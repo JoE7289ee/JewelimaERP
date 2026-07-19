@@ -1,9 +1,11 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Design Tags — create and manage the custom tags used by the Design Gallery. Add a tag,
-// recolour it (inline), rename it (cascades to every design), delete it (removes it from
-// all designs), or jump to the gallery filtered by that tag.
+// Design Tags — create and manage the tags. One shared master: the Design Bank
+// AND the Selection catalog both tag with it, so each row shows how many designs
+// and how many selection photos carry the tag right now. Add, recolour (inline),
+// rename (cascades everywhere), delete (removed from both catalogs), or jump to
+// either catalog filtered by that tag.
 // Route: /app/design-tags
 
 frappe.pages["design-tags"].on_page_load = function (wrapper) {
@@ -31,7 +33,7 @@ frappe.pages["design-tags"].on_page_load = function (wrapper) {
 	<div class="dt-wrap">
 		<div class="dt-head"><span class="dt-count"></span></div>
 		<table class="dt-tbl">
-			<thead><tr><th style="width:48px">Colour</th><th>Tag</th><th class="num" style="width:90px">Designs</th><th class="dt-act" style="width:230px">Actions</th></tr></thead>
+			<thead><tr><th style="width:48px">Colour</th><th>Tag</th><th class="num" style="width:90px">Designs</th><th class="num" style="width:120px">Selection Photos</th><th class="dt-act" style="width:270px">Actions</th></tr></thead>
 			<tbody></tbody>
 		</table>
 	</div>`);
@@ -43,18 +45,23 @@ frappe.pages["design-tags"].on_page_load = function (wrapper) {
 	function load() {
 		frappe.call(API + ".get_tags", { with_counts: 1 }).then((r) => {
 			const tags = r.message || [];
-			root.find(".dt-count").text(`${tags.length} tags · ${tags.reduce((a, t) => a + t.count, 0).toLocaleString()} tagged designs`);
+			root.find(".dt-count").text(__("{0} tags · {1} tagged designs · {2} tagged selection photos",
+				[tags.length,
+					tags.reduce((a, t) => a + (t.count || 0), 0).toLocaleString(),
+					tags.reduce((a, t) => a + (t.sel_count || 0), 0).toLocaleString()]));
 			$tb.empty();
-			if (!tags.length) { $tb.append(`<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:20px">No tags yet — create one.</td></tr>`); return; }
+			if (!tags.length) { $tb.append(`<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No tags yet — create one.</td></tr>`); return; }
 			tags.forEach((t) => $tb.append(`
 				<tr data-tag="${esc(t.tag)}">
 					<td><input type="color" class="dt-color" value="${esc(t.color || "#6b7280")}"></td>
 					<td class="dt-name">${esc(t.tag)}</td>
-					<td class="num">${t.count.toLocaleString()}</td>
+					<td class="num">${(t.count || 0).toLocaleString()}</td>
+					<td class="num">${(t.sel_count || 0).toLocaleString()}</td>
 					<td class="dt-act">
-						<button class="btn btn-xs btn-default dt-view">View</button>
-						<button class="btn btn-xs btn-default dt-rename">Rename</button>
-						<button class="btn btn-xs btn-danger dt-del">Delete</button>
+						<button class="btn btn-xs btn-default dt-view" ${t.count ? "" : "disabled"}>${__("Designs")}</button>
+						<button class="btn btn-xs btn-default dt-viewsel" ${t.sel_count ? "" : "disabled"}>${__("Selection")}</button>
+						<button class="btn btn-xs btn-default dt-rename">${__("Rename")}</button>
+						<button class="btn btn-xs btn-danger dt-del">${__("Delete")}</button>
 					</td>
 				</tr>`));
 		});
@@ -72,6 +79,12 @@ frappe.pages["design-tags"].on_page_load = function (wrapper) {
 		frappe.set_route("design-gallery");
 	});
 
+	$tb.on("click", ".dt-viewsel", function () {
+		const tag = $(this).closest("tr").data("tag");
+		frappe.route_options = { tag };
+		frappe.set_route("select-photos");
+	});
+
 	$tb.on("click", ".dt-rename", function () {
 		const tag = $(this).closest("tr").data("tag");
 		frappe.prompt(
@@ -85,7 +98,7 @@ frappe.pages["design-tags"].on_page_load = function (wrapper) {
 	$tb.on("click", ".dt-del", function () {
 		const tag = $(this).closest("tr").data("tag");
 		frappe.confirm(
-			`Delete tag <b>${esc(tag)}</b>? It will be removed from all designs that use it.`,
+			`Delete tag <b>${esc(tag)}</b>? It will be removed from every design AND every selection photo that uses it.`,
 			() => frappe.call(API + ".delete_tag", { tag_name: tag })
 				.then(() => { frappe.show_alert({ message: "Deleted", indicator: "red" }); load(); })
 		);
