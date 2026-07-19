@@ -2668,6 +2668,101 @@ def update_selection_photo(name, design_type=None, provider=None, stock_pcs=None
 		"stock_pcs": doc.stock_pcs, "tags": [t.tag for t in doc.tags]}
 
 
+# --- Selection Review (page: selection-review) --------------------------------
+# Imported photos carry OCR'd weights; a human confirms each one (code, photo,
+# gold, dia) and ticks Reviewed. A photo's CODE is its identity — one design,
+# one code — so a code change that collides brings up both photos side by side
+# and one of them has to go.
+@frappe.whitelist()
+def get_selection_review(status="pending", search=None, limit=100):
+	"""The review queue. status: pending | done | all."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	filters = {"active": 1}
+	if status == "pending":
+		filters["reviewed"] = 0
+	elif status == "done":
+		filters["reviewed"] = 1
+	if search:
+		filters["code"] = ["like", "%{0}%".format(search)]
+	rows = frappe.get_all("Selection Photo", filters=filters,
+		fields=["name", "code", "image", "gold_gms", "cts", "stock_pcs",
+			"design_type", "provider", "reviewed"],
+		order_by="reviewed asc, code asc", limit_page_length=cint(limit) or 100)
+	return {"rows": rows,
+		"total": frappe.db.count("Selection Photo", {"active": 1}),
+		"reviewed": frappe.db.count("Selection Photo", {"active": 1, "reviewed": 1})}
+
+
+@frappe.whitelist()
+def review_save(name, gold_gms=None, cts=None, stock_pcs=None, reviewed=None,
+		design_type=None, provider=None):
+	"""One review row: save values and/or the Reviewed tick."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	if not frappe.db.exists("Selection Photo", name):
+		frappe.throw(frappe._("Photo {0} not found.").format(name))
+	doc = frappe.get_doc("Selection Photo", name)
+	if gold_gms is not None:
+		doc.gold_gms = flt(gold_gms)
+	if cts is not None:
+		doc.cts = flt(cts)
+	if stock_pcs is not None:
+		doc.stock_pcs = max(cint(stock_pcs), 0)
+	if design_type is not None:
+		doc.design_type = design_type or None
+	if provider is not None:
+		doc.provider = provider or None
+	if reviewed is not None:
+		doc.reviewed = cint(reviewed)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "reviewed": doc.reviewed}
+
+
+@frappe.whitelist()
+def review_rename_code(name, new_code):
+	"""Change a photo's code. If the target code exists, DON'T rename — return
+	both photos so the page can show them side by side; the reviewer then keeps
+	one via review_delete_photo and retries."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	new_code = (new_code or "").strip().upper()
+	if not new_code:
+		frappe.throw(frappe._("Code is required."))
+	if new_code == name:
+		return {"renamed": 0, "name": name}
+	if frappe.db.exists("Selection Photo", new_code):
+		fields = ["name", "code", "image", "gold_gms", "cts", "stock_pcs",
+			"design_type", "provider", "reviewed"]
+		mine = frappe.db.get_value("Selection Photo", name, fields, as_dict=True)
+		other = frappe.db.get_value("Selection Photo", new_code, fields, as_dict=True)
+		for d in (mine, other):
+			d["selections"] = frappe.db.count("Selection Item", {"photo": d.name})
+		return {"conflict": 1, "mine": mine, "existing": other}
+	frappe.rename_doc("Selection Photo", name, new_code, force=True)
+	frappe.db.set_value("Selection Photo", new_code, "code", new_code, update_modified=False)
+	frappe.db.commit()
+	return {"renamed": 1, "name": new_code}
+
+
+@frappe.whitelist()
+def review_delete_photo(name):
+	"""Remove a duplicate photo. Any Selection lines pointing at it are dropped
+	and their Selections re-totalled first, so nothing dangles."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	if not frappe.db.exists("Selection Photo", name):
+		frappe.throw(frappe._("Photo {0} not found.").format(name))
+	parents = frappe.get_all("Selection Item", filters={"photo": name}, pluck="parent")
+	for sel in set(parents):
+		doc = frappe.get_doc("Selection", sel)
+		doc.set("items", [i for i in doc.items if i.photo != name])
+		if doc.items:
+			doc.save(ignore_permissions=True)
+		else:
+			frappe.delete_doc("Selection", sel, force=True, ignore_permissions=True)
+	frappe.delete_doc("Selection Photo", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": name, "selections_touched": len(set(parents))}
+
+
 # --- Selection Tags (their own master — different purpose from the bank's Design Tags)
 @frappe.whitelist()
 def get_selection_tags(with_counts=1):

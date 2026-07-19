@@ -14,6 +14,7 @@
   "gold_gms",
   "cts",
   "stock_pcs",
+  "reviewed",
   "active",
   "source_file",
   "sec_tags",
@@ -78,6 +79,15 @@
    "label": "Stock (pcs)"
   },
   {
+   "default": "0",
+   "description": "Ticked once a human has checked the code, photo and weights.",
+   "fieldname": "reviewed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reviewed"
+  },
+  {
    "default": "1",
    "fieldname": "active",
    "fieldtype": "Check",
@@ -105,7 +115,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-19 17:30:00.000000",
+ "modified": "2026-07-19 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Selection Photo",

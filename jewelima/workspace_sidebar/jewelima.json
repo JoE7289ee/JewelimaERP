@@ -919,6 +919,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "check",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Review",
+   "link_to": "selection-review",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "grid",
    "indent": 1,
    "keep_closed": 0,
@@ -1502,7 +1515,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-19 14:44:38.178598",
+ "modified": "2026-07-19 17:36:47.092887",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
