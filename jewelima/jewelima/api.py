@@ -2588,16 +2588,17 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 		in_stock=None, gold_min=None, gold_max=None, cts_min=None, cts_max=None, limit=500):
 	"""The photo catalog for the Selection page + everything there is to filter by
-	(design types, providers, tags)."""
+	(design types, providers, tags). ONLY reviewed photos show — the unreviewed
+	imports live on the Review page until a human confirms them."""
 	design_types = frappe.db.sql_list(
-		"SELECT DISTINCT design_type FROM `tabSelection Photo` WHERE IFNULL(design_type,'') != '' ORDER BY design_type")
+		"SELECT DISTINCT design_type FROM `tabSelection Photo` WHERE IFNULL(design_type,'') != '' AND reviewed=1 ORDER BY design_type")
 	providers = frappe.db.sql_list(
-		"SELECT DISTINCT provider FROM `tabSelection Photo` WHERE IFNULL(provider,'') != '' ORDER BY provider")
+		"SELECT DISTINCT provider FROM `tabSelection Photo` WHERE IFNULL(provider,'') != '' AND reviewed=1 ORDER BY provider")
 	# EVERY tag ever created (the master), not just the used ones — the filter bar
 	# shows the whole vocabulary, with its colours
 	tags_all = frappe.get_all("Selection Tag", fields=["name as tag", "color"], order_by="tag_name")
 
-	filters = {"active": 1}
+	filters = {"active": 1, "reviewed": 1}
 	if design_type:
 		filters["design_type"] = design_type
 	if provider:
