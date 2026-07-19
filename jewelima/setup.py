@@ -99,6 +99,11 @@ JEWELIMA_ORDER_PAGES = ["card-info", "job-order-status", "order-requests"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
 JEWELIMA_ORDERING_ONLY_PAGES = ["place-order"]
+# The runner role: moves cards from one place to another and NOTHING else.
+# One page; the transfer APIs write with ignore_permissions, and Transfer Rules
+# can further restrict which from->to moves the role may make.
+JEWELIMA_TRANSFER_PAGES = ["transfer-order-bag"]
+JEWELIMA_TRANSFER_READ = ["Order Bag", "Order Bag Transfer"]
 
 
 def setup_roles():
@@ -113,7 +118,7 @@ def setup_roles():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for name in ("Jewelima", "Jewelima Ordering"):
+	for name in ("Jewelima", "Jewelima Ordering", "Jewelima Transfer"):
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -181,6 +186,24 @@ def setup_roles():
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
 		               strip=("Jewelima", "Manufacturing Manager", "Manufacturing User"))
+
+	# ---- Jewelima Transfer: the runner ------------------------------------------
+	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so
+	# the page paints, nothing else — read is the only right granted, so the
+	# view-only sweep above needs no second pass. Writes happen through the page's
+	# APIs (ignore_permissions); Transfer Rules can narrow WHICH from -> to moves
+	# the role may make.
+	for dt in JEWELIMA_TRANSFER_READ:
+		grant(dt, "Jewelima Transfer", {"read": 1})
+	for page in JEWELIMA_TRANSFER_PAGES:
+		set_page_roles(page, ("Jewelima Transfer",))
+	# tight: strip the role from any other page it may have picked up
+	transfer_ok = set(JEWELIMA_TRANSFER_PAGES)
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Transfer"}, pluck="parent"):
+		if page not in transfer_ok:
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != "Jewelima Transfer"])
+			pg.save(ignore_permissions=True)
 
 	# Strip Jewelima Ordering from any page it shouldn't reach (e.g. import-stock was
 	# authored with it). The Ordering role only opens the order-flow pages above.
