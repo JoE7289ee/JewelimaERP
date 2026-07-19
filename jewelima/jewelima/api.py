@@ -2538,7 +2538,7 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 
 @frappe.whitelist()
 def get_selection_photos(batch=None, search=None, design_type=None, provider=None, tag=None,
-		in_stock=None, limit=500):
+		in_stock=None, gold_min=None, gold_max=None, cts_min=None, cts_max=None, limit=500):
 	"""The photo catalog for the Selection page + everything there is to filter by
 	(batches, design types, providers, tags)."""
 	batches = [b.batch for b in frappe.db.sql(
@@ -2565,6 +2565,15 @@ def get_selection_photos(batch=None, search=None, design_type=None, provider=Non
 	rows = frappe.get_all("Selection Photo", filters=filters,
 		fields=["name", "code", "image", "gold_gms", "cts", "batch", "design_type", "provider", "stock_pcs"],
 		order_by="code", limit_page_length=cint(limit) or 500)
+	# weight-range filters (a photo with no value entered never matches a range)
+	if gold_min not in (None, ""):
+		rows = [r for r in rows if flt(r.gold_gms) >= flt(gold_min)]
+	if gold_max not in (None, ""):
+		rows = [r for r in rows if flt(r.gold_gms) and flt(r.gold_gms) <= flt(gold_max)]
+	if cts_min not in (None, ""):
+		rows = [r for r in rows if flt(r.cts) >= flt(cts_min)]
+	if cts_max not in (None, ""):
+		rows = [r for r in rows if flt(r.cts) and flt(r.cts) <= flt(cts_max)]
 
 	# tags per photo, painted on the cards + used for the tag filter
 	photo_tags = {}

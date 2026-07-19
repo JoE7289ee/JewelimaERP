@@ -18,6 +18,9 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.sl2-wrap{display:flex;flex-direction:column;height:calc(100vh - 110px);}
 		.sl2-top{flex:0 0 auto;display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:8px;}
 		.sl2-top .frappe-control{margin:0;flex:0 0 190px;}
+		.sl2-top .sl2-rng .frappe-control{flex:0 0 82px;}
+		.sl2-rng{display:flex;gap:6px;align-items:end;}
+		.sl2-rng .dash{padding-bottom:8px;color:var(--text-muted);}
 		.sl2-top .control-label{font-size:11px;color:var(--text-muted);}
 		.sl2-pills{flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
 		.sl2-pills .lbl{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
@@ -67,6 +70,8 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		<div class="sl2-wrap">
 			<div class="sl2-top">
 				<div class="sl2-party"></div><div class="sl2-date"></div><div class="sl2-search"></div>
+				<div class="sl2-rng"><div class="sl2-gmin"></div><span class="dash">–</span><div class="sl2-gmax"></div></div>
+				<div class="sl2-rng"><div class="sl2-cmin"></div><span class="dash">–</span><div class="sl2-cmax"></div></div>
 				<button class="btn btn-default sl2-clear">${__("Clear picks")}</button>
 			</div>
 			<div class="sl2-pills sl2-dtypes"></div>
@@ -109,13 +114,20 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const party = mk(".sl2-party", { fieldtype: "Link", label: __("Party"), fieldname: "party", options: "Customer", reqd: 1 });
 	const dt = mk(".sl2-date", { fieldtype: "Date", label: __("Date"), fieldname: "selection_date", reqd: 1 });
 	const search = mk(".sl2-search", { fieldtype: "Data", label: __("Search code"), fieldname: "search", placeholder: __("SM-…") });
+	const gmin = mk(".sl2-gmin", { fieldtype: "Float", label: __("Gold g from"), fieldname: "gmin" });
+	const gmax = mk(".sl2-gmax", { fieldtype: "Float", label: __("to"), fieldname: "gmax" });
+	const cmin = mk(".sl2-cmin", { fieldtype: "Float", label: __("Ct from"), fieldname: "cmin" });
+	const cmax = mk(".sl2-cmax", { fieldtype: "Float", label: __("to"), fieldname: "cmax" });
 	dt.set_value(frappe.datetime.get_today());
 	search.$input.on("input", frappe.utils.debounce(() => load(), 400));
+	[gmin, gmax, cmin, cmax].forEach((c) => c.$input.on("input", frappe.utils.debounce(() => load(), 500)));
 
 	function load() {
 		frappe.call({ method: API + ".get_selection_photos",
 			args: { batch: S.batch || null, design_type: S.dtp || null, provider: S.provider || null,
-				tag: S.tag || null, search: (search.get_value() || "").trim() || null } }).then((r) => {
+				tag: S.tag || null, search: (search.get_value() || "").trim() || null,
+				gold_min: gmin.get_value() || null, gold_max: gmax.get_value() || null,
+				cts_min: cmin.get_value() || null, cts_max: cmax.get_value() || null } }).then((r) => {
 			const m = r.message || {};
 			S.photos = m.photos || [];
 			paintPills(m);
