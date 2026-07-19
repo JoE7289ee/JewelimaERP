@@ -198,7 +198,7 @@ def import_selection(file_url, mode="skip", with_selections=1):
 				_ensure("Design Type", p.get("design_type"))
 				_ensure("Supplier", p.get("provider"), "supplier_name")
 				for t in p.get("tags") or []:
-					_ensure("Design Tag", t, "tag_name")
+					_ensure("Selection Tag", t, "tag_name")
 				img = _restore_image(z, p.get("image"), code)
 
 				vals = {

@@ -2604,14 +2604,67 @@ def update_selection_photo(name, design_type=None, provider=None, stock_pcs=None
 			t = (t or "").strip().upper()
 			if not t or t in clean:
 				continue
-			if not frappe.db.exists("Design Tag", t):
-				frappe.get_doc({"doctype": "Design Tag", "tag_name": t}).insert(ignore_permissions=True)
+			if not frappe.db.exists("Selection Tag", t):
+				frappe.get_doc({"doctype": "Selection Tag", "tag_name": t}).insert(ignore_permissions=True)
 			clean.append(t)
 		doc.set("tags", [{"tag": t} for t in clean])
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name, "design_type": doc.design_type, "provider": doc.provider,
 		"stock_pcs": doc.stock_pcs, "tags": [t.tag for t in doc.tags]}
+
+
+# --- Selection Tags (their own master — different purpose from the bank's Design Tags)
+@frappe.whitelist()
+def get_selection_tags(with_counts=1):
+	"""All Selection Tags (name + colour) + how many catalog photos carry each."""
+	tags = frappe.get_all("Selection Tag", fields=["name as tag", "color"], order_by="tag_name asc")
+	if cint(with_counts):
+		counts = dict(frappe.db.sql(
+			"SELECT tag, COUNT(*) FROM `tabSelection Photo Tag` GROUP BY tag"))
+		for t in tags:
+			t["count"] = int(counts.get(t["tag"], 0))
+	return tags
+
+
+@frappe.whitelist()
+def create_selection_tag(tag_name, color=None):
+	tag_name = (tag_name or "").strip()
+	if not tag_name:
+		frappe.throw(frappe._("Tag name is required"))
+	if frappe.db.exists("Selection Tag", tag_name):
+		frappe.throw(frappe._("Tag '{0}' already exists").format(tag_name))
+	doc = frappe.get_doc({"doctype": "Selection Tag", "tag_name": tag_name,
+		"color": color or "#6b7280"}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"tag": doc.name, "color": doc.color, "count": 0}
+
+
+@frappe.whitelist()
+def rename_selection_tag(old, new):
+	new = (new or "").strip()
+	if not new:
+		frappe.throw(frappe._("New name is required"))
+	if old == new:
+		return {"tag": new}
+	frappe.rename_doc("Selection Tag", old, new, force=True)  # cascades into Selection Photo Tag
+	frappe.db.commit()
+	return {"tag": new}
+
+
+@frappe.whitelist()
+def delete_selection_tag(tag_name):
+	frappe.db.delete("Selection Photo Tag", {"tag": tag_name})
+	frappe.delete_doc("Selection Tag", tag_name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+@frappe.whitelist()
+def set_selection_tag_color(tag_name, color):
+	frappe.db.set_value("Selection Tag", tag_name, "color", color)
+	frappe.db.commit()
+	return {"ok": 1}
 
 
 @frappe.whitelist()

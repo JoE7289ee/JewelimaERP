@@ -281,7 +281,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 
 	page.add_inner_button(__("Records"), () => frappe.set_route("List", "Selection"));
 	page.add_inner_button(__("Export / Import"), () => frappe.set_route("selection-transfer"));
-	page.add_inner_button(__("Manage Tags"), () => frappe.set_route("design-tags"));
+	page.add_inner_button(__("Manage Tags"), () => frappe.set_route("selection-tags"));
 	page.add_inner_button(__("Refresh"), load);
 	// arriving from Design Tags with a tag pre-picked
 	if (frappe.route_options && frappe.route_options.tag) {
