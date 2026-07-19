@@ -7,7 +7,7 @@ One ZIP carries everything:
 
     manifest.json             {version, site, exported_on, photos, selections}
     photos.json               [{code, design_type, provider, stock_pcs,
-                                gold_gms, cts, active, tags:[...], image}]
+                                gold_gms, cts, active, reviewed, tags:[...], image}]
     selections.json           [{party, selection_date, batch, remarks, photos:[codes]}]
     images/<code>.ext         the photo itself
 
@@ -55,7 +55,7 @@ def _photo_payload(design_type=None, provider=None):
 		filters["provider"] = provider
 	rows = frappe.get_all("Selection Photo", filters=filters,
 		fields=["name", "code", "design_type", "provider", "stock_pcs",
-			"gold_gms", "cts", "active", "image"],
+			"gold_gms", "cts", "active", "reviewed", "image"],
 		order_by="code", limit_page_length=0)
 	tags = {}
 	for t in frappe.db.sql("""SELECT parent, tag FROM `tabSelection Photo Tag`
@@ -204,6 +204,7 @@ def import_selection(file_url, mode="skip", with_selections=1):
 					"gold_gms": flt(p.get("gold_gms")),
 					"cts": flt(p.get("cts")),
 					"active": 1 if p.get("active") in (1, "1", True, None) else 0,
+					"reviewed": cint(p.get("reviewed")),
 				}
 				if exists:
 					doc = frappe.get_doc("Selection Photo", code)
