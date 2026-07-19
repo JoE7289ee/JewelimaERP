@@ -25,22 +25,24 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 		.rv-tab.on{background:var(--primary);border-color:var(--primary);color:#fff;}
 		.rv-prog{margin-left:auto;font-size:13px;color:var(--text-muted);}
 		.rv-prog b{color:var(--text-color);}
-		.rv-list{display:flex;flex-direction:column;gap:8px;}
-		.rv-row{display:flex;gap:14px;align-items:center;border:1px solid var(--border-color);
-			border-radius:10px;background:var(--fg-color);padding:8px 14px;}
+		.rv-list{display:flex;flex-direction:column;gap:14px;}
+		.rv-row{display:flex;gap:22px;align-items:stretch;border:1px solid var(--border-color);
+			border-radius:12px;background:var(--fg-color);padding:14px 18px;}
 		.rv-row.done{opacity:.55;}
-		.rv-row img{width:110px;height:110px;object-fit:contain;background:#111;border-radius:7px;cursor:zoom-in;flex:0 0 110px;}
-		.rv-f{display:flex;flex-direction:column;gap:2px;}
-		.rv-f label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;}
-		.rv-f input{border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;font-size:13.5px;
-			background:var(--control-bg);width:110px;font-variant-numeric:tabular-nums;}
-		.rv-f input.rv-code{width:130px;font-weight:800;letter-spacing:.4px;}
+		.rv-row img{width:520px;max-width:48vw;height:640px;object-fit:contain;background:#111;
+			border-radius:9px;cursor:zoom-in;flex:0 0 auto;}
+		.rv-side{display:flex;flex-direction:column;gap:14px;justify-content:center;flex:1 1 auto;}
+		.rv-fields{display:flex;gap:14px;flex-wrap:wrap;}
+		.rv-f{display:flex;flex-direction:column;gap:3px;}
+		.rv-f label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;}
+		.rv-f input{border:1px solid var(--border-color);border-radius:7px;padding:10px 12px;font-size:16px;
+			background:var(--control-bg);width:140px;font-variant-numeric:tabular-nums;}
+		.rv-f input.rv-code{width:170px;font-weight:800;letter-spacing:.4px;}
 		.rv-f input:focus{outline:2px solid var(--primary);border-color:var(--primary);}
-		.rv-meta{font-size:11px;color:var(--text-muted);min-width:110px;}
-		.rv-ok{margin-left:auto;display:flex;align-items:center;gap:8px;}
-		.rv-ok label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;cursor:pointer;
-			border:2px solid #2e7d32;border-radius:8px;padding:8px 18px;color:#2e7d32;user-select:none;margin:0;}
-		.rv-ok input{width:19px;height:19px;accent-color:#2e7d32;cursor:pointer;}
+		.rv-meta{font-size:12.5px;color:var(--text-muted);}
+		.rv-ok label{display:inline-flex;align-items:center;gap:10px;font-size:16px;font-weight:800;cursor:pointer;
+			border:2px solid #2e7d32;border-radius:10px;padding:14px 34px;color:#2e7d32;user-select:none;margin:0;}
+		.rv-ok input{width:24px;height:24px;accent-color:#2e7d32;cursor:pointer;}
 		.rv-row.done .rv-ok label{background:#2e7d32;color:#fff;}
 		.rv-none{padding:50px;text-align:center;color:var(--text-muted);font-size:14px;}
 		.rv-more{margin:14px 0 30px;text-align:center;}
@@ -88,16 +90,21 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 	function rowHtml(p) {
 		return `<div class="rv-row ${p.reviewed ? "done" : ""}" data-n="${esc(p.name)}">
 			<img src="${encodeURI(p.image || "")}" loading="lazy" onerror="this.style.visibility='hidden'">
-			<div class="rv-f"><label>${__("Code")}</label>
-				<input class="rv-code" data-f="code" value="${esc(p.code)}"></div>
-			<div class="rv-f"><label>${__("Gold g")}</label>
-				<input type="number" step="0.001" data-f="gold_gms" value="${p.gold_gms || ""}"></div>
-			<div class="rv-f"><label>${__("Diamond ct")}</label>
-				<input type="number" step="0.01" data-f="cts" value="${p.cts || ""}"></div>
-			<div class="rv-f"><label>${__("Stock pcs")}</label>
-				<input type="number" step="1" data-f="stock_pcs" value="${p.stock_pcs || 0}"></div>
-			<div class="rv-meta">${esc(p.design_type || "—")}<br>${esc(p.provider || "—")}</div>
-			<div class="rv-ok"><label><input type="checkbox" class="rv-check" ${p.reviewed ? "checked" : ""}> ${__("REVIEWED")}</label></div>
+			<div class="rv-side">
+				<div class="rv-fields">
+					<div class="rv-f"><label>${__("Code")}</label>
+						<input class="rv-code" data-f="code" value="${esc(p.code)}"></div>
+					<div class="rv-f"><label>${__("Gold g")}</label>
+						<input type="number" step="0.001" data-f="gold_gms" value="${p.gold_gms || ""}"></div>
+					<div class="rv-f"><label>${__("Diamond ct")}</label>
+						<input type="number" step="0.01" data-f="cts" value="${p.cts || ""}"></div>
+					<div class="rv-f"><label>${__("Stock pcs")}</label>
+						<input type="number" step="1" data-f="stock_pcs" value="${p.stock_pcs || 0}"></div>
+				</div>
+				<div class="rv-meta">${esc(p.design_type || "—")} · ${esc(p.provider || "—")}
+					· <span style="cursor:pointer;text-decoration:underline;" class="rv-zoom">${__("open full size")}</span></div>
+				<div class="rv-ok"><label><input type="checkbox" class="rv-check" ${p.reviewed ? "checked" : ""}> ${__("REVIEWED")}</label></div>
+			</div>
 		</div>`;
 	}
 
@@ -207,9 +214,9 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 		d.show();
 	}
 
-	// image click -> full size in a new tab
-	root.on("click", ".rv-row img", function () {
-		const src = this.getAttribute("src");
+	// image (or the link) -> full size in a new tab
+	root.on("click", ".rv-row img, .rv-zoom", function () {
+		const src = rowOf(this).find("img").attr("src");
 		if (src) window.open(src, "_blank");
 	});
 
