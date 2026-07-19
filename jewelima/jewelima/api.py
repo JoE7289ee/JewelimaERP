@@ -1984,15 +1984,21 @@ def _all_locations():
 
 
 def _transfer_allowed(roles, from_location, to_location):
-	"""Role-based from->to permission. Dormant (allow all) until any Transfer Rule
-	exists; System Manager always allowed. A rule with a blank from/to = wildcard."""
+	"""Role-based from->to permission, PER-ROLE dormancy: a rule only binds the
+	roles that appear in the rules table (the Transfer Matrix). A user whose roles
+	have no rules at all is unrestricted — so painting the matrix for the transfer
+	roles never locks out Stock Managers etc. If any of the user's roles IS in the
+	matrix, the union of those roles' rules decides. System Manager always allowed;
+	a rule with a blank from/to = wildcard."""
 	if "System Manager" in roles:
 		return True
 	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
-	if not rules:
-		return True
+	ruled = {r.role for r in rules}
+	mine = roles & ruled
+	if not mine:
+		return True   # none of my roles is governed by the matrix
 	for r in rules:
-		if r.role in roles and (not r.from_location or r.from_location == from_location) and (not r.to_location or r.to_location == to_location):
+		if r.role in mine and (not r.from_location or r.from_location == from_location) and (not r.to_location or r.to_location == to_location):
 			return True
 	return False
 
@@ -2000,17 +2006,59 @@ def _transfer_allowed(roles, from_location, to_location):
 @frappe.whitelist()
 def allowed_to_locations(from_location):
 	"""Destinations the current user may transfer to from `from_location` (for the
-	page's dropdown). All locations if rules are dormant or the user is admin."""
+	page's dropdown). Same per-role dormancy as _transfer_allowed."""
 	roles = set(frappe.get_roles())
-	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
 	all_locs = _all_locations()
-	if not rules or "System Manager" in roles:
+	if "System Manager" in roles:
+		return all_locs
+	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
+	mine = roles & {r.role for r in rules}
+	if not mine:
 		return all_locs
 	allowed = set()
 	for r in rules:
-		if r.role in roles and (not r.from_location or r.from_location == from_location):
+		if r.role in mine and (not r.from_location or r.from_location == from_location):
 			allowed.update(all_locs if not r.to_location else [r.to_location])
 	return [loc for loc in all_locs if loc in allowed]
+
+
+# --- Transfer Matrix (Setup) — paint which from->to moves each transfer role may make
+TRANSFER_MATRIX_ROLES = ("Jewelima Transfer", "Jewelima Transfer Plus")
+
+
+@frappe.whitelist()
+def get_transfer_matrix():
+	"""The whole board: locations, the governed roles, and each role's allowed
+	from->to pairs (straight from Transfer Rule)."""
+	frappe.only_for(("System Manager",))
+	matrix = {role: [] for role in TRANSFER_MATRIX_ROLES}
+	for r in frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"]):
+		if r.role in matrix:
+			matrix[r.role].append([r.from_location or "", r.to_location or ""])
+	return {"locations": _all_locations(), "roles": list(TRANSFER_MATRIX_ROLES), "matrix": matrix}
+
+
+@frappe.whitelist()
+def save_transfer_matrix(role, pairs):
+	"""Replace ONE role's rules with the checked cells. `pairs` = [[from,to],...].
+	Empty = the role has no rules = it goes dormant (unrestricted) again."""
+	frappe.only_for(("System Manager",))
+	if role not in TRANSFER_MATRIX_ROLES:
+		frappe.throw(frappe._("Only the transfer roles live on this matrix."))
+	if isinstance(pairs, str):
+		pairs = json.loads(pairs or "[]")
+	locs = set(_all_locations())
+	frappe.db.delete("Transfer Rule", {"role": role})
+	n = 0
+	for p in pairs or []:
+		f, t = (p[0] or "").strip(), (p[1] or "").strip()
+		if f not in locs or t not in locs or f == t:
+			continue
+		frappe.get_doc({"doctype": "Transfer Rule", "role": role,
+			"from_location": f, "to_location": t}).insert(ignore_permissions=True)
+		n += 1
+	frappe.db.commit()
+	return {"role": role, "rules": n}
 
 
 @frappe.whitelist()
