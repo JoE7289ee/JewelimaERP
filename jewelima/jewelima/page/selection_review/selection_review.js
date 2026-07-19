@@ -2,11 +2,11 @@
 // For license information, please see license.txt
 //
 // Selection Review — after every import, a human confirms each photo: code,
-// gold, dia, stock — then ticks REVIEWED and the row leaves the queue. Values
-// save as you type (on blur); Enter jumps to the next row's gold field. A code
-// is a design's identity: renaming onto a code that already exists brings both
-// photos up SIDE BY SIDE and one of them has to be deleted before the rename
-// lands. Route: /app/selection-review
+// gold, dia, stock. NOTHING saves while typing: the row's UPDATE button writes
+// all its values in one go (and that's also where a changed code is checked —
+// renaming onto an existing code brings both photos up SIDE BY SIDE and one of
+// them has to be deleted first). Ticking REVIEWED saves any pending edits too,
+// so a tick never loses what was typed. Route: /app/selection-review
 
 frappe.pages["selection-review"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selection Review", single_column: true });
@@ -40,7 +40,12 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 		.rv-f input.rv-code{width:170px;font-weight:800;letter-spacing:.4px;}
 		.rv-f input:focus{outline:2px solid var(--primary);border-color:var(--primary);}
 		.rv-meta{font-size:12.5px;color:var(--text-muted);}
-		.rv-ok label{display:inline-flex;align-items:center;gap:10px;font-size:16px;font-weight:800;cursor:pointer;
+		.rv-upd{border:none;border-radius:8px;padding:11px 26px;font-size:14px;font-weight:800;
+		letter-spacing:.4px;background:var(--control-bg);color:var(--text-muted);cursor:pointer;
+		border:1px solid var(--border-color);}
+	.rv-row.dirty .rv-upd{background:#1461d2;border-color:#1461d2;color:#fff;}
+	.rv-ok{display:flex;gap:12px;align-items:center;}
+	.rv-ok label{display:inline-flex;align-items:center;gap:10px;font-size:16px;font-weight:800;cursor:pointer;
 			border:2px solid #2e7d32;border-radius:10px;padding:14px 34px;color:#2e7d32;user-select:none;margin:0;}
 		.rv-ok input{width:24px;height:24px;accent-color:#2e7d32;cursor:pointer;}
 		.rv-row.done .rv-ok label{background:#2e7d32;color:#fff;}
@@ -103,7 +108,10 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 				</div>
 				<div class="rv-meta">${esc(p.design_type || "—")} · ${esc(p.provider || "—")}
 					· <span style="cursor:pointer;text-decoration:underline;" class="rv-zoom">${__("open full size")}</span></div>
-				<div class="rv-ok"><label><input type="checkbox" class="rv-check" ${p.reviewed ? "checked" : ""}> ${__("REVIEWED")}</label></div>
+				<div class="rv-ok">
+					<button class="rv-upd">${__("UPDATE")}</button>
+					<label><input type="checkbox" class="rv-check" ${p.reviewed ? "checked" : ""}> ${__("REVIEWED")}</label>
+				</div>
 			</div>
 		</div>`;
 	}
@@ -117,61 +125,81 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 	const rowOf = (el) => $(el).closest(".rv-row");
 	const dataOf = (el) => S.rows.find((r) => r.name === rowOf(el).attr("data-n"));
 
-	// values save on blur
-	root.on("change", ".rv-row input[data-f]:not(.rv-code)", function () {
-		const p = dataOf(this);
-		const f = this.getAttribute("data-f");
-		const v = Number(this.value) || 0;
-		p[f] = v;
-		frappe.call({ method: API + ".review_save", args: { name: p.name, [f]: v } })
-			.then(() => frappe.show_alert({ message: __("Saved"), indicator: "green" }, 1.5));
+	// typing only marks the row dirty — UPDATE is what saves
+	root.on("input", ".rv-row input[data-f]", function () {
+		rowOf(this).addClass("dirty");
 	});
 
-	// Enter in any field -> next row's gold input
+	function saveRow(row, p, done) {
+		const vals = {};
+		row.find("input[data-f]:not(.rv-code)").each(function () {
+			vals[this.getAttribute("data-f")] = Number(this.value) || 0;
+		});
+		const newCode = (row.find(".rv-code").val() || "").trim().toUpperCase();
+
+		const finish = () => frappe.call({ method: API + ".review_save", args: { name: p.name, ...vals } })
+			.then(() => {
+				Object.assign(p, vals);
+				row.removeClass("dirty");
+				frappe.show_alert({ message: __("Updated {0}", [p.name]), indicator: "green" }, 2);
+				if (done) done();
+			});
+
+		if (newCode && newCode !== p.name) {
+			frappe.call({ method: API + ".review_rename_code", args: { name: p.name, new_code: newCode } })
+				.then((r) => {
+					const m = r.message || {};
+					if (m.renamed) {
+						p.name = p.code = m.name;
+						row.attr("data-n", m.name);
+						row.find(".rv-code").val(m.name);
+						finish();
+					} else if (m.conflict) {
+						row.find(".rv-code").val(p.code);   // revert until resolved
+						compare(m, p, newCode);
+					}
+				}).catch(() => row.find(".rv-code").val(p.code));
+		} else {
+			finish();
+		}
+	}
+
+	root.on("click", ".rv-upd", function () {
+		const row = rowOf(this);
+		saveRow(row, dataOf(this));
+	});
+
+	// Enter anywhere in a row = UPDATE that row, then jump to the next row
 	root.on("keydown", ".rv-row input", function (e) {
 		if (e.key !== "Enter") return;
 		e.preventDefault();
-		this.blur();
-		const next = rowOf(this).next(".rv-row");
-		if (next.length) next.find("input[data-f='gold_gms']").focus().select();
+		const row = rowOf(this);
+		saveRow(row, dataOf(this), () => {
+			const next = row.next(".rv-row");
+			if (next.length) next.find("input[data-f='gold_gms']").focus().select();
+		});
 	});
 
-	// reviewed tick
+	// reviewed tick — saves any pending edits first, so a tick never loses typing
 	root.on("change", ".rv-check", function () {
 		const p = dataOf(this);
+		const row = rowOf(this);
 		const on = this.checked ? 1 : 0;
-		p.reviewed = on;
-		rowOf(this).toggleClass("done", !!on);
-		frappe.call({ method: API + ".review_save", args: { name: p.name, reviewed: on } })
+		const tick = () => frappe.call({ method: API + ".review_save", args: { name: p.name, reviewed: on } })
 			.then(() => {
+				p.reviewed = on;
+				row.toggleClass("done", !!on);
 				const prog = root.find(".rv-prog b");
 				prog.text(Number(prog.text()) + (on ? 1 : -1));
 				if (on && S.status === "pending") {
-					const row = root.find(`.rv-row[data-n="${p.name}"]`);
 					row.slideUp(180, () => row.remove());
 				}
 			});
-	});
-
-	// code rename + conflict flow
-	root.on("change", ".rv-code", function () {
-		const p = dataOf(this);
-		const input = this;
-		const code = (this.value || "").trim().toUpperCase();
-		if (!code || code === p.name) { this.value = p.code; return; }
-		frappe.call({ method: API + ".review_rename_code", args: { name: p.name, new_code: code } })
-			.then((r) => {
-				const m = r.message || {};
-				if (m.renamed) {
-					p.name = p.code = m.name;
-					rowOf(input).attr("data-n", m.name);
-					input.value = m.name;
-					frappe.show_alert({ message: __("Code changed to {0}", [m.name]), indicator: "green" }, 3);
-				} else if (m.conflict) {
-					input.value = p.code;   // revert until resolved
-					compare(m, p, code);
-				}
-			}).catch(() => { input.value = p.code; });
+		if (row.hasClass("dirty")) {
+			saveRow(row, p, tick);
+		} else {
+			tick();
+		}
 	});
 
 	function side(d, label) {
