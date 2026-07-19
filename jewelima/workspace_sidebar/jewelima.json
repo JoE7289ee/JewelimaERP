@@ -982,6 +982,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Providers",
+   "link_to": "selection-providers",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "chart-column",
@@ -1476,7 +1489,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-19 14:00:46.718518",
+ "modified": "2026-07-19 14:06:15.270952",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

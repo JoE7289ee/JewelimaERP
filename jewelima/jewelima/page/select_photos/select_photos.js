@@ -70,7 +70,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<button class="btn btn-default sl2-clear">${__("Clear picks")}</button>
 			</div>
 			<div class="sl2-pills sl2-dtypes"></div>
-			<div class="sl2-pills sl2-batches"></div>
+			<div class="sl2-pills sl2-tagrow"></div>
 			<div class="sl2-pills sl2-more"></div>
 			<div class="sl2-grid"></div>
 			<div class="sl2-view">
@@ -130,12 +130,25 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		: "");
 
 	function paintPills(m) {
+		// level 1: design type · level 2: the whole tag vocabulary (coloured) ·
+		// level 3: provider + batch
 		root.find(".sl2-dtypes").html(pillRow(__("Design Type"), m.design_types || [], S.dtp, "dtp"));
-		root.find(".sl2-batches").html(pillRow(__("Batch"), m.batches || [], S.batch, "batch"));
+		const tags = m.tags || [];
+		root.find(".sl2-tagrow").html(tags.length
+			? `<span class="lbl">${__("Tags")}</span>
+			   <span class="sl2-pill ${S.tag ? "" : "on"}" data-k="tag" data-v="">${__("All")}</span>` +
+			  tags.map((t) => {
+				const on = S.tag === t.tag;
+				const c = t.color || "#6b7280";
+				return `<span class="sl2-pill ${on ? "on" : ""}" data-k="tag" data-v="${esc(t.tag)}"
+					style="${on ? `background:${c};border-color:${c};color:#fff;` : `border-color:${c};`}">
+					<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${on ? "#fff" : c};margin-right:5px;"></span>${esc(t.tag)}</span>`;
+			  }).join("")
+			: "");
 		root.find(".sl2-more").html(
 			pillRow(__("Provider"), m.providers || [], S.provider, "provider") +
-			((m.providers || []).length && (m.tags || []).length ? `<span class="lbl" style="margin-left:14px;"></span>` : "") +
-			pillRow(__("Tag"), m.tags || [], S.tag, "tag"));
+			((m.providers || []).length && (m.batches || []).length ? `<span class="lbl" style="margin-left:14px;"></span>` : "") +
+			pillRow(__("Batch"), m.batches || [], S.batch, "batch"));
 	}
 
 	function paintGrid() {
@@ -282,10 +295,12 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	page.add_inner_button(__("Records"), () => frappe.set_route("List", "Selection"));
 	page.add_inner_button(__("Export / Import"), () => frappe.set_route("selection-transfer"));
 	page.add_inner_button(__("Manage Tags"), () => frappe.set_route("selection-tags"));
+	page.add_inner_button(__("Providers"), () => frappe.set_route("selection-providers"));
 	page.add_inner_button(__("Refresh"), load);
-	// arriving from Design Tags with a tag pre-picked
-	if (frappe.route_options && frappe.route_options.tag) {
-		S.tag = frappe.route_options.tag;
+	// arriving from Selection Tags / Providers with a filter pre-picked
+	if (frappe.route_options) {
+		if (frappe.route_options.tag) S.tag = frappe.route_options.tag;
+		if (frappe.route_options.provider) S.provider = frappe.route_options.provider;
 		frappe.route_options = null;
 	}
 	load();

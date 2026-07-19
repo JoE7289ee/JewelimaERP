@@ -2547,8 +2547,9 @@ def get_selection_photos(batch=None, search=None, design_type=None, provider=Non
 		"SELECT DISTINCT design_type FROM `tabSelection Photo` WHERE IFNULL(design_type,'') != '' ORDER BY design_type")
 	providers = frappe.db.sql_list(
 		"SELECT DISTINCT provider FROM `tabSelection Photo` WHERE IFNULL(provider,'') != '' ORDER BY provider")
-	tags_all = frappe.db.sql_list(
-		"""SELECT DISTINCT tag FROM `tabSelection Photo Tag` WHERE parenttype='Selection Photo' ORDER BY tag""")
+	# EVERY tag ever created (the master), not just the used ones — the filter bar
+	# shows the whole vocabulary, with its colours
+	tags_all = frappe.get_all("Selection Tag", fields=["name as tag", "color"], order_by="tag_name")
 
 	filters = {"active": 1}
 	if batch:
@@ -2663,6 +2664,55 @@ def delete_selection_tag(tag_name):
 @frappe.whitelist()
 def set_selection_tag_color(tag_name, color):
 	frappe.db.set_value("Selection Tag", tag_name, "color", color)
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+# --- Selection Providers (who makes the pieces — plain Suppliers underneath) ---
+@frappe.whitelist()
+def get_selection_providers():
+	"""Every Supplier + how many catalog photos each one provides."""
+	rows = frappe.get_all("Supplier", fields=["name", "supplier_name"], order_by="supplier_name")
+	counts = dict(frappe.db.sql(
+		"SELECT provider, COUNT(*) FROM `tabSelection Photo` WHERE IFNULL(provider,'') != '' GROUP BY provider"))
+	for r in rows:
+		r["count"] = int(counts.get(r.name, 0))
+	return rows
+
+
+@frappe.whitelist()
+def create_selection_provider(provider_name):
+	provider_name = (provider_name or "").strip()
+	if not provider_name:
+		frappe.throw(frappe._("Provider name is required"))
+	if frappe.db.exists("Supplier", provider_name):
+		frappe.throw(frappe._("Provider '{0}' already exists").format(provider_name))
+	doc = frappe.get_doc({
+		"doctype": "Supplier", "supplier_name": provider_name,
+		"supplier_group": frappe.db.get_value("Supplier Group", {}, "name"),
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "supplier_name": doc.supplier_name, "count": 0}
+
+
+@frappe.whitelist()
+def rename_selection_provider(old, new):
+	new = (new or "").strip()
+	if not new:
+		frappe.throw(frappe._("New name is required"))
+	if old == new:
+		return {"name": new}
+	frappe.rename_doc("Supplier", old, new, force=True)  # cascades into Selection Photo.provider
+	frappe.db.commit()
+	return {"name": new}
+
+
+@frappe.whitelist()
+def delete_selection_provider(name):
+	used = frappe.db.count("Selection Photo", {"provider": name})
+	if used:
+		frappe.throw(frappe._("{0} provides {1} photo(s) — reassign them first.").format(name, used))
+	frappe.delete_doc("Supplier", name, ignore_permissions=True)
 	frappe.db.commit()
 	return {"ok": 1}
 
