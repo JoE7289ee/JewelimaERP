@@ -130,11 +130,14 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		: "");
 
 	function paintPills(m) {
-		// level 1: design type · level 2: the whole tag vocabulary (coloured) ·
-		// level 3: provider + batch
-		root.find(".sl2-dtypes").html(pillRow(__("Design Type"), m.design_types || [], S.dtp, "dtp"));
+		// levels: provider · design type · tags (no batch filter — the batch only
+		// lives on the record)
+		root.find(".sl2-dtypes").html(
+			pillRow(__("Provider"), m.providers || [], S.provider, "provider"));
+		root.find(".sl2-tagrow").html(
+			pillRow(__("Design Type"), m.design_types || [], S.dtp, "dtp"));
 		const tags = m.tags || [];
-		root.find(".sl2-tagrow").html(tags.length
+		root.find(".sl2-more").html(tags.length
 			? `<span class="lbl">${__("Tags")}</span>
 			   <span class="sl2-pill ${S.tag ? "" : "on"}" data-k="tag" data-v="">${__("All")}</span>` +
 			  tags.map((t) => {
@@ -145,10 +148,6 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 					<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${on ? "#fff" : c};margin-right:5px;"></span>${esc(t.tag)}</span>`;
 			  }).join("")
 			: "");
-		root.find(".sl2-more").html(
-			pillRow(__("Provider"), m.providers || [], S.provider, "provider") +
-			((m.providers || []).length && (m.batches || []).length ? `<span class="lbl" style="margin-left:14px;"></span>` : "") +
-			pillRow(__("Batch"), m.batches || [], S.batch, "batch"));
 	}
 
 	function paintGrid() {
