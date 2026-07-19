@@ -40,52 +40,226 @@
   "lines"
  ],
  "fields": [
-  {"fieldname": "date", "fieldtype": "Date", "in_list_view": 1, "label": "Date", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "sec_orders", "fieldtype": "Section Break", "label": "Orders & Floor"},
-  {"fieldname": "orders_placed", "fieldtype": "Int", "in_list_view": 1, "label": "Orders Placed", "read_only": 1},
-  {"fieldname": "bags_created", "fieldtype": "Int", "in_list_view": 1, "label": "Bags Created", "read_only": 1},
-  {"fieldname": "bags_cancelled", "fieldtype": "Int", "label": "Bags Cancelled", "read_only": 1},
-  {"fieldname": "col_o2", "fieldtype": "Column Break"},
-  {"fieldname": "floor_bags", "fieldtype": "Int", "label": "Bags on the Floor (close)", "read_only": 1},
-  {"fieldname": "overdue_orders", "fieldtype": "Int", "label": "Overdue Orders", "read_only": 1},
-  {"fieldname": "employees_worked", "fieldtype": "Int", "label": "Employees Worked", "read_only": 1},
-  {"fieldname": "sec_issue", "fieldtype": "Section Break", "label": "Issues & Loss"},
-  {"fieldname": "gold_issued_g", "fieldtype": "Float", "label": "Gold Issued (g)", "precision": "3", "read_only": 1},
-  {"fieldname": "gold_issued_pure_g", "fieldtype": "Float", "label": "Gold Issued (pure g)", "precision": "3", "read_only": 1},
-  {"fieldname": "col_i2", "fieldtype": "Column Break"},
-  {"fieldname": "stones_issued_pcs", "fieldtype": "Int", "label": "Stones Issued (pcs)", "read_only": 1},
-  {"fieldname": "stones_issued_ct", "fieldtype": "Float", "label": "Stones Issued (ct)", "precision": "3", "read_only": 1},
-  {"fieldname": "loss_booked_g", "fieldtype": "Float", "label": "Loss Booked (g)", "precision": "3", "read_only": 1},
-  {"fieldname": "sec_out", "fieldtype": "Section Break", "label": "Output & Certification"},
-  {"fieldname": "products_made", "fieldtype": "Int", "label": "Products Made", "read_only": 1},
-  {"fieldname": "pieces_imported", "fieldtype": "Int", "label": "Pieces Imported", "read_only": 1},
-  {"fieldname": "col_p2", "fieldtype": "Column Break"},
-  {"fieldname": "cert_sent_pcs", "fieldtype": "Int", "label": "Certification Sent (pcs)", "read_only": 1},
-  {"fieldname": "cert_received_pcs", "fieldtype": "Int", "label": "Certification Received (pcs)", "read_only": 1},
-  {"fieldname": "sec_sales", "fieldtype": "Section Break", "label": "Sales"},
-  {"fieldname": "sales_count", "fieldtype": "Int", "label": "Sales", "read_only": 1},
-  {"fieldname": "sales_pieces", "fieldtype": "Int", "label": "Pieces Sold", "read_only": 1},
-  {"fieldname": "col_s2", "fieldtype": "Column Break"},
-  {"fieldname": "sales_value", "fieldtype": "Currency", "label": "Sales Value", "read_only": 1},
-  {"fieldname": "sec_close", "fieldtype": "Section Break", "label": "Closing Positions"},
-  {"fieldname": "closing_pure_gold_g", "fieldtype": "Float", "label": "Closing Pure Gold (g)", "precision": "3", "read_only": 1},
-  {"fieldname": "closing_stones_ct", "fieldtype": "Float", "label": "Closing Stones (ct)", "precision": "3", "read_only": 1},
-  {"fieldname": "sec_lines", "fieldtype": "Section Break", "label": "Detail Lines"},
-  {"fieldname": "lines", "fieldtype": "Table", "label": "Lines", "options": "Day Record Line", "read_only": 1}
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "sec_orders",
+   "fieldtype": "Section Break",
+   "label": "Orders & Floor"
+  },
+  {
+   "fieldname": "orders_placed",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Orders Placed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bags_created",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Bags Created",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bags_cancelled",
+   "fieldtype": "Int",
+   "label": "Bags Cancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_o2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "floor_bags",
+   "fieldtype": "Int",
+   "label": "Bags on the Floor (close)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "overdue_orders",
+   "fieldtype": "Int",
+   "label": "Overdue Orders",
+   "read_only": 1
+  },
+  {
+   "fieldname": "employees_worked",
+   "fieldtype": "Int",
+   "label": "Employees Worked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_issue",
+   "fieldtype": "Section Break",
+   "label": "Issues & Loss"
+  },
+  {
+   "fieldname": "gold_issued_g",
+   "fieldtype": "Float",
+   "label": "Gold Issued (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gold_issued_pure_g",
+   "fieldtype": "Float",
+   "label": "Gold Issued (pure g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_i2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stones_issued_pcs",
+   "fieldtype": "Int",
+   "label": "Stones Issued (pcs)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stones_issued_ct",
+   "fieldtype": "Float",
+   "label": "Stones Issued (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "loss_booked_g",
+   "fieldtype": "Float",
+   "label": "Loss Booked (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_out",
+   "fieldtype": "Section Break",
+   "label": "Output & Certification"
+  },
+  {
+   "fieldname": "products_made",
+   "fieldtype": "Int",
+   "label": "Products Made",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pieces_imported",
+   "fieldtype": "Int",
+   "label": "Pieces Imported",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_p2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cert_sent_pcs",
+   "fieldtype": "Int",
+   "label": "Certification Sent (pcs)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cert_received_pcs",
+   "fieldtype": "Int",
+   "label": "Certification Received (pcs)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_sales",
+   "fieldtype": "Section Break",
+   "label": "Sales"
+  },
+  {
+   "fieldname": "sales_count",
+   "fieldtype": "Int",
+   "label": "Sales",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_pieces",
+   "fieldtype": "Int",
+   "label": "Pieces Sold",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_s2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sales_value",
+   "fieldtype": "Currency",
+   "label": "Sales Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_close",
+   "fieldtype": "Section Break",
+   "label": "Closing Positions"
+  },
+  {
+   "fieldname": "closing_pure_gold_g",
+   "fieldtype": "Float",
+   "label": "Closing Pure Gold (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closing_stones_ct",
+   "fieldtype": "Float",
+   "label": "Closing Stones (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_lines",
+   "fieldtype": "Section Break",
+   "label": "Detail Lines"
+  },
+  {
+   "fieldname": "lines",
+   "fieldtype": "Table",
+   "label": "Lines",
+   "options": "Day Record Line",
+   "read_only": 1
+  }
  ],
  "in_create": 1,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-14 11:00:00.000000",
+ "modified": "2026-07-19 17:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Day Record",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
-  {"delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1},
-  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "Stock Manager", "share": 1},
-  {"print": 1, "read": 1, "report": 1, "role": "Jewelima"}
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1
+  }
  ],
  "sort_field": "date",
  "sort_order": "DESC",

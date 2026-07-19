@@ -83,7 +83,7 @@
    "label": "Days (Due Date)"
   },
   {
-   "description": "Date promised to the customer — empty copies the due date.",
+   "description": "Date promised to the customer \u2014 empty copies the due date.",
    "fieldname": "cust_days",
    "fieldtype": "Int",
    "label": "Days (Customer Date)"
@@ -120,7 +120,7 @@
   }
  ],
  "links": [],
- "modified": "2026-07-08 14:30:00.000000",
+ "modified": "2026-07-19 17:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Request",
@@ -136,13 +136,6 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Jewelima",
    "write": 1
   },
   {

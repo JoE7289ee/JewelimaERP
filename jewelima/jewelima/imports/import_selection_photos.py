@@ -45,7 +45,7 @@ def run(batch):
 			skipped += 1
 			continue
 		frappe.get_doc({
-			"doctype": "Selection Photo", "code": code, "batch": batch,
+			"doctype": "Selection Photo", "code": code,
 			"image": "/files/{0}/{1}/{2}".format(FOLDER, quote(batch), quote(fn)),
 			"source_file": src, "active": 1,
 		}).insert(ignore_permissions=True)
@@ -61,7 +61,7 @@ _GOLD_RE = re.compile(r"GOLD\s*[-–:]?\s*([\d.]+)\s*(?:GMS|GM|G)\b", re.I)
 _CTS_RE = re.compile(r"CTS?\s*[-–:]?\s*([\d.]+)\s*(?:CTS|CT)\b", re.I)
 
 
-def ocr_fill(batch=None, limit=500):
+def ocr_fill(limit=500):
 	"""Fill gold_gms / cts by OCR-ing the cards. Needs tesseract + pytesseract."""
 	try:
 		import pytesseract
@@ -70,8 +70,6 @@ def ocr_fill(batch=None, limit=500):
 		frappe.throw("pytesseract / Pillow not installed — cannot OCR.")
 
 	filters = {"gold_gms": 0}
-	if batch:
-		filters["batch"] = batch
 	rows = frappe.get_all("Selection Photo", filters=filters, fields=["name", "source_file"], limit=limit)
 	done = 0
 	for r in rows:

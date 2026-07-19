@@ -1,15 +1,15 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Selection (Selection > Selection) — the party sits with the photo book: pick a
-// batch, click the photos they like, and Save. The record keeps WHAT was selected
-// and HOW MANY (plus gold/ct totals once the cards are OCR'd).
+// Selection (Selection > Selection) — the party sits with the photo book, clicks
+// the photos they like, and Saves. The record keeps WHAT was selected and HOW
+// MANY (plus gold/ct totals once the weights are entered).
 // Route: /app/select-photos
 
 frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selection", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { photos: [], batch: "", dtp: "", provider: "", tag: "", sel: new Set(), view: 0 };
+	const S = { photos: [], dtp: "", provider: "", tag: "", sel: new Set(), view: 0 };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -124,7 +124,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 
 	function load() {
 		frappe.call({ method: API + ".get_selection_photos",
-			args: { batch: S.batch || null, design_type: S.dtp || null, provider: S.provider || null,
+			args: { design_type: S.dtp || null, provider: S.provider || null,
 				tag: S.tag || null, search: (search.get_value() || "").trim() || null,
 				gold_min: gmin.get_value() || null, gold_max: gmax.get_value() || null,
 				cts_min: cmin.get_value() || null, cts_max: cmax.get_value() || null } }).then((r) => {
@@ -142,8 +142,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		: "");
 
 	function paintPills(m) {
-		// levels: provider · design type · tags (no batch filter — the batch only
-		// lives on the record)
+		// levels: provider · design type · tags
 		root.find(".sl2-dtypes").html(
 			pillRow(__("Provider"), m.providers || [], S.provider, "provider"));
 		root.find(".sl2-tagrow").html(
@@ -290,7 +289,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		frappe.confirm(__("Save <b>{0}</b> photo(s) selected by <b>{1}</b>?", [S.sel.size, esc(p)]), () => {
 			frappe.dom.freeze(__("Saving..."));
 			frappe.call({ method: API + ".create_selection", args: { payload: {
-				party: p, selection_date: dt.get_value(), batch: S.batch || null,
+				party: p, selection_date: dt.get_value(),
 				remarks: "", photos: [...S.sel],
 			} } }).then((r) => {
 				frappe.dom.unfreeze();

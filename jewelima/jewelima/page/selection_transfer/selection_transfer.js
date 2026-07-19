@@ -32,7 +32,6 @@ frappe.pages["selection-transfer"].on_page_load = function (wrapper) {
 			<div class="st-card">
 				<h4>${__("Export")}</h4>
 				<div class="hint">${__("One .zip: every photo (image + code, design type, provider, stock, weights, tags) plus all Selection records. Leave the filters empty to take everything.")}</div>
-				<div class="st-e-batch"></div>
 				<div class="st-e-dtype"></div>
 				<div class="st-e-provider"></div>
 				<div class="st-sum st-e-sum">${__("…")}</div>
@@ -61,8 +60,6 @@ frappe.pages["selection-transfer"].on_page_load = function (wrapper) {
 		c.refresh();
 		return c;
 	};
-	const eBatch = mk(".st-e-batch", { fieldtype: "Data", label: __("Batch (optional)"), fieldname: "batch",
-		onchange: () => preview() });
 	const eDtype = mk(".st-e-dtype", { fieldtype: "Link", label: __("Design Type (optional)"), fieldname: "dt",
 		options: "Design Type", onchange: () => preview() });
 	const eProv = mk(".st-e-provider", { fieldtype: "Link", label: __("Provider (optional)"), fieldname: "pr",
@@ -71,7 +68,6 @@ frappe.pages["selection-transfer"].on_page_load = function (wrapper) {
 		onchange: () => inspect() });
 
 	const eArgs = () => ({
-		batch: (eBatch.get_value() || "").trim() || null,
 		design_type: eDtype.get_value() || null,
 		provider: eProv.get_value() || null,
 	});
@@ -79,9 +75,8 @@ frappe.pages["selection-transfer"].on_page_load = function (wrapper) {
 	function preview() {
 		frappe.call({ method: API + ".preview_export", args: eArgs() }).then((r) => {
 			const m = r.message || {};
-			root.find(".st-e-sum").html(__("<b>{0}</b> photo(s) match ({1} with an image) · <b>{2}</b> selection record(s) travel along{3}",
-				[m.photos || 0, m.with_image || 0, m.selections || 0,
-					(m.batches || []).length ? " · " + __("batches: ") + m.batches.map(esc).join(", ") : ""]));
+			root.find(".st-e-sum").html(__("<b>{0}</b> photo(s) match ({1} with an image) · <b>{2}</b> selection record(s) travel along",
+				[m.photos || 0, m.with_image || 0, m.selections || 0]));
 		});
 	}
 

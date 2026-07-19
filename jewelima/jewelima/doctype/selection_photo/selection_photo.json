@@ -9,7 +9,6 @@
   "code",
   "design_type",
   "provider",
-  "batch",
   "image",
   "col_sp",
   "gold_gms",
@@ -46,13 +45,6 @@
    "in_standard_filter": 1,
    "label": "Provider",
    "options": "Supplier"
-  },
-  {
-   "description": "The folder/day the photos came from, e.g. 14-07-26.",
-   "fieldname": "batch",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Batch"
   },
   {
    "fieldname": "image",
@@ -113,7 +105,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-16 10:00:00.000000",
+ "modified": "2026-07-19 17:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Selection Photo",
@@ -143,12 +135,6 @@
    "role": "Stock Manager",
    "share": 1,
    "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Jewelima"
   }
  ],
  "sort_field": "code",

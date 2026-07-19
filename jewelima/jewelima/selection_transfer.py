@@ -6,7 +6,7 @@ Selection catalog export / import — move the whole photo book to another syste
 One ZIP carries everything:
 
     manifest.json             {version, site, exported_on, photos, selections}
-    photos.json               [{code, batch, design_type, provider, stock_pcs,
+    photos.json               [{code, design_type, provider, stock_pcs,
                                 gold_gms, cts, active, tags:[...], image}]
     selections.json           [{party, selection_date, batch, remarks, photos:[codes]}]
     images/<code>.ext         the photo itself
@@ -47,16 +47,14 @@ def _ensure(doctype, value, namefield=None):
 	return value
 
 
-def _photo_payload(batch=None, design_type=None, provider=None):
+def _photo_payload(design_type=None, provider=None):
 	filters = {}
-	if batch:
-		filters["batch"] = batch
 	if design_type:
 		filters["design_type"] = design_type
 	if provider:
 		filters["provider"] = provider
 	rows = frappe.get_all("Selection Photo", filters=filters,
-		fields=["name", "code", "batch", "design_type", "provider", "stock_pcs",
+		fields=["name", "code", "design_type", "provider", "stock_pcs",
 			"gold_gms", "cts", "active", "image"],
 		order_by="code", limit_page_length=0)
 	tags = {}
@@ -85,20 +83,19 @@ def _selection_payload():
 
 
 @frappe.whitelist()
-def preview_export(batch=None, design_type=None, provider=None):
+def preview_export(design_type=None, provider=None):
 	"""What the current filters would put in the zip."""
 	frappe.only_for(("System Manager", "Stock Manager"))
-	photos = _photo_payload(batch, design_type, provider)
+	photos = _photo_payload(design_type, provider)
 	return {"photos": len(photos), "with_image": len([p for p in photos if p.get("image")]),
-		"selections": frappe.db.count("Selection"),
-		"batches": sorted({p["batch"] for p in photos if p.get("batch")})}
+		"selections": frappe.db.count("Selection")}
 
 
 @frappe.whitelist()
-def export_selection(batch=None, design_type=None, provider=None):
+def export_selection(design_type=None, provider=None):
 	"""Stream the zip: every matching photo (meta + image) + every Selection record."""
 	frappe.only_for(("System Manager", "Stock Manager"))
-	photos = _photo_payload(batch, design_type, provider)
+	photos = _photo_payload(design_type, provider)
 	if not photos:
 		frappe.throw(frappe._("No photos match — nothing to export."))
 	selections = _selection_payload()
@@ -149,8 +146,7 @@ def inspect_import(file_url):
 			else:
 				new += 1
 	return {"manifest": manifest, "photos": len(photos), "new": new, "existing": existing,
-		"selections": len(selections),
-		"batches": sorted({p.get("batch") for p in photos if p.get("batch")})}
+		"selections": len(selections)}
 
 
 def _resolve_upload(file_url):
@@ -202,7 +198,6 @@ def import_selection(file_url, mode="skip", with_selections=1):
 				img = _restore_image(z, p.get("image"), code)
 
 				vals = {
-					"batch": p.get("batch") or None,
 					"design_type": p.get("design_type") or None,
 					"provider": p.get("provider") or None,
 					"stock_pcs": cint(p.get("stock_pcs")),

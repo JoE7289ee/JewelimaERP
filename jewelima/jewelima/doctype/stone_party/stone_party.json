@@ -18,7 +18,7 @@
    "label": "Code",
    "reqd": 1,
    "unique": 1,
-   "description": "3-letter party code — the prefix of every stone item of this party (e.g. EDI → EDI-VS1)."
+   "description": "3-letter party code \u2014 the prefix of every stone item of this party (e.g. EDI \u2192 EDI-VS1)."
   },
   {
    "fieldname": "party_name",
@@ -32,7 +32,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-07 20:00:00.000000",
+ "modified": "2026-07-19 17:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Stone Party",
@@ -50,10 +50,6 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Jewelima"
   }
  ],
  "search_fields": "party_name",

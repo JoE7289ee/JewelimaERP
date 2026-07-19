@@ -2585,12 +2585,10 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 # --- Selection: pick photos from the catalog, keep the record ----------------------
 
 @frappe.whitelist()
-def get_selection_photos(batch=None, search=None, design_type=None, provider=None, tag=None,
+def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 		in_stock=None, gold_min=None, gold_max=None, cts_min=None, cts_max=None, limit=500):
 	"""The photo catalog for the Selection page + everything there is to filter by
-	(batches, design types, providers, tags)."""
-	batches = [b.batch for b in frappe.db.sql(
-		"SELECT DISTINCT batch FROM `tabSelection Photo` WHERE IFNULL(batch,'') != '' ORDER BY batch DESC", as_dict=True)]
+	(design types, providers, tags)."""
 	design_types = frappe.db.sql_list(
 		"SELECT DISTINCT design_type FROM `tabSelection Photo` WHERE IFNULL(design_type,'') != '' ORDER BY design_type")
 	providers = frappe.db.sql_list(
@@ -2600,8 +2598,6 @@ def get_selection_photos(batch=None, search=None, design_type=None, provider=Non
 	tags_all = frappe.get_all("Selection Tag", fields=["name as tag", "color"], order_by="tag_name")
 
 	filters = {"active": 1}
-	if batch:
-		filters["batch"] = batch
 	if design_type:
 		filters["design_type"] = design_type
 	if provider:
@@ -2611,7 +2607,7 @@ def get_selection_photos(batch=None, search=None, design_type=None, provider=Non
 	if cint(in_stock):
 		filters["stock_pcs"] = [">", 0]
 	rows = frappe.get_all("Selection Photo", filters=filters,
-		fields=["name", "code", "image", "gold_gms", "cts", "batch", "design_type", "provider", "stock_pcs"],
+		fields=["name", "code", "image", "gold_gms", "cts", "design_type", "provider", "stock_pcs"],
 		order_by="code", limit_page_length=cint(limit) or 500)
 	# weight-range filters (a photo with no value entered never matches a range)
 	if gold_min not in (None, ""):
@@ -2632,7 +2628,7 @@ def get_selection_photos(batch=None, search=None, design_type=None, provider=Non
 		r["tags"] = photo_tags.get(r.name, [])
 	if tag:
 		rows = [r for r in rows if tag in r["tags"]]
-	return {"batches": batches, "design_types": design_types, "providers": providers,
+	return {"design_types": design_types, "providers": providers,
 		"tags": tags_all, "photos": rows, "total": len(rows)}
 
 
