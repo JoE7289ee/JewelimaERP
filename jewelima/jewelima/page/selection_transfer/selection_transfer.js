@@ -75,8 +75,10 @@ frappe.pages["selection-transfer"].on_page_load = function (wrapper) {
 	function preview() {
 		frappe.call({ method: API + ".preview_export", args: eArgs() }).then((r) => {
 			const m = r.message || {};
-			root.find(".st-e-sum").html(__("<b>{0}</b> photo(s) match ({1} with an image) · <b>{2}</b> selection record(s) travel along",
-				[m.photos || 0, m.with_image || 0, m.selections || 0]));
+			const mb = (m.size_bytes || 0) / (1024 * 1024);
+			const size = mb >= 1024 ? (mb / 1024).toFixed(2) + " GB" : mb.toFixed(1) + " MB";
+			root.find(".st-e-sum").html(__("<b>{0}</b> photo(s) match ({1} with an image) · <b>{2}</b> selection record(s) travel along · estimated download <b>≈ {3}</b>",
+				[m.photos || 0, m.with_image || 0, m.selections || 0, size]));
 		});
 	}
 

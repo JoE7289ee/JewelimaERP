@@ -84,11 +84,22 @@ def _selection_payload():
 
 @frappe.whitelist()
 def preview_export(design_type=None, provider=None):
-	"""What the current filters would put in the zip."""
+	"""What the current filters would put in the zip — including a size estimate
+	(the images ARE the zip: JPEGs barely compress, so the sum of file sizes is
+	within a percent or two of the final download)."""
 	frappe.only_for(("System Manager", "Stock Manager"))
 	photos = _photo_payload(design_type, provider)
+	size = 0
+	for p in photos:
+		img = p.get("image") or ""
+		if not img.startswith("/files/") and not img.startswith("/private/files/"):
+			continue
+		parts = img.lstrip("/").split("/")
+		path = frappe.get_site_path("public" if parts[0] == "files" else "", *parts)
+		if os.path.exists(path):
+			size += os.path.getsize(path)
 	return {"photos": len(photos), "with_image": len([p for p in photos if p.get("image")]),
-		"selections": frappe.db.count("Selection")}
+		"selections": frappe.db.count("Selection"), "size_bytes": size}
 
 
 @frappe.whitelist()
