@@ -711,6 +711,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "pen-tool",
+   "indent": 0,
+   "keep_closed": 1,
+   "label": "CAD",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "scale",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Weight Checker",
+   "link_to": "weight-checker",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "box",
    "indent": 0,
    "keep_closed": 1,
@@ -1580,7 +1606,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-20 22:47:45.344257",
+ "modified": "2026-07-20 23:18:15.445020",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
