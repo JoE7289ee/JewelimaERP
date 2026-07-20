@@ -4,7 +4,7 @@
  "autoname": "BAGE-.#####",
  "naming_rule": "Expression (old style)",
  "creation": "2026-06-18 12:00:00.000000",
- "modified": "2026-06-18 12:00:00.000000",
+ "modified": "2026-07-20 11:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -17,6 +17,7 @@
   "cb_times",
   "time_in",
   "time_out",
+  "transferred_at",
   "issued_at",
   "receipted_at",
   "sec_weights",
@@ -57,7 +58,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted",
+   "options": "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted\nExpired",
    "default": "In Queue",
    "in_list_view": 1,
    "in_standard_filter": 1
@@ -75,6 +76,13 @@
    "fieldname": "time_out",
    "fieldtype": "Datetime",
    "label": "Time Out"
+  },
+  {
+   "fieldname": "transferred_at",
+   "fieldtype": "Datetime",
+   "label": "Transferred Out At",
+   "read_only": 1,
+   "description": "When the card physically left this bench (transfer time). Gap vs Time Out = how long a completed card waited."
   },
   {
    "fieldname": "issued_at",

@@ -2073,7 +2073,7 @@ def get_bag_stage_history(order_bag):
 			continue
 		for r in frappe.get_all(
 			dt, filters={"order_bag": order_bag},
-			fields=["name", "status", "employee", "time_in", "time_out", "issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
+			fields=["name", "status", "employee", "time_in", "time_out", "transferred_at", "issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
 		):
 			r["bench"] = dt
 			rows.append(r)
@@ -2134,16 +2134,27 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 		"remarks": remarks,
 	}).insert(ignore_permissions=True)
 	bag.db_set("location", to_location)
-	# the card is leaving its current bench — close out that bench's record so it
-	# stops counting as present/queue/issued/receipted there (status -> Completed).
+	# the card is leaving its current bench — close out that bench's record.
+	# Work that was properly finished stays Completed and gets transferred_at
+	# stamped (Completed -> transfer gap = how long the finished card waited);
+	# anything still open (In Queue / Issued / ...) becomes EXPIRED — the card
+	# left without the work completing, and reports can filter that out.
 	try:
 		from jewelima.jewelima.benches import bench_doctype, on_bag_arrival
 
 		fdt = bench_doctype(from_location)
 		if fdt and frappe.db.exists("DocType", fdt):
-			old = frappe.get_all(fdt, filters={"order_bag": order_bag, "status": ["!=", "Completed"]}, order_by="creation desc", limit=1, pluck="name")
-			if old:
-				frappe.db.set_value(fdt, old[0], {"status": "Completed", "time_out": frappe.utils.now_datetime()})
+			now = frappe.utils.now_datetime()
+			open_rec = frappe.get_all(fdt, filters={"order_bag": order_bag,
+				"status": ["not in", ["Completed", "Expired"]]},
+				order_by="creation desc", limit=1, pluck="name")
+			if open_rec:
+				frappe.db.set_value(fdt, open_rec[0], {"status": "Expired", "transferred_at": now})
+			else:
+				done = frappe.get_all(fdt, filters={"order_bag": order_bag, "status": "Completed",
+					"transferred_at": ["is", "not set"]}, order_by="creation desc", limit=1, pluck="name")
+				if done:
+					frappe.db.set_value(fdt, done[0], "transferred_at", now)
 		# create the destination bench's record (only if that bench doctype exists yet)
 		on_bag_arrival(order_bag, to_location)
 	except Exception:
