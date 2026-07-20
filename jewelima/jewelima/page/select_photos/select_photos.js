@@ -99,7 +99,8 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<div class="b"><div class="bk">${__("OF")}</div><div class="bv sl2-of">0</div></div>
 				<div class="b"><div class="bk">${__("GOLD g")}</div><div class="bv sl2-gold">0.000</div></div>
 				<div class="b"><div class="bk">${__("DIAMOND ct")}</div><div class="bv sl2-cts">0.000</div></div>
-				<button class="btn btn-default sl2-reset" style="margin-left:auto;">${__("Reset")}</button>
+				<button class="btn btn-default sl2-selall" style="margin-left:auto;">${__("Select All")}</button>
+				<button class="btn btn-default sl2-reset">${__("Reset")}</button>
 				<button class="btn btn-default sl2-addtag">${__("Add Tag")}</button>
 				<button class="btn btn-primary sl2-save">${__("Save Selection")}</button>
 			</div>
@@ -281,6 +282,14 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		});
 		d.show();
 	});
+	// select everything the current filters show (adds to any existing picks)
+	root.find(".sl2-selall").on("click", () => {
+		if (!S.photos.length) return;
+		S.photos.forEach((p) => S.sel.add(p.name));
+		paintGrid();
+		frappe.show_alert({ message: __("{0} photo(s) selected", [S.sel.size]), indicator: "green" }, 2);
+	});
+
 	root.find(".sl2-reset").on("click", () => {
 		if (!S.sel.size) return;
 		frappe.confirm(__("Clear all <b>{0}</b> selected photo(s)?", [S.sel.size]), () => {
