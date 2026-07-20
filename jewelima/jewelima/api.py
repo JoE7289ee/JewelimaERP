@@ -2809,6 +2809,42 @@ def get_sieve_map():
 		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
 
 
+# --- Stone Stock (CAD) — read-only: is that stone in stock, and where? --------
+@frappe.whitelist()
+def get_stone_stock(search=None, family=None):
+	"""Every stone item holding stock, with its per-warehouse split. For sized
+	diamonds the sieve average adds an estimated piece count."""
+	rows = frappe.db.sql("""
+		SELECT b.item_code, i.item_group, i.stone_type, b.warehouse, b.actual_qty
+		FROM `tabBin` b JOIN `tabItem` i ON i.name = b.item_code
+		WHERE IFNULL(i.stone_type, '') != '' AND b.actual_qty > 0.0005
+		ORDER BY b.item_code""", as_dict=True)
+	sieve = {r.sieve_size: flt(r.avg_cts) for r in frappe.get_all(
+		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
+	agg = {}
+	for r in rows:
+		fam = "DIAMOND" if (r.item_group or "").startswith("DIAMOND") else (r.item_group or "")
+		if family and fam != family:
+			continue
+		if search and search.upper() not in r.item_code.upper():
+			continue
+		a = agg.setdefault(r.item_code, {"item": r.item_code, "group": r.item_group,
+			"family": fam, "stone_type": r.stone_type, "total": 0.0, "warehouses": []})
+		a["total"] += flt(r.actual_qty)
+		a["warehouses"].append({"warehouse": r.warehouse, "qty": flt(r.actual_qty)})
+	out = []
+	for a in agg.values():
+		a["total"] = round(a["total"], 3)
+		if a["stone_type"] == "Diamond":
+			avg = sieve.get(a["item"].split(" ", 1)[1] if " " in a["item"] else "")
+			a["est_pcs"] = int(a["total"] / avg) if avg else None
+		else:
+			a["est_pcs"] = None
+		out.append(a)
+	fams = sorted({("DIAMOND" if (r.item_group or "").startswith("DIAMOND") else r.item_group) for r in rows})
+	return {"rows": sorted(out, key=lambda x: x["item"]), "families": fams}
+
+
 # --- Repack Stock (Stones) — split bulk stone stock into sieves, with approval
 # The requester proposes the split; someone with the bigger role (System Manager /
 # Stock Manager) approves, and only THEN does a Repack Stock Entry move the stock.

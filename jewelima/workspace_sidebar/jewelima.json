@@ -735,6 +735,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "gem",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Stone Stock",
+   "link_to": "stone-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "box",
@@ -1606,7 +1619,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-20 23:18:15.445020",
+ "modified": "2026-07-20 23:36:59.788484",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
