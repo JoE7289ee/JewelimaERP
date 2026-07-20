@@ -68,6 +68,9 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 
 	$(page.main).append(`
 		<style>
+		.bb-loc{font-size:26px;font-weight:800;letter-spacing:.6px;margin:2px 0 10px;display:flex;align-items:center;gap:12px;}
+		.bb-loc .tag{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;
+			border:1px solid var(--border-color);border-radius:9px;padding:2px 10px;background:var(--control-bg);}
 		.bb-tiles{display:flex;gap:12px;flex-wrap:wrap;margin:4px 0 14px;}
 		.bb-tile{border:1px solid var(--border-color);border-radius:9px;padding:9px 18px;background:var(--control-bg);min-width:104px;}
 		.bb-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
@@ -83,6 +86,7 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		.bb-none{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.bb-st{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:var(--control-bg);}
 		</style>
+		<div class="bb-loc"><span class="tag">${__("Bench")}</span>${esc(bench)}</div>
 		<div class="bb-filter"></div>
 		<div class="bb-tiles bb-kpi"></div>
 		<div class="bb-sec">${__("Stock at the filtered cards")}</div>
