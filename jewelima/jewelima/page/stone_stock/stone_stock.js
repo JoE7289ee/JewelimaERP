@@ -1,10 +1,10 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Stone Stock (CAD) — read-only answer to one question: IS THAT STONE IN STOCK?
-// Every stone item holding stock, its total carats, estimated pieces (sized
-// diamonds, via the sieve chart) and the per-warehouse split. Family pills +
-// search. Route: /app/stone-stock
+// Stone Stock (CAD) — read-only answer to one question: IS THAT STONE FREE?
+// Stone Issue warehouse only, and only what open production cards HAVEN'T
+// already spoken for: free = stock there - still-to-issue plan demand. Sized
+// diamonds add estimated pieces via the sieve chart. Route: /app/stone-stock
 
 frappe.pages["stone-stock"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Stone Stock", single_column: true });
@@ -61,19 +61,21 @@ frappe.pages["stone-stock"].on_page_load = function (wrapper) {
 			? `<span class="ss-pill ${S.family ? "" : "on"}" data-f="">${__("All")}</span>` +
 			  S.families.map((f) => `<span class="ss-pill ${S.family === f ? "on" : ""}" data-f="${esc(f)}">${esc(f)}</span>`).join("")
 			: "");
-		const totCt = S.rows.reduce((a, r) => a + r.total, 0);
-		root.find(".ss-count").text(S.rows.length ? __("{0} item(s) in stock · {1} ct", [S.rows.length, totCt.toFixed(3)]) : "");
+		const totFree = S.rows.reduce((a, r) => a + r.free, 0);
+		root.find(".ss-count").text(S.rows.length
+			? __("{0} stone(s) free at Stone Issue · {1} ct", [S.rows.length, totFree.toFixed(3)]) : "");
 		root.find(".ss-body").html(S.rows.length ? `<table class="ss-tbl"><thead><tr>
-			<th>${__("Stone")}</th><th>${__("Group")}</th><th class="num">${__("In Stock (ct)")}</th>
-			<th class="num">${__("~ Pieces")}</th><th>${__("Where")}</th></tr></thead><tbody>` +
+			<th>${__("Stone")}</th><th>${__("Group")}</th><th class="num">${__("Free (ct)")}</th>
+			<th class="num">${__("~ Pieces")}</th><th class="num">${__("In Stock")}</th><th class="num">${__("Planned to issue")}</th></tr></thead><tbody>` +
 			S.rows.map((r) => `<tr>
 				<td class="ss-item">${esc(r.item)}</td>
 				<td>${esc(r.group)}</td>
-				<td class="num"><b>${r.total.toFixed(3)}</b></td>
+				<td class="num"><b style="color:#2e7d32;">${r.free.toFixed(3)}</b></td>
 				<td class="num">${r.est_pcs != null ? "~" + r.est_pcs : ""}</td>
-				<td class="ss-wh">${r.warehouses.map((w) => `${esc(w.warehouse)} — ${w.qty.toFixed(3)}`).join("<br>")}</td>
+				<td class="num" style="color:var(--text-muted);">${r.stock.toFixed(3)}</td>
+				<td class="num" style="color:var(--text-muted);">${r.planned ? r.planned.toFixed(3) : "—"}</td>
 			</tr>`).join("") + "</tbody></table>"
-			: `<div class="ss-none">${__("No stones in stock match.")}</div>`);
+			: `<div class="ss-none">${__("Nothing free at Stone Issue matches.")}</div>`);
 	}
 
 	root.on("click", ".ss-pill", function () {

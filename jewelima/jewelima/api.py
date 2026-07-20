@@ -2809,40 +2809,65 @@ def get_sieve_map():
 		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
 
 
-# --- Stone Stock (CAD) — read-only: is that stone in stock, and where? --------
+# --- Stone Stock (CAD) — read-only: is that stone FREE to use? -----------------
 @frappe.whitelist()
 def get_stone_stock(search=None, family=None):
-	"""Every stone item holding stock, with its per-warehouse split. For sized
-	diamonds the sieve average adds an estimated piece count."""
-	rows = frappe.db.sql("""
-		SELECT b.item_code, i.item_group, i.stone_type, b.warehouse, b.actual_qty
+	"""Stone Issue warehouse only. FREE = what's physically there MINUS what open
+	production cards still plan to draw (their plan lines less what's already
+	been issued to them). CAD sees only stones that are genuinely available."""
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+	bins = frappe.db.sql("""
+		SELECT b.item_code, i.item_group, i.stone_type, b.actual_qty
 		FROM `tabBin` b JOIN `tabItem` i ON i.name = b.item_code
-		WHERE IFNULL(i.stone_type, '') != '' AND b.actual_qty > 0.0005
-		ORDER BY b.item_code""", as_dict=True)
+		WHERE b.warehouse = %s AND IFNULL(i.stone_type, '') != '' AND b.actual_qty > 0.0005
+		ORDER BY b.item_code""", wh, as_dict=True)
+
+	# planned demand: stone plan lines of OPEN cards, minus what those cards
+	# already received (Bag Material Ledger In) — clamped at zero per card+item
+	plan = frappe.db.sql("""
+		SELECT bi.item, ob.name AS bag, SUM(bi.weight) AS w
+		FROM `tabOrder Bag BOM Item` bi
+		JOIN `tabOrder Bag` ob ON ob.name = bi.parent
+		JOIN `tabItem` i ON i.name = bi.item
+		WHERE ob.is_finished = 0 AND ob.stock_status = 'In Production'
+			AND IFNULL(i.stone_type, '') != ''
+		GROUP BY bi.item, ob.name""", as_dict=True)
+	got = {}
+	if plan:
+		for r in frappe.db.sql("""
+			SELECT item, order_bag, SUM(CASE WHEN direction='In' THEN qty ELSE -qty END) AS q
+			FROM `tabBag Material Ledger`
+			WHERE order_bag IN %(bags)s
+			GROUP BY item, order_bag""", {"bags": tuple({r.bag for r in plan})}, as_dict=True):
+			got[(r.item, r.order_bag)] = flt(r.q)
+	pending = {}
+	for r in plan:
+		short = flt(r.w) - max(got.get((r.item, r.bag), 0.0), 0.0)
+		if short > 0.0005:
+			pending[r.item] = pending.get(r.item, 0.0) + short
+
 	sieve = {r.sieve_size: flt(r.avg_cts) for r in frappe.get_all(
 		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
-	agg = {}
-	for r in rows:
-		fam = "DIAMOND" if (r.item_group or "").startswith("DIAMOND") else (r.item_group or "")
+	out, fams = [], set()
+	for b in bins:
+		fam = "DIAMOND" if (b.item_group or "").startswith("DIAMOND") else (b.item_group or "")
+		fams.add(fam)
 		if family and fam != family:
 			continue
-		if search and search.upper() not in r.item_code.upper():
+		if search and search.upper() not in b.item_code.upper():
 			continue
-		a = agg.setdefault(r.item_code, {"item": r.item_code, "group": r.item_group,
-			"family": fam, "stone_type": r.stone_type, "total": 0.0, "warehouses": []})
-		a["total"] += flt(r.actual_qty)
-		a["warehouses"].append({"warehouse": r.warehouse, "qty": flt(r.actual_qty)})
-	out = []
-	for a in agg.values():
-		a["total"] = round(a["total"], 3)
-		if a["stone_type"] == "Diamond":
-			avg = sieve.get(a["item"].split(" ", 1)[1] if " " in a["item"] else "")
-			a["est_pcs"] = int(a["total"] / avg) if avg else None
-		else:
-			a["est_pcs"] = None
-		out.append(a)
-	fams = sorted({("DIAMOND" if (r.item_group or "").startswith("DIAMOND") else r.item_group) for r in rows})
-	return {"rows": sorted(out, key=lambda x: x["item"]), "families": fams}
+		stock = flt(b.actual_qty)
+		planned = round(pending.get(b.item_code, 0.0), 3)
+		free = round(stock - planned, 3)
+		if free <= 0.0005:
+			continue   # fully spoken for — not available to CAD
+		avg = sieve.get(b.item_code.split(" ", 1)[1]) if (b.stone_type == "Diamond" and " " in b.item_code) else None
+		out.append({"item": b.item_code, "group": b.item_group, "family": fam,
+			"stock": round(stock, 3), "planned": planned, "free": free,
+			"est_pcs": int(free / avg) if avg else None})
+	return {"rows": out, "families": sorted(fams), "warehouse": wh}
 
 
 # --- Repack Stock (Stones) — split bulk stone stock into sieves, with approval
