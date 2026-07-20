@@ -19,7 +19,7 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		#page-repack-stock .container{max-width:100%;}
-		.rp2-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:16px;max-width:1150px;align-items:start;}
+		.rp2-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:16px;align-items:start;}
 		@media (max-width:900px){.rp2-grid{grid-template-columns:1fr;}}
 		.rp2-card{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:14px 18px;}
 		.rp2-card h4{margin:0 0 10px;font-size:14px;}
@@ -37,7 +37,7 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		.rp2-go{background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
 			padding:10px 28px;border-radius:8px;font-size:14px;cursor:pointer;}
 		.rp2-go:disabled{opacity:.4;cursor:default;}
-		.rp2-list{margin-top:18px;max-width:1150px;}
+		.rp2-list{margin-top:18px;}
 		.rp2-reqtbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--fg-color);
 			border:1px solid var(--border-color);border-radius:9px;overflow:hidden;font-size:12.5px;}
 		.rp2-reqtbl th{background:var(--control-bg);border-bottom:1px solid var(--border-color);padding:7px 10px;text-align:left;font-weight:700;}
@@ -92,8 +92,8 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 	const src = mk(".rp2-src", { fieldtype: "Link", label: __("Source Item"), fieldname: "src", options: "Item",
 		get_query: () => ({ filters: { stone_type: ["is", "set"], is_stock_item: 1 } }),
 		onchange: () => onSource() });
-	const qty = mk(".rp2-qty", { fieldtype: "Float", label: __("Qty being repacked (ct)"), fieldname: "q",
-		onchange: () => balance() });
+	const qty = mk(".rp2-qty", { fieldtype: "Float", label: __("Qty being repacked (ct) — auto from the split"), fieldname: "q",
+		read_only: 1 });
 	const titem = mk(".rp2-titem", { fieldtype: "Link", label: __("Target item"), fieldname: "t", options: "Item" });
 	const remarks = mk(".rp2-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "r" });
 
@@ -143,14 +143,17 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 	});
 
 	function balance() {
-		const q = Number(qty.get_value()) || 0;
 		const sum = TARGETS.reduce((a, t) => a + (t.qty || 0), 0);
-		const ok = q > 0 && TARGETS.length && Math.abs(sum - q) < 0.0005;
+		qty.set_value(sum ? Number(sum.toFixed(3)) : "");
+		const avail = CTX.available || 0;
+		const over = sum > avail + 0.0005;
+		const ok = sum > 0 && TARGETS.length && !over && !!src.get_value();
 		root.find(".rp2-bal")
-			.toggleClass("ok", ok).toggleClass("bad", !ok)
-			.text(q || sum ? __("Targets {0} ct of {1} ct — {2}", [sum.toFixed(3), q.toFixed(3),
-				ok ? __("balanced ✓") : __("must match exactly")]) : "");
-		root.find(".rp2-go").prop("disabled", !ok || !src.get_value());
+			.toggleClass("ok", ok).toggleClass("bad", !ok && sum > 0)
+			.text(sum ? (over
+				? __("Split {0} ct — only {1} ct available at Stone Issue", [sum.toFixed(3), avail.toFixed(3)])
+				: __("Repacking {0} ct ✓", [sum.toFixed(3)])) : "");
+		root.find(".rp2-go").prop("disabled", !ok);
 	}
 
 	root.find(".rp2-go").on("click", () => {
