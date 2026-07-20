@@ -2822,6 +2822,35 @@ def _stone_family(item):
 
 
 @frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def stone_item_search(doctype, txt, searchfield, start, page_len, filters):
+	"""Link-field search that puts the EXACT / shortest match first — Frappe's
+	default relevance drowns the bare 'CZ' under its 49 sieve children."""
+	filters = filters or {}
+	cond, vals = ["i.disabled = 0", "i.is_stock_item = 1"], {"txt": f"%{txt}%", "exact": txt}
+	if filters.get("item_group"):
+		ig = filters["item_group"]
+		if isinstance(ig, (list, tuple)) and len(ig) == 2 and ig[0] == "in":
+			cond.append("i.item_group IN %(groups)s")
+			vals["groups"] = tuple(ig[1]) or ("",)
+		else:
+			cond.append("i.item_group = %(group)s")
+			vals["group"] = ig
+	if filters.get("stone_only"):
+		cond.append("IFNULL(i.stone_type, '') != ''")
+	if filters.get("exclude"):
+		cond.append("i.name != %(excl)s")
+		vals["excl"] = filters["exclude"]
+	vals.update({"start": start, "page_len": page_len})
+	return frappe.db.sql("""
+		SELECT i.name, i.item_group
+		FROM `tabItem` i
+		WHERE {cond} AND i.name LIKE %(txt)s
+		ORDER BY (i.name = %(exact)s) DESC, CHAR_LENGTH(i.name), i.name
+		LIMIT %(start)s, %(page_len)s""".format(cond=" AND ".join(cond)), vals)
+
+
+@frappe.whitelist()
 def get_repack_context(source_item=None):
 	"""What the Repack page needs: the locked warehouse, and (given a source)
 	its available stock there + the items it may legally split into."""

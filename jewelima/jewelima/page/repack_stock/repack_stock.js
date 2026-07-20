@@ -90,7 +90,7 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		return c;
 	};
 	const src = mk(".rp2-src", { fieldtype: "Link", label: __("Source Item"), fieldname: "src", options: "Item",
-		get_query: () => ({ filters: { stone_type: ["is", "set"], is_stock_item: 1 } }),
+		get_query: () => ({ query: "jewelima.jewelima.api.stone_item_search", filters: { stone_only: 1 } }),
 		onchange: () => onSource() });
 	const qty = mk(".rp2-qty", { fieldtype: "Float", label: __("Qty being repacked (ct) — auto from the split"), fieldname: "q",
 		read_only: 1 });
@@ -106,8 +106,8 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 			CTX = r.message || CTX;
 			root.find(".rp2-info").html(__("Warehouse <b>{0}</b> · available there: <b>{1} ct</b> · family: <b>{2}</b>",
 				[esc(CTX.warehouse || "—"), (CTX.available || 0).toFixed(3), esc(CTX.family || "—")]));
-			titem.df.get_query = () => ({ filters: {
-				item_group: ["in", CTX.target_groups || []], is_stock_item: 1, name: ["!=", it] } });
+			titem.df.get_query = () => ({ query: "jewelima.jewelima.api.stone_item_search",
+				filters: { item_group: ["in", CTX.target_groups || []], exclude: it } });
 			balance();
 		});
 	}
