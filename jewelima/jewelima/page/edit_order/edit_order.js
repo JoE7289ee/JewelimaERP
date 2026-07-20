@@ -1,121 +1,118 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Edit Order — the ONLY place (besides Place Order itself) where an order
-// changes after it's placed: per-card MATERIALS (the plan BOM — a card whose
-// plan differs from its design shows a yellow "edited" badge) and the order's
-// dates. A card whose ornament is already made is locked. Change-logging of
-// these edits comes later (parked).
+// Edit Order — CARD-scan flow: scan (or type) a card, its plan comes up, change
+// its MATERIALS. A card whose plan differs from its design wears a yellow
+// "edited vs design" badge; one click resets to the design's original; a made
+// ornament is locked. Together with Place Order these are the only doors where
+// an order's materials change (change-logging comes later — parked).
 // Route: /app/edit-order
 
 frappe.pages["edit-order"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Edit Order", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
-	const S = { order: null, bags: [] };
+	let CARD = null;
 
 	$(page.main).append(`
 		<style>
 		#page-edit-order .container{max-width:100%;}
-		.eo-top{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px;}
-		.eo-top .frappe-control{margin:0;flex:0 0 220px;}
-		.eo-top .control-label{font-size:11px;color:var(--text-muted);}
-		.eo-head{display:flex;gap:26px;flex-wrap:wrap;border:1px solid var(--border-color);border-radius:10px;
-			background:var(--fg-color);padding:12px 18px;margin-bottom:12px;align-items:end;}
-		.eo-h{font-size:13px;}
-		.eo-h .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;display:block;}
-		.eo-h .frappe-control{margin:0;width:150px;}
-		.eo-tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--fg-color);
-			border:1px solid var(--border-color);border-radius:9px;overflow:hidden;font-size:13px;}
-		.eo-tbl th{background:var(--control-bg);border-bottom:1px solid var(--border-color);padding:8px 12px;text-align:left;font-weight:700;white-space:nowrap;}
-		.eo-tbl td{border-bottom:1px solid var(--border-color);padding:7px 12px;vertical-align:middle;}
-		.eo-tbl tbody tr:last-child td{border-bottom:0;}
-		.eo-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;}
-		.eo-card{font-weight:700;}
-		.eo-badge{display:inline-block;font-size:10px;font-weight:800;padding:1px 8px;border-radius:9px;margin-left:6px;}
+		.eo-scanwrap{display:flex;gap:12px;align-items:end;margin-bottom:14px;}
+		.eo-scanwrap .frappe-control{margin:0;flex:0 0 280px;}
+		.eo-scanwrap .control-label{font-size:11px;color:var(--text-muted);}
+		.eo-card{display:flex;gap:22px;border:1px solid var(--border-color);border-radius:12px;
+			background:var(--fg-color);padding:16px 20px;align-items:flex-start;max-width:1000px;}
+		.eo-card img{width:190px;height:190px;object-fit:contain;background:#111;border-radius:9px;flex:0 0 auto;}
+		.eo-main{flex:1 1 auto;}
+		.eo-title{font-size:20px;font-weight:800;letter-spacing:.4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+		.eo-badge{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 10px;border-radius:9px;}
 		.eo-badge.edited{background:#fff3cd;color:#8a6d00;}
-		.eo-badge.locked{background:var(--subtle-accent);color:var(--text-muted);}
-		.eo-mat{background:#1461d2;border:none;color:#fff;font-weight:700;padding:5px 16px;border-radius:6px;font-size:12px;cursor:pointer;}
+		.eo-badge.locked{background:#fdecea;color:#b02a2a;}
+		.eo-meta{font-size:13px;color:var(--text-muted);margin:6px 0 12px;line-height:1.7;}
+		.eo-meta b{color:var(--text-color);}
+		.eo-boxes{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+		.eo-b{border:1px solid var(--border-color);border-radius:8px;padding:5px 16px;text-align:center;background:var(--control-bg);min-width:92px;}
+		.eo-b .k{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
+		.eo-b .v{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;}
+		.eo-bom{font-size:12.5px;margin-bottom:14px;}
+		.eo-bom table{border-collapse:collapse;}
+		.eo-bom td,.eo-bom th{padding:3px 14px 3px 0;text-align:left;}
+		.eo-bom th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);}
+		.eo-bom td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		.eo-mat{background:#1461d2;border:none;color:#fff;font-weight:800;letter-spacing:.3px;
+			padding:10px 30px;border-radius:8px;font-size:14px;cursor:pointer;}
+		.eo-mat:hover{background:#0f4ca8;}
 		.eo-mat:disabled{opacity:.4;cursor:default;}
-		.eo-none{padding:44px;text-align:center;color:var(--text-muted);}
+		.eo-none{padding:46px;text-align:center;color:var(--text-muted);max-width:1000px;}
 		</style>
-		<div class="eo-top"><div class="eo-jo"></div></div>
-		<div class="eo-body"><div class="eo-none">${__("Pick a Job Order to edit.")}</div></div>
+		<div class="eo-scanwrap"><div class="eo-scan"></div></div>
+		<div class="eo-body"><div class="eo-none">${__("Scan a card to edit its materials.")}</div></div>
 	`);
 	const root = $(page.main);
 
-	const jo = frappe.ui.form.make_control({
-		df: { fieldtype: "Link", label: __("Job Order"), fieldname: "jo", options: "Job Order", reqd: 1,
-			onchange: () => { if (jo.get_value()) load(jo.get_value()); } },
-		parent: root.find(".eo-jo").get(0), render_input: true,
+	const scan = frappe.ui.form.make_control({
+		df: { fieldtype: "Data", label: __("Scan Card"), fieldname: "scan", placeholder: __("E0123.4 …") },
+		parent: root.find(".eo-scan").get(0), render_input: true,
 	});
-	jo.refresh();
-
-	let due, pdate;
+	scan.refresh();
+	scan.$input.on("keydown", (e) => {
+		if (e.key !== "Enter") return;
+		e.preventDefault();
+		const v = (scan.get_value() || "").trim();
+		if (v) load(v);
+	});
+	setTimeout(() => scan.$input.focus(), 300);
 
 	function load(name) {
-		frappe.call({ method: API + ".get_order_for_edit", args: { job_order: name } }).then((r) => {
-			const m = r.message || {};
-			S.order = m.order; S.bags = m.bags || [];
-			paint();
-		});
+		frappe.call({ method: API + ".get_card_for_edit", args: { order_bag: name } })
+			.then((r) => {
+				CARD = r.message;
+				paint();
+				scan.set_value("");
+			})
+			.catch(() => {
+				root.find(".eo-body").html(`<div class="eo-none" style="color:#b02a2a;">${__("Card {0} not found.", [esc(name)])}</div>`);
+			});
+	}
+
+	function bomTable(rows, title) {
+		if (!rows.length) return "";
+		return `<div class="eo-bom"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;">${title}</b>
+			<table><tr><th>${__("Item")}</th><th>${__("Qty")}</th><th>${__("Weight")}</th></tr>
+			${rows.map((r) => `<tr><td>${esc(r.item)}</td><td class="num">${r.qty || 0}</td><td class="num">${(r.weight || 0).toFixed(3)}</td></tr>`).join("")}
+			</table></div>`;
 	}
 
 	function paint() {
-		const o = S.order;
+		const c = CARD;
+		const badge = c.is_finished
+			? `<span class="eo-badge locked">${__("ORNAMENT MADE — locked")}</span>`
+			: (c.diverged ? `<span class="eo-badge edited">${__("edited vs design")}</span>` : "");
 		root.find(".eo-body").html(`
-			<div class="eo-head">
-				<div class="eo-h"><span class="k">${__("Order")}</span><b>${esc(o.name)}</b></div>
-				<div class="eo-h"><span class="k">${__("Party")}</span>${esc(o.customer || "—")}</div>
-				<div class="eo-h"><span class="k">${__("Salesman")}</span>${esc(o.salesman || "—")}</div>
-				<div class="eo-h"><span class="k">${__("Type")}</span>${esc(o.order_type || "—")}</div>
-				<div class="eo-h"><span class="k">${__("Order Date")}</span>${frappe.datetime.str_to_user(o.order_date) || "—"}</div>
-				<div class="eo-h"><span class="k">${__("Due Date")}</span><div class="eo-due"></div></div>
-				<div class="eo-h"><span class="k">${__("Party Date")}</span><div class="eo-pdate"></div></div>
-				<button class="btn btn-sm btn-default eo-savedates">${__("Update Dates")}</button>
-			</div>
-			<table class="eo-tbl"><thead><tr>
-				<th>${__("Card")}</th><th>${__("Design")}</th><th class="num">${__("Qty")}</th>
-				<th>${__("Location")}</th><th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th>
-				<th style="text-align:right">${__("Materials")}</th>
-			</tr></thead><tbody>${S.bags.map(rowHtml).join("")}</tbody></table>`);
-
-		due = frappe.ui.form.make_control({ df: { fieldtype: "Date", fieldname: "due" },
-			parent: root.find(".eo-due").get(0), render_input: true });
-		due.refresh(); due.set_value(o.due_date);
-		pdate = frappe.ui.form.make_control({ df: { fieldtype: "Date", fieldname: "pdate" },
-			parent: root.find(".eo-pdate").get(0), render_input: true });
-		pdate.refresh(); pdate.set_value(o.customer_date);
+			<div class="eo-card">
+				<img src="${encodeURI(c.image || "")}" onerror="this.style.visibility='hidden'">
+				<div class="eo-main">
+					<div class="eo-title">${esc(c.name)} ${badge}</div>
+					<div class="eo-meta">
+						${__("Design")} <b>${esc(c.design || "—")}</b> · ${__("Qty")} <b>${c.qty || 0}</b>
+						${c.size ? " · " + __("Size") + " <b>" + esc(c.size) + "</b>" : ""}<br>
+						${__("Party")} <b>${esc(c.customer || "—")}</b> · ${esc(c.salesman || "")}
+						· ${__("Due")} <b>${c.due_date ? frappe.datetime.str_to_user(c.due_date) : "—"}</b><br>
+						${__("At")} <b>${esc(c.location || "—")}</b> · ${esc(c.stock_status || "")}
+						· <a href="/app/order-bag/${encodeURIComponent(c.name)}">${__("open card")}</a>
+					</div>
+					<div class="eo-boxes">
+						<div class="eo-b"><div class="k">${__("GROSS g")}</div><div class="v">${(c.gross_weight || 0).toFixed(3)}</div></div>
+						<div class="eo-b"><div class="k">${__("NETT g")}</div><div class="v">${(c.nett_weight || 0).toFixed(3)}</div></div>
+						<div class="eo-b"><div class="k">${__("PURITY %")}</div><div class="v">${(c.purity || 0).toFixed(1)}</div></div>
+					</div>
+					${bomTable(c.bom, __("Current plan"))}
+					<button class="eo-mat" ${c.is_finished ? "disabled" : ""}>${__("EDIT MATERIALS")}</button>
+				</div>
+			</div>`);
 	}
 
-	function rowHtml(b) {
-		const badge = b.is_finished ? `<span class="eo-badge locked">${__("MADE — locked")}</span>`
-			: (b.diverged ? `<span class="eo-badge edited">${__("edited vs design")}</span>` : "");
-		return `<tr data-n="${esc(b.name)}">
-			<td class="eo-card">${esc(b.name)}${badge}</td>
-			<td>${esc(b.design || "—")}</td>
-			<td class="num">${b.qty || 0}</td>
-			<td>${esc(b.location || "—")} <span style="color:var(--text-muted);font-size:11px;">${esc(b.stock_status || "")}</span></td>
-			<td class="num">${(b.gross_weight || 0).toFixed(3)}</td>
-			<td class="num">${(b.nett_weight || 0).toFixed(3)}</td>
-			<td style="text-align:right"><button class="eo-mat" ${b.is_finished ? "disabled" : ""}>${__("Materials")}</button></td>
-		</tr>`;
-	}
-
-	root.on("click", ".eo-savedates", () => {
-		frappe.call({ method: API + ".update_order_dates", args: {
-			job_order: S.order.name, due_date: due.get_value() || null, customer_date: pdate.get_value() || null,
-		} }).then(() => {
-			frappe.show_alert({ message: __("Dates updated on the order and every card."), indicator: "green" }, 3);
-			load(S.order.name);
-		});
-	});
-
-	root.on("click", ".eo-mat", function () {
-		const bag = S.bags.find((b) => b.name === $(this).closest("tr").attr("data-n"));
-		if (!bag) return;
-		openMaterials(bag);
-	});
+	root.on("click", ".eo-mat", () => openMaterials(CARD));
 
 	function openMaterials(bag) {
 		const d = new frappe.ui.Dialog({
@@ -144,18 +141,18 @@ frappe.pages["edit-order"].on_page_load = function (wrapper) {
 				} }).then(() => {
 					frappe.dom.unfreeze();
 					frappe.show_alert({ message: __("{0} — plan updated and re-totalled.", [bag.name]), indicator: "green" }, 3);
-					load(S.order.name);
+					load(bag.name);
 				}).catch(() => frappe.dom.unfreeze());
 			},
-			secondary_action_label: bag.design ? __("Reset to design") : null,
-			secondary_action: bag.design ? () => {
+			secondary_action_label: bag.design_bom.length ? __("Reset to design") : null,
+			secondary_action: bag.design_bom.length ? () => {
 				frappe.confirm(__("Replace this card's plan with the design's original BOM?"), () => {
 					d.hide();
 					frappe.call({ method: API + ".save_bag_bom", args: {
 						order_bag: bag.name, rows: JSON.stringify(bag.design_bom),
 					} }).then(() => {
 						frappe.show_alert({ message: __("Back to the design's BOM."), indicator: "green" }, 3);
-						load(S.order.name);
+						load(bag.name);
 					});
 				});
 			} : null,
@@ -169,9 +166,9 @@ frappe.pages["edit-order"].on_page_load = function (wrapper) {
 		d.show();
 	}
 
-	// arriving with a job order pre-picked (e.g. from another page)
-	if (frappe.route_options && frappe.route_options.job_order) {
-		jo.set_value(frappe.route_options.job_order);
+	// arriving with a card pre-picked
+	if (frappe.route_options && frappe.route_options.order_bag) {
+		load(frappe.route_options.order_bag);
 		frappe.route_options = null;
 	}
 	page.add_inner_button(__("Place Order"), () => frappe.set_route("place-order"));

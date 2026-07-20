@@ -3328,6 +3328,30 @@ def get_order_for_edit(job_order):
 
 
 @frappe.whitelist()
+def get_card_for_edit(order_bag):
+	"""Edit Order, card-scan flow: ONE card with its plan BOM, the design's
+	original materials (to show the diversion), and whether it's locked."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Card {0} not found.").format(order_bag))
+	doc = frappe.get_doc("Order Bag", order_bag)
+	design_mats = []
+	if doc.design and frappe.db.exists("Design", doc.design):
+		d = frappe.get_doc("Design", doc.design)
+		design_mats = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in d.materials if m.item]
+	bom = [{"item": r.item, "qty": flt(r.qty), "weight": flt(r.weight)} for r in doc.bag_bom]
+	return {
+		"name": doc.name, "design": doc.design, "image": doc.image, "qty": doc.qty, "size": doc.size,
+		"location": doc.location, "stock_status": doc.stock_status, "is_finished": doc.is_finished,
+		"customer": doc.customer, "salesman": doc.salesman, "due_date": str(doc.due_date or ""),
+		"job_order": doc.job_order,
+		"gross_weight": flt(doc.gross_weight), "nett_weight": flt(doc.nett_weight), "purity": flt(doc.purity),
+		"bom": bom, "design_bom": design_mats,
+		"diverged": sorted((r["item"], r["qty"], r["weight"]) for r in bom) != \
+			sorted((r["item"], r["qty"], r["weight"]) for r in design_mats) if design_mats else bool(bom),
+	}
+
+
+@frappe.whitelist()
 def update_order_dates(job_order, due_date=None, customer_date=None):
 	"""Edit Order: move the order's dates — on the Job Order and every one of its bags."""
 	if not frappe.db.exists("Job Order", job_order):
