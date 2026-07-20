@@ -2809,6 +2809,153 @@ def get_sieve_map():
 		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
 
 
+# --- Repack Stock (Stones) — split bulk stone stock into sieves, with approval
+# The requester proposes the split; someone with the bigger role (System Manager /
+# Stock Manager) approves, and only THEN does a Repack Stock Entry move the stock.
+# Locked to the Stone Issue warehouse. Family rule: a stone can only repack into
+# its own parent group — CZ -> CZ sieves; DIAMOND -> any diamond quality + sieve.
+def _stone_family(item):
+	group = frappe.db.get_value("Item", item, "item_group") or ""
+	if group.startswith("DIAMOND"):
+		return "DIAMOND"
+	return group   # CUBIC ZIRCONIA, CVD, SWAROVSKI, ... are their own family
+
+
+@frappe.whitelist()
+def get_repack_context(source_item=None):
+	"""What the Repack page needs: the locked warehouse, and (given a source)
+	its available stock there + the items it may legally split into."""
+	wh = _wh("Stone Issue")
+	out = {"warehouse": wh, "can_approve": bool({"System Manager", "Stock Manager"} & set(frappe.get_roles()))}
+	if source_item:
+		fam = _stone_family(source_item)
+		out["family"] = fam
+		out["available"] = flt(frappe.db.get_value("Bin", {"item_code": source_item, "warehouse": wh}, "actual_qty"))
+		if fam == "DIAMOND":
+			groups = frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name")
+		else:
+			groups = [fam]
+		out["target_groups"] = groups
+	return out
+
+
+@frappe.whitelist()
+def create_repack_request(source_item, qty, targets, remarks=None):
+	"""Place a repack request (Pending). Validates the family rule and that the
+	target quantities add up EXACTLY to the source qty — repacking never creates
+	or loses carats."""
+	if isinstance(targets, str):
+		targets = json.loads(targets or "[]")
+	qty = flt(qty)
+	if not frappe.db.exists("Item", source_item):
+		frappe.throw(frappe._("Item {0} not found.").format(source_item))
+	if not frappe.db.get_value("Item", source_item, "stone_type"):
+		frappe.throw(frappe._("{0} is not a stone.").format(source_item))
+	if qty <= 0:
+		frappe.throw(frappe._("Qty must be positive."))
+	fam = _stone_family(source_item)
+	rows = []
+	total = 0.0
+	for t in targets or []:
+		it, q = t.get("item"), flt(t.get("qty"))
+		if not it or q <= 0:
+			continue
+		if it == source_item:
+			frappe.throw(frappe._("{0} can't be repacked into itself.").format(it))
+		if _stone_family(it) != fam:
+			frappe.throw(frappe._("{0} is outside the {1} family — a stone only repacks within its own group.").format(it, fam))
+		rows.append({"item": it, "qty": q})
+		total += q
+	if not rows:
+		frappe.throw(frappe._("Add at least one target line."))
+	if abs(total - qty) > 0.0005:
+		frappe.throw(frappe._("Targets add up to {0} ct but the source is {1} ct — a repack must balance exactly.").format(round(total, 3), qty))
+	wh = _wh("Stone Issue")
+	doc = frappe.get_doc({
+		"doctype": "Repack Request", "source_item": source_item, "qty": qty,
+		"warehouse": wh, "status": "Pending", "remarks": remarks,
+		"requested_by": frappe.session.user, "requested_on": frappe.utils.now_datetime(),
+		"targets": rows,
+	})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name}
+
+
+@frappe.whitelist()
+def list_repack_requests(status=None, limit=50):
+	filters = {}
+	if status and status != "all":
+		filters["status"] = status.title()
+	rows = frappe.get_all("Repack Request", filters=filters,
+		fields=["name", "source_item", "qty", "status", "requested_by", "requested_on",
+			"approved_by", "stock_entry", "reject_reason"],
+		order_by="creation desc", limit_page_length=cint(limit) or 50)
+	tmap = {}
+	for t in frappe.get_all("Repack Request Item", filters={"parent": ["in", [r.name for r in rows]]},
+			fields=["parent", "item", "qty"], order_by="idx"):
+		tmap.setdefault(t.parent, []).append({"item": t.item, "qty": flt(t.qty)})
+	for r in rows:
+		r["targets"] = tmap.get(r.name, [])
+		r["requested_on"] = str(r.requested_on or "")
+	return rows
+
+
+@frappe.whitelist()
+def approve_repack(name):
+	"""The bigger role signs off: checks live stock, writes ONE Repack Stock Entry
+	(source out, sieves in — same warehouse), stamps the request Approved."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	doc = frappe.get_doc("Repack Request", name)
+	if doc.status != "Pending":
+		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
+	have = flt(frappe.db.get_value("Bin", {"item_code": doc.source_item, "warehouse": doc.warehouse}, "actual_qty"))
+	if have + 0.0005 < flt(doc.qty):
+		frappe.throw(frappe._("Only {0} ct of {1} at {2} — the request needs {3} ct.").format(
+			round(have, 3), doc.source_item, doc.warehouse, doc.qty))
+	items = [{
+		"item_code": doc.source_item, "qty": flt(doc.qty),
+		"uom": frappe.db.get_value("Item", doc.source_item, "stock_uom") or "Carat",
+		"s_warehouse": doc.warehouse, "allow_zero_valuation_rate": 1,
+	}]
+	# multiple finished goods in a Repack need explicit rates — the sieves inherit
+	# the source parcel's per-carat valuation, so value is conserved like weight
+	src_rate = flt(frappe.db.get_value("Bin", {"item_code": doc.source_item, "warehouse": doc.warehouse}, "valuation_rate"))
+	for t in doc.targets:
+		items.append({
+			"item_code": t.item, "qty": flt(t.qty),
+			"uom": frappe.db.get_value("Item", t.item, "stock_uom") or "Carat",
+			"t_warehouse": doc.warehouse, "allow_zero_valuation_rate": 1,
+			"set_basic_rate_manually": 1, "basic_rate": src_rate,
+			"is_finished_item": 1,
+		})
+	se = frappe.get_doc({"doctype": "Stock Entry", "stock_entry_type": "Repack",
+		"company": _company(), "items": items})
+	se.insert(ignore_permissions=True)
+	se.submit()
+	doc.db_set("status", "Approved")
+	doc.db_set("approved_by", frappe.session.user)
+	doc.db_set("approved_on", frappe.utils.now_datetime())
+	doc.db_set("stock_entry", se.name)
+	frappe.db.commit()
+	return {"name": name, "stock_entry": se.name}
+
+
+@frappe.whitelist()
+def reject_repack(name, reason=None):
+	frappe.only_for(("System Manager", "Stock Manager"))
+	doc = frappe.get_doc("Repack Request", name)
+	if doc.status != "Pending":
+		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
+	doc.db_set("status", "Rejected")
+	doc.db_set("approved_by", frappe.session.user)
+	doc.db_set("approved_on", frappe.utils.now_datetime())
+	if reason:
+		doc.db_set("reject_reason", reason)
+	frappe.db.commit()
+	return {"name": name}
+
+
 # --- Selection Tags (their own master — different purpose from the bank's Design Tags)
 @frappe.whitelist()
 def get_selection_tags(with_counts=1):
