@@ -64,7 +64,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.sl2-strip .b .bk{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
 		.sl2-strip .b .bv{font-size:15px;font-weight:800;}
 		.sl2-strip .b.tot{background:var(--fg-color);border-width:2px;}
-		.sl2-strip .sl2-save{margin-left:auto;font-size:15px;font-weight:700;padding:9px 30px;background:#2e7d32;border-color:#2e7d32;color:#fff;}
+		.sl2-strip .sl2-save{font-size:15px;font-weight:700;padding:9px 30px;background:#2e7d32;border-color:#2e7d32;color:#fff;}
 		.sl2-strip .sl2-save:hover{background:#256628;border-color:#256628;}
 		</style>
 		<div class="sl2-wrap">
@@ -72,7 +72,6 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<div class="sl2-party"></div><div class="sl2-date"></div><div class="sl2-search"></div>
 				<div class="sl2-rng"><div class="sl2-gmin"></div><span class="dash">–</span><div class="sl2-gmax"></div></div>
 				<div class="sl2-rng"><div class="sl2-cmin"></div><span class="dash">–</span><div class="sl2-cmax"></div></div>
-				<button class="btn btn-default sl2-clear">${__("Clear picks")}</button>
 			</div>
 			<div class="sl2-pills sl2-dtypes"></div>
 			<div class="sl2-pills sl2-tagrow"></div>
@@ -100,6 +99,8 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<div class="b"><div class="bk">${__("OF")}</div><div class="bv sl2-of">0</div></div>
 				<div class="b"><div class="bk">${__("GOLD g")}</div><div class="bv sl2-gold">0.000</div></div>
 				<div class="b"><div class="bk">${__("DIAMOND ct")}</div><div class="bv sl2-cts">0.000</div></div>
+				<button class="btn btn-default sl2-reset" style="margin-left:auto;">${__("Reset")}</button>
+				<button class="btn btn-default sl2-addtag">${__("Add Tag")}</button>
 				<button class="btn btn-primary sl2-save">${__("Save Selection")}</button>
 			</div>
 		</div>
@@ -280,7 +281,32 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		});
 		d.show();
 	});
-	root.find(".sl2-clear").on("click", () => { S.sel.clear(); paintGrid(); });
+	root.find(".sl2-reset").on("click", () => {
+		if (!S.sel.size) return;
+		frappe.confirm(__("Clear all <b>{0}</b> selected photo(s)?", [S.sel.size]), () => {
+			S.sel.clear();
+			paintGrid();
+		});
+	});
+
+	root.find(".sl2-addtag").on("click", () => {
+		if (!S.sel.size) return frappe.msgprint(__("Select at least one photo first."));
+		frappe.prompt(
+			{ fieldname: "t", label: __("Tag(s)"), fieldtype: "Data", reqd: 1,
+				description: __("comma separated — new tags are created automatically") },
+			(v) => {
+				const tags = (v.t || "").split(",").map((x) => x.trim()).filter(Boolean);
+				frappe.call({ method: API + ".bulk_add_selection_tags", args: {
+					photos: JSON.stringify([...S.sel]), tags: JSON.stringify(tags),
+				} }).then((r) => {
+					const m = r.message || {};
+					frappe.show_alert({ message: __("{0} tagged with {1}", [m.photos_tagged, (m.tags || []).join(", ")]), indicator: "green" }, 4);
+					load();   // repaint chips + the tag filter row
+				});
+			},
+			__("Add tag to {0} selected photo(s)", [S.sel.size])
+		);
+	});
 
 	root.find(".sl2-save").on("click", () => {
 		if (!S.sel.size) return frappe.msgprint(__("Select at least one photo."));
@@ -302,11 +328,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		});
 	});
 
-	page.add_inner_button(__("Records"), () => frappe.set_route("List", "Selection"));
-	page.add_inner_button(__("Export / Import"), () => frappe.set_route("selection-transfer"));
 	page.add_inner_button(__("Manage Tags"), () => frappe.set_route("selection-tags"));
-	page.add_inner_button(__("Providers"), () => frappe.set_route("selection-providers"));
-	page.add_inner_button(__("Refresh"), load);
 	// arriving from Selection Tags / Providers with a filter pre-picked
 	if (frappe.route_options) {
 		if (frappe.route_options.tag) S.tag = frappe.route_options.tag;

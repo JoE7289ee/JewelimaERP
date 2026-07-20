@@ -2817,6 +2817,40 @@ def set_selection_tag_color(tag_name, color):
 	return {"ok": 1}
 
 
+@frappe.whitelist()
+def bulk_add_selection_tags(photos, tags):
+	"""Stick tag(s) on many catalog photos at once (the Selection page's Add Tag
+	button). Unknown tags are created; a photo that already carries the tag is
+	left alone."""
+	if isinstance(photos, str):
+		photos = json.loads(photos or "[]")
+	if isinstance(tags, str):
+		tags = json.loads(tags or "[]")
+	clean = []
+	for t in tags or []:
+		t = (t or "").strip().upper()
+		if t and t not in clean:
+			if not frappe.db.exists("Selection Tag", t):
+				frappe.get_doc({"doctype": "Selection Tag", "tag_name": t}).insert(ignore_permissions=True)
+			clean.append(t)
+	if not clean or not photos:
+		frappe.throw(frappe._("Pick photos and give at least one tag."))
+	touched = 0
+	for name in photos:
+		if not frappe.db.exists("Selection Photo", name):
+			continue
+		doc = frappe.get_doc("Selection Photo", name)
+		have = {t.tag for t in doc.tags}
+		add = [t for t in clean if t not in have]
+		if add:
+			for t in add:
+				doc.append("tags", {"tag": t})
+			doc.save(ignore_permissions=True)
+			touched += 1
+	frappe.db.commit()
+	return {"tags": clean, "photos_tagged": touched, "photos_given": len(photos)}
+
+
 # --- Selection Providers (who makes the pieces — plain Suppliers underneath) ---
 @frappe.whitelist()
 def get_selection_providers():
