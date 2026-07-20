@@ -124,7 +124,9 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 				if ($c) $c.prop("disabled", true).val("").attr("placeholder", "—");
 				if ($g) $g.prop("disabled", false).attr("placeholder", "grams");
 				if ($ct) $ct.prop("disabled", true).val("").attr("placeholder", "—");
-				if ($p) $p.prop("disabled", false).val(v.purity_percentage || "").attr("placeholder", "%");
+				// purity is the ITEM's — shown, never edited (stock is item-keyed,
+				// so a typed purity could never land anywhere anyway)
+				if ($p) $p.prop("disabled", true).val(v.purity_percentage || "").attr("placeholder", "%");
 			}
 			recalc();
 		});
