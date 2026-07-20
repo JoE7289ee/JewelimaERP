@@ -43,6 +43,8 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		.wc-tbl tr.hasval td.tot{color:#2e7d32;}
 		.wc-foot{position:sticky;bottom:0;display:flex;gap:12px;align-items:center;margin-top:12px;
 			border:2px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:10px 16px;flex-wrap:wrap;}
+		.wc-foot.compare{justify-content:space-between;}
+		.wc-fgroup{display:flex;gap:12px;}
 		.wc-b{border:1px solid var(--border-color);border-radius:8px;padding:5px 20px;text-align:center;background:var(--control-bg);}
 		.wc-b .k{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
 		.wc-b .v{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;}
@@ -110,19 +112,27 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		});
 		applyHide();
 		const A = totalsOf("A");
-		let html = compare
-			? `<div class="wc-b"><div class="k">${__("A — PIECES")}</div><div class="v">${A.n}</div></div>
-			   <div class="wc-b"><div class="k">${__("A — CARATS")}</div><div class="v">${A.ct.toFixed(3)}</div></div>`
-			: `<div class="wc-b"><div class="k">${__("TOTAL PIECES")}</div><div class="v">${A.n}</div></div>
-			   <div class="wc-b"><div class="k">${__("TOTAL CARATS")}</div><div class="v">${A.ct.toFixed(3)}</div></div>`;
+		let html;
 		if (compare) {
+			// A under the left table, the deltas in the middle, B under the right
 			const B = totalsOf("B");
-			html += `<div class="wc-b"><div class="k">${__("B — PIECES")}</div><div class="v">${B.n}</div></div>
-				<div class="wc-b"><div class="k">${__("B — CARATS")}</div><div class="v">${B.ct.toFixed(3)}</div></div>
-				<div class="wc-b diff"><div class="k">${__("Δ CARATS (A−B)")}</div><div class="v">${(A.ct - B.ct).toFixed(3)}</div></div>
-				<div class="wc-b diff"><div class="k">${__("Δ PIECES")}</div><div class="v">${A.n - B.n}</div></div>`;
+			html = `<div class="wc-fgroup">
+					<div class="wc-b"><div class="k">${__("A — PIECES")}</div><div class="v">${A.n}</div></div>
+					<div class="wc-b"><div class="k">${__("A — CARATS")}</div><div class="v">${A.ct.toFixed(3)}</div></div>
+				</div>
+				<div class="wc-fgroup">
+					<div class="wc-b diff"><div class="k">${__("Δ CARATS (A−B)")}</div><div class="v">${(A.ct - B.ct).toFixed(3)}</div></div>
+					<div class="wc-b diff"><div class="k">${__("Δ PIECES")}</div><div class="v">${A.n - B.n}</div></div>
+				</div>
+				<div class="wc-fgroup">
+					<div class="wc-b"><div class="k">${__("B — PIECES")}</div><div class="v">${B.n}</div></div>
+					<div class="wc-b"><div class="k">${__("B — CARATS")}</div><div class="v">${B.ct.toFixed(3)}</div></div>
+				</div>`;
+		} else {
+			html = `<div class="wc-b"><div class="k">${__("TOTAL PIECES")}</div><div class="v">${A.n}</div></div>
+				<div class="wc-b"><div class="k">${__("TOTAL CARATS")}</div><div class="v">${A.ct.toFixed(3)}</div></div>`;
 		}
-		root.find(".wc-foot").html(html);
+		root.find(".wc-foot").toggleClass("compare", compare).html(html);
 	}
 
 	function applyHide() {
