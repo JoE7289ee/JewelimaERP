@@ -1387,6 +1387,32 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "settings-2",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Login Accounts",
+   "link_to": "reset-password",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "lock",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Permissions",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
@@ -1405,19 +1431,6 @@
    "keep_closed": 0,
    "label": "Transfer Matrix",
    "link_to": "transfer-matrix",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "settings-2",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Login Accounts",
-   "link_to": "reset-password",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -1528,7 +1541,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-20 13:48:42.671408",
+ "modified": "2026-07-20 16:54:23.954117",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
