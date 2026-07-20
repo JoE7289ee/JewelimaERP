@@ -3302,6 +3302,51 @@ def weight_reduce(order_bag, lines, to_warehouse=None):
 
 
 @frappe.whitelist()
+def get_order_for_edit(job_order):
+	"""Everything the Edit Order page needs: the header + every bag with its plan
+	BOM, the design's ORIGINAL materials (to show diversions), and whether the
+	bag's plan is still editable (locked once the ornament is made)."""
+	jo = frappe.db.get_value("Job Order", job_order,
+		["name", "customer", "salesman", "order_type", "order_date", "due_date", "customer_date"], as_dict=True)
+	if not jo:
+		frappe.throw(frappe._("Job Order {0} not found.").format(job_order))
+	bags = []
+	for b in frappe.get_all("Order Bag", filters={"job_order": job_order},
+			fields=["name", "design", "qty", "size", "location", "stock_status", "is_finished",
+				"gross_weight", "nett_weight", "purity", "narration"], order_by="name"):
+		doc = frappe.get_doc("Order Bag", b.name)
+		b["bom"] = [{"item": r.item, "qty": flt(r.qty), "weight": flt(r.weight)} for r in doc.bag_bom]
+		design_mats = []
+		if b.design and frappe.db.exists("Design", b.design):
+			d = frappe.get_doc("Design", b.design)
+			design_mats = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in d.materials if m.item]
+		b["design_bom"] = design_mats
+		b["diverged"] = sorted((r["item"], r["qty"], r["weight"]) for r in b["bom"]) != \
+			sorted((r["item"], r["qty"], r["weight"]) for r in design_mats) if design_mats else bool(b["bom"])
+		bags.append(b)
+	return {"order": jo, "bags": bags}
+
+
+@frappe.whitelist()
+def update_order_dates(job_order, due_date=None, customer_date=None):
+	"""Edit Order: move the order's dates — on the Job Order and every one of its bags."""
+	if not frappe.db.exists("Job Order", job_order):
+		frappe.throw(frappe._("Job Order {0} not found.").format(job_order))
+	vals = {}
+	if due_date:
+		vals["due_date"] = due_date
+	if customer_date:
+		vals["customer_date"] = customer_date
+	if not vals:
+		return {"ok": 0}
+	frappe.db.set_value("Job Order", job_order, vals)
+	for bag in frappe.get_all("Order Bag", filters={"job_order": job_order}, pluck="name"):
+		frappe.db.set_value("Order Bag", bag, vals, update_modified=False)
+	frappe.db.commit()
+	return {"ok": 1, **vals}
+
+
+@frappe.whitelist()
 def save_bag_bom(order_bag, rows):
 	"""Replace a card's BOM (editable plan) from the Weight Add screen. Blocked once
 	the ornament is made."""

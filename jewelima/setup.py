@@ -98,7 +98,7 @@ JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Orde
 JEWELIMA_ORDER_PAGES = ["card-info", "job-order-status", "order-requests"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
-JEWELIMA_ORDERING_ONLY_PAGES = ["place-order"]
+JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order"]
 # The runner role: moves cards from one place to another and NOTHING else.
 # One page; the transfer APIs write with ignore_permissions, and Transfer Rules
 # can further restrict which from->to moves the role may make.

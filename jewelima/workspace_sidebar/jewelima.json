@@ -48,6 +48,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "edit",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Edit Order",
+   "link_to": "edit-order",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "inbox",
    "indent": 1,
    "keep_closed": 0,
@@ -1515,7 +1528,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-19 17:36:47.092887",
+ "modified": "2026-07-20 13:48:42.671408",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
