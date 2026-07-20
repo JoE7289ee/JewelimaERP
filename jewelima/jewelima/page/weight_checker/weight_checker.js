@@ -69,7 +69,8 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 
 	function panelHtml(k) {
 		return `<div class="wc-panel" data-p="${k}">
-			${compare ? `<h4>${__("Weight {0}", [k])}</h4>` : ""}
+			${compare ? `<h4 style="display:flex;align-items:center;gap:10px;">${__("Weight {0}", [k])}
+				<button class="btn btn-xs btn-default wc-clear-one" data-p="${k}">${__("Clear {0}", [k])}</button></h4>` : ""}
 			<table class="wc-tbl">
 				<thead><tr><th>${__("Sieve")}</th><th>${__("MM")}</th><th>${__("Avg Cts")}</th><th>${__("Nos")}</th><th>${__("Total Cts")}</th></tr></thead>
 				<tbody>${ROWS.map((r, i) => `<tr data-i="${i}">
@@ -157,6 +158,12 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 	});
 
 	root.find(".wc-compare").on("click", () => { compare = !compare; paint(); });
+	root.on("click", ".wc-clear-one", function () {
+		const k = $(this).attr("data-p");
+		VALS[k] = {};
+		root.find(`tbody input[data-p="${k}"]`).val("");
+		recalc();
+	});
 	root.find(".wc-hide").on("click", () => { hideEmpty = !hideEmpty; applyHide(); });
 	root.find(".wc-clear").on("click", () => {
 		VALS.A = {}; VALS.B = {}; hideEmpty = false;
