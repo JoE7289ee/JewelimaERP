@@ -125,7 +125,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			row.isStone = !!v.stone_type;
 			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat, $p = row.inputs.purity;
 			if (row.isStone) {
-				row._avg = sieveAvg(item);
+				row._avg = v.stone_type === "Diamond" ? sieveAvg(item) : 0;   // sieve chart is DIAMOND-only
 				if ($ct && !row._sieveWired) {
 					row._sieveWired = true;
 					$ct.on("input", () => {

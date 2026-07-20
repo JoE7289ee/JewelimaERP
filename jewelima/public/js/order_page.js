@@ -25,7 +25,7 @@ function jwSieveQty() {
 	// plain handler — resolves its grid at call time (referencing the dialog
 	// variable inside its own constructor is a TDZ error that kills the dialog)
 	const r = this.doc || (this.grid_row && this.grid_row.doc);
-	if (!r || !r.stone_type || !r.item) return;
+	if (!r || r.stone_type !== "Diamond" || !r.item) return;   // sieve chart is DIAMOND-only
 	const avg = JW_SIEVE[(r.item || "").split(" ").slice(1).join(" ")];
 	if (avg && flt(r.qty) > 0) {
 		r.weight = Math.round(flt(r.qty) * avg * 1000) / 1000;
@@ -1204,8 +1204,10 @@ function openNewDesignDialog(state, prefill) {
 			row.purity = flt(v.purity_percentage);
 			row.uom = v.weight_unit || "";
 			row.stone_type = v.stone_type || "";
-			if (!v.stone_type) row.qty = 0;   // metals are weighed, not counted
-			row.pure = v.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
+			// a changed material starts clean — old qty/weight belonged to the old item
+			row.qty = 0;
+			row.weight = 0;
+			row.pure = 0;
 			d.fields_dict.materials.grid.refresh();
 		});
 	}
