@@ -1,138 +1,222 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Make Products — pick finished (qty-1) Order Bags that hold materials and turn them
-// into stock products: consumes their materials (gold In Bags -> Finished Goods),
-// freezes the actual weights, sets Held By (order customer / JD Stock), status In
-// Stock. Route: /app/make-products
-
-const MP_LOCATIONS =
-	"\nORDERING\nCAD\nCAM\nWAX INJECTING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION";
+// Make Products — transfer-page style: SCAN cards and they line up in a queue
+// (a card that isn't qty 1, or has no actual weight, is refused with the reason),
+// then ONE button converts the whole queue: materials consumed, actuals frozen,
+// stock moves In Bags -> Finished Goods carrying the card dimension, card becomes
+// a product (In Stock). Below: the Bag Extraction pool — every card waiting
+// there, filterable by party / job order / design type / salesman, click to
+// queue the ready ones. Route: /app/make-products
 
 frappe.pages["make-products"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Make Products", single_column: true });
-	const state = { rows: [], sel: {} };
+	const API = "jewelima.jewelima.api";
+	const esc = frappe.utils.escape_html;
+	const Q = new Map();   // name -> queued card
+	let POOL = { rows: [], parties: [], job_orders: [], salesmen: [], design_types: [] };
+	const F = { party: "", job_order: "", design_type: "", salesman: "" };
 
 	$(page.main).append(`
 		<style>
-		.mp-bar{display:flex;gap:12px;align-items:end;margin:2px 0 12px;max-width:420px;}
-		.mp-bar .help-box{display:none !important;}
-		.mp-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 240px);}
-		table.mp-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
-		table.mp-tbl th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:7px 9px;text-align:left;font-weight:700;}
-		table.mp-tbl td{border-bottom:1px solid var(--border-color);padding:5px 9px;}
-		table.mp-tbl td.num,table.mp-tbl th.num{text-align:right;}
-		.mp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;}
-		.mp-foot .cnt{color:var(--text-muted);font-size:13px;}
+		#page-make-products .container{max-width:100%;}
+		.mp-wrap{display:flex;flex-direction:column;gap:12px;}
+		.mp-scanrow{display:flex;gap:12px;align-items:end;}
+		.mp-scanrow .frappe-control{margin:0;flex:0 0 280px;}
+		.mp-scanrow .control-label{font-size:11px;color:var(--text-muted);}
+		.mp-tbl{width:100%;border-collapse:separate;border-spacing:0;background:var(--fg-color);
+			border:1px solid var(--border-color);border-radius:9px;overflow:hidden;font-size:13px;}
+		.mp-tbl th{background:var(--control-bg);border-bottom:1px solid var(--border-color);padding:7px 12px;text-align:left;font-weight:700;white-space:nowrap;}
+		.mp-tbl td{border-bottom:1px solid var(--border-color);padding:6px 12px;}
+		.mp-tbl tbody tr:last-child td{border-bottom:0;}
+		.mp-tbl td.num,.mp-tbl th.num{text-align:right;font-variant-numeric:tabular-nums;}
+		.mp-x{color:#b02a2a;cursor:pointer;font-weight:800;padding:0 6px;}
+		.mp-empty{padding:26px;text-align:center;color:var(--text-muted);}
+		.mp-strip{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;border:2px solid var(--border-color);
+			border-radius:10px;background:var(--fg-color);padding:9px 14px;flex-wrap:wrap;z-index:5;}
+		.mp-b{border:1px solid var(--border-color);border-radius:8px;padding:4px 16px;text-align:center;background:var(--control-bg);min-width:96px;}
+		.mp-b .k{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text-muted);}
+		.mp-b .v{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;}
+		.mp-go{margin-left:auto;background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.5px;
+			padding:11px 34px;border-radius:8px;font-size:15px;cursor:pointer;}
+		.mp-go:hover{background:#256628;}
+		.mp-go:disabled{opacity:.4;cursor:default;}
+		.mp-pool{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:12px 16px;}
+		.mp-pool h4{margin:0 0 8px;font-size:14px;}
+		.mp-pills{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+		.mp-pills .lbl{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
+		.mp-pill{border:1px solid var(--border-color);border-radius:12px;padding:2px 12px;font-size:12px;font-weight:600;cursor:pointer;background:var(--control-bg);user-select:none;}
+		.mp-pill.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+		.mp-ready{color:#2e7d32;font-weight:700;}
+		.mp-block{color:#b02a2a;font-size:11.5px;}
+		.mp-add{background:#1461d2;border:none;color:#fff;font-weight:700;padding:3px 14px;border-radius:6px;font-size:11.5px;cursor:pointer;}
+		.mp-add:disabled{opacity:.35;cursor:default;}
+		.mp-inq{color:var(--text-muted);font-size:11.5px;font-weight:700;}
 		</style>
-		<div class="mp-bar"><div class="mp-scan" style="flex:1"></div><div class="mp-loc" style="flex:1"></div></div>
-		<div class="mp-box"><table class="mp-tbl"><thead></thead><tbody></tbody></table></div>
-		<div class="mp-foot"><span class="cnt"></span><div class="mp-actions"></div></div>
+		<div class="mp-wrap">
+			<div class="mp-scanrow">
+				<div class="mp-scan"></div>
+				<button class="btn btn-default mp-clear">${__("Clear queue")}</button>
+			</div>
+			<div class="mp-queue"></div>
+			<div class="mp-strip">
+				<div class="mp-b"><div class="k">${__("PIECES")}</div><div class="v mp-n">0</div></div>
+				<div class="mp-b"><div class="k">${__("GROSS g")}</div><div class="v mp-gross">0.000</div></div>
+				<div class="mp-b"><div class="k">${__("NETT g")}</div><div class="v mp-nett">0.000</div></div>
+				<div class="mp-b"><div class="k">${__("DMD ct")}</div><div class="v mp-dmd">0.000</div></div>
+				<button class="mp-go" disabled>${__("MAKE PRODUCTS")}</button>
+			</div>
+			<div class="mp-pool">
+				<h4>${__("At Bag Extraction")} <span class="mp-poolcount" style="color:var(--text-muted);font-weight:400;"></span></h4>
+				<div class="mp-pills mp-f-party"></div>
+				<div class="mp-pills mp-f-rest"></div>
+				<div class="mp-poolbody"></div>
+			</div>
+		</div>
 	`);
+	const root = $(page.main);
 
-	const scanCtl = frappe.ui.form.make_control({
-		df: { fieldtype: "Data", label: "Scan to make", fieldname: "scan", description: "Scan a card to make it a product right away." },
-		parent: $(page.main).find(".mp-scan").get(0), render_input: true,
+	const scan = frappe.ui.form.make_control({
+		df: { fieldtype: "Data", label: __("Scan Card"), fieldname: "scan", placeholder: __("E0123.4 …") },
+		parent: root.find(".mp-scan").get(0), render_input: true,
 	});
-	scanCtl.refresh();
-	scanCtl.$input.on("keydown", (e) => {
-		if (e.which === 13 || e.key === "Enter") {
-			e.preventDefault();
-			const c = (scanCtl.$input.val() || "").trim();
-			scanCtl.set_value("");
-			if (c) makeOne(c);
+	scan.refresh();
+	scan.$input.on("keydown", (e) => {
+		if (e.key !== "Enter") return;
+		e.preventDefault();
+		const v = (scan.get_value() || "").trim();
+		if (v) addCard(v);
+	});
+	setTimeout(() => scan.$input.focus(), 300);
+
+	function addCard(name) {
+		if (Q.has(name)) {
+			frappe.show_alert({ message: __("{0} is already in the queue.", [esc(name)]), indicator: "orange" }, 3);
+			scan.set_value("");
+			return;
 		}
+		frappe.call({ method: API + ".get_make_product_card", args: { order_bag: name } })
+			.then((r) => {
+				Q.set(r.message.name, r.message);
+				scan.set_value("");
+				paint();
+			})
+			.catch(() => scan.$input.select());
+	}
+
+	function paint() {
+		const rows = [...Q.values()];
+		root.find(".mp-queue").html(rows.length ? `<table class="mp-tbl"><thead><tr>
+			<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Party")}</th><th>${__("From")}</th>
+			<th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th><th class="num">${__("DMD ct")}</th><th></th>
+			</tr></thead><tbody>` +
+			rows.map((c) => `<tr>
+				<td><b>${esc(c.name)}</b></td><td>${esc(c.design || "—")}</td><td>${esc(c.customer || "—")}</td>
+				<td>${esc(c.location || "—")}</td>
+				<td class="num">${c.gross.toFixed(3)}</td><td class="num">${c.nett.toFixed(3)}</td>
+				<td class="num">${c.dmd_ct.toFixed(3)}</td>
+				<td><span class="mp-x" data-n="${esc(c.name)}">✕</span></td>
+			</tr>`).join("") + "</tbody></table>"
+			: `<div class="mp-empty">${__("Scan cards — they line up here.")}</div>`);
+		root.find(".mp-n").text(rows.length);
+		root.find(".mp-gross").text(rows.reduce((a, c) => a + c.gross, 0).toFixed(3));
+		root.find(".mp-nett").text(rows.reduce((a, c) => a + c.nett, 0).toFixed(3));
+		root.find(".mp-dmd").text(rows.reduce((a, c) => a + c.dmd_ct, 0).toFixed(3));
+		root.find(".mp-go").prop("disabled", !rows.length);
+		paintPool();   // refresh the "in queue" markers
+	}
+
+	root.on("click", ".mp-x", function () {
+		Q.delete($(this).attr("data-n"));
+		paint();
 	});
-	function makeOne(code) {
-		frappe.call({ method: "jewelima.jewelima.api.make_products", args: { bags: JSON.stringify([code]) } }).then((r) => {
-			const res = r.message || {};
-			if (res.count) frappe.show_alert({ message: __("Made {0} into a product.", [code]), indicator: "green" }, 4);
-			if (res.errors && res.errors.length) frappe.show_alert({ message: code + ": " + res.errors[0].error, indicator: "red" }, 6);
-			load();
-			setTimeout(() => scanCtl.$input.focus(), 30);
-		});
-	}
+	root.find(".mp-clear").on("click", () => { Q.clear(); paint(); });
 
-	const locCtl = frappe.ui.form.make_control({
-		df: { fieldtype: "Select", label: "Location", fieldname: "loc", options: MP_LOCATIONS, description: "Blank = all locations." },
-		parent: $(page.main).find(".mp-loc").get(0), render_input: true,
+	root.find(".mp-go").on("click", () => {
+		const names = [...Q.keys()];
+		frappe.confirm(
+			__("Make <b>{0}</b> piece(s) into products?<br>Materials are consumed, actual weights frozen, and stock moves In Bags → Finished Goods on each card. This cannot be undone.", [names.length]),
+			() => {
+				frappe.dom.freeze(__("Converting..."));
+				frappe.call({ method: API + ".make_products", args: { bags: JSON.stringify(names) } })
+					.then((r) => {
+						frappe.dom.unfreeze();
+						const m = r.message || {};
+						const errs = (m.errors || []).map((e) => `<div style="color:#b02a2a;">${esc(e.name)}: ${esc(e.error)}</div>`).join("");
+						frappe.msgprint({
+							title: __("Products made"), indicator: errs ? "orange" : "green",
+							message: __("<b>{0}</b> piece(s) are now products (In Stock).", [(m.done || []).length]) + (errs ? "<hr>" + errs : ""),
+						});
+						(m.done || []).forEach((n) => Q.delete(n));   // failures stay queued, visible
+						loadPool();
+						paint();
+					}).catch(() => frappe.dom.unfreeze());
+			});
 	});
-	locCtl.refresh();
-	locCtl.$input.on("change", () => setTimeout(load, 50));
 
-	const $head = $(page.main).find(".mp-tbl thead");
-	const $body = $(page.main).find(".mp-tbl tbody");
-	const $cnt = $(page.main).find(".mp-foot .cnt");
-	const $actions = $(page.main).find(".mp-actions");
-	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
-
-	function render() {
-		$head.html(`<tr>
-			<th style="width:32px"><input type="checkbox" class="mp-all"></th>
-			<th>Order Bag</th><th>Design</th><th>Party</th><th>Location</th>
-			<th class="num">Gold (g)</th><th class="num">Nett (g)</th>
-		</tr>`);
-		$body.html(
-			state.rows
-				.map(
-					(r) => `<tr>
-				<td><input type="checkbox" class="mp-cb" data-n="${frappe.utils.escape_html(r.name)}" ${state.sel[r.name] ? "checked" : ""}></td>
-				<td><b>${frappe.utils.escape_html(r.name)}</b></td>
-				<td>${frappe.utils.escape_html(r.design || "")}</td>
-				<td>${frappe.utils.escape_html(r.customer || "— (JD Stock)")}</td>
-				<td>${frappe.utils.escape_html(r.location || "")}</td>
-				<td class="num">${flt(r.gold).toFixed(3)}</td>
-				<td class="num">${r.act_nett_weight ? flt(r.act_nett_weight).toFixed(3) : ""}</td>
-			</tr>`
-				)
-				.join("") || `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:18px;">No qty-1 bags with materials to make.</td></tr>`
-		);
-		$head.find(".mp-all").on("change", function () {
-			state.rows.forEach((r) => (state.sel[r.name] = this.checked));
-			render();
-		});
-		$body.find(".mp-cb").on("change", function () {
-			state.sel[$(this).data("n")] = this.checked;
-			updateCount();
-		});
-		updateCount();
-		$actions.empty();
-		$(`<button class="btn btn-primary btn-sm">${__("Make Products")}</button>`).appendTo($actions).on("click", doMake);
-	}
-	function selected() {
-		return state.rows.map((r) => r.name).filter((n) => state.sel[n]);
-	}
-	function updateCount() {
-		$cnt.text(`${selected().length} selected / ${state.rows.length} ready`);
-	}
-
-	function doMake() {
-		const sel = selected();
-		if (!sel.length) return frappe.msgprint(__("Select at least one bag."));
-		frappe.confirm(__("Make <b>{0}</b> bag(s) into products? Their materials will be consumed.", [sel.length]), () => {
-			frappe.dom.freeze(__("Making products…"));
-			frappe.call({ method: "jewelima.jewelima.api.make_products", args: { bags: JSON.stringify(sel) } })
-				.then((r) => {
-					frappe.dom.unfreeze();
-					const res = r.message || {};
-					frappe.show_alert({ message: __("Made {0} product(s).", [res.count]), indicator: "green" }, 6);
-					if (res.errors && res.errors.length) {
-						frappe.msgprint({ title: __("Some skipped"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
-					}
-					state.sel = {};
-					load();
-				})
-				.catch(() => frappe.dom.unfreeze());
+	// ---- the Bag Extraction pool -------------------------------------------
+	function loadPool() {
+		frappe.call({ method: API + ".get_extraction_cards", args: {
+			party: F.party || null, job_order: F.job_order || null,
+			design_type: F.design_type || null, salesman: F.salesman || null,
+		} }).then((r) => {
+			POOL = r.message || POOL;
+			paintPills();
+			paintPool();
 		});
 	}
 
-	function load() {
-		frappe.call({ method: "jewelima.jewelima.api.get_makeable_bags", args: { location: locCtl.get_value() || null } }).then((r) => {
-			state.rows = r.message || [];
-			render();
-		});
+	const pillRow = (lbl, list, cur, key) => (list.length
+		? `<span class="lbl">${lbl}</span>
+		   <span class="mp-pill ${cur ? "" : "on"}" data-k="${key}" data-v="">${__("All")}</span>` +
+		  list.map((x) => `<span class="mp-pill ${cur === x ? "on" : ""}" data-k="${key}" data-v="${esc(x)}">${esc(x)}</span>`).join("")
+		: "");
+
+	function paintPills() {
+		root.find(".mp-f-party").html(pillRow(__("Party"), POOL.parties, F.party, "party"));
+		root.find(".mp-f-rest").html(
+			pillRow(__("Job Order"), POOL.job_orders, F.job_order, "job_order") +
+			(POOL.design_types.length ? `<span class="lbl" style="margin-left:12px;"></span>` : "") +
+			pillRow(__("Design Type"), POOL.design_types, F.design_type, "design_type") +
+			(POOL.salesmen.length ? `<span class="lbl" style="margin-left:12px;"></span>` : "") +
+			pillRow(__("Salesman"), POOL.salesmen, F.salesman, "salesman"));
 	}
 
-	page.add_inner_button(__("Refresh"), load);
-	load();
+	function paintPool() {
+		const rows = POOL.rows || [];
+		root.find(".mp-poolcount").text(rows.length ? __("— {0} card(s), {1} ready", [rows.length, rows.filter((r) => r.ready).length]) : "");
+		root.find(".mp-poolbody").html(rows.length ? `<table class="mp-tbl"><thead><tr>
+			<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Party")}</th><th>${__("Job Order")}</th>
+			<th>${__("Due")}</th><th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th>
+			<th>${__("Status")}</th><th></th></tr></thead><tbody>` +
+			rows.map((c) => {
+				const inq = Q.has(c.name);
+				return `<tr>
+				<td><b>${esc(c.name)}</b></td>
+				<td>${esc(c.design || "—")} <span style="color:var(--text-muted);font-size:11px;">${esc(c.design_type || "")}</span></td>
+				<td>${esc(c.customer || "—")}</td><td>${esc(c.job_order || "—")}</td>
+				<td>${c.due_date ? frappe.datetime.str_to_user(c.due_date) : "—"}</td>
+				<td class="num">${c.gross.toFixed(3)}</td><td class="num">${c.nett.toFixed(3)}</td>
+				<td>${c.ready ? `<span class="mp-ready">${__("READY")}</span>` : `<span class="mp-block">${esc(c.blocker)}</span>`}</td>
+				<td>${inq ? `<span class="mp-inq">${__("in queue")}</span>`
+					: `<button class="mp-add" data-n="${esc(c.name)}" ${c.ready ? "" : "disabled"}>${__("Queue")}</button>`}</td>
+			</tr>`; }).join("") + "</tbody></table>" +
+			(rows.some((r) => r.ready && !Q.has(r.name))
+				? `<div style="margin-top:8px;"><button class="btn btn-sm btn-default mp-addall">${__("Queue all ready")}</button></div>` : "")
+			: `<div class="mp-empty">${__("No cards at Bag Extraction match.")}</div>`);
+	}
+
+	root.on("click", ".mp-pill", function () {
+		F[$(this).attr("data-k")] = $(this).attr("data-v");
+		loadPool();
+	});
+	root.on("click", ".mp-add", function () { addCard($(this).attr("data-n")); });
+	root.on("click", ".mp-addall", () => {
+		(POOL.rows || []).filter((r) => r.ready && !Q.has(r.name)).forEach((r) => addCard(r.name));
+	});
+
+	page.add_inner_button(__("Finished Stock"), () => frappe.set_route("finished-stock"));
+	page.set_primary_action(__("Refresh"), () => loadPool(), "refresh");
+	loadPool();
+	paint();
 };

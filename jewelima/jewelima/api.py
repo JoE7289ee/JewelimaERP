@@ -4146,6 +4146,85 @@ def get_makeable_bags(location=None):
 
 
 @frappe.whitelist()
+def get_make_product_card(order_bag):
+	"""Make Products scan: validate a card BEFORE it joins the queue — must exist,
+	not already a product, qty exactly 1, and it must have ACTUAL weight (weighed
+	in). Returns the card's queue row; throws a specific error otherwise."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Card {0} not found.").format(order_bag))
+	b = frappe.db.get_value("Order Bag", order_bag,
+		["name", "design", "image", "qty", "location", "is_finished", "stock_status",
+			"customer", "salesman", "job_order", "due_date"], as_dict=True)
+	if b.is_finished:
+		frappe.throw(frappe._("{0} is already a product.").format(order_bag))
+	if b.stock_status in ("Cancelled", "Sold"):
+		frappe.throw(frappe._("{0} is {1}.").format(order_bag, b.stock_status))
+	if int(b.qty or 0) != 1:
+		frappe.throw(frappe._("{0} holds qty {1} — extract/split it to single pieces first.").format(order_bag, b.qty))
+	p = _actual_profile(order_bag)
+	if flt(p["gross"]) <= 0:
+		frappe.throw(frappe._("{0} has NO actual weight — weigh the piece in before making it a product.").format(order_bag))
+	return {
+		"name": b.name, "design": b.design, "image": b.image, "location": b.location,
+		"customer": b.customer, "salesman": b.salesman, "job_order": b.job_order,
+		"due_date": str(b.due_date or ""),
+		"gross": flt(p["gross"]), "nett": flt(p["nett"]),
+		"dmd_ct": flt(p["dmd_weight"]) + flt(p["pdmd_weight"]),
+	}
+
+
+@frappe.whitelist()
+def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=None):
+	"""The Bag Extraction pool for the Make Products page: every unfinished card
+	sitting at BAG EXTRACTION with its actual weights and whether it's READY
+	(qty 1 + actual weight). Filter lists ride along for the pills."""
+	filters = {"location": "BAG EXTRACTION", "is_finished": 0,
+		"stock_status": ["not in", ["Cancelled", "Sold"]]}
+	if party:
+		filters["customer"] = party
+	if job_order:
+		filters["job_order"] = job_order
+	if salesman:
+		filters["salesman"] = salesman
+	bags = frappe.get_all("Order Bag", filters=filters,
+		fields=["name", "design", "qty", "customer", "salesman", "job_order", "due_date"],
+		order_by="due_date asc, name asc", limit_page_length=0)
+	dt_of = {}
+	designs = list({b.design for b in bags if b.design})
+	if designs:
+		for d in frappe.get_all("Design", filters={"name": ["in", designs]}, fields=["name", "design_type"]):
+			dt_of[d.name] = d.design_type
+	rows = []
+	for b in bags:
+		b["design_type"] = dt_of.get(b.design) or ""
+		if design_type and b["design_type"] != design_type:
+			continue
+		prof = _actual_profile(b.name)
+		b["gross"] = flt(prof["gross"])
+		b["nett"] = flt(prof["nett"])
+		b["dmd_ct"] = flt(prof["dmd_weight"]) + flt(prof["pdmd_weight"])
+		b["ready"] = 1 if (int(b.qty or 0) == 1 and b["gross"] > 0) else 0
+		b["blocker"] = "" if b["ready"] else (
+			frappe._("qty {0} — split first").format(b.qty) if int(b.qty or 0) != 1 else frappe._("no actual weight"))
+		b["due_date"] = str(b.due_date or "")
+		rows.append(b)
+	# the full (unfiltered-by-me) pools for the filter pills
+	pool = frappe.get_all("Order Bag", filters={"location": "BAG EXTRACTION", "is_finished": 0,
+		"stock_status": ["not in", ["Cancelled", "Sold"]]},
+		fields=["customer", "salesman", "job_order", "design"], limit_page_length=0)
+	all_designs = list({x.design for x in pool if x.design})
+	all_dts = set()
+	if all_designs:
+		all_dts = {d.design_type for d in frappe.get_all("Design",
+			filters={"name": ["in", all_designs]}, fields=["design_type"]) if d.design_type}
+	return {"rows": rows,
+		"parties": sorted({x.customer for x in pool if x.customer}),
+		"job_orders": sorted({x.job_order for x in pool if x.job_order}),
+		"salesmen": sorted({x.salesman for x in pool if x.salesman}),
+		"design_types": sorted(all_dts)}
+
+
+@frappe.whitelist()
 def make_products(bags):
 	"""Turn selected qty-1 bags into finished stock products: consume their materials
 	(gold In Bags -> Finished Goods), freeze the actual weights, set held_by (the
