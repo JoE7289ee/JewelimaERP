@@ -108,6 +108,11 @@ JEWELIMA_TRANSFER_READ = ["Order Bag", "Order Bag Transfer"]
 # Transfer Matrix) decides which from -> to moves each may make. A role with no
 # cells painted is unrestricted (dormant).
 JEWELIMA_TRANSFER_ROLES = ("Jewelima Transfer", "Jewelima Transfer Plus")
+# The stock buyer: books raw-material purchases and nothing else. One page;
+# posting writes a submitted Purchase Receipt server-side (ignore_permissions),
+# so read on the pickers is all the role needs.
+JEWELIMA_PURCHASE_PAGES = ["purchase-raw-material"]
+JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", "UOM"]
 
 
 def setup_roles():
@@ -125,7 +130,7 @@ def setup_roles():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for name in ("Jewelima Ordering",) + JEWELIMA_TRANSFER_ROLES:
+	for name in ("Jewelima Ordering", "Jewelima Purchase") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -201,6 +206,19 @@ def setup_roles():
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
 		               strip=("Manufacturing Manager", "Manufacturing User"))
+
+	# ---- Jewelima Purchase: the stock buyer -------------------------------------
+	# One page (Purchase Raw Material), read on the masters its pickers paint —
+	# nothing else. Same tight sweep as the runner roles.
+	for dt in JEWELIMA_PURCHASE_READ:
+		grant(dt, "Jewelima Purchase", {"read": 1})
+	for page in JEWELIMA_PURCHASE_PAGES:
+		set_page_roles(page, ("Jewelima Purchase",))
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Purchase"}, pluck="parent"):
+		if page not in set(JEWELIMA_PURCHASE_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != "Jewelima Purchase"])
+			pg.save(ignore_permissions=True)
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so
