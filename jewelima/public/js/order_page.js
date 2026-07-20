@@ -21,17 +21,18 @@ function jwLoadSieve() {
 	JW_SIEVE_LOADED = true;
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { JW_SIEVE = r.message || {}; });
 }
-function jwSieveQty(dd) {
-	return function () {
-		const r = this.doc || (this.grid_row && this.grid_row.doc);
-		if (!r || !r.stone_type || !r.item) return;
-		const avg = JW_SIEVE[(r.item || "").split(" ").slice(1).join(" ")];
-		if (avg && flt(r.qty) > 0) {
-			r.weight = Math.round(flt(r.qty) * avg * 1000) / 1000;
-			r.pure = 0;
-			dd.fields_dict.materials.grid.refresh();
-		}
-	};
+function jwSieveQty() {
+	// plain handler — resolves its grid at call time (referencing the dialog
+	// variable inside its own constructor is a TDZ error that kills the dialog)
+	const r = this.doc || (this.grid_row && this.grid_row.doc);
+	if (!r || !r.stone_type || !r.item) return;
+	const avg = JW_SIEVE[(r.item || "").split(" ").slice(1).join(" ")];
+	if (avg && flt(r.qty) > 0) {
+		r.weight = Math.round(flt(r.qty) * avg * 1000) / 1000;
+		r.pure = 0;
+		const grid = this.grid_row && this.grid_row.grid;
+		if (grid) grid.refresh();
+	}
 }
 
 const PO_COLUMNS = [
@@ -663,7 +664,7 @@ const PO_COLUMNS = [
 						{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: itemChanged },
 						{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 						{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
-						{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type", onchange: jwSieveQty(dd) },
+						{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type", onchange: jwSieveQty },
 						{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: weightChanged },
 						{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
 					],
@@ -1244,7 +1245,7 @@ function openNewDesignDialog(state, prefill) {
 					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
 					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 					{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type", onchange: jwSieveQty(d) },
+					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type", onchange: jwSieveQty },
 					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: bomWeightChanged },
 					{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
 				],
