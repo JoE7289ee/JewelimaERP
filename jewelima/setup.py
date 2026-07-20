@@ -870,18 +870,22 @@ def get_item_custom_fields():
 
 
 def create_default_stone_types():
-	"""Seed the six stone buckets. This is the ONLY place Stone Types come from —
+	"""Seed the seven stone buckets. This is the ONLY place Stone Types come from —
 	the controller blocks UI create/rename/delete (bucket maps + the Order Bag
 	stone columns are keyed to these exact names)."""
 	frappe.flags.allow_stone_type_edit = True
 	try:
-		for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Party Diamond", "Party Other"]:
+		for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Cubic Zirconia", "Party Diamond", "Party Other"]:
 			if not frappe.db.exists("Stone Type", stone_type):
 				frappe.get_doc(
 					{"doctype": "Stone Type", "stone_type_name": stone_type}
 				).insert(ignore_permissions=True)
 	finally:
 		frappe.flags.allow_stone_type_edit = False
+	# CZ items used to bucket as Color Stone — flip them to their own bucket
+	# (idempotent; item_group CUBIC ZIRCONIA is the authority on what's a CZ)
+	frappe.db.sql("""UPDATE `tabItem` SET stone_type='Cubic Zirconia'
+		WHERE item_group='CUBIC ZIRCONIA' AND IFNULL(stone_type,'') != 'Cubic Zirconia'""")
 	frappe.db.commit()
 
 

@@ -55,6 +55,9 @@
   "col_break_ps",
   "cs_no",
   "cs_weight",
+  "col_break_cz",
+  "cz_no",
+  "cz_weight",
   "col_break_cvd",
   "cvd_no",
   "cvd_weight",
@@ -80,6 +83,9 @@
   "act_col_ps",
   "act_cs_no",
   "act_cs_weight",
+  "act_col_cz",
+  "act_cz_no",
+  "act_cz_weight",
   "act_col_cvd",
   "act_cvd_no",
   "act_cvd_weight",
@@ -429,6 +435,23 @@
    "read_only": 1
   },
   {
+   "fieldname": "col_break_cz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cz_no",
+   "fieldtype": "Int",
+   "label": "CZ (No)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cz_weight",
+   "fieldtype": "Float",
+   "label": "CZ Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
    "fieldname": "col_break_cvd",
    "fieldtype": "Column Break"
   },
@@ -572,6 +595,23 @@
    "fieldname": "act_cs_weight",
    "fieldtype": "Float",
    "label": "CS Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_col_cz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "act_cz_no",
+   "fieldtype": "Int",
+   "label": "CZ (No)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "act_cz_weight",
+   "fieldtype": "Float",
+   "label": "CZ Weight (ct)",
    "precision": "3",
    "read_only": 1
   },
@@ -740,7 +780,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-15 13:30:00.000000",
+ "modified": "2026-07-19 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Bag",

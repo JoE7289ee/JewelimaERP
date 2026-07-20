@@ -22,6 +22,7 @@
   "ps_no",
   "col_break_stone",
   "cs_no",
+  "cz_no",
   "poth_no",
   "pdmd_no",
   "cvd_no",
@@ -126,6 +127,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "cz_no",
+   "fieldtype": "Int",
+   "label": "CZ (No)",
+   "read_only": 1
+  },
+  {
    "fieldname": "cvd_no",
    "fieldtype": "Int",
    "label": "CVD No",
@@ -167,7 +174,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-15 14:00:00.000000",
+ "modified": "2026-07-19 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design",

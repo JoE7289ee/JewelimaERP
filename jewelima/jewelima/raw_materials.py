@@ -62,13 +62,13 @@ for _q in DIAMOND_QUALITIES:
 
 # --- STONE / CVD, SWAROVSKI, CUBIC ZIRCONIA -------------------------------------
 # Same canonical sieve run as diamonds + a generic base item each.
-# SW and CZ bucket as Color Stone (matches the six-bucket stone architecture).
+# SW buckets as Color Stone; CZ has its OWN bucket (Cubic Zirconia) since 2026-07-19.
 
 SIZED_STONES = [
 	# (prefix, item group leaf, stone type)
 	("CVD", "CVD", "CVD"),
 	("SW", "SWAROVSKI", "Color Stone"),
-	("CZ", "CUBIC ZIRCONIA", "Color Stone"),
+	("CZ", "CUBIC ZIRCONIA", "Cubic Zirconia"),
 ]
 
 for _p, _g, _t in SIZED_STONES:

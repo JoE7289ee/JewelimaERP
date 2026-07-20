@@ -59,7 +59,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		if (flt(v.nett)) p.push(`Nett <b>${g(v.nett)}</b>g`);
 		if (pure && flt(v.pure)) p.push(`Pure <b>${g(v.pure)}</b>g`);
 		if (flt(v.purity)) p.push(`<b>${flt(v.purity).toFixed(1)}%</b>`);
-		[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
+		[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CZ", "cz"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
 			if (v[b + "_no"] || flt(v[b + "_w"])) p.push(`${lb} <b>${v[b + "_no"] || 0}</b>/<b>${g(v[b + "_w"])}</b>ct`);
 		});
 		return p.join(" &middot; ");
@@ -75,7 +75,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 
 		const bkt = (src, pre) => {
 			const o = {};
-			["dmd", "ps", "cs", "cvd", "pdmd", "poth"].forEach((k) => { o[k + "_no"] = src[pre + k + "_no"]; o[k + "_w"] = src[pre + k + "_weight"]; });
+			["dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth"].forEach((k) => { o[k + "_no"] = src[pre + k + "_no"]; o[k + "_w"] = src[pre + k + "_weight"]; });
 			return o;
 		};
 		const act = wline({ gross: b.act_gross_weight, nett: b.act_nett_weight, pure: b.act_pure_weight, purity: b.act_purity, ...bkt(b, "act_") }, true);

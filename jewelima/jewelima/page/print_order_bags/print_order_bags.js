@@ -192,7 +192,7 @@ function pob_cardHTML(c) {
 	const gold = (c.materials || []).find((m) => (m.uom || "") !== "Carat" && flt(m.purity) > 0);
 	const purBadge = gold ? gold.item : (c.cad_karat || (c.purity ? flt(c.purity) + "%" : ""));
 	const stones = [];
-	[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
+	[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CZ", "cz"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
 		if (c[b + "_no"] || c[b + "_weight"]) stones.push(`${lb} ${c[b + "_no"] || 0}/${flt(c[b + "_weight"])}ct`);
 	});
 	return `

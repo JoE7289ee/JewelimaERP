@@ -27,6 +27,7 @@ const PO_COLUMNS = [
 	{ key: "ps", label: "PS (no/ct)", type: "stone", no: "ps_no", wt: "ps_weight", width: "105px" },
 	{ key: "cs", label: "CS (no/ct)", type: "stone", no: "cs_no", wt: "cs_weight", width: "105px" },
 	{ key: "cvd", label: "CVD (no/ct)", type: "stone", no: "cvd_no", wt: "cvd_weight", width: "105px" },
+	{ key: "cz", label: "CZ (no/ct)", type: "stone", no: "cz_no", wt: "cz_weight", width: "105px" },
 	{ key: "pdmd", label: "PDMD (no/ct)", type: "stone", no: "pdmd_no", wt: "pdmd_weight", width: "105px" },
 	{ key: "poth", label: "POTH (no/ct)", type: "stone", no: "poth_no", wt: "poth_weight", width: "105px" },
 ];
@@ -201,11 +202,11 @@ const PO_COLUMNS = [
 	function recalcTotals() {
 		state.rows.forEach(paintRowStatus);
 		const s = { qty: 0, gross_weight: 0, nett_weight: 0, pure: 0 };
-		["dmd", "ps", "cs", "cvd", "pdmd", "poth"].forEach((b) => { s[b + "_no"] = 0; s[b + "_weight"] = 0; });
+		["dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth"].forEach((b) => { s[b + "_no"] = 0; s[b + "_weight"] = 0; });
 		state.rows.forEach((r) => {
 			s.qty += cint(r.f.qty.get()) || 0;
-			["gross_weight", "nett_weight", "pure", "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
-			["dmd_no", "ps_no", "cs_no", "cvd_no", "pdmd_no", "poth_no"].forEach((k) => (s[k] += cint(r.f[k].get()) || 0));
+			["gross_weight", "nett_weight", "pure", "dmd_weight", "ps_weight", "cs_weight", "cz_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => (s[k] += flt(r.f[k].get()) || 0));
+			["dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no"].forEach((k) => (s[k] += cint(r.f[k].get()) || 0));
 		});
 		totalCells.qty.text(s.qty || "");
 		totalCells.gross_weight.text(s.gross_weight ? s.gross_weight.toFixed(3) : "");
@@ -213,7 +214,7 @@ const PO_COLUMNS = [
 		totalCells.pure.text(s.pure ? s.pure.toFixed(3) : "");
 		state.hiddenStones = state.hiddenStones || new Set();
 		[["dmd", "dmd_no", "dmd_weight"], ["ps", "ps_no", "ps_weight"], ["cs", "cs_no", "cs_weight"],
-		 ["cvd", "cvd_no", "cvd_weight"], ["pdmd", "pdmd_no", "pdmd_weight"], ["poth", "poth_no", "poth_weight"]].forEach(([gk, nk, wk]) => {
+		 ["cz", "cz_no", "cz_weight"], ["cvd", "cvd_no", "cvd_weight"], ["pdmd", "pdmd_no", "pdmd_weight"], ["poth", "poth_no", "poth_weight"]].forEach(([gk, nk, wk]) => {
 			totalCells[gk].text(s[nk] || s[wk] ? `${s[nk]} / ${s[wk].toFixed(3)}` : "");
 			// stone columns only take space once some line actually carries that stone
 			const used = !!(s[nk] || s[wk]);
@@ -453,7 +454,7 @@ const PO_COLUMNS = [
 		// no plan yet — budgets live on the bag's CAD fields, so the weight cells stay blank
 		["gross_weight", "nett_weight", "purity", "pure",
 			"dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
-			"cvd_no", "cvd_weight", "pdmd_no", "pdmd_weight", "poth_no", "poth_weight"]
+			"cz_no", "cz_weight", "cvd_no", "cvd_weight", "pdmd_no", "pdmd_weight", "poth_no", "poth_weight"]
 			.forEach((k) => row.f[k] && row.f[k].set(""));
 		updateDesignBtn(row);
 		recalcTotals();
@@ -527,7 +528,7 @@ const PO_COLUMNS = [
 	// grams + stone grams (1 ct = 0.2 g), nett = metal grams, gram-weighted metal purity.
 	// Lets edited materials recompute the line's numbers instantly (no round-trip).
 	function planProfile(mats) {
-		const BUCKET = { "Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs", "CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth" };
+		const BUCKET = { "Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs", "Cubic Zirconia": "cz", "CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth" };
 		const w = {}, n = {};
 		Object.values(BUCKET).forEach((b) => { w[b] = 0; n[b] = 0; });
 		let metal = 0, pnum = 0;
@@ -764,20 +765,20 @@ const PO_COLUMNS = [
 		if (!p) {
 			// design cleared — wipe everything derived from it (was left stale before)
 			["design_type", "purity", "gross_weight", "nett_weight", "pure",
-			 "dmd_no", "ps_no", "cs_no", "cvd_no", "pdmd_no", "poth_no",
-			 "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => set(k, ""));
+			 "dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no",
+			 "dmd_weight", "ps_weight", "cs_weight", "cz_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => set(k, ""));
 			recalcTotals();
 			return;
 		}
 		const q = cint(row.f.qty.get()) || 1;
 		set("purity", p.purity);
-		["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => {
+		["gross_weight", "nett_weight", "dmd_weight", "ps_weight", "cs_weight", "cz_weight", "cvd_weight", "pdmd_weight", "poth_weight"].forEach((k) => {
 			const v = flt(p[k]) * q;
 			set(k, v ? v.toFixed(3) : "");
 		});
 		const pure = (flt(p.nett_weight) * q * flt(p.purity)) / 100; // pure gold grams (scales with qty)
 		set("pure", pure ? pure.toFixed(3) : "");
-		["dmd_no", "ps_no", "cs_no", "cvd_no", "pdmd_no", "poth_no"].forEach((k) => set(k, cint(p[k]) * q || ""));
+		["dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no"].forEach((k) => set(k, cint(p[k]) * q || ""));
 		recalcTotals();
 	}
 
@@ -1061,6 +1062,7 @@ function po_readLine(r) {
 		ps_no: cint(g("ps_no")) || 0, ps_weight: flt(g("ps_weight")) || 0,
 		cs_no: cint(g("cs_no")) || 0, cs_weight: flt(g("cs_weight")) || 0,
 		cvd_no: cint(g("cvd_no")) || 0, cvd_weight: flt(g("cvd_weight")) || 0,
+		cz_no: cint(g("cz_no")) || 0, cz_weight: flt(g("cz_weight")) || 0,
 		pdmd_no: cint(g("pdmd_no")) || 0, pdmd_weight: flt(g("pdmd_weight")) || 0,
 		poth_no: cint(g("poth_no")) || 0, poth_weight: flt(g("poth_weight")) || 0,
 		narration: r._remark || undefined,
@@ -1125,7 +1127,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
 				cs_no: l.cs_no, cs_weight: l.cs_weight,
-				cvd_no: l.cvd_no, cvd_weight: l.cvd_weight, pdmd_no: l.pdmd_no, pdmd_weight: l.pdmd_weight,
+				cz_no: l.cz_no, cz_weight: l.cz_weight, cvd_no: l.cvd_no, cvd_weight: l.cvd_weight, pdmd_no: l.pdmd_no, pdmd_weight: l.pdmd_weight,
 				poth_no: l.poth_no, poth_weight: l.poth_weight, narration: l.narration,
 				bag_bom: l.bag_bom && l.bag_bom.length ? l.bag_bom : undefined,
 				...(l.cad ? {

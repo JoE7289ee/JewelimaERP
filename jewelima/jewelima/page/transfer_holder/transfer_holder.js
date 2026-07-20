@@ -13,7 +13,7 @@ frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
 	const S = { rows: [] };
 	const esc = frappe.utils.escape_html;
 	const fmt = (v) => flt(v).toFixed(3);
-	const BUCKETS = [["dmd", "DMD"], ["ps", "PS"], ["cs", "CS"], ["cvd", "CVD"], ["pdmd", "PDMD"], ["poth", "POTH"]];
+	const BUCKETS = [["dmd", "DMD"], ["ps", "PS"], ["cs", "CS"], ["cz", "CZ"], ["cvd", "CVD"], ["pdmd", "PDMD"], ["poth", "POTH"]];
 
 	$(page.main).append(`
 		<style>
