@@ -148,11 +148,16 @@ def setup_roles():
 		for ptype, val in ptypes.items():
 			update_permission_property(doctype, role, 0, ptype, val, validate=False)
 
-	# Ordering inherits what the old base role used to carry: read-only on our
-	# doctypes + the ERPNext masters (their pages need these to paint)
 	our_doctypes = frappe.get_all("DocType", filters={"module": "Jewelima", "istable": 0}, pluck="name")
-	for dt in our_doctypes + JEWELIMA_READ_ERPNEXT:
-		grant(dt, "Jewelima Ordering", {"read": 1, "report": 1, "export": 1})
+
+	# Ordering reads ONLY the order flow + its masters — no blanket read on every
+	# Jewelima doctype (certification / sales records are none of the order desk's
+	# business). Anything granted beyond the allowed set is scrubbed on every run.
+	_ordering_allowed = set(JEWELIMA_ORDER_DOCTYPES) | set(JEWELIMA_ORDERING_READ)
+	for parent in frappe.get_all("Custom DocPerm",
+			filters={"role": "Jewelima Ordering", "parent": ["not in", list(_ordering_allowed)]},
+			pluck="parent", distinct=True):
+		frappe.db.delete("Custom DocPerm", {"role": "Jewelima Ordering", "parent": parent})
 
 	# Jewelima Ordering — full control of the order flow
 	base = {"read": 1, "write": 1, "create": 1, "delete": 1, "print": 1, "export": 1, "email": 1, "share": 1}
