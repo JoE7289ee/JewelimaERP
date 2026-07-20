@@ -15,7 +15,9 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.wc-wrap{max-width:760px;}
+		#page-weight-checker .container{max-width:100%;}
+		.wc-wrap{width:100%;}
+		tr.wc-hidden{display:none;}
 		.wc-bar{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
 		.wc-note{color:var(--text-muted);font-size:12.5px;}
 		.wc-clear{margin-left:auto;}
@@ -41,6 +43,9 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		<div class="wc-wrap">
 			<div class="wc-bar">
 				<span class="wc-note">${__("Averages come live from the Sieve Chart — edit them there, not here.")}</span>
+				<button class="btn btn-default wc-hide">${__("Hide empty")}</button>
+				<button class="btn btn-default wc-xlsx">${__("Export Excel")}</button>
+				<button class="btn btn-default wc-pdf">${__("PDF / Print")}</button>
 				<button class="btn btn-default wc-clear">${__("Clear")}</button>
 			</div>
 			<table class="wc-tbl">
@@ -87,7 +92,57 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		const next = root.find(`tbody input[data-i="${i}"]`);
 		if (next.length) next.focus().select();
 	});
-	root.find(".wc-clear").on("click", () => { root.find("tbody input").val(""); recalc(); });
+	root.find(".wc-clear").on("click", () => { root.find("tbody input").val(""); hideEmpty = false; applyHide(); recalc(); });
+
+	// ---- hide sieves with no Nos (toggle) ----
+	let hideEmpty = false;
+	function applyHide() {
+		root.find(".wc-hide").text(hideEmpty ? __("Show all") : __("Hide empty"))
+			.toggleClass("btn-primary", hideEmpty);
+		root.find("tbody tr").each(function () {
+			const nos = Number($(this).find("input").val()) || 0;
+			$(this).toggleClass("wc-hidden", hideEmpty && nos <= 0);
+		});
+	}
+	root.find(".wc-hide").on("click", () => { hideEmpty = !hideEmpty; applyHide(); });
+
+	// ---- exports: the filled lines + totals, exactly as shown ----
+	function exportData() {
+		const data = [[__("Sieve"), __("MM"), __("Avg Cts"), __("Nos"), __("Total Cts")]];
+		let n = 0, ct = 0;
+		root.find("tbody tr").each(function () {
+			const i = Number(this.dataset.i);
+			const nos = Number($(this).find("input").val()) || 0;
+			if (nos <= 0) return;
+			const t = nos * (ROWS[i].avg_cts || 0);
+			data.push([ROWS[i].sieve_size, ROWS[i].mm_size, ROWS[i].avg_cts, nos, Number(t.toFixed(3))]);
+			n += nos; ct += t;
+		});
+		data.push(["", "", __("TOTAL"), n, Number(ct.toFixed(3))]);
+		return { data, n, ct };
+	}
+
+	root.find(".wc-xlsx").on("click", () => {
+		const { data, n } = exportData();
+		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to export — type some Nos first."), indicator: "orange" }, 3);
+		open_url_post("/api/method/jewelima.jewelima.api.export_table_xlsx",
+			{ title: `weight-check-${frappe.datetime.get_today()}`, data: JSON.stringify(data) });
+	});
+
+	root.find(".wc-pdf").on("click", () => {
+		const { data } = exportData();
+		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to print — type some Nos first."), indicator: "orange" }, 3);
+		const rows = data.map((r, i) => `<tr>${r.map((c) => `<t${i === 0 ? "h" : "d"}>${esc(String(c))}</t${i === 0 ? "h" : "d"}>`).join("")}</tr>`).join("");
+		const w = window.open("", "_blank");
+		w.document.write(`<html><head><title>Weight Check ${frappe.datetime.get_today()}</title><style>
+			body{font-family:sans-serif;padding:24px;} h3{margin:0 0 12px;}
+			table{border-collapse:collapse;font-size:13px;} td,th{border:1px solid #999;padding:5px 14px;text-align:right;}
+			th{background:#eee;} td:first-child,th:first-child{text-align:left;}
+			tr:last-child td{font-weight:bold;background:#f5f5f5;}
+			</style></head><body><h3>Weight Check — ${frappe.datetime.str_to_user(frappe.datetime.get_today())}</h3>
+			<table>${rows}</table><script>window.print()</` + `script></body></html>`);
+		w.document.close();
+	});
 
 	page.add_inner_button(__("Sieve Chart"), () => frappe.set_route("sieve-chart"));
 	frappe.call({ method: API + ".get_sieve_chart" }).then((r) => {
