@@ -90,6 +90,15 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	});
 	$fr.append("<td></td>");
 
+	// sieve averages: size label -> avg cts/stone (loaded once). Entering CARATS
+	// on a sized diamond row judges the piece COUNT = carats / avg (editable after).
+	let SIEVE = {};
+	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { SIEVE = r.message || {}; });
+	function sieveAvg(item) {
+		const size = (item || "").split(" ").slice(1).join(" ");
+		return SIEVE[size] || 0;
+	}
+
 	function recalc() {
 		let csum = 0, gsum = 0, ctsum = 0;
 		state.rows.forEach((r) => {
@@ -116,6 +125,14 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			row.isStone = !!v.stone_type;
 			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat, $p = row.inputs.purity;
 			if (row.isStone) {
+				row._avg = sieveAvg(item);
+				if ($ct && !row._sieveWired) {
+					row._sieveWired = true;
+					$ct.on("input", () => {
+						const ct = parseFloat($ct.val());
+						if (row._avg && ct > 0 && $c) { $c.val(Math.max(1, Math.round(ct / row._avg))); recalc(); }
+					});
+				}
 				if ($c) $c.prop("disabled", false).attr("placeholder", "count");
 				if ($g) $g.prop("disabled", true).val("").attr("placeholder", "—");
 				if ($ct) $ct.prop("disabled", false).attr("placeholder", "carats");

@@ -1,0 +1,19 @@
+{
+ "content": null,
+ "creation": "2026-07-20 12:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-20 12:00:00.000000",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "module": "Jewelima",
+ "name": "sieve-chart",
+ "page_name": "sieve-chart",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Stock Manager"}
+ ],
+ "standard": "Yes",
+ "title": "Sieve Chart"
+}

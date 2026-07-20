@@ -633,6 +633,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 1,
+   "label": "Stones",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "grid",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Sieve Chart",
+   "link_to": "sieve-chart",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "package",
    "indent": 1,
    "keep_closed": 1,
@@ -1541,7 +1567,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-20 17:11:03.580874",
+ "modified": "2026-07-20 22:28:32.938943",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

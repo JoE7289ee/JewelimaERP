@@ -2775,6 +2775,40 @@ def review_delete_photo(name):
 	return {"deleted": name, "selections_touched": len(set(parents))}
 
 
+# --- Diamond Sieve chart (Stones > Sieve Chart) --------------------------------
+@frappe.whitelist()
+def get_sieve_chart():
+	"""The whole chart, in chart order, for the excel-style page."""
+	return frappe.get_all("Diamond Sieve", fields=["name", "sieve_size", "mm_size", "avg_cts", "idx_order"],
+		order_by="idx_order asc, name asc", limit_page_length=0)
+
+
+@frappe.whitelist()
+def save_sieve_chart(rows):
+	"""Save edited cells from the Sieve Chart page. rows = [{name, mm_size, avg_cts}]."""
+	frappe.only_for(("System Manager", "Stock Manager"))
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	n = 0
+	for r in rows or []:
+		if not frappe.db.exists("Diamond Sieve", r.get("name")):
+			continue
+		frappe.db.set_value("Diamond Sieve", r["name"], {
+			"mm_size": flt(r.get("mm_size")), "avg_cts": flt(r.get("avg_cts"))})
+		n += 1
+	frappe.db.commit()
+	return {"saved": n}
+
+
+@frappe.whitelist()
+def get_sieve_map():
+	"""size label -> avg cts/stone, for the pages that auto-fill qty<->carat
+	(purchase entry, BOM entry). The size label matches the tail of the diamond
+	item codes: 'SI-IJ 1-1.5' -> '1-1.5'."""
+	return {r.sieve_size: flt(r.avg_cts) for r in frappe.get_all(
+		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
+
+
 # --- Selection Tags (their own master — different purpose from the bank's Design Tags)
 @frappe.whitelist()
 def get_selection_tags(with_counts=1):

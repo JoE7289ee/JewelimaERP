@@ -28,6 +28,7 @@ def after_install():
 	sync_workspace_sidebar()
 	setup_roles()
 	seed_benches()
+	seed_sieve_chart()
 	# bench rosters ship in data/bench_employees.csv — restore them so a refresh
 	# doesn't lose the team's allotments (never blocks install/migrate)
 	try:
@@ -66,6 +67,7 @@ def after_migrate():
 	sync_workspace_sidebar()
 	setup_roles()
 	seed_benches()
+	seed_sieve_chart()
 	# bench rosters ship in data/bench_employees.csv — restore them so a refresh
 	# doesn't lose the team's allotments (never blocks install/migrate)
 	try:
@@ -1061,3 +1063,39 @@ def make_warehouse(warehouse_name, company, abbr, parent, is_group):
 		}
 	).insert(ignore_permissions=True)
 	return doc.name
+
+# ---------------------------------------------------------------------------
+# Diamond sieve chart — average carat per stone, per sieve. Ships IN CODE
+# (source: the workshop's sieve chart xlsx, labels normalised to the item-size
+# convention: zeros -> O's, no trailing .0). Drives qty<->carat auto-fill in
+# purchases and BOM entry. Values are editable on the Sieve Chart page;
+# seeding only ADDS missing rows, it never overwrites an edited value.
+# ---------------------------------------------------------------------------
+SIEVE_CHART = [
+	# (sieve size = item size label, mm, avg cts/stone)
+	("OOOO-OOO", 0.85, 0.0023), ("OOO-OO", 0.9, 0.0034), ("OO-O", 1.0, 0.0044),
+	("O-1", 1.1, 0.0055), ("1-1.5", 1.15, 0.0067), ("1.5-2", 1.2, 0.007),
+	("2-2.5", 1.25, 0.0085), ("2.5-3", 1.3, 0.009), ("3-3.5", 1.35, 0.01),
+	("3.5-4", 1.4, 0.011), ("4-4.5", 1.45, 0.013), ("4.5-5", 1.5, 0.014),
+	("5-5.5", 1.55, 0.015), ("5.5-6", 1.6, 0.018), ("6-6.5", 1.7, 0.021),
+	("6.5-7", 1.8, 0.025), ("7-7.5", 1.9, 0.029), ("7.5-8", 2.0, 0.035),
+	("8-8.5", 2.1, 0.038), ("8.5-9", 2.2, 0.045), ("9-9.5", 2.3, 0.05),
+	("9.5-10", 2.4, 0.058), ("10-10.5", 2.5, 0.066), ("10.5-11", 2.6, 0.07),
+	("11-11.5", 2.7, 0.077), ("11.5-12", 2.8, 0.086), ("12-12.5", 2.9, 0.094),
+	("12.5-13", 3.0, 0.103), ("13-13.5", 3.1, 0.119), ("13.5-14", 3.2, 0.131),
+	("14-14.5", 3.3, 0.144), ("14.5-15", 3.4, 0.158), ("15-15.5", 3.5, 0.167),
+	("15.5-16", 3.6, 0.175), ("16-16.5", 3.7, 0.188), ("16.5-17", 3.8, 0.196),
+	("17-17.5", 3.9, 0.211), ("17.5-18", 4.0, 0.223), ("18-18.5", 4.1, 0.252),
+	("18.5-19", 4.2, 0.285), ("19-19.5", 4.3, 0.29), ("19.5-20", 4.4, 0.331),
+]
+
+
+def seed_sieve_chart():
+	"""Create missing Diamond Sieve rows. Idempotent; NEVER overwrites edits."""
+	if not frappe.db.exists("DocType", "Diamond Sieve"):
+		return
+	for i, (sieve, mm, avg) in enumerate(SIEVE_CHART):
+		if not frappe.db.exists("Diamond Sieve", sieve):
+			frappe.get_doc({"doctype": "Diamond Sieve", "sieve_size": sieve,
+				"mm_size": mm, "avg_cts": avg, "idx_order": i}).insert(ignore_permissions=True)
+	frappe.db.commit()

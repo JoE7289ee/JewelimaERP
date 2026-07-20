@@ -1,0 +1,32 @@
+{
+ "actions": [],
+ "autoname": "field:sieve_size",
+ "creation": "2026-07-20 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["sieve_size", "mm_size", "avg_cts", "idx_order"],
+ "fields": [
+  {"fieldname": "sieve_size", "fieldtype": "Data", "in_list_view": 1, "label": "Sieve Size", "reqd": 1, "unique": 1,
+   "description": "Matches the size part of the diamond item codes (O-1, 1-1.5, ...)."},
+  {"fieldname": "mm_size", "fieldtype": "Float", "in_list_view": 1, "label": "MM Size", "precision": "2"},
+  {"fieldname": "avg_cts", "fieldtype": "Float", "in_list_view": 1, "label": "Avg Cts / Stone", "precision": "4",
+   "description": "Average carat weight of ONE stone of this sieve — drives qty<->carat auto-fill in purchases and BOMs."},
+  {"fieldname": "idx_order", "fieldtype": "Int", "hidden": 1, "label": "Order"}
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-20 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Diamond Sieve",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"read": 1, "report": 1, "role": "Stock Manager", "write": 1},
+  {"read": 1, "role": "Jewelima Ordering"}
+ ],
+ "sort_field": "idx_order",
+ "sort_order": "ASC",
+ "states": []
+}
