@@ -3290,6 +3290,96 @@ def export_table_xlsx(title, data):
 
 
 @frappe.whitelist()
+def export_table_image(title, data, heading=None):
+	"""Generic table -> PNG download (Pillow, no browser needed). `data` =
+	[[header...], [row...], ...] exactly as the page shows. Header row is styled,
+	the LAST row is treated as a totals row. Numeric-looking cells right-align."""
+	from io import BytesIO
+	from PIL import Image, ImageDraw, ImageFont
+
+	if isinstance(data, str):
+		data = json.loads(data or "[]")
+	if not data:
+		frappe.throw(frappe._("Nothing to export."))
+
+	def font(sz, bold=False):
+		for name in ((["DejaVuSans-Bold.ttf"] if bold else ["DejaVuSans.ttf"])):
+			try:
+				return ImageFont.truetype(name, sz)
+			except Exception:
+				pass
+		return ImageFont.load_default()
+
+	f_head = font(15, bold=True)
+	f_cell = font(15)
+	f_tot = font(15, bold=True)
+	f_title = font(20, bold=True)
+
+	ncols = max(len(r) for r in data)
+	rows = [list(r) + [""] * (ncols - len(r)) for r in data]
+	pad_x, pad_y, line_h = 16, 10, 34
+	scratch = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+
+	def text_w(txt, fnt):
+		return scratch.textbbox((0, 0), str(txt), font=fnt)[2]
+
+	# column widths = widest cell + padding
+	col_w = []
+	for c in range(ncols):
+		w = 0
+		for ri, r in enumerate(rows):
+			fnt = f_head if ri == 0 else f_cell
+			w = max(w, text_w(r[c], fnt))
+		col_w.append(w + pad_x * 2)
+
+	# which columns are numeric (right-align) — sample non-header rows
+	def is_num(v):
+		try:
+			float(str(v).replace(",", ""))
+			return str(v).strip() != ""
+		except Exception:
+			return False
+	num_col = []
+	for c in range(ncols):
+		vals = [rows[ri][c] for ri in range(1, len(rows)) if str(rows[ri][c]).strip() != ""]
+		num_col.append(bool(vals) and all(is_num(v) for v in vals))
+
+	title_h = 40 if title else 0
+	W = sum(col_w) + 2
+	H = title_h + line_h * len(rows) + 2 + pad_y
+
+	img = Image.new("RGB", (W, H), "#ffffff")
+	d = ImageDraw.Draw(img)
+	y = 0
+	if title:
+		d.text((4, 8), heading or title, fill="#111111", font=f_title)
+		y = title_h
+
+	for ri, r in enumerate(rows):
+		is_header = ri == 0
+		is_totals = ri == len(rows) - 1 and len(rows) > 2
+		bg = "#e9ecef" if is_header else ("#f5f5f5" if is_totals else "#ffffff")
+		d.rectangle([1, y, W - 1, y + line_h], fill=bg, outline="#bbbbbb")
+		x = 1
+		for c in range(ncols):
+			cw = col_w[c]
+			d.rectangle([x, y, x + cw, y + line_h], outline="#cccccc")
+			fnt = f_head if is_header else (f_tot if is_totals else f_cell)
+			txt = str(r[c])
+			tw = text_w(txt, fnt)
+			tx = (x + cw - pad_x - tw) if (num_col[c] and not is_header) else (x + pad_x)
+			d.text((tx, y + 8), txt, fill="#111111", font=fnt)
+			x += cw
+		y += line_h
+
+	buf = BytesIO()
+	img.save(buf, "PNG")
+	frappe.local.response.filename = "{0}.png".format(title or "export")
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with
 	its OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —

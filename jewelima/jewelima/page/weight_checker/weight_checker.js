@@ -56,6 +56,7 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 				<button class="btn btn-default wc-compare">${__("Compare")}</button>
 				<button class="btn btn-default wc-hide">${__("Hide empty")}</button>
 				<button class="btn btn-default wc-xlsx">${__("Export Excel")}</button>
+				<button class="btn btn-default wc-img">${__("Export Image")}</button>
 				<button class="btn btn-default wc-pdf">${__("PDF / Print")}</button>
 				<button class="btn btn-default wc-clear">${__("Clear")}</button>
 			</div>
@@ -199,6 +200,16 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to export — type some Nos first."), indicator: "orange" }, 3);
 		open_url_post("/api/method/jewelima.jewelima.api.export_table_xlsx",
 			{ title: `weight-check-${frappe.datetime.get_today()}`, data: JSON.stringify(data) });
+	});
+
+	root.find(".wc-img").on("click", () => {
+		const data = exportData();
+		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to export — type some Nos first."), indicator: "orange" }, 3);
+		open_url_post("/api/method/jewelima.jewelima.api.export_table_image", {
+			title: `weight-check-${frappe.datetime.get_today()}`,
+			heading: __("Weight Check — {0}", [frappe.datetime.str_to_user(frappe.datetime.get_today())]),
+			data: JSON.stringify(data),
+		});
 	});
 
 	root.find(".wc-pdf").on("click", () => {
