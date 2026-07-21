@@ -4110,65 +4110,6 @@ def get_stone_issue_stock():
 
 
 @frappe.whitelist()
-def stone_issue_edit(order_bag, from_item, to_item=None, pcs=None):
-	"""Edit one stone line on the card's BOM: swap the item (sieve size doesn't
-	work) and/or change the piece count. When PIECES change, the plan carats scale
-	by the line's average per-piece weight (weight/qty x new pcs) — the design
-	weight follows the count."""
-	if not frappe.db.exists("Order Bag", order_bag):
-		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
-	bag = frappe.get_doc("Order Bag", order_bag)
-	if bag.is_finished or bag.stock_status != "In Production":
-		frappe.throw(frappe._("{0} is not on the floor anymore.").format(order_bag))
-	row = next((r for r in bag.bag_bom if r.item == from_item), None)
-	if not row:
-		frappe.throw(frappe._("{0} is not on this card's BOM.").format(from_item))
-
-	to_item = (to_item or "").strip()
-	if to_item and to_item != from_item:
-		if not frappe.db.get_value("Item", to_item, "stone_type"):
-			frappe.throw(frappe._("{0} is not a stone.").format(to_item))
-		if any(r.item == to_item for r in bag.bag_bom):
-			frappe.throw(frappe._("{0} is already on this card's BOM.").format(to_item))
-		row.item = to_item
-
-	# the station shows TOTALS (per-unit x bag qty) — convert back to per-unit
-	bag_qty = bag.qty or 1
-	if pcs is not None and cint(pcs) != cint(flt(row.qty) * bag_qty):
-		new_total = cint(pcs)
-		if new_total <= 0:
-			frappe.throw(frappe._("Pieces must be at least 1."))
-		if flt(row.qty) > 0 and flt(row.weight) > 0:
-			avg = flt(row.weight) / flt(row.qty)  # per-piece design weight
-			row.weight = round(avg * new_total / bag_qty, 4)
-		row.qty = new_total / bag_qty
-
-	bag.save(ignore_permissions=True)
-	frappe.db.commit()
-	return get_stone_issue_card(order_bag)
-
-
-@frappe.whitelist()
-def stone_issue_add(order_bag, item, pcs=0, weight=0):
-	"""Add a NEW stone line to the card's BOM from the issue station. Weight may be
-	left blank — the plan gets filled from the ACTUAL carats when they're issued."""
-	if not frappe.db.exists("Order Bag", order_bag):
-		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
-	bag = frappe.get_doc("Order Bag", order_bag)
-	if bag.is_finished or bag.stock_status != "In Production":
-		frappe.throw(frappe._("{0} is not on the floor anymore.").format(order_bag))
-	if not frappe.db.get_value("Item", item, "stone_type"):
-		frappe.throw(frappe._("{0} is not a stone — only stones are added here.").format(item))
-	if any(r.item == item for r in bag.bag_bom):
-		frappe.throw(frappe._("{0} is already on this card's BOM.").format(item))
-	bag_qty = bag.qty or 1
-	bag.append("bag_bom", {"item": item, "qty": cint(pcs) / bag_qty, "weight": flt(weight) / bag_qty})
-	bag.save(ignore_permissions=True)
-	frappe.db.commit()
-	return get_stone_issue_card(order_bag)
-
-
-@frappe.whitelist()
 def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	"""Record metal loss out of a bag (the out-minus-in difference at a bench).
 	Per-bag ledger row AND real stock: In Bags pool -> '<bench> -LOSS' warehouse.

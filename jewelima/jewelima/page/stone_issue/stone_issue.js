@@ -73,10 +73,9 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 					</tr></thead><tbody></tbody>
 				</table>
 				<div class="si-foot">
-					<button class="btn btn-default si-add">${__("Add Stone")}</button>
 					<span class="si-sum text-muted"></span>
 				</div>
-				<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. ✎ edits a line (swap the sieve size or change the piece count — the plan carats follow the per-piece average). Add Stone puts a brand-new material on the card; leave its weight blank and the actual issued carats become the plan. Issuing moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger.")}</div>
+				<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. Enter the pieces and carats you are handing out and Issue — this moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger. (Changing the BOM — swapping a sieve or adding a stone — is done upstream, not here.)")}</div>
 			</div>
 			<div class="si-side">
 				<div class="si-panel si-today-panel" style="display:none;">
@@ -171,8 +170,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find(".si-wh").text(c.warehouse);
 		root.find("table.si-grid tbody").html(c.lines.map((l, i) => `
 			<tr data-i="${i}">
-				<td>${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span>
-					<button class="btn btn-xs btn-default si-edit" title="${__("Edit this line — swap the stone or change the piece count")}">✎</button></td>
+				<td>${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span></td>
 				<td class="mut">${l.plan_pcs} / ${l.plan_ct.toFixed(3)}</td>
 				<td class="mut">${l.issued_pcs} / ${l.issued_ct.toFixed(3)}</td>
 				<td class="${l.available_ct <= 0 ? "low" : ""}">${l.available_ct.toFixed(3)}</td>
@@ -231,64 +229,6 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		next ? $(next).focus().select() : root.find(".si-go").focus();
 	});
 
-	// ✎ — swap the stone (sieve size doesn't work) and/or change the piece count;
-	// when pieces change, the plan carats scale by the line's per-piece average
-	root.on("click", ".si-edit", function () {
-		const i = cint($(this).closest("tr").attr("data-i"));
-		const l = S.card.lines[i];
-		const d = new frappe.ui.Dialog({
-			title: __("Edit {0}", [l.item]),
-			fields: [
-				{ fieldname: "to_item", fieldtype: "Link", label: __("Stone"), options: "Item", default: l.item, reqd: 1,
-					get_query: () => ({ filters: { stone_type: ["is", "set"] } }),
-					description: __("Pick a different size if the plan's doesn't work.") },
-				{ fieldname: "pcs", fieldtype: "Int", label: __("Pieces (plan)"), default: l.plan_pcs, reqd: 1,
-					description: __("Changing the count scales the plan carats by the per-piece average.") },
-			],
-			primary_action_label: __("Save"),
-			primary_action(v) {
-				d.hide();
-				frappe.dom.freeze(__("Saving..."));
-				frappe.call({ method: API + ".stone_issue_edit", args: {
-					order_bag: S.card.order_bag, from_item: l.item, to_item: v.to_item, pcs: v.pcs,
-				} }).then((r) => {
-					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("Line updated on the card's BOM."), indicator: "green" }, 4);
-					S.card = r.message;
-					paint();
-				}).catch(() => frappe.dom.unfreeze());
-			},
-		});
-		d.show();
-	});
-
-	// a stone the design never had — new BOM line; blank weight = plan fills from the actual
-	root.on("click", ".si-add", () => {
-		const d = new frappe.ui.Dialog({
-			title: __("Add Stone — {0}", [S.card.order_bag]),
-			fields: [
-				{ fieldname: "item", fieldtype: "Link", label: __("Stone"), options: "Item", reqd: 1,
-					get_query: () => ({ filters: { stone_type: ["is", "set"] } }) },
-				{ fieldname: "pcs", fieldtype: "Int", label: __("Pieces (plan)") },
-				{ fieldname: "weight", fieldtype: "Float", label: __("Weight ct (plan)"), precision: 3,
-					description: __("Leave blank — the actual carats you issue become the plan.") },
-			],
-			primary_action_label: __("Add"),
-			primary_action(v) {
-				d.hide();
-				frappe.dom.freeze(__("Adding..."));
-				frappe.call({ method: API + ".stone_issue_add", args: {
-					order_bag: S.card.order_bag, item: v.item, pcs: v.pcs || 0, weight: v.weight || 0,
-				} }).then((r) => {
-					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("{0} added to the card's BOM.", [v.item]), indicator: "green" }, 4);
-					S.card = r.message;
-					paint();
-				}).catch(() => frappe.dom.unfreeze());
-			},
-		});
-		d.show();
-	});
 
 	root.find(".si-go").on("click", () => {
 		const lines = readLines();
