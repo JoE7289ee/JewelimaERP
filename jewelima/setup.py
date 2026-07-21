@@ -18,6 +18,7 @@ def after_install():
 	create_default_supplier()
 	create_jd_stock_customer()
 	seed_party_masters()
+	seed_quality_map()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -59,6 +60,7 @@ def after_migrate():
 	create_default_supplier()
 	create_jd_stock_customer()
 	seed_party_masters()
+	seed_quality_map()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -544,6 +546,18 @@ def get_customer_custom_fields():
 			 "label": "Default Price Chart", "insert_after": "default_salesman"},
 		]
 	}
+
+
+def seed_quality_map():
+	"""Diamond quality parent-mapping (VVS1-EF rates as VVS-EF). Global fact about
+	diamonds, shipped with the app; extend in the Diamond Quality Map doctype."""
+	if not frappe.db.exists("DocType", "Diamond Quality Map"):
+		return
+	for member, parent in (("VVS1-EF", "VVS-EF"), ("VVS2-EF", "VVS-EF")):
+		if not frappe.db.exists("Diamond Quality Map", member):
+			frappe.get_doc({"doctype": "Diamond Quality Map",
+				"member_quality": member, "parent_quality": parent}).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def seed_party_masters():

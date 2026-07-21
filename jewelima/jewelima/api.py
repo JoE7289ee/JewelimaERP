@@ -6281,6 +6281,11 @@ def get_price_chart(name):
 		"status": d.status, "diamond_quality_note": d.diamond_quality_note or "",
 		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
 			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
+		"solitaire_min_ct": flt(d.get("solitaire_min_ct")) or 0.07,
+		"solitaire_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "quality": r.quality, "rate": r.rate}
+			for r in (d.get("solitaire_rates") or [])],
+		"certification_charges": [{"certification": r.certification, "rate": r.rate}
+			for r in (d.get("certification_charges") or [])],
 		"colour_stone_rate": flt(d.colour_stone_rate), "precious_stone_rate": flt(d.precious_stone_rate),
 		"job_work_pty_rate": flt(d.job_work_pty_rate),
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
@@ -6308,6 +6313,15 @@ def save_price_chart(payload):
 		if r.get("rate"):
 			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label"), "from_ct": flt(r.get("from_ct")),
 				"to_ct": flt(r.get("to_ct")), "quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
+	doc.solitaire_min_ct = flt(p.get("solitaire_min_ct")) or 0.07
+	for r in p.get("solitaire_rates") or []:
+		if r.get("rate"):
+			doc.append("solitaire_rates", {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
+				"quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
+	for r in p.get("certification_charges") or []:
+		if (r.get("certification") or "").strip():
+			doc.append("certification_charges", {"certification": r.get("certification").strip().upper(),
+				"rate": flt(r.get("rate"))})
 	doc.colour_stone_rate = flt(p.get("colour_stone_rate"))
 	doc.precious_stone_rate = flt(p.get("precious_stone_rate"))
 	doc.job_work_pty_rate = flt(p.get("job_work_pty_rate"))
@@ -6342,6 +6356,11 @@ def _price_chart_letter_html(d):
 	dmd = "".join("<tr><td>{0}</td><td>{1}</td><td>{2}</td><td class='r'>₹ {3}</td></tr>".format(
 		frappe.utils.escape_html(r["sieve_label"] or ""), bracket(r),
 		frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d["diamond_rates"])
+	sol = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
+		bracket(r), frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d.get("solitaire_rates", []))
+	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
+		frappe.utils.escape_html(r["certification"]), "₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included")
+		for r in d.get("certification_charges", []))
 	setting = "".join("<tr><td>{0} ct</td><td class='r'>₹ {1}</td></tr>".format(
 		r["stone_ct"], money(r["rate"])) for r in d["setting_rates"])
 	special = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
@@ -6391,7 +6410,7 @@ def _price_chart_letter_html(d):
 		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
-		{dmd_sec}{setting_sec}{special_sec}{flat_sec}
+		{dmd_sec}{sol_sec}{setting_sec}{special_sec}{flat_sec}{cert_sec}
 		{payment}{terms}
 		<div class='sign'>
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
@@ -6401,6 +6420,9 @@ def _price_chart_letter_html(d):
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		qnote="<div class='qnote'>Diamond quality: {0}</div>".format(esc(d["diamond_quality_note"])) if d["diamond_quality_note"] else "",
 		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieve</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
+		sol_sec=sec("Solitaire Rates (per-stone above {0} ct)".format(d.get("solitaire_min_ct", 0.07)),
+			"<thead><tr><th>Per-stone size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", sol),
+		cert_sec=sec("Certification Charges", "", certs),
 		setting_sec=sec("Setting Rates", "<thead><tr><th>Stone Size</th><th class='r'>Rate</th></tr></thead>", setting),
 		special_sec=sec("Special Works", "<thead><tr><th>Work</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", special),
 		flat_sec=sec("Making &amp; Charges", "", flat_rows),
@@ -6421,6 +6443,201 @@ def export_price_chart_pdf(name):
 
 
 # ---------------------------------------------------------------------------
+# Prepare for Sale — the two-step sale: build the priced list (per-line manual
+# overrides recorded: chart price vs final price vs who), export the
+# confirmation excel for the party, and only THEN Sell (stock moves, bags Sold).
+# ---------------------------------------------------------------------------
+PREP_VALUE_FIELDS = ("gold_value", "diamond_value", "stone_value", "labour_value", "charges_value")
+
+
+def _prep_totals(doc):
+	doc.grand_total = round(sum(flt(r.piece_total) for r in doc.items), 2)
+
+
+@frappe.whitelist()
+def get_sale_preparations():
+	return {"preps": frappe.get_all("Sale Preparation",
+		fields=["name", "customer", "price_chart", "status", "grand_total", "modified", "sale"],
+		order_by="creation desc", limit=50)}
+
+
+@frappe.whitelist()
+def get_sale_preparation(name):
+	d = frappe.get_doc("Sale Preparation", name)
+	return {
+		"name": d.name, "customer": d.customer, "price_chart": d.price_chart,
+		"gold_rate": flt(d.gold_rate), "status": d.status, "sale": d.sale,
+		"remarks": d.remarks or "", "grand_total": flt(d.grand_total),
+		"items": [{"row": r.name, "order_bag": r.order_bag, "design": r.design,
+			"design_type": r.design_type, "nett": flt(r.nett), "dmd_ct": flt(r.dmd_ct),
+			"solitaire_ct": flt(r.solitaire_ct), "ostone_ct": flt(r.ostone_ct),
+			**{f: flt(r.get(f)) for f in PREP_VALUE_FIELDS},
+			**{"chart_" + f.replace("_value", ""): flt(r.get("chart_" + f.replace("_value", ""))) for f in PREP_VALUE_FIELDS},
+			"piece_total": flt(r.piece_total), "overridden": r.overridden,
+			"override_remark": r.override_remark or "", "changed_by": r.changed_by or ""} for r in d.items],
+	}
+
+
+@frappe.whitelist()
+def create_sale_preparation(customer, price_chart, gold_rate=0):
+	if not frappe.db.exists("Customer", customer):
+		frappe.throw(frappe._("Pick the party."))
+	if not frappe.db.exists("Price Chart", price_chart):
+		frappe.throw(frappe._("Pick the price chart."))
+	d = frappe.get_doc({"doctype": "Sale Preparation", "customer": customer,
+		"price_chart": price_chart, "gold_rate": flt(gold_rate), "status": "Draft"})
+	d.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name}
+
+
+@frappe.whitelist()
+def prep_add_piece(name, barcode):
+	"""Scan a piece into the preparation — priced by the chart engine (all its
+	guards apply: quality/solitaire/certification not on chart = scan denied)."""
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} — no more edits.").format(name, d.status))
+	nm = (barcode or "").strip()
+	if any(r.order_bag == nm for r in d.items):
+		frappe.throw(frappe._("{0} is already on this list.").format(nm))
+	pc = get_sale_piece(nm, d.price_chart, d.gold_rate)
+	vals = {f: flt(pc[f]) for f in PREP_VALUE_FIELDS}
+	d.append("items", {
+		"order_bag": nm, "design": pc["design"], "design_type": pc["design_type"],
+		"nett": pc["nett"], "dmd_ct": pc["dmd_ct"], "solitaire_ct": pc.get("solitaire_ct", 0),
+		"ostone_ct": pc["ostone_ct"],
+		**{"chart_" + f.replace("_value", ""): v for f, v in vals.items()},
+		**vals, "piece_total": round(sum(vals.values()), 2),
+	})
+	_prep_totals(d)
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_sale_preparation(name)
+
+
+@frappe.whitelist()
+def prep_set_line(name, row, field, value, remark=None):
+	"""A manual price change on one line — ALWAYS recorded: the chart price stays
+	in the chart_* column, the final in the value column, plus who changed it."""
+	if field not in PREP_VALUE_FIELDS:
+		frappe.throw(frappe._("Only the value columns can be changed."))
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} — no more edits.").format(name, d.status))
+	r = next((x for x in d.items if x.name == row), None)
+	if not r:
+		frappe.throw(frappe._("Line not found."))
+	r.set(field, flt(value))
+	r.piece_total = round(sum(flt(r.get(f)) for f in PREP_VALUE_FIELDS), 2)
+	changed = any(abs(flt(r.get(f)) - flt(r.get("chart_" + f.replace("_value", "")))) > 0.005 for f in PREP_VALUE_FIELDS)
+	r.overridden = 1 if changed else 0
+	r.changed_by = frappe.session.user if changed else ""
+	if remark is not None:
+		r.override_remark = remark
+	_prep_totals(d)
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_sale_preparation(name)
+
+
+@frappe.whitelist()
+def prep_remove_line(name, row):
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} — no more edits.").format(name, d.status))
+	d.set("items", [x for x in d.items if x.name != row])
+	_prep_totals(d)
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_sale_preparation(name)
+
+
+@frappe.whitelist()
+def prep_set_status(name, status):
+	"""Draft <-> Sent (the excel went to the party) / Cancelled. Sold only happens
+	through sell_preparation."""
+	if status not in ("Draft", "Sent", "Cancelled"):
+		frappe.throw(frappe._("Bad status."))
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status == "Sold":
+		frappe.throw(frappe._("{0} is already sold.").format(name))
+	d.status = status
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": d.status}
+
+
+@frappe.whitelist()
+def export_sale_prep_xlsx(name):
+	"""The default sale-confirmation excel for the party. (Company-specific
+	templates plug in later, one exporter per format.)"""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font, PatternFill
+	d = get_sale_preparation(name)
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Sale Confirmation"
+	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+	ws.append(["Sale Confirmation", "", d["customer"], "", "Chart: " + (d["price_chart"] or ""),
+		"", "Gold rate: " + str(d["gold_rate"])])
+	ws.append([])
+	cols = ["Card", "Design", "Type", "Nett g", "Dmd ct", "Solitaire ct", "Stone ct",
+		"Gold", "Diamond", "Stone", "Labour", "Charges", "Total"]
+	ws.append(cols)
+	for c in ws[3]:
+		c.font, c.fill = head_font, head_fill
+	for r in d["items"]:
+		ws.append([r["order_bag"], r["design"], r["design_type"], r["nett"], r["dmd_ct"],
+			r["solitaire_ct"], r["ostone_ct"], r["gold_value"], r["diamond_value"],
+			r["stone_value"], r["labour_value"], r["charges_value"], r["piece_total"]])
+	ws.append([])
+	ws.append(["", "", "", "", "", "", "", "", "", "", "", "GRAND TOTAL", d["grand_total"]])
+	ws[ws.max_row][12].font = Font(bold=True)
+	for i, w in enumerate([16, 14, 12, 9, 9, 11, 9, 11, 11, 10, 10, 10, 12], 1):
+		ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "SaleConfirmation-{0}-{1}.xlsx".format(d["customer"].replace(" ", "-"), name)
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def sell_preparation(name):
+	"""The actual sale: hands the preparation's FINAL values to create_product_sale
+	(stock write-off, bags Sold, holder transfer) and locks the prep as Sold."""
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status == "Sold":
+		frappe.throw(frappe._("{0} is already sold.").format(name))
+	if not d.items:
+		frappe.throw(frappe._("Nothing on the list."))
+	lines = []
+	for r in d.items:
+		lines.append({"order_bag": r.order_bag, "design": r.design, "design_type": r.design_type,
+			"held_by": frappe.db.get_value("Order Bag", r.order_bag, "held_by"),
+			"nett": flt(r.nett), "dmd_ct": flt(r.dmd_ct), "ostone_ct": flt(r.ostone_ct),
+			**{f: flt(r.get(f)) for f in PREP_VALUE_FIELDS}})
+	overrides = [r for r in d.items if r.overridden]
+	remark_bits = ["{0}: chart {1} -> sold {2} (by {3}){4}".format(
+		r.order_bag,
+		round(sum(flt(r.get("chart_" + f.replace("_value", ""))) for f in PREP_VALUE_FIELDS), 2),
+		flt(r.piece_total), r.changed_by,
+		" — " + r.override_remark if r.override_remark else "") for r in overrides]
+	res = create_product_sale(json.dumps({
+		"customer": d.customer, "price_chart": d.price_chart, "gold_rate": flt(d.gold_rate),
+		"remarks": ((d.remarks or "") + ("\nManual price changes:\n" + "\n".join(remark_bits) if remark_bits else "")).strip(),
+		"lines": lines,
+	}))
+	d.status = "Sold"
+	d.sale = res["name"]
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {**res, "prep": name}
+
+
+# ---------------------------------------------------------------------------
 # Sell (Sales) — price scanned pieces against a Price Chart, record the sale,
 # write the stock off. The verified costing math: gold = nett x effective rate;
 # diamonds = ct x cents-bracket rate; labour per rule (gram+min / piece /
@@ -6435,7 +6652,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
 	b = frappe.db.get_value("Order Bag", nm, [
-		"name", "design", "held_by", "stock_status", "is_finished", "huid", "qty",
+		"name", "design", "held_by", "stock_status", "is_finished", "huid", "qty", "certifications",
 		"act_gross_weight", "act_nett_weight", "act_dmd_weight", "act_dmd_no",
 		"act_ps_weight", "act_cs_weight", "act_cz_weight", "act_cvd_weight", "act_pdmd_weight", "act_poth_weight",
 	], as_dict=True)
@@ -6450,13 +6667,34 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	tags = [r.charge_category for r in frappe.get_all(
 		"Order Bag Charge Category", filters={"parent": nm}, fields=["charge_category"])]
 
-	# ---- diamonds: every quality present must be on the chart -----------------
-	qual_ct = {}
+	# ---- diamonds ---------------------------------------------------------------
+	# Per ITEM line: per-stone ct = the line's carats divided equally by its piece
+	# count. Above the chart's solitaire threshold the line is a SOLITAIRE — pulled
+	# out of the diamond totals and priced from the solitaire brackets (missing
+	# bracket = scan denied). Qualities map through the global Diamond Quality Map
+	# (VVS1-EF rates as VVS-EF) before the chart lookup.
+	qmap = {r.name: r.parent_quality for r in frappe.get_all(
+		"Diamond Quality Map", fields=["name", "parent_quality"])} if frappe.db.exists("DocType", "Diamond Quality Map") else {}
+	bom_pcs = {}
+	bag_doc = frappe.get_doc("Order Bag", nm)
+	for r in bag_doc.bag_bom:
+		bom_pcs[r.item] = bom_pcs.get(r.item, 0) + cint(flt(r.qty) * (bag_doc.qty or 1))
+	sol_min = flt(getattr(chart, "solitaire_min_ct", 0)) or 0.07
+
+	qual_ct, sol_lines = {}, []
 	for item, qty in _bag_convert_materials([nm])[nm].items():
 		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
-		if st == "Diamond":
-			q = (grp or "").replace("DIAMOND ", "")
+		if st != "Diamond":
+			continue
+		q = (grp or "").replace("DIAMOND ", "")
+		q = qmap.get(q, q)
+		pcs = bom_pcs.get(item, 0)
+		line_per_stone = (flt(qty) / pcs) if pcs else 0
+		if line_per_stone > sol_min and getattr(chart, "solitaire_rates", None) is not None:
+			sol_lines.append({"item": item, "quality": q, "ct": flt(qty), "pcs": pcs, "per_stone": line_per_stone})
+		else:
 			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+
 	diamond_value = 0.0
 	dmd_detail = []
 	per_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
@@ -6474,6 +6712,22 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
 		diamond_value += ct * flt(row.rate)
 		dmd_detail.append({"quality": q, "ct": round(ct, 3), "rate": flt(row.rate)})
+
+	# solitaires: their own brackets, their own line on the bill
+	solitaire_value, solitaire_ct, sol_detail = 0.0, 0.0, []
+	for s in sol_lines:
+		rows = [r for r in (chart.get("solitaire_rates") or [])
+			if (r.quality or "") in (s["quality"], "")
+			and flt(r.from_ct) <= s["per_stone"] and (not flt(r.to_ct) or s["per_stone"] < flt(r.to_ct))]
+		if not rows:
+			frappe.throw(frappe._("{0}: solitaire {1} ct/stone ({2}) has no solitaire bracket on chart {3} — scan denied.").format(
+				nm, round(s["per_stone"], 3), s["quality"], chart.chart_name))
+		exact = [r for r in rows if (r.quality or "") == s["quality"]] or rows
+		rate = flt(exact[0].rate)
+		solitaire_value += s["ct"] * rate
+		solitaire_ct += s["ct"]
+		sol_detail.append({"quality": s["quality"], "pcs": s["pcs"], "per_stone": round(s["per_stone"], 3),
+			"ct": round(s["ct"], 3), "rate": rate})
 
 	# ---- other stones + party job work ----------------------------------------
 	stone_value = (flt(b.act_cs_weight) + flt(b.act_cz_weight)) * flt(chart.colour_stone_rate) + flt(b.act_ps_weight) * flt(chart.precious_stone_rate)
@@ -6495,17 +6749,41 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	# hallmark is per HUID — a stud pair carries two HUIDs and pays twice
 	huids = [x for x in re.split(r"[,/\s]+", b.huid or "") if x]
 	pieces = max(len(huids), 1)
-	charges = flt(chart.hallmark_charge) * pieces + flt(chart.certification_charge)
+	charges = flt(chart.hallmark_charge) * pieces
 
+	# certifications the bag ACTUALLY carries, charged per the chart's rows. A
+	# certification the chart hasn't priced BLOCKS the scan (rate 0 = free is fine).
+	cert_detail = []
+	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
+	cert_rows = {(r.certification or "").upper(): flt(r.rate) for r in (chart.get("certification_charges") or [])}
+	if cert_rows or trail:
+		for token in trail:
+			if cert_rows:
+				if token not in cert_rows:
+					frappe.throw(frappe._("{0} is {1} certified but chart {2} has no price for {1} — scan denied.").format(
+						nm, token, chart.chart_name))
+				charges += cert_rows[token] * pieces
+				cert_detail.append({"certification": token, "rate": cert_rows[token], "pieces": pieces})
+			else:
+				# legacy chart without the table: the old flat charge covers everything
+				pass
+	if not cert_rows:
+		charges += flt(chart.certification_charge)
+
+	# solitaires ride inside diamond_value but stay OUT of the piece's diamond ct
+	dmd_ct_regular = flt(b.act_dmd_weight) + flt(b.act_pdmd_weight) - solitaire_ct
 	return {
 		"order_bag": nm, "design": b.design or "", "design_type": design_type,
 		"held_by": b.held_by or "", "huid": b.huid or "",
 		"gross": flt(b.act_gross_weight), "nett": nett,
-		"dmd_ct": flt(b.act_dmd_weight) + flt(b.act_pdmd_weight), "ostone_ct": round(ostone_ct, 3),
-		"gold_value": round(gold_value, 2), "diamond_value": round(diamond_value, 2),
+		"dmd_ct": round(dmd_ct_regular, 3), "solitaire_ct": round(solitaire_ct, 3),
+		"ostone_ct": round(ostone_ct, 3),
+		"gold_value": round(gold_value, 2),
+		"diamond_value": round(diamond_value + solitaire_value, 2),
 		"stone_value": round(stone_value, 2), "labour_value": round(labour, 2),
 		"charges_value": round(charges, 2),
-		"dmd_detail": dmd_detail, "labour_rule": rule_desc,
+		"dmd_detail": dmd_detail, "sol_detail": sol_detail, "cert_detail": cert_detail,
+		"labour_rule": rule_desc,
 	}
 
 

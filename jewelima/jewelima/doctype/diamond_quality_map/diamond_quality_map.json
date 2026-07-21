@@ -1,0 +1,57 @@
+{
+ "name": "Diamond Quality Map",
+ "autoname": "field:member_quality",
+ "track_changes": 1,
+ "description": "Global mapping of diamond quality groups to the PARENT quality a price chart rates them under (VVS1-EF -> VVS-EF).",
+ "fields": [
+  {
+   "fieldname": "member_quality",
+   "fieldtype": "Data",
+   "label": "Member Quality (item group suffix)",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "As it appears after 'DIAMOND ' in the item group, e.g. VVS1-EF."
+  },
+  {
+   "fieldname": "parent_quality",
+   "fieldtype": "Data",
+   "label": "Rates As (parent quality)",
+   "reqd": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-21 23:45:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-21 23:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "member_quality",
+  "parent_quality"
+ ]
+}

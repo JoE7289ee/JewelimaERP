@@ -92,6 +92,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
 		diamond_quality_note: "", diamond_rates: [], setting_rates: [], special_works: [],
+		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
 		payment_terms: "", terms: "", signatory: "", signatory_phone: "" });
@@ -114,6 +115,16 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td><input data-f="quality" value="${esc(r.quality || "")}" placeholder="${__("blank = any")}"></td>
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td class="del">&times;</td></tr>`).join("");
+		if (kind === "sol") return cur.solitaire_rates.map((r, i) => `
+			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
+			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
+			<td><input data-f="quality" value="${esc(r.quality || "")}" placeholder="${__("blank = any")}"></td>
+			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td class="del">&times;</td></tr>`).join("");
+		if (kind === "cert") return cur.certification_charges.map((r, i) => `
+			<tr data-i="${i}"><td><input data-f="certification" value="${esc(r.certification || "")}" placeholder="HALLMARKING / IGL / ..."></td>
+			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "set") return cur.setting_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="stone_ct" type="number" step="0.001" value="${num(r.stone_ct)}"></td>
@@ -141,6 +152,14 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Diamond Rates (₹/ct by size bracket)")}<span class="add" data-k="dmd">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("Sieve label")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("dmd")}</tbody></table>
+			<div class="pc-sec">${__("Solitaire Rates — per-stone above the threshold leaves the diamond totals")}<span class="add" data-k="sol">+ ${__("row")}</span></div>
+			<div class="pc-flats"><div><label>${__("Solitaire threshold ct / stone")}</label>
+				<input class="pc-f" data-f="solitaire_min_ct" type="number" step="0.001" value="${num(cur.solitaire_min_ct)}"></div></div>
+			<table class="pc-t" data-k="sol"><thead><tr><th>${__("From ct/stone")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("sol")}</tbody></table>
+			<div class="pc-sec">${__("Certification Charges — a cert on the bag missing here BLOCKS the scan")}<span class="add" data-k="cert">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Rate ₹/piece")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("cert")}</tbody></table>
 			<div class="pc-sec">${__("Setting Rates")}<span class="add" data-k="set">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="set"><thead><tr><th>${__("Stone ct")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("set")}</tbody></table>
@@ -184,7 +203,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	root.on("input change", ".pc-f", function () {
 		cur[$(this).data("f")] = this.type === "number" ? flt($(this).val()) : $(this).val();
 	});
-	const KIND_ARR = { dmd: "diamond_rates", set: "setting_rates", spw: "special_works" };
+	const KIND_ARR = { dmd: "diamond_rates", set: "setting_rates", spw: "special_works",
+		sol: "solitaire_rates", cert: "certification_charges" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
 		const $t = $(this).closest("table.pc-t");
 		const arr = cur[KIND_ARR[$t.data("k")]];
@@ -195,6 +215,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	root.on("click", ".pc-sec .add", function () {
 		const k = $(this).data("k");
 		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
+			: k === "sol" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
+			: k === "cert" ? { certification: "", rate: "" }
 			: k === "set" ? { stone_ct: "", rate: "" } : { work_name: "", basis: "Per Piece", rate: "" });
 		paintEditor();
 	});

@@ -867,6 +867,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "clipboard-check",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Prepare for Sale",
+   "link_to": "prepare-sale",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "shopping-cart",
    "indent": 1,
    "keep_closed": 0,
@@ -1710,7 +1723,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-21 23:19:48.138850",
+ "modified": "2026-07-21 23:52:57.295426",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

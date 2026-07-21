@@ -13,6 +13,9 @@
   "diamond_quality_note",
   "diamond_section",
   "diamond_rates",
+  "solitaire_min_ct",
+  "solitaire_rates",
+  "certification_charges",
   "stones_section",
   "colour_stone_rate",
   "precious_stone_rate",
@@ -84,6 +87,26 @@
    "fieldtype": "Table",
    "label": "Diamond Rates",
    "options": "Price Chart Diamond Rate"
+  },
+  {
+   "fieldname": "solitaire_min_ct",
+   "fieldtype": "Float",
+   "label": "Solitaire threshold (ct/stone)",
+   "default": "0.07",
+   "description": "A BOM stone line whose PER-STONE weight (line ct / qty) exceeds this is a solitaire: excluded from the diamond totals and priced from the solitaire brackets below."
+  },
+  {
+   "fieldname": "solitaire_rates",
+   "fieldtype": "Table",
+   "options": "Price Chart Solitaire Rate",
+   "label": "Solitaire Rates"
+  },
+  {
+   "fieldname": "certification_charges",
+   "fieldtype": "Table",
+   "options": "Price Chart Certification Charge",
+   "label": "Certification Charges",
+   "description": "Per certification on the bag's trail, charged per piece. A certification the bag carries but this table lacks BLOCKS the scan."
   },
   {
    "fieldname": "stones_section",
@@ -210,7 +233,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-14 15:00:00.000000",
+ "modified": "2026-07-21 23:45:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",

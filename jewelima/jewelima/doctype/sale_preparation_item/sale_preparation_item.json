@@ -1,0 +1,160 @@
+{
+ "name": "Sale Preparation Item",
+ "istable": 1,
+ "permissions": [],
+ "fields": [
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "options": "Order Bag",
+   "label": "Order Bag",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "options": "Design",
+   "label": "Design"
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Data",
+   "label": "Design Type"
+  },
+  {
+   "fieldname": "nett",
+   "fieldtype": "Float",
+   "label": "Nett g"
+  },
+  {
+   "fieldname": "dmd_ct",
+   "fieldtype": "Float",
+   "label": "Diamond ct"
+  },
+  {
+   "fieldname": "solitaire_ct",
+   "fieldtype": "Float",
+   "label": "Solitaire ct"
+  },
+  {
+   "fieldname": "ostone_ct",
+   "fieldtype": "Float",
+   "label": "Other Stone ct"
+  },
+  {
+   "fieldname": "chart_gold",
+   "fieldtype": "Float",
+   "label": "Chart Gold"
+  },
+  {
+   "fieldname": "chart_diamond",
+   "fieldtype": "Float",
+   "label": "Chart Diamond"
+  },
+  {
+   "fieldname": "chart_stone",
+   "fieldtype": "Float",
+   "label": "Chart Stone"
+  },
+  {
+   "fieldname": "chart_labour",
+   "fieldtype": "Float",
+   "label": "Chart Labour"
+  },
+  {
+   "fieldname": "chart_charges",
+   "fieldtype": "Float",
+   "label": "Chart Charges"
+  },
+  {
+   "fieldname": "gold_value",
+   "fieldtype": "Float",
+   "label": "Gold (final)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "diamond_value",
+   "fieldtype": "Float",
+   "label": "Diamond (final)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "stone_value",
+   "fieldtype": "Float",
+   "label": "Stone (final)"
+  },
+  {
+   "fieldname": "labour_value",
+   "fieldtype": "Float",
+   "label": "Labour (final)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "charges_value",
+   "fieldtype": "Float",
+   "label": "Charges (final)"
+  },
+  {
+   "fieldname": "piece_total",
+   "fieldtype": "Float",
+   "label": "Piece Total",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "overridden",
+   "fieldtype": "Check",
+   "label": "Manually Changed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "override_remark",
+   "fieldtype": "Data",
+   "label": "Override Remark"
+  },
+  {
+   "fieldname": "changed_by",
+   "fieldtype": "Data",
+   "label": "Changed By",
+   "read_only": 1
+  }
+ ],
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-21 23:45:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-21 23:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "order_bag",
+  "design",
+  "design_type",
+  "nett",
+  "dmd_ct",
+  "solitaire_ct",
+  "ostone_ct",
+  "chart_gold",
+  "chart_diamond",
+  "chart_stone",
+  "chart_labour",
+  "chart_charges",
+  "gold_value",
+  "diamond_value",
+  "stone_value",
+  "labour_value",
+  "charges_value",
+  "piece_total",
+  "overridden",
+  "override_remark",
+  "changed_by"
+ ]
+}
