@@ -34,6 +34,14 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 		.ws-tbl tbody tr:last-child td{border-bottom:0;}
 		.ws-act .btn{margin-right:4px;margin-bottom:2px;}
 		.ws-none{padding:30px;text-align:center;color:var(--text-muted);}
+		/* karat / customer-vs-bulk row colours (company scheme) */
+		.ws-tbl tr.k-row td{background:transparent;}
+		.ws-tbl tr.k22b{background:#1e3a8a;}                                        /* 22K bulk  = dark blue */
+		.ws-tbl tr.k22b td, .ws-tbl tr.k22b td b{color:#fff;}
+		.ws-tbl tr.k22c{background:linear-gradient(90deg,#d6e6ff 0%,#dbe9ff 45%,#1e3a8a 100%);} /* 22K customer = light->dark blue */
+		.ws-tbl tr.k18c{background:#f7cfe0;}                                        /* 18K customer = pink */
+		.ws-tbl tr.k18b{background:linear-gradient(90deg,#fff2ad 0%,#ffe08a 45%,#f4a6c0 100%);}  /* 18K bulk = yellow->pink */
+		.ws-tbl tr.k-row td.ws-act .btn{background:var(--fg-color);}
 		.ws-assign{border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--control-bg);}
 		</style>
 		<div class="ws-top">
@@ -61,12 +69,20 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 		</span>`;
 	}
 
+	function karatClass(c) {
+		if (!c.karat) return "";
+		const k = c.karat, bulk = !!c.is_bulk;
+		if (k === "22K") return "k-row " + (bulk ? "k22b" : "k22c");
+		if (k === "18K") return "k-row " + (bulk ? "k18b" : "k18c");
+		return "";
+	}
+
 	function cardTable(list, lead) {
 		if (!list.length) return `<div class="ws-none">${lead ? __("Nothing unassigned.") : __("No cards assigned to you.")}</div>`;
 		return `<table class="ws-tbl"><thead><tr>
 			<th>${__("Order Bag")}</th><th>${__("Customer")}</th><th>${__("Order Date")}</th><th>${__("Due Date")}</th>
 			${lead ? `<th>${__("Assign to")}</th>` : `<th>${__("Actions")}</th>`}</tr></thead><tbody>` +
-			list.map((c) => `<tr>
+			list.map((c) => `<tr class="${karatClass(c)}">
 				<td><b>${esc(c.name)}</b> <span style="color:var(--text-muted);font-size:11px;">${esc(c.cad_design_type || "")}</span></td>
 				<td>${esc(c.customer || "—")}</td>
 				<td>${c.order_date ? frappe.datetime.str_to_user(c.order_date) : "—"}</td>

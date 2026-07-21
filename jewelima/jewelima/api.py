@@ -3661,6 +3661,19 @@ def export_cad_sheet_xlsx(payload):
 # --- CAD Workstation (Workstation) — CAD users see their assigned cards; a lead
 # (System Manager) assigns queue cards. Read-only dashboard + assign. Approval
 # workflow: deferred.
+def _cad_karat(bag):
+	"""'22K' / '18K' etc. from the card's cad_karat, else its design's gold row."""
+	import re as _re
+	k = bag.get("cad_karat") or ""
+	if not k and bag.get("design"):
+		gold = frappe.db.sql_list("""SELECT bi.item FROM `tabDesign BOM Item` bi
+			JOIN `tabItem` i ON i.name = bi.item
+			WHERE bi.parent = %s AND i.material_group = 'GOLD' LIMIT 1""", bag.get("design"))
+		k = gold[0] if gold else ""
+	m = _re.match(r"^(\d+)K", k or "")
+	return f"{m.group(1)}K" if m else ""
+
+
 def _my_employee():
 	return frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
 
@@ -3678,8 +3691,10 @@ def get_cad_workstation():
 	roster = _cad_roster()
 	is_lead = "System Manager" in set(frappe.get_roles())
 	bags = frappe.get_all("Order Bag", filters={"is_cad": 1},
-		fields=["name", "customer", "order_date", "due_date", "job_order", "cad_design_type", "qty"],
+		fields=["name", "customer", "order_date", "due_date", "job_order", "cad_design_type", "qty",
+			"cad_karat", "design"],
 		order_by="due_date asc, creation asc", limit_page_length=0)
+	jd = _jd_stock_customer()
 	names = [b.name for b in bags] or [""]
 	assign = {}
 	for r in frappe.get_all("CAD", filters={"order_bag": ["in", names], "status": ["not in", ["Completed", "Expired"]]},
@@ -3696,6 +3711,8 @@ def get_cad_workstation():
 		row["employee_name"] = empname.get(emp, "")
 		row["order_date"] = str(b.order_date or "")
 		row["due_date"] = str(b.due_date or "")
+		row["karat"] = _cad_karat(b)
+		row["is_bulk"] = 1 if (b.customer and b.customer == jd) else 0
 		if emp:
 			counts[emp] = counts.get(emp, 0) + 1
 		if me and emp == me:
