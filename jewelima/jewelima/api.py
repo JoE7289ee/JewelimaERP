@@ -2282,11 +2282,21 @@ def get_stone_issue_card(barcode):
 
 	nm = (barcode or "").strip()
 	if not frappe.db.exists("Order Bag", nm):
-		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
+		return {"error": "not_found", "card": nm or "?",
+			"message": frappe._("Card {0} does not exist — check the number and scan again.").format(nm or "?")}
 	bag = frappe.get_doc("Order Bag", nm)
 	if bag.is_finished or bag.stock_status != "In Production":
-		frappe.throw(frappe._("{0} is {1} — stones only go into cards still on the floor.").format(
-			nm, "a product" if bag.is_finished else (bag.stock_status or "?")))
+		# spell out WHY the card can't take stones (sold / product / cancelled / …)
+		st = bag.stock_status or "?"
+		if st == "Sold":
+			why, code = frappe._("{0} is SOLD — no more stones go into it.").format(nm), "sold"
+		elif st == "Cancelled":
+			why, code = frappe._("{0} is CANCELLED — nothing gets issued to a cancelled card.").format(nm), "cancelled"
+		elif bag.is_finished:
+			why, code = frappe._("{0} is already a finished product ({1}) — stones only go into cards on the floor.").format(nm, st), "product"
+		else:
+			why, code = frappe._("{0} is {1} — stones only go into cards still In Production.").format(nm, st), "status"
+		return {"error": code, "card": nm, "status": st, "message": why}
 	wh = _wh(STONE_ISSUE_WAREHOUSE)
 
 	# already issued through THIS station (entry_type Stone Issue), per item
@@ -2313,7 +2323,8 @@ def get_stone_issue_card(barcode):
 			"available_ct": flt(frappe.db.get_value("Bin", {"item_code": r.item, "warehouse": wh}, "actual_qty")),
 		})
 	if not lines:
-		frappe.throw(frappe._("{0} has no stones on its BOM — nothing to issue here.").format(nm))
+		return {"error": "no_stones", "card": nm,
+			"message": frappe._("{0} has no stones on its BOM — nothing to issue here.").format(nm)}
 	return {
 		"order_bag": bag.name, "design": bag.design or "", "qty": bag.qty or 1,
 		"location": bag.location or "", "warehouse": wh,

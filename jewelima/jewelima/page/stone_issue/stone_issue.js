@@ -56,11 +56,22 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-strip .si-go:hover{background:#256628;border-color:#256628;}
 		table.si-grid tr.si-locked{opacity:.5;}
 		table.si-grid tr.si-locked input{background:var(--disabled-control-bg,#eee);cursor:not-allowed;}
+		.si-callout{display:none;border:2px solid;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:14px;font-weight:600;}
+		.si-callout.warn{border-color:#e67e22;background:rgba(230,126,34,.08);color:#b35a00;}
+		.si-callout.bad{border-color:#c0392b;background:rgba(192,57,43,.08);color:#a02618;}
+		.si-hist td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}
+		.si-hist .hb{display:inline-block;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#fff;}
+		.si-hist .hb.ok{background:#2e7d32;}.si-hist .hb.sold{background:#c0392b;}
+		.si-hist .hb.product{background:#8e44ad;}.si-hist .hb.cancelled{background:#7f8c8d;}
+		.si-hist .hb.not_found{background:#b35a00;}.si-hist .hb.no_access{background:#b35a00;}
+		.si-hist .hb.no_stones{background:#7f8c8d;}.si-hist .hb.status{background:#7f8c8d;}
+		.si-hist .hb.issued{background:#1f618d;}
 		</style>
 		<div class="si-wrap2">
 		<div class="si-cols">
 			<div class="si-main">
 				<div class="si-scan"><div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
+				<div class="si-callout"></div>
 				<div class="si-head">
 					<div><div class="k">${__("Card")}</div><div class="v si-bag"></div></div>
 					<div><div class="k">${__("Design")}</div><div class="v si-design"></div></div>
@@ -80,6 +91,10 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 				<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. Enter the pieces and carats you are handing out and Issue — this moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger. (Changing the BOM — swapping a sieve or adding a stone — is done upstream, not here.)")}</div>
 			</div>
 			<div class="si-side">
+				<div class="si-panel si-hist-panel" style="display:none;">
+					<div class="p-head"><span>${__("Scan History")}</span><span class="si-hist-t"></span></div>
+					<div class="p-body si-hist-b"></div>
+				</div>
 				<div class="si-panel si-today-panel" style="display:none;">
 					<div class="p-head"><span>${__("Issued Today")}</span><span class="si-today-t"></span></div>
 					<div class="p-body si-today-b"></div>
@@ -120,6 +135,14 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	const bucketOK = (b) => !allowedBuckets || allowedBuckets.has(b);
 	function applyBucketLocks() {
 		if (!S.card) return;
+		// the picked issuer may be blocked from EVERY stone on the loaded card
+		if (allowedBuckets && !S.card.lines.some((l) => allowedBuckets.has(l.bucket || "POTH"))) {
+			const bags = S.card.order_bag;
+			hideCard();
+			callout("bad", esc(__("This issuer has no access to issue the stones on {0}.", [bags])));
+			logScan(bags, "no_access");
+			return;
+		}
 		root.find("table.si-grid tbody tr").each(function () {
 			const i = cint(this.getAttribute("data-i"));
 			const b = S.card.lines[i].bucket || "POTH";
@@ -195,17 +218,68 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	function clearAll() {
 		S.card = null;
 		scan.set_value("");
-		root.find(".si-head, table.si-grid, .si-foot, .si-strip").hide();
+		root.find(".si-head, table.si-grid, .si-foot, .si-strip, .si-callout").hide();
 		scan.$input.focus();
 	}
 	root.find(".si-clear").on("click", clearAll);
 
+	// every scan lands here — what happened, newest first (this session)
+	const HIST_LABEL = { ok: __("LOADED"), issued: __("ISSUED"), sold: __("SOLD"), product: __("PRODUCT"),
+		cancelled: __("CANCELLED"), status: __("OFF FLOOR"), not_found: __("NOT FOUND"),
+		no_stones: __("NO STONES"), no_access: __("NO ACCESS") };
+	const hist = [];
+	function logScan(card, code, note) {
+		hist.unshift({ card, code, note: note || "", t: frappe.datetime.now_time().slice(0, 5) });
+		if (hist.length > 40) hist.pop();
+		root.find(".si-hist-t").text(__("{0} scan(s)", [hist.length]));
+		root.find(".si-hist-b").html(`<table class="si-hist"><tbody>${hist.map((h) => `
+			<tr><td>${esc(h.card)}</td>
+			<td><span class="hb ${h.code}">${HIST_LABEL[h.code] || h.code}</span></td>
+			<td class="r text-muted" title="${esc(h.note)}">${h.t}</td></tr>`).join("")}</tbody></table>`);
+		root.find(".si-hist-panel").show();
+	}
+
+	function callout(kind, msg) {
+		root.find(".si-callout").removeClass("warn bad").addClass(kind).html(msg).show();
+	}
+	function hideCard() {
+		S.card = null;
+		root.find(".si-head, table.si-grid, .si-foot, .si-strip").hide();
+	}
+
 	function loadCard(nm) {
 		if (!nm) return;
+		root.find(".si-callout").hide();
 		frappe.call({ method: API + ".get_stone_issue_card", args: { barcode: nm } }).then((r) => {
-			if (!r.message) return;
-			S.card = r.message;
+			const m = r.message;
+			if (!m) return;
+			if (m.error) {
+				// sold / product / cancelled / not found / no stones — big callout, not a load
+				hideCard();
+				callout(m.error === "not_found" || m.error === "no_stones" ? "warn" : "bad", esc(m.message));
+				logScan(m.card || nm, m.error, m.message);
+				scan.set_value(""); scan.$input.focus();
+				return;
+			}
+			// the issuer may be blocked from EVERY stone on this card
+			if (allowedBuckets && !m.lines.some((l) => allowedBuckets.has(l.bucket || "POTH"))) {
+				hideCard();
+				callout("bad", esc(__("You have no access to issue the stones on {0} ({1}).",
+					[m.order_bag, m.lines.map((l) => l.bucket).filter((v, i, a) => a.indexOf(v) === i).join(", ")])));
+				logScan(m.order_bag, "no_access");
+				scan.set_value(""); scan.$input.focus();
+				return;
+			}
+			S.card = m;
 			paint();
+			// mixed card, partial access (e.g. CS + DMD, issuer allowed CS only) —
+			// the blocked lines grey out; say so, and log the load
+			const blocked = allowedBuckets ? m.lines.filter((l) => !allowedBuckets.has(l.bucket || "POTH")) : [];
+			if (blocked.length) {
+				const bl = blocked.map((l) => l.bucket).filter((v, i, a) => a.indexOf(v) === i).join(", ");
+				callout("warn", esc(__("You can only issue part of this card — {0} line(s) are locked for you.", [bl])));
+			}
+			logScan(m.order_bag, "ok", blocked.length ? __("partial — {0} locked", [blocked.length]) : "");
 		});
 	}
 
@@ -293,6 +367,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 				.then((r) => {
 					frappe.dom.unfreeze();
 					frappe.show_alert({ message: __("Stones issued into {0}.", [S.card.order_bag]), indicator: "green" }, 5);
+					logScan(S.card.order_bag, "issued", __("{0} ct across {1} line(s)", [ct.toFixed(3), lines.length]));
 					S.card = r.message; // refreshed issued/available numbers
 					paint();
 					refreshToday();
