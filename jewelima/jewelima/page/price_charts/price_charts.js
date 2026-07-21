@@ -15,7 +15,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let GROUPS = [];
 	let cur = null;      // loaded chart payload (or a blank draft)
-	let dirty = false;
+	let snap = "";       // JSON snapshot taken after load; differs = real edits
 
 	$(page.main).append(`
 		<style>
@@ -98,11 +98,13 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 
 	function openChart(data) {
 		cur = data || BLANK();
-		dirty = false;
 		if (cur.name) markOn(cur.name);
 		root.find(".pc-pick").hide();
 		paintEditor();
+		// snapshot AFTER the controls settle — loading must never count as an edit
+		setTimeout(() => { snap = JSON.stringify(cur); }, 400);
 	}
+	const isDirty = () => JSON.stringify(cur) !== snap;
 
 	const num = (v) => (v || v === 0) && flt(v) ? flt(v) : "";
 	function rowsHtml(kind) {
@@ -172,16 +174,15 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		`);
 		const nmC = frappe.ui.form.make_control({ df: { fieldtype: "Data", label: __("Chart name (party)"), fieldname: "cn" },
 			parent: $ed.find(".pc-nm").get(0), render_input: true }); nmC.refresh(); nmC.set_value(cur.chart_name);
-		nmC.$input.on("input", () => { cur.chart_name = (nmC.get_value() || "").toUpperCase(); dirty = true; });
+		nmC.$input.on("input", () => { cur.chart_name = (nmC.get_value() || "").toUpperCase(); });
 		const dtC = frappe.ui.form.make_control({ df: { fieldtype: "Date", label: __("Date"), fieldname: "cd" },
 			parent: $ed.find(".pc-dt").get(0), render_input: true }); dtC.refresh(); dtC.set_value(cur.chart_date);
-		dtC.$input.on("change", () => { cur.chart_date = dtC.get_value(); dirty = true; });
+		dtC.$input.on("change", () => { cur.chart_date = dtC.get_value(); });
 	}
 
 	// simple field edits land straight on cur
 	root.on("input change", ".pc-f", function () {
 		cur[$(this).data("f")] = this.type === "number" ? flt($(this).val()) : $(this).val();
-		dirty = true;
 	});
 	const KIND_ARR = { dmd: "diamond_rates", set: "setting_rates", spw: "special_works" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
@@ -190,7 +191,6 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		const i = cint($(this).closest("tr").data("i"));
 		const f = $(this).data("f");
 		arr[i][f] = this.type === "number" ? flt($(this).val()) : $(this).val();
-		dirty = true;
 	});
 	root.on("click", ".pc-sec .add", function () {
 		const k = $(this).data("k");
@@ -216,7 +216,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			}).catch(() => frappe.dom.unfreeze());
 	});
 	root.on("click", ".pc-pdf", () => {
-		if (dirty) return frappe.show_alert({ message: __("Unsaved edits — save first, the PDF prints the stored chart."), indicator: "orange" }, 4);
+		if (isDirty()) return frappe.show_alert({ message: __("Unsaved edits — save first, the PDF prints the stored chart."), indicator: "orange" }, 4);
 		open_url_post("/api/method/jewelima.jewelima.api.export_price_chart_pdf", { name: cur.name });
 	});
 
