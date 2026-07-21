@@ -262,6 +262,8 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				if (i >= 0) root.find(`tbody input.q[data-i="${i}"]`).val(st.qty);
 			});
 			recalc();
+			hideEmpty = true;   // arriving prefilled — show just the filled sieves
+			applyHide();
 		}
 	});
 };
