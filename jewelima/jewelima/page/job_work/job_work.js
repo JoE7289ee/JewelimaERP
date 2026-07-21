@@ -51,6 +51,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			<div class="jw-scan"></div>
 			<div class="jw-loc"><span class="lbl">Batch location</span><span class="val jw-locval">—</span></div>
 			<div class="jw-emp"></div>
+			<div class="jw-work" style="display:none;"></div>
+			<div class="jw-state" style="display:none;"></div>
 		</div>
 		<div class="jw-msg"></div>
 		<div class="jw-box"><table class="jw-grid"><thead class="jw-thead"></thead><tbody class="jw-body"></tbody></table></div>
@@ -68,6 +70,25 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// only show employees allotted to the current bench (state.location); all if none set — see api.bench_employee_query
 	state.emp.get_query = () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: state.location || "" } });
 
+	// per-bench Work Type (issue) + Collection State (receipt) — configured on
+	// Setup > Work Types & States; pickers only show when the bench has options
+	state.work = mk(".jw-work", { fieldtype: "Select", label: "Type of Work", fieldname: "work_type", options: "" });
+	state.cstate = mk(".jw-state", { fieldtype: "Select", label: "State of Collection", fieldname: "collection_state", options: "" });
+	state.workOpts = { work_types: [], collection_states: [] };
+	function loadWorkOptions() {
+		if (!state.location) { state.workOpts = { work_types: [], collection_states: [] }; toggleWorkPickers(); return; }
+		frappe.call({ method: "jewelima.jewelima.api.get_bench_work_options", args: { location: state.location } }).then((r) => {
+			state.workOpts = r.message || { work_types: [], collection_states: [] };
+			state.work.df.options = [""].concat(state.workOpts.work_types).join("\n"); state.work.refresh();
+			state.cstate.df.options = [""].concat(state.workOpts.collection_states).join("\n"); state.cstate.refresh();
+			toggleWorkPickers();
+		});
+	}
+	function toggleWorkPickers() {
+		$(page.main).find(".jw-work").toggle(state.mode === "issue" && state.workOpts.work_types.length > 0);
+		$(page.main).find(".jw-state").toggle(state.mode === "receipt" && state.workOpts.collection_states.length > 0);
+	}
+
 	const $body = $(page.main).find(".jw-body");
 	const $thead = $(page.main).find(".jw-thead");
 	const $msg = $(page.main).find(".jw-msg");
@@ -84,6 +105,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	}
 	function updateLoc() {
 		$(page.main).find(".jw-locval").text(state.location || "—");
+		loadWorkOptions();
 	}
 
 	// ---- rendering -------------------------------------------------------
@@ -233,7 +255,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		frappe.dom.freeze(__("Issuing…"));
 		frappe.call({
 			method: "jewelima.jewelima.api.issue_bench_cards",
-			args: { names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, employee: withEmployee ? empVal() : null },
+			args: { names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, employee: withEmployee ? empVal() : null, work_type: state.work.get_value() || null },
 		}).then((r) => {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
@@ -255,7 +277,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				frappe.dom.freeze(__("Receipting…"));
 				frappe.call({
 					method: "jewelima.jewelima.api.receipt_bench_cards",
-					args: { lines: JSON.stringify(state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }))), location: state.location, employee: empVal() },
+					args: { lines: JSON.stringify(state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }))), location: state.location, employee: empVal(), collection_state: state.cstate.get_value() || null },
 				}).then((r) => {
 					frappe.dom.unfreeze();
 					const res = r.message || {};
@@ -298,6 +320,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		state.emp.df.reqd = mode === "receipt" ? 1 : 0;
 		state.emp.df.label = mode === "receipt" ? __("Employee (did the work)") : __("Employee (optional)");
 		state.emp.refresh();
+		toggleWorkPickers();
 		renderHead();
 		renderActions();
 		clearBatch();

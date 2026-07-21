@@ -2105,7 +2105,7 @@ def get_bag_stage_history(order_bag):
 			continue
 		for r in frappe.get_all(
 			dt, filters={"order_bag": order_bag},
-			fields=["name", "status", "employee", "time_in", "time_out", "transferred_at", "issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
+			fields=["name", "status", "work_type", "collection_state", "employee", "time_in", "time_out", "transferred_at", "issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
 		):
 			r["bench"] = dt
 			rows.append(r)
@@ -4902,8 +4902,119 @@ def get_bench_card(order_bag):
 	}
 
 
+# ---------------------------------------------------------------------------
+# Bench work options — per-bench Work Types (picked at issue/assign) and
+# Collection States (picked at collect/receipt). Configured on Setup > Bench
+# Setup > Work Types & States; options can always be renamed (the rename
+# follows through to every record) but only deleted while nothing uses them.
+# ---------------------------------------------------------------------------
+def _bench_option_field(kind):
+	return "work_type" if kind == "Work Type" else "collection_state"
+
+
+def _bench_option_usage(bench, kind, value):
+	"""How many bench records at this location carry the option right now."""
+	from jewelima.jewelima.benches import bench_doctype
+	dt = bench_doctype(bench)
+	if not dt or not frappe.db.exists("DocType", dt):
+		return 0
+	return frappe.db.count(dt, {_bench_option_field(kind): value})
+
+
 @frappe.whitelist()
-def issue_bench_cards(names, location, employee=None):
+def get_bench_work_options(location):
+	"""The configured Work Types + Collection States for one bench (for the
+	issue/assign and collect/receipt pickers). Empty lists = nothing configured,
+	the pages then skip the picker."""
+	loc = (location or "").upper()
+	rows = frappe.get_all("Bench Work Option", filters={"bench": loc},
+		fields=["name", "kind", "value"], order_by="creation")
+	return {
+		"work_types": [r.value for r in rows if r.kind == "Work Type"],
+		"collection_states": [r.value for r in rows if r.kind == "Collection State"],
+	}
+
+
+@frappe.whitelist()
+def get_bench_work_setup(location):
+	"""Setup page: the options WITH their usage counts (rename always allowed;
+	delete only at zero usage)."""
+	_require_stone_issue_admin()
+	loc = (location or "").upper()
+	rows = frappe.get_all("Bench Work Option", filters={"bench": loc},
+		fields=["name", "kind", "value"], order_by="creation")
+	return {"options": [{"name": r.name, "kind": r.kind, "value": r.value,
+		"in_use": _bench_option_usage(loc, r.kind, r.value)} for r in rows]}
+
+
+@frappe.whitelist()
+def bench_work_option_add(location, kind, value):
+	_require_stone_issue_admin()
+	loc, value = (location or "").upper(), (value or "").strip()
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	if loc not in BENCH_DOCTYPE:
+		frappe.throw(frappe._("{0} is not a bench.").format(loc or "?"))
+	if kind not in ("Work Type", "Collection State"):
+		frappe.throw(frappe._("Kind must be Work Type or Collection State."))
+	if not value:
+		frappe.throw(frappe._("Enter a value."))
+	if frappe.db.exists("Bench Work Option", {"bench": loc, "kind": kind, "value": value}):
+		frappe.throw(frappe._("{0} already has {1} '{2}'.").format(loc, kind, value))
+	d = frappe.get_doc({"doctype": "Bench Work Option", "bench": loc, "kind": kind, "value": value}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name}
+
+
+@frappe.whitelist()
+def bench_work_option_rename(name, new_value):
+	"""Rename an option — and carry the rename onto every bench record that used
+	the old spelling, so history stays consistent."""
+	_require_stone_issue_admin()
+	from jewelima.jewelima.benches import bench_doctype
+	new_value = (new_value or "").strip()
+	if not new_value:
+		frappe.throw(frappe._("Enter the new name."))
+	d = frappe.get_doc("Bench Work Option", name)
+	if frappe.db.exists("Bench Work Option", {"bench": d.bench, "kind": d.kind, "value": new_value, "name": ["!=", d.name]}):
+		frappe.throw(frappe._("{0} already has {1} '{2}'.").format(d.bench, d.kind, new_value))
+	old = d.value
+	d.value = new_value
+	d.save(ignore_permissions=True)
+	dt = bench_doctype(d.bench)
+	updated = 0
+	if dt and frappe.db.exists("DocType", dt) and old != new_value:
+		field = _bench_option_field(d.kind)
+		for rec in frappe.get_all(dt, filters={field: old}, pluck="name"):
+			frappe.db.set_value(dt, rec, field, new_value, update_modified=False)
+			updated += 1
+	frappe.db.commit()
+	return {"renamed": old + " -> " + new_value, "records_updated": updated}
+
+
+@frappe.whitelist()
+def bench_work_option_delete(name):
+	"""Delete an option — refused while any bench record still carries it."""
+	_require_stone_issue_admin()
+	d = frappe.get_doc("Bench Work Option", name)
+	used = _bench_option_usage(d.bench, d.kind, d.value)
+	if used:
+		frappe.throw(frappe._("'{0}' is on {1} record(s) at {2} — rename it instead; delete only works when nothing uses it.").format(d.value, used, d.bench))
+	frappe.delete_doc("Bench Work Option", name, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": d.value}
+
+
+def _valid_bench_option(location, kind, value):
+	"""A picked option must actually be configured for THIS bench (or blank)."""
+	if not value:
+		return None
+	if not frappe.db.exists("Bench Work Option", {"bench": (location or "").upper(), "kind": kind, "value": value}):
+		frappe.throw(frappe._("'{0}' is not a configured {1} for {2}.").format(value, kind, location))
+	return value
+
+
+@frappe.whitelist()
+def issue_bench_cards(names, location, employee=None, work_type=None):
 	"""Issue a batch of bags at one bench: status -> Issued, snapshot weight_out
 	(gold grams), stamp issued_at (+ employee if given). Skips already-Issued cards;
 	with an employee, bumps their held-weight balance."""
@@ -4913,6 +5024,7 @@ def issue_bench_cards(names, location, employee=None):
 		names = json.loads(names or "[]")
 	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
+	work_type = _valid_bench_option(location, "Work Type", work_type)
 	dt = bench_doctype(location)
 	now = frappe.utils.now_datetime()
 	done, errors = [], []
@@ -4930,6 +5042,8 @@ def issue_bench_cards(names, location, employee=None):
 			doc.status = "Issued"
 			doc.weight_out = gold
 			doc.issued_at = now
+			if work_type:
+				doc.work_type = work_type
 			if not doc.time_in:
 				doc.time_in = now
 			if employee:
@@ -4945,9 +5059,10 @@ def issue_bench_cards(names, location, employee=None):
 
 
 @frappe.whitelist()
-def assign_bench_cards(names, location, employee=None):
+def assign_bench_cards(names, location, employee=None, work_type=None):
 	"""Assign a batch of bags at a transfer bench (CAD / Wax Injecting / Wax Cleaning):
-	status -> Issued, stamp issued_at (+ employee if given). Times only — no weight/loss."""
+	status -> Issued, stamp issued_at (+ employee / work type if given). Times only —
+	no weight/loss."""
 	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, bench_doctype
 
 	if isinstance(names, str):
@@ -4955,6 +5070,7 @@ def assign_bench_cards(names, location, employee=None):
 	loc = (location or "").upper()
 	if loc not in ASSIGN_COLLECT_LOCATIONS:
 		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
+	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	dt = bench_doctype(loc)
 	now = frappe.utils.now_datetime()
 	done, errors = [], []
@@ -4970,6 +5086,8 @@ def assign_bench_cards(names, location, employee=None):
 				continue
 			doc.status = "Issued"
 			doc.issued_at = now
+			if work_type:
+				doc.work_type = work_type
 			if not doc.time_in:
 				doc.time_in = now
 			if employee:
@@ -4983,9 +5101,10 @@ def assign_bench_cards(names, location, employee=None):
 
 
 @frappe.whitelist()
-def collect_bench_cards(names, location):
+def collect_bench_cards(names, location, collection_state=None):
 	"""Collect a batch of assigned bags at a transfer bench: status -> Completed, stamp
-	receipted_at + time_out. Times only — no weight/loss. Only assigned (Issued) cards."""
+	receipted_at + time_out (+ collection state — complete / failed / QC failed / … —
+	if given). Times only — no weight/loss. Only assigned (Issued) cards."""
 	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, bench_doctype
 
 	if isinstance(names, str):
@@ -4993,6 +5112,7 @@ def collect_bench_cards(names, location):
 	loc = (location or "").upper()
 	if loc not in ASSIGN_COLLECT_LOCATIONS:
 		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
+	collection_state = _valid_bench_option(loc, "Collection State", collection_state)
 	dt = bench_doctype(loc)
 	now = frappe.utils.now_datetime()
 	done, errors = [], []
@@ -5014,6 +5134,8 @@ def collect_bench_cards(names, location):
 			doc.status = "Completed"
 			doc.receipted_at = now
 			doc.time_out = now
+			if collection_state:
+				doc.collection_state = collection_state
 			doc.save(ignore_permissions=True)
 			done.append(nm)
 		except Exception as e:
@@ -5023,16 +5145,18 @@ def collect_bench_cards(names, location):
 
 
 @frappe.whitelist()
-def receipt_bench_cards(lines, location, employee=None):
+def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 	"""Receive a batch of issued bags at one bench (one employee). Per line
 	{order_bag, weight_in}: loss = weight_out - weight_in, status -> Receipted,
-	loss booked (per-bag ledger + In Bags -> '<bench> -LOSS' stock)."""
+	loss booked (per-bag ledger + In Bags -> '<bench> -LOSS' stock). The optional
+	collection state (complete / failed / QC failed / …) lands on every line."""
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS, bench_doctype
 
 	if isinstance(lines, str):
 		lines = json.loads(lines or "[]")
 	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
+	collection_state = _valid_bench_option(location, "Collection State", collection_state)
 	dt = bench_doctype(location)
 	now = frappe.utils.now_datetime()
 	done, errors, total_loss = [], [], 0.0
@@ -5059,6 +5183,8 @@ def receipt_bench_cards(lines, location, employee=None):
 			doc.status = "Receipted"
 			doc.receipted_at = now
 			doc.time_out = now
+			if collection_state:
+				doc.collection_state = collection_state
 			doc.save(ignore_permissions=True)
 			if loss > 0:
 				book_loss(nm, _bag_gold_item(nm), loss, bench=location, employee=doc.employee)

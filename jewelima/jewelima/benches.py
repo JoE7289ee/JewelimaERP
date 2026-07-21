@@ -76,6 +76,8 @@ def _base_fields(label):
 		{"fieldname": "bench", "fieldtype": "Data", "label": "Bench", "default": label, "read_only": 1, "in_standard_filter": 1},
 		{"fieldname": "employee", "fieldtype": "Link", "options": "Employee", "label": "Employee", "in_list_view": 1, "in_standard_filter": 1},
 		{"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": STATUS_OPTIONS, "default": "In Queue", "in_list_view": 1, "in_standard_filter": 1},
+		{"fieldname": "work_type", "fieldtype": "Data", "label": "Work Type", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1},
+		{"fieldname": "collection_state", "fieldtype": "Data", "label": "Collection State", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1},
 		{"fieldname": "cb_times", "fieldtype": "Column Break"},
 		{"fieldname": "time_in", "fieldtype": "Datetime", "label": "Time In"},
 		{"fieldname": "time_out", "fieldtype": "Datetime", "label": "Time Out"},

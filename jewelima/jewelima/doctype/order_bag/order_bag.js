@@ -238,6 +238,8 @@ function render_stages(frm) {
 					<td><b>${frappe.utils.escape_html(s.bench || "")}</b></td>
 					<td>${frappe.utils.escape_html(s.employee_name || "—")}</td>
 					<td>${frappe.utils.escape_html(s.status || "")}</td>
+					<td>${frappe.utils.escape_html(s.work_type || "")}</td>
+					<td>${frappe.utils.escape_html(s.collection_state || "")}</td>
 					<td>${dt(s.issued_at || s.time_in)}</td>
 					<td>${dt(s.receipted_at)}</td>
 					<td style="text-align:right">${num(s.weight_out)}</td>
@@ -250,6 +252,7 @@ function render_stages(frm) {
 			<table class="table table-bordered" style="font-size:12px;">
 				<thead><tr>
 					<th style="width:32px">#</th><th>Bench</th><th>Employee</th><th>Status</th>
+					<th>Work</th><th>State</th>
 					<th>Issued</th><th>Received</th>
 					<th style="text-align:right">Wt Out</th><th style="text-align:right">Wt In</th><th style="text-align:right">Loss</th>
 				</tr></thead>
