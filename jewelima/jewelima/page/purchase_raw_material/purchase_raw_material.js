@@ -46,7 +46,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		</style>
 		<div class="pr-wrap">
 			<div class="pr-head">
-				<div class="pr-h-supplier"></div><div class="pr-h-date"></div><div class="pr-h-wh"></div>
+				<div class="pr-h-voucher"></div><div class="pr-h-supplier"></div><div class="pr-h-date"></div><div class="pr-h-wh"></div>
 			</div>
 			<div class="pr-gridbox">
 				<table class="pr-grid"><thead><tr class="pr-headrow"></tr></thead><tbody class="pr-body"></tbody><tfoot><tr class="pr-footrow"></tr></tfoot></table>
@@ -60,6 +60,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		c.refresh();
 		return c;
 	};
+	state.header.voucher = mk(".pr-h-voucher", { fieldtype: "Link", label: "Voucher Type", fieldname: "voucher_type", options: "Voucher Type", reqd: 1 });
 	state.header.supplier = mk(".pr-h-supplier", { fieldtype: "Link", label: "Supplier", fieldname: "supplier", options: "Supplier" });
 	state.header.posting_date = mk(".pr-h-date", { fieldtype: "Date", label: "Date", fieldname: "posting_date", read_only: 1 });
 	state.header.warehouse = mk(".pr-h-wh", { fieldtype: "Link", label: "Warehouse", fieldname: "warehouse", options: "Warehouse", get_query: () => ({ filters: { is_group: 0, custom_is_purchase_location: 1 } }) });
@@ -218,12 +219,14 @@ function postPurchase(page, state, $body) {
 	const badStone = items.find((l) => l.isStone && l.count <= 0);
 	if (badStone) return frappe.msgprint(__("{0} is a stone — enter the piece count (Qty).", [badStone.item]));
 	if (!supplier) return frappe.msgprint(__("Select a supplier."));
+	const voucher_type = state.header.voucher.get_value();
+	if (!voucher_type) return frappe.msgprint(__("Pick the voucher type."));
 	if (!warehouse) return frappe.msgprint(__("Select a warehouse."));
 
 	frappe.dom.freeze(__("Posting purchase…"));
 	frappe.call({
 		method: "jewelima.jewelima.api.post_raw_material_purchase",
-		args: { supplier, warehouse, posting_date, items: JSON.stringify(items) },
+		args: { supplier, warehouse, posting_date, voucher_type, items: JSON.stringify(items) },
 	}).then((r) => {
 		frappe.dom.unfreeze();
 		const res = r.message || {};
@@ -231,7 +234,7 @@ function postPurchase(page, state, $body) {
 		frappe.show_alert({ message: __("Posted {0}", [res.name]), indicator: "green" }, 7);
 		frappe.msgprint({
 			title: __("Purchase posted"), indicator: "green",
-			message: __("Purchase Receipt {0} created & submitted. <a href='/app/purchase-receipt/{0}'>Open</a>", [res.name]),
+			message: __("Purchase Receipt {0} created & submitted — recorded as <b>{1}</b> (₹ {2}). <a href='/app/purchase-receipt/{0}'>Open</a>", [res.name, res.record, res.total]),
 		});
 		$body.empty();
 		state.rows = [];

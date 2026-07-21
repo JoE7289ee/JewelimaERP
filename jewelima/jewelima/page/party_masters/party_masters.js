@@ -15,6 +15,7 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 		{ kind: "zone", title: __("Zones"), hint: __("3-letter city/area code") },
 		{ kind: "state", title: __("States"), hint: __("2-letter driving-licence code") },
 		{ kind: "special", title: __("Specials"), hint: __("optional tag at the end (PTY)") },
+		{ kind: "voucher", title: __("Voucher Types (Purchases)"), hint: __("code up to 4 — leads the purchase series (SIN-0001)") },
 	];
 	let DATA = {};
 	let open = null;   // {kind, code}
@@ -95,6 +96,23 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 	root.on("keydown", ".pm-addrow input", function (e) { if (e.key === "Enter") add($(this).closest(".pm-card")); });
 
 	function drill(kind, code) {
+		if (kind === "voucher") {
+			const card = root.find('.pm-card[data-kind="voucher"]');
+			root.find(".pm-cust").hide();
+			frappe.call({ method: "frappe.client.get_list", args: { doctype: "Purchase Record",
+				filters: { voucher_type: code }, fields: ["name", "supplier", "purchase_date", "total_amount"],
+				order_by: "creation desc", limit_page_length: 30 } }).then((r) => {
+				const rows = r.message || [];
+				card.find(".pm-cust-t").text(__("{0} — {1} purchase(s)", [code, rows.length]));
+				card.find(".cb").html(rows.length ? `<table><tbody>${rows.map((p) => `
+					<tr><td><a href="/app/purchase-record/${encodeURIComponent(p.name)}">${esc(p.name)}</a></td>
+					<td>${esc(p.supplier || "")}</td><td>${esc(p.purchase_date || "")}</td>
+					<td style="text-align:right;">₹ ${(p.total_amount || 0).toLocaleString("en-IN")}</td></tr>`).join("")}</tbody></table>`
+					: `<div class="empty">${__("No purchases under this voucher yet.")}</div>`);
+				card.find(".pm-cust").show();
+			});
+			return;
+		}
 		open = { kind, code };
 		const card = root.find(`.pm-card[data-kind="${kind}"]`);
 		root.find(".pm-cust").hide();

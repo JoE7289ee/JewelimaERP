@@ -206,10 +206,14 @@ def transfer_stock(from_warehouse, to_warehouse, items):
 
 
 @frappe.whitelist()
-def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=None):
+def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=None, voucher_type=None):
 	"""Create + submit a Purchase Receipt for raw materials (from the Purchase
-	Raw Material page). Stock lands in `warehouse`. Returns the PR name."""
+	Raw Material page) AND write Jewelima's own Purchase Record — named by the
+	voucher type's code series (SIN-0001) — storing what/how much/who/total."""
 	from frappe.utils import today
+
+	if not voucher_type or not frappe.db.exists("Voucher Type", voucher_type):
+		frappe.throw(frappe._("Pick the voucher type."))
 
 	if isinstance(items, str):
 		items = json.loads(items or "[]")
@@ -257,7 +261,17 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 	)
 	pr.insert(ignore_permissions=True)
 	pr.submit()
-	return {"name": pr.name}
+
+	rec = frappe.get_doc({
+		"doctype": "Purchase Record", "voucher_type": voucher_type, "supplier": supplier,
+		"purchase_date": posting_date or today(), "warehouse": warehouse, "purchase_receipt": pr.name,
+		"items": [{"item": i.get("item"), "weight": flt(i.get("weight")), "count": cint(i.get("count")),
+			"purity": flt(i.get("purity")), "rate": flt(i.get("rate"))} for i in items
+			if i.get("item") and flt(i.get("weight")) > 0],
+	})
+	rec.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": pr.name, "record": rec.name, "total": rec.total_amount}
 
 
 @frappe.whitelist()
@@ -6081,6 +6095,9 @@ def _party_name_from(group, zone, state, special=None):
 	return "-".join(parts)
 
 
+# voucher types ride on the same Masters page (usage = purchase records)
+VOUCHER_MASTER = ("Voucher Type", "title", None)
+
 PARTY_MASTERS = {
 	# kind -> (doctype, label field, customer link field)
 	"group": ("Party Group", "group_name", "party_group"),
@@ -6105,6 +6122,13 @@ def get_party_masters():
 			if v:
 				counts[v] = counts.get(v, 0) + 1
 		out[kind] = [{"code": r.name, "label": r.get(label_field), "customers": counts.get(r.name, 0)} for r in rows]
+	if frappe.db.exists("DocType", "Voucher Type"):
+		vt = frappe.get_all("Voucher Type", fields=["name", "title"], order_by="name")
+		vcnt = {}
+		if frappe.db.exists("DocType", "Purchase Record"):
+			for r in frappe.get_all("Purchase Record", fields=["voucher_type"], limit_page_length=0):
+				vcnt[r.voucher_type] = vcnt.get(r.voucher_type, 0) + 1
+		out["voucher"] = [{"code": r.name, "label": r.title, "customers": vcnt.get(r.name, 0)} for r in vt]
 	return out
 
 
@@ -6123,10 +6147,14 @@ def get_master_customers(kind, code):
 
 @frappe.whitelist()
 def add_party_master(kind, code, label):
-	"""Add a value to one of the four party masters (code validated by the doctype)."""
-	if kind not in PARTY_MASTERS:
+	"""Add a value to one of the party masters or the voucher types (codes
+	validated by each doctype)."""
+	if kind == "voucher":
+		dt, label_field = "Voucher Type", "title"
+	elif kind in PARTY_MASTERS:
+		dt, label_field, _cust = PARTY_MASTERS[kind]
+	else:
 		frappe.throw(frappe._("Unknown master kind."))
-	dt, label_field, _cust = PARTY_MASTERS[kind]
 	code, label = (code or "").strip().upper(), (label or "").strip()
 	if not code or not label:
 		frappe.throw(frappe._("Enter both the code and the full name."))

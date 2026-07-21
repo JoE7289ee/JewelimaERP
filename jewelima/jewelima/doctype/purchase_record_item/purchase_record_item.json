@@ -1,0 +1,67 @@
+{
+ "name": "Purchase Record Item",
+ "istable": 1,
+ "permissions": [],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "options": "Item",
+   "label": "Item",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "label": "Weight (g / ct)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "count",
+   "fieldtype": "Int",
+   "label": "Pieces",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "purity",
+   "fieldtype": "Float",
+   "label": "Purity %"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Float",
+   "label": "Rate",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Float",
+   "label": "Amount",
+   "in_list_view": 1
+  }
+ ],
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-22 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-22 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "item",
+  "weight",
+  "count",
+  "purity",
+  "rate",
+  "amount"
+ ]
+}

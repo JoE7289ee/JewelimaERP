@@ -19,6 +19,7 @@ def after_install():
 	create_jd_stock_customer()
 	seed_party_masters()
 	seed_quality_map()
+	seed_voucher_types()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -61,6 +62,7 @@ def after_migrate():
 	create_jd_stock_customer()
 	seed_party_masters()
 	seed_quality_map()
+	seed_voucher_types()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -557,6 +559,17 @@ def seed_quality_map():
 		if not frappe.db.exists("Diamond Quality Map", member):
 			frappe.get_doc({"doctype": "Diamond Quality Map",
 				"member_quality": member, "parent_quality": parent}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def seed_voucher_types():
+	"""Base purchase voucher types (codes lead the Purchase Record series). The
+	final list is still being confirmed — extend on Setup > Masters."""
+	if not frappe.db.exists("DocType", "Voucher Type"):
+		return
+	for code, title in (("SIN", "Stock Import"), ("OGD", "Recovered Gold")):
+		if not frappe.db.exists("Voucher Type", code):
+			frappe.get_doc({"doctype": "Voucher Type", "code": code, "title": title}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
