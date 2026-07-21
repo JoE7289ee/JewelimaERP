@@ -184,7 +184,12 @@ def setup_roles():
 	# edit, delete, submit or cancel for anyone. System Manager keeps full rights as
 	# the admin escape hatch. (Runs AFTER the grants above so it wins.)
 	MUTATING = ("write", "create", "delete", "submit", "cancel", "amend")
+	# Working doctypes a role is MEANT to edit (not order-flow history). CAD Sheet is
+	# the CAD team's editable artifact — the sweep must not strip their write.
+	EDITABLE = {"CAD Sheet Record"}
 	for dt in our_doctypes:
+		if dt in EDITABLE:
+			continue
 		roles_on = {p.role for p in frappe.get_all(
 			"Custom DocPerm", filters={"parent": dt}, fields=["role"])}
 		for role in roles_on:
@@ -242,6 +247,10 @@ def setup_roles():
 	# view-only sweep above needs no second pass. Writes happen through the page's
 	# APIs (ignore_permissions); Transfer Rules can narrow WHICH from -> to moves
 	# the role may make.
+	# CAD team fully manages the CAD Sheet artifact
+	if frappe.db.exists("DocType", "CAD Sheet Record"):
+		grant("CAD Sheet Record", "Jewelima CAD", {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "export": 1})
+
 	for role in JEWELIMA_TRANSFER_ROLES:
 		for dt in JEWELIMA_TRANSFER_READ:
 			grant(dt, role, {"read": 1})

@@ -1,7 +1,32 @@
 {
- "content": null, "creation": "2026-07-21 10:00:00.000000", "docstatus": 0, "doctype": "Page",
- "idx": 0, "modified": "2026-07-21 10:00:00.000000", "modified_by": "Administrator",
- "owner": "Administrator", "module": "Jewelima", "name": "cad-sheet", "page_name": "cad-sheet",
- "roles": [{"role": "System Manager"}, {"role": "Stock Manager"}, {"role": "Stock User"}],
- "standard": "Yes", "title": "CAD Sheet"
+ "content": null,
+ "creation": "2026-07-21 10:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-21 14:30:49.960344",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "cad-sheet",
+ "owner": "Administrator",
+ "page_name": "cad-sheet",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Jewelima CAD"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "CAD Sheet"
 }

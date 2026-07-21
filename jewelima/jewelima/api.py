@@ -3443,6 +3443,22 @@ def _cad_rows(payload):
 	return rows, tot_qty, tot_ct
 
 
+def _cad_image_any(ref):
+	"""A PIL image from either a base64 data-URL or a stored /files/ url. Used by
+	the composite so a saved CAD Sheet (stored image) re-renders like a fresh one."""
+	if not ref:
+		return None
+	if ref.startswith("data:") or (len(ref) > 80 and "/" not in ref[:24]):
+		return _cad_image_from_b64(ref)
+	try:
+		from io import BytesIO
+		from PIL import Image
+		content = frappe.get_doc("File", {"file_url": ref}).get_content()
+		return Image.open(BytesIO(content)).convert("RGB")
+	except Exception:
+		return None
+
+
 def _cad_image_from_b64(b64):
 	"""Decode the browser-supplied image (data URL or bare base64). NEVER stored —
 	it lives only for the duration of this request."""
@@ -3465,8 +3481,8 @@ def _cad_compose(payload):
 	from PIL import Image, ImageDraw, ImageFont
 
 	rows, tot_qty, tot_ct = _cad_rows(payload)
-	photo = _cad_image_from_b64(payload.get("image_b64"))
-	subs = [im for im in (_cad_image_from_b64(b) for b in (payload.get("sub_images") or [])) if im]
+	photo = _cad_image_any(payload.get("image_b64"))
+	subs = [im for im in (_cad_image_any(b) for b in (payload.get("sub_images") or [])) if im]
 	payload["approver"] = frappe.utils.get_fullname(frappe.session.user)
 
 	def font(sz, bold=False):
@@ -3585,6 +3601,106 @@ def _cad_compose(payload):
 			d.text((right_x, my), "\u2022 " + ln, fill="#111", font=f_c)
 			my += 26
 	return img
+
+
+def _cad_store_image(ref, attach_to):
+	"""Persist an image the page holds. A data-URL becomes a File attached to the
+	CAD Sheet; an existing /files/ url is kept as-is. Returns the file_url."""
+	if not ref:
+		return ""
+	if not ref.startswith("data:"):
+		return ref
+	import base64
+	head, b64 = ref.split(",", 1)
+	ext = "png"
+	if "jpeg" in head or "jpg" in head:
+		ext = "jpg"
+	f = frappe.get_doc({"doctype": "File", "file_name": "cadimg-{0}.{1}".format(frappe.generate_hash(length=8), ext),
+		"content": base64.b64decode(b64), "is_private": 0,
+		"attached_to_doctype": "CAD Sheet Record", "attached_to_name": attach_to}).insert(ignore_permissions=True)
+	return f.file_url
+
+
+@frappe.whitelist()
+def get_cad_sheet(order_bag):
+	"""The saved CAD Sheet for an order bag (edit-and-pull-again). {} if none yet."""
+	name = frappe.db.get_value("CAD Sheet Record", {"order_bag": order_bag}, "name")
+	if not name:
+		return {}
+	d = frappe.get_doc("CAD Sheet Record", name)
+	return {
+		"name": d.name, "order_bag": d.order_bag, "design": d.design,
+		"style_no": d.design_number, "design_type": d.design_type, "karat": d.karat,
+		"gold_wt": d.gold_wt, "length": d.length, "dia_wt": d.diamond_wt,
+		"image_url": d.main_image or "", "rendered": d.rendered_sheet or "",
+		"stones": [{"col": r.colour, "sieve": r.sieve, "mm": r.mm, "wt": r.wt_ct, "qty": r.qty, "total": r.total_wt} for r in d.stones],
+		"manual_lines": [r.line for r in d.notes if r.line],
+		"sub_image_urls": [r.image for r in d.sub_images if r.image],
+		"created_by": d.owner, "created_on": str(d.creation),
+		"edited_by": d.modified_by, "edited_on": str(d.modified),
+	}
+
+
+@frappe.whitelist()
+def save_cad_sheet(payload):
+	"""Upsert the CAD Sheet for an order bag (one per bag, edited in place — the
+	Version history logs who/what/when). Renders the composite PNG into the record
+	AND pushes it to Order Bag Photos under a deterministic name, replacing the
+	previous push so only the latest sheet image sits on the card."""
+	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	order_bag = payload.get("order_bag")
+	if not order_bag or not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Pick a valid Order Bag."))
+
+	name = frappe.db.get_value("CAD Sheet Record", {"order_bag": order_bag}, "name")
+	doc = frappe.get_doc("CAD Sheet Record", name) if name else frappe.new_doc("CAD Sheet Record")
+	doc.order_bag = order_bag
+	if payload.get("design") and frappe.db.exists("Design", payload["design"]):
+		doc.design = payload["design"]
+	elif frappe.db.get_value("Order Bag", order_bag, "design"):
+		doc.design = frappe.db.get_value("Order Bag", order_bag, "design")
+	doc.design_number = payload.get("style_no") or ""
+	doc.design_type = payload.get("design_type") or None
+	doc.karat = payload.get("karat") or ""
+	doc.gold_wt = payload.get("gold_wt") or ""
+	doc.length = payload.get("length") or ""
+	doc.diamond_wt = payload.get("dia_wt") or ""
+	if not doc.name:
+		doc.insert(ignore_permissions=True)          # need a name to attach files
+	doc.main_image = _cad_store_image(payload.get("image_b64"), doc.name)
+	doc.set("stones", [{"colour": r.get("col"), "sieve": r.get("sieve"), "mm": flt(r.get("mm")),
+		"wt_ct": flt(r.get("wt")), "qty": cint(r.get("qty")), "total_wt": flt(r.get("total"))}
+		for r in (payload.get("rows") or [])])
+	doc.set("notes", [{"line": ln} for ln in (payload.get("manual_lines") or []) if ln])
+	doc.set("sub_images", [{"image": _cad_store_image(b, doc.name)} for b in (payload.get("sub_images") or []) if b])
+
+	# render the composite from what we just stored (stored urls re-render via _cad_image_any)
+	from io import BytesIO
+	render_payload = dict(payload)
+	render_payload["image_b64"] = doc.main_image
+	render_payload["sub_images"] = [r.image for r in doc.sub_images]
+	buf = BytesIO()
+	_cad_compose(render_payload).save(buf, "PNG")
+	rf = frappe.get_doc({"doctype": "File", "file_name": "CADSHEET-{0}.png".format(doc.name),
+		"content": buf.getvalue(), "is_private": 0,
+		"attached_to_doctype": "CAD Sheet Record", "attached_to_name": doc.name}).insert(ignore_permissions=True)
+	doc.rendered_sheet = rf.file_url
+	doc.save(ignore_permissions=True)
+
+	# push to Order Bag Photos — replace the prior CADSHEET-<name> image on the bag
+	tag = "CADSHEET-{0}".format(doc.name)
+	for old in frappe.get_all("File", filters={"attached_to_doctype": "Order Bag",
+			"attached_to_name": order_bag, "file_name": ["like", tag + "%"]}, pluck="name"):
+		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
+	bag = frappe.get_doc("Order Bag", order_bag)
+	bag.set("attachments", [a for a in bag.attachments if not (a.title or "").startswith(tag)])
+	pushed = frappe.get_doc({"doctype": "File", "file_name": tag + ".png",
+		"content": buf.getvalue(), "is_private": 0,
+		"attached_to_doctype": "Order Bag", "attached_to_name": order_bag}).insert(ignore_permissions=True)
+	bag.append("attachments", {"image": pushed.file_url, "title": tag, "remarks": "CAD sheet"})
+	bag.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "rendered": doc.rendered_sheet, "pushed_to_card": pushed.file_url}
 
 
 @frappe.whitelist()

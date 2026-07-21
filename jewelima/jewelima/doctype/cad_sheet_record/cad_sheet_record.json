@@ -1,0 +1,174 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "CADS-.#####",
+ "creation": "2026-07-21 19:30:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_bag",
+  "design",
+  "cb1",
+  "design_number",
+  "design_type",
+  "karat",
+  "cb2",
+  "gold_wt",
+  "length",
+  "diamond_wt",
+  "sec_img",
+  "main_image",
+  "rendered_sheet",
+  "sec_stones",
+  "stones",
+  "sec_notes",
+  "notes",
+  "sec_sub",
+  "sub_images"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Order Bag",
+   "options": "Order Bag",
+   "reqd": 1
+  },
+  {
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Design",
+   "options": "Design"
+  },
+  {
+   "fieldname": "cb1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "design_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Design Number"
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "label": "Design Type",
+   "options": "Design Type"
+  },
+  {
+   "fieldname": "karat",
+   "fieldtype": "Data",
+   "label": "Karat"
+  },
+  {
+   "fieldname": "cb2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gold_wt",
+   "fieldtype": "Data",
+   "label": "Gold Wt"
+  },
+  {
+   "fieldname": "length",
+   "fieldtype": "Data",
+   "label": "Length"
+  },
+  {
+   "fieldname": "diamond_wt",
+   "fieldtype": "Data",
+   "label": "Diamond Wt"
+  },
+  {
+   "fieldname": "sec_img",
+   "fieldtype": "Section Break",
+   "label": "Images"
+  },
+  {
+   "fieldname": "main_image",
+   "fieldtype": "Attach Image",
+   "label": "Main Image"
+  },
+  {
+   "fieldname": "rendered_sheet",
+   "fieldtype": "Attach Image",
+   "label": "Rendered Sheet",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_stones",
+   "fieldtype": "Section Break",
+   "label": "Stones"
+  },
+  {
+   "fieldname": "stones",
+   "fieldtype": "Table",
+   "label": "Stones",
+   "options": "CAD Sheet Stone"
+  },
+  {
+   "fieldname": "sec_notes",
+   "fieldtype": "Section Break",
+   "label": "Manual Lines"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Table",
+   "label": "Notes",
+   "options": "CAD Sheet Note"
+  },
+  {
+   "fieldname": "sec_sub",
+   "fieldtype": "Section Break",
+   "label": "Sub Images"
+  },
+  {
+   "fieldname": "sub_images",
+   "fieldtype": "Table",
+   "label": "Sub Images",
+   "options": "CAD Sheet Image"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-21 19:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "CAD Sheet Record",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Jewelima CAD",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "track_seen": 1
+}

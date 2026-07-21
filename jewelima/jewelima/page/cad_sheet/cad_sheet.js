@@ -84,6 +84,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				<div class="cs-card cs-hd" style="margin-bottom:14px;">
 					<div class="cs-style"></div><div class="cs-dtype"></div><div class="cs-purity"></div><div class="cs-gold"></div><div class="cs-length"></div>
 					<div class="cs-dia"></div><div class="cs-approver"></div>
+				<div class="cs-audit" style="font-size:11.5px;color:var(--text-muted);margin-top:6px;"></div>
 				</div>
 				<div class="cs-card">
 					<div style="display:flex;align-items:center;margin-bottom:8px;">
@@ -101,6 +102,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			<div class="cs-b"><div class="k">${__("PIECES")}</div><div class="v cs-n">0</div></div>
 			<div class="cs-b"><div class="k">${__("TOTAL CT")}</div><div class="v cs-ct">0.0000</div></div>
 			<div class="cs-exp">
+				<button class="cs-go cs-save" style="background:#2e7d32;">${__("Save")}</button>
 				<button class="cs-go cs-img">${__("Export Image")}</button>
 				<button class="cs-go x cs-xlsx">${__("Export Excel")}</button>
 				<button class="cs-go cs-pdf" style="background:#b02a2a;">${__("Export PDF")}</button>
@@ -268,6 +270,50 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			}).catch(() => frappe.dom.unfreeze());
 	});
 
+	root.find(".cs-save").on("click", () => {
+		const bag = fOrderBag.get_value();
+		if (!bag) return frappe.show_alert({ message: __("Pick the Order Bag first."), indicator: "orange" }, 3);
+		const p = collect();
+		p.order_bag = bag;
+		frappe.dom.freeze(__("Saving..."));
+		frappe.call({ method: "jewelima.jewelima.api.save_cad_sheet", args: { payload: JSON.stringify(p) } })
+			.then((r) => {
+				frappe.dom.unfreeze();
+				const m = r.message || {};
+				frappe.show_alert({ message: __("Saved {0} — pushed to the card's photos.", [m.name]), indicator: "green" }, 4);
+				loadRecord(bag);   // reflect stored image urls + audit
+			}).catch(() => frappe.dom.unfreeze());
+	});
+
+	function loadRecord(bag) {
+		frappe.call({ method: "jewelima.jewelima.api.get_cad_sheet", args: { order_bag: bag } }).then((r) => {
+			const m = r.message || {};
+			if (!m.name) return;   // no saved sheet — leave the card-brief prefill as is
+			fStyle.set_value(m.style_no || ""); if (m.design_type) fDType.set_value(m.design_type);
+			fKarat.set_value(m.karat || ""); fGold.set_value(m.gold_wt || ""); fLength.set_value(m.length || "");
+			if (m.dia_wt) { diaManual = true; fDia.set_value(m.dia_wt); }
+			if (m.image_url) { imgB64 = m.image_url; root.find(".cs-drop").html(`<img src="${m.image_url}">`); root.find(".cs-clearimg").show(); }
+			subImgs = (m.sub_image_urls || []).slice(); paintSubs();
+			// stones -> qty by sieve
+			(m.stones || []).forEach((st) => {
+				const i = ROWS.findIndex((rr) => rr.sieve_size === st.sieve);
+				if (i >= 0) root.find(`tbody input.q[data-i="${i}"]`).val(st.qty);
+			});
+			// colours per row
+			(m.stones || []).forEach((st) => {
+				const i = ROWS.findIndex((rr) => rr.sieve_size === st.sieve);
+				if (i >= 0 && st.col) root.find(`.cs-sw[data-i="${i}"]`).addClass("set").css("background", st.col).attr("data-hex", st.col);
+			});
+			// notes -> manual lines
+			const mlist = root.find(".cs-mlist"); mlist.empty();
+			(m.manual_lines || []).forEach((ln) => mlist.append(`<input class="cs-mline" value="${esc(ln)}">`));
+			mlist.append(`<input class="cs-mline" placeholder="${__("e.g. PEARL Stone 17mm D blue")}">`);
+			recalc();
+			root.find(".cs-audit").html(__("Created by {0} · {1} · Last edited by {2} · {3}",
+				[esc(m.created_by), (m.created_on || "").slice(0, 16), esc(m.edited_by), (m.edited_on || "").slice(0, 16)]));
+		});
+	}
+
 	root.find(".cs-img").on("click", () => exportSheet("image"));
 	root.find(".cs-xlsx").on("click", () => exportSheet("xlsx"));
 	root.find(".cs-pdf").on("click", () => exportSheet("pdf"));
@@ -285,6 +331,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				if (m.karat) fKarat.set_value(m.karat);
 				if (m.gold_wt) fGold.set_value(String(m.gold_wt).replace(/[^0-9.]/g, ""));
 			});
+			loadRecord(ob);   // a saved CAD Sheet, if any, overrides the brief prefill
 		}
 		if (frappe.route_options && frappe.route_options.cad_stones) {
 			const stones = frappe.route_options.cad_stones;
