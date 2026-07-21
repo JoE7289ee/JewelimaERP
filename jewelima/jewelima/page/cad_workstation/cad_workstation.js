@@ -34,14 +34,13 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 		.ws-tbl tbody tr:last-child td{border-bottom:0;}
 		.ws-act .btn{margin-right:4px;margin-bottom:2px;}
 		.ws-none{padding:30px;text-align:center;color:var(--text-muted);}
-		/* karat / customer-vs-bulk row colours (company scheme) */
-		.ws-tbl tr.k-row td{background:transparent;}
-		.ws-tbl tr.k22b{background:#1e3a8a;}                                        /* 22K bulk  = dark blue */
-		.ws-tbl tr.k22b td, .ws-tbl tr.k22b td b{color:#fff;}
-		.ws-tbl tr.k22c{background:linear-gradient(90deg,#d6e6ff 0%,#dbe9ff 45%,#1e3a8a 100%);} /* 22K customer = light->dark blue */
-		.ws-tbl tr.k18c{background:#f7cfe0;}                                        /* 18K customer = pink */
-		.ws-tbl tr.k18b{background:linear-gradient(90deg,#fff2ad 0%,#ffe08a 45%,#f4a6c0 100%);}  /* 18K bulk = yellow->pink */
-		.ws-tbl tr.k-row td.ws-act .btn{background:var(--fg-color);}
+		/* karat + customer/bulk — colour the Actions cell only (company scheme) */
+		.ws-tbl tr.k-row td:last-child{border-left:2px solid rgba(0,0,0,.12);}
+		.ws-tbl tr.k22b td:last-child{background:#1e3a8a;}   /* 22K bulk     = dark blue  */
+		.ws-tbl tr.k22c td:last-child{background:#bcd6ff;}   /* 22K customer = light blue */
+		.ws-tbl tr.k18c td:last-child{background:#f7b8d4;}   /* 18K customer = pink       */
+		.ws-tbl tr.k18b td:last-child{background:#ffe08a;}   /* 18K bulk     = yellow     */
+		.ws-tbl tr.k-row td:last-child .btn{background:var(--fg-color);}
 		.ws-assign{border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--control-bg);}
 		</style>
 		<div class="ws-top">
