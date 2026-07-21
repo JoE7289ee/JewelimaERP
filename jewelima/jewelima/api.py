@@ -3451,7 +3451,7 @@ def _cad_compose(payload):
 	header = [
 		("DESIGN NUMBER", payload.get("style_no") or ""),
 		("DESIGN TYPE", payload.get("design_type") or ""),
-		("PURITY", payload.get("purity") or ""),
+		("KARAT", payload.get("karat") or ""),
 		("APPROX. GOLD WT", (payload.get("gold_wt") or "") and f"{payload.get('gold_wt')} Gms"),
 		("DIAMOND WT", (payload.get("dia_wt") or "") and f"{payload.get('dia_wt')} cts"),
 		("LENGTH", payload.get("length") or ""),
@@ -3793,10 +3793,10 @@ def get_cad_card_detail(order_bag):
 	for a in doc.attachments:
 		if a.image:
 			photos.append({"image": a.image, "title": a.title or ""})
-	purity = frappe.db.get_value("Item", doc.cad_karat, "purity_percentage") if doc.cad_karat else None
 	return {"name": order_bag, "design": doc.design, "customer": doc.customer,
 		"materials": materials, "mat_source": mat_source, "brief": brief, "photos": photos,
-		"design_type": doc.cad_design_type or "", "purity": (round(flt(purity), 1) if purity else None),
+		"design_type": doc.cad_design_type or "",
+		"karat": _cad_karat({"cad_karat": doc.cad_karat, "design": doc.design}),
 		"gold_wt": doc.cad_gold_weight or "", "dia_wt": doc.cad_diamond_weight or ""}
 
 

@@ -118,7 +118,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	const fStyle = mk(".cs-style", { fieldtype: "Data", label: __("Design Number"), fieldname: "s" });
 	const fGold = mk(".cs-gold", { fieldtype: "Data", label: __("Approx Gold Wt (g)"), fieldname: "g" });
 	const fDType = mk(".cs-dtype", { fieldtype: "Link", label: __("Design Type"), fieldname: "dt", options: "Design Type" });
-	const fPurity = mk(".cs-purity", { fieldtype: "Data", label: __("Purity"), fieldname: "p" });
+	const fKarat = mk(".cs-purity", { fieldtype: "Data", label: __("Karat"), fieldname: "p", placeholder: "22K / 18K" });
 	const fLength = mk(".cs-length", { fieldtype: "Data", label: __("Length"), fieldname: "l" });
 	const fDia = mk(".cs-dia", { fieldtype: "Data", label: __("Diamond Wt (ct) — auto, editable"), fieldname: "d" });
 	const fApprover = mk(".cs-approver", { fieldtype: "Data", label: __("Created By"), fieldname: "a", read_only: 1 });
@@ -241,7 +241,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				mm: ROWS[i].mm_size, wt: ROWS[i].avg_cts, qty: q, total: Number((q * (ROWS[i].avg_cts || 0)).toFixed(4)) });
 		});
 		const manual = root.find(".cs-mline").map((_, el) => el.value.trim()).get().filter(Boolean);
-		return { style_no: fStyle.get_value() || "", design_type: fDType.get_value() || "", purity: fPurity.get_value() || "",
+		return { style_no: fStyle.get_value() || "", design_type: fDType.get_value() || "", karat: fKarat.get_value() || "",
 			gold_wt: fGold.get_value() || "", length: fLength.get_value() || "", dia_wt: fDia.get_value() || "",
 			approver: fApprover.get_value() || "", rows, manual_lines: manual, image_b64: imgB64, sub_images: subImgs };
 	}
@@ -282,7 +282,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			frappe.call({ method: API + ".get_cad_card_detail", args: { order_bag: ob } }).then((r) => {
 				const m = r.message || {};
 				if (m.design_type) fDType.set_value(m.design_type);
-				if (m.purity) fPurity.set_value(m.purity + "%");
+				if (m.karat) fKarat.set_value(m.karat);
 				if (m.gold_wt) fGold.set_value(String(m.gold_wt).replace(/[^0-9.]/g, ""));
 			});
 		}
