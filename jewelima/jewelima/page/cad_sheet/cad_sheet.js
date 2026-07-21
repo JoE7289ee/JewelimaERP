@@ -277,7 +277,14 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		paint();
 		// arriving from the Weight Checker with stones pre-picked
 		if (frappe.route_options && frappe.route_options.order_bag) {
-			fOrderBag.set_value(frappe.route_options.order_bag);
+			const ob = frappe.route_options.order_bag;
+			fOrderBag.set_value(ob);
+			frappe.call({ method: API + ".get_cad_card_detail", args: { order_bag: ob } }).then((r) => {
+				const m = r.message || {};
+				if (m.design_type) fDType.set_value(m.design_type);
+				if (m.purity) fPurity.set_value(m.purity + "%");
+				if (m.gold_wt) fGold.set_value(String(m.gold_wt).replace(/[^0-9.]/g, ""));
+			});
 		}
 		if (frappe.route_options && frappe.route_options.cad_stones) {
 			const stones = frappe.route_options.cad_stones;
