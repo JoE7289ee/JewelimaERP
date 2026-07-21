@@ -34,13 +34,16 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 		.ws-tbl tbody tr:last-child td{border-bottom:0;}
 		.ws-act .btn{margin-right:4px;margin-bottom:2px;}
 		.ws-none{padding:30px;text-align:center;color:var(--text-muted);}
-		/* karat + customer/bulk — colour the Actions cell only (company scheme) */
-		.ws-tbl tr.k-row td:last-child{border-left:2px solid rgba(0,0,0,.12);}
-		.ws-tbl tr.k22b td:last-child{background:#1e3a8a;}   /* 22K bulk     = dark blue  */
-		.ws-tbl tr.k22c td:last-child{background:#bcd6ff;}   /* 22K customer = light blue */
-		.ws-tbl tr.k18c td:last-child{background:#f7b8d4;}   /* 18K customer = pink       */
-		.ws-tbl tr.k18b td:last-child{background:#ffe08a;}   /* 18K bulk     = yellow     */
-		.ws-tbl tr.k-row td:last-child .btn{background:var(--fg-color);}
+		/* karat colours the row up to the actions; the actions cell switches to a
+		   modifier colour when applicable (22K+customer -> light blue, 18K+bulk ->
+		   yellow), otherwise the base colour extends through it. */
+		.ws-tbl tr.k22 td{background:#1e3a8a;color:#fff;}
+		.ws-tbl tr.k22 td b, .ws-tbl tr.k22 td span, .ws-tbl tr.k22 td a{color:#fff !important;}
+		.ws-tbl tr.k18 td{background:#f7b8d4;}
+		.ws-tbl tr.k22.mod td:last-child{background:#bcd6ff;}                 /* 22K customer */
+		.ws-tbl tr.k22.mod td:last-child, .ws-tbl tr.k22.mod td:last-child *{color:#111 !important;}
+		.ws-tbl tr.k18.mod td:last-child{background:#ffe08a;}                 /* 18K bulk */
+		.ws-tbl tr.k-row td:last-child .btn{background:var(--fg-color);color:var(--text-color);}
 		.ws-assign{border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--control-bg);}
 		</style>
 		<div class="ws-top">
@@ -70,9 +73,8 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 
 	function karatClass(c) {
 		if (!c.karat) return "";
-		const k = c.karat, bulk = !!c.is_bulk;
-		if (k === "22K") return "k-row " + (bulk ? "k22b" : "k22c");
-		if (k === "18K") return "k-row " + (bulk ? "k18b" : "k18c");
+		if (c.karat === "22K") return "k-row k22" + (c.is_bulk ? "" : " mod");   // customer -> light-blue actions
+		if (c.karat === "18K") return "k-row k18" + (c.is_bulk ? " mod" : "");   // bulk -> yellow actions
 		return "";
 	}
 
