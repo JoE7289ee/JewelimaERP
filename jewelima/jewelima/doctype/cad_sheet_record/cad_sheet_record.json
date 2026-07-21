@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "order_bag",
+  "order_bags",
   "design",
   "cb1",
   "design_number",
@@ -36,6 +37,13 @@
    "label": "Order Bag",
    "options": "Order Bag",
    "reqd": 1
+  },
+  {
+   "description": "Additional order bags this same CAD sheet drives (e.g. others of the same design in production).",
+   "fieldname": "order_bags",
+   "fieldtype": "Table",
+   "label": "Also Linked Bags",
+   "options": "CAD Sheet Order Bag"
   },
   {
    "fieldname": "design",
@@ -137,7 +145,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 19:30:00.000000",
+ "modified": "2026-07-21 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "CAD Sheet Record",

@@ -3621,15 +3621,29 @@ def _cad_store_image(ref, attach_to):
 	return f.file_url
 
 
+def _cad_sheet_name_for_bag(bag):
+	"""The CAD Sheet Record driving this bag — as its primary bag or one of its
+	'also linked' bags. Returns the record name, or None."""
+	if not bag:
+		return None
+	name = frappe.db.get_value("CAD Sheet Record", {"order_bag": bag}, "name")
+	if name:
+		return name
+	return frappe.db.get_value(
+		"CAD Sheet Order Bag", {"order_bag": bag, "parenttype": "CAD Sheet Record"}, "parent")
+
+
 @frappe.whitelist()
 def get_cad_sheet(order_bag):
-	"""The saved CAD Sheet for an order bag (edit-and-pull-again). {} if none yet."""
-	name = frappe.db.get_value("CAD Sheet Record", {"order_bag": order_bag}, "name")
+	"""The saved CAD Sheet for an order bag (edit-and-pull-again). {} if none yet.
+	Matches whether the bag is the sheet's primary bag or one of its linked bags."""
+	name = _cad_sheet_name_for_bag(order_bag)
 	if not name:
 		return {}
 	d = frappe.get_doc("CAD Sheet Record", name)
 	return {
 		"name": d.name, "order_bag": d.order_bag, "design": d.design,
+		"linked_bags": [r.order_bag for r in d.order_bags if r.order_bag],
 		"style_no": d.design_number, "design_type": d.design_type, "karat": d.karat,
 		"gold_wt": d.gold_wt, "length": d.length, "dia_wt": d.diamond_wt,
 		"image_url": d.main_image or "", "rendered": d.rendered_sheet or "",
@@ -3652,9 +3666,10 @@ def save_cad_sheet(payload):
 	if not order_bag or not frappe.db.exists("Order Bag", order_bag):
 		frappe.throw(frappe._("Pick a valid Order Bag."))
 
-	name = frappe.db.get_value("CAD Sheet Record", {"order_bag": order_bag}, "name")
+	name = _cad_sheet_name_for_bag(order_bag)
 	doc = frappe.get_doc("CAD Sheet Record", name) if name else frappe.new_doc("CAD Sheet Record")
-	doc.order_bag = order_bag
+	if not doc.get("order_bag"):
+		doc.order_bag = order_bag          # primary bag is set once, on creation
 	if payload.get("design") and frappe.db.exists("Design", payload["design"]):
 		doc.design = payload["design"]
 	elif frappe.db.get_value("Order Bag", order_bag, "design"):
@@ -3674,6 +3689,22 @@ def save_cad_sheet(payload):
 	doc.set("notes", [{"line": ln} for ln in (payload.get("manual_lines") or []) if ln])
 	doc.set("sub_images", [{"image": _cad_store_image(b, doc.name)} for b in (payload.get("sub_images") or []) if b])
 
+	# additional order bags this same sheet drives (same design in production).
+	# dedupe, drop the primary, and refuse a bag already owned by a different sheet.
+	linked, seen = [], {doc.order_bag}
+	candidates = list(payload.get("linked_bags") or [])
+	if order_bag != doc.order_bag:
+		candidates.insert(0, order_bag)   # keep the bag being worked on linked
+	for lb in candidates:
+		if not lb or lb in seen or not frappe.db.exists("Order Bag", lb):
+			continue
+		owner = _cad_sheet_name_for_bag(lb)
+		if owner and owner != doc.name:
+			frappe.throw(frappe._("Order Bag {0} is already on CAD Sheet {1}.").format(lb, owner))
+		seen.add(lb)
+		linked.append({"order_bag": lb})
+	doc.set("order_bags", linked)
+
 	# render the composite from what we just stored (stored urls re-render via _cad_image_any)
 	from io import BytesIO
 	render_payload = dict(payload)
@@ -3687,20 +3718,27 @@ def save_cad_sheet(payload):
 	doc.rendered_sheet = rf.file_url
 	doc.save(ignore_permissions=True)
 
-	# push to Order Bag Photos — replace the prior CADSHEET-<name> image on the bag
+	# push to Order Bag Photos — replace the prior CADSHEET-<name> image on EVERY
+	# bag this sheet drives (primary + linked); each gets the same latest image.
 	tag = "CADSHEET-{0}".format(doc.name)
-	for old in frappe.get_all("File", filters={"attached_to_doctype": "Order Bag",
-			"attached_to_name": order_bag, "file_name": ["like", tag + "%"]}, pluck="name"):
-		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
-	bag = frappe.get_doc("Order Bag", order_bag)
-	bag.set("attachments", [a for a in bag.attachments if not (a.title or "").startswith(tag)])
-	pushed = frappe.get_doc({"doctype": "File", "file_name": tag + ".png",
-		"content": buf.getvalue(), "is_private": 0,
-		"attached_to_doctype": "Order Bag", "attached_to_name": order_bag}).insert(ignore_permissions=True)
-	bag.append("attachments", {"image": pushed.file_url, "title": tag, "remarks": "CAD sheet"})
-	bag.save(ignore_permissions=True)
+	all_bags = [doc.order_bag] + [r.order_bag for r in doc.order_bags if r.order_bag]
+	pushed_url = ""
+	for b in all_bags:
+		for old in frappe.get_all("File", filters={"attached_to_doctype": "Order Bag",
+				"attached_to_name": b, "file_name": ["like", tag + "%"]}, pluck="name"):
+			frappe.delete_doc("File", old, force=True, ignore_permissions=True)
+		bag = frappe.get_doc("Order Bag", b)
+		bag.set("attachments", [a for a in bag.attachments if not (a.title or "").startswith(tag)])
+		pushed = frappe.get_doc({"doctype": "File", "file_name": tag + ".png",
+			"content": buf.getvalue(), "is_private": 0,
+			"attached_to_doctype": "Order Bag", "attached_to_name": b}).insert(ignore_permissions=True)
+		bag.append("attachments", {"image": pushed.file_url, "title": tag, "remarks": "CAD sheet"})
+		bag.save(ignore_permissions=True)
+		if b == order_bag:
+			pushed_url = pushed.file_url
 	frappe.db.commit()
-	return {"name": doc.name, "rendered": doc.rendered_sheet, "pushed_to_card": pushed.file_url}
+	return {"name": doc.name, "rendered": doc.rendered_sheet,
+		"pushed_to_card": pushed_url, "bags": all_bags}
 
 
 @frappe.whitelist()

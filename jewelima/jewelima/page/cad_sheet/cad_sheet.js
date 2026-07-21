@@ -111,6 +111,10 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 					<button class="cs-go cs-upload" style="background:#8a6d00;">${__("Upload to Order Bag")}</button>
 				</div>
 			</div>
+			<div class="cs-linkwrap" style="display:flex;gap:8px;align-items:end;margin-top:10px;flex-wrap:wrap;">
+				<div class="cs-lb" style="min-width:200px;"></div>
+				<div class="cs-lbchips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
+			</div>
 		</div>
 	`);
 	const root = $(page.main);
@@ -254,6 +258,26 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		open_url_post(`/api/method/jewelima.jewelima.api.export_cad_sheet_${fmt}`, { payload: JSON.stringify(p) });
 	}
 	const fOrderBag = mk(".cs-ob", { fieldtype: "Link", label: __("Order Bag"), fieldname: "ob", options: "Order Bag" });
+
+	// extra order bags this same sheet also drives (same design in production)
+	let linkedBags = [];
+	function paintLinked() {
+		const box = root.find(".cs-lbchips").empty();
+		if (linkedBags.length) box.append(`<span style="font-size:11.5px;color:var(--text-muted);">${__("Also linked:")}</span>`);
+		linkedBags.forEach((b, i) => {
+			box.append(`<span class="cs-lbchip" style="background:var(--control-bg);border:1px solid var(--border-color);border-radius:12px;padding:2px 8px;font-size:12px;">
+				${esc(b)} <span class="cs-lbx" data-i="${i}" style="cursor:pointer;color:#b02a2a;font-weight:700;">&times;</span></span>`);
+		});
+	}
+	root.find(".cs-lbchips").on("click", ".cs-lbx", function () {
+		linkedBags.splice($(this).data("i"), 1); paintLinked();
+	});
+	const fLinkBag = mk(".cs-lb", { fieldtype: "Link", label: __("Also link another Order Bag"), fieldname: "lb", options: "Order Bag" });
+	fLinkBag.$input && fLinkBag.$input.on("change", () => {
+		const v = fLinkBag.get_value();
+		if (v && v !== fOrderBag.get_value() && !linkedBags.includes(v)) { linkedBags.push(v); paintLinked(); }
+		setTimeout(() => fLinkBag.set_value(""), 50);
+	});
 	root.find(".cs-upload").on("click", () => {
 		const bag = fOrderBag.get_value();
 		if (!bag) return frappe.show_alert({ message: __("Pick the Order Bag first."), indicator: "orange" }, 3);
@@ -275,6 +299,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		if (!bag) return frappe.show_alert({ message: __("Pick the Order Bag first."), indicator: "orange" }, 3);
 		const p = collect();
 		p.order_bag = bag;
+		p.linked_bags = linkedBags.slice();
 		frappe.dom.freeze(__("Saving..."));
 		frappe.call({ method: "jewelima.jewelima.api.save_cad_sheet", args: { payload: JSON.stringify(p) } })
 			.then((r) => {
@@ -289,6 +314,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		frappe.call({ method: "jewelima.jewelima.api.get_cad_sheet", args: { order_bag: bag } }).then((r) => {
 			const m = r.message || {};
 			if (!m.name) return;   // no saved sheet — leave the card-brief prefill as is
+			linkedBags = [m.order_bag].concat(m.linked_bags || []).filter((b) => b && b !== bag); paintLinked();
 			fStyle.set_value(m.style_no || ""); if (m.design_type) fDType.set_value(m.design_type);
 			fKarat.set_value(m.karat || ""); fGold.set_value(m.gold_wt || ""); fLength.set_value(m.length || "");
 			if (m.dia_wt) { diaManual = true; fDia.set_value(m.dia_wt); }
