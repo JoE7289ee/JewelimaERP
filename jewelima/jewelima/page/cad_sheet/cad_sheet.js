@@ -50,7 +50,8 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		</style>
 		<div class="cs-grid">
 			<div class="cs-card">
-				<div class="cs-drop">${__("Click to upload the design image")}<input type="file" accept="image/*" class="cs-file" style="display:none;"></div>
+				<div class="cs-drop"><span class="cs-ph">${__("Click to upload the design image")}</span></div>
+				<input type="file" accept="image/*" class="cs-file" style="display:none;">
 				<div style="margin-top:8px;"><button class="btn btn-xs btn-default cs-clearimg" style="display:none;">${__("Remove image")}</button></div>
 			</div>
 			<div>
@@ -90,33 +91,26 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	const fApprover = mk(".cs-approver", { fieldtype: "Data", label: __("Approved By"), fieldname: "a" });
 	fDia.$input.on("input", () => { diaManual = true; });
 
-	// image: read locally as base64, never uploaded
-	root.find(".cs-drop").on("click", (e) => { if (e.target.tagName !== "BUTTON") root.find(".cs-file").click(); });
+	// image: read locally as base64, never uploaded — one persistent input
+	const fileInput = root.find(".cs-file").get(0);
+	root.find(".cs-drop").on("click", () => fileInput.click());
 	root.find(".cs-file").on("change", function () {
 		const file = this.files[0];
 		if (!file) return;
 		const reader = new FileReader();
 		reader.onload = () => {
 			imgB64 = reader.result;
-			root.find(".cs-drop").html(`<img src="${imgB64}">`).append('<input type="file" accept="image/*" class="cs-file" style="display:none;">');
-			bindFile();
+			root.find(".cs-drop").html(`<img src="${imgB64}">`);
 			root.find(".cs-clearimg").show();
 		};
 		reader.readAsDataURL(file);
 	});
-	function bindFile() {
-		root.find(".cs-file").off("change").on("change", function () {
-			const f = this.files[0]; if (!f) return;
-			const rd = new FileReader(); rd.onload = () => { imgB64 = rd.result; root.find(".cs-drop img").attr("src", imgB64); }; rd.readAsDataURL(f);
-		});
-	}
 	root.find(".cs-clearimg").on("click", (e) => {
-		e.stopPropagation(); imgB64 = "";
-		root.find(".cs-drop").html(__("Click to upload the design image") + '<input type="file" accept="image/*" class="cs-file" style="display:none;">');
+		e.stopPropagation();
+		imgB64 = "";
+		fileInput.value = "";
+		root.find(".cs-drop").html(`<span class="cs-ph">${__("Click to upload the design image")}</span>`);
 		root.find(".cs-clearimg").hide();
-		root.find(".cs-drop").off("click").on("click", (ev) => { if (ev.target.tagName !== "BUTTON") root.find(".cs-file").click(); });
-		root.find(".cs-file").on("change", root.find(".cs-file").get(0) && arguments.callee);
-		location.reload();  // simplest reset of the file input
 	});
 
 	function paint() {
