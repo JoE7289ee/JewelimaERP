@@ -3450,6 +3450,7 @@ def _cad_compose(payload):
 	IMG_W, PAD = 380, 24
 	header = [
 		("DESIGN NUMBER", payload.get("style_no") or ""),
+		("DESIGN TYPE", payload.get("design_type") or ""),
 		("PURITY", payload.get("purity") or ""),
 		("APPROX. GOLD WT", (payload.get("gold_wt") or "") and f"{payload.get('gold_wt')} Gms"),
 		("DIAMOND WT", (payload.get("dia_wt") or "") and f"{payload.get('dia_wt')} cts"),
@@ -3576,6 +3577,28 @@ def export_cad_sheet_pdf(payload):
 	frappe.local.response.filename = "{0}.pdf".format((payload.get("style_no") or "cad-sheet").replace(" ", "-"))
 	frappe.local.response.filecontent = buf.getvalue()
 	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def attach_cad_sheet_to_card(order_bag, payload):
+	"""Render the CAD sheet composite and attach it into the card's photos (Order
+	Bag Attachment) — the same store Order Bag Photos shows. Image is base64 in
+	the payload; the rendered PNG is stored as the card's attachment."""
+	from io import BytesIO
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Card {0} not found.").format(order_bag))
+	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	buf = BytesIO()
+	_cad_compose(payload).save(buf, "PNG")
+	stamp = frappe.utils.now().replace(" ", "_").replace(":", "")
+	fname = "cadsheet-{0}-{1}.png".format((payload.get("style_no") or "sheet").replace(" ", "-"), stamp)
+	f = frappe.get_doc({"doctype": "File", "file_name": fname, "content": buf.getvalue(),
+		"is_private": 0, "attached_to_doctype": "Order Bag", "attached_to_name": order_bag}).insert(ignore_permissions=True)
+	bag = frappe.get_doc("Order Bag", order_bag)
+	bag.append("attachments", {"image": f.file_url, "title": (payload.get("style_no") or "CAD Sheet"), "remarks": "CAD sheet"})
+	bag.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"order_bag": order_bag, "file_url": f.file_url, "count": len(bag.attachments)}
 
 
 @frappe.whitelist()

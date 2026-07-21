@@ -60,7 +60,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		.cs-b{border:1px solid var(--border-color);border-radius:8px;padding:5px 18px;text-align:center;background:var(--control-bg);}
 		.cs-b .k{font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;}
 		.cs-b .v{font-size:16px;font-weight:800;}
-		.cs-exp{margin-left:auto;display:flex;gap:8px;}
+		.cs-exp{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:end;}
 		.cs-go{background:#2e7d32;border:none;color:#fff;font-weight:800;padding:9px 22px;border-radius:8px;cursor:pointer;}
 		.cs-go.x{background:#1461d2;}
 		</style>
@@ -82,7 +82,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			</div>
 			<div>
 				<div class="cs-card cs-hd" style="margin-bottom:14px;">
-					<div class="cs-style"></div><div class="cs-purity"></div><div class="cs-gold"></div><div class="cs-length"></div>
+					<div class="cs-style"></div><div class="cs-dtype"></div><div class="cs-purity"></div><div class="cs-gold"></div><div class="cs-length"></div>
 					<div class="cs-dia"></div><div class="cs-approver"></div>
 				</div>
 				<div class="cs-card">
@@ -104,6 +104,10 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				<button class="cs-go cs-img">${__("Export Image")}</button>
 				<button class="cs-go x cs-xlsx">${__("Export Excel")}</button>
 				<button class="cs-go cs-pdf" style="background:#b02a2a;">${__("Export PDF")}</button>
+				<div class="cs-obwrap" style="display:flex;gap:8px;align-items:end;margin-left:12px;">
+					<div class="cs-ob" style="min-width:200px;"></div>
+					<button class="cs-go cs-upload" style="background:#8a6d00;">${__("Upload to Order Bag")}</button>
+				</div>
 			</div>
 		</div>
 	`);
@@ -113,6 +117,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	const fStyle = mk(".cs-style", { fieldtype: "Data", label: __("Design Number"), fieldname: "s" });
 	const fGold = mk(".cs-gold", { fieldtype: "Data", label: __("Approx Gold Wt (g)"), fieldname: "g" });
+	const fDType = mk(".cs-dtype", { fieldtype: "Link", label: __("Design Type"), fieldname: "dt", options: "Design Type" });
 	const fPurity = mk(".cs-purity", { fieldtype: "Data", label: __("Purity"), fieldname: "p" });
 	const fLength = mk(".cs-length", { fieldtype: "Data", label: __("Length"), fieldname: "l" });
 	const fDia = mk(".cs-dia", { fieldtype: "Data", label: __("Diamond Wt (ct) — auto, editable"), fieldname: "d" });
@@ -236,9 +241,9 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				mm: ROWS[i].mm_size, wt: ROWS[i].avg_cts, qty: q, total: Number((q * (ROWS[i].avg_cts || 0)).toFixed(4)) });
 		});
 		const manual = root.find(".cs-mline").map((_, el) => el.value.trim()).get().filter(Boolean);
-		return { style_no: fStyle.get_value() || "", purity: fPurity.get_value() || "", gold_wt: fGold.get_value() || "",
-			length: fLength.get_value() || "", dia_wt: fDia.get_value() || "", approver: fApprover.get_value() || "",
-			rows, manual_lines: manual, image_b64: imgB64, sub_images: subImgs };
+		return { style_no: fStyle.get_value() || "", design_type: fDType.get_value() || "", purity: fPurity.get_value() || "",
+			gold_wt: fGold.get_value() || "", length: fLength.get_value() || "", dia_wt: fDia.get_value() || "",
+			approver: fApprover.get_value() || "", rows, manual_lines: manual, image_b64: imgB64, sub_images: subImgs };
 	}
 
 	function exportSheet(fmt) {
@@ -246,6 +251,23 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		if (!p.rows.length && !imgB64 && !p.manual_lines.length && !subImgs.length) return frappe.show_alert({ message: __("Add an image, stones, or a line first."), indicator: "orange" }, 3);
 		open_url_post(`/api/method/jewelima.jewelima.api.export_cad_sheet_${fmt}`, { payload: JSON.stringify(p) });
 	}
+	const fOrderBag = mk(".cs-ob", { fieldtype: "Link", label: __("Order Bag"), fieldname: "ob", options: "Order Bag" });
+	root.find(".cs-upload").on("click", () => {
+		const bag = fOrderBag.get_value();
+		if (!bag) return frappe.show_alert({ message: __("Pick the Order Bag first."), indicator: "orange" }, 3);
+		const p = collect();
+		if (!p.rows.length && !imgB64 && !p.manual_lines.length && !subImgs.length)
+			return frappe.show_alert({ message: __("Nothing to upload yet."), indicator: "orange" }, 3);
+		frappe.dom.freeze(__("Uploading..."));
+		frappe.call({ method: "jewelima.jewelima.api.attach_cad_sheet_to_card", args: { order_bag: bag, payload: JSON.stringify(p) } })
+			.then((r) => {
+				frappe.dom.unfreeze();
+				const m = r.message || {};
+				frappe.msgprint({ title: __("Uploaded"), indicator: "green",
+					message: __("CAD sheet added to <a href='/app/order-bag-photos'>{0}</a> — it now has {1} photo(s).", [esc(m.order_bag), m.count]) });
+			}).catch(() => frappe.dom.unfreeze());
+	});
+
 	root.find(".cs-img").on("click", () => exportSheet("image"));
 	root.find(".cs-xlsx").on("click", () => exportSheet("xlsx"));
 	root.find(".cs-pdf").on("click", () => exportSheet("pdf"));
@@ -254,9 +276,11 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		ROWS = r.message || [];
 		paint();
 		// arriving from the Weight Checker with stones pre-picked
+		if (frappe.route_options && frappe.route_options.order_bag) {
+			fOrderBag.set_value(frappe.route_options.order_bag);
+		}
 		if (frappe.route_options && frappe.route_options.cad_stones) {
 			const stones = frappe.route_options.cad_stones;
-			frappe.route_options = null;
 			stones.forEach((st) => {
 				const i = ROWS.findIndex((rr) => rr.sieve_size === st.sieve);
 				if (i >= 0) root.find(`tbody input.q[data-i="${i}"]`).val(st.qty);
@@ -265,5 +289,6 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			hideEmpty = true;   // arriving prefilled — show just the filled sieves
 			applyHide();
 		}
+		frappe.route_options = null;
 	});
 };

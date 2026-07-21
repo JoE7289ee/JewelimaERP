@@ -15,6 +15,8 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 	let ROWS = [];
 	let compare = false;
 	let hideEmpty = false;
+	let wcOrderBag = (frappe.route_options && frappe.route_options.order_bag) || "";
+	if (wcOrderBag) frappe.route_options = null;
 	const VALS = { A: {}, B: {} };   // row index -> nos (survives mode toggles)
 
 	$(page.main).append(`
@@ -57,7 +59,7 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 				<button class="btn btn-default wc-hide">${__("Hide empty")}</button>
 				<button class="btn btn-default wc-xlsx">${__("Export Excel")}</button>
 				<button class="btn btn-default wc-img">${__("Export Image")}</button>
-				<button class="btn btn-default wc-tocard">${__("Add to Card")}</button>
+				<button class="btn btn-default wc-tocard">${__("To Order Bag Photos")}</button>
 				<button class="btn btn-default wc-tocad">${__("Open in CAD Sheet")}</button>
 				<button class="btn btn-default wc-clear">${__("Clear")}</button>
 			</div>
@@ -221,26 +223,28 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		});
 	});
 
-	root.find(".wc-tocard").on("click", () => {
+	function attachToCard(card) {
 		const data = exportData();
 		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to attach — type some Nos first."), indicator: "orange" }, 3);
+		frappe.dom.freeze(__("Attaching..."));
+		frappe.call({ method: "jewelima.jewelima.api.attach_table_image_to_card", args: {
+			order_bag: card,
+			title: `weight-check-${frappe.datetime.get_today()}`,
+			heading: __("Weight Check — {0}", [frappe.datetime.str_to_user(frappe.datetime.get_today())]),
+			data: JSON.stringify(data),
+		} }).then((r) => {
+			frappe.dom.unfreeze();
+			const m = r.message || {};
+			frappe.msgprint({ title: __("Attached"), indicator: "green",
+				message: __("Added to <a href='/app/order-bag-photos'>{0}</a> — it now has {1} photo(s).", [esc(m.order_bag), m.count]) });
+		}).catch(() => frappe.dom.unfreeze());
+	}
+	root.find(".wc-tocard").on("click", () => {
+		if (wcOrderBag) return attachToCard(wcOrderBag);   // came from the Workstation
 		frappe.prompt(
-			{ fieldname: "card", label: __("Card No"), fieldtype: "Data", reqd: 1, description: __("e.g. E0123.4") },
-			(v) => {
-				frappe.dom.freeze(__("Attaching..."));
-				frappe.call({ method: "jewelima.jewelima.api.attach_table_image_to_card", args: {
-					order_bag: (v.card || "").trim(),
-					title: `weight-check-${frappe.datetime.get_today()}`,
-					heading: __("Weight Check — {0}", [frappe.datetime.str_to_user(frappe.datetime.get_today())]),
-					data: JSON.stringify(data),
-				} }).then((r) => {
-					frappe.dom.unfreeze();
-					const m = r.message || {};
-					frappe.msgprint({ title: __("Attached"), indicator: "green",
-						message: __("Added to <a href='/app/order-bag/{0}'>{0}</a> — it now has {1} photo(s).", [esc(m.order_bag), m.count]) });
-				}).catch(() => frappe.dom.unfreeze());
-			},
-			__("Attach weight check to a card")
+			{ fieldname: "card", label: __("Order Bag"), fieldtype: "Link", options: "Order Bag", reqd: 1 },
+			(v) => attachToCard((v.card || "").trim()),
+			__("Export weight check to an Order Bag's photos")
 		);
 	});
 

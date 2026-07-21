@@ -67,6 +67,7 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 			<button class="btn btn-xs btn-default" data-mat="${esc(c.name)}">${__("Materials")}</button>
 			<button class="btn btn-xs btn-default" data-info="${esc(c.name)}">${__("CAD Info")}</button>
 			<button class="btn btn-xs btn-default" data-sheet="${esc(c.name)}">${__("CAD Sheet")}</button>
+			<button class="btn btn-xs btn-default" data-weight="${esc(c.name)}">${__("Weight")}</button>
 			<button class="btn btn-xs btn-default" data-photos="${esc(c.name)}">${__("Photos")}</button>
 		</span>`;
 	}
@@ -125,7 +126,14 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 	});
 
 	// ---- per-card dialogs / links ----
-	root.on("click", "[data-sheet]", function () { frappe.set_route("cad-sheet"); });   // prefill later
+	root.on("click", "[data-sheet]", function () {
+		frappe.route_options = { order_bag: $(this).attr("data-sheet") };
+		frappe.set_route("cad-sheet");
+	});
+	root.on("click", "[data-weight]", function () {
+		frappe.route_options = { order_bag: $(this).attr("data-weight") };
+		frappe.set_route("weight-checker");
+	});
 	root.on("click", "[data-mat]", function () { detail($(this).attr("data-mat"), "materials"); });
 	root.on("click", "[data-info]", function () { detail($(this).attr("data-info"), "info"); });
 	root.on("click", "[data-photos]", function () {
