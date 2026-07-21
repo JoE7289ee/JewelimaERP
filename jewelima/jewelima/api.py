@@ -3481,7 +3481,9 @@ def export_cad_sheet_image(payload):
 	if photo:
 		ratio = IMG_W / photo.width
 		img_h = int(photo.height * ratio)
-	H = max(head_block_h, top + table_h + 40, top + img_h + 60) + 40
+	manual = [str(m) for m in (payload.get("manual_lines") or []) if str(m).strip()]
+	manual_h = (26 * len(manual) + 30) if manual else 0
+	H = max(head_block_h, top + 30 * len(header) + 16 + table_h + 50 + manual_h, top + img_h + 60) + 40
 
 	img = Image.new("RGB", (int(W), int(H)), "#ffffff")
 	d = ImageDraw.Draw(img)
@@ -3522,8 +3524,17 @@ def export_cad_sheet_image(payload):
 			x += cw[c]
 		ty += line_h
 
+	ay = ty
 	if payload.get("approver"):
-		d.text((right_x, ty + 14), "Approved: " + str(payload.get("approver")), fill="#111", font=f_b)
+		d.text((right_x, ay + 14), "Approved: " + str(payload.get("approver")), fill="#111", font=f_b)
+		ay += 40
+	if manual:
+		my = ay + 16
+		d.text((right_x, my), "OTHER / NOTES", fill="#666", font=f_h)
+		my += 24
+		for ln in manual:
+			d.text((right_x, my), "\u2022 " + ln, fill="#111", font=f_c)
+			my += 26
 
 	buf = BytesIO()
 	img.save(buf, "PNG")
@@ -3578,8 +3589,17 @@ def export_cad_sheet_xlsx(payload):
 		r += 1
 	for j, v in enumerate(["", "", "", "TOTAL", tot_qty, tot_ct]):
 		cc = ws.cell(row=r, column=base_c + j, value=v); cc.font = bold; cc.fill = tot_fill; cc.border = thin
+	mr = r + 2
 	if payload.get("approver"):
-		ws.cell(row=r + 2, column=base_c + 3, value="Approved: " + str(payload.get("approver"))).font = bold
+		ws.cell(row=mr, column=base_c + 3, value="Approved: " + str(payload.get("approver"))).font = bold
+		mr += 2
+	manual = [str(m) for m in (payload.get("manual_lines") or []) if str(m).strip()]
+	if manual:
+		ws.cell(row=mr, column=base_c, value="OTHER / NOTES").font = bold
+		mr += 1
+		for ln in manual:
+			ws.cell(row=mr, column=base_c, value=ln)
+			mr += 1
 
 	for j in range(len(cols)):
 		ws.column_dimensions[chr(ord("A") + base_c - 1 + j)].width = 12

@@ -39,6 +39,11 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		.cs-tbl td:focus-within{outline:2px solid var(--primary);outline-offset:-2px;}
 		.cs-tbl tr.hasq td.tot{color:#2e7d32;font-weight:700;}
 		tr.cs-hidden{display:none;}
+		.cs-mwrap{margin-top:12px;}
+		.cs-mwrap .lbl{font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;display:block;}
+		.cs-mline{width:100%;border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;font:inherit;
+			background:var(--control-bg);margin-bottom:6px;outline:none;}
+		.cs-mline:focus{outline:2px solid var(--primary);outline-offset:-2px;}
 		.cs-sw{width:38px;height:26px;border:1px solid var(--border-color);border-radius:5px;cursor:pointer;padding:0;
 			background:repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0/10px 10px;}
 		.cs-sw.set{background-image:none;}
@@ -58,6 +63,10 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				<div class="cs-drop"><span class="cs-ph">${__("Click to upload the design image")}</span></div>
 				<input type="file" accept="image/*" class="cs-file" style="display:none;">
 				<div style="margin-top:8px;"><button class="btn btn-xs btn-default cs-clearimg" style="display:none;">${__("Remove image")}</button></div>
+				<div class="cs-mwrap">
+					<span class="lbl">${__("Manual lines")}</span>
+					<div class="cs-mlist"><input class="cs-mline" placeholder="${__("e.g. PEARL Stone 17mm D blue")}"></div>
+				</div>
 			</div>
 			<div>
 				<div class="cs-card cs-hd" style="margin-bottom:14px;">
@@ -162,6 +171,17 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	});
 	root.find(".cs-hide").on("click", () => { hideEmpty = !hideEmpty; applyHide(); });
 
+	// manual lines — always keep exactly one trailing empty input
+	root.on("input", ".cs-mline", function () {
+		const $all = root.find(".cs-mline");
+		const isLast = this === $all.get($all.length - 1);
+		if (isLast && this.value.trim()) {
+			$(this).closest(".cs-mlist").append(`<input class="cs-mline" placeholder="${__("e.g. PEARL Stone 17mm D blue")}">`);
+		} else if (!isLast && !this.value.trim() && $all.length > 1) {
+			$(this).remove();
+		}
+	});
+
 	// COL = visual colour swatch: click opens the OS picker; × clears it
 	root.on("click", ".cs-sw", function () { root.find(`.cs-colinp[data-i="${this.dataset.i}"]`).get(0).click(); });
 	root.on("input", ".cs-colinp", function () {
@@ -181,13 +201,14 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			rows.push({ col: $(this).find(".cs-sw").attr("data-hex") || "", sieve: ROWS[i].sieve_size,
 				mm: ROWS[i].mm_size, wt: ROWS[i].avg_cts, qty: q, total: Number((q * (ROWS[i].avg_cts || 0)).toFixed(4)) });
 		});
+		const manual = root.find(".cs-mline").map((_, el) => el.value.trim()).get().filter(Boolean);
 		return { style_no: fStyle.get_value() || "", gold_wt: fGold.get_value() || "", length: fLength.get_value() || "",
-			dia_wt: fDia.get_value() || "", approver: fApprover.get_value() || "", rows, image_b64: imgB64 };
+			dia_wt: fDia.get_value() || "", approver: fApprover.get_value() || "", rows, manual_lines: manual, image_b64: imgB64 };
 	}
 
 	function exportSheet(fmt) {
 		const p = collect();
-		if (!p.rows.length && !imgB64) return frappe.show_alert({ message: __("Add an image or some stones first."), indicator: "orange" }, 3);
+		if (!p.rows.length && !imgB64 && !p.manual_lines.length) return frappe.show_alert({ message: __("Add an image, stones, or a line first."), indicator: "orange" }, 3);
 		open_url_post(`/api/method/jewelima.jewelima.api.export_cad_sheet_${fmt}`, { payload: JSON.stringify(p) });
 	}
 	root.find(".cs-img").on("click", () => exportSheet("image"));
