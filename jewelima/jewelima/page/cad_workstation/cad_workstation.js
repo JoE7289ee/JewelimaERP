@@ -32,6 +32,7 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 		.ws-tbl th{background:var(--control-bg);border-bottom:1px solid var(--border-color);padding:7px 11px;text-align:left;font-weight:700;white-space:nowrap;}
 		.ws-tbl td{border-bottom:1px solid var(--border-color);padding:6px 11px;vertical-align:middle;}
 		.ws-tbl tbody tr:last-child td{border-bottom:0;}
+		.ws-tbl td.num,.ws-tbl th.num{text-align:right;font-variant-numeric:tabular-nums;}
 		.ws-act .btn{margin-right:4px;margin-bottom:2px;}
 		.ws-none{padding:30px;text-align:center;color:var(--text-muted);}
 		/* karat colours the row up to the actions; the actions cell switches to a
@@ -83,12 +84,15 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 		if (!list.length) return `<div class="ws-none">${lead ? __("Nothing unassigned.") : __("No cards assigned to you.")}</div>`;
 		return `<table class="ws-tbl"><thead><tr>
 			<th>${__("Order Bag")}</th><th>${__("Customer")}</th><th>${__("Order Date")}</th><th>${__("Due Date")}</th>
+			<th class="num">${__("Gold Wt")}</th><th class="num">${__("Dia (ct)")}</th>
 			${lead ? `<th>${__("Assign to")}</th>` : `<th>${__("Actions")}</th>`}</tr></thead><tbody>` +
 			list.map((c) => `<tr class="${karatClass(c)}">
 				<td><b>${esc(c.name)}</b> <span style="color:var(--text-muted);font-size:11px;">${esc(c.cad_design_type || "")}</span></td>
 				<td>${esc(c.customer || "—")}</td>
 				<td>${c.order_date ? frappe.datetime.str_to_user(c.order_date) : "—"}</td>
 				<td>${c.due_date ? frappe.datetime.str_to_user(c.due_date) : "—"}</td>
+				<td class="num">${esc(c.cad_gold_weight || "—")}</td>
+				<td class="num">${c.cad_diamond_weight ? Number(c.cad_diamond_weight).toFixed(2) : "—"}</td>
 				<td>${lead ? assignSelect(c) : actions(c)}</td>
 			</tr>`).join("") + "</tbody></table>";
 	}

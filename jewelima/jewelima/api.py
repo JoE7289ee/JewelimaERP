@@ -3715,7 +3715,7 @@ def get_cad_workstation():
 	is_lead = "System Manager" in set(frappe.get_roles())
 	bags = frappe.get_all("Order Bag", filters={"is_cad": 1},
 		fields=["name", "customer", "order_date", "due_date", "job_order", "cad_design_type", "qty",
-			"cad_karat", "design"],
+			"cad_karat", "design", "cad_gold_weight", "cad_diamond_weight"],
 		order_by="due_date asc, creation asc", limit_page_length=0)
 	jd = _jd_stock_customer()
 	names = [b.name for b in bags] or [""]
