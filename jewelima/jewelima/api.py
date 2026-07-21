@@ -3289,11 +3289,9 @@ def export_table_xlsx(title, data):
 	build_xlsx_response(data, (title or "export"))
 
 
-@frappe.whitelist()
-def export_table_image(title, data, heading=None):
-	"""Generic table -> PNG download (Pillow, no browser needed). `data` =
-	[[header...], [row...], ...] exactly as the page shows. Header row is styled,
-	the LAST row is treated as a totals row. Numeric-looking cells right-align."""
+def _render_table_png(data, heading=None):
+	"""Render [[header],[row]...] to PNG bytes (Pillow, no browser). Header row is
+	styled, the LAST row is a totals row, numeric columns right-align."""
 	from io import BytesIO
 	from PIL import Image, ImageDraw, ImageFont
 
@@ -3344,15 +3342,15 @@ def export_table_image(title, data, heading=None):
 		vals = [rows[ri][c] for ri in range(1, len(rows)) if str(rows[ri][c]).strip() != ""]
 		num_col.append(bool(vals) and all(is_num(v) for v in vals))
 
-	title_h = 40 if title else 0
+	title_h = 40 if heading else 0
 	W = sum(col_w) + 2
 	H = title_h + line_h * len(rows) + 2 + pad_y
 
 	img = Image.new("RGB", (W, H), "#ffffff")
 	d = ImageDraw.Draw(img)
 	y = 0
-	if title:
-		d.text((4, 8), heading or title, fill="#111111", font=f_title)
+	if heading:
+		d.text((4, 8), heading, fill="#111111", font=f_title)
 		y = title_h
 
 	for ri, r in enumerate(rows):
@@ -3374,9 +3372,36 @@ def export_table_image(title, data, heading=None):
 
 	buf = BytesIO()
 	img.save(buf, "PNG")
+	return buf.getvalue()
+
+
+@frappe.whitelist()
+def export_table_image(title, data, heading=None):
+	"""Generic table -> PNG download."""
+	png = _render_table_png(data, heading)
 	frappe.local.response.filename = "{0}.png".format(title or "export")
-	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.filecontent = png
 	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def attach_table_image_to_card(order_bag, data, title=None, heading=None, remarks=None):
+	"""Render the table to PNG and attach it into the card's photos (the Order Bag
+	Attachment table) — same store the Card page shows."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Card {0} not found.").format(order_bag))
+	png = _render_table_png(data, heading)
+	fname = "{0}-{1}.png".format(title or "table", frappe.utils.now().replace(" ", "_").replace(":", ""))
+	f = frappe.get_doc({
+		"doctype": "File", "file_name": fname, "content": png, "is_private": 0,
+		"attached_to_doctype": "Order Bag", "attached_to_name": order_bag,
+	}).insert(ignore_permissions=True)
+	bag = frappe.get_doc("Order Bag", order_bag)
+	bag.append("attachments", {"image": f.file_url, "title": (title or "Weight Check"),
+		"remarks": remarks or heading or ""})
+	bag.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"order_bag": order_bag, "file_url": f.file_url, "count": len(bag.attachments)}
 
 
 @frappe.whitelist()

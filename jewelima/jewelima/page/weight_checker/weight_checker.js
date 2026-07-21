@@ -57,7 +57,7 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 				<button class="btn btn-default wc-hide">${__("Hide empty")}</button>
 				<button class="btn btn-default wc-xlsx">${__("Export Excel")}</button>
 				<button class="btn btn-default wc-img">${__("Export Image")}</button>
-				<button class="btn btn-default wc-pdf">${__("PDF / Print")}</button>
+				<button class="btn btn-default wc-tocard">${__("Add to Card")}</button>
 				<button class="btn btn-default wc-clear">${__("Clear")}</button>
 			</div>
 			<div class="wc-panels"></div>
@@ -212,19 +212,27 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		});
 	});
 
-	root.find(".wc-pdf").on("click", () => {
+	root.find(".wc-tocard").on("click", () => {
 		const data = exportData();
-		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to print — type some Nos first."), indicator: "orange" }, 3);
-		const rows = data.map((r, i) => `<tr>${r.map((c) => `<t${i === 0 ? "h" : "d"}>${esc(String(c))}</t${i === 0 ? "h" : "d"}>`).join("")}</tr>`).join("");
-		const w = window.open("", "_blank");
-		w.document.write(`<html><head><title>Weight Check ${frappe.datetime.get_today()}</title><style>
-			body{font-family:sans-serif;padding:24px;} h3{margin:0 0 12px;}
-			table{border-collapse:collapse;font-size:13px;} td,th{border:1px solid #999;padding:5px 14px;text-align:right;}
-			th{background:#eee;} td:first-child,th:first-child{text-align:left;}
-			tr:last-child td{font-weight:bold;background:#f5f5f5;}
-			</style></head><body><h3>Weight Check — ${frappe.datetime.str_to_user(frappe.datetime.get_today())}</h3>
-			<table>${rows}</table><script>window.print()</` + `script></body></html>`);
-		w.document.close();
+		if (data.length < 3) return frappe.show_alert({ message: __("Nothing to attach — type some Nos first."), indicator: "orange" }, 3);
+		frappe.prompt(
+			{ fieldname: "card", label: __("Card No"), fieldtype: "Data", reqd: 1, description: __("e.g. E0123.4") },
+			(v) => {
+				frappe.dom.freeze(__("Attaching..."));
+				frappe.call({ method: "jewelima.jewelima.api.attach_table_image_to_card", args: {
+					order_bag: (v.card || "").trim(),
+					title: `weight-check-${frappe.datetime.get_today()}`,
+					heading: __("Weight Check — {0}", [frappe.datetime.str_to_user(frappe.datetime.get_today())]),
+					data: JSON.stringify(data),
+				} }).then((r) => {
+					frappe.dom.unfreeze();
+					const m = r.message || {};
+					frappe.msgprint({ title: __("Attached"), indicator: "green",
+						message: __("Added to <a href='/app/order-bag/{0}'>{0}</a> — it now has {1} photo(s).", [esc(m.order_bag), m.count]) });
+				}).catch(() => frappe.dom.unfreeze());
+			},
+			__("Attach weight check to a card")
+		);
 	});
 
 	page.add_inner_button(__("Sieve Chart"), () => frappe.set_route("sieve-chart"));
