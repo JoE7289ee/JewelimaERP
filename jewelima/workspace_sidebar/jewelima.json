@@ -897,8 +897,8 @@
    "indent": 1,
    "keep_closed": 0,
    "label": "Price Charts",
-   "link_to": "Price Chart",
-   "link_type": "DocType",
+   "link_to": "price-charts",
+   "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
    "url": ""
@@ -1710,7 +1710,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-21 22:33:55.597699",
+ "modified": "2026-07-21 23:19:48.138850",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

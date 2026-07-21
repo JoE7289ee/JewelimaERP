@@ -6250,6 +6250,177 @@ def get_party_detail(customer):
 
 
 # ---------------------------------------------------------------------------
+# Price Charts (Setup) — the dedicated editor + the customer-facing PDF letter.
+# The doctype stays the storage (the Sell engine prices against it; saving an
+# Active chart auto-supersedes the previous one of the same name); these APIs
+# and the price-charts page replace the raw ERPNext form as the face.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_price_chart_list():
+	"""Charts grouped by name: the Active one + its superseded history."""
+	rows = frappe.get_all("Price Chart",
+		fields=["name", "chart_name", "chart_date", "status", "modified"],
+		order_by="chart_name asc, chart_date desc, creation desc")
+	groups = {}
+	for r in rows:
+		g = groups.setdefault(r.chart_name or r.name, {"chart_name": r.chart_name, "active": None, "history": []})
+		r["chart_date"] = str(r.chart_date or "")
+		if r.status == "Active" and not g["active"]:
+			g["active"] = r
+		else:
+			g["history"].append(r)
+	return {"groups": list(groups.values())}
+
+
+@frappe.whitelist()
+def get_price_chart(name):
+	"""One chart, every block — feeds the editor and the PDF preview."""
+	d = frappe.get_doc("Price Chart", name)
+	return {
+		"name": d.name, "chart_name": d.chart_name, "chart_date": str(d.chart_date or ""),
+		"status": d.status, "diamond_quality_note": d.diamond_quality_note or "",
+		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
+			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
+		"colour_stone_rate": flt(d.colour_stone_rate), "precious_stone_rate": flt(d.precious_stone_rate),
+		"job_work_pty_rate": flt(d.job_work_pty_rate),
+		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
+		"setting_rates": [{"stone_ct": r.stone_ct, "rate": r.rate} for r in d.setting_rates],
+		"special_works": [{"work_name": r.work_name, "basis": r.basis, "rate": r.rate} for r in d.special_works],
+		"hallmark_charge": flt(d.hallmark_charge), "certification_charge": flt(d.certification_charge),
+		"payment_terms": d.payment_terms or "", "terms": d.terms or "",
+		"signatory": d.signatory or "", "signatory_phone": d.signatory_phone or "",
+	}
+
+
+@frappe.whitelist()
+def save_price_chart(payload):
+	"""Save = a NEW Active version (the controller supersedes the previous Active
+	chart of the same name — history is never edited)."""
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	if not (p.get("chart_name") or "").strip():
+		frappe.throw(frappe._("Give the chart a name — usually the party's name."))
+	doc = frappe.new_doc("Price Chart")
+	doc.chart_name = p["chart_name"].strip().upper()
+	doc.chart_date = p.get("chart_date") or frappe.utils.today()
+	doc.status = "Active"
+	doc.diamond_quality_note = p.get("diamond_quality_note") or ""
+	for r in p.get("diamond_rates") or []:
+		if r.get("rate"):
+			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label"), "from_ct": flt(r.get("from_ct")),
+				"to_ct": flt(r.get("to_ct")), "quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
+	doc.colour_stone_rate = flt(p.get("colour_stone_rate"))
+	doc.precious_stone_rate = flt(p.get("precious_stone_rate"))
+	doc.job_work_pty_rate = flt(p.get("job_work_pty_rate"))
+	doc.making_rate = flt(p.get("making_rate"))
+	doc.making_min_grams = flt(p.get("making_min_grams"))
+	for r in p.get("setting_rates") or []:
+		if r.get("rate"):
+			doc.append("setting_rates", {"stone_ct": flt(r.get("stone_ct")), "rate": flt(r.get("rate"))})
+	for r in p.get("special_works") or []:
+		if r.get("work_name") and r.get("rate"):
+			doc.append("special_works", {"work_name": r.get("work_name"), "basis": r.get("basis") or "Per Piece",
+				"rate": flt(r.get("rate"))})
+	doc.hallmark_charge = flt(p.get("hallmark_charge"))
+	doc.certification_charge = flt(p.get("certification_charge"))
+	doc.payment_terms = p.get("payment_terms") or ""
+	doc.terms = p.get("terms") or ""
+	doc.signatory = p.get("signatory") or ""
+	doc.signatory_phone = p.get("signatory_phone") or ""
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "chart_name": doc.chart_name}
+
+
+def _price_chart_letter_html(d):
+	"""The customer-facing rate letter (A4). d = get_price_chart payload."""
+	def money(v):
+		return "{:,.0f}".format(flt(v)) if flt(v) == int(flt(v)) else "{:,.2f}".format(flt(v))
+	def bracket(r):
+		if flt(r["to_ct"]):
+			return "{0} – {1} ct".format(r["from_ct"], r["to_ct"])
+		return "{0} ct & above".format(r["from_ct"]) if flt(r["from_ct"]) else "any size"
+	dmd = "".join("<tr><td>{0}</td><td>{1}</td><td>{2}</td><td class='r'>₹ {3}</td></tr>".format(
+		frappe.utils.escape_html(r["sieve_label"] or ""), bracket(r),
+		frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d["diamond_rates"])
+	setting = "".join("<tr><td>{0} ct</td><td class='r'>₹ {1}</td></tr>".format(
+		r["stone_ct"], money(r["rate"])) for r in d["setting_rates"])
+	special = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
+		frappe.utils.escape_html(r["work_name"]), r["basis"], money(r["rate"])) for r in d["special_works"])
+	flats = []
+	if flt(d["making_rate"]):
+		note = " (min {0} g per piece)".format(d["making_min_grams"]) if flt(d["making_min_grams"]) else ""
+		flats.append(("Making charge", "₹ {0} / g{1}".format(money(d["making_rate"]), note)))
+	if flt(d["colour_stone_rate"]):
+		flats.append(("Colour stone", "₹ {0} / ct".format(money(d["colour_stone_rate"]))))
+	if flt(d["precious_stone_rate"]):
+		flats.append(("Precious stone", "₹ {0} / ct".format(money(d["precious_stone_rate"]))))
+	if flt(d["job_work_pty_rate"]):
+		flats.append(("Setting party diamonds (job work)", "₹ {0} / ct".format(money(d["job_work_pty_rate"]))))
+	if flt(d["hallmark_charge"]):
+		flats.append(("Hallmarking", "₹ {0} / piece".format(money(d["hallmark_charge"]))))
+	if flt(d["certification_charge"]):
+		flats.append(("Certification", "₹ {0}".format(money(d["certification_charge"]))))
+	flat_rows = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(k, v) for k, v in flats)
+	sec = lambda title, table_head, body: (
+		"<div class='sec'><div class='st'>{0}</div><table>{1}<tbody>{2}</tbody></table></div>".format(
+			title, table_head, body) if body else "")
+	esc = frappe.utils.escape_html
+	return """<!doctype html><html><head><meta charset='utf-8'><style>
+		@page {{ size: A4; margin: 18mm 16mm; }}
+		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 12.5px; }}
+		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 10px; margin-bottom: 18px; }}
+		.brand {{ font-size: 21px; font-weight: 800; letter-spacing: .04em; color: #1f4e5f; }}
+		.doc {{ font-size: 13px; color: #666; margin-top: 2px; }}
+		.meta {{ margin: 10px 0 4px; }}
+		.meta b {{ font-size: 16px; }}
+		.meta span {{ float: right; color: #666; }}
+		.qnote {{ color: #444; font-size: 12px; }}
+		.sec {{ margin: 14px 0; page-break-inside: avoid; }}
+		.st {{ font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+			color: #1f4e5f; border-bottom: 1px solid #1f4e5f; padding-bottom: 3px; margin-bottom: 6px; }}
+		table {{ width: 100%; border-collapse: collapse; }}
+		th {{ text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+			color: #888; padding: 4px 8px; border-bottom: 1px solid #ddd; }}
+		td {{ padding: 5px 8px; border-bottom: 1px solid #eee; }}
+		td.r, th.r {{ text-align: right; white-space: nowrap; }}
+		.terms {{ margin-top: 16px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
+		.sign {{ margin-top: 34px; display: flex; justify-content: space-between; align-items: flex-end; }}
+		.sign .who {{ font-weight: 700; }}
+		.sign .line {{ border-top: 1px solid #999; padding-top: 4px; width: 220px; text-align: center; color: #666; font-size: 11px; }}
+	</style></head><body>
+		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
+		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
+		{qnote}
+		{dmd_sec}{setting_sec}{special_sec}{flat_sec}
+		{payment}{terms}
+		<div class='sign'>
+			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
+			<div class='line'>Authorised Signatory</div>
+		</div>
+	</body></html>""".format(
+		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
+		qnote="<div class='qnote'>Diamond quality: {0}</div>".format(esc(d["diamond_quality_note"])) if d["diamond_quality_note"] else "",
+		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieve</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
+		setting_sec=sec("Setting Rates", "<thead><tr><th>Stone Size</th><th class='r'>Rate</th></tr></thead>", setting),
+		special_sec=sec("Special Works", "<thead><tr><th>Work</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", special),
+		flat_sec=sec("Making &amp; Charges", "", flat_rows),
+		payment="<div class='sec'><div class='st'>Payment Terms</div><div class='terms'>{0}</div></div>".format(esc(d["payment_terms"])) if d["payment_terms"] else "",
+		terms="<div class='terms'>{0}</div>".format(esc(d["terms"])) if d["terms"] else "",
+		signatory=esc(d["signatory"]), signatory_phone=esc(d["signatory_phone"]))
+
+
+@frappe.whitelist()
+def export_price_chart_pdf(name):
+	"""The rate-chart letter as a PDF — clean enough to send straight to the party."""
+	from frappe.utils.pdf import get_pdf
+	d = get_price_chart(name)
+	frappe.local.response.filename = "RateChart-{0}-{1}.pdf".format(
+		(d["chart_name"] or "chart").replace(" ", "-"), d["chart_date"])
+	frappe.local.response.filecontent = get_pdf(_price_chart_letter_html(d))
+	frappe.local.response.type = "download"
+
+
+# ---------------------------------------------------------------------------
 # Sell (Sales) — price scanned pieces against a Price Chart, record the sale,
 # write the stock off. The verified costing math: gold = nett x effective rate;
 # diamonds = ct x cents-bracket rate; labour per rule (gram+min / piece /
