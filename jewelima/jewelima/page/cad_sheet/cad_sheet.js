@@ -14,6 +14,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let ROWS = [];              // sieve chart
 	let imgB64 = "";
+	let subImgs = [];   // additional images, base64 (never uploaded)
 	let diaManual = false;      // once the user edits Diamond Wt, stop auto-filling
 
 	$(page.main).append(`
@@ -44,6 +45,11 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		.cs-mline{width:100%;border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;font:inherit;
 			background:var(--control-bg);margin-bottom:6px;outline:none;}
 		.cs-mline:focus{outline:2px solid var(--primary);outline-offset:-2px;}
+		.cs-subthumbs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px;}
+		.cs-subt{position:relative;width:84px;height:84px;border:1px solid var(--border-color);border-radius:6px;overflow:hidden;}
+		.cs-subt img{width:100%;height:100%;object-fit:cover;}
+		.cs-subt .x{position:absolute;top:2px;right:2px;background:#b02a2a;color:#fff;border-radius:50%;width:18px;height:18px;
+			font-size:12px;font-weight:800;text-align:center;line-height:18px;cursor:pointer;}
 		.cs-sw{width:38px;height:26px;border:1px solid var(--border-color);border-radius:5px;cursor:pointer;padding:0;
 			background:repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0/10px 10px;}
 		.cs-sw.set{background-image:none;}
@@ -67,10 +73,16 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 					<span class="lbl">${__("Manual lines")}</span>
 					<div class="cs-mlist"><input class="cs-mline" placeholder="${__("e.g. PEARL Stone 17mm D blue")}"></div>
 				</div>
+				<div class="cs-mwrap">
+					<span class="lbl">${__("More images")}</span>
+					<div class="cs-subthumbs"></div>
+					<button class="btn btn-xs btn-default cs-subadd">${__("+ Add images")}</button>
+					<input type="file" accept="image/*" multiple class="cs-subfile" style="display:none;">
+				</div>
 			</div>
 			<div>
 				<div class="cs-card cs-hd" style="margin-bottom:14px;">
-					<div class="cs-style"></div><div class="cs-gold"></div><div class="cs-length"></div>
+					<div class="cs-style"></div><div class="cs-purity"></div><div class="cs-gold"></div><div class="cs-length"></div>
 					<div class="cs-dia"></div><div class="cs-approver"></div>
 				</div>
 				<div class="cs-card">
@@ -91,6 +103,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 			<div class="cs-exp">
 				<button class="cs-go cs-img">${__("Export Image")}</button>
 				<button class="cs-go x cs-xlsx">${__("Export Excel")}</button>
+				<button class="cs-go cs-pdf" style="background:#b02a2a;">${__("Export PDF")}</button>
 			</div>
 		</div>
 	`);
@@ -100,6 +113,7 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	const fStyle = mk(".cs-style", { fieldtype: "Data", label: __("Design Number"), fieldname: "s" });
 	const fGold = mk(".cs-gold", { fieldtype: "Data", label: __("Approx Gold Wt (g)"), fieldname: "g" });
+	const fPurity = mk(".cs-purity", { fieldtype: "Data", label: __("Purity"), fieldname: "p" });
 	const fLength = mk(".cs-length", { fieldtype: "Data", label: __("Length"), fieldname: "l" });
 	const fDia = mk(".cs-dia", { fieldtype: "Data", label: __("Diamond Wt (ct) — auto, editable"), fieldname: "d" });
 	const fApprover = mk(".cs-approver", { fieldtype: "Data", label: __("Created By"), fieldname: "a", read_only: 1 });
@@ -126,6 +140,25 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		fileInput.value = "";
 		root.find(".cs-drop").html(`<span class="cs-ph">${__("Click to upload the design image")}</span>`);
 		root.find(".cs-clearimg").hide();
+	});
+
+	// additional images — multi-select, base64, never uploaded
+	const subInput = root.find(".cs-subfile").get(0);
+	root.find(".cs-subadd").on("click", () => subInput.click());
+	root.find(".cs-subfile").on("change", function () {
+		[...this.files].forEach((f) => {
+			const rd = new FileReader();
+			rd.onload = () => { subImgs.push(rd.result); paintSubs(); };
+			rd.readAsDataURL(f);
+		});
+		this.value = "";
+	});
+	function paintSubs() {
+		root.find(".cs-subthumbs").html(subImgs.map((b, i) =>
+			`<div class="cs-subt"><img src="${b}"><span class="x" data-i="${i}">×</span></div>`).join(""));
+	}
+	root.on("click", ".cs-subt .x", function () {
+		subImgs.splice(Number($(this).attr("data-i")), 1); paintSubs();
 	});
 
 	function paint() {
@@ -203,17 +236,19 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 				mm: ROWS[i].mm_size, wt: ROWS[i].avg_cts, qty: q, total: Number((q * (ROWS[i].avg_cts || 0)).toFixed(4)) });
 		});
 		const manual = root.find(".cs-mline").map((_, el) => el.value.trim()).get().filter(Boolean);
-		return { style_no: fStyle.get_value() || "", gold_wt: fGold.get_value() || "", length: fLength.get_value() || "",
-			dia_wt: fDia.get_value() || "", approver: fApprover.get_value() || "", rows, manual_lines: manual, image_b64: imgB64 };
+		return { style_no: fStyle.get_value() || "", purity: fPurity.get_value() || "", gold_wt: fGold.get_value() || "",
+			length: fLength.get_value() || "", dia_wt: fDia.get_value() || "", approver: fApprover.get_value() || "",
+			rows, manual_lines: manual, image_b64: imgB64, sub_images: subImgs };
 	}
 
 	function exportSheet(fmt) {
 		const p = collect();
-		if (!p.rows.length && !imgB64 && !p.manual_lines.length) return frappe.show_alert({ message: __("Add an image, stones, or a line first."), indicator: "orange" }, 3);
+		if (!p.rows.length && !imgB64 && !p.manual_lines.length && !subImgs.length) return frappe.show_alert({ message: __("Add an image, stones, or a line first."), indicator: "orange" }, 3);
 		open_url_post(`/api/method/jewelima.jewelima.api.export_cad_sheet_${fmt}`, { payload: JSON.stringify(p) });
 	}
 	root.find(".cs-img").on("click", () => exportSheet("image"));
 	root.find(".cs-xlsx").on("click", () => exportSheet("xlsx"));
+	root.find(".cs-pdf").on("click", () => exportSheet("pdf"));
 
 	frappe.call({ method: API + ".get_sieve_chart" }).then((r) => { ROWS = r.message || []; paint(); });
 };

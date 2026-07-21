@@ -3427,17 +3427,14 @@ def _cad_image_from_b64(b64):
 		return None
 
 
-@frappe.whitelist()
-def export_cad_sheet_image(payload):
-	"""Composite the CAD sheet (design image + header + stone table) into ONE PNG,
-	laid out like the excel. The uploaded image is base64 in the payload — never
-	stored on the server."""
-	from io import BytesIO
+def _cad_compose(payload):
+	"""Composite the CAD sheet -> PIL Image (design image + header + stone table +
+	notes + sub-images). Uploaded images are base64 in the payload — never stored."""
 	from PIL import Image, ImageDraw, ImageFont
 
-	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	rows, tot_qty, tot_ct = _cad_rows(payload)
 	photo = _cad_image_from_b64(payload.get("image_b64"))
+	subs = [im for im in (_cad_image_from_b64(b) for b in (payload.get("sub_images") or [])) if im]
 	payload["approver"] = frappe.utils.get_fullname(frappe.session.user)
 
 	def font(sz, bold=False):
@@ -3451,14 +3448,13 @@ def export_cad_sheet_image(payload):
 	tw = lambda t, fn: scratch.textbbox((0, 0), str(t), font=fn)[2]
 
 	IMG_W, PAD = 380, 24
-	# --- header lines ---
 	header = [
 		("DESIGN NUMBER", payload.get("style_no") or ""),
+		("PURITY", payload.get("purity") or ""),
 		("APPROX. GOLD WT", (payload.get("gold_wt") or "") and f"{payload.get('gold_wt')} Gms"),
 		("DIAMOND WT", (payload.get("dia_wt") or "") and f"{payload.get('dia_wt')} cts"),
 		("LENGTH", payload.get("length") or ""),
 	]
-	# --- stone table geometry ---
 	cols = [("COL", "col"), ("S.Size", "sieve"), ("SIZE/MM", "mm"), ("WT/CT", "wt"), ("Qty", "qty"), ("Total WT", "total")]
 	tbl = [[c[0] for c in cols]]
 	for r in rows:
@@ -3472,31 +3468,52 @@ def export_cad_sheet_image(payload):
 	tbl_w = sum(cw)
 	line_h = 32
 
-	# --- canvas size ---
 	top = 44
-	head_block_h = top + 30 * len(header) + 20
 	right_x = PAD + IMG_W + 40
 	table_h = line_h * len(tbl)
-	W = max(right_x + tbl_w + PAD, PAD + IMG_W + PAD)
-	img_h = 0
-	if photo:
-		ratio = IMG_W / photo.width
-		img_h = int(photo.height * ratio)
+	img_h = int(photo.height * (IMG_W / photo.width)) if photo else 0
+
+	# sub-images: laid out in the LEFT column below the main photo, 2 across
+	SUB_W, SUB_GAP = 182, 16
+	sub_thumbs = []
+	for im in subs:
+		th = int(im.height * (SUB_W / im.width))
+		sub_thumbs.append((im.resize((SUB_W, th)), th))
+	sub_rows = (len(sub_thumbs) + 1) // 2
+	sub_block_h = 0
+	if sub_thumbs:
+		# height = sum of the taller thumb in each pair-row + gaps
+		for ri in range(sub_rows):
+			pair = sub_thumbs[ri * 2:ri * 2 + 2]
+			sub_block_h += max(t[1] for t in pair) + SUB_GAP
+
 	manual = [str(m) for m in (payload.get("manual_lines") or []) if str(m).strip()]
 	manual_h = (26 * len(manual) + 30) if manual else 0
-	H = max(head_block_h, top + 30 * len(header) + 16 + table_h + 50 + manual_h, top + img_h + 60) + 40
 
-	img = Image.new("RGB", (int(W), int(H)), "#ffffff")
+	left_h = top + img_h + (20 + sub_block_h if sub_thumbs else 0)
+	right_h = top + 30 * len(header) + 16 + table_h + 50 + manual_h
+	W = int(max(right_x + tbl_w + PAD, PAD + IMG_W + PAD))
+	H = int(max(left_h, right_h, top + 60) + 40)
+
+	img = Image.new("RGB", (W, H), "#ffffff")
 	d = ImageDraw.Draw(img)
 	d.text((PAD, 10), payload.get("style_no") or "CAD SHEET", fill="#111", font=f_t)
 
-	# design photo (left)
 	if photo:
-		photo = photo.resize((IMG_W, img_h))
-		img.paste(photo, (PAD, top))
+		img.paste(photo.resize((IMG_W, img_h)), (PAD, top))
 		d.rectangle([PAD, top, PAD + IMG_W, top + img_h], outline="#999")
 
-	# header block (under/right — put it right of the image so it never overlaps)
+	# sub-images grid (left, below main)
+	sy = top + img_h + 20
+	for ri in range(sub_rows):
+		pair = sub_thumbs[ri * 2:ri * 2 + 2]
+		sx = PAD
+		for thumb, th in pair:
+			img.paste(thumb, (sx, sy))
+			d.rectangle([sx, sy, sx + SUB_W, sy + th], outline="#bbb")
+			sx += SUB_W + SUB_GAP
+		sy += max(t[1] for t in pair) + SUB_GAP
+
 	hy = top
 	for label, val in header:
 		d.text((right_x, hy), f"{label} :", fill="#666", font=f_h)
@@ -3504,7 +3521,6 @@ def export_cad_sheet_image(payload):
 		hy += 30
 	hy += 16
 
-	# stone table (right block, below the header lines)
 	ty = hy
 	for ri, row in enumerate(tbl):
 		is_head = ri == 0
@@ -3526,9 +3542,8 @@ def export_cad_sheet_image(payload):
 		ty += line_h
 
 	ay = ty
-	if payload.get("approver"):
-		d.text((right_x, ay + 14), "Created by: " + str(payload.get("approver")), fill="#111", font=f_b)
-		ay += 40
+	d.text((right_x, ay + 14), "Created by: " + str(payload.get("approver")), fill="#111", font=f_b)
+	ay += 40
 	if manual:
 		my = ay + 16
 		d.text((right_x, my), "OTHER / NOTES", fill="#666", font=f_h)
@@ -3536,10 +3551,29 @@ def export_cad_sheet_image(payload):
 		for ln in manual:
 			d.text((right_x, my), "\u2022 " + ln, fill="#111", font=f_c)
 			my += 26
+	return img
 
+
+@frappe.whitelist()
+def export_cad_sheet_image(payload):
+	"""CAD sheet -> PNG (composite; images base64, never stored)."""
+	from io import BytesIO
+	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	buf = BytesIO()
-	img.save(buf, "PNG")
+	_cad_compose(payload).save(buf, "PNG")
 	frappe.local.response.filename = "{0}.png".format((payload.get("style_no") or "cad-sheet").replace(" ", "-"))
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def export_cad_sheet_pdf(payload):
+	"""CAD sheet -> single-page PDF of the same composite."""
+	from io import BytesIO
+	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	buf = BytesIO()
+	_cad_compose(payload).convert("RGB").save(buf, "PDF", resolution=150)
+	frappe.local.response.filename = "{0}.pdf".format((payload.get("style_no") or "cad-sheet").replace(" ", "-"))
 	frappe.local.response.filecontent = buf.getvalue()
 	frappe.local.response.type = "download"
 
@@ -3607,11 +3641,16 @@ def export_cad_sheet_xlsx(payload):
 		ws.column_dimensions[chr(ord("A") + base_c - 1 + j)].width = 12
 
 	# embed the design image (top-left), scaled to ~360px wide
+	anchor_row = 10
+	def _embed(pil, cell, w):
+		nonlocal anchor_row
+		pil = pil.resize((w, int(pil.height * (w / pil.width))))
+		bio = BytesIO(); pil.save(bio, "PNG"); bio.seek(0)
+		ws.add_image(XLImage(bio), cell)
 	if photo:
-		ratio = 360 / photo.width
-		photo = photo.resize((360, int(photo.height * ratio)))
-		bio = BytesIO(); photo.save(bio, "PNG"); bio.seek(0)
-		xi = XLImage(bio); ws.add_image(xi, "A9")
+		_embed(photo, "A" + str(anchor_row), 360); anchor_row += 20
+	for sub in [im for im in (_cad_image_from_b64(b) for b in (payload.get("sub_images") or [])) if im]:
+		_embed(sub, "A" + str(anchor_row), 240); anchor_row += 14
 
 	out = BytesIO(); wb.save(out)
 	frappe.local.response.filename = "{0}.xlsx".format((payload.get("style_no") or "cad-sheet").replace(" ", "-"))
