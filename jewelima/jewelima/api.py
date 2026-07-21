@@ -6049,41 +6049,148 @@ def writeoff_loss(payload):
 
 
 # ---------------------------------------------------------------------------
-# Parties (Setup > Party) — review the imported parties and group them.
-# "Party" is our word for ERPNext's Customer; the Individual default group
-# counts as UNGROUPED until the review assigns a real one.
+# Parties (Setup > Party) — "Party" is our word for ERPNext's Customer.
+# Every party carries a STRUCTURED name built from four master codes:
+#     GROUP-ZONE-STATE[-SPECIAL]      e.g. JOS-TCR-KL-PTY, EDI-CHE-TN
+# so who/where is readable at a glance and everything is queryable by part.
+# The ONLY exemptions are the internal stock holders (JD Stock / BTQ Stock).
 # ---------------------------------------------------------------------------
-@frappe.whitelist()
-def get_parties():
-	"""Every party with its group; Individual (the import default) = ungrouped."""
-	rows = frappe.get_all("Customer", fields=["name", "customer_group", "disabled"],
-	                      order_by="name", limit=2000)
-	groups = sorted({r.customer_group for r in rows if r.customer_group and r.customer_group != "Individual"})
-	return {"parties": rows, "groups": groups}
+PARTY_EXEMPT = ("JD Stock", "BTQ Stock")
+
+
+def _party_code(dt, name):
+	if not name:
+		return None
+	code = frappe.db.get_value(dt, name, "code")
+	if not code:
+		frappe.throw(frappe._("{0} '{1}' not found.").format(dt, name))
+	return code
+
+
+def _party_name_from(group, zone, state, special=None):
+	"""JOS + TCR + KL (+ PTY) -> 'JOS-TCR-KL-PTY'. All parts are master codes."""
+	g = _party_code("Party Group", group)
+	z = _party_code("Party Zone", zone)
+	s = _party_code("Party State", state)
+	if not (g and z and s):
+		frappe.throw(frappe._("Pick the group, zone and state — they build the party name."))
+	parts = [g, z, s]
+	sp = _party_code("Party Special", special) if special else None
+	if sp:
+		parts.append(sp)
+	return "-".join(parts)
 
 
 @frappe.whitelist()
-def set_party_group(names, group):
-	"""Put the given parties under a Customer Group (created if new)."""
-	if isinstance(names, str):
-		names = json.loads(names or "[]")
-	names = [n for n in names if n]
-	if not names:
-		frappe.throw(frappe._("Pick at least one party."))
-	group = (group or "").strip()
-	if not group:
-		frappe.throw(frappe._("Type the group name."))
-	if not frappe.db.exists("Customer Group", group):
-		frappe.get_doc({
-			"doctype": "Customer Group", "customer_group_name": group,
-			"parent_customer_group": "All Customer Groups", "is_group": 0,
-		}).insert(ignore_permissions=True)
-	for nm in names:
-		if not frappe.db.exists("Customer", nm):
-			frappe.throw(frappe._("{0} not found.").format(nm))
-		frappe.db.set_value("Customer", nm, "customer_group", group)
+def get_party_directory():
+	"""Every party with its identity parts + defaults, plus the master lists —
+	one call paints the whole Parties page."""
+	rows = frappe.get_all("Customer",
+		fields=["name", "customer_name", "party_group", "party_zone", "party_state",
+			"party_special", "default_salesman", "default_price_chart", "disabled"],
+		order_by="name", limit_page_length=0)
+	for r in rows:
+		r["exempt"] = 1 if r.name in PARTY_EXEMPT else 0
+		r["classified"] = 1 if (r.party_group and r.party_zone and r.party_state) else 0
+	masters = {
+		"groups": frappe.get_all("Party Group", fields=["name", "group_name"], order_by="name"),
+		"zones": frappe.get_all("Party Zone", fields=["name", "zone_name"], order_by="name"),
+		"states": frappe.get_all("Party State", fields=["name", "state_name"], order_by="name"),
+		"specials": frappe.get_all("Party Special", fields=["name", "special_name"], order_by="name"),
+		"salesmen": frappe.get_all("Sales Person", filters={"is_group": 0}, pluck="name", order_by="name"),
+		"price_charts": frappe.get_all("Price Chart", filters={"status": "Active"}, pluck="name", order_by="name")
+			if frappe.db.exists("DocType", "Price Chart") else [],
+	}
+	return {"parties": rows, "masters": masters,
+		"unclassified": len([r for r in rows if not r["classified"] and not r["exempt"]])}
+
+
+@frappe.whitelist()
+def make_party(group, zone, state, special=None, salesman=None, price_chart=None):
+	"""Create a NEW party — the name IS the code combo (JOS-TCR-KL[-PTY]).
+	One party per exact combo; use a different zone (e.g. Chennai 2) for a
+	second store in the same city."""
+	nm = _party_name_from(group, zone, state, special)
+	if frappe.db.exists("Customer", nm):
+		frappe.throw(frappe._("{0} already exists — one party per combo (add a zone like 'Chennai 2' for a second store).").format(nm))
+	cg = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+	terr = frappe.db.get_value("Territory", {"is_group": 0}, "name")
+	doc = frappe.get_doc({
+		"doctype": "Customer", "customer_name": nm, "customer_group": cg, "territory": terr,
+		"party_group": group, "party_zone": zone, "party_state": state, "party_special": special or None,
+		"default_salesman": salesman or None, "default_price_chart": price_chart or None,
+	}).insert(ignore_permissions=True)
 	frappe.db.commit()
-	return {"count": len(names), "group": group}
+	return {"name": doc.name}
+
+
+@frappe.whitelist()
+def classify_party(customer, group, zone, state, special=None):
+	"""Give an EXISTING party its structured identity: set the four links and
+	RENAME the record to the generated code name. Every Link field pointing at
+	the customer (orders, bags, sales) follows the rename automatically."""
+	if not frappe.db.exists("Customer", customer):
+		frappe.throw(frappe._("{0} not found.").format(customer))
+	if customer in PARTY_EXEMPT:
+		frappe.throw(frappe._("{0} is an internal stock holder — it stays outside the naming scheme.").format(customer))
+	nm = _party_name_from(group, zone, state, special)
+	if nm != customer and frappe.db.exists("Customer", nm):
+		frappe.throw(frappe._("{0} already exists — one party per combo.").format(nm))
+	frappe.db.set_value("Customer", customer, {
+		"party_group": group, "party_zone": zone, "party_state": state,
+		"party_special": special or None,
+	})
+	if nm != customer:
+		frappe.rename_doc("Customer", customer, nm, force=True)
+		frappe.db.set_value("Customer", nm, "customer_name", nm)
+	frappe.db.commit()
+	return {"name": nm, "renamed": nm != customer}
+
+
+@frappe.whitelist()
+def update_party_defaults(customer, salesman=None, price_chart=None):
+	"""The per-party defaults the sale/order flow prefills from."""
+	if not frappe.db.exists("Customer", customer):
+		frappe.throw(frappe._("{0} not found.").format(customer))
+	if salesman and not frappe.db.exists("Sales Person", salesman):
+		frappe.throw(frappe._("Salesman {0} not found.").format(salesman))
+	if price_chart and not frappe.db.exists("Price Chart", price_chart):
+		frappe.throw(frappe._("Price Chart {0} not found.").format(price_chart))
+	frappe.db.set_value("Customer", customer, {
+		"default_salesman": salesman or None, "default_price_chart": price_chart or None,
+	})
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+@frappe.whitelist()
+def get_party_detail(customer):
+	"""Everything the Parties page shows for one party: identity, defaults, and
+	the numbers that matter (orders, cards on the floor, stock, sales)."""
+	if not frappe.db.exists("Customer", customer):
+		frappe.throw(frappe._("{0} not found.").format(customer))
+	d = frappe.db.get_value("Customer", customer,
+		["name", "customer_name", "party_group", "party_zone", "party_state", "party_special",
+		 "default_salesman", "default_price_chart", "disabled", "creation"], as_dict=True)
+	labels = {
+		"group_label": frappe.db.get_value("Party Group", d.party_group, "group_name") if d.party_group else "",
+		"zone_label": frappe.db.get_value("Party Zone", d.party_zone, "zone_name") if d.party_zone else "",
+		"state_label": frappe.db.get_value("Party State", d.party_state, "state_name") if d.party_state else "",
+		"special_label": frappe.db.get_value("Party Special", d.party_special, "special_name") if d.party_special else "",
+	}
+	stats = {
+		"job_orders": frappe.db.count("Job Order", {"customer": customer}),
+		"last_order": str((frappe.get_all("Job Order", filters={"customer": customer},
+			order_by="creation desc", limit=1, pluck="creation") or [""])[0])[:10],
+		"bags_in_production": frappe.db.count("Order Bag", {"customer": customer, "stock_status": "In Production"}),
+		"products_in_stock": frappe.db.count("Order Bag", {"customer": customer, "is_finished": 1, "stock_status": "In Stock"}),
+		"sold": frappe.db.count("Order Bag", {"customer": customer, "stock_status": "Sold"}),
+	}
+	recent = frappe.get_all("Job Order", filters={"customer": customer},
+		fields=["name", "creation", "salesman", "order_type"], order_by="creation desc", limit=8)
+	for r in recent:
+		r["creation"] = str(r.creation)[:10]
+	return {**d, **labels, "stats": stats, "recent_orders": recent, "exempt": 1 if customer in PARTY_EXEMPT else 0}
 
 
 # ---------------------------------------------------------------------------

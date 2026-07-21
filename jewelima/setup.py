@@ -9,6 +9,7 @@ def after_install():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_employee_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_customer_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
@@ -16,6 +17,7 @@ def after_install():
 	create_igi_description_maps()
 	create_default_supplier()
 	create_jd_stock_customer()
+	seed_party_masters()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -48,6 +50,7 @@ def after_migrate():
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_warehouse_custom_fields(), ignore_validate=True)
 	create_custom_fields(get_employee_custom_fields(), ignore_validate=True)
+	create_custom_fields(get_customer_custom_fields(), ignore_validate=True)
 	create_default_stone_types()
 	create_design_masters()
 	create_order_types()
@@ -55,6 +58,7 @@ def after_migrate():
 	create_igi_description_maps()
 	create_default_supplier()
 	create_jd_stock_customer()
+	seed_party_masters()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -499,18 +503,64 @@ def create_default_supplier():
 
 
 def create_jd_stock_customer():
-	"""'JD Stock' Customer = the holder of own finished-goods stock (a piece with no
-	real customer is 'held by' JD Stock). Skips until Customer Group / Territory exist
-	(seeded by the ERPNext setup wizard)."""
-	if frappe.db.exists("Customer", "JD Stock"):
-		return
+	"""The two EXEMPT parties — the only Customers allowed outside the structured
+	GROUP-ZONE-STATE[-SPECIAL] naming: 'JD Stock' (holder of own finished-goods
+	stock) and 'BTQ Stock' (stock kept at the boutique). Skips until Customer
+	Group / Territory exist (seeded by the ERPNext setup wizard)."""
 	cg = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
 	terr = frappe.db.get_value("Territory", {"is_group": 0}, "name") or frappe.db.get_value("Territory", {}, "name")
 	if not (cg and terr):
 		return
-	frappe.get_doc(
-		{"doctype": "Customer", "customer_name": "JD Stock", "customer_group": cg, "territory": terr}
-	).insert(ignore_permissions=True)
+	for nm in ("JD Stock", "BTQ Stock"):
+		if not frappe.db.exists("Customer", nm):
+			frappe.get_doc(
+				{"doctype": "Customer", "customer_name": nm, "customer_group": cg, "territory": terr}
+			).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+# Parties (Customers) carry a structured identity — GROUP-ZONE-STATE[-SPECIAL],
+# e.g. JOS-TCR-KL-PTY — built from four small master doctypes so everything is
+# queryable, plus per-party defaults the sale flow prefills from.
+def get_customer_custom_fields():
+	return {
+		"Customer": [
+			{"fieldname": "jewelima_sec", "fieldtype": "Section Break", "label": "Jewelima Party",
+			 "insert_after": "customer_name"},
+			{"fieldname": "party_group", "fieldtype": "Link", "options": "Party Group",
+			 "label": "Party Group (Store)", "insert_after": "jewelima_sec", "in_list_view": 1,
+			 "in_standard_filter": 1},
+			{"fieldname": "party_zone", "fieldtype": "Link", "options": "Party Zone",
+			 "label": "Zone", "insert_after": "party_group", "in_standard_filter": 1},
+			{"fieldname": "party_col", "fieldtype": "Column Break", "insert_after": "party_zone"},
+			{"fieldname": "party_state", "fieldtype": "Link", "options": "Party State",
+			 "label": "State", "insert_after": "party_col", "in_standard_filter": 1},
+			{"fieldname": "party_special", "fieldtype": "Link", "options": "Party Special",
+			 "label": "Special", "insert_after": "party_state"},
+			{"fieldname": "party_col2", "fieldtype": "Column Break", "insert_after": "party_special"},
+			{"fieldname": "default_salesman", "fieldtype": "Link", "options": "Sales Person",
+			 "label": "Default Salesman", "insert_after": "party_col2"},
+			{"fieldname": "default_price_chart", "fieldtype": "Link", "options": "Price Chart",
+			 "label": "Default Price Chart", "insert_after": "default_salesman"},
+		]
+	}
+
+
+def seed_party_masters():
+	"""Starter codes for the structured party names — extend on the Parties page
+	or straight in the doctypes. Idempotent."""
+	seeds = [
+		("Party Group", "group_name", [("JOS", "JOS"), ("EDI", "EDDIMINIKAL")]),
+		("Party Zone", "zone_name", [("TCR", "Thrissur"), ("CHE", "Chennai"), ("CH2", "Chennai 2"), ("BLR", "Bangalore")]),
+		("Party State", "state_name", [("KL", "Kerala"), ("TN", "Tamil Nadu"), ("KA", "Karnataka")]),
+		("Party Special", "special_name", [("PTY", "Party")]),
+	]
+	for dt, label_field, rows in seeds:
+		if not frappe.db.exists("DocType", dt):
+			continue
+		for code, label in rows:
+			if not frappe.db.exists(dt, code):
+				frappe.get_doc({"doctype": dt, "code": code, label_field: label}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
