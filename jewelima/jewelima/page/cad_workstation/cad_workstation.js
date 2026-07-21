@@ -111,7 +111,10 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 	root.on("click", "[data-sheet]", function () { frappe.set_route("cad-sheet"); });   // prefill later
 	root.on("click", "[data-mat]", function () { detail($(this).attr("data-mat"), "materials"); });
 	root.on("click", "[data-info]", function () { detail($(this).attr("data-info"), "info"); });
-	root.on("click", "[data-photos]", function () { detail($(this).attr("data-photos"), "photos"); });
+	root.on("click", "[data-photos]", function () {
+		frappe.route_options = { order_bag: $(this).attr("data-photos") };
+		frappe.set_route("order-bag-photos");
+	});
 
 	function detail(bag, which) {
 		frappe.call({ method: API + ".get_cad_card_detail", args: { order_bag: bag } }).then((r) => {
@@ -119,11 +122,12 @@ frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 			const d = new frappe.ui.Dialog({ title: `${bag} — ${which === "materials" ? __("Materials") : which === "info" ? __("CAD Info") : __("Photos")}`, size: "large" });
 			let html = "";
 			if (which === "materials") {
-				html = (m.materials || []).length
+				const srcNote = m.design ? `<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">${__("From design {0}", [esc(m.design)])}${m.mat_source === "bag" ? " (bag BOM)" : ""}</div>` : "";
+				html = srcNote + ((m.materials || []).length
 					? `<table class="ws-tbl"><thead><tr><th>${__("Item")}</th><th>${__("Qty")}</th><th>${__("Weight")}</th></tr></thead><tbody>`
 						+ m.materials.map((x) => `<tr><td>${esc(x.item)}</td><td>${x.qty || 0}</td><td>${(x.weight || 0).toFixed(3)}</td></tr>`).join("")
 						+ "</tbody></table>"
-					: `<div class="ws-none">${__("No materials yet (CAD job).")}</div>`;
+					: `<div class="ws-none">${__("No materials yet (CAD job — design not finalized).")}</div>`);
 			} else if (which === "info") {
 				const b = m.brief || {};
 				const rowsB = [["Design Type", b.cad_design_type], ["Karat", b.cad_karat], ["Gold Wt", b.cad_gold_weight],

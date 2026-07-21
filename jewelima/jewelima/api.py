@@ -3735,7 +3735,16 @@ def get_cad_card_detail(order_bag):
 	if not frappe.db.exists("Order Bag", order_bag):
 		frappe.throw(frappe._("Card {0} not found.").format(order_bag))
 	doc = frappe.get_doc("Order Bag", order_bag)
-	materials = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in doc.bag_bom]
+	# materials come from the DESIGN's BOM — an existing/made design often comes to
+	# CAD only for a size change, so the design recipe is what CAD works against.
+	# Fall back to the bag's own BOM if it isn't tied to a design.
+	if doc.design and frappe.db.exists("Design", doc.design):
+		dm = frappe.get_doc("Design", doc.design).materials
+		materials = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in dm if m.item]
+		mat_source = "design"
+	else:
+		materials = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in doc.bag_bom]
+		mat_source = "bag"
 	brief = {k: doc.get(k) for k in ("cad_design_type", "cad_karat", "cad_gold_weight",
 		"cad_diamond_weight", "cad_stone_no", "cad_reference", "cad_remarks")}
 	photos = []
@@ -3745,7 +3754,7 @@ def get_cad_card_detail(order_bag):
 		if a.image:
 			photos.append({"image": a.image, "title": a.title or ""})
 	return {"name": order_bag, "design": doc.design, "customer": doc.customer,
-		"materials": materials, "brief": brief, "photos": photos}
+		"materials": materials, "mat_source": mat_source, "brief": brief, "photos": photos}
 
 
 @frappe.whitelist()

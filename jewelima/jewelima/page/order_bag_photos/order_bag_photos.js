@@ -38,6 +38,14 @@ frappe.pages["order-bag-photos"].on_page_load = function (wrapper) {
 	state.bag = mk(".obp-bag", { fieldtype: "Link", label: "Order Bag", fieldname: "order_bag", options: "Order Bag" });
 	state.bag.$input.on("change awesomplete-selectcomplete", () => setTimeout(load, 80));
 
+	// arriving from the Workstation with a card pre-picked
+	if (frappe.route_options && frappe.route_options.order_bag) {
+		const bag = frappe.route_options.order_bag;
+		frappe.route_options = null;
+		state.bag.set_value(bag);
+		setTimeout(load, 120);
+	}
+
 	const $grid = $(page.main).find(".obp-grid");
 	const $empty = $(page.main).find(".obp-empty");
 
