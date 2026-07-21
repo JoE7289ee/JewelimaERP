@@ -6,7 +6,7 @@
 // (System Manager) assigns queue cards to CAD users. Top: CAD In-Queue count +
 // a small who-has-what table. Approval workflow: later. Route: /app/workstation
 
-frappe.pages["workstation"].on_page_load = function (wrapper) {
+frappe.pages["cad-workstation"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Workstation", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;

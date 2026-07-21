@@ -116,7 +116,7 @@ JEWELIMA_TRANSFER_ROLES = ("Jewelima Transfer", "Jewelima Transfer Plus")
 JEWELIMA_PURCHASE_PAGES = ["purchase-raw-material"]
 JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", "UOM"]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
-JEWELIMA_CAD_PAGES = ["workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs"]
+JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs"]
 JEWELIMA_CAD_READ = ["Order Bag", "Design", "Item", "Item Group", "Customer", "Diamond Sieve", "Bin", "Warehouse"]
 
 

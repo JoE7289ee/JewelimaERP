@@ -728,7 +728,7 @@
    "indent": 1,
    "keep_closed": 0,
    "label": "Workstation",
-   "link_to": "workstation",
+   "link_to": "cad-workstation",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -1645,7 +1645,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-21 14:30:47.833080",
+ "modified": "2026-07-21 14:39:03.064218",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
