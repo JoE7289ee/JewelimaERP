@@ -39,6 +39,11 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 		.cs-tbl td:focus-within{outline:2px solid var(--primary);outline-offset:-2px;}
 		.cs-tbl tr.hasq td.tot{color:#2e7d32;font-weight:700;}
 		tr.cs-hidden{display:none;}
+		.cs-sw{width:38px;height:26px;border:1px solid var(--border-color);border-radius:5px;cursor:pointer;padding:0;
+			background:repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 0/10px 10px;}
+		.cs-sw.set{background-image:none;}
+		.cs-swx{cursor:pointer;color:#b02a2a;font-weight:800;margin-left:5px;display:none;}
+		.cs-sw.set + .cs-swx{display:inline;}
 		.cs-foot{position:sticky;bottom:0;display:flex;gap:12px;align-items:center;margin-top:12px;
 			border:2px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:10px 14px;flex-wrap:wrap;}
 		.cs-b{border:1px solid var(--border-color);border-radius:8px;padding:5px 18px;text-align:center;background:var(--control-bg);}
@@ -115,7 +120,10 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 
 	function paint() {
 		root.find("tbody").html(ROWS.map((r, i) => `<tr data-i="${i}">
-			<td><input data-f="col" data-i="${i}" placeholder=""></td>
+			<td style="text-align:center;white-space:nowrap;">
+				<button class="cs-sw" data-i="${i}" title="${__("Pick colour")}"></button><span class="cs-swx" data-i="${i}">×</span>
+				<input type="color" class="cs-colinp" data-i="${i}" style="display:none;">
+			</td>
 			<td class="lbl">${esc(r.sieve_size)}</td>
 			<td class="mm">${r.mm_size ?? ""}</td>
 			<td class="wt">${r.avg_cts ?? ""}</td>
@@ -154,13 +162,23 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	});
 	root.find(".cs-hide").on("click", () => { hideEmpty = !hideEmpty; applyHide(); });
 
+	// COL = visual colour swatch: click opens the OS picker; × clears it
+	root.on("click", ".cs-sw", function () { root.find(`.cs-colinp[data-i="${this.dataset.i}"]`).get(0).click(); });
+	root.on("input", ".cs-colinp", function () {
+		const hex = this.value;
+		root.find(`.cs-sw[data-i="${this.dataset.i}"]`).addClass("set").css("background", hex).attr("data-hex", hex);
+	});
+	root.on("click", ".cs-swx", function () {
+		root.find(`.cs-sw[data-i="${this.dataset.i}"]`).removeClass("set").css("background", "").removeAttr("data-hex");
+	});
+
 	function collect() {
 		const rows = [];
 		root.find("tbody tr").each(function () {
 			const i = Number(this.dataset.i);
 			const q = Number($(this).find("input.q").val()) || 0;
 			if (q <= 0) return;
-			rows.push({ col: $(this).find('input[data-f="col"]').val() || "", sieve: ROWS[i].sieve_size,
+			rows.push({ col: $(this).find(".cs-sw").attr("data-hex") || "", sieve: ROWS[i].sieve_size,
 				mm: ROWS[i].mm_size, wt: ROWS[i].avg_cts, qty: q, total: Number((q * (ROWS[i].avg_cts || 0)).toFixed(4)) });
 		});
 		return { style_no: fStyle.get_value() || "", gold_wt: fGold.get_value() || "", length: fLength.get_value() || "",

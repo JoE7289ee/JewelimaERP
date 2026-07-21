@@ -3467,7 +3467,7 @@ def export_cad_sheet_image(payload):
 	cw = []
 	for c in range(ncol):
 		w = max(tw(tbl[ri][c], f_b if ri == 0 else f_c) for ri in range(len(tbl)))
-		cw.append(w + 24)
+		cw.append(max(w + 24, 60 if c == 0 else 0))
 	tbl_w = sum(cw)
 	line_h = 32
 
@@ -3513,9 +3513,12 @@ def export_cad_sheet_image(payload):
 			d.rectangle([x, ty, x + cw[c], ty + line_h], outline="#ccc")
 			fn = f_b if is_head else (font(15, True) if is_tot else f_c)
 			t = str(row[c])
-			align_r = c >= 3 and not is_head
-			tx = (x + cw[c] - 12 - tw(t, fn)) if align_r else (x + 12)
-			d.text((tx, ty + 7), t, fill="#111", font=fn)
+			if c == 0 and not is_head and t.startswith("#") and len(t) in (4, 7):
+				d.rectangle([x + 10, ty + 6, x + cw[c] - 10, ty + line_h - 6], fill=t, outline="#888")
+			else:
+				align_r = c >= 3 and not is_head
+				tx = (x + cw[c] - 12 - tw(t, fn)) if align_r else (x + 12)
+				d.text((tx, ty + 7), t, fill="#111", font=fn)
 			x += cw[c]
 		ty += line_h
 
@@ -3566,9 +3569,12 @@ def export_cad_sheet_xlsx(payload):
 		cell.font = bold; cell.fill = hdr_fill; cell.border = thin
 	r = 2
 	for row in rows:
-		vals = [row.get("col") or "", row.get("sieve") or "", row.get("mm") or "", row.get("wt") or "", cint(row.get("qty")), round(flt(row.get("total")), 4)]
+		colhex = str(row.get("col") or "")
+		vals = ["", row.get("sieve") or "", row.get("mm") or "", row.get("wt") or "", cint(row.get("qty")), round(flt(row.get("total")), 4)]
 		for j, v in enumerate(vals):
 			cc = ws.cell(row=r, column=base_c + j, value=v); cc.border = thin
+			if j == 0 and colhex.startswith("#") and len(colhex) in (4, 7):
+				cc.fill = PatternFill("solid", fgColor=colhex.lstrip("#").upper().rjust(6, colhex.lstrip("#")[0]))
 		r += 1
 	for j, v in enumerate(["", "", "", "TOTAL", tot_qty, tot_ct]):
 		cc = ws.cell(row=r, column=base_c + j, value=v); cc.font = bold; cc.fill = tot_fill; cc.border = thin
