@@ -1893,6 +1893,13 @@ def get_order_bag_images(order_bag):
 		fields=["file_url", "file_name"],
 		order_by="creation desc",
 	)
+	# owner map: only File-backed attachments on THIS bag can be deleted, by the
+	# user who added them (File.owner) or a System Manager
+	me = frappe.session.user
+	is_admin = "System Manager" in set(frappe.get_roles())
+	owner_by_url = {f.file_url: f.owner for f in frappe.get_all("File",
+		filters={"attached_to_doctype": "Order Bag", "attached_to_name": order_bag},
+		fields=["file_url", "owner"])}
 	bag = frappe.get_doc("Order Bag", order_bag)
 	if bag.image:
 		files.insert(0, {"file_url": bag.image, "file_name": bag.design or "design"})  # the bag's held design photo, first
@@ -1907,8 +1914,33 @@ def get_order_bag_images(order_bag):
 		if not url.lower().split("?")[0].endswith(IMG):
 			continue
 		seen.add(url)
-		out.append({"file_url": url, "file_name": f.get("file_name") or url.split("/")[-1]})
+		owner = owner_by_url.get(url)
+		out.append({"file_url": url, "file_name": f.get("file_name") or url.split("/")[-1],
+			"owner": owner, "can_delete": 1 if (owner and (is_admin or owner == me)) else 0})
 	return out
+
+
+@frappe.whitelist()
+def delete_order_bag_image(order_bag, file_url):
+	"""Delete a card photo — ONLY the File-backed attachment the current user added
+	(or any, for a System Manager). The design image and files added by others are
+	refused."""
+	me = frappe.session.user
+	is_admin = "System Manager" in set(frappe.get_roles())
+	rec = frappe.get_all("File", filters={"attached_to_doctype": "Order Bag",
+		"attached_to_name": order_bag, "file_url": file_url}, fields=["name", "owner"], limit=1)
+	if not rec:
+		frappe.throw(frappe._("That image isn't a removable attachment on this card."))
+	if not (is_admin or rec[0].owner == me):
+		frappe.throw(frappe._("You can only delete images you added."))
+	bag = frappe.get_doc("Order Bag", order_bag)
+	kept = [a for a in bag.attachments if a.image != file_url]
+	if len(kept) != len(bag.attachments):
+		bag.set("attachments", kept)
+		bag.save(ignore_permissions=True)
+	frappe.delete_doc("File", rec[0].name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": file_url}
 
 
 @frappe.whitelist()

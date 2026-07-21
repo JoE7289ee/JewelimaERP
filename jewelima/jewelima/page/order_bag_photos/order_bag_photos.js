@@ -63,13 +63,27 @@ frappe.pages["order-bag-photos"].on_page_load = function (wrapper) {
 			imgs.forEach((im) => {
 				const url = frappe.utils.escape_html(im.file_url);
 				const name = frappe.utils.escape_html(im.file_name || "");
+				const del = im.can_delete
+					? `<span class="obp-del" title="Delete (yours)" style="position:absolute;top:4px;left:4px;background:#b02a2a;color:#fff;border-radius:50%;width:22px;height:22px;line-height:22px;text-align:center;font-weight:800;cursor:pointer;">×</span>`
+					: "";
 				const $cell = $(`
-					<div class="obp-cell">
+					<div class="obp-cell" style="position:relative;">
 						<img src="${url}" loading="lazy" title="${name}">
 						<a class="obp-dl" href="${url}" download title="Download">⬇</a>
+						${del}
 						<div class="obp-cap">${name}</div>
 					</div>`);
 				$cell.find("img").on("click", () => lightbox(im.file_url));
+				$cell.find(".obp-del").on("click", (e) => {
+					e.stopPropagation();
+					frappe.confirm(__("Delete this photo? (only images you added)"), () => {
+						frappe.call({ method: "jewelima.jewelima.api.delete_order_bag_image",
+							args: { order_bag: bag, file_url: im.file_url } }).then(() => {
+							frappe.show_alert({ message: __("Deleted"), indicator: "red" }, 2);
+							load();
+						});
+					});
+				});
 				$grid.append($cell);
 			});
 		});
