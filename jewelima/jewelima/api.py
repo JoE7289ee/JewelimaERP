@@ -3438,6 +3438,7 @@ def export_cad_sheet_image(payload):
 	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	rows, tot_qty, tot_ct = _cad_rows(payload)
 	photo = _cad_image_from_b64(payload.get("image_b64"))
+	payload["approver"] = frappe.utils.get_fullname(frappe.session.user)
 
 	def font(sz, bold=False):
 		try:
@@ -3452,7 +3453,7 @@ def export_cad_sheet_image(payload):
 	IMG_W, PAD = 380, 24
 	# --- header lines ---
 	header = [
-		("STYLE NO", payload.get("style_no") or ""),
+		("DESIGN NUMBER", payload.get("style_no") or ""),
 		("APPROX. GOLD WT", (payload.get("gold_wt") or "") and f"{payload.get('gold_wt')} Gms"),
 		("DIAMOND WT", (payload.get("dia_wt") or "") and f"{payload.get('dia_wt')} cts"),
 		("LENGTH", payload.get("length") or ""),
@@ -3526,7 +3527,7 @@ def export_cad_sheet_image(payload):
 
 	ay = ty
 	if payload.get("approver"):
-		d.text((right_x, ay + 14), "Approved: " + str(payload.get("approver")), fill="#111", font=f_b)
+		d.text((right_x, ay + 14), "Created by: " + str(payload.get("approver")), fill="#111", font=f_b)
 		ay += 40
 	if manual:
 		my = ay + 16
@@ -3555,6 +3556,7 @@ def export_cad_sheet_xlsx(payload):
 	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	rows, tot_qty, tot_ct = _cad_rows(payload)
 	photo = _cad_image_from_b64(payload.get("image_b64"))
+	payload["approver"] = frappe.utils.get_fullname(frappe.session.user)
 
 	wb = Workbook()
 	ws = wb.active
@@ -3566,7 +3568,7 @@ def export_cad_sheet_xlsx(payload):
 
 	# header block (col A)
 	ws["A1"] = payload.get("style_no") or "CAD SHEET"; ws["A1"].font = Font(bold=True, size=14)
-	meta = [("STYLE NO :", payload.get("style_no")), ("APPROX. GOLD WT :", (payload.get("gold_wt") and f"{payload.get('gold_wt')} Gms")),
+	meta = [("DESIGN NUMBER :", payload.get("style_no")), ("APPROX. GOLD WT :", (payload.get("gold_wt") and f"{payload.get('gold_wt')} Gms")),
 		("DIAMOND WT :", (payload.get("dia_wt") and f"{payload.get('dia_wt')} cts")), ("LENGTH :", payload.get("length"))]
 	for i, (k, v) in enumerate(meta, start=3):
 		ws.cell(row=i, column=1, value=k).font = bold
@@ -3591,7 +3593,7 @@ def export_cad_sheet_xlsx(payload):
 		cc = ws.cell(row=r, column=base_c + j, value=v); cc.font = bold; cc.fill = tot_fill; cc.border = thin
 	mr = r + 2
 	if payload.get("approver"):
-		ws.cell(row=mr, column=base_c + 3, value="Approved: " + str(payload.get("approver"))).font = bold
+		ws.cell(row=mr, column=base_c + 3, value="Created by: " + str(payload.get("approver"))).font = bold
 		mr += 2
 	manual = [str(m) for m in (payload.get("manual_lines") or []) if str(m).strip()]
 	if manual:

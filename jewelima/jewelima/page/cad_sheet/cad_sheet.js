@@ -98,11 +98,12 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	let hideEmpty = false;
 
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
-	const fStyle = mk(".cs-style", { fieldtype: "Data", label: __("Style No"), fieldname: "s" });
+	const fStyle = mk(".cs-style", { fieldtype: "Data", label: __("Design Number"), fieldname: "s" });
 	const fGold = mk(".cs-gold", { fieldtype: "Data", label: __("Approx Gold Wt (g)"), fieldname: "g" });
 	const fLength = mk(".cs-length", { fieldtype: "Data", label: __("Length"), fieldname: "l" });
 	const fDia = mk(".cs-dia", { fieldtype: "Data", label: __("Diamond Wt (ct) — auto, editable"), fieldname: "d" });
-	const fApprover = mk(".cs-approver", { fieldtype: "Data", label: __("Approved By"), fieldname: "a" });
+	const fApprover = mk(".cs-approver", { fieldtype: "Data", label: __("Created By"), fieldname: "a", read_only: 1 });
+	fApprover.set_value(frappe.session.user_fullname || frappe.session.user);
 	fDia.$input.on("input", () => { diaManual = true; });
 
 	// image: read locally as base64, never uploaded — one persistent input
