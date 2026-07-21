@@ -118,6 +118,13 @@ JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", 
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
 JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "bench-cad", "order-bag-photos"]
 JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item", "Item Group", "Customer", "Supplier", "Diamond Sieve", "Bin", "Warehouse", "File"]
+# The stone issuer: ONE page (Stone Issue). A plain issuer is locked to issuing as
+# themselves and only the buckets an admin allows on Setup > Issue > Issue Access
+# (that page + the access doctype stay System-Manager-only). Writes go through the
+# page APIs (ignore_permissions); read on the masters the page paints is all it needs.
+JEWELIMA_STONE_ISSUE_ROLE = "Jewelima Stone Issue"
+JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue"]
+JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin", "Warehouse", "Material Issue", "Bag Material Ledger"]
 
 
 def setup_roles():
@@ -135,7 +142,7 @@ def setup_roles():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD") + JEWELIMA_TRANSFER_ROLES:
+	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -240,6 +247,20 @@ def setup_roles():
 		grant(dt, "Jewelima CAD", {"read": 1})
 	for page in JEWELIMA_CAD_PAGES:
 		set_page_roles(page, ("Jewelima CAD",))
+
+	# ---- Jewelima Stone Issue: the issuing station ------------------------------
+	# One page (Stone Issue) + read on the masters it paints. The Issue Access
+	# setup page and its doctype stay admin-only, so the issuer can't widen their
+	# own buckets. Tight: strip the role from any other page it may have grabbed.
+	for dt in JEWELIMA_STONE_ISSUE_READ:
+		grant(dt, JEWELIMA_STONE_ISSUE_ROLE, {"read": 1})
+	for page in JEWELIMA_STONE_ISSUE_PAGES:
+		set_page_roles(page, (JEWELIMA_STONE_ISSUE_ROLE,))
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_STONE_ISSUE_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_STONE_ISSUE_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STONE_ISSUE_ROLE])
+			pg.save(ignore_permissions=True)
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so

@@ -2322,6 +2322,101 @@ def get_stone_issue_card(barcode):
 	}
 
 
+STONE_BUCKET_CODES = ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth")
+STONE_ISSUE_ROLE = "Jewelima Stone Issue"
+
+
+def _stone_issue_admin():
+	"""Only an admin (System Manager) may hand-pick who is issuing; everyone else
+	is locked to their own linked Employee."""
+	return "System Manager" in frappe.get_roles()
+
+
+def _employee_from_user(user=None):
+	"""The Employee linked to a desk user (user_id), if any."""
+	return frappe.db.get_value("Employee", {"user_id": user or frappe.session.user}, "name")
+
+
+def _employee_allowed_buckets(employee):
+	"""The uppercase bucket codes this employee may issue. No access record on
+	file means everything is allowed (the page defaults to all-on)."""
+	all_codes = {c.upper() for c in STONE_BUCKET_CODES}
+	if not employee:
+		return all_codes
+	acc = frappe.db.get_value("Stone Issue Access", {"employee": employee},
+		["allow_" + c for c in STONE_BUCKET_CODES], as_dict=True)
+	if not acc:
+		return all_codes
+	return {c.upper() for c in STONE_BUCKET_CODES if acc.get("allow_" + c)}
+
+
+@frappe.whitelist()
+def get_stone_issue_context():
+	"""Who the Stone Issue station will book against, and what they may issue.
+	Admins choose the issuer; a plain Stone Issue user is locked to themselves."""
+	admin = _stone_issue_admin()
+	self_emp = _employee_from_user()
+	effective = None if admin else self_emp
+	return {
+		"can_choose_issuer": bool(admin),
+		"self_employee": self_emp,
+		"self_employee_name": frappe.db.get_value("Employee", self_emp, "employee_name") if self_emp else None,
+		"allowed_buckets": sorted(_employee_allowed_buckets(effective)) if not admin else sorted({c.upper() for c in STONE_BUCKET_CODES}),
+	}
+
+
+@frappe.whitelist()
+def get_employee_buckets(employee):
+	"""The buckets a given employee may issue — used when an admin picks an issuer."""
+	return {"allowed_buckets": sorted(_employee_allowed_buckets(employee))}
+
+
+def _require_stone_issue_admin():
+	if not _stone_issue_admin():
+		frappe.throw(frappe._("Only an administrator can manage issue access."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def get_issue_access():
+	"""Setup > Issue > Issue Access: every relevant issuer and the buckets they may
+	issue. Relevant = has the Stone Issue role, or already has an access record.
+	No record on file = all buckets on (that's the default the grid shows)."""
+	_require_stone_issue_admin()
+	users = frappe.get_all("Has Role", filters={"role": STONE_ISSUE_ROLE, "parenttype": "User"}, pluck="parent")
+	emps = set(frappe.get_all("Employee", filters={"user_id": ["in", users]}, pluck="name")) if users else set()
+	emps |= set(frappe.get_all("Stone Issue Access", pluck="employee"))
+	codes = [c.upper() for c in STONE_BUCKET_CODES]
+	rows = []
+	for e in sorted(emps):
+		allowed = _employee_allowed_buckets(e)
+		rows.append({"employee": e, "employee_name": frappe.db.get_value("Employee", e, "employee_name"),
+			"buckets": {c: (1 if c in allowed else 0) for c in codes}})
+	return {"buckets": codes, "rows": rows}
+
+
+@frappe.whitelist()
+def save_issue_access(rows):
+	"""Upsert the per-employee bucket locks from the setup page. Each row carries the
+	employee and a {BUCKET: 0/1} map; a fully-on row leaves the employee unrestricted."""
+	_require_stone_issue_admin()
+	rows = frappe.parse_json(rows) if isinstance(rows, str) else (rows or [])
+	saved = 0
+	for r in rows:
+		emp = r.get("employee")
+		if not emp or not frappe.db.exists("Employee", emp):
+			continue
+		buckets = r.get("buckets") or {}
+		name = frappe.db.get_value("Stone Issue Access", {"employee": emp}, "name")
+		doc = frappe.get_doc("Stone Issue Access", name) if name else frappe.new_doc("Stone Issue Access")
+		doc.employee = emp
+		for c in STONE_BUCKET_CODES:
+			doc.set("allow_" + c, 1 if buckets.get(c.upper(), 1) else 0)
+		doc.save(ignore_permissions=True)
+		saved += 1
+	frappe.db.commit()
+	return {"saved": saved}
+
+
 @frappe.whitelist()
 def stone_issue_apply(order_bag, lines, issued_by=None):
 	"""Issue several stone lines into one card (pcs + carats each). Per line: a Bag
@@ -2337,8 +2432,17 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
 	if not lines:
 		frappe.throw(frappe._("Enter a Qty + Carat weight on at least one stone line."))
+
+	# non-admins can only ever issue as themselves — the client's issued_by is ignored
+	if not _stone_issue_admin():
+		issued_by = _employee_from_user()
+		if not issued_by:
+			frappe.throw(frappe._("Your login isn't linked to an Employee, so you can't issue stones."))
 	if not issued_by or not frappe.db.exists("Employee", issued_by):
 		frappe.throw(frappe._("Pick who is issuing these stones."))
+
+	# the issuer may be locked to only certain stone buckets
+	allowed = _employee_allowed_buckets(issued_by)
 
 	bag = frappe.get_doc("Order Bag", order_bag)
 	if bag.is_finished or bag.stock_status != "In Production":
@@ -2350,8 +2454,12 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
 		if item not in bom_items:
 			frappe.throw(frappe._("{0} is not on this card's BOM.").format(item))
-		if not frappe.db.get_value("Item", item, "stone_type"):
+		stone_type = frappe.db.get_value("Item", item, "stone_type")
+		if not stone_type:
 			frappe.throw(frappe._("{0} is not a stone — only stones are issued here.").format(item))
+		bucket = (_BUCKET_OF_STONE_TYPE.get(stone_type) or "poth").upper()
+		if bucket not in allowed:
+			frappe.throw(frappe._("The issuer isn't allowed to issue {0} stones ({1}).").format(bucket, item))
 		if ct <= 0 or pcs <= 0:
 			frappe.throw(frappe._("{0}: enter both a Qty (pcs) and a Carat weight.").format(item))
 		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": wh}, "actual_qty"))

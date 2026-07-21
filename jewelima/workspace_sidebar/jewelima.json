@@ -1374,6 +1374,32 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "log-out",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Issue Setup",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "shield",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Issue Access",
+   "link_to": "issue-access",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "settings-2",
    "indent": 1,
    "keep_closed": 1,
@@ -1645,7 +1671,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-21 14:39:03.064218",
+ "modified": "2026-07-21 20:10:48.844191",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

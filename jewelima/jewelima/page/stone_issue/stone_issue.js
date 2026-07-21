@@ -54,6 +54,8 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-strip .b.tot{background:var(--fg-color);border-width:2px;}
 		.si-strip .si-go{margin-left:auto;font-size:15px;font-weight:700;padding:10px 34px;background:#2e7d32;border-color:#2e7d32;color:#fff;}
 		.si-strip .si-go:hover{background:#256628;border-color:#256628;}
+		table.si-grid tr.si-locked{opacity:.5;}
+		table.si-grid tr.si-locked input{background:var(--disabled-control-bg,#eee);cursor:not-allowed;}
 		</style>
 		<div class="si-wrap2">
 		<div class="si-cols">
@@ -112,6 +114,43 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	});
 	issuedBy.refresh();
 
+	// who may pick the issuer, and which buckets the issuer can hand out
+	let ctx = { can_choose_issuer: true };
+	let allowedBuckets = null;   // null = no restriction (admin, no issuer picked yet)
+	const bucketOK = (b) => !allowedBuckets || allowedBuckets.has(b);
+	function applyBucketLocks() {
+		if (!S.card) return;
+		root.find("table.si-grid tbody tr").each(function () {
+			const i = cint(this.getAttribute("data-i"));
+			const b = S.card.lines[i].bucket || "POTH";
+			const ok = bucketOK(b);
+			const $r = $(this);
+			$r.toggleClass("si-locked", !ok);
+			$r.find(".si-pcs,.si-ct").prop("disabled", !ok);
+			if (!ok) { $r.find(".si-pcs,.si-ct").val(""); $r.attr("title", __("Not allowed to issue {0} stones", [b])); }
+			else { $r.removeAttr("title"); }
+		});
+		sum();
+	}
+	function loadContext() {
+		frappe.call({ method: API + ".get_stone_issue_context" }).then((r) => {
+			ctx = r.message || {};
+			if (ctx.can_choose_issuer) { allowedBuckets = null; return; }
+			// locked user — issue only as themselves, only their buckets
+			allowedBuckets = new Set(ctx.allowed_buckets || []);
+			if (ctx.self_employee) {
+				issuedBy.set_value(ctx.self_employee);
+				refreshToday();
+			} else {
+				frappe.msgprint({ title: __("No Employee linked"), indicator: "orange",
+					message: __("Your login isn't linked to an Employee, so you can't issue stones. Ask an admin to link you.") });
+			}
+			issuedBy.$input.prop("disabled", true).attr("title", __("Locked to you."));
+			issuedBy.$wrapper.find(".link-btn, .btn-open").hide();
+			applyBucketLocks();
+		});
+	}
+
 	// RIGHT PANEL 1 — the picked issuer's day, line by line
 	function refreshToday() {
 		const emp = issuedBy.get_value();
@@ -129,7 +168,16 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			root.find(".si-today-panel").show();
 		});
 	}
-	issuedBy.$input.on("change awesomplete-selectcomplete", () => setTimeout(refreshToday, 100));
+	issuedBy.$input.on("change awesomplete-selectcomplete", () => setTimeout(() => {
+		refreshToday();
+		if (!ctx.can_choose_issuer) return;   // locked users can't change it anyway
+		const e = issuedBy.get_value();
+		if (!e) { allowedBuckets = null; applyBucketLocks(); return; }
+		frappe.call({ method: API + ".get_employee_buckets", args: { employee: e } }).then((r) => {
+			allowedBuckets = new Set((r.message || {}).allowed_buckets || []);
+			applyBucketLocks();
+		});
+	}, 100));
 
 	// RIGHT PANEL 2 — everything in the Stone Issue warehouse
 	function refreshStock() {
@@ -182,7 +230,8 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find(".si-foot").css("display", "flex");
 		root.find(".si-strip").css("display", "flex");
 		sum();
-		root.find("table.si-grid tbody tr:first .si-pcs").focus();
+		applyBucketLocks();
+		root.find("table.si-grid tbody tr:not(.si-locked):first .si-pcs").focus();
 	}
 
 	function readLines() {
@@ -255,4 +304,5 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 
 	clearAll();
 	refreshStock();
+	loadContext();
 };
