@@ -3404,6 +3404,193 @@ def attach_table_image_to_card(order_bag, data, title=None, heading=None, remark
 	return {"order_bag": order_bag, "file_url": f.file_url, "count": len(bag.attachments)}
 
 
+def _cad_rows(payload):
+	rows = [r for r in (payload.get("rows") or []) if cint(r.get("qty"))]
+	tot_qty = sum(cint(r.get("qty")) for r in rows)
+	tot_ct = round(sum(flt(r.get("total")) for r in rows), 4)
+	return rows, tot_qty, tot_ct
+
+
+def _cad_image_from_b64(b64):
+	"""Decode the browser-supplied image (data URL or bare base64). NEVER stored —
+	it lives only for the duration of this request."""
+	if not b64:
+		return None
+	import base64
+	from io import BytesIO
+	from PIL import Image
+	if "," in b64 and b64.strip().startswith("data:"):
+		b64 = b64.split(",", 1)[1]
+	try:
+		return Image.open(BytesIO(base64.b64decode(b64))).convert("RGB")
+	except Exception:
+		return None
+
+
+@frappe.whitelist()
+def export_cad_sheet_image(payload):
+	"""Composite the CAD sheet (design image + header + stone table) into ONE PNG,
+	laid out like the excel. The uploaded image is base64 in the payload — never
+	stored on the server."""
+	from io import BytesIO
+	from PIL import Image, ImageDraw, ImageFont
+
+	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	rows, tot_qty, tot_ct = _cad_rows(payload)
+	photo = _cad_image_from_b64(payload.get("image_b64"))
+
+	def font(sz, bold=False):
+		try:
+			return ImageFont.truetype("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf", sz)
+		except Exception:
+			return ImageFont.load_default()
+	f_h, f_b, f_c, f_t = font(15), font(18, True), font(15), font(22, True)
+
+	scratch = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+	tw = lambda t, fn: scratch.textbbox((0, 0), str(t), font=fn)[2]
+
+	IMG_W, PAD = 380, 24
+	# --- header lines ---
+	header = [
+		("STYLE NO", payload.get("style_no") or ""),
+		("APPROX. GOLD WT", (payload.get("gold_wt") or "") and f"{payload.get('gold_wt')} Gms"),
+		("DIAMOND WT", (payload.get("dia_wt") or "") and f"{payload.get('dia_wt')} cts"),
+		("LENGTH", payload.get("length") or ""),
+	]
+	# --- stone table geometry ---
+	cols = [("COL", "col"), ("S.Size", "sieve"), ("SIZE/MM", "mm"), ("WT/CT", "wt"), ("Qty", "qty"), ("Total WT", "total")]
+	tbl = [[c[0] for c in cols]]
+	for r in rows:
+		tbl.append([r.get("col") or "", r.get("sieve") or "", r.get("mm") or "", r.get("wt") or "", cint(r.get("qty")), round(flt(r.get("total")), 4)])
+	tbl.append(["", "", "", "TOTAL", tot_qty, tot_ct])
+	ncol = len(cols)
+	cw = []
+	for c in range(ncol):
+		w = max(tw(tbl[ri][c], f_b if ri == 0 else f_c) for ri in range(len(tbl)))
+		cw.append(w + 24)
+	tbl_w = sum(cw)
+	line_h = 32
+
+	# --- canvas size ---
+	top = 44
+	head_block_h = top + 30 * len(header) + 20
+	right_x = PAD + IMG_W + 40
+	table_h = line_h * len(tbl)
+	W = max(right_x + tbl_w + PAD, PAD + IMG_W + PAD)
+	img_h = 0
+	if photo:
+		ratio = IMG_W / photo.width
+		img_h = int(photo.height * ratio)
+	H = max(head_block_h, top + table_h + 40, top + img_h + 60) + 40
+
+	img = Image.new("RGB", (int(W), int(H)), "#ffffff")
+	d = ImageDraw.Draw(img)
+	d.text((PAD, 10), payload.get("style_no") or "CAD SHEET", fill="#111", font=f_t)
+
+	# design photo (left)
+	if photo:
+		photo = photo.resize((IMG_W, img_h))
+		img.paste(photo, (PAD, top))
+		d.rectangle([PAD, top, PAD + IMG_W, top + img_h], outline="#999")
+
+	# header block (under/right — put it right of the image so it never overlaps)
+	hy = top
+	for label, val in header:
+		d.text((right_x, hy), f"{label} :", fill="#666", font=f_h)
+		d.text((right_x + 190, hy), str(val or ""), fill="#111", font=f_b)
+		hy += 30
+	hy += 16
+
+	# stone table (right block, below the header lines)
+	ty = hy
+	for ri, row in enumerate(tbl):
+		is_head = ri == 0
+		is_tot = ri == len(tbl) - 1
+		bg = "#e9ecef" if is_head else ("#f5f5f5" if is_tot else "#ffffff")
+		d.rectangle([right_x, ty, right_x + tbl_w, ty + line_h], fill=bg, outline="#bbb")
+		x = right_x
+		for c in range(ncol):
+			d.rectangle([x, ty, x + cw[c], ty + line_h], outline="#ccc")
+			fn = f_b if is_head else (font(15, True) if is_tot else f_c)
+			t = str(row[c])
+			align_r = c >= 3 and not is_head
+			tx = (x + cw[c] - 12 - tw(t, fn)) if align_r else (x + 12)
+			d.text((tx, ty + 7), t, fill="#111", font=fn)
+			x += cw[c]
+		ty += line_h
+
+	if payload.get("approver"):
+		d.text((right_x, ty + 14), "Approved: " + str(payload.get("approver")), fill="#111", font=f_b)
+
+	buf = BytesIO()
+	img.save(buf, "PNG")
+	frappe.local.response.filename = "{0}.png".format((payload.get("style_no") or "cad-sheet").replace(" ", "-"))
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def export_cad_sheet_xlsx(payload):
+	"""The CAD sheet as an .xlsx — header cells, stone table, embedded design image.
+	The image is base64 in the payload (never stored server-side)."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.drawing.image import Image as XLImage
+	from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+	payload = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	rows, tot_qty, tot_ct = _cad_rows(payload)
+	photo = _cad_image_from_b64(payload.get("image_b64"))
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "CAD Sheet"
+	bold = Font(bold=True)
+	hdr_fill = PatternFill("solid", fgColor="E9ECEF")
+	tot_fill = PatternFill("solid", fgColor="F5F5F5")
+	thin = Border(*[Side(style="thin", color="BBBBBB")] * 4)
+
+	# header block (col A)
+	ws["A1"] = payload.get("style_no") or "CAD SHEET"; ws["A1"].font = Font(bold=True, size=14)
+	meta = [("STYLE NO :", payload.get("style_no")), ("APPROX. GOLD WT :", (payload.get("gold_wt") and f"{payload.get('gold_wt')} Gms")),
+		("DIAMOND WT :", (payload.get("dia_wt") and f"{payload.get('dia_wt')} cts")), ("LENGTH :", payload.get("length"))]
+	for i, (k, v) in enumerate(meta, start=3):
+		ws.cell(row=i, column=1, value=k).font = bold
+		ws.cell(row=i, column=2, value=v or "")
+
+	# stone table (starts col H, row 1)
+	cols = ["COL.", "S.Size", "SIZE/MM", "WT/CT", "Qty", "Total WT"]
+	base_c = 8
+	for j, c in enumerate(cols):
+		cell = ws.cell(row=1, column=base_c + j, value=c)
+		cell.font = bold; cell.fill = hdr_fill; cell.border = thin
+	r = 2
+	for row in rows:
+		vals = [row.get("col") or "", row.get("sieve") or "", row.get("mm") or "", row.get("wt") or "", cint(row.get("qty")), round(flt(row.get("total")), 4)]
+		for j, v in enumerate(vals):
+			cc = ws.cell(row=r, column=base_c + j, value=v); cc.border = thin
+		r += 1
+	for j, v in enumerate(["", "", "", "TOTAL", tot_qty, tot_ct]):
+		cc = ws.cell(row=r, column=base_c + j, value=v); cc.font = bold; cc.fill = tot_fill; cc.border = thin
+	if payload.get("approver"):
+		ws.cell(row=r + 2, column=base_c + 3, value="Approved: " + str(payload.get("approver"))).font = bold
+
+	for j in range(len(cols)):
+		ws.column_dimensions[chr(ord("A") + base_c - 1 + j)].width = 12
+
+	# embed the design image (top-left), scaled to ~360px wide
+	if photo:
+		ratio = 360 / photo.width
+		photo = photo.resize((360, int(photo.height * ratio)))
+		bio = BytesIO(); photo.save(bio, "PNG"); bio.seek(0)
+		xi = XLImage(bio); ws.add_image(xi, "A9")
+
+	out = BytesIO(); wb.save(out)
+	frappe.local.response.filename = "{0}.xlsx".format((payload.get("style_no") or "cad-sheet").replace(" ", "-"))
+	frappe.local.response.filecontent = out.getvalue()
+	frappe.local.response.type = "binary"
+
+
 @frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with
