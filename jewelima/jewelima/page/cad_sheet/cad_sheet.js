@@ -250,5 +250,18 @@ frappe.pages["cad-sheet"].on_page_load = function (wrapper) {
 	root.find(".cs-xlsx").on("click", () => exportSheet("xlsx"));
 	root.find(".cs-pdf").on("click", () => exportSheet("pdf"));
 
-	frappe.call({ method: API + ".get_sieve_chart" }).then((r) => { ROWS = r.message || []; paint(); });
+	frappe.call({ method: API + ".get_sieve_chart" }).then((r) => {
+		ROWS = r.message || [];
+		paint();
+		// arriving from the Weight Checker with stones pre-picked
+		if (frappe.route_options && frappe.route_options.cad_stones) {
+			const stones = frappe.route_options.cad_stones;
+			frappe.route_options = null;
+			stones.forEach((st) => {
+				const i = ROWS.findIndex((rr) => rr.sieve_size === st.sieve);
+				if (i >= 0) root.find(`tbody input.q[data-i="${i}"]`).val(st.qty);
+			});
+			recalc();
+		}
+	});
 };

@@ -58,6 +58,7 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 				<button class="btn btn-default wc-xlsx">${__("Export Excel")}</button>
 				<button class="btn btn-default wc-img">${__("Export Image")}</button>
 				<button class="btn btn-default wc-tocard">${__("Add to Card")}</button>
+				<button class="btn btn-default wc-tocad">${__("Open in CAD Sheet")}</button>
 				<button class="btn btn-default wc-clear">${__("Clear")}</button>
 			</div>
 			<div class="wc-panels"></div>
@@ -166,6 +167,14 @@ frappe.pages["weight-checker"].on_page_load = function (wrapper) {
 		recalc();
 	});
 	root.find(".wc-hide").on("click", () => { hideEmpty = !hideEmpty; applyHide(); });
+	root.find(".wc-tocad").on("click", () => {
+		const stones = [];
+		ROWS.forEach((r, i) => { const q = VALS.A[i] || 0; if (q > 0) stones.push({ sieve: r.sieve_size, qty: q }); });
+		if (!stones.length) return frappe.show_alert({ message: __("Type some Nos first (weight A)."), indicator: "orange" }, 3);
+		frappe.route_options = { cad_stones: stones };
+		frappe.set_route("cad-sheet");
+	});
+
 	root.find(".wc-clear").on("click", () => {
 		VALS.A = {}; VALS.B = {}; hideEmpty = false;
 		paint();
