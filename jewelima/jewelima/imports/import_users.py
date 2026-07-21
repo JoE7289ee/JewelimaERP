@@ -172,6 +172,11 @@ def run(file_path=None, dry_run=False):
 				user.set("block_modules", [{"module": m.module} for m in mp.block_modules])
 				changed = True
 
+			# land on the Jewelima workspace at login
+			if frappe.db.exists("Workspace", "Jewelima") and user.get("default_workspace") != "Jewelima":
+				user.default_workspace = "Jewelima"
+				changed = True
+
 			if changed:
 				user.save(ignore_permissions=True)
 
@@ -210,4 +215,24 @@ def set_passwords(password, file_path=None):
 			n += 1
 	frappe.db.commit()
 	print(f"Password set on {n} user(s).")
+	return {"updated": n}
+
+
+def set_default_workspace(workspace="Jewelima", team_only=True):
+	"""Backfill: land every team login on the Jewelima workspace. team_only=True
+	skips Administrator/Guest; False sets it for every enabled System User."""
+	if not frappe.db.exists("Workspace", workspace):
+		print(f"No workspace '{workspace}'.")
+		return
+	users = frappe.get_all("User", filters={"user_type": "System User", "enabled": 1},
+		fields=["name"], pluck="name")
+	n = 0
+	for u in users:
+		if team_only and u in ("Administrator", "Guest"):
+			continue
+		if frappe.db.get_value("User", u, "default_workspace") != workspace:
+			frappe.db.set_value("User", u, "default_workspace", workspace, update_modified=False)
+			n += 1
+	frappe.db.commit()
+	print(f"default_workspace='{workspace}' set on {n} user(s).")
 	return {"updated": n}
