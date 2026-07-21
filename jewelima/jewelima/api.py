@@ -3658,6 +3658,96 @@ def export_cad_sheet_xlsx(payload):
 	frappe.local.response.type = "binary"
 
 
+# --- CAD Workstation (Workstation) — CAD users see their assigned cards; a lead
+# (System Manager) assigns queue cards. Read-only dashboard + assign. Approval
+# workflow: deferred.
+def _my_employee():
+	return frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name")
+
+
+def _cad_roster():
+	b = frappe.db.get_value("Bench", "CAD", "name") or frappe.db.get_value("Bench", {"bench_name": "CAD"}, "name")
+	return frappe.get_all("Bench Employee", filters={"parent": b}, pluck="employee") if b else []
+
+
+@frappe.whitelist()
+def get_cad_workstation():
+	"""The Workstation: CAD queue count, the logged-in user's assigned cards, the
+	per-user summary, and (for a lead) the unassigned queue to hand out."""
+	me = _my_employee()
+	roster = _cad_roster()
+	is_lead = "System Manager" in set(frappe.get_roles())
+	bags = frappe.get_all("Order Bag", filters={"is_cad": 1},
+		fields=["name", "customer", "order_date", "due_date", "job_order", "cad_design_type", "qty"],
+		order_by="due_date asc, creation asc", limit_page_length=0)
+	names = [b.name for b in bags] or [""]
+	assign = {}
+	for r in frappe.get_all("CAD", filters={"order_bag": ["in", names], "status": ["not in", ["Completed", "Expired"]]},
+			fields=["order_bag", "employee"], order_by="creation desc"):
+		assign.setdefault(r.order_bag, r.employee)
+	empname = {e.name: e.employee_name for e in frappe.get_all("Employee",
+		filters={"name": ["in", (roster or []) + [me] if me else roster or [""]]}, fields=["name", "employee_name"])}
+	counts = {e: 0 for e in roster}
+	my_cards, unassigned = [], []
+	for b in bags:
+		emp = assign.get(b.name)
+		row = dict(b)
+		row["employee"] = emp
+		row["employee_name"] = empname.get(emp, "")
+		row["order_date"] = str(b.order_date or "")
+		row["due_date"] = str(b.due_date or "")
+		if emp:
+			counts[emp] = counts.get(emp, 0) + 1
+		if me and emp == me:
+			my_cards.append(row)
+		elif not emp:
+			unassigned.append(row)
+	cad_users = sorted(
+		[{"employee": e, "name": empname.get(e, e), "count": counts.get(e, 0), "is_me": e == me} for e in roster],
+		key=lambda x: -x["count"])
+	return {"in_queue": len(bags), "assigned_total": sum(counts.values()),
+		"my_cards": my_cards, "unassigned": unassigned if is_lead else [],
+		"cad_users": cad_users, "is_lead": is_lead, "my_employee": me,
+		"my_name": empname.get(me, "") if me else ""}
+
+
+@frappe.whitelist()
+def assign_cad_card(order_bag, employee=None):
+	"""Lead assigns (or reassigns / clears) a CAD queue card to a CAD user."""
+	frappe.only_for(("System Manager",))
+	if employee and employee not in _cad_roster():
+		frappe.throw(frappe._("{0} isn't on the CAD bench.").format(employee))
+	rec = frappe.get_all("CAD", filters={"order_bag": order_bag, "status": ["not in", ["Completed", "Expired"]]},
+		order_by="creation desc", limit=1, pluck="name")
+	if rec:
+		frappe.db.set_value("CAD", rec[0], "employee", employee or None)
+	else:
+		frappe.get_doc({"doctype": "CAD", "order_bag": order_bag, "bench": "CAD",
+			"status": "In Queue", "employee": employee or None,
+			"time_in": frappe.utils.now_datetime()}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"order_bag": order_bag, "employee": employee or ""}
+
+
+@frappe.whitelist()
+def get_cad_card_detail(order_bag):
+	"""One card's materials + CAD brief + photos, for the Workstation dialogs."""
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Card {0} not found.").format(order_bag))
+	doc = frappe.get_doc("Order Bag", order_bag)
+	materials = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in doc.bag_bom]
+	brief = {k: doc.get(k) for k in ("cad_design_type", "cad_karat", "cad_gold_weight",
+		"cad_diamond_weight", "cad_stone_no", "cad_reference", "cad_remarks")}
+	photos = []
+	if doc.image:
+		photos.append({"image": doc.image, "title": "Design"})
+	for a in doc.attachments:
+		if a.image:
+			photos.append({"image": a.image, "title": a.title or ""})
+	return {"name": order_bag, "design": doc.design, "customer": doc.customer,
+		"materials": materials, "brief": brief, "photos": photos}
+
+
 @frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with

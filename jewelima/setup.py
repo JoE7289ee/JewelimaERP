@@ -115,6 +115,9 @@ JEWELIMA_TRANSFER_ROLES = ("Jewelima Transfer", "Jewelima Transfer Plus")
 # so read on the pickers is all the role needs.
 JEWELIMA_PURCHASE_PAGES = ["purchase-raw-material"]
 JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", "UOM"]
+# CAD workstation persona: the CAD tool pages + read on what those pages paint.
+JEWELIMA_CAD_PAGES = ["workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs"]
+JEWELIMA_CAD_READ = ["Order Bag", "Design", "Item", "Item Group", "Customer", "Diamond Sieve", "Bin", "Warehouse"]
 
 
 def setup_roles():
@@ -132,7 +135,7 @@ def setup_roles():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for name in ("Jewelima Ordering", "Jewelima Purchase") + JEWELIMA_TRANSFER_ROLES:
+	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -226,6 +229,12 @@ def setup_roles():
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != "Jewelima Purchase"])
 			pg.save(ignore_permissions=True)
+
+	# ---- Jewelima CAD: the workstation persona ----------------------------------
+	for dt in JEWELIMA_CAD_READ:
+		grant(dt, "Jewelima CAD", {"read": 1})
+	for page in JEWELIMA_CAD_PAGES:
+		set_page_roles(page, ("Jewelima CAD",))
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so
