@@ -6081,6 +6081,62 @@ def _party_name_from(group, zone, state, special=None):
 	return "-".join(parts)
 
 
+PARTY_MASTERS = {
+	# kind -> (doctype, label field, customer link field)
+	"group": ("Party Group", "group_name", "party_group"),
+	"zone": ("Party Zone", "zone_name", "party_zone"),
+	"state": ("Party State", "state_name", "party_state"),
+	"special": ("Party Special", "special_name", "party_special"),
+}
+
+
+@frappe.whitelist()
+def get_party_masters():
+	"""Setup > Masters: every party master with its code, full name and how many
+	customers carry it — one call paints the whole page."""
+	custs = frappe.get_all("Customer",
+		fields=["party_group", "party_zone", "party_state", "party_special"], limit_page_length=0)
+	out = {}
+	for kind, (dt, label_field, cust_field) in PARTY_MASTERS.items():
+		rows = frappe.get_all(dt, fields=["name", label_field], order_by="name")
+		counts = {}
+		for c in custs:
+			v = c.get(cust_field)
+			if v:
+				counts[v] = counts.get(v, 0) + 1
+		out[kind] = [{"code": r.name, "label": r.get(label_field), "customers": counts.get(r.name, 0)} for r in rows]
+	return out
+
+
+@frappe.whitelist()
+def get_master_customers(kind, code):
+	"""Every customer under one master value (the drill-down on Setup > Masters)."""
+	if kind not in PARTY_MASTERS:
+		frappe.throw(frappe._("Unknown master kind."))
+	dt, _label, cust_field = PARTY_MASTERS[kind]
+	if not frappe.db.exists(dt, code):
+		frappe.throw(frappe._("{0} '{1}' not found.").format(dt, code))
+	return {"customers": frappe.get_all("Customer", filters={cust_field: code},
+		fields=["name", "party_group", "party_zone", "party_state", "party_special",
+			"default_salesman", "disabled"], order_by="name", limit_page_length=0)}
+
+
+@frappe.whitelist()
+def add_party_master(kind, code, label):
+	"""Add a value to one of the four party masters (code validated by the doctype)."""
+	if kind not in PARTY_MASTERS:
+		frappe.throw(frappe._("Unknown master kind."))
+	dt, label_field, _cust = PARTY_MASTERS[kind]
+	code, label = (code or "").strip().upper(), (label or "").strip()
+	if not code or not label:
+		frappe.throw(frappe._("Enter both the code and the full name."))
+	if frappe.db.exists(dt, code):
+		frappe.throw(frappe._("{0} {1} already exists.").format(dt, code))
+	d = frappe.get_doc({"doctype": dt, "code": code, label_field: label}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name}
+
+
 @frappe.whitelist()
 def get_party_directory():
 	"""Every party with its identity parts + defaults, plus the master lists —
