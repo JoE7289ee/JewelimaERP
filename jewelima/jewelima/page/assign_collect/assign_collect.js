@@ -100,6 +100,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	function updateLoc() {
 		$(page.main).find(".ac-locval").text(state.location || "—");
 		loadWorkOptions();
+		renderActions();   // CAD hides the no-employee assign
 	}
 
 	function renderHead() {
@@ -235,7 +236,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		$actions.empty();
 		if (state.mode === "assign") {
 			$(`<button class="btn btn-primary btn-sm">${__("Assign with Employee")}</button>`).appendTo($actions).on("click", () => doAssign(true));
-			$(`<button class="btn btn-default btn-sm">${__("Assign (no employee)")}</button>`).appendTo($actions).on("click", () => doAssign(false));
+			// CAD work is always owned by someone — no anonymous assigns there
+			if (state.location !== "CAD")
+				$(`<button class="btn btn-default btn-sm">${__("Assign (no employee)")}</button>`).appendTo($actions).on("click", () => doAssign(false));
 		} else {
 			$(`<button class="btn btn-primary btn-sm">${__("Collect")}</button>`).appendTo($actions).on("click", doCollect);
 		}

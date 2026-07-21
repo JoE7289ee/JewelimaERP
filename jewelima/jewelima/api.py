@@ -5070,6 +5070,9 @@ def assign_bench_cards(names, location, employee=None, work_type=None):
 	loc = (location or "").upper()
 	if loc not in ASSIGN_COLLECT_LOCATIONS:
 		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
+	# CAD work is always owned by someone — it lands on their Workstation
+	if loc == "CAD" and not employee:
+		frappe.throw(frappe._("CAD cards must be assigned TO an employee — pick who takes the work."))
 	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	dt = bench_doctype(loc)
 	now = frappe.utils.now_datetime()
