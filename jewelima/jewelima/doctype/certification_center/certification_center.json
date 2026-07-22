@@ -41,13 +41,13 @@
    "fieldname": "mail_subject",
    "fieldtype": "Data",
    "label": "Mail Subject",
-   "description": "Placeholders: {batch} {count} {date}. e.g. 'Jewelima submission {batch} \u2014 {count} pieces'"
+   "description": "Placeholders: {batch} {count} {date} {types} {gross} {dmd}. e.g. 'Jewelima submission {batch} \u2014 {count} pieces'"
   },
   {
    "fieldname": "mail_body",
    "fieldtype": "Small Text",
    "label": "Mail Body",
-   "description": "Same placeholders. Plain text; the excel rides as attachment."
+   "description": "Same placeholders ({types} = '1 NOSEPIN, 2 RING'; {gross} g; {dmd} ct). Plain text; the excel rides as attachment."
   }
  ],
  "permissions": [
@@ -72,7 +72,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-22 23:00:00.000000",
+ "modified": "2026-07-22 23:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "owner": "Administrator",

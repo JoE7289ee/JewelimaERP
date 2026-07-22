@@ -7292,7 +7292,14 @@ def get_cert_mail_defaults(name):
 	p = get_cert_prep(name)
 	c = frappe.db.get_value("Certification Center", p["center"],
 		["email", "mail_subject", "mail_body", "center_name"], as_dict=True) if p["center"] else None
-	ph = {"batch": p["name"], "count": p["count"], "date": frappe.utils.today()}
+	# the batch summary the mail carries: pieces by design type + totals
+	by_type = {}
+	for r in p["rows"]:
+		t = r["design_type"] or "UNTYPED"
+		by_type[t] = by_type.get(t, 0) + 1
+	types = ", ".join("{0} {1}".format(n, t) for t, n in sorted(by_type.items()))
+	ph = {"batch": p["name"], "count": p["count"], "date": frappe.utils.today(),
+		"types": types, "gross": p["gross"], "dmd": p["dmd_ct"]}
 	def render(t, default):
 		t = (t or default)
 		for k, v in ph.items():
@@ -7303,7 +7310,9 @@ def get_cert_mail_defaults(name):
 		"center_name": (c and c.center_name) or "",
 		"subject": render(c and c.mail_subject, "Jewelima submission {batch} — {count} piece(s)"),
 		"body": render(c and c.mail_body,
-			"Dear team,\n\nPlease find attached our submission {batch} ({count} pieces, {date}).\n\nRegards,\nJewelima"),
+			"Dear team,\n\nPlease find attached our submission {batch} dated {date}.\n\n"
+			"{count} piece(s) — {types}\nTotal gross weight: {gross} g\nTotal diamond weight: {dmd} ct\n\n"
+			"Regards,\nJewelima"),
 	}
 
 

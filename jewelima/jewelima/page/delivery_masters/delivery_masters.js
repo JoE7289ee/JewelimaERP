@@ -95,7 +95,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 				fields: [
 					{ fieldname: "email", fieldtype: "Data", label: __("Email"), default: c.email },
 					{ fieldname: "mail_subject", fieldtype: "Data", label: __("Subject template"), default: c.mail_subject,
-						description: __("Placeholders: {batch} {count} {date}") },
+						description: __("Placeholders: {batch} {count} {date} {types} {gross} {dmd}") },
 					{ fieldname: "mail_body", fieldtype: "Small Text", label: __("Body template"), default: c.mail_body },
 				],
 				primary_action_label: __("Save"),
