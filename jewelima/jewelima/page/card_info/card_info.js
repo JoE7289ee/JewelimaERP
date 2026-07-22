@@ -10,7 +10,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	const state = { data: null };
 
 	const CSS = `
-	.ci-wrap{max-width:900px;}
+	.ci-wrap{max-width:none;width:100%;}
 	.ci-img{height:84px;width:84px;object-fit:cover;border-radius:8px;border:1px solid #e2e6ea;margin:0 12px;}
 	.ci-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:8px;}
 	.ci-code{font-size:20px;font-weight:800;letter-spacing:.4px;}
