@@ -60,7 +60,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				<table class="cf-t"><thead class="cf-th"></thead><tbody class="cf-tb"></tbody></table>
 				<div class="cf-tot"></div>
 				<div class="cf-actions">
-					<button class="btn btn-default cf-xlsx" style="display:none;">${__("Export IGI Excel")}</button>
+					<button class="btn btn-primary cf-prep" style="background:#2e7d32;border-color:#2e7d32;display:none;">${__("PREP — create the batch")}</button>
+				<button class="btn btn-default cf-xlsx" style="display:none;">${__("Export IGI Excel")}</button>
 					<button class="btn btn-default cf-cancel" style="color:#b02a2a;">${__("Cancel Batch")}</button>
 					<a class="btn btn-default" href="/app/send-certifications">${__("Go to Send Certifications →")}</a>
 				</div>
