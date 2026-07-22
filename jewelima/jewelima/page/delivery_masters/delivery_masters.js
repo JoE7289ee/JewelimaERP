@@ -12,7 +12,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.pm-grid{display:grid;grid-template-columns:1fr;gap:18px;max-width:760px;}
+		.pm-grid{display:grid;grid-template-columns:1fr;gap:18px;}
 		.pm-card{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
 		.pm-card .h{background:var(--control-bg);padding:9px 14px;display:flex;justify-content:space-between;align-items:baseline;}
 		.pm-card .h .t{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
