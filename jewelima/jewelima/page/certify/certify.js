@@ -112,8 +112,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		if (hist.length > 40) hist.pop();
 		root.find(".cf-hist-t").text(__("{0} scan(s)", [hist.length]));
 		root.find(".cf-hist-b").html(`<table><tbody>${hist.map((h) => `
-			<tr><td>${esc(h.code)}</td><td><span class="cf-hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("REJECTED")}</span></td>
-			<td class="text-muted" title="${esc(h.note)}">${esc(h.note.slice(0, 44))}</td>
+			<tr title="${esc(h.note)}"><td>${esc(h.code)}</td>
+			<td><span class="cf-hb ${h.ok ? "ok" : "no"}" style="${h.ok ? "" : "cursor:help;"}">${h.ok ? __("ADDED") : __("REJECTED")}</span></td>
 			<td class="text-muted">${h.t}</td></tr>`).join("")}</tbody></table>`);
 		root.find(".cf-panel").show();
 	}
@@ -157,7 +157,28 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		if (!locked) setTimeout(() => scan.$input.focus(), 100);
 	}
 
-	const rejMsg = (err) => ((err && err._server_messages && JSON.parse(JSON.parse(err._server_messages)[0]).message) || __("Rejected")).replace(/<[^>]*>/g, "");
+	function rejMsg(err) {
+		let raw = "";
+		try {
+			const sm = (err && err._server_messages) || (err && err.responseJSON && err.responseJSON._server_messages);
+			if (sm) raw = (JSON.parse(JSON.parse(sm)[0]).message || "");
+		} catch (e) { /* fall through */ }
+		raw = (raw || (err && err.message) || "").replace(/<[^>]*>/g, "");
+		// hardcoded reasons — the hover text users actually read
+		if (/does not exist/i.test(raw)) return __("This card doesn't exist");
+		if (/already on (this|prepared)/i.test(raw)) {
+			const m = raw.match(/prepared batch (\S+?)\.?$/);
+			return m ? __("Already in a draft/batch ({0})", [m[1]]) : __("Already in this draft");
+		}
+		if (/is Sold/i.test(raw)) return __("This piece was sold");
+		if (/is At Certification/i.test(raw)) return __("Already out at certification");
+		if (/only pieces In Stock/i.test(raw)) {
+			const m = raw.match(/ is (.+?) — /);
+			return __("Not a piece in stock{0}", [m ? " (currently " + m[1] + ")" : ""]);
+		}
+		if (/not a product yet/i.test(raw)) return __("Not a product yet — make it a product first");
+		return raw || __("Rejected");
+	}
 	scan.$input.on("keydown", (e) => {
 		if (e.key !== "Enter") return;
 		const v = (scan.$input.val() || "").trim();
