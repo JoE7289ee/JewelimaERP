@@ -183,11 +183,9 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			jewelima.print_window(state.branding || {}, title, buildHTML(state.data, true), CSS);
 			return;
 		}
-		const w = window.open("", "_blank", "width=780,height=900");
-		w.document.write(`<html><head><title>${esc(state.data.bag.name)}</title><style>${CSS} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:14px;color:#222;}</style></head><body>${buildHTML(state.data, true)}</body></html>`);
-		w.document.close();
-		w.focus();
-		setTimeout(() => w.print(), 350);
+		// no branding loaded yet — still print in place through the shared iframe helper
+		jewelima.print_window({}, state.data.bag.name, buildHTML(state.data, true),
+			CSS + " body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#222;}");
 	}
 
 	scan.$input.on("keydown", (e) => {

@@ -67,17 +67,27 @@ jewelima.print_footer = function (b) {
 
 // Open a clean, branded print window. `bodyHTML` = the page-specific content;
 // `extraCss` = any page-specific styles.
+// Prints IN PLACE through a hidden iframe — no new tab; the browser's print
+// dialog opens right on the page. The iframe is rebuilt per print (stale DOM
+// from the last job must never leak into the next one).
 jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
-	const w = window.open("", "_blank", "width=820,height=960");
-	w.document.write(
+	const html =
 		`<html><head><title>${frappe.utils.escape_html(title || "Jewelima")}</title>` +
 		`<style>body{padding:16px;}${jewelima.print_css}${extraCss || ""}</style></head><body>` +
 		jewelima.print_header(branding, title) + bodyHTML + jewelima.print_footer(branding) +
-		`</body></html>`
-	);
-	w.document.close();
-	w.focus();
-	setTimeout(() => w.print(), 350);
+		`</body></html>`;
+	document.getElementById("jw-print-frame")?.remove();
+	const fr = document.createElement("iframe");
+	fr.id = "jw-print-frame";
+	fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+	document.body.appendChild(fr);
+	const doc = fr.contentDocument;
+	doc.open();
+	doc.write(html);
+	doc.close();
+	// let images/fonts settle, then print from the frame — the dialog appears
+	// over the CURRENT page, and the page underneath is untouched
+	setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 400);
 };
 
 // ---------------------------------------------------------------------------
