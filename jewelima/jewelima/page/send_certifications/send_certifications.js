@@ -46,6 +46,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 					<div class="sc-actions">
 						<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>
 						<button class="btn btn-default btn-sm sc-open">${__("Open / edit")}</button>
+						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
 					</div>
 				</div>`).join("") || `<div class="sc-empty">${__("Nothing prepared — build a batch on the Certification desk.")}</div>`);
 			root.find(".sc-recent").html(m.recent.length ? `<table class="sc-r"><thead><tr>
@@ -58,6 +59,32 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 	root.on("click", ".sc-open", function () {
 		frappe.route_options = { prep: $(this).closest(".sc-card").data("name") };
 		frappe.set_route("certify");
+	});
+	root.on("click", ".sc-mail", function () {
+		const nm = $(this).closest(".sc-card").data("name");
+		frappe.call({ method: API + ".get_cert_mail_defaults", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			const dlg = new frappe.ui.Dialog({
+				title: __("Email {0} to {1}", [nm, m.center_name || __("the center")]),
+				fields: [
+					{ fieldname: "recipient", fieldtype: "Data", label: __("To"), reqd: 1, default: m.recipient,
+						description: m.recipient ? "" : __("No email on the center yet — set it on Delivery Masters; typing one here works for now.") },
+					{ fieldname: "subject", fieldtype: "Data", label: __("Subject"), reqd: 1, default: m.subject },
+					{ fieldname: "body", fieldtype: "Small Text", label: __("Message"), default: m.body },
+				],
+				primary_action_label: __("Send"),
+				primary_action(v) {
+					dlg.hide();
+					frappe.dom.freeze(__("Sending..."));
+					frappe.call({ method: API + ".email_cert_excel", args: { name: nm, ...v } })
+						.then((rr) => {
+							frappe.dom.unfreeze();
+							frappe.show_alert({ message: __("Sent to {0} ({1}).", [(rr.message || {}).sent_to, (rr.message || {}).attachment]), indicator: "green" }, 5);
+						}).catch(() => frappe.dom.unfreeze());
+				},
+			});
+			dlg.show();
+		});
 	});
 	root.on("click", ".sc-send", function () {
 		const nm = $(this).closest(".sc-card").data("name");
