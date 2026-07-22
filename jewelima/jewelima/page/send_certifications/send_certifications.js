@@ -47,6 +47,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 						<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>
 						<button class="btn btn-default btn-sm sc-open">${__("Open / edit")}</button>
 						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
+						<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>
 					</div>
 				</div>`).join("") || `<div class="sc-empty">${__("Nothing prepared — build a batch on the Certification desk.")}</div>`);
 			root.find(".sc-recent").html(m.recent.length ? `<table class="sc-r"><thead><tr>
@@ -84,6 +85,14 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 				},
 			});
 			dlg.show();
+		});
+	});
+	// one click — no confirm dialog; the record stays, marked Cancelled
+	root.on("click", ".sc-cancel", function () {
+		const nm = $(this).closest(".sc-card").data("name");
+		frappe.call({ method: API + ".cert_prep_cancel", args: { name: nm } }).then(() => {
+			frappe.show_alert({ message: __("{0} cancelled — its pieces are free again.", [nm]), indicator: "orange" }, 4);
+			load();
 		});
 	});
 	root.on("click", ".sc-send", function () {
