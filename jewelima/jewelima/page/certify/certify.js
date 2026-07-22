@@ -43,6 +43,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		.cf-panel td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}
 		.cf-hb{display:inline-block;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700;color:#fff;}
 		.cf-hb.ok{background:#2e7d32;}.cf-hb.no{background:#c0392b;}
+		.cf-why{display:none;margin-left:8px;font-size:11.5px;color:#c0392b;}
+		.cf-hrow:hover .cf-why{display:inline;}
 		.cf-tip{position:fixed;z-index:2000;display:none;background:#1a1a1a;color:#fff;border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.6;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;pointer-events:none;}
 		.cf-tip .t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:2px;}
 		td.cf-bag{cursor:help;text-decoration:underline dotted;}
@@ -112,8 +114,9 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		if (hist.length > 40) hist.pop();
 		root.find(".cf-hist-t").text(__("{0} scan(s)", [hist.length]));
 		root.find(".cf-hist-b").html(`<table><tbody>${hist.map((h) => `
-			<tr title="${esc(h.note)}"><td>${esc(h.code)}</td>
-			<td><span class="cf-hb ${h.ok ? "ok" : "no"}" style="${h.ok ? "" : "cursor:help;"}">${h.ok ? __("ADDED") : __("REJECTED")}</span></td>
+			<tr class="cf-hrow"><td>${esc(h.code)}</td>
+			<td><span class="cf-hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("REJECTED")}</span>
+			${h.ok ? "" : `<span class="cf-why">${esc(h.note)}</span>`}</td>
 			<td class="text-muted">${h.t}</td></tr>`).join("")}</tbody></table>`);
 		root.find(".cf-panel").show();
 	}
