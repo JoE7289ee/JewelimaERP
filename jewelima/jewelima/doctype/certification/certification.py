@@ -11,8 +11,17 @@ from frappe.model.document import Document
 
 
 class Certification(Document):
+	def autoname(self):
+		# named at PREP time by the certification's code series (IGI-0001);
+		# legacy records without cert_type keep the old CERT- series
+		from frappe.model.naming import make_autoname
+		code = frappe.db.get_value("Certification Type", self.cert_type, "code") if self.cert_type else None
+		self.name = make_autoname((code or "CERT") + "-.####")
+
 	def on_trash(self):
 		# a batch with pieces still OUT can't just vanish — the stock and bag
 		# statuses hang off it. Receive everything back first.
+		if self.status in ("Prepared", "Cancelled"):
+			return  # never sent — nothing hangs off it
 		if any(not r.received for r in self.items):
 			frappe.throw(frappe._("{0} still has pieces out at certification — receive them back before deleting.").format(self.name))

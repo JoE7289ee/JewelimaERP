@@ -815,6 +815,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "send",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Send Certifications",
+   "link_to": "send-certifications",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "arrow-right",
    "indent": 1,
    "keep_closed": 0,
@@ -1749,7 +1762,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-22 13:57:47.091512",
+ "modified": "2026-07-22 15:21:48.803285",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

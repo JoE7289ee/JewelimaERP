@@ -7003,6 +7003,188 @@ def get_certifiable_pieces(search=None):
 	return out
 
 
+# ---------------------------------------------------------------------------
+# Certification PREP (the reworked desk): pick the certification + center,
+# lock the rules/format, scan products in (rejections recorded client-side),
+# then SEND from the Send Certifications page. The prep IS the batch — it is
+# named by the certification code series (IGI-0001) the moment it's created.
+# ---------------------------------------------------------------------------
+def _bag_diamond_qualities(nm):
+	"""The DISTINCT parent-mapped diamond qualities a finished piece carries."""
+	qmap = {r.name: r.parent_quality for r in frappe.get_all(
+		"Diamond Quality Map", fields=["name", "parent_quality"])}
+	quals = set()
+	for item in _bag_convert_materials([nm])[nm]:
+		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
+		if st == "Diamond":
+			q = (grp or "").replace("DIAMOND ", "")
+			quals.add(qmap.get(q, q))
+	return sorted(quals)
+
+
+@frappe.whitelist()
+def get_cert_prep_context():
+	"""The certify page's setup: certifications with centers + requirements, and
+	the quality options (parent-mapped diamond item groups) for the IGI lock."""
+	types = frappe.get_all("Certification Type", fields=["name", "title", "excel_requirements"], order_by="name")
+	centers = frappe.get_all("Certification Center",
+		fields=["name", "certification_type", "center_name"], order_by="center_name")
+	qmap = {r.name: r.parent_quality for r in frappe.get_all("Diamond Quality Map", fields=["name", "parent_quality"])}
+	groups = frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"]}, pluck="name")
+	quals = sorted({qmap.get(g.replace("DIAMOND ", ""), g.replace("DIAMOND ", "")) for g in groups})
+	return {"types": types, "centers": centers, "qualities": quals}
+
+
+@frappe.whitelist()
+def create_cert_prep(cert_type, center=None, quality=None):
+	"""Start a prep — it takes its FINAL outgoing name now (IGI-0001)."""
+	if not frappe.db.exists("Certification Type", cert_type):
+		frappe.throw(frappe._("Pick the certification."))
+	if cert_type == "IGI" and not (quality or "").strip():
+		frappe.throw(frappe._("IGI batches carry ONE colour+clarity — pick it first."))
+	# legacy Select filled only where the old option list has the value (receive
+	# flow reads it for HUID handling); the new cert_type is the real key
+	legacy = {"HALL": "HALLMARKING", "SGL": "SGL", "IDT": "IDT", "GIG": "GIG"}.get(cert_type)
+	d = frappe.get_doc({"doctype": "Certification", "cert_type": cert_type,
+		"center": center or None, "quality": (quality or "").strip(),
+		"status": "Prepared", "prepared_on": frappe.utils.today(),
+		"certification_type": legacy})
+	d.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name}
+
+
+@frappe.whitelist()
+def cert_prep_scan(name, barcode):
+	"""Scan a piece into the prep. Rejections THROW with the reason (the page
+	logs them in its scan history): not found / not a product yet (make product
+	first) / not In Stock / already on this or another open batch / IGI quality
+	mismatch or mixed-quality piece."""
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — no more scanning.").format(name, d.status))
+	nm = (barcode or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} does not exist.").format(nm or "?"))
+	b = frappe.db.get_value("Order Bag", nm,
+		["is_finished", "stock_status", "design", "act_gross_weight", "act_dmd_weight", "huid"], as_dict=True)
+	if not b.is_finished:
+		frappe.throw(frappe._("{0} is not a product yet — MAKE IT A PRODUCT first (Make Products).").format(nm))
+	if b.stock_status != "In Stock":
+		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can go out.").format(nm, b.stock_status))
+	if any(r.order_bag == nm for r in d.items):
+		frappe.throw(frappe._("{0} is already on this batch.").format(nm))
+	other = frappe.db.sql("""select i.parent from `tabCertification Item` i
+		join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and c.status = 'Prepared' and c.name != %s limit 1""", (nm, name))
+	if other:
+		frappe.throw(frappe._("{0} is already on prepared batch {1}.").format(nm, other[0][0]))
+	# IGI: every diamond line must resolve to THE locked quality; mixed = error
+	if d.cert_type == "IGI":
+		quals = _bag_diamond_qualities(nm)
+		if len(quals) > 1:
+			frappe.throw(frappe._("{0} carries MIXED diamond qualities ({1}) — IGI batches take one only.").format(nm, ", ".join(quals)))
+		if quals and quals[0] != d.quality:
+			frappe.throw(frappe._("{0} is {1} — this batch is locked to {2}.").format(nm, quals[0], d.quality))
+		if not quals:
+			frappe.throw(frappe._("{0} has no diamonds — nothing for IGI to certify.").format(nm))
+	d.append("items", {"order_bag": nm, "design": b.design,
+		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+		"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight)})
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_cert_prep(name)
+
+
+@frappe.whitelist()
+def get_cert_prep(name):
+	d = frappe.get_doc("Certification", name)
+	rows = []
+	for r in d.items:
+		row = {"row": r.name, "order_bag": r.order_bag, "design": r.design or "",
+			"design_type": r.design_type or "", "gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct)}
+		if d.cert_type == "IGI":
+			bag = frappe.db.get_value("Order Bag", r.order_bag, ["huid", "act_nett_weight"], as_dict=True) or {}
+			metal = frappe.db.get_value("Design", r.design, "metal_colour") if r.design else ""
+			row.update({"style_no": "{0} {1}".format(r.design or "", r.order_bag).strip(),
+				"metal_color": _IGI_METAL_COLOR.get(metal or "", "Gold"),
+				"color": (_IGI_QUALITY.get(d.quality or "", ("", "")))[0],
+				"clarity": (_IGI_QUALITY.get(d.quality or "", ("", "")))[1],
+				"shape": "Round Brilliant"})
+		rows.append(row)
+	return {"name": d.name, "cert_type": d.cert_type, "center": d.center or "",
+		"quality": d.quality or "", "status": d.status, "prepared_on": str(d.prepared_on or ""),
+		"remarks": d.remarks or "", "rows": rows, "count": len(rows),
+		"gross": round(sum(x["gross"] for x in rows), 3), "dmd_ct": round(sum(x["dmd_ct"] for x in rows), 3)}
+
+
+@frappe.whitelist()
+def cert_prep_remove(name, row):
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — no more edits.").format(name, d.status))
+	d.set("items", [x for x in d.items if x.name != row])
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_cert_prep(name)
+
+
+@frappe.whitelist()
+def cert_prep_cancel(name):
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("Only a Prepared batch cancels — {0} is {1}.").format(name, d.status))
+	d.status = "Cancelled"
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": "Cancelled"}
+
+
+@frappe.whitelist()
+def get_cert_preps():
+	"""The Send Certifications page: every Prepared batch, plus recent sent."""
+	out = {"prepared": [], "recent": []}
+	for r in frappe.get_all("Certification",
+			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]], "cert_type": ["is", "set"]},
+			fields=["name", "cert_type", "center", "quality", "status", "prepared_on", "sent_on"],
+			order_by="creation desc", limit=40):
+		r["pieces"] = frappe.db.count("Certification Item", {"parent": r.name})
+		(out["prepared"] if r.status == "Prepared" else out["recent"]).append(r)
+	return out
+
+
+@frappe.whitelist()
+def send_cert_prep(name):
+	"""The actual SEND: one stock move Finished Goods -> At Certification for
+	everything the pieces hold, bags flip At Certification, status -> Sent."""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only Prepared batches send.").format(name, d.status))
+	if not d.items:
+		frappe.throw(frappe._("Nothing on the batch."))
+	bags = [r.order_bag for r in d.items]
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status"], as_dict=True)
+		if not b or not b.is_finished or b.stock_status != "In Stock":
+			frappe.throw(frappe._("{0} is no longer In Stock — remove it from the batch.").format(nm))
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh("Finished Goods"), _wh(CERTIFICATION_WAREHOUSE))
+	d.stock_entry = se
+	d.status = "Sent"
+	d.sent_on = frappe.utils.today()
+	if not d.certification_type:
+		d.certification_type = "HALLMARKING" if d.cert_type == "HALL" else None
+	d.save(ignore_permissions=True)
+	for nm in bags:
+		frappe.db.set_value("Order Bag", nm, "stock_status", "At Certification")
+	frappe.db.commit()
+	return {"name": d.name, "count": len(bags), "stock_entry": se}
+
+
 @frappe.whitelist()
 def send_certification(payload):
 	"""Create a Certification batch: snapshot the pieces, move their materials
@@ -7088,7 +7270,7 @@ def receive_certification(name, rows):
 		child.huid = huid
 		child.received_on = now
 		vals = {"stock_status": "In Stock", "in_stock_on": now,
-			"certifications": _stamp_certification(child.order_bag, doc.certification_type)}
+			"certifications": _stamp_certification(child.order_bag, doc.get("cert_type") or doc.certification_type)}
 		if huid:
 			vals["huid"] = huid
 		frappe.db.set_value("Order Bag", child.order_bag, vals)

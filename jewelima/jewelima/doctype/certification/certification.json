@@ -1,11 +1,15 @@
 {
  "actions": [],
- "autoname": "CERT-.####",
+ "autoname": "",
  "creation": "2026-07-12 10:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "cert_type",
+  "center",
+  "quality",
+  "prepared_on",
   "certification_type",
   "status",
   "sent_on",
@@ -18,14 +22,40 @@
  ],
  "fields": [
   {
+   "fieldname": "cert_type",
+   "fieldtype": "Link",
+   "options": "Certification Type",
+   "label": "Certification",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "center",
+   "fieldtype": "Link",
+   "options": "Certification Center",
+   "label": "Center"
+  },
+  {
+   "fieldname": "quality",
+   "fieldtype": "Data",
+   "label": "Locked Quality",
+   "description": "IGI: the ONE colour+clarity this batch carries (e.g. VVS-EF)."
+  },
+  {
+   "fieldname": "prepared_on",
+   "fieldtype": "Date",
+   "label": "Prepared On"
+  },
+  {
    "description": "Stone labs (IGL / DHSC / SGL / IDT / GIG) \u2014 a piece goes to ONE of them. HALLMARKING is separate; nearly every piece gets it.",
    "fieldname": "certification_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Certification Type",
+   "label": "Type (legacy)",
    "options": "HALLMARKING\nIGL\nDHSC\nSGL\nIDT\nGIG",
-   "reqd": 1
+   "reqd": 0,
+   "hidden": 1
   },
   {
    "default": "Sent",
@@ -34,7 +64,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Sent\nPartially Received\nReceived",
+   "options": "Prepared\nSent\nPartially Received\nReceived\nCancelled",
    "read_only": 1
   },
   {
@@ -76,12 +106,12 @@
    "fieldtype": "Table",
    "label": "Pieces",
    "options": "Certification Item",
-   "reqd": 1
+   "reqd": 0
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-14 16:00:00.000000",
+ "modified": "2026-07-22 13:45:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Certification",

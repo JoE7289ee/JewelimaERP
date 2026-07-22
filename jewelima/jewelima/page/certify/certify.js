@@ -1,151 +1,167 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Certification desk (Delivery) — pick finished pieces In Stock and send them to
-// HALLMARKING or a stone lab — IGL/DHSC/SGL/IDT/GIG (creates a Certification batch, moves stock Finished Goods →
-// At Certification). What's OUT lives on its own board: /app/certification-out.
+// Certification desk (Delivery) — PREPARE a batch: pick the certification +
+// center first (locks the format and, for IGI, the ONE colour+clarity), then
+// scan products in. Every rejected scan lands in the history with WHY. The
+// table mirrors the lab's submission format. Prep gets its final outgoing
+// name (IGI-0001) immediately; the actual SEND happens on Send Certifications.
 // Route: /app/certify
 
 frappe.pages["certify"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Certification", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { pieces: [], sel: new Set(), term: "" };
 	const esc = frappe.utils.escape_html;
-	const fmt = (v) => flt(v).toFixed(3);
+	let CTX = { types: [], centers: [], qualities: [] };
+	let prep = null;
+	const hist = [];
 
 	$(page.main).append(`
 		<style>
-		.ct-pane{display:flex;flex-direction:column;min-height:0;height:calc(100vh - 100px);border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);}
-		.ct-pane-h{padding:8px 12px;border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-		.ct-pane-h .t{font-weight:800;font-size:13px;margin-right:auto;}
-		.ct-body{flex:1 1 auto;overflow:auto;}
-		.ct-search{width:230px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:3px 9px;height:28px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:12.5px;}
-		.ct-ctl select,.ct-ctl input{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);height:28px;border-radius:5px;padding:2px 8px;font-size:12.5px;color:var(--text-color);box-sizing:border-box;}
-		table.ct-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;}
-		table.ct-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:4px 8px;text-align:left;white-space:nowrap;font-weight:700;}
-		table.ct-tbl td{border-bottom:1px solid var(--border-color);padding:4px 8px;white-space:nowrap;font-variant-numeric:tabular-nums;}
-		table.ct-tbl td.r,table.ct-tbl th.r{text-align:right;}
-		table.ct-tbl tr{cursor:pointer;}
-		table.ct-tbl tr.on td{background:#eaf6ec;}
-		.ct-bar{font-weight:700;}
-		.ct-sub{color:var(--text-muted);font-size:11px;}
-		.ct-foot{padding:6px 12px;border-top:1px solid var(--border-color);color:var(--text-muted);font-size:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-		.ct-foot .ct-lab{width:150px;}
-		.ct-foot .ct-remarks{flex:1 1 120px;min-width:90px;}
-		.ct-foot .ct-send{white-space:nowrap;}
-		.ct-chip{display:inline-block;border-radius:8px;padding:0 7px;font-size:10px;font-weight:700;}
-		.ct-chip.ok{background:#eaf6ec;color:#1d7a33;}
-		.ct-empty{padding:20px;text-align:center;color:var(--text-muted);}
+		.cf-setup{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px;}
+		.cf-setup .frappe-control{margin:0;min-width:200px;}
+		.cf-req{font-size:12px;color:var(--text-muted);max-width:900px;margin-bottom:12px;white-space:pre-wrap;}
+		.cf-cols{display:flex;gap:20px;align-items:flex-start;}
+		.cf-main{flex:1;min-width:0;}
+		.cf-side{flex:0 0 340px;}
+		.cf-head{display:none;gap:18px;align-items:baseline;flex-wrap:wrap;background:var(--control-bg);border:1px solid var(--border-color);border-radius:8px;padding:10px 16px;margin-bottom:12px;}
+		.cf-head .nm{font-size:19px;font-weight:800;}
+		.cf-lock{font-size:11px;font-weight:700;border-radius:10px;padding:2px 10px;background:#1f618d;color:#fff;}
+		.cf-scanrow{display:none;gap:10px;align-items:end;margin-bottom:10px;}
+		.cf-scanrow .frappe-control{margin:0;flex:0 0 260px;}
+		table.cf-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);display:none;}
+		table.cf-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:6px 8px;border:1px solid var(--border-color);text-align:left;}
+		table.cf-t td{border:1px solid var(--border-color);padding:5px 8px;}
+		table.cf-t td.r{text-align:right;}
+		table.cf-t .del{cursor:pointer;color:#b02a2a;font-weight:700;text-align:center;width:26px;}
+		.cf-tot{display:none;margin-top:8px;font-weight:700;}
+		.cf-actions{display:none;margin-top:14px;gap:8px;}
+		.cf-panel{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;display:none;}
+		.cf-panel .h{background:var(--control-bg);padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;justify-content:space-between;}
+		.cf-panel .b{max-height:420px;overflow:auto;}
+		.cf-panel td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}
+		.cf-hb{display:inline-block;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700;color:#fff;}
+		.cf-hb.ok{background:#2e7d32;}.cf-hb.no{background:#c0392b;}
 		</style>
-		<div class="ct-pane">
-			<div class="ct-pane-h">
-				<span class="t">${__("In Stock — pick pieces to send")}</span>
-				<input class="ct-search" type="text" placeholder="${__("Search…")}">
+		<div class="cf-setup">
+			<div class="cf-type"></div><div class="cf-center"></div><div class="cf-qual" style="display:none;"></div>
+			<button class="btn btn-primary cf-start">${__("Start Prep")}</button>
+		</div>
+		<div class="cf-req"></div>
+		<div class="cf-cols">
+			<div class="cf-main">
+				<div class="cf-head"></div>
+				<div class="cf-scanrow"><div class="cf-scan"></div>
+					<span style="font-size:11.5px;color:var(--text-muted);">${__("scan / type card no. + Enter — products only")}</span></div>
+				<table class="cf-t"><thead class="cf-th"></thead><tbody class="cf-tb"></tbody></table>
+				<div class="cf-tot"></div>
+				<div class="cf-actions">
+					<button class="btn btn-default cf-xlsx" style="display:none;">${__("Export IGI Excel")}</button>
+					<button class="btn btn-default cf-cancel" style="color:#b02a2a;">${__("Cancel Batch")}</button>
+					<a class="btn btn-default" href="/app/send-certifications">${__("Go to Send Certifications →")}</a>
+				</div>
 			</div>
-			<div class="ct-body"><table class="ct-tbl">
-				<thead><tr><th style="width:26px"><input type="checkbox" class="ct-all"></th>
-				<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Holder")}</th>
-				<th class="r">${__("Gross g")}</th><th class="r">${__("DMD ct")}</th><th>${__("HUID")}</th></tr></thead>
-				<tbody class="ct-pieces"></tbody></table></div>
-			<div class="ct-foot ct-ctl">
-				<span style="white-space:nowrap;"><b class="ct-selcount">0</b> ${__("selected")}</span>
-				<select class="ct-type-sel"><option>HALLMARKING</option><option>IGL</option><option>DHSC</option><option>SGL</option><option>IDT</option><option>GIG</option></select>
-				<input class="ct-lab" type="text" placeholder="${__("Lab / Centre")}">
-				<input class="ct-remarks" type="text" placeholder="${__("Remarks")}">
-				<button class="btn btn-primary btn-sm ct-send">${__("Send")}</button>
-			</div>
+			<div class="cf-side"><div class="cf-panel">
+				<div class="h"><span>${__("Scan History")}</span><span class="cf-hist-t"></span></div>
+				<div class="b cf-hist-b"></div>
+			</div></div>
 		</div>
 	`);
-	const root = $(page.main)[0];
+	const root = $(page.main);
+	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
+	const fType = mk(".cf-type", { fieldtype: "Select", label: __("Certification"), fieldname: "ct", options: "" });
+	const fCenter = mk(".cf-center", { fieldtype: "Select", label: __("Center"), fieldname: "cc", options: "" });
+	const fQual = mk(".cf-qual", { fieldtype: "Select", label: __("Colour + Clarity (locked)"), fieldname: "q", options: "" });
+	const scan = mk(".cf-scan", { fieldtype: "Data", label: __("Scan Product"), fieldname: "scan" });
 
-	function paintPieces() {
-		const term = S.term.toLowerCase().trim();
-		const rows = S.pieces.filter((p) => !term ||
-			[p.order_bag, p.design, p.design_type, p.held_by].join(" ").toLowerCase().includes(term));
-		$(root).find(".ct-pieces").html(rows.length ? rows.map((p) => `
-			<tr data-bag="${esc(p.order_bag)}" class="${S.sel.has(p.order_bag) ? "on" : ""}">
-				<td><input type="checkbox" ${S.sel.has(p.order_bag) ? "checked" : ""}></td>
-				<td><span class="ct-bar">${esc(p.order_bag)}</span></td>
-				<td>${esc(p.design)}<div class="ct-sub">${esc(p.design_type)}</div></td>
-				<td>${esc(p.held_by)}</td>
-				<td class="r">${fmt(p.gross)}</td>
-				<td class="r">${p.dmd_ct ? fmt(p.dmd_ct) : "·"}</td>
-				<td>${p.huid ? `<span class="ct-chip ok">${esc(p.huid)}</span>` : "·"}</td>
-			</tr>`).join("")
-			: `<tr><td colspan="7" class="ct-empty">${__("No finished pieces In Stock.")}</td></tr>`);
-		$(root).find(".ct-selcount").text(S.sel.size);
+	frappe.call({ method: API + ".get_cert_prep_context" }).then((r) => {
+		CTX = r.message || CTX;
+		fType.df.options = [""].concat(CTX.types.map((t) => t.name)).join("\n"); fType.refresh();
+		fQual.df.options = [""].concat(CTX.qualities).join("\n"); fQual.refresh();
+	});
+	fType.$input.on("change", () => {
+		const t = fType.get_value();
+		fCenter.df.options = [""].concat(CTX.centers.filter((c) => c.certification_type === t).map((c) => c.name)).join("\n");
+		fCenter.refresh();
+		root.find(".cf-qual").toggle(t === "IGI");
+		const ty = CTX.types.find((x) => x.name === t);
+		root.find(".cf-req").text(ty && ty.excel_requirements ? __("Rules: ") + ty.excel_requirements : "");
+	});
+
+	root.find(".cf-start").on("click", () => {
+		const t = fType.get_value();
+		if (!t) return frappe.show_alert({ message: __("Pick the certification."), indicator: "orange" }, 3);
+		frappe.call({ method: API + ".create_cert_prep", args: { cert_type: t, center: fCenter.get_value() || null, quality: fQual.get_value() || null } })
+			.then((r) => load((r.message || {}).name));
+	});
+
+	function load(name) {
+		frappe.call({ method: API + ".get_cert_prep", args: { name } }).then((r) => { prep = r.message; paint(); });
+	}
+	function logScan(code, ok, note) {
+		hist.unshift({ code, ok, note: note || "", t: frappe.datetime.now_time().slice(0, 5) });
+		if (hist.length > 40) hist.pop();
+		root.find(".cf-hist-t").text(__("{0} scan(s)", [hist.length]));
+		root.find(".cf-hist-b").html(`<table><tbody>${hist.map((h) => `
+			<tr><td>${esc(h.code)}</td><td><span class="cf-hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("REJECTED")}</span></td>
+			<td class="text-muted" title="${esc(h.note)}">${esc(h.note.slice(0, 44))}</td>
+			<td class="text-muted">${h.t}</td></tr>`).join("")}</tbody></table>`);
+		root.find(".cf-panel").show();
 	}
 
-	function loadAll() {
-		frappe.call({ method: API + ".get_certifiable_pieces" }).then((r) => {
-			S.pieces = r.message || [];
-			S.sel = new Set([...S.sel].filter((b) => S.pieces.some((p) => p.order_bag === b)));
-			paintPieces();
-		});
+	const IGI_COLS = ["style_no", "metal_color", "color", "clarity", "shape", "gross", "dmd_ct"];
+	const IGI_HEAD = [__("Style Number"), __("Metal Color"), __("Color Criteria"), __("Clarity Criteria"), __("Shape"), __("Gross Wt (g)"), __("Diamond Wt (ct)")];
+	const BASIC_COLS = ["order_bag", "design", "design_type", "gross", "dmd_ct"];
+	const BASIC_HEAD = [__("Card"), __("Design"), __("Type"), __("Gross (g)"), __("Diamond (ct)")];
+
+	function paint() {
+		const igi = prep.cert_type === "IGI";
+		const locked = prep.status !== "Prepared";
+		root.find(".cf-setup, .cf-req").toggle(false);
+		root.find(".cf-head").css("display", "flex").html(`
+			<span class="nm">${esc(prep.name)}</span>
+			<span>${esc(prep.cert_type)}${prep.center ? " · " + esc(prep.center.split("-").slice(1).join("-")) : ""}</span>
+			${prep.quality ? `<span class="cf-lock">${esc(prep.quality)}</span>` : ""}
+			<span class="cf-lock" style="background:${prep.status === "Prepared" ? "#7f8c8d" : prep.status === "Cancelled" ? "#b02a2a" : "#2e7d32"};">${esc(prep.status)}</span>`);
+		const cols = igi ? IGI_COLS : BASIC_COLS;
+		const head = igi ? IGI_HEAD : BASIC_HEAD;
+		root.find(".cf-th").html(`<tr>${igi ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${locked ? "" : "<th></th>"}</tr>`);
+		root.find(".cf-tb").html(prep.rows.map((r) => `<tr data-row="${esc(r.row)}">
+			${igi ? `<td><b>${esc(r.order_bag)}</b></td>` : ""}
+			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}">${typeof r[c] === "number" ? r[c].toFixed(3) : esc("" + (r[c] || ""))}</td>`).join("")}
+			${locked ? "" : '<td class="del">&times;</td>'}</tr>`).join("")
+			|| `<tr><td colspan="9" style="color:var(--text-muted);padding:14px;">${__("Scan the first product.")}</td></tr>`);
+		root.find("table.cf-t").show();
+		root.find(".cf-tot").show().text(__("{0} piece(s) · {1} g gross · {2} ct diamond", [prep.count, prep.gross, prep.dmd_ct]));
+		root.find(".cf-scanrow").css("display", locked ? "none" : "flex");
+		root.find(".cf-actions").css("display", "flex");
+		root.find(".cf-xlsx").toggle(igi && prep.count > 0);
+		root.find(".cf-cancel").toggle(!locked);
+		if (!locked) setTimeout(() => scan.$input.focus(), 100);
 	}
 
-	$(root).on("click", ".ct-pieces tr[data-bag]", function () {
-		const bag = this.getAttribute("data-bag");
-		if (S.sel.has(bag)) S.sel.delete(bag);
-		else S.sel.add(bag);
-		paintPieces();
+	scan.$input.on("keydown", (e) => {
+		if (e.key !== "Enter") return;
+		const v = (scan.$input.val() || "").trim();
+		if (!v) return;
+		scan.set_value("");
+		frappe.call({ method: API + ".cert_prep_scan", args: { name: prep.name, barcode: v }, freeze: false })
+			.then((r) => { prep = r.message; logScan(v, true, ""); paint(); })
+			.catch((err) => {
+				const msg = ((err && err._server_messages && JSON.parse(JSON.parse(err._server_messages)[0]).message) || __("Rejected")).replace(/<[^>]*>/g, "");
+				logScan(v, false, msg);
+				scan.$input.focus();
+			});
 	});
-	$(root).on("click", ".ct-all", function (e) {
-		e.stopPropagation();
-		const term = S.term.toLowerCase().trim();
-		const vis = S.pieces.filter((p) => !term ||
-			[p.order_bag, p.design, p.design_type, p.held_by].join(" ").toLowerCase().includes(term));
-		if (this.checked) vis.forEach((p) => S.sel.add(p.order_bag));
-		else vis.forEach((p) => S.sel.delete(p.order_bag));
-		paintPieces();
+	root.on("click", "table.cf-t .del", function () {
+		frappe.call({ method: API + ".cert_prep_remove", args: { name: prep.name, row: $(this).closest("tr").data("row") } })
+			.then((r) => { prep = r.message; paint(); });
 	});
-	$(root).find(".ct-search").on("input", frappe.utils.debounce(function () {
-		S.term = this.value || "";
-		paintPieces();
-	}, 200));
+	root.find(".cf-cancel").on("click", () => frappe.confirm(__("Cancel {0}? The record stays, marked Cancelled.", [prep.name]),
+		() => frappe.call({ method: API + ".cert_prep_cancel", args: { name: prep.name } }).then(() => load(prep.name))));
+	root.find(".cf-xlsx").on("click", () =>
+		open_url_post("/api/method/jewelima.jewelima.api.export_igi_xlsx", { bags: JSON.stringify(prep.rows.map((r) => r.order_bag)) }));
 
-	$(root).find(".ct-send").on("click", () => {
-		if (!S.sel.size) {
-			frappe.msgprint(__("Pick at least one piece."));
-			return;
-		}
-		const ctype = $(root).find(".ct-type-sel").val();
-		frappe.confirm(__("Send {0} piece(s) to {1}?", [S.sel.size, esc(ctype)]), () => {
-			frappe.dom.freeze(__("Sending..."));
-			frappe.call({
-				method: API + ".send_certification",
-				args: { payload: { certification_type: ctype, lab: $(root).find(".ct-lab").val(),
-					remarks: $(root).find(".ct-remarks").val(), bags: [...S.sel] } },
-			}).then((r) => {
-				frappe.dom.unfreeze();
-				const m = r.message || {};
-				frappe.show_alert({ message: __("{0} sent — {1} piece(s) to {2}.", [m.name, m.count, esc(ctype)]), indicator: "green" }, 6);
-				S.sel.clear();
-				loadAll();
-			}).catch(() => frappe.dom.unfreeze());
-		});
-	});
-
-	page.set_primary_action(__("Batches Out"), () => frappe.set_route("certification-out"));
-	page.add_inner_button(__("Export IGI"), () => {
-		if (!S.sel.size) {
-			frappe.msgprint(__("Pick the pieces to export first."));
-			return;
-		}
-		const d = new frappe.ui.Dialog({
-			title: __("Export IGI submission ({0} pieces)", [S.sel.size]),
-			fields: [{ fieldname: "metal_type", fieldtype: "Data", label: __("Metal Type (all rows)"),
-				description: __("Optional — IGI's wording, e.g. Partly Rhodium Plated. Leave blank to skip.") }],
-			primary_action_label: __("Download"),
-			primary_action: (v) => {
-				d.hide();
-				window.open("/api/method/jewelima.jewelima.api.export_igi_xlsx?bags=" +
-					encodeURIComponent(JSON.stringify([...S.sel])) +
-					"&metal_type=" + encodeURIComponent(v.metal_type || ""));
-			},
-		});
-		d.show();
-	});
-	page.add_inner_button(__("Refresh"), loadAll);
-	loadAll();
+	// arriving with a prep already picked (from Send Certifications)
+	if (frappe.route_options && frappe.route_options.prep) { load(frappe.route_options.prep); frappe.route_options = null; }
 };
