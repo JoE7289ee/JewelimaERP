@@ -1,0 +1,71 @@
+{
+ "name": "Certification Center",
+ "autoname": "format:{certification_type}-{center_name}",
+ "track_changes": 1,
+ "description": "A lab's physical center \u2014 one certification can have several (IGI Mumbai / Chennai; four hallmarking centers).",
+ "fields": [
+  {
+   "fieldname": "certification_type",
+   "fieldtype": "Link",
+   "options": "Certification Type",
+   "label": "Certification",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "center_name",
+   "fieldtype": "Data",
+   "label": "Center Name",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Small Text",
+   "label": "Location / Address"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "options": "Email",
+   "label": "Email",
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-22 11:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-22 11:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "certification_type",
+  "center_name",
+  "location",
+  "email"
+ ]
+}

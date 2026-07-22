@@ -1,0 +1,64 @@
+{
+ "name": "Certification Type",
+ "autoname": "field:code",
+ "track_changes": 1,
+ "description": "Certification / lab master (ships with the app). The code leads every batch's name (IGI-0001); per-lab excel rules are coded against it.",
+ "fields": [
+  {
+   "fieldname": "code",
+   "fieldtype": "Data",
+   "label": "Code",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "UPPERCASE, max 6 \u2014 becomes the Certification batch series (IGI-0001)."
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Certification",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "excel_requirements",
+   "fieldtype": "Small Text",
+   "label": "Excel Requirements",
+   "description": "Plain-language pointers on the batch rules / how the submission excel is filled \u2014 the coded rules target the CODE."
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-22 11:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-22 11:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "code",
+  "title",
+  "excel_requirements"
+ ]
+}

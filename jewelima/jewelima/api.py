@@ -6122,6 +6122,12 @@ def get_party_masters():
 			if v:
 				counts[v] = counts.get(v, 0) + 1
 		out[kind] = [{"code": r.name, "label": r.get(label_field), "customers": counts.get(r.name, 0)} for r in rows]
+	if frappe.db.exists("DocType", "Certification Type"):
+		ct = frappe.get_all("Certification Type", fields=["name", "title"], order_by="name")
+		ccnt = {}
+		for r in frappe.get_all("Certification Center", fields=["certification_type"], limit_page_length=0):
+			ccnt[r.certification_type] = ccnt.get(r.certification_type, 0) + 1
+		out["cert"] = [{"code": r.name, "label": r.title, "customers": ccnt.get(r.name, 0)} for r in ct]
 	if frappe.db.exists("DocType", "Voucher Type"):
 		vt = frappe.get_all("Voucher Type", fields=["name", "title"], order_by="name")
 		vcnt = {}
@@ -6149,7 +6155,9 @@ def get_master_customers(kind, code):
 def add_party_master(kind, code, label):
 	"""Add a value to one of the party masters or the voucher types (codes
 	validated by each doctype)."""
-	if kind == "voucher":
+	if kind == "cert":
+		dt, label_field = "Certification Type", "title"
+	elif kind == "voucher":
 		dt, label_field = "Voucher Type", "title"
 	elif kind in PARTY_MASTERS:
 		dt, label_field, _cust = PARTY_MASTERS[kind]

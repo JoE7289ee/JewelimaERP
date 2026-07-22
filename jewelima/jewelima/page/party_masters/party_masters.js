@@ -16,6 +16,7 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 		{ kind: "state", title: __("States"), hint: __("2-letter driving-licence code") },
 		{ kind: "special", title: __("Specials"), hint: __("optional tag at the end (PTY)") },
 		{ kind: "voucher", title: __("Voucher Types (Purchases)"), hint: __("code up to 4 — leads the purchase series (SIN-0001)") },
+		{ kind: "cert", title: __("Certifications"), hint: __("labs; code leads the batch series (IGI-0001) — centers on drill") },
 	];
 	let DATA = {};
 	let open = null;   // {kind, code}
@@ -96,6 +97,23 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 	root.on("keydown", ".pm-addrow input", function (e) { if (e.key === "Enter") add($(this).closest(".pm-card")); });
 
 	function drill(kind, code) {
+		if (kind === "cert") {
+			const card = root.find('.pm-card[data-kind="cert"]');
+			root.find(".pm-cust").hide();
+			frappe.call({ method: "frappe.client.get_list", args: { doctype: "Certification Center",
+				filters: { certification_type: code }, fields: ["name", "center_name", "location", "email"],
+				order_by: "center_name", limit_page_length: 50 } }).then((r) => {
+				const rows = r.message || [];
+				card.find(".pm-cust-t").text(__("{0} — {1} center(s)", [code, rows.length]));
+				card.find(".cb").html(rows.length ? `<table><tbody>${rows.map((c) => `
+					<tr><td><a href="/app/certification-center/${encodeURIComponent(c.name)}"><b>${esc(c.center_name)}</b></a></td>
+					<td>${esc((c.location || "").split(",")[0])}</td>
+					<td>${esc(c.email || "")}</td></tr>`).join("")}</tbody></table>`
+					: `<div class="empty">${__("No centers yet — add them in the Certification Center doctype.")}</div>`);
+				card.find(".pm-cust").show();
+			});
+			return;
+		}
 		if (kind === "voucher") {
 			const card = root.find('.pm-card[data-kind="voucher"]');
 			root.find(".pm-cust").hide();

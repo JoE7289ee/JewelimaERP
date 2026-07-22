@@ -20,6 +20,7 @@ def after_install():
 	seed_party_masters()
 	seed_quality_map()
 	seed_voucher_types()
+	seed_certifications()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -63,6 +64,7 @@ def after_migrate():
 	seed_party_masters()
 	seed_quality_map()
 	seed_voucher_types()
+	seed_certifications()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -570,6 +572,44 @@ def seed_voucher_types():
 	for code, title in (("SIN", "Stock Import"), ("OGD", "Recovered Gold")):
 		if not frappe.db.exists("Voucher Type", code):
 			frappe.get_doc({"doctype": "Voucher Type", "code": code, "title": title}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+# Certification masters — from the client's certification_masters.xlsx (2026-07-22).
+# Emails were "pending" in the sheet; fill them on the Certification Center records.
+CERTIFICATIONS = {
+	# code: (title, excel requirements, [(center, location), ...])
+	"IGI": ("IGI",
+		"YellowGold -> Metal Color 'YellowGold'; WhiteGold -> 'WhiteGold'; PinkGold -> just 'Gold'. "
+		"One request = ONE colour + purity (EF means only EF) — same brackets as the price chart mapping "
+		"(EF-VVS, GH-VVS/VS). Shape: Round Brilliant for all.",
+		[("IGI Thrissur", "2nd Floor, JMA Trade Centre, Opp. Thrissur Railway Station (Rear), Poothole, Thrissur 680 004")]),
+	"DHC": ("DHC", "Simple format excel — format pending from the lab.",
+		[("DHC Gem Lab & Institute Thrissur", "Above South Indian Bank, Opp. Petrol Pump & All Saint's CSI Church, Near Manorama Circle, Mission Quarters, Thrissur 680 001")]),
+	"SGL": ("SGL", "General excel — format pending.",
+		[("SGL Labs", "2nd Floor, Holy Space Complex, 10/815/16/48-51, NC Road, Erinjery Angady, Pallikkulam, Thrissur 680001")]),
+	"IDT": ("IDT", "General excel — format pending.",
+		[("IDT Gemological Laboratories Worldwide", "2nd Floor, Centre Point, MG Road, Poothole, Thrissur 680004")]),
+	"HALL": ("HALLMARKING", "General excel — format pending. HUID per piece on receive.",
+		[("KERALA", ""), ("GLOBAL", ""), ("NEW POOVATHATHINGAL", ""), ("GOLD MARK", "")]),
+	"GIG": ("GIG", "General excel — format pending.",
+		[("Global Institute of Gemology", "2nd Floor, East End Plaza Building, Rice Bazar Rd, Erinjery Angady, Pallikkulam, Thrissur 680005")]),
+}
+
+
+def seed_certifications():
+	"""Certification types + their centers (idempotent; ships with the app)."""
+	if not frappe.db.exists("DocType", "Certification Type"):
+		return
+	for code, (title, req, centers) in CERTIFICATIONS.items():
+		if not frappe.db.exists("Certification Type", code):
+			frappe.get_doc({"doctype": "Certification Type", "code": code, "title": title,
+				"excel_requirements": req}).insert(ignore_permissions=True)
+		if frappe.db.exists("DocType", "Certification Center"):
+			for cname, loc in centers:
+				if not frappe.db.exists("Certification Center", {"certification_type": code, "center_name": cname}):
+					frappe.get_doc({"doctype": "Certification Center", "certification_type": code,
+						"center_name": cname, "location": loc}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 
