@@ -48,10 +48,19 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		.cf-tip{position:fixed;z-index:2000;display:none;background:#1a1a1a;color:#fff;border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.6;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;pointer-events:none;}
 		.cf-tip .t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:2px;}
 		td.cf-bag{cursor:help;text-decoration:underline dotted;}
+		.cf-stage{margin-bottom:12px;}
+		.cf-stg-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:6px;}
+		.cf-blocks{display:flex;gap:10px;flex-wrap:wrap;}
+		.cf-blk{border:2px solid var(--border-color);border-radius:9px;background:var(--fg-color);padding:10px 18px;cursor:pointer;min-width:110px;text-align:center;}
+		.cf-blk:hover{border-color:#1f618d;}
+		.cf-blk.on{border-color:#1f618d;background:#1f618d;color:#fff;}
+		.cf-blk .bc{font-size:16px;font-weight:800;letter-spacing:.03em;}
+		.cf-blk .bl{font-size:11px;color:inherit;opacity:.75;margin-top:1px;}
 		</style>
 		<div class="cf-setup">
-			<div class="cf-type"></div><div class="cf-center"></div><div class="cf-qual" style="display:none;"></div>
-			<button class="btn btn-primary cf-start">${__("Start Scanning")}</button>
+			<div class="cf-stage" data-stage="type"><div class="cf-stg-t">${__("1 · Pick the certification")}</div><div class="cf-blocks cf-b-type"></div></div>
+			<div class="cf-stage" data-stage="center" style="display:none;"><div class="cf-stg-t">${__("2 · Pick the center")}</div><div class="cf-blocks cf-b-center"></div></div>
+			<div class="cf-stage" data-stage="qual" style="display:none;"><div class="cf-stg-t">${__("3 · Lock the colour + clarity")}</div><div class="cf-blocks cf-b-qual"></div></div>
 		</div>
 		<div class="cf-req"></div>
 		<div class="cf-cols">
@@ -77,34 +86,44 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	$(page.main).append('<div class="cf-tip"></div>');
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
-	const fType = mk(".cf-type", { fieldtype: "Select", label: __("Certification"), fieldname: "ct", options: "" });
-	const fCenter = mk(".cf-center", { fieldtype: "Select", label: __("Center"), fieldname: "cc", options: "" });
-	const fQual = mk(".cf-qual", { fieldtype: "Select", label: __("Colour + Clarity (locked)"), fieldname: "q", options: "" });
 	const scan = mk(".cf-scan", { fieldtype: "Data", label: __("Scan Product"), fieldname: "scan" });
 
-	frappe.call({ method: API + ".get_cert_prep_context" }).then((r) => {
-		CTX = r.message || CTX;
-		fType.df.options = [""].concat(CTX.types.map((t) => t.name)).join("\n"); fType.refresh();
-		fQual.df.options = [""].concat(CTX.qualities).join("\n"); fQual.refresh();
-	});
-	fType.$input.on("change", () => {
-		const t = fType.get_value();
-		fCenter.df.options = [""].concat(CTX.centers.filter((c) => c.certification_type === t).map((c) => c.name)).join("\n");
-		fCenter.refresh();
-		root.find(".cf-qual").toggle(t === "IGI");
-		const ty = CTX.types.find((x) => x.name === t);
-		root.find(".cf-req").text(ty && ty.excel_requirements ? __("Rules: ") + ty.excel_requirements : "");
-	});
+	// ---- block picker: certification -> center -> (IGI) quality -> scanning ----
+	const sel = { type: null, center: null, quality: null };
+	const blk = (code, label, on) => `<div class="cf-blk ${on ? "on" : ""}" data-code="${esc(code)}">
+		<div class="bc">${esc(code)}</div>${label ? `<div class="bl">${esc(label)}</div>` : ""}</div>`;
 
-	root.find(".cf-start").on("click", () => {
-		const t = fType.get_value();
-		if (!t) return frappe.show_alert({ message: __("Pick the certification."), indicator: "orange" }, 3);
-		if (t === "IGI" && !fQual.get_value())
-			return frappe.show_alert({ message: __("IGI batches carry ONE colour+clarity — pick it first."), indicator: "orange" }, 4);
-		draft = { cert_type: t, center: fCenter.get_value() || null, quality: fQual.get_value() || "", rows: [] };
+	function paintPicker() {
+		root.find(".cf-b-type").html(CTX.types.map((t) => blk(t.name, t.title !== t.name ? t.title : "", sel.type === t.name)).join(""));
+		const centers = CTX.centers.filter((c) => c.certification_type === sel.type);
+		root.find('.cf-stage[data-stage="center"]').toggle(!!sel.type && centers.length > 0);
+		root.find(".cf-b-center").html(centers.map((c) => blk(c.center_name, "", sel.center === c.name))
+			.join("").replace(/data-code="([^"]*)"/g, (m, i) => m));  // codes are center names below
+		root.find(".cf-b-center .cf-blk").each(function (i) { $(this).attr("data-code", centers[i].name); });
+		root.find('.cf-stage[data-stage="qual"]').toggle(sel.type === "IGI" && !!(sel.center || !centers.length));
+		root.find(".cf-b-qual").html(CTX.qualities.map((q) => blk(q, "", sel.quality === q)).join(""));
+		const ty = CTX.types.find((x) => x.name === sel.type);
+		root.find(".cf-req").text(ty && ty.excel_requirements ? __("Rules: ") + ty.excel_requirements : "");
+	}
+	frappe.call({ method: API + ".get_cert_prep_context" }).then((r) => { CTX = r.message || CTX; paintPicker(); });
+
+	function maybeStart() {
+		const centers = CTX.centers.filter((c) => c.certification_type === sel.type);
+		const needCenter = centers.length > 0 && !sel.center;
+		const needQual = sel.type === "IGI" && !sel.quality;
+		if (!sel.type || needCenter || needQual) { paintPicker(); return; }
+		draft = { cert_type: sel.type, center: sel.center, quality: sel.quality || "", rows: [] };
 		prep = null;
 		paint();
+	}
+	root.on("click", ".cf-b-type .cf-blk", function () {
+		sel.type = $(this).data("code"); sel.center = null; sel.quality = null;
+		const centers = CTX.centers.filter((c) => c.certification_type === sel.type);
+		if (centers.length === 1) sel.center = centers[0].name;   // lone center auto-picks
+		maybeStart();
 	});
+	root.on("click", ".cf-b-center .cf-blk", function () { sel.center = $(this).data("code"); maybeStart(); });
+	root.on("click", ".cf-b-qual .cf-blk", function () { sel.quality = $(this).data("code"); maybeStart(); });
 
 	function load(name) {
 		frappe.call({ method: API + ".get_cert_prep", args: { name } }).then((r) => { prep = r.message; paint(); });
@@ -221,8 +240,10 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		if (draft && !prep) {
 			frappe.confirm(__("Discard this draft? Nothing was saved."), () => {
 				draft = null;
+				sel.type = sel.center = sel.quality = null;
 				root.find(".cf-head, .cf-scanrow, table.cf-t, .cf-tot, .cf-actions").hide();
 				root.find(".cf-setup, .cf-req").show();
+				paintPicker();
 			});
 			return;
 		}
