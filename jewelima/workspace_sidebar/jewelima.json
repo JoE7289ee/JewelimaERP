@@ -1411,6 +1411,32 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "shopping-cart",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Purchase Masters",
+   "link_to": "purchase-masters",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "truck",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Delivery Masters",
+   "link_to": "delivery-masters",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "log-out",
@@ -1723,7 +1749,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-21 23:52:57.295426",
+ "modified": "2026-07-22 13:57:47.091512",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
