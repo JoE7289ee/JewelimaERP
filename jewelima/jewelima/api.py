@@ -7113,7 +7113,11 @@ def cert_draft_scan(cert_type, quality, barcode, existing=None):
 	if isinstance(existing, str):
 		existing = json.loads(existing or "[]")
 	nm = (barcode or "").strip()
-	b = _cert_validate_piece(cert_type, (quality or "").strip(), nm, set(existing or []))
+	try:
+		b = _cert_validate_piece(cert_type, (quality or "").strip(), nm, set(existing or []))
+	except frappe.ValidationError as e:
+		frappe.local.message_log = []  # no modal — the page logs it in scan history
+		return {"rejected": str(e)}
 	return _cert_format_row(cert_type, quality, nm, b)
 
 

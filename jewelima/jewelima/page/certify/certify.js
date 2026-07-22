@@ -167,6 +167,10 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			if (sm) raw = (JSON.parse(JSON.parse(sm)[0]).message || "");
 		} catch (e) { /* fall through */ }
 		raw = (raw || (err && err.message) || "").replace(/<[^>]*>/g, "");
+		return classify(raw);
+	}
+	function classify(raw) {
+		raw = (raw || "").replace(/<[^>]*>/g, "");
 		// hardcoded reasons — the hover text users actually read
 		if (/does not exist/i.test(raw)) return __("This card doesn't exist");
 		if (/already on (this|prepared)/i.test(raw)) {
@@ -188,10 +192,15 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		if (!v) return;
 		scan.set_value("");
 		if (draft && !prep) {
-			// LOCAL list — validated server-side, saved only on PREP
+			// LOCAL list — validated server-side, saved only on PREP; rejections
+			// come back as data (no modal), straight into the scan history
 			frappe.call({ method: API + ".cert_draft_scan", args: { cert_type: draft.cert_type,
 				quality: draft.quality, barcode: v, existing: JSON.stringify(draft.rows.map((r) => r.order_bag)) }, freeze: false })
-				.then((r) => { draft.rows.push(r.message); logScan(v, true, ""); paint(); })
+				.then((r) => {
+					const m = r.message || {};
+					if (m.rejected) { logScan(v, false, classify(m.rejected)); scan.$input.focus(); return; }
+					draft.rows.push(m); logScan(v, true, ""); paint();
+				})
 				.catch((err) => { logScan(v, false, rejMsg(err)); scan.$input.focus(); });
 			return;
 		}
