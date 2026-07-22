@@ -7084,6 +7084,29 @@ def _cert_format_row(cert_type, quality, nm, b):
 
 
 @frappe.whitelist()
+def get_bag_bom_summary(order_bag):
+	"""Hover summary: the piece's ACTUAL frozen composition (Convert rows), one
+	line per item — '22KPG 8g' / 'VVS-EF 0.5-2 10pc 0.9ct'."""
+	nm = (order_bag or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		return {"lines": []}
+	pcs_by_item = {}
+	for r in frappe.get_all("Bag Material Ledger",
+			filters={"order_bag": nm, "entry_type": "Convert", "direction": "Out"},
+			fields=["item", "pcs"]):
+		pcs_by_item[r.item] = pcs_by_item.get(r.item, 0) + int(r.pcs or 0)
+	lines = []
+	for item, qty in sorted(_bag_convert_materials([nm])[nm].items()):
+		st = frappe.db.get_value("Item", item, "stone_type")
+		if st:
+			pcs = pcs_by_item.get(item, 0)
+			lines.append("{0}{1} {2}ct".format(item, " {0}pc".format(pcs) if pcs else "", round(flt(qty), 3)))
+		else:
+			lines.append("{0} {1}g".format(item, round(flt(qty), 3)))
+	return {"lines": lines}
+
+
+@frappe.whitelist()
 def cert_draft_scan(cert_type, quality, barcode, existing=None):
 	"""Validate ONE scan for the local (unsaved) draft list — nothing is written.
 	Throws with the reason on any rejection; returns the format row otherwise."""

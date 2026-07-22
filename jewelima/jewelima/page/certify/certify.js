@@ -43,6 +43,9 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		.cf-panel td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}
 		.cf-hb{display:inline-block;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700;color:#fff;}
 		.cf-hb.ok{background:#2e7d32;}.cf-hb.no{background:#c0392b;}
+		.cf-tip{position:fixed;z-index:2000;display:none;background:#1a1a1a;color:#fff;border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.6;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;pointer-events:none;}
+		.cf-tip .t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:2px;}
+		td.cf-bag{cursor:help;text-decoration:underline dotted;}
 		</style>
 		<div class="cf-setup">
 			<div class="cf-type"></div><div class="cf-center"></div><div class="cf-qual" style="display:none;"></div>
@@ -68,6 +71,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			</div></div>
 		</div>
 	`);
+	$(page.main).append('<div class="cf-tip"></div>');
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	const fType = mk(".cf-type", { fieldtype: "Select", label: __("Certification"), fieldname: "ct", options: "" });
@@ -137,8 +141,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		const head = igi ? IGI_HEAD : BASIC_HEAD;
 		root.find(".cf-th").html(`<tr>${igi ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${locked ? "" : "<th></th>"}</tr>`);
 		root.find(".cf-tb").html(src.rows.map((r, i) => `<tr data-row="${esc(r.row || i)}" data-i="${i}">
-			${igi ? `<td><b>${esc(r.order_bag)}</b></td>` : ""}
-			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}">${typeof r[c] === "number" ? r[c].toFixed(3) : esc("" + (r[c] || ""))}</td>`).join("")}
+			${igi ? `<td class="cf-bag" data-bag="${esc(r.order_bag)}"><b>${esc(r.order_bag)}</b></td>` : ""}
+			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}${c === "order_bag" ? " cf-bag" : ""}"${c === "order_bag" ? ` data-bag="${esc(r.order_bag)}"` : ""}>${typeof r[c] === "number" ? r[c].toFixed(3) : esc("" + (r[c] || ""))}</td>`).join("")}
 			${locked ? "" : '<td class="del">&times;</td>'}</tr>`).join("")
 			|| `<tr><td colspan="9" style="color:var(--text-muted);padding:14px;">${__("Scan the first product.")}</td></tr>`);
 		root.find("table.cf-t").show();
@@ -207,6 +211,25 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	});
 	root.find(".cf-xlsx").on("click", () =>
 		open_url_post("/api/method/jewelima.jewelima.api.export_igi_xlsx", { bags: JSON.stringify(((prep || draft).rows).map((r) => r.order_bag)) }));
+
+	// hover a card no. -> its ACTUAL frozen BOM, so the row's values are explainable
+	const bomCache = {};
+	root.on("mouseenter", "td.cf-bag", function (e) {
+		const bag = $(this).data("bag");
+		const $tip = root.find(".cf-tip");
+		const show = (lines) => {
+			if (!lines.length) return;
+			$tip.html(`<div class="t">${__("Actual BOM — {0}", [esc(bag)])}</div>` +
+				lines.map((l) => esc(l)).join("<br>")).css({ left: e.clientX + 14, top: e.clientY + 12 }).show();
+		};
+		if (bomCache[bag]) return show(bomCache[bag]);
+		frappe.call({ method: API + ".get_bag_bom_summary", args: { order_bag: bag }, freeze: false })
+			.then((r) => { bomCache[bag] = (r.message || {}).lines || []; show(bomCache[bag]); });
+	});
+	root.on("mousemove", "td.cf-bag", function (e) {
+		root.find(".cf-tip:visible").css({ left: e.clientX + 14, top: e.clientY + 12 });
+	});
+	root.on("mouseleave", "td.cf-bag", () => root.find(".cf-tip").hide());
 
 	// arriving with a prep already picked (from Send Certifications)
 	if (frappe.route_options && frappe.route_options.prep) { load(frappe.route_options.prep); frappe.route_options = null; }
