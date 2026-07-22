@@ -49,7 +49,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		</style>
 		<div class="cf-setup">
 			<div class="cf-type"></div><div class="cf-center"></div><div class="cf-qual" style="display:none;"></div>
-			<button class="btn btn-primary cf-start">${__("Start Prep")}</button>
+			<button class="btn btn-primary cf-start">${__("Start Scanning")}</button>
 		</div>
 		<div class="cf-req"></div>
 		<div class="cf-cols">
