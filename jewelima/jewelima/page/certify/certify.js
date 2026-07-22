@@ -285,11 +285,16 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				fields: [
 					{ fieldname: "recipient", fieldtype: "Data", label: __("To"), reqd: 1, default: m.recipient,
 						description: m.recipient ? "" : __("No email on the center yet — set it on Delivery Masters; typing one here works for now.") },
+					{ fieldname: "cc", fieldtype: "Data", label: __("CC (optional)"),
+						description: __("comma-separated emails") },
 					{ fieldname: "subject", fieldtype: "Data", label: __("Subject"), reqd: 1, default: m.subject },
 					{ fieldname: "body", fieldtype: "Small Text", label: __("Message"), default: m.body },
 				],
 				primary_action_label: __("Send"),
 				primary_action(v) {
+					const bad = (v.cc || "").split(/[,;\s]+/).filter(Boolean)
+						.concat([v.recipient]).find((a) => !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(a));
+					if (bad) return frappe.show_alert({ message: __("{0} is not a valid email.", [bad]), indicator: "orange" }, 4);
 					dlg.hide();
 					frappe.dom.freeze(__("Sending..."));
 					frappe.call({ method: API + ".email_cert_excel", args: { name: prep.name, ...v } })

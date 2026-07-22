@@ -7317,20 +7317,28 @@ def get_cert_mail_defaults(name):
 
 
 @frappe.whitelist()
-def email_cert_excel(name, recipient, subject, body):
+def email_cert_excel(name, recipient, subject, body, cc=None):
 	"""Send the batch's submission excel to the center (or whoever the prompt
-	says). Uses the default outgoing account (system@jewelima.com)."""
+	says), with optional CCs — every address format-checked before anything
+	goes out. Uses the default outgoing account (system@jewelima.com)."""
+	from frappe.utils import validate_email_address
 	recipient = (recipient or "").strip()
 	if not recipient:
 		frappe.throw(frappe._("Enter the recipient email."))
+	if not validate_email_address(recipient):
+		frappe.throw(frappe._("{0} is not a valid email address.").format(recipient))
+	cc_list = [x.strip() for x in re.split(r"[,;\s]+", cc or "") if x.strip()]
+	for a in cc_list:
+		if not validate_email_address(a):
+			frappe.throw(frappe._("CC address {0} is not a valid email.").format(a))
 	p = get_cert_prep(name)
 	if not p["rows"]:
 		frappe.throw(frappe._("Nothing on the batch."))
 	fname, content = _cert_excel_bytes(p)
-	frappe.sendmail(recipients=[recipient], subject=subject or p["name"],
+	frappe.sendmail(recipients=[recipient], cc=cc_list or None, subject=subject or p["name"],
 		message=(body or "").replace("\n", "<br>"),
 		attachments=[{"fname": fname, "fcontent": content}], now=True)
-	return {"sent_to": recipient, "attachment": fname}
+	return {"sent_to": recipient, "cc": cc_list, "attachment": fname}
 
 
 @frappe.whitelist()
