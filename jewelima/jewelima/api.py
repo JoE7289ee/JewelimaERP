@@ -7255,6 +7255,75 @@ def get_cert_prep(name):
 		"gross": round(sum(x["gross"] for x in rows), 3), "dmd_ct": round(sum(x["dmd_ct"] for x in rows), 3)}
 
 
+def _cert_excel_bytes(prep):
+	"""The submission excel for a batch as bytes: IGI = the shipped template
+	(reuses export_igi_xlsx's fill); others = the basic table."""
+	bags = [r["order_bag"] for r in prep["rows"]]
+	if prep["cert_type"] == "IGI":
+		export_igi_xlsx(json.dumps(bags))
+		content = frappe.local.response.filecontent
+		fname = frappe.local.response.filename
+		frappe.local.response.filecontent = frappe.local.response.filename = frappe.local.response.type = None
+		return fname, content
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font, PatternFill
+	wb = Workbook()
+	ws = wb.active
+	ws.title = prep["cert_type"]
+	ws.append(["Card", "Design", "Type", "Gross (g)", "Diamond (ct)"])
+	for c in ws[1]:
+		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+	for r in prep["rows"]:
+		ws.append([r["order_bag"], r["design"], r["design_type"], r["gross"], r["dmd_ct"]])
+	ws.append(["TOTAL", "", "", prep["gross"], prep["dmd_ct"]])
+	ws[ws.max_row][0].font = Font(bold=True)
+	for i, w in enumerate([16, 14, 14, 11, 12], 1):
+		ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	return "{0}-{1}.xlsx".format(prep["cert_type"], prep["name"]), buf.getvalue()
+
+
+@frappe.whitelist()
+def get_cert_mail_defaults(name):
+	"""What the email prompt prefills: the center's address + its subject/body
+	templates with {batch}/{count}/{date} already filled in."""
+	p = get_cert_prep(name)
+	c = frappe.db.get_value("Certification Center", p["center"],
+		["email", "mail_subject", "mail_body", "center_name"], as_dict=True) if p["center"] else None
+	ph = {"batch": p["name"], "count": p["count"], "date": frappe.utils.today()}
+	def render(t, default):
+		t = (t or default)
+		for k, v in ph.items():
+			t = t.replace("{" + k + "}", str(v))
+		return t
+	return {
+		"recipient": (c and c.email) or "",
+		"center_name": (c and c.center_name) or "",
+		"subject": render(c and c.mail_subject, "Jewelima submission {batch} — {count} piece(s)"),
+		"body": render(c and c.mail_body,
+			"Dear team,\n\nPlease find attached our submission {batch} ({count} pieces, {date}).\n\nRegards,\nJewelima"),
+	}
+
+
+@frappe.whitelist()
+def email_cert_excel(name, recipient, subject, body):
+	"""Send the batch's submission excel to the center (or whoever the prompt
+	says). Uses the default outgoing account (system@jewelima.com)."""
+	recipient = (recipient or "").strip()
+	if not recipient:
+		frappe.throw(frappe._("Enter the recipient email."))
+	p = get_cert_prep(name)
+	if not p["rows"]:
+		frappe.throw(frappe._("Nothing on the batch."))
+	fname, content = _cert_excel_bytes(p)
+	frappe.sendmail(recipients=[recipient], subject=subject or p["name"],
+		message=(body or "").replace("\n", "<br>"),
+		attachments=[{"fname": fname, "fcontent": content}], now=True)
+	return {"sent_to": recipient, "attachment": fname}
+
+
 @frappe.whitelist()
 def cert_prep_remove(name, row):
 	d = frappe.get_doc("Certification", name)

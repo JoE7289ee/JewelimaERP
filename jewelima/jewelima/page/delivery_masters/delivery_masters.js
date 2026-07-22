@@ -77,9 +77,35 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 			root.find(".pm-cust-t").text(__("{0} — {1} center(s)", [code, list.length]));
 			root.find(".cb").html(list.length ? `<table><tbody>${list.map((c) => `
 				<tr><td><a href="/app/certification-center/${encodeURIComponent(c.name)}"><b>${esc(c.center_name)}</b></a></td>
-				<td>${esc((c.location || "").split(",")[0])}</td><td>${esc(c.email || "")}</td></tr>`).join("")}</tbody></table>`
+				<td>${esc((c.location || "").split(",")[0])}</td>
+				<td>${esc(c.email || "")}</td>
+				<td style="text-align:right;"><span class="dm-edit" data-name="${esc(c.name)}" style="cursor:pointer;">✎ ${__("mail setup")}</span></td></tr>`).join("")}</tbody></table>`
 				: `<div class="empty">${__("No centers yet — add them in the Certification Center doctype.")}</div>`);
 			root.find(".pm-cust").show();
+		});
+	});
+	// per-center mail setup: recipient + the subject/body templates the certify
+	// page's email prompt prefills from ({batch} {count} {date} placeholders)
+	root.on("click", ".dm-edit", function (e) {
+		e.stopPropagation();
+		const nm = $(this).data("name");
+		frappe.db.get_doc("Certification Center", nm).then((c) => {
+			const dlg = new frappe.ui.Dialog({
+				title: __("Mail setup — {0}", [c.center_name]),
+				fields: [
+					{ fieldname: "email", fieldtype: "Data", label: __("Email"), default: c.email },
+					{ fieldname: "mail_subject", fieldtype: "Data", label: __("Subject template"), default: c.mail_subject,
+						description: __("Placeholders: {batch} {count} {date}") },
+					{ fieldname: "mail_body", fieldtype: "Small Text", label: __("Body template"), default: c.mail_body },
+				],
+				primary_action_label: __("Save"),
+				primary_action(v) {
+					dlg.hide();
+					frappe.call({ method: "frappe.client.set_value", args: { doctype: "Certification Center", name: nm, fieldname: v } })
+						.then(() => { frappe.show_alert({ message: __("Saved."), indicator: "green" }, 3); load(); });
+				},
+			});
+			dlg.show();
 		});
 	});
 	root.on("click", ".pm-cust .x", function () { $(this).closest(".pm-cust").hide(); });

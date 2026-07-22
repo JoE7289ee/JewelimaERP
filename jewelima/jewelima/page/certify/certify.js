@@ -73,6 +73,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				<div class="cf-actions">
 					<button class="btn btn-primary cf-prep" style="background:#2e7d32;border-color:#2e7d32;display:none;">${__("PREP — create the batch")}</button>
 				<button class="btn btn-default cf-xlsx" style="display:none;">${__("Export IGI Excel")}</button>
+				<button class="btn btn-default cf-mail" style="display:none;">${__("Email Excel to Center")}</button>
 					<button class="btn btn-default cf-cancel" style="color:#b02a2a;">${__("Cancel Batch")}</button>
 					<a class="btn btn-default" href="/app/send-certifications">${__("Go to Send Certifications →")}</a>
 				</div>
@@ -174,6 +175,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		root.find(".cf-actions").css("display", "flex");
 		root.find(".cf-prep").toggle(!!draft && !prep && src.count > 0);
 		root.find(".cf-xlsx").toggle(igi && src.count > 0);
+		root.find(".cf-mail").toggle(!!prep && src.count > 0 && prep.status !== "Cancelled");
 		root.find(".cf-cancel").toggle(!locked);
 		root.find(".cf-cancel").text(prep ? __("Cancel Batch") : __("Discard Draft"));
 		if (!locked) setTimeout(() => scan.$input.focus(), 100);
@@ -262,6 +264,31 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 					draft = null;
 					load(m.name);
 				}).catch(() => frappe.dom.unfreeze());
+		});
+	});
+	root.find(".cf-mail").on("click", () => {
+		frappe.call({ method: API + ".get_cert_mail_defaults", args: { name: prep.name } }).then((r) => {
+			const m = r.message || {};
+			const dlg = new frappe.ui.Dialog({
+				title: __("Email {0} to {1}", [prep.name, m.center_name || __("the center")]),
+				fields: [
+					{ fieldname: "recipient", fieldtype: "Data", label: __("To"), reqd: 1, default: m.recipient,
+						description: m.recipient ? "" : __("No email on the center yet — set it on Delivery Masters; typing one here works for now.") },
+					{ fieldname: "subject", fieldtype: "Data", label: __("Subject"), reqd: 1, default: m.subject },
+					{ fieldname: "body", fieldtype: "Small Text", label: __("Message"), default: m.body },
+				],
+				primary_action_label: __("Send"),
+				primary_action(v) {
+					dlg.hide();
+					frappe.dom.freeze(__("Sending..."));
+					frappe.call({ method: API + ".email_cert_excel", args: { name: prep.name, ...v } })
+						.then((rr) => {
+							frappe.dom.unfreeze();
+							frappe.show_alert({ message: __("Sent to {0} ({1}).", [(rr.message || {}).sent_to, (rr.message || {}).attachment]), indicator: "green" }, 5);
+						}).catch(() => frappe.dom.unfreeze());
+				},
+			});
+			dlg.show();
 		});
 	});
 	root.find(".cf-xlsx").on("click", () =>
