@@ -253,7 +253,18 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			() => frappe.call({ method: API + ".cert_prep_cancel", args: { name: prep.name } }).then(() => load(prep.name)));
 	});
 	root.find(".cf-prep").on("click", () => {
-		frappe.confirm(__("Prep {0} piece(s) for {1}? The batch is created and NAMED now.", [draft.rows.length, draft.cert_type]), () => {
+		// the summary the operator confirms: piece count by design type + totals
+		const byType = {};
+		draft.rows.forEach((r) => { const t = r.design_type || __("(no type)"); byType[t] = (byType[t] || 0) + 1; });
+		const types = Object.keys(byType).sort().map((t) => `${byType[t]} ${esc(t)}`).join(", ");
+		const gross = draft.rows.reduce((a, r) => a + (r.gross || 0), 0).toFixed(3);
+		const dmd = draft.rows.reduce((a, r) => a + (r.dmd_ct || 0), 0).toFixed(3);
+		frappe.confirm(
+			__("Prep this batch for {0}?", [esc(draft.cert_type)]) +
+			`<br><br><b>${draft.rows.length}</b> ${__("piece(s)")} — ${types}` +
+			`<br>${__("Total gross")}: <b>${gross} g</b>` +
+			`<br>${__("Total diamond")}: <b>${dmd} ct</b>` +
+			`<br><br><span style="color:var(--text-muted);font-size:12px;">${__("The batch is saved and gets its outgoing number now.")}</span>`, () => {
 			frappe.dom.freeze(__("Prepping..."));
 			frappe.call({ method: API + ".cert_prep_create_full", args: { cert_type: draft.cert_type,
 				center: draft.center, quality: draft.quality, bags: JSON.stringify(draft.rows.map((r) => r.order_bag)) } })
