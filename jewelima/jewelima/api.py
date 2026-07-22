@@ -7104,10 +7104,17 @@ def get_cert_prep(name):
 		row = {"row": r.name, "order_bag": r.order_bag, "design": r.design or "",
 			"design_type": r.design_type or "", "gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct)}
 		if d.cert_type == "IGI":
-			bag = frappe.db.get_value("Order Bag", r.order_bag, ["huid", "act_nett_weight"], as_dict=True) or {}
-			metal = frappe.db.get_value("Design", r.design, "metal_colour") if r.design else ""
+			# metal colour comes off the gold ITEM CODE suffix (…22KYG -> Yellow
+			# Gold), exactly like the IGI excel export does
+			color = "Gold"
+			for it in _bag_convert_materials([r.order_bag])[r.order_bag]:
+				if not frappe.db.get_value("Item", it, "stone_type"):
+					g = re.search(r"(\d{2}K)(YG|WG|PG)$", it)
+					if g:
+						color = _IGI_METAL_COLOR[g.group(2)]
+						break
 			row.update({"style_no": "{0} {1}".format(r.design or "", r.order_bag).strip(),
-				"metal_color": _IGI_METAL_COLOR.get(metal or "", "Gold"),
+				"metal_color": color,
 				"color": (_IGI_QUALITY.get(d.quality or "", ("", "")))[0],
 				"clarity": (_IGI_QUALITY.get(d.quality or "", ("", "")))[1],
 				"shape": "Round Brilliant"})
