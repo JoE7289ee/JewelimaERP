@@ -3,9 +3,9 @@
 //
 // Certification desk (Delivery) — PREPARE a batch: pick the certification +
 // center first (locks the format and, for IGI, the ONE colour+clarity), then
-// scan products in. Every rejected scan lands in the history with WHY. The
-// table mirrors the lab's submission format. Prep gets its final outgoing
-// name (IGI-0001) immediately; the actual SEND happens on Send Certifications.
+// scan products into a LOCAL draft (nothing saved). Every rejected scan lands
+// in the history with WHY. Hitting PREP creates the batch in one shot with its
+// final code-series name (IGI-0001); the actual SEND happens on Send Certifications.
 // Route: /app/certify
 
 frappe.pages["certify"].on_page_load = function (wrapper) {
@@ -13,7 +13,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	let CTX = { types: [], centers: [], qualities: [] };
-	let prep = null;
+	let prep = null;    // a SAVED batch (opened from Send Certifications)
+	let draft = null;   // the local unsaved list {cert_type, center, quality, rows}
 	const hist = [];
 
 	$(page.main).append(`
@@ -91,8 +92,11 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	root.find(".cf-start").on("click", () => {
 		const t = fType.get_value();
 		if (!t) return frappe.show_alert({ message: __("Pick the certification."), indicator: "orange" }, 3);
-		frappe.call({ method: API + ".create_cert_prep", args: { cert_type: t, center: fCenter.get_value() || null, quality: fQual.get_value() || null } })
-			.then((r) => load((r.message || {}).name));
+		if (t === "IGI" && !fQual.get_value())
+			return frappe.show_alert({ message: __("IGI batches carry ONE colour+clarity — pick it first."), indicator: "orange" }, 4);
+		draft = { cert_type: t, center: fCenter.get_value() || null, quality: fQual.get_value() || "", rows: [] };
+		prep = null;
+		paint();
 	});
 
 	function load(name) {
@@ -115,52 +119,94 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	const BASIC_HEAD = [__("Card"), __("Design"), __("Type"), __("Gross (g)"), __("Diamond (ct)")];
 
 	function paint() {
-		const igi = prep.cert_type === "IGI";
-		const locked = prep.status !== "Prepared";
+		const src = prep || {
+			name: __("DRAFT — not prepped yet"), cert_type: draft.cert_type, center: draft.center || "",
+			quality: draft.quality, status: "Draft", rows: draft.rows, count: draft.rows.length,
+			gross: Math.round(draft.rows.reduce((a, r) => a + (r.gross || 0), 0) * 1000) / 1000,
+			dmd_ct: Math.round(draft.rows.reduce((a, r) => a + (r.dmd_ct || 0), 0) * 1000) / 1000,
+		};
+		const igi = src.cert_type === "IGI";
+		const locked = prep ? prep.status !== "Prepared" : false;
 		root.find(".cf-setup, .cf-req").toggle(false);
 		root.find(".cf-head").css("display", "flex").html(`
-			<span class="nm">${esc(prep.name)}</span>
-			<span>${esc(prep.cert_type)}${prep.center ? " · " + esc(prep.center.split("-").slice(1).join("-")) : ""}</span>
-			${prep.quality ? `<span class="cf-lock">${esc(prep.quality)}</span>` : ""}
-			<span class="cf-lock" style="background:${prep.status === "Prepared" ? "#7f8c8d" : prep.status === "Cancelled" ? "#b02a2a" : "#2e7d32"};">${esc(prep.status)}</span>`);
+			<span class="nm">${esc(src.name)}</span>
+			<span>${esc(src.cert_type)}${src.center ? " · " + esc(src.center.split("-").slice(1).join("-")) : ""}</span>
+			${src.quality ? `<span class="cf-lock">${esc(src.quality)}</span>` : ""}
+			<span class="cf-lock" style="background:${src.status === "Draft" ? "#b35a00" : src.status === "Prepared" ? "#7f8c8d" : src.status === "Cancelled" ? "#b02a2a" : "#2e7d32"};">${esc(src.status)}</span>`);
 		const cols = igi ? IGI_COLS : BASIC_COLS;
 		const head = igi ? IGI_HEAD : BASIC_HEAD;
 		root.find(".cf-th").html(`<tr>${igi ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${locked ? "" : "<th></th>"}</tr>`);
-		root.find(".cf-tb").html(prep.rows.map((r) => `<tr data-row="${esc(r.row)}">
+		root.find(".cf-tb").html(src.rows.map((r, i) => `<tr data-row="${esc(r.row || i)}" data-i="${i}">
 			${igi ? `<td><b>${esc(r.order_bag)}</b></td>` : ""}
 			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}">${typeof r[c] === "number" ? r[c].toFixed(3) : esc("" + (r[c] || ""))}</td>`).join("")}
 			${locked ? "" : '<td class="del">&times;</td>'}</tr>`).join("")
 			|| `<tr><td colspan="9" style="color:var(--text-muted);padding:14px;">${__("Scan the first product.")}</td></tr>`);
 		root.find("table.cf-t").show();
-		root.find(".cf-tot").show().text(__("{0} piece(s) · {1} g gross · {2} ct diamond", [prep.count, prep.gross, prep.dmd_ct]));
+		root.find(".cf-tot").show().text(__("{0} piece(s) · {1} g gross · {2} ct diamond", [src.count, src.gross, src.dmd_ct]));
 		root.find(".cf-scanrow").css("display", locked ? "none" : "flex");
 		root.find(".cf-actions").css("display", "flex");
-		root.find(".cf-xlsx").toggle(igi && prep.count > 0);
+		root.find(".cf-prep").toggle(!!draft && !prep && src.count > 0);
+		root.find(".cf-xlsx").toggle(igi && src.count > 0);
 		root.find(".cf-cancel").toggle(!locked);
+		root.find(".cf-cancel").text(prep ? __("Cancel Batch") : __("Discard Draft"));
 		if (!locked) setTimeout(() => scan.$input.focus(), 100);
 	}
 
+	const rejMsg = (err) => ((err && err._server_messages && JSON.parse(JSON.parse(err._server_messages)[0]).message) || __("Rejected")).replace(/<[^>]*>/g, "");
 	scan.$input.on("keydown", (e) => {
 		if (e.key !== "Enter") return;
 		const v = (scan.$input.val() || "").trim();
 		if (!v) return;
 		scan.set_value("");
+		if (draft && !prep) {
+			// LOCAL list — validated server-side, saved only on PREP
+			frappe.call({ method: API + ".cert_draft_scan", args: { cert_type: draft.cert_type,
+				quality: draft.quality, barcode: v, existing: JSON.stringify(draft.rows.map((r) => r.order_bag)) }, freeze: false })
+				.then((r) => { draft.rows.push(r.message); logScan(v, true, ""); paint(); })
+				.catch((err) => { logScan(v, false, rejMsg(err)); scan.$input.focus(); });
+			return;
+		}
 		frappe.call({ method: API + ".cert_prep_scan", args: { name: prep.name, barcode: v }, freeze: false })
 			.then((r) => { prep = r.message; logScan(v, true, ""); paint(); })
-			.catch((err) => {
-				const msg = ((err && err._server_messages && JSON.parse(JSON.parse(err._server_messages)[0]).message) || __("Rejected")).replace(/<[^>]*>/g, "");
-				logScan(v, false, msg);
-				scan.$input.focus();
-			});
+			.catch((err) => { logScan(v, false, rejMsg(err)); scan.$input.focus(); });
 	});
 	root.on("click", "table.cf-t .del", function () {
+		if (draft && !prep) {
+			draft.rows.splice(cint($(this).closest("tr").data("i")), 1);
+			paint();
+			return;
+		}
 		frappe.call({ method: API + ".cert_prep_remove", args: { name: prep.name, row: $(this).closest("tr").data("row") } })
 			.then((r) => { prep = r.message; paint(); });
 	});
-	root.find(".cf-cancel").on("click", () => frappe.confirm(__("Cancel {0}? The record stays, marked Cancelled.", [prep.name]),
-		() => frappe.call({ method: API + ".cert_prep_cancel", args: { name: prep.name } }).then(() => load(prep.name))));
+	root.find(".cf-cancel").on("click", () => {
+		if (draft && !prep) {
+			frappe.confirm(__("Discard this draft? Nothing was saved."), () => {
+				draft = null;
+				root.find(".cf-head, .cf-scanrow, table.cf-t, .cf-tot, .cf-actions").hide();
+				root.find(".cf-setup, .cf-req").show();
+			});
+			return;
+		}
+		frappe.confirm(__("Cancel {0}? The record stays, marked Cancelled.", [prep.name]),
+			() => frappe.call({ method: API + ".cert_prep_cancel", args: { name: prep.name } }).then(() => load(prep.name)));
+	});
+	root.find(".cf-prep").on("click", () => {
+		frappe.confirm(__("Prep {0} piece(s) for {1}? The batch is created and NAMED now.", [draft.rows.length, draft.cert_type]), () => {
+			frappe.dom.freeze(__("Prepping..."));
+			frappe.call({ method: API + ".cert_prep_create_full", args: { cert_type: draft.cert_type,
+				center: draft.center, quality: draft.quality, bags: JSON.stringify(draft.rows.map((r) => r.order_bag)) } })
+				.then((r) => {
+					frappe.dom.unfreeze();
+					const m = r.message || {};
+					frappe.show_alert({ message: __("{0} prepped — {1} piece(s).", [m.name, m.count]), indicator: "green" }, 5);
+					draft = null;
+					load(m.name);
+				}).catch(() => frappe.dom.unfreeze());
+		});
+	});
 	root.find(".cf-xlsx").on("click", () =>
-		open_url_post("/api/method/jewelima.jewelima.api.export_igi_xlsx", { bags: JSON.stringify(prep.rows.map((r) => r.order_bag)) }));
+		open_url_post("/api/method/jewelima.jewelima.api.export_igi_xlsx", { bags: JSON.stringify(((prep || draft).rows).map((r) => r.order_bag)) }));
 
 	// arriving with a prep already picked (from Send Certifications)
 	if (frappe.route_options && frappe.route_options.prep) { load(frappe.route_options.prep); frappe.route_options = null; }

@@ -7035,6 +7035,95 @@ def get_cert_prep_context():
 	return {"types": types, "centers": centers, "qualities": quals}
 
 
+def _cert_validate_piece(cert_type, quality, nm, taken=None):
+	"""All the scan guards, WITHOUT writing anything. Returns the piece's basics."""
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} does not exist.").format(nm or "?"))
+	b = frappe.db.get_value("Order Bag", nm,
+		["is_finished", "stock_status", "design", "act_gross_weight", "act_dmd_weight"], as_dict=True)
+	if not b.is_finished:
+		frappe.throw(frappe._("{0} is not a product yet — MAKE IT A PRODUCT first (Make Products).").format(nm))
+	if b.stock_status != "In Stock":
+		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can go out.").format(nm, b.stock_status))
+	if taken and nm in taken:
+		frappe.throw(frappe._("{0} is already on this list.").format(nm))
+	other = frappe.db.sql("""select i.parent from `tabCertification Item` i
+		join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and c.status = 'Prepared' limit 1""", (nm,))
+	if other:
+		frappe.throw(frappe._("{0} is already on prepared batch {1}.").format(nm, other[0][0]))
+	if cert_type == "IGI":
+		quals = _bag_diamond_qualities(nm)
+		if len(quals) > 1:
+			frappe.throw(frappe._("{0} carries MIXED diamond qualities ({1}) — IGI batches take one only.").format(nm, ", ".join(quals)))
+		if not quals:
+			frappe.throw(frappe._("{0} has no diamonds — nothing for IGI to certify.").format(nm))
+		if quals[0] != quality:
+			frappe.throw(frappe._("{0} is {1} — this batch is locked to {2}.").format(nm, quals[0], quality))
+	return b
+
+
+def _cert_format_row(cert_type, quality, nm, b):
+	row = {"order_bag": nm, "design": b.design or "",
+		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+		"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight)}
+	if cert_type == "IGI":
+		color = "Gold"
+		for it in _bag_convert_materials([nm])[nm]:
+			if not frappe.db.get_value("Item", it, "stone_type"):
+				g = re.search(r"(\d{2}K)(YG|WG|PG)$", it)
+				if g:
+					color = _IGI_METAL_COLOR[g.group(2)]
+					break
+		row.update({"style_no": "{0} {1}".format(b.design or "", nm).strip(),
+			"metal_color": color,
+			"color": (_IGI_QUALITY.get(quality or "", ("", "")))[0],
+			"clarity": (_IGI_QUALITY.get(quality or "", ("", "")))[1],
+			"shape": "Round Brilliant"})
+	return row
+
+
+@frappe.whitelist()
+def cert_draft_scan(cert_type, quality, barcode, existing=None):
+	"""Validate ONE scan for the local (unsaved) draft list — nothing is written.
+	Throws with the reason on any rejection; returns the format row otherwise."""
+	if isinstance(existing, str):
+		existing = json.loads(existing or "[]")
+	nm = (barcode or "").strip()
+	b = _cert_validate_piece(cert_type, (quality or "").strip(), nm, set(existing or []))
+	return _cert_format_row(cert_type, quality, nm, b)
+
+
+@frappe.whitelist()
+def cert_prep_create_full(cert_type, center=None, quality=None, bags=None):
+	"""PREP: the draft list becomes the real batch in one shot — re-validated
+	piece by piece, then named by the code series (IGI-0001)."""
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	bags = [b for b in (bags or []) if b]
+	if not bags:
+		frappe.throw(frappe._("Scan at least one piece before prepping."))
+	if not frappe.db.exists("Certification Type", cert_type):
+		frappe.throw(frappe._("Pick the certification."))
+	quality = (quality or "").strip()
+	if cert_type == "IGI" and not quality:
+		frappe.throw(frappe._("IGI batches carry ONE colour+clarity — pick it first."))
+	rows, seen = [], set()
+	for nm in bags:
+		b = _cert_validate_piece(cert_type, quality, nm, seen)
+		seen.add(nm)
+		rows.append({"order_bag": nm, "design": b.design,
+			"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+			"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight)})
+	legacy = {"HALL": "HALLMARKING", "SGL": "SGL", "IDT": "IDT", "GIG": "GIG"}.get(cert_type)
+	d = frappe.get_doc({"doctype": "Certification", "cert_type": cert_type,
+		"center": center or None, "quality": quality, "status": "Prepared",
+		"prepared_on": frappe.utils.today(), "certification_type": legacy, "items": rows})
+	d.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name, "count": len(rows)}
+
+
 @frappe.whitelist()
 def create_cert_prep(cert_type, center=None, quality=None):
 	"""Start a prep — it takes its FINAL outgoing name now (IGI-0001)."""
