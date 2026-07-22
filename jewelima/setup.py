@@ -721,6 +721,21 @@ def setup_item_group_tree():
 			leaf = f"GOLD {it.metal_purity}" if it.metal_purity in ("22K", "18K", "14K") else "GOLD STANDARD"
 			frappe.db.set_value("Item", it.name, "item_group", leaf)
 
+	# quality-group parents inside DIAMOND: leaves that are "the same stone,
+	# different in-house batch" live under one parent the certification and sale
+	# flows key on (leaf under 'X GROUP' resolves to quality X automatically).
+	DIAMOND_PARENT_GROUPS = {
+		"VVS-EF GROUP": ["DIAMOND VVS-EF", "DIAMOND VVS1-EF"],
+		"VVS/VS-GH GROUP": ["DIAMOND VVS/VS-GH"],
+	}
+
+	def home_diamond_groups():
+		for parent, leaves in DIAMOND_PARENT_GROUPS.items():
+			ensure(parent, "DIAMOND", 1)
+			for leaf in leaves:
+				if frappe.db.exists("Item Group", leaf):
+					ensure(leaf, parent, 0)
+
 	# the 5th-level ornament branch: GOLD > GOLD ORNAMENT > karat leaves
 	def home_ornament_gold():
 		ensure("GOLD ORNAMENT", "GOLD", 1)
@@ -738,9 +753,13 @@ def setup_item_group_tree():
 
 	home_ornament_gold()
 
-	# re-parent the existing diamond quality groups under DIAMOND
+	# re-parent the existing diamond quality groups under DIAMOND — except the
+	# ones that live under a quality-group parent (homed right after)
+	_grouped = {leaf for leaves in DIAMOND_PARENT_GROUPS.values() for leaf in leaves}
 	for g in frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name"):
-		ensure(g, "DIAMOND", 0)
+		if g not in _grouped:
+			ensure(g, "DIAMOND", 0)
+	home_diamond_groups()
 	# PRODUCT: one leaf per Design Type + the legacy Products leaf
 	for dt in frappe.get_all("Design Type", pluck="name"):
 		ensure(dt, "PRODUCT", 0)

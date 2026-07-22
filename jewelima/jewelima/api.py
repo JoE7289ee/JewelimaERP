@@ -6709,8 +6709,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	# out of the diamond totals and priced from the solitaire brackets (missing
 	# bracket = scan denied). Qualities map through the global Diamond Quality Map
 	# (VVS1-EF rates as VVS-EF) before the chart lookup.
-	qmap = {r.name: r.parent_quality for r in frappe.get_all(
-		"Diamond Quality Map", fields=["name", "parent_quality"])} if frappe.db.exists("DocType", "Diamond Quality Map") else {}
+	qmap = _diamond_qmap()
 	bom_pcs = {}
 	bag_doc = frappe.get_doc("Order Bag", nm)
 	for r in bag_doc.bag_bom:
@@ -7009,10 +7008,25 @@ def get_certifiable_pieces(search=None):
 # then SEND from the Send Certifications page. The prep IS the batch — it is
 # named by the certification code series (IGI-0001) the moment it's created.
 # ---------------------------------------------------------------------------
+def _diamond_qmap():
+	"""quality -> parent quality. TWO sources, tree first: a DIAMOND leaf sitting
+	under an 'X GROUP' Item Group resolves to X (drop a new batch-leaf under the
+	parent and it just works); Diamond Quality Map rows override/extend."""
+	qmap = {}
+	for g in frappe.get_all("Item Group",
+			filters={"name": ["like", "DIAMOND %"], "is_group": 0},
+			fields=["name", "parent_item_group"]):
+		if (g.parent_item_group or "").endswith(" GROUP"):
+			qmap[g.name.replace("DIAMOND ", "")] = g.parent_item_group[:-6].strip()
+	if frappe.db.exists("DocType", "Diamond Quality Map"):
+		for r in frappe.get_all("Diamond Quality Map", fields=["name", "parent_quality"]):
+			qmap[r.name] = r.parent_quality
+	return qmap
+
+
 def _bag_diamond_qualities(nm):
 	"""The DISTINCT parent-mapped diamond qualities a finished piece carries."""
-	qmap = {r.name: r.parent_quality for r in frappe.get_all(
-		"Diamond Quality Map", fields=["name", "parent_quality"])}
+	qmap = _diamond_qmap()
 	quals = set()
 	for item in _bag_convert_materials([nm])[nm]:
 		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
@@ -7029,8 +7043,8 @@ def get_cert_prep_context():
 	types = frappe.get_all("Certification Type", fields=["name", "title", "excel_requirements"], order_by="name")
 	centers = frappe.get_all("Certification Center",
 		fields=["name", "certification_type", "center_name"], order_by="center_name")
-	qmap = {r.name: r.parent_quality for r in frappe.get_all("Diamond Quality Map", fields=["name", "parent_quality"])}
-	groups = frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"]}, pluck="name")
+	qmap = _diamond_qmap()
+	groups = frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name")
 	quals = sorted({qmap.get(g.replace("DIAMOND ", ""), g.replace("DIAMOND ", "")) for g in groups})
 	return {"types": types, "centers": centers, "qualities": quals}
 
