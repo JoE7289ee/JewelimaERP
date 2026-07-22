@@ -653,7 +653,12 @@ ITEM_GROUP_TREE = {
 	# MAIN TYPE -> TYPE -> GROUP (-> leaves). A GROUP with no finer split is itself the leaf.
 	"RAW MATERIAL": {
 		"METAL": {
-			"GOLD": ["GOLD 22K", "GOLD 18K", "GOLD 14K", "GOLD STANDARD"],
+			# ornament golds live one level deeper (GOLD > GOLD ORNAMENT > karats)
+			# so pickers can target ornament metal only; GOLD STANDARD stays
+			# directly under GOLD — melt stock, never inside a piece. The extra
+			# level is re-homed after the main loop (the loop is 4-level only);
+			# material_group stays 'GOLD' either way (it's chain position 3).
+			"GOLD": ["GOLD STANDARD"],
 			"ALLOY": [],
 			# customer-given gold, created on demand from the Party Metal Add page.
 			# Deliberately OUTSIDE the GOLD branch so material_group filters
@@ -716,6 +721,12 @@ def setup_item_group_tree():
 			leaf = f"GOLD {it.metal_purity}" if it.metal_purity in ("22K", "18K", "14K") else "GOLD STANDARD"
 			frappe.db.set_value("Item", it.name, "item_group", leaf)
 
+	# the 5th-level ornament branch: GOLD > GOLD ORNAMENT > karat leaves
+	def home_ornament_gold():
+		ensure("GOLD ORNAMENT", "GOLD", 1)
+		for leaf in ("GOLD 22K", "GOLD 18K", "GOLD 14K"):
+			ensure(leaf, "GOLD ORNAMENT", 0)
+
 	for main, types in ITEM_GROUP_TREE.items():
 		ensure(main, root, 1)
 		for typ, groups in types.items():
@@ -724,6 +735,8 @@ def setup_item_group_tree():
 				ensure(grp, typ, 1 if leaves else 0)
 				for leaf in leaves:
 					ensure(leaf, grp, 0)
+
+	home_ornament_gold()
 
 	# re-parent the existing diamond quality groups under DIAMOND
 	for g in frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name"):
