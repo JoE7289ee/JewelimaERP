@@ -6545,6 +6545,53 @@ def _card_compose(p):
 
 
 @frappe.whitelist()
+def design_card_autocrop(name):
+	"""Pull the PRODUCT photo out of a legacy scanned card: score every pixel by
+	colour saturation / darkness, drop the printed top+bottom text bands, take
+	the dense bounding box with padding. Heuristic — the live preview shows the
+	result and a manual upload always wins. Returns base64 (nothing stored)."""
+	import base64
+	from io import BytesIO
+	d = frappe.get_doc("Design Bank", name)
+	src = _cad_image_any(d.photo or d.image)
+	if not src:
+		frappe.throw(frappe._("No image on {0}.").format(d.design_no or name))
+	img = src.convert("RGB")
+	w, h = img.size
+	small = img.resize((max(1, w // 4), max(1, h // 4)))
+	sw, sh = small.size
+	px = small.load()
+	# per-row/col density of "photo-ish" pixels (saturated OR clearly dark)
+	rows = [0] * sh
+	cols = [0] * sw
+	for y in range(sh):
+		for x in range(sw):
+			r, g, b = px[x, y]
+			mx, mn = max(r, g, b), min(r, g, b)
+			sat = mx - mn
+			lum = (r + g + b) // 3
+			if sat > 26 or lum < 120:
+				rows[y] += 1
+				cols[x] += 1
+	# ignore the printed bands: top 12% (design no) and bottom 20% (GW/DW text)
+	y0_lim, y1_lim = int(sh * 0.12), int(sh * 0.80)
+	def span(vals, lo, hi, need):
+		idx = [i for i in range(lo, hi) if vals[i] >= need]
+		return (idx[0], idx[-1]) if idx else (lo, hi - 1)
+	ry0, ry1 = span(rows, y0_lim, y1_lim, max(3, sw // 25))
+	cx0, cx1 = span(cols, 0, sw, max(3, sh // 25))
+	pad = max(2, sw // 40)
+	box = (max(0, (cx0 - pad) * 4), max(0, (ry0 - pad) * 4),
+		min(w, (cx1 + pad) * 4), min(h, (ry1 + pad) * 4))
+	if box[2] - box[0] < w // 6 or box[3] - box[1] < h // 8:
+		frappe.throw(frappe._("Couldn't find a clear photo region on this card — upload the photo manually."))
+	crop = img.crop(box)
+	buf = BytesIO()
+	crop.save(buf, "PNG")
+	return {"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
+
+
+@frappe.whitelist()
 def design_card_preview(payload):
 	"""Live preview: compose and hand back base64 — nothing touches the record."""
 	import base64

@@ -54,7 +54,10 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 				<div class="cb-row"><div class="cb-note" style="flex:1;"></div></div>
 				<div class="cb-extra"><textarea placeholder="${__("anything else on the card, one line each")}"></textarea></div>
 				<div class="cb-sec">${__("Photo")}</div>
-				<div class="cb-photo">${__("click to upload the product photo")}</div>
+				<div style="display:flex;gap:10px;align-items:center;">
+					<div class="cb-photo" style="flex:1;">${__("click to upload the product photo")}</div>
+					<button class="btn btn-default cb-crop" style="display:none;">${__("Auto-crop from old card")}</button>
+				</div>
 				<input type="file" class="cb-file" accept="image/*" style="display:none;">
 				<div class="cb-actions">
 					<button class="btn btn-primary cb-save" style="background:#2e7d32;border-color:#2e7d32;">${__("Save — render into Design Bank")}</button>
@@ -144,6 +147,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 			fGW.set_value(m.gross_weight || ""); fDW.set_value(m.diamond_weight || "");
 			fNote.set_value(m.note); root.find(".cb-extra textarea").val(m.extra_lines);
 			root.find(".cb-photo").text(m.photo ? __("photo on record — click to replace") : __("click to upload the product photo"));
+			root.find(".cb-crop").toggle(!!m.image && !m.photo);
 			paintStones();
 			if (!m.photo && m.image) root.find(".cb-prev").attr("src", m.image);
 			else preview();
@@ -160,7 +164,21 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		root.find(".cb-extra textarea").val("");
 		root.find(".cb-photo").text(__("click to upload the product photo"));
 		root.find(".cb-prev").attr("src", "");
+		root.find(".cb-crop").hide();
 		paintStones(); preview();
+	});
+
+	// legacy cards: lift the product photo off the old scanned card
+	root.find(".cb-crop").on("click", () => {
+		if (!cur.name) return;
+		frappe.dom.freeze(__("Cropping..."));
+		frappe.call({ method: API + ".design_card_autocrop", args: { name: cur.name } })
+			.then((r) => {
+				frappe.dom.unfreeze();
+				cur.photo = (r.message || {}).image || "";
+				root.find(".cb-photo").text(__("auto-cropped from the old card — replace if it looks off"));
+				preview();
+			}).catch(() => frappe.dom.unfreeze());
 	});
 
 	root.find(".cb-save").on("click", () => {
