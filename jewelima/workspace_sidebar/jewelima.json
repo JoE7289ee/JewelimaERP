@@ -1047,6 +1047,19 @@
    "url": ""
   },
   {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 1,
+   "label": "Designs",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
    "child": 1,
    "collapsible": 0,
    "icon": "palette",
@@ -1801,7 +1814,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-23 10:55:29.908086",
+ "modified": "2026-07-23 21:17:06.755449",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
