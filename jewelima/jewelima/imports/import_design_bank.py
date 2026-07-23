@@ -174,7 +174,9 @@ def rebuild_cards(limit=500):
 					"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
 				d.photo = fdoc.file_url
 			except Exception:
-				d.photoupdate = 1  # crop failed -> straight onto the upgrade queue
+				# crop refused entirely: the raw scan stands in as the photo —
+				# NO auto-flag; a human decides on Review which ones matter
+				d.photo = d.raw_image
 			payload = {"design_no": d.design_no, "design_type": d.design_type,
 				"gross_weight": d.gross_weight, "diamond_weight": d.diamond_weight,
 				"note": d.note, "extra_lines": d.extra_lines, "photo": d.photo,
