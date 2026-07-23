@@ -144,6 +144,65 @@ def fresh_v2():
 	return {"cards": total, "duplicate_cards": dups, "extra_images": merged}
 
 
+def rebuild_cards(limit=500):
+	"""Batch crop + re-render for imported cards, resumable like ocr_fill:
+	  raw_image <- the original scan (kept forever),
+	  photo     <- the auto-cropped product cutout,
+	  image     <- the NEW-format B/W card rendered from photo + OCR'd values.
+	Gated on ocr_done=1 (values must exist) and duplicate_review=0 (the one-time
+	dedupe page resolves those to one photo FIRST). customer_image stays empty.
+	Run repeatedly / in a loop: bench execute ...rebuild_cards --kwargs "{'limit': 500}"
+	"""
+	from io import BytesIO
+	from jewelima.jewelima.api import _card_compose, design_card_autocrop  # noqa
+	import base64 as _b64
+	rows = frappe.get_all("Design Bank",
+		filters={"rebuilt": 0, "ocr_done": 1, "duplicate_review": 0},
+		fields=["name"], limit=limit)
+	done = failed = 0
+	for r in rows:
+		try:
+			d = frappe.get_doc("Design Bank", r.name)
+			if not d.raw_image:
+				d.raw_image = d.image
+			try:
+				crop = design_card_autocrop(d.name)
+				head, b64 = crop["image"].split(",", 1)
+				fdoc = frappe.get_doc({"doctype": "File",
+					"file_name": "photo-{0}.png".format(frappe.generate_hash(length=8)),
+					"content": _b64.b64decode(b64), "is_private": 0,
+					"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+				d.photo = fdoc.file_url
+			except Exception:
+				d.photoupdate = 1  # crop failed -> straight onto the upgrade queue
+			payload = {"design_no": d.design_no, "design_type": d.design_type,
+				"gross_weight": d.gross_weight, "diamond_weight": d.diamond_weight,
+				"note": d.note, "extra_lines": d.extra_lines, "photo": d.photo,
+				"stones": [{"stone": x.stone, "sieve": x.sieve, "pcs": x.pcs, "ct": x.ct} for x in d.stones]}
+			buf = BytesIO()
+			_card_compose(payload).save(buf, "PNG")
+			tag = "CARD-{0}".format(d.name)
+			for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
+					"attached_to_name": d.name, "file_name": ["like", tag + "%"]}, pluck="name"):
+				frappe.delete_doc("File", old, force=True, ignore_permissions=True)
+			fdoc = frappe.get_doc({"doctype": "File", "file_name": tag + ".png",
+				"content": buf.getvalue(), "is_private": 0,
+				"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+			d.image = fdoc.file_url
+			d.rebuilt = 1
+			d.flags.ignore_version = True
+			d.save(ignore_permissions=True)
+			done += 1
+		except Exception:
+			failed += 1
+		if (done + failed) % 100 == 0:
+			frappe.db.commit()
+	frappe.db.commit()
+	left = frappe.db.count("Design Bank", {"rebuilt": 0, "ocr_done": 1, "duplicate_review": 0})
+	print(f"rebuild_cards: done {done}, failed {failed}, remaining eligible {left}")
+	return {"done": done, "failed": failed, "left": left}
+
+
 def ocr_fill(limit=1000, recheck=False):
 	"""OCR cards to fill gross_weight / diamond_weight / note. Run repeatedly.
 

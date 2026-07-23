@@ -30,7 +30,10 @@
   "customer_image",
   "extra_lines",
   "sec_stones",
-  "stones"
+  "stones",
+  "raw_image",
+  "customer_image_needed",
+  "rebuilt"
  ],
  "fields": [
   {
@@ -112,8 +115,9 @@
   {
    "fieldname": "photoupdate",
    "fieldtype": "Check",
-   "label": "Photo Update Needed",
-   "in_standard_filter": 1
+   "label": "Upgrade Photo",
+   "in_standard_filter": 1,
+   "description": "Crop didn't work / background needs nulling \u2014 the photo-upgrade queue."
   },
   {
    "fieldname": "duplicate_review",
@@ -183,12 +187,32 @@
    "fieldtype": "Table",
    "options": "Design Bank Stone",
    "label": "Stones"
+  },
+  {
+   "fieldname": "raw_image",
+   "fieldtype": "Attach Image",
+   "label": "Raw Image (original scan)",
+   "description": "The imported original card scan \u2014 never touched after the rebuild."
+  },
+  {
+   "fieldname": "customer_image_needed",
+   "fieldtype": "Check",
+   "label": "Customer Image Needed",
+   "in_standard_filter": 1,
+   "description": "Best sellers queued for a lifestyle/AI shot."
+  },
+  {
+   "fieldname": "rebuilt",
+   "fieldtype": "Check",
+   "label": "Rebuilt",
+   "read_only": 1,
+   "description": "Crop + new-format card render done by the batch job."
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 01:00:00.000000",
+ "modified": "2026-07-24 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",
