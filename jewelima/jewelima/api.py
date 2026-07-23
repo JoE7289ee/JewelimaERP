@@ -7431,6 +7431,73 @@ def collect_certification(name):
 
 
 @frappe.whitelist()
+def get_confirm_pool():
+	"""The Confirm page's pool: every piece on a COLLECTED batch with where it
+	stands (pending / confirmed / rejected) — grouped by batch, live-refreshable."""
+	batches = []
+	for c in frappe.get_all("Certification",
+			filters={"status": ["in", ["Collected", "Partially Received"]]},
+			fields=["name", "cert_type", "certification_type", "quality", "collected_on"],
+			order_by="collected_on asc, creation asc"):
+		items = frappe.get_all("Certification Item", filters={"parent": c.name},
+			fields=["name", "order_bag", "design_type", "received", "rejected", "confirmed_by"],
+			order_by="idx")
+		batches.append({"name": c.name, "cert_type": c.cert_type or c.certification_type or "?",
+			"quality": c.quality or "", "collected_on": str(c.collected_on or ""),
+			"pieces": [{"order_bag": i.order_bag, "design_type": i.design_type or "",
+				"state": "confirmed" if i.received else ("rejected" if i.rejected else "pending"),
+				"by": i.confirmed_by or ""} for i in items]})
+	pend = sum(1 for b in batches for p in b["pieces"] if p["state"] == "pending")
+	return {"batches": batches, "pending": pend}
+
+
+@frappe.whitelist()
+def confirm_cert_scan(barcode, mode="accept"):
+	"""ONE scan on the Confirm page — lightweight and race-safe for several
+	scanners at once. Finds the piece on a Collected batch and marks it
+	confirmed (accept) or sends it to the reject queue (reject). Every failure
+	comes back as data for the scan history, never a modal."""
+	nm = (barcode or "").strip()
+	if mode not in ("accept", "reject"):
+		mode = "accept"
+	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
+		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and c.status in ('Collected', 'Partially Received')
+		order by c.creation desc limit 1""", nm, as_dict=True)
+	if not row:
+		if not frappe.db.exists("Order Bag", nm):
+			return {"rejected_scan": frappe._("This card doesn't exist")}
+		return {"rejected_scan": frappe._("Not on any collected batch")}
+	r = row[0]
+	if r.received:
+		return {"rejected_scan": frappe._("Already confirmed by {0}").format(r.confirmed_by or "?")}
+	if r.rejected:
+		return {"rejected_scan": frappe._("Already in the reject queue")}
+	now = frappe.utils.now_datetime()
+	user = frappe.session.user
+	# ATOMIC claim: the guarded UPDATE wins for exactly one scanner — a second
+	# simultaneous scan of the same card affects 0 rows and reports the loser
+	field = "received" if mode == "accept" else "rejected"
+	frappe.db.sql("""update `tabCertification Item`
+		set {0} = 1, received_on = %s, confirmed_by = %s
+		where name = %s and received = 0 and rejected = 0""".format(field), (now, user, r.name))
+	claimed = frappe.db.sql("select confirmed_by from `tabCertification Item` where name = %s", r.name)[0][0]
+	if claimed != user:
+		return {"rejected_scan": frappe._("Already confirmed by {0}").format(claimed or "?")}
+	if mode == "accept":
+		ct = frappe.db.get_value("Certification", r.parent, "cert_type") or frappe.db.get_value(
+			"Certification", r.parent, "certification_type")
+		frappe.db.set_value("Order Bag", nm, "certifications", _stamp_certification(nm, ct))
+	# batch rollup: all processed -> Received; some -> Partially Received
+	left = frappe.db.sql("""select count(*) from `tabCertification Item`
+		where parent = %s and received = 0 and rejected = 0""", r.parent)[0][0]
+	frappe.db.set_value("Certification", r.parent, "status",
+		"Received" if left == 0 else "Partially Received", update_modified=False)
+	frappe.db.commit()
+	return {"ok": 1, "mode": mode, "batch": r.parent, "batch_done": left == 0}
+
+
+@frappe.whitelist()
 def send_cert_prep(name):
 	"""The actual SEND: one stock move Finished Goods -> At Certification for
 	everything the pieces hold, bags flip At Certification, status -> Sent."""

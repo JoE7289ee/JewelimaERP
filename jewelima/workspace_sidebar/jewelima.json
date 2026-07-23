@@ -865,6 +865,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "check-circle",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Confirm",
+   "link_to": "confirm-certifications",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "archive",
@@ -1788,7 +1801,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-23 10:46:49.668472",
+ "modified": "2026-07-23 10:55:29.908086",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

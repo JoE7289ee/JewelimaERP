@@ -12,7 +12,9 @@
   "dmd_ct",
   "received",
   "huid",
-  "received_on"
+  "received_on",
+  "rejected",
+  "confirmed_by"
  ],
  "fields": [
   {
@@ -80,12 +82,24 @@
    "fieldtype": "Datetime",
    "label": "Received On",
    "read_only": 1
+  },
+  {
+   "fieldname": "rejected",
+   "fieldtype": "Check",
+   "label": "Rejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confirmed_by",
+   "fieldtype": "Data",
+   "label": "Confirmed By",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-14 17:00:00.000000",
+ "modified": "2026-07-23 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Certification Item",
