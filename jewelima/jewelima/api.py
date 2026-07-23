@@ -6494,8 +6494,11 @@ def _card_font(size, bold=False):
 	"""Card typography: Cantarell (thin, elegant), SHIPPED IN THE APP so every
 	deployment renders identically; DejaVu is only the last-resort fallback."""
 	from PIL import ImageFont
-	shipped = frappe.get_app_path("jewelima", "public", "fonts",
-		"Cantarell-Bold.otf" if bold else "Cantarell-Light.otf")
+	# bold -> Bold, "regular" -> Regular (printable weight for the stone/note
+	# lines), everything else -> Light
+	name = {"bold": "Cantarell-Bold.otf", "regular": "Cantarell-Regular.otf"}.get(
+		"bold" if bold is True else bold or "", "Cantarell-Light.otf")
+	shipped = frappe.get_app_path("jewelima", "public", "fonts", name)
 	for cand in (shipped,
 			"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
 			else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
@@ -6532,26 +6535,27 @@ def _card_compose(p):
 	d.line([30, y - 12, W - 30, y - 12], fill="#000000", width=3)
 	big = _card_font(34, True)
 	if flt(p.get("gross_weight")):
-		d.text((30, y), "GW  {0} GMS".format(p["gross_weight"]), font=big, fill="#111111")
+		d.text((30, y), "GW  {0} gm".format(p["gross_weight"]), font=big, fill="#111111")
 	if flt(p.get("diamond_weight")):
-		d.text((W - 30, y), "DW  {0} CTS".format(p["diamond_weight"]), font=big, fill="#111111", anchor="ra")
+		d.text((W - 30, y), "DW  {0} ct".format(p["diamond_weight"]), font=big, fill="#111111", anchor="ra")
 	y += 56
-	f_line = _card_font(26)
+	# stone/note lines print too faint in Light — Regular at 28 holds up on paper
+	f_line = _card_font(28, "regular")
 	for st in (p.get("stones") or []):
 		if not (st.get("stone") or st.get("sieve")):
 			continue
 		bits = [x for x in (st.get("stone"), st.get("sieve"),
 			("{0} pc".format(st["pcs"]) if cint(st.get("pcs")) else ""),
 			("{0} ct".format(st["ct"]) if flt(st.get("ct")) else "")) if x]
-		d.text((30, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#222222")
+		d.text((30, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#111111")
 		y += 38
 	if p.get("note"):
-		d.text((30, y), str(p["note"]), font=f_line, fill="#222222")
+		d.text((30, y), str(p["note"]), font=f_line, fill="#111111")
 		y += 38
 	for ln in (p.get("extra_lines") or "").split("\n"):
 		if ln.strip():
-			d.text((30, y), ln.strip(), font=f_line, fill="#444444")
-			y += 36
+			d.text((30, y), ln.strip(), font=f_line, fill="#111111")
+			y += 38
 	d.line([30, H - 52, W - 30, H - 52], fill="#000000", width=2)
 	d.text((W // 2, H - 40), "JEWELIMA", font=_card_font(22, True), fill="#000000", anchor="ma")
 	return img
