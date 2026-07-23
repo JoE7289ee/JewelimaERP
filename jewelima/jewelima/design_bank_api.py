@@ -274,3 +274,37 @@ def delete_design_bank(name):
 	frappe.delete_doc("Design Bank", name, ignore_permissions=True)  # tags + uploaded image File cascade
 	frappe.db.commit()
 	return {"ok": 1, "design_no": design_no}
+
+
+@frappe.whitelist()
+def get_duplicate_queue(start=0, limit=20):
+	"""The one-time dedupe queue: cards flagged duplicate_review with every
+	candidate image (the card's own + each folded-in review image)."""
+	rows = frappe.get_all("Design Bank", filters={"duplicate_review": 1},
+		fields=["name", "design_no", "image", "raw_image", "source_file"],
+		order_by="design_no", start=int(start), limit=int(limit))
+	total = frappe.db.count("Design Bank", {"duplicate_review": 1})
+	for r in rows:
+		r["candidates"] = [{"image": r.raw_image or r.image, "source_file": r.source_file, "main": 1}] + [
+			{"image": x.image, "source_file": x.source_file, "main": 0}
+			for x in frappe.get_all("Design Bank Review Image",
+				filters={"parent": r.name}, fields=["image", "source_file"], order_by="idx")]
+	return {"rows": rows, "total": total}
+
+
+@frappe.whitelist()
+def resolve_duplicate(name, image):
+	"""ONE photo wins: it becomes the card's raw source, the review rows clear,
+	duplicate_review drops — the card now flows into the rebuild + review pipe."""
+	d = frappe.get_doc("Design Bank", name)
+	if not d.duplicate_review:
+		frappe.throw(frappe._("{0} is not awaiting duplicate review.").format(d.design_no))
+	d.raw_image = image
+	d.image = d.image or image
+	d.set("review_images", [])
+	d.duplicate_review = 0
+	d.rebuilt = 0  # re-enter the crop+rebuild queue with the chosen photo
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "left": frappe.db.count("Design Bank", {"duplicate_review": 1})}

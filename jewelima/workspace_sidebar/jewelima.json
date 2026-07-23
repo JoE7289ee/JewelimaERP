@@ -1023,6 +1023,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "copy",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Duplicates",
+   "link_to": "design-duplicates",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -1827,7 +1840,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-23 23:32:10.161107",
+ "modified": "2026-07-24 00:36:33.692589",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
