@@ -17,8 +17,8 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 		.co-top{font-size:13px;color:var(--text-muted);margin-bottom:14px;}
 		.co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;}
 		.co-card{border:1px solid var(--border-color);border-radius:9px;background:var(--fg-color);padding:14px 18px;}
-		.co-card.hall{border-left:5px solid #b8860b;}
-		.co-card.lab{border-left:5px solid #1f618d;}
+		.co-card.hall{border-left:5px solid #b8860b;background:rgba(184,134,11,.10);}
+		.co-card.lab{border-left:5px solid #1f618d;background:rgba(31,97,141,.10);}
 		.co-head{display:flex;justify-content:space-between;align-items:baseline;}
 		.co-nm{font-size:18px;font-weight:800;}
 		.co-days{font-size:13px;font-weight:700;}
