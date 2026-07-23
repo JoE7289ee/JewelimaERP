@@ -6491,9 +6491,14 @@ def export_price_chart_pdf(name):
 # the record's image, keeping the raw photo for future re-renders.
 # ---------------------------------------------------------------------------
 def _card_font(size, bold=False):
+	"""Card typography: Cantarell (thin, elegant), SHIPPED IN THE APP so every
+	deployment renders identically; DejaVu is only the last-resort fallback."""
 	from PIL import ImageFont
-	for cand in (["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"] if bold else
-			["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]):
+	shipped = frappe.get_app_path("jewelima", "public", "fonts",
+		"Cantarell-Bold.otf" if bold else "Cantarell-Light.otf")
+	for cand in (shipped,
+			"/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
+			else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
 		try:
 			return ImageFont.truetype(cand, size)
 		except Exception:
