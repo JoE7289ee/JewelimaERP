@@ -7377,6 +7377,60 @@ def get_cert_preps():
 
 
 @frappe.whitelist()
+def get_certifications_out():
+	"""Certification Out board: every SENT batch — days out, piece count split by
+	design type, weights. No per-piece rows; collection is whole-batch."""
+	out = []
+	for c in frappe.get_all("Certification",
+			filters={"status": "Sent"},
+			fields=["name", "cert_type", "certification_type", "center", "quality", "sent_on"],
+			order_by="sent_on asc, creation asc"):
+		items = frappe.get_all("Certification Item", filters={"parent": c.name},
+			fields=["design_type", "gross", "dmd_ct"])
+		by_type = {}
+		for r in items:
+			t = r.design_type or "UNTYPED"
+			by_type[t] = by_type.get(t, 0) + 1
+		out.append({
+			"name": c.name, "cert_type": c.cert_type or c.certification_type or "?",
+			"center": c.center or "", "quality": c.quality or "",
+			"sent_on": str(c.sent_on or ""),
+			"days_out": frappe.utils.date_diff(frappe.utils.today(), c.sent_on) if c.sent_on else 0,
+			"pieces": len(items),
+			"by_type": [{"design_type": t, "count": n} for t, n in sorted(by_type.items())],
+			"gross": round(sum(flt(r.gross) for r in items), 3),
+			"dmd_ct": round(sum(flt(r.dmd_ct) for r in items), 3),
+		})
+	return {"batches": out, "total_pieces": sum(b["pieces"] for b in out)}
+
+
+@frappe.whitelist()
+def collect_certification(name):
+	"""The packet came back: count the pieces and COLLECT the whole batch — stock
+	moves At Certification -> Finished Goods, bags flip back In Stock, status ->
+	Collected. NOT confirmed yet: HUID / certificate confirmation happens on its
+	own page later."""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Sent":
+		frappe.throw(frappe._("{0} is {1} — only Sent batches collect.").format(name, d.status))
+	bags = [r.order_bag for r in d.items]
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
+	now = frappe.utils.now_datetime()
+	for nm in bags:
+		frappe.db.set_value("Order Bag", nm, {"stock_status": "In Stock", "in_stock_on": now})
+	d.status = "Collected"
+	d.collected_on = frappe.utils.today()
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "pieces": len(bags), "stock_entry": se}
+
+
+@frappe.whitelist()
 def send_cert_prep(name):
 	"""The actual SEND: one stock move Finished Goods -> At Certification for
 	everything the pieces hold, bags flip At Certification, status -> Sent."""

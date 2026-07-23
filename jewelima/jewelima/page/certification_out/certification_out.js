@@ -1,170 +1,74 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Certification Out (Delivery) — the board of pieces OUT at certification, batch
-// by batch (make-tree style): one panel per batch (stone labs blue / HALLMARKING amber),
-// a chip per piece with its weights, sent date + days out on the panel. Header
-// totals what's physically out: pieces, pure gold, stone weight. Clicking a
-// pending chip receives that piece back (HUID / certificate number dialog).
-// Route: /app/certification-out
+// Certification Out (Delivery) — the batches OUT at the labs, batch-level only:
+// batch · days out · piece count split by design type · weights. COLLECT brings
+// the WHOLE batch back (stock At Certification -> Finished Goods, bags In
+// Stock) and parks it as Collected — NOT confirmed; HUID / certificate
+// confirmation gets its own page. Route: /app/certification-out
 
 frappe.pages["certification-out"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Certification Out", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { batches: [], summary: {} };
 	const esc = frappe.utils.escape_html;
-	const fmt = (v) => flt(v).toFixed(3);
 
 	$(page.main).append(`
 		<style>
-		.co-top{display:flex;align-items:center;gap:14px;margin:2px 0 18px;flex-wrap:wrap;}
-		.co-mark{display:flex;align-items:center;gap:12px;}
-		.co-mark svg{width:38px;height:38px;}
-		.co-headline{font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:4px;color:#3d3425;}
-		.co-sub{color:var(--text-muted);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;margin-top:1px;}
-		.co-cards{display:flex;gap:12px;flex-wrap:wrap;margin-left:auto;}
-		.co-card{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);padding:7px 16px;min-width:130px;text-align:right;}
-		.co-card .lb{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
-		.co-card .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;}
-		.co-card.gold{box-shadow:inset 3px 0 0 #b8860b;}
-		.co-card.stone{box-shadow:inset 3px 0 0 #1c5da8;}
-		.co-board{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;}
-		.co-col{width:340px;flex:0 0 340px;}
-		.co-title{font-size:18px;font-weight:800;letter-spacing:.5px;text-align:center;margin:0 0 2px;}
-		.co-title small{display:block;font-size:10.5px;font-weight:600;opacity:.7;letter-spacing:.1em;}
-		.co-panel{border-radius:14px;min-height:120px;padding:12px;border:2px solid;display:flex;flex-direction:column;gap:8px;}
-		.co-panel.igi{border-color:#1c5da8;background:#f3f7fc;color:#1c5da8;}
-		.co-panel.hm{border-color:#b8860b;background:#fdf8ec;color:#9a6700;}
-		.co-panel.done{opacity:.65;filter:saturate(.6);}
-		.co-chip{display:flex;align-items:center;gap:10px;background:#fff;border:2px solid transparent;border-radius:9px;padding:8px 12px;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.06);color:var(--text-color);}
-		.co-chip.pend{cursor:pointer;}
-		.co-chip.pend:hover{box-shadow:0 2px 6px rgba(0,0,0,.14);border-color:currentColor;}
-		.co-chip .code{font-weight:800;letter-spacing:.4px;font-size:13px;}
-		.co-chip .ty{font-size:10.5px;color:#6b7785;}
-		.co-chip .wt{margin-left:auto;font-variant-numeric:tabular-nums;font-size:12px;color:#6b7785;text-align:right;}
-		.co-chip.back{background:#f2f8f3;border-color:#bfe3c6;}
-		.co-chip.back .code{color:#1d7a33;}
-		.co-chip .nums{font-size:10.5px;color:#1d7a33;font-weight:700;}
-		.co-cnt{margin-top:auto;padding-top:8px;text-align:center;font-size:12px;font-weight:700;opacity:.85;}
-		.co-days{display:inline-block;border-radius:8px;background:#fff;padding:0 8px;font-size:10.5px;font-weight:800;border:1px solid currentColor;}
-		.co-none{border:1px dashed var(--border-color);border-radius:14px;padding:40px;text-align:center;color:var(--text-muted);width:100%;}
+		.co-top{font-size:13px;color:var(--text-muted);margin-bottom:14px;}
+		.co-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;}
+		.co-card{border:1px solid var(--border-color);border-radius:9px;background:var(--fg-color);padding:14px 18px;}
+		.co-card.hall{border-left:5px solid #b8860b;}
+		.co-card.lab{border-left:5px solid #1f618d;}
+		.co-head{display:flex;justify-content:space-between;align-items:baseline;}
+		.co-nm{font-size:18px;font-weight:800;}
+		.co-days{font-size:13px;font-weight:700;}
+		.co-days.warn{color:#b35a00;}
+		.co-days.late{color:#b02a2a;}
+		.co-meta{font-size:12px;color:var(--text-muted);margin:3px 0 10px;}
+		.co-types{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+		.co-type{background:var(--control-bg);border:1px solid var(--border-color);border-radius:12px;padding:2px 12px;font-size:12.5px;}
+		.co-type b{margin-right:4px;}
+		.co-nums{font-size:12.5px;color:var(--text-muted);margin-bottom:12px;}
+		.co-collect{background:#2e7d32;border-color:#2e7d32;color:#fff;}
+		.co-empty{color:var(--text-muted);padding:24px;}
 		</style>
-		<div class="co-top">
-			<div class="co-mark">
-				<svg viewBox="0 0 24 24" fill="none" stroke="#8a6d1a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M20 6 9 17l-5-5"/><circle cx="12" cy="12" r="10"/>
-				</svg>
-				<div><div class="co-headline">CERTIFICATION OUT</div><div class="co-sub">${__("what's at the lab · click a card to receive it back")}</div></div>
-			</div>
-			<div class="co-cards"></div>
-		</div>
-		<div class="co-board"></div>
+		<div class="co-top"></div>
+		<div class="co-grid"></div>
 	`);
-	const root = $(page.main)[0];
-
-	function daysOut(sent) {
-		if (!sent) return 0;
-		return Math.max(0, frappe.datetime.get_day_diff(frappe.datetime.get_today(), sent));
-	}
-
-	function render() {
-		const s = S.summary || {};
-		$(root).find(".co-cards").html(`
-			<div class="co-card"><div class="lb">${__("Pieces Out")}</div><div class="v">${s.pieces_out || 0}</div></div>
-			<div class="co-card gold"><div class="lb">${__("Pure Gold Out")}</div><div class="v">${fmt(s.pure_gold || 0)} g</div></div>
-			<div class="co-card stone"><div class="lb">${__("Stones Out")}</div><div class="v">${fmt(s.stones_ct || 0)} ct</div></div>
-			<div class="co-card"><div class="lb">${__("Batches Out")}</div><div class="v">${s.batches_out || 0}</div></div>`);
-
-		const $b = $(root).find(".co-board");
-		if (!S.batches.length) {
-			$b.html(`<div class="co-none">${__("Nothing out at certification.")}</div>`);
-			return;
-		}
-		$b.html(S.batches.map((b) => {
-			const cls = b.certification_type === "HALLMARKING" ? "hm" : "igi"; // amber = hallmark, blue = any stone lab
-			const d = daysOut(b.sent_on);
-			return `<div class="co-col" data-name="${esc(b.name)}">
-				<div class="co-title">${esc(b.name)}
-					<small>${esc(b.certification_type)}${b.lab ? " · " + esc(b.lab) : ""} · ${__("sent")} ${esc(b.sent_on)}
-					<span class="co-days">${d} ${__("day(s) out")}</span></small></div>
-				<div class="co-panel ${cls}${b.status === "Received" ? " done" : ""}">
-					${b.items.map((r) => r.received ? `
-						<div class="co-chip back"><span class="code">✓ ${esc(r.order_bag)}</span><span class="ty">${esc(r.design_type)}</span>
-							<span class="wt"><span class="nums">${r.huid ? "HUID " + esc(r.huid) : ""}</span></span></div>` : `
-						<div class="co-chip ${b.certification_type === "HALLMARKING" ? "pend" : "lab"}" data-row="${esc(r.row)}" data-bag="${esc(r.order_bag)}">
-							<span class="code">${esc(r.order_bag)}</span><span class="ty">${esc(r.design_type)}</span>
-							<span class="wt">${fmt(r.gross)} g${r.stones_ct ? ` · ${fmt(r.stones_ct)} ct` : ""}<br>
-							<span style="font-size:10px;">${__("pure")} ${fmt(r.pure)} g</span></span></div>`).join("")}
-					<div class="co-cnt">${b.back}/${b.total} ${__("back")}${b.status === "Received" ? " · " + __("complete") : ""}
-						${b.certification_type !== "HALLMARKING" && b.status !== "Received" ? `· <a class="co-collect" data-name="${esc(b.name)}" data-n="${b.total - b.back}" style="cursor:pointer;font-weight:700;">${__("Collect all")} (${b.total - b.back}) ✓</a> ` : ""}
-						· <a class="co-igi" data-bags='${esc(JSON.stringify(b.items.map((r) => r.order_bag)))}' style="cursor:pointer;">${__("Lab xlsx")} ⬇</a></div>
-				</div>
-			</div>`;
-		}).join(""));
-	}
+	const root = $(page.main);
 
 	function load() {
-		frappe.call({ method: API + ".get_certification_batches" }).then((r) => {
-			const m = r.message || {};
-			S.batches = m.batches || [];
-			S.summary = m.summary || {};
-			render();
+		frappe.call({ method: API + ".get_certifications_out" }).then((r) => {
+			const m = r.message || { batches: [], total_pieces: 0 };
+			root.find(".co-top").text(m.batches.length
+				? __("{0} batch(es) out · {1} piece(s) at the labs", [m.batches.length, m.total_pieces])
+				: "");
+			root.find(".co-grid").html(m.batches.map((b) => `
+				<div class="co-card ${b.cert_type === "HALL" || b.cert_type === "HALLMARKING" ? "hall" : "lab"}" data-name="${esc(b.name)}">
+					<div class="co-head"><span class="co-nm">${esc(b.name)}</span>
+						<span class="co-days ${b.days_out > 10 ? "late" : b.days_out > 5 ? "warn" : ""}">${__("{0} day(s) out", [b.days_out])}</span></div>
+					<div class="co-meta">${esc(b.cert_type)}${b.center ? " · " + esc(b.center.split("-").slice(1).join("-")) : ""}
+						${b.quality ? " · " + esc(b.quality) : ""} · ${__("sent")} ${esc(b.sent_on)}</div>
+					<div class="co-types">${b.by_type.map((t) =>
+						`<span class="co-type"><b>${t.count}</b>${esc(t.design_type)}</span>`).join("")}</div>
+					<div class="co-nums">${__("{0} piece(s) · {1} g gross · {2} ct diamond", [b.pieces, b.gross, b.dmd_ct])}</div>
+					<button class="btn btn-sm co-collect">${__("COLLECT — {0} piece(s) back to stock", [b.pieces])}</button>
+				</div>`).join("") || `<div class="co-empty">${__("Nothing out at certification.")}</div>`);
 		});
 	}
 
-	// batch footer -> download its IGI submission workbook
-	$(root).on("click", ".co-igi", function (e) {
-		e.stopPropagation();
-		window.open("/api/method/jewelima.jewelima.api.export_igi_xlsx?bags=" +
-			encodeURIComponent(this.getAttribute("data-bags")));
-	});
-
-	// stone-lab batches: COUNT the packet, one click collects the lot
-	$(root).on("click", ".co-collect", function (e) {
-		e.stopPropagation();
-		const batch = this.getAttribute("data-name");
-		const n = this.getAttribute("data-n");
-		frappe.confirm(__("Counted <b>{0}</b> piece(s) back from <b>{1}</b>? All of them are marked collected.", [n, batch]), () => {
+	root.on("click", ".co-collect", function () {
+		const nm = $(this).closest(".co-card").data("name");
+		frappe.confirm(__("Collect <b>{0}</b>? Count the packet first — every piece returns to Finished Goods and the batch waits as COLLECTED (confirmation later).", [esc(nm)]), () => {
 			frappe.dom.freeze(__("Collecting..."));
-			frappe.call({ method: API + ".receive_certification_all", args: { name: batch } })
-				.then(() => {
+			frappe.call({ method: API + ".collect_certification", args: { name: nm } })
+				.then((r) => {
 					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("{0} collected — {1} piece(s) back In Stock.", [batch, n]), indicator: "green" }, 5);
-					load();
-				})
-				.catch(() => frappe.dom.unfreeze());
-		});
-	});
-
-	// hallmark pieces come back one by one — each brings its HUID
-	$(root).on("click", ".co-chip.pend", function () {
-		const row = this.getAttribute("data-row");
-		const bag = this.getAttribute("data-bag");
-		const batch = $(this).closest(".co-col").attr("data-name");
-		const d = new frappe.ui.Dialog({
-			title: __("Receive {0}", [bag]),
-			fields: [
-				{ fieldname: "huid", fieldtype: "Data", label: "HUID", description: __("From hallmarking.") },
-			],
-			primary_action_label: __("Receive"),
-			primary_action: (v) => {
-				d.hide();
-				frappe.dom.freeze(__("Receiving..."));
-				frappe.call({
-					method: API + ".receive_certification",
-					args: { name: batch, rows: [{ row, huid: v.huid }] },
-				}).then((r) => {
-					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("{0} received back ({1}).", [bag, (r.message || {}).status]), indicator: "green" }, 5);
+					frappe.show_alert({ message: __("{0} collected — {1} piece(s) back in stock.", [nm, (r.message || {}).pieces]), indicator: "green" }, 5);
 					load();
 				}).catch(() => frappe.dom.unfreeze());
-			},
 		});
-		d.show();
-		setTimeout(() => d.fields_dict.huid.$input.focus(), 200);
 	});
 
-	page.set_primary_action(__("Send Pieces"), () => frappe.set_route("certify"));
-	page.add_inner_button(__("Refresh"), load);
 	load();
 };

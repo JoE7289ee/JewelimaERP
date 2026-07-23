@@ -10,6 +10,7 @@
   "center",
   "quality",
   "prepared_on",
+  "collected_on",
   "certification_type",
   "status",
   "sent_on",
@@ -47,6 +48,11 @@
    "label": "Prepared On"
   },
   {
+   "fieldname": "collected_on",
+   "fieldtype": "Date",
+   "label": "Collected On"
+  },
+  {
    "description": "Stone labs (IGL / DHSC / SGL / IDT / GIG) \u2014 a piece goes to ONE of them. HALLMARKING is separate; nearly every piece gets it.",
    "fieldname": "certification_type",
    "fieldtype": "Select",
@@ -64,7 +70,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Prepared\nSent\nPartially Received\nReceived\nCancelled",
+   "options": "Prepared\nSent\nCollected\nPartially Received\nReceived\nCancelled",
    "read_only": 1
   },
   {
@@ -111,7 +117,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-22 13:45:00.000000",
+ "modified": "2026-07-23 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Certification",
