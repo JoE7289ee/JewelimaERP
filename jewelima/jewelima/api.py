@@ -6533,14 +6533,15 @@ def _card_compose(p):
 		d.text((W // 2, (top + bottom) // 2), "PHOTO", font=_card_font(36), fill="#bbbbbb", anchor="mm")
 	y = bottom + 30
 	d.line([30, y - 12, W - 30, y - 12], fill="#000000", width=3)
-	big = _card_font(34, True)
+	big = _card_font(36, True)
 	if flt(p.get("gross_weight")):
 		d.text((30, y), "GW  {0} gm".format(p["gross_weight"]), font=big, fill="#111111")
 	if flt(p.get("diamond_weight")):
 		d.text((W - 30, y), "DW  {0} ct".format(p["diamond_weight"]), font=big, fill="#111111", anchor="ra")
-	y += 56
-	# stone/note lines print too faint in Light — Regular at 28 holds up on paper
-	f_line = _card_font(28, "regular")
+	y += 58
+	# stone/note lines print too faint in Light — Regular, sized to actually use
+	# the info band the card reserves for them
+	f_line = _card_font(30, "regular")
 	for st in (p.get("stones") or []):
 		if not (st.get("stone") or st.get("sieve")):
 			continue
@@ -6548,14 +6549,14 @@ def _card_compose(p):
 			("{0} pc".format(st["pcs"]) if cint(st.get("pcs")) else ""),
 			("{0} ct".format(st["ct"]) if flt(st.get("ct")) else "")) if x]
 		d.text((30, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#111111")
-		y += 38
+		y += 42
 	if p.get("note"):
 		d.text((30, y), str(p["note"]), font=f_line, fill="#111111")
-		y += 38
+		y += 42
 	for ln in (p.get("extra_lines") or "").split("\n"):
 		if ln.strip():
 			d.text((30, y), ln.strip(), font=f_line, fill="#111111")
-			y += 38
+			y += 40
 	d.line([30, H - 52, W - 30, H - 52], fill="#000000", width=2)
 	d.text((W // 2, H - 40), "JEWELIMA", font=_card_font(22, True), fill="#000000", anchor="ma")
 	return img
