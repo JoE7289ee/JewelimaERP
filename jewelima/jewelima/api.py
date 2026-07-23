@@ -6504,13 +6504,15 @@ def _card_font(size, bold=False):
 def _card_compose(p):
 	"""payload -> PIL image of the standard design card (portrait 900x1200)."""
 	from PIL import Image, ImageDraw
+	# BLACK AND WHITE by design — these cards go to a mono printer. Divisions are
+	# plain rules; header = design no left / design type right; footer = JEWELIMA.
 	W, H = 900, 1200
 	img = Image.new("RGB", (W, H), "#ffffff")
 	d = ImageDraw.Draw(img)
-	d.rectangle([0, 0, W - 1, 79], fill="#1f4e5f")
-	d.text((30, 20), (p.get("design_no") or "—").upper(), font=_card_font(40, True), fill="#ffffff")
+	d.text((30, 20), (p.get("design_no") or "—").upper(), font=_card_font(40, True), fill="#000000")
 	if p.get("design_type"):
-		d.text((W - 30, 28), p["design_type"].upper(), font=_card_font(26, True), fill="#cfe3ec", anchor="ra")
+		d.text((W - 30, 30), p["design_type"].upper(), font=_card_font(26, True), fill="#000000", anchor="ra")
+	d.line([30, 80, W - 30, 80], fill="#000000", width=3)
 	# photo box
 	top, bottom = 100, 760
 	ph = _cad_image_any(p.get("photo") or "")
@@ -6522,7 +6524,7 @@ def _card_compose(p):
 		d.rectangle([30, top, W - 30, bottom], outline="#cccccc", width=2)
 		d.text((W // 2, (top + bottom) // 2), "PHOTO", font=_card_font(36), fill="#bbbbbb", anchor="mm")
 	y = bottom + 30
-	d.line([30, y - 12, W - 30, y - 12], fill="#1f4e5f", width=3)
+	d.line([30, y - 12, W - 30, y - 12], fill="#000000", width=3)
 	big = _card_font(34, True)
 	if flt(p.get("gross_weight")):
 		d.text((30, y), "GW  {0} GMS".format(p["gross_weight"]), font=big, fill="#111111")
@@ -6545,8 +6547,8 @@ def _card_compose(p):
 		if ln.strip():
 			d.text((30, y), ln.strip(), font=f_line, fill="#444444")
 			y += 36
-	d.rectangle([0, H - 46, W - 1, H - 1], fill="#1f4e5f")
-	d.text((W // 2, H - 34), "JEWELIMA", font=_card_font(22, True), fill="#ffffff", anchor="ma")
+	d.line([30, H - 52, W - 30, H - 52], fill="#000000", width=2)
+	d.text((W // 2, H - 40), "JEWELIMA", font=_card_font(22, True), fill="#000000", anchor="ma")
 	return img
 
 
@@ -6606,6 +6608,21 @@ def design_card_preview(payload):
 	buf = BytesIO()
 	_card_compose(p).save(buf, "PNG")
 	return {"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
+
+
+@frappe.whitelist()
+def design_card_remove_raw(name):
+	"""Drop the RAW photo off a card (e.g. while approving) — the rendered card
+	image stays; only the making-of source goes."""
+	d = frappe.get_doc("Design Bank", name)
+	if d.photo:
+		for f in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
+				"attached_to_name": name, "file_url": d.photo}, pluck="name"):
+			frappe.delete_doc("File", f, force=True, ignore_permissions=True)
+		d.photo = ""
+		d.save(ignore_permissions=True)
+		frappe.db.commit()
+	return {"ok": 1}
 
 
 @frappe.whitelist()

@@ -57,6 +57,8 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 				<div style="display:flex;gap:10px;align-items:center;">
 					<div class="cb-photo" style="flex:1;">${__("click to upload the product photo")}</div>
 					<button class="btn btn-default cb-crop" style="display:none;">${__("Auto-crop from old card")}</button>
+					<a class="cb-rawlink btn btn-default" target="_blank" style="display:none;">${__("View raw")}</a>
+					<button class="btn btn-default cb-rawdel" style="display:none;color:#b02a2a;">${__("Remove raw")}</button>
 				</div>
 				<input type="file" class="cb-file" accept="image/*" style="display:none;">
 				<div class="cb-actions">
@@ -148,6 +150,8 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 			fNote.set_value(m.note); root.find(".cb-extra textarea").val(m.extra_lines);
 			root.find(".cb-photo").text(m.photo ? __("photo on record — click to replace") : __("click to upload the product photo"));
 			root.find(".cb-crop").toggle(!!m.image && !m.photo);
+			root.find(".cb-rawlink").toggle(!!m.photo).attr("href", m.photo || "#");
+			root.find(".cb-rawdel").toggle(!!m.photo);
 			paintStones();
 			if (!m.photo && m.image) root.find(".cb-prev").attr("src", m.image);
 			else preview();
@@ -164,7 +168,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		root.find(".cb-extra textarea").val("");
 		root.find(".cb-photo").text(__("click to upload the product photo"));
 		root.find(".cb-prev").attr("src", "");
-		root.find(".cb-crop").hide();
+		root.find(".cb-crop, .cb-rawlink, .cb-rawdel").hide();
 		paintStones(); preview();
 	});
 
@@ -179,6 +183,13 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 				root.find(".cb-photo").text(__("auto-cropped from the old card — replace if it looks off"));
 				preview();
 			}).catch(() => frappe.dom.unfreeze());
+	});
+
+	root.find(".cb-rawdel").on("click", () => {
+		if (!cur.name) return;
+		frappe.confirm(__("Remove the raw photo? The rendered card stays."), () =>
+			frappe.call({ method: API + ".design_card_remove_raw", args: { name: cur.name } })
+				.then(() => loadCard(cur.name)));
 	});
 
 	root.find(".cb-save").on("click", () => {
