@@ -21,6 +21,7 @@ def after_install():
 	seed_quality_map()
 	seed_voucher_types()
 	seed_certifications()
+	seed_diversion_types()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -65,6 +66,7 @@ def after_migrate():
 	seed_quality_map()
 	seed_voucher_types()
 	seed_certifications()
+	seed_diversion_types()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -610,6 +612,16 @@ def seed_certifications():
 				if not frappe.db.exists("Certification Center", {"certification_type": code, "center_name": cname}):
 					frappe.get_doc({"doctype": "Certification Center", "certification_type": code,
 						"center_name": cname, "location": loc}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+def seed_diversion_types():
+	"""How a made Design diverges from its Design Bank card — extensible master."""
+	if not frappe.db.exists("DocType", "Diversion Type"):
+		return
+	for t in ("Colour Stone Variant", "CZ Variant", "DMD Variant", "22K Variant"):
+		if not frappe.db.exists("Diversion Type", t):
+			frappe.get_doc({"doctype": "Diversion Type", "title": t}).insert(ignore_permissions=True)
 	frappe.db.commit()
 
 

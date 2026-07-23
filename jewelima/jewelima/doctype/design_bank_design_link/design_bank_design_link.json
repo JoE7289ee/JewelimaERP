@@ -1,0 +1,42 @@
+{
+ "name": "Design Bank Design Link",
+ "istable": 1,
+ "permissions": [],
+ "fields": [
+  {
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "options": "Design",
+   "label": "Design",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "diversion_type",
+   "fieldtype": "Link",
+   "options": "Diversion Type",
+   "label": "Diversion",
+   "in_list_view": 1,
+   "description": "How this made design diverges from the bank card (blank = made as-is)."
+  }
+ ],
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-23 16:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-23 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "field_order": [
+  "design",
+  "diversion_type"
+ ]
+}

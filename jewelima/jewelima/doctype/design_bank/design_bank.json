@@ -15,7 +15,17 @@
   "note",
   "tags",
   "source_file",
-  "ocr_done"
+  "ocr_done",
+  "status",
+  "design_type",
+  "photoupdate",
+  "duplicate_review",
+  "wax_dye",
+  "dye_available",
+  "sec_links",
+  "design_links",
+  "sec_review",
+  "review_images"
  ],
  "fields": [
   {
@@ -76,12 +86,75 @@
    "hidden": 1,
    "label": "OCR Done",
    "read_only": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nApproved\nRetired",
+   "default": "Pending",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "options": "Design Type",
+   "label": "Design Type",
+   "in_standard_filter": 1,
+   "description": "Mandatory before a card can be Approved."
+  },
+  {
+   "fieldname": "photoupdate",
+   "fieldtype": "Check",
+   "label": "Photo Update Needed",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "duplicate_review",
+   "fieldtype": "Check",
+   "label": "Duplicate Review",
+   "in_standard_filter": 1,
+   "description": "Import found more images for this design \u2014 pick the keeper in Review Images."
+  },
+  {
+   "fieldname": "wax_dye",
+   "fieldtype": "Link",
+   "options": "Wax Dye",
+   "label": "Wax Dye"
+  },
+  {
+   "fieldname": "dye_available",
+   "fieldtype": "Check",
+   "label": "Dye Available"
+  },
+  {
+   "fieldname": "sec_links",
+   "fieldtype": "Section Break",
+   "label": "Made Designs"
+  },
+  {
+   "fieldname": "design_links",
+   "fieldtype": "Table",
+   "options": "Design Bank Design Link",
+   "label": "Design Links"
+  },
+  {
+   "fieldname": "sec_review",
+   "fieldtype": "Section Break",
+   "label": "Review Images"
+  },
+  {
+   "fieldname": "review_images",
+   "fieldtype": "Table",
+   "options": "Design Bank Review Image",
+   "label": "Review Images"
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-29 17:00:00.000000",
+ "modified": "2026-07-23 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",

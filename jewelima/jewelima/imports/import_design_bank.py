@@ -99,6 +99,49 @@ _DW = re.compile(r"DW\s*[:=]?\s*(\d+(?:\.\d+)?)", re.I)
 _NOTE = re.compile(r"([+\-]?\d[\d.\-]*\s*=\s*\d+)")
 
 
+def fresh_v2():
+	"""The 2026-07-23 FRESH import (user's call: wipe and restart from the new
+	Takeout, no retire-reconciliation this once):
+
+	  1) delete every Design Bank record (files stay on disk),
+	  2) run() the base import over the flattened folder,
+	  3) group records sharing one design_no: the first stays as the card, every
+	     other record's image moves into its Review Images with duplicate_review=1
+	     (the team picks the keeper after go-live), the extra records go away.
+
+	Everything lands as status Pending; OCR runs separately via ocr_fill().
+	"""
+	frappe.db.delete("Design Bank Design Link")
+	frappe.db.delete("Design Bank Review Image")
+	frappe.db.delete("Design Bank Tag")
+	frappe.db.delete("Design Bank")
+	frappe.db.commit()
+	run()
+
+	rows = frappe.get_all("Design Bank", fields=["name", "design_no", "image", "source_file"],
+		order_by="source_file asc")
+	by_no = {}
+	for r in rows:
+		by_no.setdefault((r.design_no or "").strip().upper(), []).append(r)
+	dups = merged = 0
+	for _no, group in by_no.items():
+		if len(group) < 2:
+			continue
+		keeper = group[0]
+		doc = frappe.get_doc("Design Bank", keeper.name)
+		doc.duplicate_review = 1
+		for extra in group[1:]:
+			doc.append("review_images", {"image": extra.image, "source_file": extra.source_file})
+			frappe.delete_doc("Design Bank", extra.name, force=True, ignore_permissions=True)
+			merged += 1
+		doc.save(ignore_permissions=True)
+		dups += 1
+	frappe.db.commit()
+	total = frappe.db.count("Design Bank")
+	print(f"fresh_v2: {total} cards, {dups} with duplicate review ({merged} extra images folded in)")
+	return {"cards": total, "duplicate_cards": dups, "extra_images": merged}
+
+
 def ocr_fill(limit=1000, recheck=False):
 	"""OCR cards to fill gross_weight / diamond_weight / note. Run repeatedly.
 
