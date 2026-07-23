@@ -27,6 +27,7 @@
   "sec_review",
   "review_images",
   "photo",
+  "customer_image",
   "extra_lines",
   "sec_stones",
   "stones"
@@ -45,7 +46,7 @@
    "fieldname": "image",
    "fieldtype": "Attach Image",
    "in_list_view": 1,
-   "label": "Image"
+   "label": "Card Image (info)"
   },
   {
    "fieldname": "gross_weight",
@@ -157,8 +158,14 @@
   {
    "fieldname": "photo",
    "fieldtype": "Attach Image",
-   "label": "Raw Photo",
-   "description": "The product shot the card is composed from \u2014 kept so the card can be re-rendered anytime."
+   "label": "Product Image (print)",
+   "description": "Product-only cutout (usually PNG) \u2014 composes the card and feeds the gallery's PRINT mode."
+  },
+  {
+   "fieldname": "customer_image",
+   "fieldtype": "Attach Image",
+   "label": "Customer Image",
+   "description": "Lifestyle shot with background (real or AI) \u2014 the gallery's CUSTOMER mode."
   },
   {
    "fieldname": "extra_lines",
@@ -181,7 +188,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 19:00:00.000000",
+ "modified": "2026-07-24 01:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",

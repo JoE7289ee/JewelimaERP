@@ -69,7 +69,7 @@ def set_tag_color(tag_name, color):
 # --- Designs -----------------------------------------------------------------------
 
 @frappe.whitelist()
-def get_designs(search=None, tags=None, match="any", start=0, limit=60):
+def get_designs(search=None, tags=None, match="any", start=0, limit=60, mode="info"):
 	"""Paginated designs, optionally filtered by a text search on design_no and/or tags.
 
 	match: 'any' (has any selected tag) or 'all' (has every selected tag).
@@ -102,8 +102,14 @@ def get_designs(search=None, tags=None, match="any", start=0, limit=60):
 	total = frappe.db.sql(
 		f"SELECT COUNT(*) FROM `tabDesign Bank` db {join} {where}", params
 	)[0][0]
+	# the gallery's three faces — one dedicated image field each, the card
+	# (info) always the fallback so nothing tiles blank
+	img_expr = {
+		"print": "COALESCE(NULLIF(db.photo, ''), db.image)",
+		"customer": "COALESCE(NULLIF(db.customer_image, ''), db.image)",
+	}.get(mode, "db.image")
 	rows = frappe.db.sql(
-		f"""SELECT db.name, db.design_no, db.image, db.gross_weight, db.diamond_weight, db.note
+		f"""SELECT db.name, db.design_no, {img_expr} AS image, db.gross_weight, db.diamond_weight, db.note
 		    FROM `tabDesign Bank` db {join} {where}
 		    ORDER BY db.design_no LIMIT %s, %s""",
 		params + [start, limit],

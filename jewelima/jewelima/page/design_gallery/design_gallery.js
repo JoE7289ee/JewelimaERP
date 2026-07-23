@@ -58,6 +58,11 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 		<div class="dg-bar">
 			<div class="dg-row1">
 				<input type="text" class="form-control input-sm dg-search" placeholder="Search design no…">
+				<div class="btn-group dg-modes" style="margin-left:8px;">
+					<button class="btn btn-xs btn-primary" data-mode="info">${__("Info")}</button>
+					<button class="btn btn-xs btn-default" data-mode="print">${__("Print")}</button>
+					<button class="btn btn-xs btn-default" data-mode="customer">${__("Customer")}</button>
+				</div>
 				<span class="dg-match" title="Match any / all of the selected tags">
 					<button data-m="any" class="on">Any</button><button data-m="all">All</button>
 				</span>
@@ -131,6 +136,12 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	});
 
 	let searchTimer;
+	root.on("click", ".dg-modes button", function () {
+		state.mode = $(this).data("mode");
+		root.find(".dg-modes button").removeClass("btn-primary").addClass("btn-default");
+		$(this).removeClass("btn-default").addClass("btn-primary");
+		reload();
+	});
 	root.find(".dg-search").on("input", function () {
 		const v = this.value;
 		clearTimeout(searchTimer);
@@ -165,6 +176,7 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 		state.loading = true;
 		$status.text("Loading…");
 		frappe.call(API + ".get_designs", {
+			mode: state.mode || "info",
 			search: state.search,
 			tags: JSON.stringify([...state.tags]),
 			match: state.match,
