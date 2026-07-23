@@ -1010,6 +1010,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "image-plus",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Card Builder",
+   "link_to": "card-builder",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -1814,7 +1827,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-23 21:17:06.755449",
+ "modified": "2026-07-23 23:32:10.161107",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

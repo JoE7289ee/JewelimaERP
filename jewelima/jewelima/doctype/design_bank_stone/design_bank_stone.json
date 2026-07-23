@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-23 19:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-23 19:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Design Bank Stone",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "fields": [
+  {
+   "fieldname": "stone",
+   "fieldtype": "Data",
+   "label": "Stone / Colour",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sieve",
+   "fieldtype": "Data",
+   "label": "Sieve",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "pcs",
+   "fieldtype": "Int",
+   "label": "Pcs",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "ct",
+   "fieldtype": "Float",
+   "label": "Ct",
+   "in_list_view": 1
+  }
+ ],
+ "field_order": [
+  "stone",
+  "sieve",
+  "pcs",
+  "ct"
+ ]
+}

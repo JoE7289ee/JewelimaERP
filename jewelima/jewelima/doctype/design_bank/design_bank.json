@@ -25,7 +25,11 @@
   "sec_links",
   "design_links",
   "sec_review",
-  "review_images"
+  "review_images",
+  "photo",
+  "extra_lines",
+  "sec_stones",
+  "stones"
  ],
  "fields": [
   {
@@ -149,12 +153,35 @@
    "fieldtype": "Table",
    "options": "Design Bank Review Image",
    "label": "Review Images"
+  },
+  {
+   "fieldname": "photo",
+   "fieldtype": "Attach Image",
+   "label": "Raw Photo",
+   "description": "The product shot the card is composed from \u2014 kept so the card can be re-rendered anytime."
+  },
+  {
+   "fieldname": "extra_lines",
+   "fieldtype": "Small Text",
+   "label": "Extra Lines",
+   "description": "Anything else printed on the card, one line each."
+  },
+  {
+   "fieldname": "sec_stones",
+   "fieldtype": "Section Break",
+   "label": "Stones"
+  },
+  {
+   "fieldname": "stones",
+   "fieldtype": "Table",
+   "options": "Design Bank Stone",
+   "label": "Stones"
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 16:00:00.000000",
+ "modified": "2026-07-23 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",

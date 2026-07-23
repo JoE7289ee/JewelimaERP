@@ -6479,6 +6479,182 @@ def export_price_chart_pdf(name):
 
 
 # ---------------------------------------------------------------------------
+# Design Bank CARD BUILDER — the Photoshop replacement. Composes the standard
+# card PNG (photo + design no + GW/DW + stones + extras) with Pillow; the page
+# previews live (base64, nothing stored) and Save renders the real card into
+# the record's image, keeping the raw photo for future re-renders.
+# ---------------------------------------------------------------------------
+def _card_font(size, bold=False):
+	from PIL import ImageFont
+	for cand in (["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"] if bold else
+			["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]):
+		try:
+			return ImageFont.truetype(cand, size)
+		except Exception:
+			pass
+	return ImageFont.load_default()
+
+
+def _card_compose(p):
+	"""payload -> PIL image of the standard design card (portrait 900x1200)."""
+	from PIL import Image, ImageDraw
+	W, H = 900, 1200
+	img = Image.new("RGB", (W, H), "#ffffff")
+	d = ImageDraw.Draw(img)
+	d.rectangle([0, 0, W - 1, 79], fill="#1f4e5f")
+	d.text((30, 20), (p.get("design_no") or "—").upper(), font=_card_font(40, True), fill="#ffffff")
+	if p.get("design_type"):
+		d.text((W - 30, 28), p["design_type"].upper(), font=_card_font(26, True), fill="#cfe3ec", anchor="ra")
+	# photo box
+	top, bottom = 100, 760
+	ph = _cad_image_any(p.get("photo") or "")
+	if ph:
+		ph = ph.convert("RGB")
+		ph.thumbnail((W - 60, bottom - top), Image.LANCZOS)
+		img.paste(ph, ((W - ph.width) // 2, top + (bottom - top - ph.height) // 2))
+	else:
+		d.rectangle([30, top, W - 30, bottom], outline="#cccccc", width=2)
+		d.text((W // 2, (top + bottom) // 2), "PHOTO", font=_card_font(36), fill="#bbbbbb", anchor="mm")
+	y = bottom + 30
+	d.line([30, y - 12, W - 30, y - 12], fill="#1f4e5f", width=3)
+	big = _card_font(34, True)
+	if flt(p.get("gross_weight")):
+		d.text((30, y), "GW  {0} GMS".format(p["gross_weight"]), font=big, fill="#111111")
+	if flt(p.get("diamond_weight")):
+		d.text((W - 30, y), "DW  {0} CTS".format(p["diamond_weight"]), font=big, fill="#111111", anchor="ra")
+	y += 56
+	f_line = _card_font(26)
+	for st in (p.get("stones") or []):
+		if not (st.get("stone") or st.get("sieve")):
+			continue
+		bits = [x for x in (st.get("stone"), st.get("sieve"),
+			("{0} pc".format(st["pcs"]) if cint(st.get("pcs")) else ""),
+			("{0} ct".format(st["ct"]) if flt(st.get("ct")) else "")) if x]
+		d.text((30, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#222222")
+		y += 38
+	if p.get("note"):
+		d.text((30, y), str(p["note"]), font=f_line, fill="#222222")
+		y += 38
+	for ln in (p.get("extra_lines") or "").split("\n"):
+		if ln.strip():
+			d.text((30, y), ln.strip(), font=f_line, fill="#444444")
+			y += 36
+	d.rectangle([0, H - 46, W - 1, H - 1], fill="#1f4e5f")
+	d.text((W // 2, H - 34), "JEWELIMA", font=_card_font(22, True), fill="#ffffff", anchor="ma")
+	return img
+
+
+@frappe.whitelist()
+def design_card_preview(payload):
+	"""Live preview: compose and hand back base64 — nothing touches the record."""
+	import base64
+	from io import BytesIO
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	buf = BytesIO()
+	_card_compose(p).save(buf, "PNG")
+	return {"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
+
+
+@frappe.whitelist()
+def check_design_code(code):
+	"""The new-code guard: exact match against EVERYTHING (live + retired)."""
+	code = (code or "").strip()
+	hit = frappe.db.get_value("Design Bank", {"design_no": code}, ["name", "status"], as_dict=True)
+	return {"taken": bool(hit), "status": hit.status if hit else "", "record": hit.name if hit else ""}
+
+
+@frappe.whitelist()
+def next_design_code(prefix):
+	"""Next free number in an in-house series: 'JS' -> 'JS 0001' / first gap-free top."""
+	prefix = (prefix or "").strip().upper()
+	if not prefix:
+		frappe.throw(frappe._("Give the series prefix (JS, JN, ...)."))
+	top = 0
+	for dn in frappe.get_all("Design Bank", filters={"design_no": ["like", prefix + " %"]}, pluck="design_no"):
+		m = re.match(re.escape(prefix) + r"\s+(\d+)$", (dn or "").strip().upper())
+		if m:
+			top = max(top, int(m.group(1)))
+	return {"code": "{0} {1:04d}".format(prefix, top + 1)}
+
+
+@frappe.whitelist()
+def get_design_card(name):
+	d = frappe.get_doc("Design Bank", name)
+	return {"name": d.name, "design_no": d.design_no, "status": d.status,
+		"design_type": d.design_type or "", "gross_weight": flt(d.gross_weight),
+		"diamond_weight": flt(d.diamond_weight), "note": d.note or "",
+		"extra_lines": d.extra_lines or "", "photo": d.photo or "", "image": d.image or "",
+		"photoupdate": d.photoupdate, "duplicate_review": d.duplicate_review,
+		"stones": [{"stone": r.stone, "sieve": r.sieve, "pcs": r.pcs, "ct": r.ct} for r in d.stones]}
+
+
+@frappe.whitelist()
+def save_design_card(payload):
+	"""Create or update a card. New records pass the code guard; Save re-renders
+	the card PNG into the record's image (deterministic CARD-<name>.png, prior
+	render replaced), stores the raw photo, and clears photoupdate."""
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	code = (p.get("design_no") or "").strip()
+	if not code:
+		frappe.throw(frappe._("Give the design number."))
+	if p.get("name"):
+		d = frappe.get_doc("Design Bank", p["name"])
+		other = frappe.db.get_value("Design Bank", {"design_no": code, "name": ["!=", d.name]}, "name")
+		if other:
+			frappe.throw(frappe._("{0} is already used by another card.").format(code))
+	else:
+		if frappe.db.exists("Design Bank", {"design_no": code}):
+			hit = check_design_code(code)
+			frappe.throw(frappe._("{0} is already taken ({1}) — codes are never reused.").format(code, hit["status"]))
+		d = frappe.new_doc("Design Bank")
+		d.status = "Pending"
+	d.design_no = code
+	d.design_type = p.get("design_type") or None
+	d.gross_weight = flt(p.get("gross_weight"))
+	d.diamond_weight = flt(p.get("diamond_weight"))
+	d.note = p.get("note") or ""
+	d.extra_lines = p.get("extra_lines") or ""
+	d.set("stones", [{"stone": r.get("stone"), "sieve": r.get("sieve"),
+		"pcs": cint(r.get("pcs")), "ct": flt(r.get("ct"))} for r in (p.get("stones") or [])
+		if r.get("stone") or r.get("sieve")])
+	if d.is_new():
+		d.insert(ignore_permissions=True)
+	d.photo = _cad_store_image_generic(p.get("photo"), "Design Bank", d.name) or d.photo
+	# render the card; deterministic name so the old render dies with the new save
+	from io import BytesIO
+	rp = dict(p)
+	rp["photo"] = d.photo
+	buf = BytesIO()
+	_card_compose(rp).save(buf, "PNG")
+	tag = "CARD-{0}".format(d.name)
+	for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
+			"attached_to_name": d.name, "file_name": ["like", tag + "%"]}, pluck="name"):
+		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
+	fdoc = frappe.get_doc({"doctype": "File", "file_name": tag + ".png", "content": buf.getvalue(),
+		"is_private": 0, "attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+	d.image = fdoc.file_url
+	d.photoupdate = 0
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name, "design_no": d.design_no, "image": d.image}
+
+
+def _cad_store_image_generic(ref, doctype, name):
+	"""data-URL -> stored File on any doc; an existing /files/ url passes through."""
+	if not ref:
+		return ""
+	if not ref.startswith("data:"):
+		return ref
+	import base64
+	head, b64 = ref.split(",", 1)
+	ext = "jpg" if ("jpeg" in head or "jpg" in head) else "png"
+	f = frappe.get_doc({"doctype": "File", "file_name": "photo-{0}.{1}".format(frappe.generate_hash(length=8), ext),
+		"content": base64.b64decode(b64), "is_private": 0,
+		"attached_to_doctype": doctype, "attached_to_name": name}).insert(ignore_permissions=True)
+	return f.file_url
+
+
+# ---------------------------------------------------------------------------
 # Prepare for Sale — the two-step sale: build the priced list (per-line manual
 # overrides recorded: chart price vs final price vs who), export the
 # confirmation excel for the party, and only THEN Sell (stock moves, bags Sold).
