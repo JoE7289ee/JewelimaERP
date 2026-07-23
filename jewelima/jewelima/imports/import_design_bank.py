@@ -45,7 +45,9 @@ def _design_no(stem):
 	segments are dropped first. Plain files (e.g. "A 66066 RG") are returned unchanged.
 	"""
 	segs = [s.strip() for s in stem.split(" - ")]
-	while len(segs) > 1 and re.match(r"(?i)copy(\s*\d+)?$", segs[-1]):
+	# trailing 'Copy'/'Copy 2' (Windows dupes) and bare numbers (our flatten
+	# collision suffix '<name> - 2') are never the code — drop them
+	while len(segs) > 1 and re.match(r"(?i)(copy(\s*\d+)?|\d+)$", segs[-1]):
 		segs.pop()
 	return segs[-1] if segs else stem
 

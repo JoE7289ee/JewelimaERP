@@ -3586,7 +3586,13 @@ def _cad_image_any(ref):
 	try:
 		from io import BytesIO
 		from PIL import Image
-		content = frappe.get_doc("File", {"file_url": ref}).get_content()
+		try:
+			content = frappe.get_doc("File", {"file_url": ref}).get_content()
+		except Exception:
+			# design-bank images have no File record — read straight from disk
+			from urllib.parse import unquote
+			path = frappe.get_site_path("public", unquote(ref).lstrip("/"))
+			content = open(path, "rb").read()
 		return Image.open(BytesIO(content)).convert("RGB")
 	except Exception:
 		return None
