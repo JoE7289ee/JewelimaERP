@@ -1036,6 +1036,32 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "eye",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Review",
+   "link_to": "design-review",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "bar-chart-2",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Bank Report",
+   "link_to": "design-bank-report",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -1840,7 +1866,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-24 00:36:33.692589",
+ "modified": "2026-07-24 00:39:30.818192",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -308,3 +308,80 @@ def resolve_duplicate(name, image):
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"ok": 1, "left": frappe.db.count("Design Bank", {"duplicate_review": 1})}
+
+
+@frappe.whitelist()
+def get_review_queue(start=0):
+	"""Next cards for review: rebuilt, not duplicate-flagged, still Pending."""
+	filters = {"status": "Pending", "rebuilt": 1, "duplicate_review": 0}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name"], order_by="design_no", start=int(start), limit=1)
+	total = frappe.db.count("Design Bank", filters)
+	if not rows:
+		return {"total": total, "card": None}
+	from jewelima.jewelima.api import get_design_card
+	card = get_design_card(rows[0].name)
+	d = frappe.db.get_value("Design Bank", rows[0].name,
+		["raw_image", "customer_image", "customer_image_needed"], as_dict=True)
+	card.update({"raw_image": d.raw_image or "", "customer_image": d.customer_image or "",
+		"customer_image_needed": d.customer_image_needed})
+	return {"total": total, "card": card}
+
+
+@frappe.whitelist()
+def review_save(payload):
+	"""Review corrections: values re-render the card; checkboxes stick; optional
+	approve (needs design type); optional PERMANENT raw delete (file off disk)."""
+	from jewelima.jewelima.api import save_design_card
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	res = save_design_card(json.dumps({k: p.get(k) for k in
+		("name", "design_no", "design_type", "gross_weight", "diamond_weight",
+		 "note", "extra_lines", "photo", "stones")}))
+	d = frappe.get_doc("Design Bank", res["name"])
+	d.photoupdate = 1 if p.get("photoupdate") else 0
+	d.customer_image_needed = 1 if p.get("customer_image_needed") else 0
+	if p.get("approve"):
+		d.status = "Approved"  # validate() enforces design_type
+	if p.get("delete_raw") and d.raw_image:
+		delete_raw_forever(d)
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name, "status": d.status, "image": d.image}
+
+
+def delete_raw_forever(d):
+	"""The raw scan leaves the SYSTEM: field cleared, File docs gone, and the
+	actual file removed from disk (this is how the month-long cleanup frees space)."""
+	import os
+	from urllib.parse import unquote
+	url = d.raw_image
+	d.raw_image = ""
+	for fn in frappe.get_all("File", filters={"file_url": url}, pluck="name"):
+		frappe.delete_doc("File", fn, force=True, ignore_permissions=True)
+	try:
+		path = frappe.get_site_path("public", unquote(url).lstrip("/"))
+		if os.path.exists(path) and "/files/" in url:
+			os.remove(path)
+	except Exception:
+		pass
+
+
+@frappe.whitelist()
+def design_bank_report():
+	"""The Design Bank KPI board."""
+	c = lambda f=None: frappe.db.count("Design Bank", f)
+	return {"kpis": [
+		("Total Designs", c()),
+		("Approved", c({"status": "Approved"})),
+		("In Review Queue", c({"status": "Pending", "rebuilt": 1, "duplicate_review": 0})),
+		("In Duplicate Queue", c({"duplicate_review": 1})),
+		("Awaiting Rebuild (OCR/crop)", c({"rebuilt": 0, "duplicate_review": 0})),
+		("Raw Images Left", c({"raw_image": ["is", "set"]})),
+		("Photo Change Pending", c({"photoupdate": 1})),
+		("Customer Photos Pending", c({"customer_image_needed": 1, "customer_image": ["is", "not set"]})),
+		("Customer Photos Done", c({"customer_image": ["is", "set"]})),
+		("Retired", c({"status": "Retired"})),
+		("Dye Available", c({"dye_available": 1})),
+		("Linked to ERP Designs", frappe.db.count("Design Bank Design Link")),
+	]}
