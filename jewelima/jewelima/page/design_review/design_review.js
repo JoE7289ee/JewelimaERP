@@ -31,12 +31,6 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		</style>
 		<div class="rv-top"></div>
 		<div class="rv-cols" style="display:none;">
-			<div class="rv-imgs">
-				<div class="rv-im"><div class="t">${__("Raw (original scan)")}</div><div class="i raw"></div></div>
-				<div class="rv-im"><div class="t">${__("Card — info")}</div><div class="i card"></div></div>
-				<div class="rv-im"><div class="t">${__("Product — print")}</div><div class="i photo"></div></div>
-				<div class="rv-im"><div class="t">${__("Customer")}</div><div class="i cust"></div></div>
-			</div>
 			<div class="rv-side">
 				<div class="f-no"></div><div class="f-dt"></div>
 				<div class="f-gw"></div><div class="f-dw"></div><div class="f-note"></div>
@@ -51,6 +45,12 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 					<button class="btn btn-primary rv-save" style="background:#2e7d32;border-color:#2e7d32;">${__("Save & Approve → next")}</button>
 					<button class="btn btn-default rv-skip">${__("Save (stay Pending) → next")}</button>
 				</div>
+			</div>
+			<div class="rv-imgs">
+				<div class="rv-im"><div class="t">${__("Raw (original scan)")}</div><div class="i raw"></div></div>
+				<div class="rv-im"><div class="t">${__("Card — info")}</div><div class="i card"></div></div>
+				<div class="rv-im"><div class="t">${__("Product — print")}</div><div class="i photo"></div></div>
+				<div class="rv-im"><div class="t">${__("Customer")}</div><div class="i cust"></div></div>
 			</div>
 		</div>
 		<div class="rv-done" style="display:none;"></div>
