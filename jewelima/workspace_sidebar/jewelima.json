@@ -1151,19 +1151,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "images",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Design Bank",
-   "link_to": "Design Bank",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "gem",
@@ -1931,7 +1918,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-24 21:23:53.193715",
+ "modified": "2026-07-24 21:56:06.498722",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
