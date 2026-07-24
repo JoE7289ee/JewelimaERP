@@ -6329,9 +6329,9 @@ def get_price_chart(name):
 		"certification_charges": [{"certification": r.certification, "rate": r.rate}
 			for r in (d.get("certification_charges") or [])],
 		"precious_stone_rates": [{"stone": r.stone, "rate": r.rate} for r in (d.get("precious_stone_rates") or [])],
-		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate} for r in (d.get("cs_rates") or [])],
-		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate} for r in (d.get("cz_rates") or [])],
-		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate} for r in (d.get("cvd_rates") or [])],
+		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cs_rates") or [])],
+		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cz_rates") or [])],
+		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cvd_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
 			"rate": r.rate, "min_per_piece": r.min_per_piece} for r in (d.get("making_rules") or [])],
@@ -6379,7 +6379,7 @@ def save_price_chart(payload):
 		for r in p.get(field) or []:
 			if flt(r.get("rate")):
 				doc.append(field, {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
-					"rate": flt(r.get("rate"))})
+					"basis": r.get("basis") or "Per Ct", "rate": flt(r.get("rate"))})
 	doc.making_rate = flt(p.get("making_rate"))
 	doc.making_min_grams = flt(p.get("making_min_grams"))
 	for r in p.get("making_rules") or []:
@@ -6436,10 +6436,11 @@ def _price_chart_letter_html(d):
 		" · min ₹ " + money(r["min_per_piece"]) if flt(r.get("min_per_piece")) else "")
 		for r in d.get("making_rules", []))
 	def brk(rows):
-		return "".join("<tr><td>{0}</td><td class='r'>₹ {1} / ct</td></tr>".format(
+		return "".join("<tr><td>{0}</td><td class='r'>₹ {1} / {2}</td></tr>".format(
 			("any weight" if not flt(r["from_ct"]) and not flt(r["to_ct"])
 				else ("{0} – {1} ct".format(r["from_ct"], r["to_ct"]) if flt(r["to_ct"])
-				else "{0} ct & above".format(r["from_ct"]))), money(r["rate"])) for r in rows)
+				else "{0} ct & above".format(r["from_ct"]))), money(r["rate"]),
+			"pc" if r.get("basis") == "Per Piece" else "ct") for r in rows)
 	cs = brk(d.get("cs_rates", []))
 	cz = brk(d.get("cz_rates", []))
 	cvd = brk(d.get("cvd_rates", []))
@@ -6989,6 +6990,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"name", "design", "held_by", "stock_status", "is_finished", "huid", "qty", "certifications",
 		"act_gross_weight", "act_nett_weight", "act_dmd_weight", "act_dmd_no",
 		"act_ps_weight", "act_cs_weight", "act_cz_weight", "act_cvd_weight", "act_pdmd_weight", "act_poth_weight",
+		"act_cs_no", "act_cz_no", "act_cvd_no",
 	], as_dict=True)
 	if not b.is_finished:
 		frappe.throw(frappe._("{0} is not a product yet.").format(nm))
@@ -7065,7 +7067,9 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	# ---- coloured buckets: CS / CZ / CVD each price from their OWN bracket
 	# table (blank-range row = flat). A bucket present on the piece with no
 	# rows = scan denied. Precious stones: per-stone rows only, same law.
-	def bucket_value(label, field, ct):
+	def bucket_value(label, field, ct, pcs):
+		"""Bracket picked by total carats; the row's basis decides the maths —
+		Per Ct = ct x rate, Per Piece = stone count x rate."""
 		ct = flt(ct)
 		if ct <= 0:
 			return 0.0
@@ -7077,6 +7081,10 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		if not row:
 			frappe.throw(frappe._("{0}: {1} ct {2} falls outside every {2} bracket on chart {3} — scan denied.").format(
 				nm, round(ct, 3), label, chart.chart_name))
+		if (row.basis or "Per Ct") == "Per Piece":
+			if not cint(pcs):
+				frappe.throw(frappe._("{0}: {1} is priced per piece but the piece count is 0 — scan denied.").format(nm, label))
+			return cint(pcs) * flt(row.rate)
 		return ct * flt(row.rate)
 
 	ps_rows = {(r.stone or "").upper(): flt(r.rate) for r in (chart.get("precious_stone_rates") or [])}
@@ -7095,9 +7103,9 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 					nm, item, chart.chart_name))
 			ps_value += flt(qty) * rate
 			ps_detail.append({"stone": item, "ct": round(flt(qty), 3), "rate": rate})
-	stone_value = (bucket_value("CS", "cs_rates", b.act_cs_weight)
-		+ bucket_value("CZ", "cz_rates", b.act_cz_weight)
-		+ bucket_value("CVD", "cvd_rates", b.act_cvd_weight) + ps_value)
+	stone_value = (bucket_value("CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
+		+ bucket_value("CZ", "cz_rates", b.act_cz_weight, b.act_cz_no)
+		+ bucket_value("CVD", "cvd_rates", b.act_cvd_weight, b.act_cvd_no) + ps_value)
 	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
 	# party diamonds have no pricing route since the flat job-work rate was
 	# retired — a piece carrying them can't be priced yet
@@ -7119,18 +7127,12 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		if not row:
 			frappe.throw(frappe._("{0} ({1}) has no making rule on chart {2} and no DEFAULT row — scan denied.").format(
 				nm, design_type or "no type", chart.chart_name))
-		basis = row.basis or "Per Gram"
-		if basis == "Per Gram":
-			labour = nett * flt(row.rate)
-			rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
-			if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
-				labour = flt(row.min_per_piece)
-				rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
-		elif basis == "Per Piece":
-			labour = flt(row.rate)
-			rule_desc = "{0}/pc".format(flt(row.rate))
-		else:
-			frappe.throw(frappe._("Making basis {0} isn't wired yet — use Per Gram or Per Piece.").format(basis))
+		# making is PER GRAM, always — nett x rate, floored at the minimum rupees
+		labour = nett * flt(row.rate)
+		rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
+		if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
+			labour = flt(row.min_per_piece)
+			rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
 		if row.design_type:
 			rule_desc += " [{0}]".format(row.design_type)
 		else:

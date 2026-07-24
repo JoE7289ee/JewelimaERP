@@ -159,14 +159,14 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				<option value="">${__("DEFAULT (any type)")}</option>
 				${DTYPES.map((t) => `<option ${r.design_type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
 			</select></td>
-			<td><select data-f="basis">${["Per Gram", "Per Piece"].map((b) =>
-				`<option ${(r.basis || "Per Gram") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
-			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹ (Per Gram)")}"></td>
+			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (["csr", "czr", "cvr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
+			<td><select data-f="basis">${["Per Ct", "Per Piece"].map((b) =>
+				`<option ${(r.basis || "Per Ct") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
@@ -207,16 +207,16 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
 			<div class="pc-sec">${__("Colour Stone Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="csr">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="csr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="csr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("csr")}</tbody></table>
 			<div class="pc-sec">${__("CZ Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="czr">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="czr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="czr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("czr")}</tbody></table>
 			<div class="pc-sec">${__("CVD Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="cvr">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="cvr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="cvr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cvr")}</tbody></table>
 			<div class="pc-sec">${__("Letter — Terms & Signatory")}</div>
 			<div class="pc-wide"><label style="font-size:11px;color:var(--text-muted);">${__("Payment terms")}</label>
@@ -265,8 +265,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			: k === "sol" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", rate: "" }
 			: k === "ps" ? { stone: "", rate: "" }
-			: k === "mk" ? { design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
-			: ["csr", "czr", "cvr"].includes(k) ? { from_ct: "", to_ct: "", rate: "" }
+			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "" }
+			: ["csr", "czr", "cvr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
 			: { });
 		paintEditor();
 	});

@@ -8,7 +8,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-24 18:00:00.000000",
+ "modified": "2026-07-24 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart Bucket Rate",
@@ -32,6 +32,14 @@
    "description": "Blank = and above. Both blank = flat rate for any weight."
   },
   {
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "label": "Basis",
+   "options": "Per Ct\nPer Piece",
+   "default": "Per Ct",
+   "in_list_view": 1
+  },
+  {
    "fieldname": "rate",
    "fieldtype": "Float",
    "label": "Rate / ct",
@@ -41,6 +49,7 @@
  "field_order": [
   "from_ct",
   "to_ct",
+  "basis",
   "rate"
  ]
 }
