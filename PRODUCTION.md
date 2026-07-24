@@ -40,19 +40,21 @@ bench --site <site> clear-cache
 bench --site <site> execute jewelima.setup.setup_roles
 ```
 
-## Design Bank go-live (PROD piece, one-time)
+## Design Bank go-live (PROD piece, one-time) — DATA CARRIED FROM THE MAC
 
-1. Copy the FLATTENED image folder to `<site>/public/files/design-bank/`
-   (build it from the Takeout zips with the zip-by-zip extractor — collisions
-   become "<folder> - <name>", nothing overwritten).
-2. `bench --site <site> execute jewelima.jewelima.imports.import_design_bank.fresh_v2`
-   (wipes Design Bank, imports every image, folds same-code duplicates into
-   Review Images with duplicate_review flagged).
-3. OCR until zero left (resumable):
-   `bench --site <site> execute ...import_design_bank.ocr_fill --kwargs "{'limit': 1000}"`
-4. Crop + card re-render until zero left (resumable, OCR-gated):
-   `bench --site <site> execute ...import_design_bank.rebuild_cards --kwargs "{'limit': 500}"`
-5. Team workflow: Duplicates -> Review (approve needs Design Type) ->
+The Mac is the master: import, OCR, rebuild and the team's dedupe/review
+clicks all happened there. The server RECEIVES that state — do NOT run
+fresh_v2/ocr/rebuild on the server.
+
+1. Mac: `bench --site development.localhost execute jewelima.jewelima.imports.import_design_bank.export_full`
+   -> <site>/private/design_bank_full.jsonl
+2. Copy to the server: that JSONL into <site>/private/, PLUS the site's
+   public/files content (design-bank/ folder and the <code>.photo/.info/
+   .customer.png slot files at files/ root). rsync -a is fine.
+3. Server: `bench --site <site> execute ...import_design_bank.import_full`
+   (wipes the server's Design Bank — including the old 26,748 records, per
+   decision — and recreates the Mac state name-for-name).
+4. Team workflow: Duplicates -> Review (approve needs Design Type) ->
    Photo Update -> Photo Approvals. Progress on /app/design-bank-report.
 
 ## Email
