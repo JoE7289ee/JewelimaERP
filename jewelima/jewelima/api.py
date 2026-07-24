@@ -7122,6 +7122,113 @@ def export_sale_bill_pdf(payload):
 
 
 @frappe.whitelist()
+def export_sale_bill_jewelima_xlsx(payload):
+	"""The house MAIL format: header block (buyer / DIAMOND / date / gold rate /
+	purity), Sl.NO..PRODUCT VALUE columns with LIVE formulas per row (avg stone,
+	product value) and a TOTAL row of SUMs — plus the tax lines underneath."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+	p = frappe.parse_json(payload)
+	rows = p.get("rows") or []
+	if not rows:
+		frappe.throw(frappe._("Nothing on the bill."))
+	gold_rate = flt(p.get("gold_rate"))
+
+	def cval(r, *keys):
+		out = 0.0
+		for k in keys:
+			c = (r.get("components") or {}).get(k)
+			v = c and c.get("value")
+			if v not in (None, ""):
+				out += flt(v)
+		return round(out, 2)
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Sale"
+	bold = Font(bold=True)
+	# ---- header block, same geography as the house sheet
+	ws["D1"] = (p.get("customer") or "").upper()
+	ws["L1"] = "DIAMOND"
+	ws["R1"] = p.get("price_chart") or ""
+	ws["L2"] = "DATE :"
+	ws["R2"] = frappe.utils.formatdate(frappe.utils.today(), "dd-mm-yyyy")
+	ws["L3"] = "GOLD  RATE :"
+	ws["R3"] = gold_rate
+	ws["A4"] = "PHONE"
+	ws["D4"] = ":"
+	ws["L4"] = "PURITY :"
+	ws["A5"] = "TIN :"
+	for cell in ("D1", "L1", "L2", "L3", "L4", "A4", "A5"):
+		ws[cell].font = bold
+	for rng in ("L1:Q1", "L2:Q2", "L3:Q3", "L4:Q4"):
+		ws.merge_cells(rng)
+
+	heads = ["Sl.NO:", "Barcode", "HUID", "Item", "Purity", "G.WT", "Dim No:", "Dim WT", "",
+		"STONE WT", "STONE VALUE", "DIM RATE", "DIM VALUE", "CERT", "HM", "Net wt", "M.C", "PRODUCT VALUE"]
+	# explicit row addressing — append() would drift under the header block
+	for ci, h in enumerate(heads, 1):
+		cell = ws.cell(row=6, column=ci, value=h)
+		cell.font = bold
+
+	purities = []
+	rix = 7
+	for i, r in enumerate(rows, 1):
+		nm = r.get("order_bag")
+		b = frappe.db.get_value("Order Bag", nm, ["act_gross_weight", "act_dmd_no"], as_dict=True) or frappe._dict()
+		# the piece's gold purity off its frozen BOM
+		purity_txt = ""
+		for item in _bag_convert_materials([nm])[nm]:
+			mp, pct = frappe.db.get_value("Item", item, ["metal_purity", "purity_percentage"]) or (None, None)
+			if mp:
+				purity_txt = "Gold {0}".format(flt(pct))
+				purities.append(mp)
+				break
+		dmd_ct = flt(r.get("dmd_ct"))
+		dim_val = cval(r, "dmd", "pdmd")
+		dim_rate = round(dim_val / dmd_ct) if dmd_ct else 0
+		for ci, v in enumerate([
+			i, nm, r.get("huid") or "", r.get("design_type") or "", purity_txt,
+			flt(b.act_gross_weight), cint(b.act_dmd_no), dmd_ct,
+			"=H{0}/G{0}".format(rix) if cint(b.act_dmd_no) else None,
+			flt(r.get("ostone_ct")), cval(r, "cs", "cz", "cvd", "ps"),
+			dim_rate, dim_val, cval(r, "cert"), cval(r, "hall"),
+			flt(r.get("nett")), cval(r, "making"),
+			"=P{0}*{1}+M{0}+N{0}+Q{0}+K{0}+O{0}".format(rix, gold_rate),
+		], 1):
+			ws.cell(row=rix, column=ci, value=v)
+		rix += 1
+	last = rix - 1
+	# most common purity into the header
+	if purities:
+		ws["R4"] = max(set(purities), key=purities.count)
+	tot = rix + 1
+	ws["B{0}".format(tot)] = "TOTAL"
+	for col in ("F", "G", "H", "J", "K", "M", "N", "O", "P", "Q", "R"):
+		ws["{0}{1}".format(col, tot)] = "=SUM({0}7:{0}{1})".format(col, last)
+	for c in ws[tot]:
+		c.font = bold
+	ws.merge_cells("B{0}:D{0}".format(tot))
+	taxed = cint(p.get("tax", 1))
+	ws["Q{0}".format(tot + 2)] = "TAX 3%" if taxed else "TAX"
+	ws["R{0}".format(tot + 2)] = "=ROUND(R{0}*0.03,2)".format(tot) if taxed else "not applied"
+	ws["Q{0}".format(tot + 3)] = "GRAND TOTAL"
+	ws["R{0}".format(tot + 3)] = "=R{0}+{1}".format(tot, "R{0}".format(tot + 2) if taxed else "0")
+	ws["Q{0}".format(tot + 3)].font = bold
+	ws["R{0}".format(tot + 3)].font = bold
+
+	for col, w in zip("ABCDEFGHIJKLMNOPQR",
+			[5, 14.5, 13, 12, 11, 14, 10.5, 12, 12, 9, 12, 9, 13.5, 9, 9.5, 12.5, 11, 14]):
+		ws.column_dimensions[col].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "Jewelima-{0}.xlsx".format((p.get("customer") or "draft").replace(" ", "-"))
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
 def export_sale_bill_xlsx(payload):
 	"""The Sell board as an excel: same dynamic component columns, TOTALS row,
 	tax summary at the end. (Company-specific formats plug in beside this.)"""

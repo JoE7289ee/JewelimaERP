@@ -414,6 +414,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const FORMATS = [
 			{ label: __("PDF — Bill (landscape)"), desc: __("The board as printed: component columns, totals, tax summary."), method: "export_sale_bill_pdf" },
 			{ label: __("Excel — Bill (XLSX)"), desc: __("Same columns in a worksheet, for editing and sending."), method: "export_sale_bill_xlsx" },
+			{ label: __("Excel — Jewelima format"), desc: __("The house MAIL sheet: Sl.NO to PRODUCT VALUE with live formulas, TOTAL row, purity header."), method: "export_sale_bill_jewelima_xlsx" },
 		];
 		const dlg = new frappe.ui.Dialog({ title: __("Export bill"), fields: [{ fieldtype: "HTML", fieldname: "b" }] });
 		dlg.get_field("b").$wrapper.html(FORMATS.map((x, i) => `
