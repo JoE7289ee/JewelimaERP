@@ -145,8 +145,8 @@ JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin
 # page APIs (ignore_permissions) — read on the masters is all the pages need.
 JEWELIMA_DESIGN_BANK_ROLE = "Jewelima Design Bank"
 JEWELIMA_DESIGN_APPROVER_ROLE = "Jewelima Design Approver"
-JEWELIMA_DESIGN_BANK_PAGES = ["design-gallery", "search-design", "new-design-bank", "card-builder",
-	"design-tags", "photo-update", "design-bank-report"]
+JEWELIMA_DESIGN_BANK_PAGES = ["design-gallery", "search-design", "old-categories", "new-design-bank",
+	"card-builder", "design-tags", "photo-update", "design-bank-report"]
 JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-duplicates", "retire-design"]
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]

@@ -38,7 +38,8 @@
   "customer_image_needed",
   "rebuilt",
   "pending_photo",
-  "pending_photo_by"
+  "pending_photo_by",
+  "source_folder"
  ],
  "fields": [
   {
@@ -246,12 +247,20 @@
    "fieldtype": "Data",
    "label": "Pending Photo By",
    "read_only": 1
+  },
+  {
+   "fieldname": "source_folder",
+   "fieldtype": "Data",
+   "label": "Source Folder (old categorisation)",
+   "read_only": 1,
+   "in_standard_filter": 1,
+   "description": "The folder this image lived in before the import \u2014 REFERENCE ONLY, not part of the tag system."
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-25 01:00:00.000000",
+ "modified": "2026-07-25 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",

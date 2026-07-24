@@ -543,3 +543,24 @@ def search_designs(q, limit=60):
 		r["display"] = r.image if r.status == "Approved" else (r.raw_image or r.photo or r.image or "")
 		r["raw"] = r.raw_image or r.photo or r.image or ""
 	return {"rows": rows}
+
+
+@frappe.whitelist()
+def get_old_categories():
+	"""Old Categories page: every pre-import source folder with its card count.
+	Pure reference — nothing here touches the tag system."""
+	rows = frappe.db.sql("""select source_folder, count(*) c from `tabDesign Bank`
+		where ifnull(source_folder, '') != '' group by source_folder order by source_folder""")
+	return {"folders": [{"folder": r[0], "count": r[1]} for r in rows]}
+
+
+@frappe.whitelist()
+def get_old_category_designs(folder, start=0, limit=60):
+	"""The cards that lived in one old folder (read-only browse)."""
+	filters = {"source_folder": folder}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "status", "image", "raw_image", "photo"],
+		order_by="design_no", start=int(start), limit=int(limit))
+	for r in rows:
+		r["display"] = r.image if r.status == "Approved" else (r.raw_image or r.photo or r.image or "")
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
