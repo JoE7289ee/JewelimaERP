@@ -150,7 +150,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 				<td class="r sl-total-cell sl-rowtotal">${money(rowTotal(r))}</td>
 				<td><button class="sl-x">✕</button></td>
 			</tr>`).join("")
-			: `<tr><td colspan="${cols.length + 7}" class="sl-empty">${__("Pick buyer, chart and rate — then scan pieces.")}</td></tr>`);
+			: `<tr><td colspan="${cols.length + 7}" class="sl-empty">${__("Scan pieces to start — buyer, chart and gold rate can come any time before SELL.")}</td></tr>`);
 
 		const mism = S.rows.filter((r) => r.held_by && to && r.held_by !== to && r.held_by !== "JD Stock").length;
 		const pend = pendingCells();
@@ -185,7 +185,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	}
 
 	function repriceAll() {
-		if (!S.rows.length || !chart.get_value()) return;
+		if (!S.rows.length) return;
 		Promise.all(S.rows.map((r) => fetchPiece(r.order_bag))).then((fresh) => {
 			S.rows = fresh;
 			paint();
@@ -198,7 +198,6 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const code = (scan.get_value() || "").trim();
 		scan.set_value("");
 		if (!code) return;
-		if (!ready()) return;
 		if (S.rows.some((r) => r.order_bag === code)) {
 			frappe.show_alert({ message: __("{0} is already on the bill.", [code]), indicator: "orange" }, 4);
 			focusScan();

@@ -7061,7 +7061,9 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		frappe.throw(frappe._("{0} is not a product yet.").format(nm))
 	if b.stock_status != "In Stock":
 		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can be sold.").format(nm, b.stock_status))
-	chart = frappe.get_doc("Price Chart", price_chart)
+	# scanning is never gated on the chart/rate — a missing chart or rate just
+	# turns the affected cells into manual (amber) ones until they are picked
+	chart = frappe.get_doc("Price Chart", price_chart) if price_chart else None
 	gold_rate = flt(gold_rate)
 
 	design_type = (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or ""
@@ -7074,7 +7076,10 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 
 	# ---- gold -------------------------------------------------------------------
 	nett = flt(b.act_nett_weight)
-	comp("gold", "Gold", nett * gold_rate, note="{0} g x {1}/g".format(round(nett, 3), gold_rate))
+	if gold_rate > 0:
+		comp("gold", "Gold", nett * gold_rate, note="{0} g x {1}/g".format(round(nett, 3), gold_rate))
+	else:
+		comp("gold", "Gold", needs=True, note="{0} g — no gold rate picked".format(round(nett, 3)))
 
 	# ---- diamonds: aggregate by parent-mapped quality, bracket by avg per-stone
 	# carats (first-row fallback). A quality with NO rows -> manual cell.
@@ -7089,7 +7094,10 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		q = qmap.get(q, q)
 		qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
 
-	if qual_ct or flt(b.act_dmd_weight) > 0:
+	if (qual_ct or flt(b.act_dmd_weight) > 0) and not chart:
+		comp("dmd", "Diamond", needs=True, note="no price chart picked")
+		dmd_detail = []
+	elif qual_ct or flt(b.act_dmd_weight) > 0:
 		diamond_value = 0.0
 		dmd_detail = []
 		dmd_missing = []
@@ -7129,7 +7137,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		ct = flt(ct)
 		if ct <= 0:
 			return
-		rows = list(chart.get(field) or [])
+		rows = list(chart.get(field) or []) if chart else []
 		if not rows:
 			comp(key, label, needs=True, note="{0} ct {1} but the chart has no {1} rates".format(round(ct, 3), label))
 			return
@@ -7151,7 +7159,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 
 	# ---- precious stones: per-stone rows, flat or weight-bracketed by ITS carats
 	ps_rows = {}
-	for r in (chart.get("precious_stone_rates") or []):
+	for r in ((chart.get("precious_stone_rates") if chart else None) or []):
 		ps_rows.setdefault((r.stone or "").upper(), []).append(r)
 	ps_detail = []
 	if flt(b.act_ps_weight) > 0:
@@ -7181,8 +7189,10 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	# ---- making: per design type (blank row = DEFAULT), PER GRAM with a rupee
 	# floor. No matching rule and no default -> manual cell.
 	rule_desc = ""
-	making_rules = list(chart.get("making_rules") or [])
-	if making_rules:
+	making_rules = list(chart.get("making_rules") or []) if chart else []
+	if not chart:
+		comp("making", "Making", needs=True, note="no price chart picked")
+	elif making_rules:
 		row = next((r for r in making_rules if (r.design_type or "") == design_type and design_type), None) \
 			or next((r for r in making_rules if not r.design_type), None)
 		if not row:
@@ -7213,7 +7223,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	pieces = max(len(huids), 1)
 	cert_detail = []
 	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
-	cert_rows = {(r.certification or "").upper(): r for r in (chart.get("certification_charges") or [])}
+	cert_rows = {(r.certification or "").upper(): r
+		for r in ((chart.get("certification_charges") if chart else None) or [])}
 	for token in trail:
 		is_hall = token in ("HALL", "HALLMARKING")
 		key = "hall" if is_hall else "cert:" + token
