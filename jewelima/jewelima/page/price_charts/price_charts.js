@@ -130,8 +130,9 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
 			<tr data-i="${i}"><td><select data-f="certification">
 				<option value=""></option>
+				<option ${r.certification === "ALL LABS" ? "selected" : ""} value="ALL LABS">${__("ALL LABS (group — every lab, one price)")}</option>
 				${CERTS.map((c) => `<option ${r.certification === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
-				${r.certification && !CERTS.includes(r.certification) ? `<option selected>${esc(r.certification)}</option>` : ""}
+				${r.certification && r.certification !== "ALL LABS" && !CERTS.includes(r.certification) ? `<option selected>${esc(r.certification)}</option>` : ""}
 			</select></td>
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td class="del">&times;</td></tr>`).join("");

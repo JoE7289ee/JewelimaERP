@@ -6360,6 +6360,13 @@ def save_price_chart(payload):
 		if r.get("rate"):
 			doc.append("solitaire_rates", {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
 				"quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
+	cert_rows_in = [(r.get("certification") or "").strip().upper()
+		for r in (p.get("certification_charges") or []) if (r.get("certification") or "").strip()]
+	# ALL LABS is the GROUP price for every lab certification (hallmarking stays
+	# its own row) — group and individual lab rows never coexist
+	labs_in = [c for c in cert_rows_in if c not in ("HALL", "HALLMARKING", "ALL LABS")]
+	if "ALL LABS" in cert_rows_in and labs_in:
+		frappe.throw(frappe._("Use EITHER the ALL LABS group price OR individual lab rows — not both ({0}).").format(", ".join(labs_in)))
 	for r in p.get("certification_charges") or []:
 		if (r.get("certification") or "").strip():
 			doc.append("certification_charges", {"certification": r.get("certification").strip().upper(),
@@ -7067,14 +7074,22 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	if cert_rows or trail:
 		for token in trail:
 			if cert_rows:
-				if token not in cert_rows:
+				is_hall = token in ("HALL", "HALLMARKING")
+				# labs may be priced individually OR through the ALL LABS group
+				# row (never both — save blocks it); hallmarking only ever
+				# matches its own row
+				rate = cert_rows.get(token)
+				if rate is None and not is_hall:
+					rate = cert_rows.get("ALL LABS")
+				if rate is None:
 					frappe.throw(frappe._("{0} is {1} certified but chart {2} has no price for {1} — scan denied.").format(
 						nm, token, chart.chart_name))
 				# HALLMARKING charges per HUID (a stud pair carries two and pays
 				# twice); other certifications charge once per product
-				mult = pieces if token in ("HALL", "HALLMARKING") else 1
-				charges += cert_rows[token] * mult
-				cert_detail.append({"certification": token, "rate": cert_rows[token], "pieces": mult})
+				mult = pieces if is_hall else 1
+				charges += rate * mult
+				cert_detail.append({"certification": token, "rate": rate, "pieces": mult,
+					"via": "ALL LABS" if (token not in cert_rows and not is_hall) else token})
 			else:
 				# legacy chart without the table: the old flat charge covers everything
 				pass
