@@ -6328,7 +6328,8 @@ def get_price_chart(name):
 			for r in (d.get("solitaire_rates") or [])],
 		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",
 			"rate": r.rate, "min_amount": r.min_amount} for r in (d.get("certification_charges") or [])],
-		"precious_stone_rates": [{"stone": r.stone, "rate": r.rate} for r in (d.get("precious_stone_rates") or [])],
+		"precious_stone_rates": [{"stone": r.stone, "from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate}
+			for r in (d.get("precious_stone_rates") or [])],
 		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cs_rates") or [])],
 		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cz_rates") or [])],
 		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cvd_rates") or [])],
@@ -6377,7 +6378,8 @@ def save_price_chart(payload):
 				"rate": flt(r.get("rate")), "min_amount": flt(r.get("min_amount"))})
 	for r in p.get("precious_stone_rates") or []:
 		if (r.get("stone") or "").strip():
-			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(), "rate": flt(r.get("rate"))})
+			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(),
+				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")), "rate": flt(r.get("rate"))})
 	for field in ("cs_rates", "cz_rates", "cvd_rates"):
 		for r in p.get(field) or []:
 			if flt(r.get("rate")):
@@ -6434,8 +6436,12 @@ def _price_chart_letter_html(d):
 			else "₹ {0} / ct".format(money(r["rate"]))) if r.get("basis") == "Per Ct"
 		else ("₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included"))
 		for r in d.get("certification_charges", []))
-	psr = "".join("<tr><td>{0}</td><td class='r'>₹ {1} / ct</td></tr>".format(
-		frappe.utils.escape_html(r["stone"]), money(r["rate"])) for r in d.get("precious_stone_rates", []))
+	psr = "".join("<tr><td>{0}{1}</td><td class='r'>₹ {2} / ct</td></tr>".format(
+		frappe.utils.escape_html(r["stone"]),
+		("" if not flt(r.get("from_ct")) and not flt(r.get("to_ct"))
+			else " ({0} – {1} ct)".format(r["from_ct"], r["to_ct"]) if flt(r.get("to_ct"))
+			else " ({0} ct & above)".format(r["from_ct"])),
+		money(r["rate"])) for r in d.get("precious_stone_rates", []))
 	mkr = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}{3}</td></tr>".format(
 		frappe.utils.escape_html(r["design_type"] or "All designs (default)"), r["basis"],
 		money(r["rate"]) + ("/g" if r["basis"] == "Per Gram" else "/pc"),
@@ -7111,7 +7117,9 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			return cint(pcs) * flt(row.rate)
 		return ct * flt(row.rate)
 
-	ps_rows = {(r.stone or "").upper(): flt(r.rate) for r in (chart.get("precious_stone_rates") or [])}
+	ps_rows = {}
+	for r in (chart.get("precious_stone_rates") or []):
+		ps_rows.setdefault((r.stone or "").upper(), []).append(r)
 	ps_value = 0.0
 	ps_detail = []
 	if flt(b.act_ps_weight) > 0 and not ps_rows:
@@ -7121,12 +7129,18 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		for item, qty in _bag_convert_materials([nm])[nm].items():
 			if frappe.db.get_value("Item", item, "stone_type") != "Precious Stone":
 				continue
-			rate = ps_rows.get(item.upper())
-			if rate is None:
+			rows = ps_rows.get(item.upper())
+			if not rows:
 				frappe.throw(frappe._("{0} carries {1} but chart {2} has no rate for it — scan denied.").format(
 					nm, item, chart.chart_name))
-			ps_value += flt(qty) * rate
-			ps_detail.append({"stone": item, "ct": round(flt(qty), 3), "rate": rate})
+			ct = flt(qty)
+			# a stone can be flat (blank range) or weight-bracketed by ITS carats
+			row = next((x for x in rows if flt(x.from_ct) <= ct and (not flt(x.to_ct) or ct < flt(x.to_ct))), None)
+			if row is None:
+				frappe.throw(frappe._("{0}: {1} ct of {2} falls outside every bracket on chart {3} — scan denied.").format(
+					nm, round(ct, 3), item, chart.chart_name))
+			ps_value += ct * flt(row.rate)
+			ps_detail.append({"stone": item, "ct": round(ct, 3), "rate": flt(row.rate)})
 	stone_value = (bucket_value("CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
 		+ bucket_value("CZ", "cz_rates", b.act_cz_weight, b.act_cz_no)
 		+ bucket_value("CVD", "cvd_rates", b.act_cvd_weight, b.act_cvd_no) + ps_value)

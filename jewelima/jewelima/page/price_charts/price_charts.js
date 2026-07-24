@@ -152,6 +152,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				${PSTONES.map((p) => `<option ${r.stone === p ? "selected" : ""}>${esc(p)}</option>`).join("")}
 				${r.stone && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
 			</select></td>
+			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
+			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "mk") return cur.making_rules.map((r, i) => `
@@ -204,7 +206,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cert")}</tbody></table>
 			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (rows present = a PS stone without a row blocks the scan)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
@@ -265,7 +267,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "sol" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "" }
-			: k === "ps" ? { stone: "", rate: "" }
+			: k === "ps" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
 			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "" }
 			: ["csr", "czr", "cvr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
 			: { });
