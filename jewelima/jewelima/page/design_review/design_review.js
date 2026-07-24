@@ -44,6 +44,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 				<div class="rv-actions">
 					<button class="btn btn-primary rv-save" style="background:#2e7d32;border-color:#2e7d32;">${__("Save & Approve → next")}</button>
 					<button class="btn btn-default rv-skip">${__("Save (stay Pending) → next")}</button>
+					<button class="btn btn-default rv-retire" style="color:#b02a2a;">${__("Retire → next")}</button>
 				</div>
 			</div>
 			<div class="rv-imgs">
@@ -93,13 +94,14 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		rd.onload = () => { photoB64 = rd.result; im("photo", photoB64); };
 		rd.readAsDataURL(file);
 	});
-	function save(approve) {
+	function save(approve, retire) {
 		const p = { name: cur.name, design_no: fNo.get_value(), design_type: fDT.get_value(),
 			gross_weight: fGW.get_value(), diamond_weight: fDW.get_value(), note: fNote.get_value(),
 			extra_lines: cur.extra_lines, stones: cur.stones, photo: photoB64 || cur.photo,
 			photoupdate: root.find(".ck-up").is(":checked") ? 1 : 0,
 			customer_image_needed: root.find(".ck-cn").is(":checked") ? 1 : 0,
-			delete_raw: root.find(".ck-dr").is(":checked") ? 1 : 0, approve: approve ? 1 : 0 };
+			delete_raw: root.find(".ck-dr").is(":checked") ? 1 : 0, approve: approve ? 1 : 0,
+			retire: retire ? 1 : 0 };
 		frappe.dom.freeze(__("Saving..."));
 		frappe.call({ method: API + ".review_save", args: { payload: JSON.stringify(p) } })
 			.then(() => { frappe.dom.unfreeze(); load(); })
@@ -107,5 +109,8 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	}
 	root.find(".rv-save").on("click", () => save(true));
 	root.find(".rv-skip").on("click", () => save(false));
+	root.find(".rv-retire").on("click", () => frappe.confirm(
+		__("Retire {0}? The code stays reserved forever; the card leaves the active catalog.", [cur.design_no]),
+		() => save(false, true)));
 	load();
 };

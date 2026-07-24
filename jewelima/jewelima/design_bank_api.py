@@ -348,6 +348,8 @@ def review_save(payload):
 	d.customer_image_needed = 1 if p.get("customer_image_needed") else 0
 	if p.get("approve"):
 		d.status = "Approved"  # validate() enforces design_type
+	if p.get("retire"):
+		d.status = "Retired"   # code stays reserved forever; sales returns still resolve
 	if p.get("delete_raw") and d.raw_image:
 		delete_raw_forever(d)
 	d.flags.ignore_version = True
