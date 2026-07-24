@@ -385,3 +385,124 @@ def design_bank_report():
 		("Dye Available", c({"dye_available": 1})),
 		("Linked to ERP Designs", frappe.db.count("Design Bank Design Link")),
 	]}
+
+
+# ---------------------------------------------------------------------------
+# Photo Update workflow: flagged card -> worker uploads a candidate (PENDING,
+# nothing replaced) -> approver compares old vs new -> APPROVE kills the old
+# photo forever (disk + File docs), promotes the new one and re-renders the
+# card; REJECT bins the candidate and the card stays on the queue.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_photo_update_queue(start=0, limit=30):
+	"""Cards flagged Upgrade Photo that have NO candidate yet."""
+	filters = {"photoupdate": 1, "pending_photo": ["is", "not set"]}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "photo", "image"],
+		order_by="design_no", start=int(start), limit=int(limit))
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def submit_photo_update(name, image_b64):
+	"""The worker's upload — parked as the PENDING candidate, named
+	<code>.pending.png. Replaces a prior unapproved candidate."""
+	import base64
+	from jewelima.jewelima.api import _db_img_name
+	d = frappe.get_doc("Design Bank", name)
+	if not image_b64 or not image_b64.startswith("data:"):
+		frappe.throw(frappe._("Upload the new photo."))
+	_delete_bank_file(d.name, d.pending_photo)
+	head, b64 = image_b64.split(",", 1)
+	fdoc = frappe.get_doc({"doctype": "File", "file_name": _db_img_name(d.design_no, "pending"),
+		"content": base64.b64decode(b64), "is_private": 0,
+		"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+	d.pending_photo = fdoc.file_url
+	d.pending_photo_by = frappe.session.user
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+@frappe.whitelist()
+def get_photo_approval_queue(start=0, limit=30):
+	"""Candidates waiting for the approver: old photo vs new, side by side."""
+	filters = {"pending_photo": ["is", "set"]}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "photo", "pending_photo", "pending_photo_by", "image"],
+		order_by="modified", start=int(start), limit=int(limit))
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+def _delete_bank_file(name, url):
+	"""A design-bank image leaves the SYSTEM: File docs + the disk file."""
+	import os
+	from urllib.parse import unquote
+	if not url:
+		return
+	for fn in frappe.get_all("File", filters={"file_url": url}, pluck="name"):
+		frappe.delete_doc("File", fn, force=True, ignore_permissions=True)
+	try:
+		path = frappe.get_site_path("public", unquote(url).lstrip("/"))
+		if "/files/" in url and os.path.exists(path):
+			os.remove(path)
+	except Exception:
+		pass
+
+
+@frappe.whitelist()
+def approve_photo_update(name):
+	"""APPROVE: the old product photo is deleted FOREVER, the candidate becomes
+	<code>.photo.png, the info card re-renders, both flags clear."""
+	import base64
+	from io import BytesIO
+	from jewelima.jewelima.api import _card_compose, _db_img_name, _cad_image_any
+	d = frappe.get_doc("Design Bank", name)
+	if not d.pending_photo:
+		frappe.throw(frappe._("{0} has no pending photo.").format(d.design_no))
+	new_img = _cad_image_any(d.pending_photo)
+	if not new_img:
+		frappe.throw(frappe._("Couldn't read the pending photo."))
+	_delete_bank_file(d.name, d.photo)
+	buf = BytesIO()
+	new_img.save(buf, "PNG")
+	fdoc = frappe.get_doc({"doctype": "File", "file_name": _db_img_name(d.design_no, "photo"),
+		"content": buf.getvalue(), "is_private": 0,
+		"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+	_delete_bank_file(d.name, d.pending_photo)
+	d.photo = fdoc.file_url
+	d.pending_photo = ""
+	d.pending_photo_by = ""
+	d.photoupdate = 0
+	# re-render the info card with the approved photo
+	payload = {"design_no": d.design_no, "design_type": d.design_type,
+		"gross_weight": d.gross_weight, "diamond_weight": d.diamond_weight,
+		"note": d.note, "extra_lines": d.extra_lines, "photo": d.photo,
+		"stones": [{"stone": x.stone, "sieve": x.sieve, "pcs": x.pcs, "ct": x.ct} for x in d.stones]}
+	buf2 = BytesIO()
+	_card_compose(payload).save(buf2, "PNG")
+	info_name = _db_img_name(d.design_no, "info")
+	for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
+			"attached_to_name": d.name, "file_name": info_name}, pluck="name"):
+		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
+	f2 = frappe.get_doc({"doctype": "File", "file_name": info_name, "content": buf2.getvalue(),
+		"is_private": 0, "attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+	d.image = f2.file_url
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "left": frappe.db.count("Design Bank", {"pending_photo": ["is", "set"]})}
+
+
+@frappe.whitelist()
+def reject_photo_update(name):
+	"""REJECT: the candidate is binned; the card stays on the update queue."""
+	d = frappe.get_doc("Design Bank", name)
+	_delete_bank_file(d.name, d.pending_photo)
+	d.pending_photo = ""
+	d.pending_photo_by = ""
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "left": frappe.db.count("Design Bank", {"pending_photo": ["is", "set"]})}

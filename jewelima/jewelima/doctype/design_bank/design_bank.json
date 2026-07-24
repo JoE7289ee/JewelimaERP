@@ -33,7 +33,9 @@
   "stones",
   "raw_image",
   "customer_image_needed",
-  "rebuilt"
+  "rebuilt",
+  "pending_photo",
+  "pending_photo_by"
  ],
  "fields": [
   {
@@ -207,12 +209,25 @@
    "label": "Rebuilt",
    "read_only": 1,
    "description": "Crop + new-format card render done by the batch job."
+  },
+  {
+   "fieldname": "pending_photo",
+   "fieldtype": "Attach Image",
+   "label": "Pending Photo (awaiting approval)",
+   "read_only": 1,
+   "description": "Uploaded on the Photo Update page; replaces the product photo only when APPROVED."
+  },
+  {
+   "fieldname": "pending_photo_by",
+   "fieldtype": "Data",
+   "label": "Pending Photo By",
+   "read_only": 1
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 02:00:00.000000",
+ "modified": "2026-07-24 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",
