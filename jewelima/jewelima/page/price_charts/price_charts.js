@@ -112,7 +112,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
-		diamond_quality_note: "", diamond_rates: [], setting_rates: [], special_works: [],
+		diamond_quality_note: "", diamond_rates: [],
 		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [], precious_stone_rates: [], making_rules: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
@@ -173,16 +173,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
-		if (kind === "set") return cur.setting_rates.map((r, i) => `
-			<tr data-i="${i}"><td><input data-f="stone_ct" type="number" step="0.001" value="${num(r.stone_ct)}"></td>
-			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
-			<td class="del">&times;</td></tr>`).join("");
-		return cur.special_works.map((r, i) => `
-			<tr data-i="${i}"><td><input data-f="work_name" value="${esc(r.work_name || "")}"></td>
-			<td><select data-f="basis">${["Per Gram", "Per Piece", "Per Carat"].map((b) =>
-				`<option ${r.basis === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
-			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
-			<td class="del">&times;</td></tr>`).join("");
+		return "";
 	}
 
 	function paintEditor() {
@@ -210,12 +201,6 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (rows present = a PS stone without a row blocks the scan)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("ps")}</tbody></table>
-			<div class="pc-sec">${__("Setting Rates")}<span class="add" data-k="set">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="set"><thead><tr><th>${__("Stone ct")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
-				<tbody>${rowsHtml("set")}</tbody></table>
-			<div class="pc-sec">${__("Special Works")}<span class="add" data-k="spw">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="spw"><thead><tr><th>${__("Work")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
-				<tbody>${rowsHtml("spw")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
@@ -254,7 +239,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	root.on("input change", ".pc-f", function () {
 		cur[$(this).data("f")] = this.type === "number" ? flt($(this).val()) : $(this).val();
 	});
-	const KIND_ARR = { dmd: "diamond_rates", set: "setting_rates", spw: "special_works",
+	const KIND_ARR = { dmd: "diamond_rates",
 		sol: "solitaire_rates", cert: "certification_charges", ps: "precious_stone_rates", mk: "making_rules" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
 		const $t = $(this).closest("table.pc-t");
@@ -274,7 +259,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			: k === "cert" ? { certification: "", rate: "" }
 			: k === "ps" ? { stone: "", rate: "" }
 			: k === "mk" ? { design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
-			: k === "set" ? { stone_ct: "", rate: "" } : { work_name: "", basis: "Per Piece", rate: "" });
+			: { });
 		paintEditor();
 	});
 	root.on("click", "table.pc-t .del", function () {

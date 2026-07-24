@@ -6334,8 +6334,6 @@ def get_price_chart(name):
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
 			"rate": r.rate, "min_per_piece": r.min_per_piece} for r in (d.get("making_rules") or [])],
-		"setting_rates": [{"stone_ct": r.stone_ct, "rate": r.rate} for r in d.setting_rates],
-		"special_works": [{"work_name": r.work_name, "basis": r.basis, "rate": r.rate} for r in d.special_works],
 		"hallmark_charge": flt(d.hallmark_charge), "certification_charge": flt(d.certification_charge),
 		"payment_terms": d.payment_terms or "", "terms": d.terms or "",
 		"signatory": d.signatory or "", "signatory_phone": d.signatory_phone or "",
@@ -6387,13 +6385,6 @@ def save_price_chart(payload):
 			doc.append("making_rules", {"design_type": r.get("design_type") or None,
 				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
 				"min_per_piece": flt(r.get("min_per_piece"))})
-	for r in p.get("setting_rates") or []:
-		if r.get("rate"):
-			doc.append("setting_rates", {"stone_ct": flt(r.get("stone_ct")), "rate": flt(r.get("rate"))})
-	for r in p.get("special_works") or []:
-		if r.get("work_name") and r.get("rate"):
-			doc.append("special_works", {"work_name": r.get("work_name"), "basis": r.get("basis") or "Per Piece",
-				"rate": flt(r.get("rate"))})
 	doc.hallmark_charge = flt(p.get("hallmark_charge"))
 	doc.certification_charge = flt(p.get("certification_charge"))
 	doc.payment_terms = p.get("payment_terms") or ""
@@ -6439,10 +6430,6 @@ def _price_chart_letter_html(d):
 		for r in d.get("certification_charges", []))
 	psr = "".join("<tr><td>{0}</td><td class='r'>₹ {1} / ct</td></tr>".format(
 		frappe.utils.escape_html(r["stone"]), money(r["rate"])) for r in d.get("precious_stone_rates", []))
-	setting = "".join("<tr><td>{0} ct</td><td class='r'>₹ {1}</td></tr>".format(
-		r["stone_ct"], money(r["rate"])) for r in d["setting_rates"])
-	special = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
-		frappe.utils.escape_html(r["work_name"]), r["basis"], money(r["rate"])) for r in d["special_works"])
 	mkr = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}{3}</td></tr>".format(
 		frappe.utils.escape_html(r["design_type"] or "All designs (default)"), r["basis"],
 		money(r["rate"]) + ("/g" if r["basis"] == "Per Gram" else "/pc"),
@@ -6493,7 +6480,7 @@ def _price_chart_letter_html(d):
 		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
-		{dmd_sec}{sol_sec}{ps_sec}{mk_sec}{setting_sec}{special_sec}{flat_sec}{cert_sec}
+		{dmd_sec}{sol_sec}{ps_sec}{mk_sec}{flat_sec}{cert_sec}
 		{payment}{terms}
 		<div class='sign'>
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
@@ -6508,8 +6495,6 @@ def _price_chart_letter_html(d):
 		cert_sec=sec("Certification Charges", "", certs),
 		ps_sec=sec("Precious Stone Rates", "", psr),
 		mk_sec=sec("Making Charges", "<thead><tr><th>Design</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", mkr),
-		setting_sec=sec("Setting Rates", "<thead><tr><th>Stone Size</th><th class='r'>Rate</th></tr></thead>", setting),
-		special_sec=sec("Special Works", "<thead><tr><th>Work</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", special),
 		flat_sec=sec("Making &amp; Charges", "", flat_rows),
 		payment="<div class='sec'><div class='st'>Payment Terms</div><div class='terms'>{0}</div></div>".format(esc(d["payment_terms"])) if d["payment_terms"] else "",
 		terms="<div class='terms'>{0}</div>".format(esc(d["terms"])) if d["terms"] else "",

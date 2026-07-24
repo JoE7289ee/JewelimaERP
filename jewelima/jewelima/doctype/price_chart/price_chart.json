@@ -28,9 +28,7 @@
   "making_min_grams",
   "making_rules",
   "setting_section",
-  "setting_rates",
   "special_section",
-  "special_works",
   "charges_section",
   "hallmark_charge",
   "certification_charge",
@@ -182,21 +180,9 @@
    "label": "Setting Ladder (\u20b9 per stone, by stone size)"
   },
   {
-   "fieldname": "setting_rates",
-   "fieldtype": "Table",
-   "label": "Setting Rates",
-   "options": "Price Chart Setting Rate"
-  },
-  {
    "fieldname": "special_section",
    "fieldtype": "Section Break",
    "label": "Special Works"
-  },
-  {
-   "fieldname": "special_works",
-   "fieldtype": "Table",
-   "label": "Special Works",
-   "options": "Price Chart Special Work"
   },
   {
    "fieldname": "charges_section",
@@ -249,7 +235,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 16:00:00.000000",
+ "modified": "2026-07-24 17:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",
