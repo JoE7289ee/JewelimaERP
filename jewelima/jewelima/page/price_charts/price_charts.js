@@ -14,6 +14,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	let GROUPS = [];
+	let CERTS = [];   // Certification Type codes for the charges dropdown
 	let cur = null;      // loaded chart payload (or a blank draft)
 	let snap = "";       // JSON snapshot taken after load; differs = real edits
 
@@ -62,6 +63,10 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	`);
 	const root = $(page.main);
 	page.set_primary_action(__("New Chart"), () => openChart(null), "add");
+
+	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Certification Type",
+		fields: ["name"], limit_page_length: 0, order_by: "name" } })
+		.then((r) => { CERTS = (r.message || []).map((x) => x.name); });
 
 	function loadList(keep) {
 		frappe.call({ method: API + ".get_price_chart_list" }).then((r) => {
@@ -123,7 +128,11 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
-			<tr data-i="${i}"><td><input data-f="certification" value="${esc(r.certification || "")}" placeholder="HALLMARKING / IGL / ..."></td>
+			<tr data-i="${i}"><td><select data-f="certification">
+				<option value=""></option>
+				${CERTS.map((c) => `<option ${r.certification === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+				${r.certification && !CERTS.includes(r.certification) ? `<option selected>${esc(r.certification)}</option>` : ""}
+			</select></td>
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "set") return cur.setting_rates.map((r, i) => `
