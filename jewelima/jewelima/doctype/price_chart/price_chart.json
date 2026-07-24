@@ -10,7 +10,6 @@
   "chart_date",
   "status",
   "col_break_head",
-  "diamond_quality_note",
   "diamond_section",
   "diamond_rates",
   "solitaire_min_ct",
@@ -68,12 +67,6 @@
   {
    "fieldname": "col_break_head",
    "fieldtype": "Column Break"
-  },
-  {
-   "description": "The letter's quality line, e.g. VVS, Colour-E/F.",
-   "fieldname": "diamond_quality_note",
-   "fieldtype": "Data",
-   "label": "Diamond Purity (note)"
   },
   {
    "fieldname": "diamond_section",
@@ -220,7 +213,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 18:00:00.000000",
+ "modified": "2026-07-24 19:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",

@@ -112,7 +112,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
-		diamond_quality_note: "", diamond_rates: [], cs_rates: [], cz_rates: [], cvd_rates: [],
+		diamond_rates: [], cs_rates: [], cz_rates: [], cvd_rates: [],
 		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [], precious_stone_rates: [], making_rules: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
@@ -188,9 +188,6 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				<div class="pc-nm"></div><div class="pc-dt"></div>
 				${cur.name ? `<span class="pc-status ${cur.status === "Active" ? "act" : "sup"}">${esc(cur.status)}</span>
 					<span style="font-size:11px;color:var(--text-muted);">${esc(cur.name)}</span>` : ""}
-			</div>
-			<div class="pc-flats" style="margin-top:8px;">
-				<div><label>${__("Diamond quality note (letter line)")}</label><input class="pc-f" data-f="diamond_quality_note" value="${esc(cur.diamond_quality_note)}" placeholder="VVS, Colour E/F"></div>
 			</div>
 			<div class="pc-sec">${__("Diamond Rates (₹/ct by size bracket)")}<span class="add" data-k="dmd">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("Sieve label")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>

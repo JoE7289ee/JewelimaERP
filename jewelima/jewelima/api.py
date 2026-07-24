@@ -6320,7 +6320,7 @@ def get_price_chart(name):
 	d = frappe.get_doc("Price Chart", name)
 	return {
 		"name": d.name, "chart_name": d.chart_name, "chart_date": str(d.chart_date or ""),
-		"status": d.status, "diamond_quality_note": d.diamond_quality_note or "",
+		"status": d.status,
 		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
 			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
 		"solitaire_min_ct": flt(d.get("solitaire_min_ct")) or 0.07,
@@ -6351,7 +6351,6 @@ def save_price_chart(payload):
 	doc.chart_name = p["chart_name"].strip().upper()
 	doc.chart_date = p.get("chart_date") or frappe.utils.today()
 	doc.status = "Active"
-	doc.diamond_quality_note = p.get("diamond_quality_note") or ""
 	for r in p.get("diamond_rates") or []:
 		if r.get("rate"):
 			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label"), "from_ct": flt(r.get("from_ct")),
@@ -6484,7 +6483,7 @@ def _price_chart_letter_html(d):
 		</div>
 	</body></html>""".format(
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
-		qnote="<div class='qnote'>Diamond quality: {0}</div>".format(esc(d["diamond_quality_note"])) if d["diamond_quality_note"] else "",
+		qnote="",
 		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieve</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
 		sol_sec=sec("Solitaire Rates (per-stone above {0} ct)".format(d.get("solitaire_min_ct", 0.07)),
 			"<thead><tr><th>Per-stone size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", sol),
