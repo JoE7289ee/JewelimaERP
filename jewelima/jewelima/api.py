@@ -7432,26 +7432,32 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	else:
 		comp("gold", "Gold", needs=True, note="{0} g — no gold rate picked".format(round(nett, 3)))
 
-	# ---- diamonds: PER BOM LINE. Each frozen line is quality + sieve (e.g.
-	# "VVS/VS-GH 22-22.5"), so every line brackets by ITS OWN per-stone carats —
-	# the sieve chart's avg_cts for that sieve (falling back to the piece average,
-	# then the first row). A quality with NO chart rows -> manual cell.
+	# ---- diamonds: PER FROZEN-BOM LINE, bracketed by ACTUAL per-stone carats.
+	# Each bag_bom line carries the stone COUNT (qty) and CARATS (weight), so a
+	# line's cents = weight/pcs — never a sieve-chart average. All weight whose
+	# stones land in one bracket bills as that weight x that bracket's rate.
+	# Fallbacks: no pcs on the line -> piece average; nothing -> first row.
 	qmap = _diamond_qmap()
 	mats = _bag_convert_materials([nm])[nm]
 	dmd_lines = []
-	for item, qty in mats.items():
-		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
-		if st != "Diamond":
-			continue
-		q = (grp or "").replace("DIAMOND ", "")
-		dmd_lines.append({"item": item, "quality": qmap.get(q, q), "ct": flt(qty)})
+	for it in frappe.get_all("Order Bag BOM Item",
+			filters={"parent": nm, "stone_type": "Diamond"}, fields=["item", "qty", "weight"]):
+		grp = (frappe.db.get_value("Item", it.item, "item_group") or "").replace("DIAMOND ", "")
+		dmd_lines.append({"item": it.item, "quality": qmap.get(grp, grp),
+			"ct": flt(it.weight), "pcs": cint(it.qty)})
+	if not dmd_lines:
+		# legacy bags without a frozen bag_bom: ledger lines (no per-line counts)
+		for item, qty in mats.items():
+			st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
+			if st != "Diamond":
+				continue
+			q = (grp or "").replace("DIAMOND ", "")
+			dmd_lines.append({"item": item, "quality": qmap.get(q, q), "ct": flt(qty), "pcs": 0})
 
 	if (dmd_lines or flt(b.act_dmd_weight) > 0) and not chart:
 		comp("dmd", "Diamond", needs=True, note="no price chart picked")
 		dmd_detail = []
 	elif dmd_lines or flt(b.act_dmd_weight) > 0:
-		sieve_ct = {d.sieve_size: flt(d.avg_cts) for d in frappe.get_all(
-			"Diamond Sieve", fields=["sieve_size", "avg_cts"]) if flt(d.avg_cts) > 0}
 		avg_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
 		diamond_value = 0.0
 		dmd_detail = []
@@ -7463,9 +7469,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 					dmd_missing.append(line["quality"])
 				continue
 			exact = [r for r in rows if (r.quality or "") == line["quality"]] or rows
-			# the line's own stone size: its sieve's avg carats, else piece average
-			sieve = line["item"].rsplit(" ", 1)[-1]
-			stone_ct = sieve_ct.get(sieve) or avg_stone
+			# the line's ACTUAL cents: its carats over its stone count
+			stone_ct = (line["ct"] / line["pcs"]) if line["pcs"] else avg_stone
 			row = None
 			if stone_ct:
 				for r in exact:
@@ -7474,7 +7479,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 						break
 			row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
 			diamond_value += line["ct"] * flt(row.rate)
-			dmd_detail.append({"quality": line["quality"], "sieve": sieve if sieve in sieve_ct else "",
+			dmd_detail.append({"quality": line["quality"], "pcs": line["pcs"],
+				"stone_ct": round(stone_ct, 4) if stone_ct else 0,
 				"ct": round(line["ct"], 3), "rate": flt(row.rate),
 				"bracket": "{0}\u2013{1}".format(flt(row.from_ct), flt(row.to_ct) or "\u221e")})
 		if dmd_missing:
@@ -7482,8 +7488,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				note="no chart rows for {0}".format(", ".join(sorted(dmd_missing))))
 		else:
 			comp("dmd", "Diamond", diamond_value,
-				note="; ".join("{0}{1} {2} ct x {3} = {4}".format(
-					d["quality"], " " + d["sieve"] if d["sieve"] else "", d["ct"], d["rate"],
+				note="; ".join("{0} {1}pcs {2} ct ({3}/st) x {4} = {5}".format(
+					d["quality"], d["pcs"] or "?", d["ct"], d["stone_ct"] or "?", d["rate"],
 					_inr(d["ct"] * d["rate"])) for d in dmd_detail))
 	else:
 		dmd_detail = []
