@@ -561,11 +561,22 @@ def get_old_category_designs(folder, start=0, limit=60, subtree=0):
 	filters = ({"source_folder": ["like", folder + "%"]} if int(subtree or 0)
 		else {"source_folder": folder})
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name", "design_no", "status", "image", "raw_image", "photo"],
+		fields=["name", "design_no", "status", "image", "raw_image", "photo", "priority"],
 		order_by="design_no", start=int(start), limit=int(limit))
 	for r in rows:
 		r["display"] = r.image if r.status == "Approved" else (r.raw_image or r.photo or r.image or "")
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def set_design_priority(names, priority):
+	"""Bulk-stamp review priority on picked cards (Old Categories selection)."""
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	priority = int(priority or 0)
+	for nm in names:
+		frappe.db.set_value("Design Bank", nm, "priority", priority, update_modified=False)
+	frappe.db.commit()
+	return {"updated": len(names), "priority": priority}
 
 
 @frappe.whitelist()
