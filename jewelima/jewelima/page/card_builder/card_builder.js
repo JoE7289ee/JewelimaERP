@@ -46,7 +46,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		<div class="cb-cols">
 			<div class="cb-right">
 				<div class="cb-row"><div class="cb-pick"></div><div class="cb-series"></div>
-					<button class="btn btn-default cb-new" style="align-self:end;">${__("New Card")}</button></div>
+</div>
 				<div class="cb-code"><div class="cb-no"></div><span class="cb-codechk"></span></div>
 				<div class="cb-row"><div class="cb-dtype"></div><div class="cb-gw"></div><div class="cb-dw"></div></div>
 				<div class="cb-sec">${__("Stones / Sieves")}<span class="add cb-addstone">+ ${__("row")}</span></div>
@@ -168,17 +168,6 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		const v = fPick.get_value();
 		if (v) loadCard(v);
 	}, 100));
-	root.find(".cb-new").on("click", () => {
-		cur = { name: null, photo: "", stones: [] };
-		fPick.set_value(""); fNo.set_value(""); fType.set_value("");
-		fGW.set_value(""); fDW.set_value(""); fNote.set_value("");
-		root.find(".cb-extra textarea").val("");
-		root.find(".cb-photo").text(__("click to upload the product photo"));
-		root.find(".cb-prev").attr("src", "");
-		root.find(".cb-crop, .cb-rawlink, .cb-rawdel").hide();
-		paintStones(); preview();
-	});
-
 	// legacy cards: lift the product photo off the old scanned card
 	root.find(".cb-crop").on("click", () => {
 		if (!cur.name) return;
