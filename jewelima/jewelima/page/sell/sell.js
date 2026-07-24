@@ -55,6 +55,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-sell{margin-left:auto;background:#1d7a33;border:none;color:#fff;font-weight:800;letter-spacing:.8px;padding:12px 30px;border-radius:8px;font-size:14px;cursor:pointer;box-shadow:0 2px 6px rgba(29,122,51,.35);}
 		.sl-sell:hover{background:#155e26;}
 		.sl-sell[disabled]{background:#9aa5a0;cursor:not-allowed;box-shadow:none;}
+		.sl-tip{position:fixed;z-index:2000;display:none;background:#1a1a1a;color:#fff;border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.6;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;pointer-events:none;}
+		.sl-tip .t{font-weight:700;margin-bottom:3px;color:#ffd766;}
 		</style>
 		<div class="sl-wrap">
 		<div class="sl-top">
@@ -132,7 +134,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const $b = $(root).find(".sl-rows");
 		$b.html(S.rows.length ? S.rows.map((r, i) => `
 			<tr class="${r.held_by && to && r.held_by !== to && r.held_by !== "JD Stock" ? "mismatch" : ""}" data-i="${i}">
-				<td><span class="sl-bar">${esc(r.order_bag)}</span>${r.huid ? `<div class="sl-sub">HUID ${esc(r.huid)}</div>` : ""}</td>
+				<td class="sl-bag" data-bag="${esc(r.order_bag)}"><span class="sl-bar">${esc(r.order_bag)}</span>${r.huid ? `<div class="sl-sub">HUID ${esc(r.huid)}</div>` : ""}</td>
 				<td>${esc(r.design)}<div class="sl-sub">${esc(r.design_type)}</div></td>
 				<td class="sl-holder">${esc(r.held_by || "—")}</td>
 				<td class="r">${flt(r.nett).toFixed(3)}</td>
@@ -276,6 +278,26 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			}).catch(() => frappe.dom.unfreeze());
 		});
 	});
+
+	// hover a card no. -> its ACTUAL frozen BOM, so the priced values are explainable
+	$(root).find(".sl-wrap").append(`<div class="sl-tip"></div>`);
+	const bomCache = {};
+	$(root).on("mouseenter", "td.sl-bag", function (e) {
+		const bag = $(this).data("bag");
+		const $tip = $(root).find(".sl-tip");
+		const show = (lines) => {
+			if (!lines.length) return;
+			$tip.html(`<div class="t">${__("Actual BOM — {0}", [esc(bag)])}</div>` +
+				lines.map((l) => esc(l)).join("<br>")).css({ left: e.clientX + 14, top: e.clientY + 12 }).show();
+		};
+		if (bomCache[bag]) return show(bomCache[bag]);
+		frappe.call({ method: API + ".get_bag_bom_summary", args: { order_bag: bag }, freeze: false })
+			.then((r) => { bomCache[bag] = (r.message || {}).lines || []; show(bomCache[bag]); });
+	});
+	$(root).on("mousemove", "td.sl-bag", function (e) {
+		$(root).find(".sl-tip:visible").css({ left: e.clientX + 14, top: e.clientY + 12 });
+	});
+	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
 
 	page.add_inner_button(__("Sale Records"), () => frappe.set_route("List", "Product Sale"));
 	paint();
