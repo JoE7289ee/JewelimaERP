@@ -7397,6 +7397,10 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"dmd_detail": dmd_detail, "cert_detail": cert_detail, "ps_detail": ps_detail,
 		"labour_rule": rule_desc,
 		"components": comps,
+		# already parked on a prepared bill? the Sell page warns on re-scan
+		"prepped": [x.parent for x in frappe.get_all("Sale Preparation Item",
+			filters={"order_bag": nm, "parenttype": "Sale Preparation"}, fields=["parent"])
+			if frappe.db.get_value("Sale Preparation", x.parent, "status") in ("Draft", "Sent")],
 	}
 
 

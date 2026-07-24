@@ -14,7 +14,7 @@
 frappe.pages["sell"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Sell", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { rows: [], adjust: [], prep: null };
+	const S = { rows: [], adjust: [], prep: null, hist: [] };
 	const esc = frappe.utils.escape_html;
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	// canonical column order; cert:* columns slot in after hall, alphabetically
@@ -100,6 +100,24 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	tax.set_value(1);
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
 	rate.$input.on("change", () => repriceAll());
+
+	function logHist(code, result, kind) {
+		S.hist.push({ time: frappe.datetime.now_datetime(), code, result, kind: kind || "ok" });
+	}
+	function showHistory() {
+		const h = S.hist;
+		const body = h.slice().reverse().map((e, idx) => {
+			const color = e.kind === "err" ? "#b00020" : e.kind === "warn" ? "#9a6700" : "#1d7a33";
+			return `<tr><td>${h.length - idx}</td><td>${e.time ? frappe.datetime.str_to_user(e.time) : ""}</td>
+				<td><b>${esc(e.code)}</b></td><td style="color:${color}">${esc(e.result)}</td></tr>`;
+		}).join("");
+		const d = new frappe.ui.Dialog({ title: __("Scan history ({0})", [h.length]), size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "h" }] });
+		d.fields_dict.h.$wrapper.html(h.length
+			? `<table class="table table-bordered" style="font-size:12px;"><thead><tr><th style="width:40px">#</th><th>${__("Time")}</th><th>${__("Card")}</th><th>${__("Result")}</th></tr></thead><tbody>${body}</tbody></table>`
+			: `<div class="text-muted" style="padding:12px;">${__("No scans yet this session.")}</div>`);
+		d.show();
+	}
 
 	function ready(quiet) {
 		const missing = [];
@@ -216,15 +234,26 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		if (!code) return;
 		if (S.rows.some((r) => r.order_bag === code)) {
 			frappe.show_alert({ message: __("{0} is already on the bill.", [code]), indicator: "orange" }, 4);
+			logHist(code, __("Already on the bill"), "warn");
 			focusScan();
 			return;
 		}
 		fetchPiece(code).then((m) => {
 			Object.values(m.components || {}).forEach((c) => { c.orig = c.value; });
 			S.rows.push(m);
+			const other = (m.prepped || []).filter((p) => p !== S.prep);
+			if (other.length) {
+				frappe.show_alert({ message: __("{0} is already on prepared bill {1} — selling it here will strand that prep.", [code, other.join(", ")]), indicator: "orange" }, 8);
+				logHist(code, __("Added — WARNING: already on {0}", [other.join(", ")]), "warn");
+			} else {
+				logHist(code, __("Added ({0})", [m.design || "—"]), "ok");
+			}
 			paint();
 			focusScan();
-		}).catch(() => focusScan());
+		}).catch(() => {
+			logHist(code, __("Rejected — not sellable / not found"), "err");
+			focusScan();
+		});
 	});
 
 	$(root).on("input", ".sl-v:not([readonly])", function () {
@@ -298,6 +327,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		}).then((r) => {
 			const m = r.message || {};
 			frappe.show_alert({ message: __("Prepared as {0} — find it on Prepare Sale.", [m.name]), indicator: "yellow" }, 6);
+			logHist("—", __("Prepared {0} piece(s) as {1}", [S.rows.length, m.name]), "ok");
 			S.rows = [];
 			S.adjust = [];
 			S.prep = null;
@@ -342,6 +372,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					message: __("<a href='/app/product-sale/{0}'>{0}</a> — {1} piece(s) to {2}, total {3}.<br>Stock written off ({4}); cards are SOLD (kept for returns).",
 						[m.name, m.count, esc(to), money(m.grand_total), esc(m.stock_entry || "")]),
 				});
+				logHist("—", __("SOLD {0} piece(s) — {1}", [m.count, m.name]), "ok");
 				S.rows = [];
 				S.adjust = [];
 				paint();
@@ -557,6 +588,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 
 	page.add_inner_button(__("Prepared"), () => frappe.set_route("prepare-sale"));
+	page.add_inner_button(__("Scan History"), showHistory);
 	if (frappe.route_options && frappe.route_options.prep) {
 		const nm = frappe.route_options.prep;
 		frappe.route_options = null;
