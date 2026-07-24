@@ -157,7 +157,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const cols = activeCols();
 		$(root).find("thead").html(`
 			<tr><th>${__("Barcode")}</th><th>${__("Design")}</th><th class="sl-holder-h">${__("Held By")}</th>
-			<th class="r">${__("Gold g")}</th><th class="r">${__("DMD ct")}</th>
+			<th class="r">${__("Nett Wt")}</th><th class="r">${__("DMD ct")}</th>
 			${cols.map((k) => `<th class="r">${esc(colLabel(k))} ₹</th>`).join("")}
 			<th class="r">${__("Total ₹")}</th><th style="width:30px"></th></tr>`);
 		const $b = $(root).find(".sl-rows");

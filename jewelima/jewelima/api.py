@@ -7077,7 +7077,7 @@ def export_sale_bill_pdf(payload):
 	taxed = cint(p.get("tax", 1))
 	tax_amt = round(base * 3 / 100, 2) if taxed else 0.0
 	head = "<tr><th>{0}</th><th>{1}</th><th class='r'>{2}</th><th class='r'>{3}</th>{4}<th class='r'>{5}</th></tr>".format(
-		frappe._("Barcode"), frappe._("Design"), frappe._("Gold g"), frappe._("DMD ct"),
+		frappe._("Barcode"), frappe._("Design"), frappe._("Nett Wt"), frappe._("DMD ct"),
 		"".join("<th class='r'>{0} &#8377;</th>".format(frappe.utils.escape_html(labels[k])) for k in keys),
 		frappe._("Total &#8377;"))
 	tot_row = "<tr class='tot'><td colspan='4'>{0}</td>{1}<td class='r b'>{2}</td></tr>".format(
