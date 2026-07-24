@@ -1010,19 +1010,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "circle-plus",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Add Design",
-   "link_to": "add-design",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "plus-circle",
    "indent": 0,
    "keep_closed": 0,
@@ -1918,7 +1905,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-24 18:04:33.004637",
+ "modified": "2026-07-24 21:15:19.253871",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
