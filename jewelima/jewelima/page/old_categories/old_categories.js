@@ -28,15 +28,24 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 		.oc-tile{border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:#fff;text-align:center;}
 		.oc-tile img{width:100%;height:170px;object-fit:contain;display:block;}
 		.oc-tile .n{font-size:12px;font-weight:700;padding:4px;}
+		.oc-tile{cursor:pointer;position:relative;}
+		.oc-tile.sel{border-color:#1f618d;box-shadow:0 0 0 2px #1f618d;}
+		.oc-pri{position:absolute;top:6px;left:6px;background:#1f618d;color:#fff;font-size:10px;font-weight:700;border-radius:8px;padding:1px 7px;}
 		.oc-hint{color:var(--text-muted);padding:20px;font-size:13px;}
 		</style>
 		<div class="oc-cols">
 			<div class="oc-left">
-				<input type="text" class="form-control input-sm oc-search" placeholder="${__("filter folders…")}">
+				<div style="display:flex;gap:8px;margin-bottom:8px;">
+				<input type="text" class="form-control input-sm oc-search" style="flex:1;" placeholder="${__("filter folders…")}">
+				<button class="btn btn-xs btn-default oc-reset">${__("Reset tree")}</button>
+			</div>
 				<div class="oc-list"></div>
 			</div>
 			<div class="oc-right">
-				<div class="oc-title"></div>
+				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+				<div class="oc-title" style="margin:0;"></div>
+				<button class="btn btn-sm oc-prio" style="background:#1f618d;border-color:#1f618d;color:#fff;display:none;"></button>
+			</div>
 				<div class="oc-grid"></div>
 				<button class="btn btn-default oc-more" style="margin-top:12px;display:none;">${__("Load more")}</button>
 				<div class="oc-hint">${__("Pick a folder — this is the catalog exactly as it was kept before the import. Reference only.")}</div>
@@ -86,7 +95,9 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 				const m = r.message || { rows: [], total: 0 };
 				root.find(".oc-title").text(`${curFolder} — ${m.total} ${__("design(s)")}`);
 				root.find(".oc-grid").append(m.rows.map((d) => `
-					<div class="oc-tile"><img loading="lazy" src="${esc(d.display)}" onerror="this.style.opacity=.2">
+					<div class="oc-tile ${selected.has(d.name) ? "sel" : ""}" data-name="${esc(d.name)}">
+					${d.priority ? `<span class="oc-pri" title="${__("already prioritised")}">P${d.priority}</span>` : ""}
+					<img loading="lazy" src="${esc(d.display)}" onerror="this.style.opacity=.2">
 					<div class="n">${esc(d.design_no)}</div></div>`).join(""));
 				start += m.rows.length;
 				root.find(".oc-more").toggle(start < m.total);
@@ -105,4 +116,32 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 		load(true);
 	});
 	root.find(".oc-more").on("click", () => load());
+
+	// reset tree: fold every branch, clear the pick
+	root.find(".oc-reset").on("click", () => {
+		openParents.clear();
+		root.find(".oc-search").val("");
+		paintFolders();
+	});
+
+	// selection -> bulk prioritise
+	const selected = new Set();
+	function paintPrio() {
+		root.find(".oc-prio").toggle(selected.size > 0)
+			.text(__("Prioritise {0} selected", [selected.size]));
+	}
+	root.on("click", ".oc-tile", function () {
+		const nm = $(this).data("name");
+		if (selected.has(nm)) { selected.delete(nm); $(this).removeClass("sel"); }
+		else { selected.add(nm); $(this).addClass("sel"); }
+		paintPrio();
+	});
+	root.find(".oc-prio").on("click", () => {
+		frappe.prompt([{ fieldname: "p", fieldtype: "Int", label: __("Priority (higher = sooner in Review)"), default: 10, reqd: 1 }],
+			(v) => frappe.call({ method: API + ".set_design_priority",
+				args: { names: JSON.stringify([...selected]), priority: v.p } }).then((r) => {
+				frappe.show_alert({ message: __("{0} card(s) set to priority {1}.", [(r.message || {}).updated, v.p]), indicator: "green" }, 4);
+				selected.clear(); paintPrio(); load(true);
+			}), __("Prioritise for review"), __("Set"));
+	});
 };
