@@ -14,6 +14,9 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let cur = { name: null, design_no: "", design_type: "", gross_weight: "", diamond_weight: "",
 		note: "", extra_lines: "", photo: "", stones: [] };
+	let SIEVES = [];
+	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
+		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); paintStones(); });
 	let timer = null;
 
 	$(page.main).append(`
@@ -104,7 +107,11 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 	function paintStones() {
 		root.find(".cb-stones").html((cur.stones.length ? cur.stones : [{}]).map((r) => `
 			<tr><td><input class="s" value="${esc(r.stone || "")}" placeholder="DMD / RUBY..."></td>
-			<td><input class="v" value="${esc(r.sieve || "")}" placeholder="+6-6.5"></td>
+			<td><select class="v">
+				<option value=""></option>
+				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
+				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
+			</select></td>
 			<td><input class="p" type="number" value="${r.pcs || ""}"></td>
 			<td><input class="c" type="number" step="0.001" value="${r.ct || ""}"></td>
 			<td class="del">&times;</td></tr>`).join(""));
