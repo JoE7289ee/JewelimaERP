@@ -6452,6 +6452,17 @@ def _price_chart_letter_html(d):
 		"<div class='sec'><div class='st'>{0}</div><table>{1}<tbody>{2}</tbody></table></div>".format(
 			title, table_head, body) if body else "")
 	esc = frappe.utils.escape_html
+	# one-page discipline: the more rows the chart carries, the denser the type
+	total_rows = (len(d.get("diamond_rates", [])) + len(d.get("precious_stone_rates", []))
+		+ len(d.get("cs_rates", [])) + len(d.get("cz_rates", [])) + len(d.get("cvd_rates", []))
+		+ len(d.get("making_rules", [])) + len(d.get("certification_charges", [])))
+	if total_rows > 26:
+		density = "font-size:10px;", "3px 6px", "44px"
+	elif total_rows > 14:
+		density = "font-size:11px;", "4px 7px", "52px"
+	else:
+		density = "font-size:12.5px;", "5px 8px", "64px"
+	base_font, cell_pad, logo_h = density
 	import base64 as _b64
 	logo_html = ""
 	try:
@@ -6461,9 +6472,9 @@ def _price_chart_letter_html(d):
 		logo_html = "<div style='font-size:21px;font-weight:800;color:#1f4e5f;'>JEWELIMA</div>"
 	return """<!doctype html><html><head><meta charset='utf-8'><style>
 		@page {{ size: A4; margin: 12mm 14mm; }}
-		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 12.5px; }}
+		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; {base_font} }}
 		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 8px; margin-bottom: 12px; }}
-		.head img {{ max-height: 64px; max-width: 320px; }}
+		.head img {{ max-height: {logo_h}; max-width: 320px; }}
 		.foot {{ margin-top: 12px; text-align: center; }}
 		.foot .rule {{ border-top: 1px solid #1f4e5f; margin-bottom: 8px; }}
 		.foot .tag {{ font-size: 12px; letter-spacing: .35em; color: #1f4e5f; text-transform: lowercase; }}
@@ -6478,7 +6489,7 @@ def _price_chart_letter_html(d):
 		table {{ width: 100%; border-collapse: collapse; }}
 		th {{ text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
 			color: #888; padding: 4px 8px; border-bottom: 1px solid #ddd; }}
-		td {{ padding: 5px 8px; border-bottom: 1px solid #eee; }}
+		td {{ padding: {cell_pad}; border-bottom: 1px solid #eee; }}
 		td.r, th.r {{ text-align: right; white-space: nowrap; }}
 		.terms {{ margin-top: 16px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
 		.closing {{ page-break-inside: avoid; }}
@@ -6499,6 +6510,7 @@ def _price_chart_letter_html(d):
 			<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
 		</div>
 	</body></html>""".format(
+		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h,
 		logo=logo_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		qnote="",
