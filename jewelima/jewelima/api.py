@@ -6423,10 +6423,10 @@ def _price_chart_letter_html(d):
 		if flt(r["to_ct"]):
 			return "{0} – {1} ct".format(r["from_ct"], r["to_ct"])
 		return "{0} ct & above".format(r["from_ct"]) if flt(r["from_ct"]) else "any size"
-	dmd = "".join("<tr><td>{0}</td><td>{1}</td><td>{2}</td><td class='r'>₹ {3}</td></tr>".format(
+	dmd = "".join("<tr><td>{0}</td><td>{1}</td><td><b>{2}</b></td><td class='r'>₹ {3}</td></tr>".format(
 		frappe.utils.escape_html(r["sieve_label"] or ""), bracket(r),
 		frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d["diamond_rates"])
-	sol = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
+	sol = "".join("<tr><td>{0}</td><td><b>{1}</b></td><td class='r'>₹ {2}</td></tr>".format(
 		bracket(r), frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d.get("solitaire_rates", []))
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
 		frappe.utils.escape_html(r["certification"]),
@@ -6456,11 +6456,21 @@ def _price_chart_letter_html(d):
 		"<div class='sec'><div class='st'>{0}</div><table>{1}<tbody>{2}</tbody></table></div>".format(
 			title, table_head, body) if body else "")
 	esc = frappe.utils.escape_html
+	import base64 as _b64
+	logo_html = ""
+	try:
+		lp = frappe.get_app_path("jewelima", "public", "images", "jewelima-letterhead.png")
+		logo_html = "<img src='data:image/png;base64,{0}'>".format(_b64.b64encode(open(lp, "rb").read()).decode())
+	except Exception:
+		logo_html = "<div style='font-size:21px;font-weight:800;color:#1f4e5f;'>JEWELIMA</div>"
 	return """<!doctype html><html><head><meta charset='utf-8'><style>
 		@page {{ size: A4; margin: 18mm 16mm; }}
 		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 12.5px; }}
 		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 10px; margin-bottom: 18px; }}
-		.brand {{ font-size: 21px; font-weight: 800; letter-spacing: .04em; color: #1f4e5f; }}
+		.head img {{ max-height: 64px; max-width: 320px; }}
+		.foot {{ margin-top: 30px; text-align: center; }}
+		.foot .rule {{ border-top: 1px solid #1f4e5f; margin-bottom: 8px; }}
+		.foot .tag {{ font-size: 12px; letter-spacing: .35em; color: #1f4e5f; text-transform: lowercase; }}
 		.doc {{ font-size: 13px; color: #666; margin-top: 2px; }}
 		.meta {{ margin: 10px 0 4px; }}
 		.meta b {{ font-size: 16px; }}
@@ -6479,7 +6489,7 @@ def _price_chart_letter_html(d):
 		.sign .who {{ font-weight: 700; }}
 		.sign .line {{ border-top: 1px solid #999; padding-top: 4px; width: 220px; text-align: center; color: #666; font-size: 11px; }}
 	</style></head><body>
-		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
+		<div class='head'>{logo}<div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
 		{dmd_sec}{sol_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
@@ -6488,7 +6498,9 @@ def _price_chart_letter_html(d):
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
 			<div class='line'>Authorised Signatory</div>
 		</div>
+		<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
 	</body></html>""".format(
+		logo=logo_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		qnote="",
 		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieve</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
@@ -6503,6 +6515,12 @@ def _price_chart_letter_html(d):
 		payment="<div class='sec'><div class='st'>Payment Terms</div><div class='terms'>{0}</div></div>".format(esc(d["payment_terms"])) if d["payment_terms"] else "",
 		terms="<div class='terms'>{0}</div>".format(esc(d["terms"])) if d["terms"] else "",
 		signatory=esc(d["signatory"]), signatory_phone=esc(d["signatory_phone"]))
+
+
+@frappe.whitelist()
+def price_chart_letter(name):
+	"""The rate letter as HTML — the page prints it in place (hidden iframe)."""
+	return {"html": _price_chart_letter_html(get_price_chart(name))}
 
 
 @frappe.whitelist()

@@ -229,7 +229,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			</div>
 			<div class="pc-actions">
 				<button class="btn btn-primary pc-save">${cur.name ? __("Save as New Version") : __("Save Chart")}</button>
-				${cur.name ? `<button class="btn btn-default pc-pdf">${__("Export PDF")}</button>` : ""}
+				${cur.name ? `<button class="btn btn-default pc-pdf">${__("Export PDF")}</button>
+				<button class="btn btn-default pc-print">${__("Print")}</button>` : ""}
 			</div>
 			<div class="pc-hint">${__("Saving always creates a fresh ACTIVE version; the previous active chart of the same name is kept as history (superseded). The Sell page prices against the active chart. The PDF is the rate letter for the party.")}</div>
 		`);
@@ -286,6 +287,19 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				frappe.show_alert({ message: __("{0} saved as the active chart.", [m.chart_name]), indicator: "green" }, 4);
 				frappe.call({ method: API + ".get_price_chart", args: { name: m.name } }).then((rr) => { openChart(rr.message); loadList(true); });
 			}).catch(() => frappe.dom.unfreeze());
+	});
+	root.on("click", ".pc-print", () => {
+		if (isDirty()) return frappe.show_alert({ message: __("Unsaved edits — save first, the print shows the stored chart."), indicator: "orange" }, 4);
+		frappe.call({ method: API + ".price_chart_letter", args: { name: cur.name } }).then((r) => {
+			const html = (r.message || {}).html || "";
+			document.getElementById("pc-print-frame")?.remove();
+			const fr = document.createElement("iframe");
+			fr.id = "pc-print-frame";
+			fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+			document.body.appendChild(fr);
+			fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+			setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 400);
+		});
 	});
 	root.on("click", ".pc-pdf", () => {
 		if (isDirty()) return frappe.show_alert({ message: __("Unsaved edits — save first, the PDF prints the stored chart."), indicator: "orange" }, 4);
