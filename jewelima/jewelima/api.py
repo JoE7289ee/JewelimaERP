@@ -6323,9 +6323,6 @@ def get_price_chart(name):
 		"status": d.status,
 		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
 			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
-		"solitaire_min_ct": flt(d.get("solitaire_min_ct")) or 0.07,
-		"solitaire_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "quality": r.quality, "rate": r.rate}
-			for r in (d.get("solitaire_rates") or [])],
 		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",
 			"rate": r.rate, "min_amount": r.min_amount} for r in (d.get("certification_charges") or [])],
 		"precious_stone_rates": [{"stone": r.stone, "from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate}
@@ -6356,11 +6353,6 @@ def save_price_chart(payload):
 		if r.get("rate"):
 			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label"), "from_ct": flt(r.get("from_ct")),
 				"to_ct": flt(r.get("to_ct")), "quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
-	doc.solitaire_min_ct = flt(p.get("solitaire_min_ct")) or 0.07
-	for r in p.get("solitaire_rates") or []:
-		if r.get("rate"):
-			doc.append("solitaire_rates", {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
-				"quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
 	cert_rows_in = [(r.get("certification") or "").strip().upper()
 		for r in (p.get("certification_charges") or []) if (r.get("certification") or "").strip()]
 	# ALL LABS is the GROUP price for every lab certification (hallmarking stays
@@ -6428,8 +6420,6 @@ def _price_chart_letter_html(d):
 	dmd = "".join("<tr><td>{0}</td><td>{1}</td><td><b>{2}</b></td><td class='r'>₹ {3}</td></tr>".format(
 		frappe.utils.escape_html(r["sieve_label"] or ""), bracket(r),
 		frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d["diamond_rates"])
-	sol = "".join("<tr><td>{0}</td><td><b>{1}</b></td><td class='r'>₹ {2}</td></tr>".format(
-		bracket(r), frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d.get("solitaire_rates", []))
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
 		frappe.utils.escape_html(r["certification"]),
 		("₹ {0} / ct (min ₹ {1})".format(money(r["rate"]), money(r.get("min_amount"))) if flt(r.get("min_amount"))
@@ -6498,7 +6488,7 @@ def _price_chart_letter_html(d):
 		<div class='head'>{logo}<div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
-		{dmd_sec}{sol_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
+		{dmd_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
 		{payment}{terms}
 		<div class='sign'>
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
@@ -6510,8 +6500,6 @@ def _price_chart_letter_html(d):
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		qnote="",
 		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieves</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
-		sol_sec=sec("Solitaire Rates (per-stone above {0} ct)".format(d.get("solitaire_min_ct", 0.07)),
-			"<thead><tr><th>Per-stone size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", sol),
 		cert_sec=sec("Certification Charges", "", certs),
 		ps_sec=sec("Precious Stone Rates", "", psr),
 		mk_sec=sec("Making Charges", "<thead><tr><th>Design</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", mkr),
@@ -7034,31 +7022,19 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"Order Bag Charge Category", filters={"parent": nm}, fields=["charge_category"])]
 
 	# ---- diamonds ---------------------------------------------------------------
-	# Per ITEM line: per-stone ct = the line's carats divided equally by its piece
-	# count. Above the chart's solitaire threshold the line is a SOLITAIRE — pulled
-	# out of the diamond totals and priced from the solitaire brackets (missing
-	# bracket = scan denied). Qualities map through the global Diamond Quality Map
-	# (VVS1-EF rates as VVS-EF) before the chart lookup.
+	# Every diamond line aggregates by its PARENT-MAPPED quality (VVS1-EF rates
+	# as VVS-EF) and prices from the quality's bracket rows; the bracket is
+	# picked by the piece's average per-stone carats, falling back to the first
+	# row when nothing matches (a stone outside every bracket is NEVER denied).
 	qmap = _diamond_qmap()
-	bom_pcs = {}
-	bag_doc = frappe.get_doc("Order Bag", nm)
-	for r in bag_doc.bag_bom:
-		bom_pcs[r.item] = bom_pcs.get(r.item, 0) + cint(flt(r.qty) * (bag_doc.qty or 1))
-	sol_min = flt(getattr(chart, "solitaire_min_ct", 0)) or 0.07
-
-	qual_ct, sol_lines = {}, []
+	qual_ct = {}
 	for item, qty in _bag_convert_materials([nm])[nm].items():
 		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
 		if st != "Diamond":
 			continue
 		q = (grp or "").replace("DIAMOND ", "")
 		q = qmap.get(q, q)
-		pcs = bom_pcs.get(item, 0)
-		line_per_stone = (flt(qty) / pcs) if pcs else 0
-		if line_per_stone > sol_min and getattr(chart, "solitaire_rates", None) is not None:
-			sol_lines.append({"item": item, "quality": q, "ct": flt(qty), "pcs": pcs, "per_stone": line_per_stone})
-		else:
-			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+		qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
 
 	diamond_value = 0.0
 	dmd_detail = []
@@ -7078,22 +7054,6 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		diamond_value += ct * flt(row.rate)
 		dmd_detail.append({"quality": q, "ct": round(ct, 3), "rate": flt(row.rate)})
 
-	# solitaires: their own brackets, their own line on the bill
-	solitaire_value, solitaire_ct, sol_detail = 0.0, 0.0, []
-	for s in sol_lines:
-		rows = [r for r in (chart.get("solitaire_rates") or [])
-			if (r.quality or "") in (s["quality"], "")
-			and flt(r.from_ct) <= s["per_stone"] and (not flt(r.to_ct) or s["per_stone"] < flt(r.to_ct))]
-		if not rows:
-			frappe.throw(frappe._("{0}: solitaire {1} ct/stone ({2}) has no solitaire bracket on chart {3} — scan denied.").format(
-				nm, round(s["per_stone"], 3), s["quality"], chart.chart_name))
-		exact = [r for r in rows if (r.quality or "") == s["quality"]] or rows
-		rate = flt(exact[0].rate)
-		solitaire_value += s["ct"] * rate
-		solitaire_ct += s["ct"]
-		sol_detail.append({"quality": s["quality"], "pcs": s["pcs"], "per_stone": round(s["per_stone"], 3),
-			"ct": round(s["ct"], 3), "rate": rate})
-
 	# ---- coloured buckets: CS / CZ / CVD each price from their OWN bracket
 	# table (blank-range row = flat). A bucket present on the piece with no
 	# rows = scan denied. Precious stones: per-stone rows only, same law.
@@ -7109,8 +7069,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				nm, round(ct, 3), label, chart.chart_name))
 		row = next((r for r in rows if flt(r.from_ct) <= ct and (not flt(r.to_ct) or ct < flt(r.to_ct))), None)
 		if not row:
-			frappe.throw(frappe._("{0}: {1} ct {2} falls outside every {2} bracket on chart {3} — scan denied.").format(
-				nm, round(ct, 3), label, chart.chart_name))
+			return 0.0  # outside every bracket -> ignored, never denied
 		if (row.basis or "Per Ct") == "Per Piece":
 			if not cint(pcs):
 				frappe.throw(frappe._("{0}: {1} is priced per piece but the piece count is 0 — scan denied.").format(nm, label))
@@ -7137,8 +7096,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			# a stone can be flat (blank range) or weight-bracketed by ITS carats
 			row = next((x for x in rows if flt(x.from_ct) <= ct and (not flt(x.to_ct) or ct < flt(x.to_ct))), None)
 			if row is None:
-				frappe.throw(frappe._("{0}: {1} ct of {2} falls outside every bracket on chart {3} — scan denied.").format(
-					nm, round(ct, 3), item, chart.chart_name))
+				continue  # outside every bracket -> ignored, never denied
 			ps_value += ct * flt(row.rate)
 			ps_detail.append({"stone": item, "ct": round(ct, 3), "rate": flt(row.rate)})
 	stone_value = (bucket_value("CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
@@ -7231,19 +7189,17 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				# legacy chart without the table: the old flat charge covers everything
 				pass
 
-	# solitaires ride inside diamond_value but stay OUT of the piece's diamond ct
-	dmd_ct_regular = flt(b.act_dmd_weight) + flt(b.act_pdmd_weight) - solitaire_ct
 	return {
 		"order_bag": nm, "design": b.design or "", "design_type": design_type,
 		"held_by": b.held_by or "", "huid": b.huid or "",
 		"gross": flt(b.act_gross_weight), "nett": nett,
-		"dmd_ct": round(dmd_ct_regular, 3), "solitaire_ct": round(solitaire_ct, 3),
+		"dmd_ct": round(flt(b.act_dmd_weight) + flt(b.act_pdmd_weight), 3),
 		"ostone_ct": round(ostone_ct, 3),
 		"gold_value": round(gold_value, 2),
-		"diamond_value": round(diamond_value + solitaire_value, 2),
+		"diamond_value": round(diamond_value, 2),
 		"stone_value": round(stone_value, 2), "labour_value": round(labour, 2),
 		"charges_value": round(charges, 2),
-		"dmd_detail": dmd_detail, "sol_detail": sol_detail, "cert_detail": cert_detail,
+		"dmd_detail": dmd_detail, "cert_detail": cert_detail,
 		"ps_detail": ps_detail,
 		"labour_rule": rule_desc,
 	}
