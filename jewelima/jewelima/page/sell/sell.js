@@ -300,12 +300,62 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
 
-	// Pricing Rules — ONLY the components priced on THIS bill, with a live %
-	// board: type -10 next to Diamond and the reduced amount shows instantly.
-	// Apply rescales the bill's cells (the Price Chart itself is never touched);
-	// re-opening shows the already-reduced amounts. The applied adjustments ride
-	// to create_product_sale and land as an audit comment on the Product Sale.
+	// Pricing Rules — READ-ONLY: exactly which slabs/rules the scanned pieces
+	// hit (diamond bracket + rate, making rule, cert/hallmark rates, stone
+	// buckets), aggregated across the bill.
 	page.add_inner_button(__("Pricing Rules"), () => {
+		if (!S.rows.length) {
+			frappe.show_alert({ message: __("Scan pieces first — this shows the slabs used by the bill."), indicator: "orange" }, 4);
+			return;
+		}
+		const slabs = {}; // label -> {rule, qty (ct/pcs text), value}
+		const add = (section, label, rule, qty, val) => {
+			const key = section + "|" + label + "|" + rule;
+			if (!slabs[key]) slabs[key] = { section, label, rule, qty: 0, val: 0 };
+			slabs[key].qty += qty;
+			slabs[key].val += val;
+		};
+		S.rows.forEach((r) => {
+			(r.dmd_detail || []).forEach((d) => add(__("Diamond"),
+				`${d.quality}${d.sieve ? " · " + d.sieve : ""}`,
+				`${__("bracket")} ${d.bracket || "?"} ct → ${money(d.rate)}/ct`, d.ct, d.ct * d.rate));
+			(r.ps_detail || []).forEach((d) => add(__("Precious"), d.stone, `${money(d.rate)}/ct`, d.ct, d.ct * d.rate));
+			(r.cert_detail || []).forEach((d) => {
+				const hall = ["HALL", "HALLMARKING"].includes(d.certification);
+				add(hall ? __("Hallmark") : __("Certification"),
+					d.certification + (d.via && d.via === "ALL LABS" ? " (ALL LABS)" : ""),
+					d.basis === "Per Ct" ? `${money(d.rate)}/ct` : `${money(d.rate)} ${__("per piece")}`,
+					hall ? (d.pieces || 1) : (d.basis === "Per Ct" ? d.ct : 1),
+					d.basis === "Per Ct" ? (d.value || 0) : d.rate * (d.pieces || 1));
+			});
+			["cs", "cz", "cvd", "making", "gold"].forEach((k) => {
+				const c = (r.components || {})[k];
+				if (c && c.value !== null && c.value !== "" && !c.needs_price)
+					add(c.label, c.label, c.note || "—", 1, flt(c.value));
+			});
+		});
+		const order = [__("Diamond"), "Gold", "Making", __("Precious"), "CS", "CZ", "CVD", __("Hallmark"), __("Certification")];
+		const list = Object.values(slabs).sort((x, y) => order.indexOf(x.section) - order.indexOf(y.section));
+		const dlg = new frappe.ui.Dialog({ title: __("Pricing rules in effect — this bill"), size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "b" }] });
+		dlg.get_field("b").$wrapper.html(`
+			<table class="pr-tbl" style="width:100%;border-collapse:collapse;font-size:13px;">
+			<thead><tr>
+				<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${__("Component")}</th>
+				<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${__("Slab / rule used")}</th>
+				<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${__("Amount ₹")}</th>
+			</tr></thead><tbody>
+			${list.map((x) => `<tr>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);"><b>${esc(x.section === x.label ? x.section : x.section + " — " + x.label)}</b></td>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);">${esc(x.rule)}</td>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);text-align:right;font-variant-numeric:tabular-nums;">${money(x.val)}</td>
+			</tr>`).join("")}
+			</tbody></table>`);
+		dlg.show();
+	});
+
+	// Discount Total — live % board over the components priced on THIS bill.
+	page.add_inner_button(__("Discount Total"), () => {
 		if (!S.rows.length) {
 			frappe.show_alert({ message: __("Scan pieces first — this board adjusts what is on the bill."), indicator: "orange" }, 4);
 			return;
@@ -317,7 +367,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		});
 		const grand0 = Object.values(cur).reduce((a, b) => a + b, 0);
 		const dlg = new frappe.ui.Dialog({
-			title: __("Pricing in effect — this sale only"),
+			title: __("Discount Total — this sale only"),
 			size: "large",
 			fields: [{ fieldtype: "HTML", fieldname: "board" }],
 			primary_action_label: __("Apply to Bill"),

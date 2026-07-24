@@ -7124,7 +7124,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
 			diamond_value += line["ct"] * flt(row.rate)
 			dmd_detail.append({"quality": line["quality"], "sieve": sieve if sieve in sieve_ct else "",
-				"ct": round(line["ct"], 3), "rate": flt(row.rate)})
+				"ct": round(line["ct"], 3), "rate": flt(row.rate),
+				"bracket": "{0}\u2013{1}".format(flt(row.from_ct), flt(row.to_ct) or "\u221e")})
 		if dmd_missing:
 			comp("dmd", "Diamond", needs=True,
 				note="no chart rows for {0}".format(", ".join(sorted(dmd_missing))))
