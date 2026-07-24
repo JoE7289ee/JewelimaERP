@@ -200,8 +200,11 @@ def rebuild_cards(limit=500):
 			done += 1
 		except Exception:
 			failed += 1
-		if (done + failed) % 100 == 0:
+		if (done + failed) % 25 == 0:
 			frappe.db.commit()
+			frappe.clear_document_cache("Design Bank", r.name)
+			import gc
+			gc.collect()
 	frappe.db.commit()
 	left = frappe.db.count("Design Bank", {"rebuilt": 0, "ocr_done": 1, "duplicate_review": 0})
 	print(f"rebuild_cards: done {done}, failed {failed}, remaining eligible {left}")

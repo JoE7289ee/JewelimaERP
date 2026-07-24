@@ -6575,6 +6575,9 @@ def design_card_autocrop(name):
 	if not src:
 		frappe.throw(frappe._("No image on {0}.").format(d.design_no or name))
 	img = src.convert("RGB")
+	# some scans are ENORMOUS — cap before the pixel walk or the batch OOMs
+	if max(img.size) > 2400:
+		img.thumbnail((2400, 2400))
 	w, h = img.size
 	small = img.resize((max(1, w // 4), max(1, h // 4)))
 	sw, sh = small.size
