@@ -7037,6 +7037,70 @@ def sell_preparation(name):
 # diamonds = ct x cents-bracket rate; labour per rule (gram+min / piece /
 # purity-percent); pass-through charges per piece.
 # ---------------------------------------------------------------------------
+@frappe.whitelist()
+def save_sale_prep_board(payload):
+	"""PREPARE TO SELL: snapshot the whole Sell board (rows with components,
+	manual edits, adjustments, buyer/chart/rate/remarks) as a Draft Sale
+	Preparation. The Prepare Sale page lists them; opening one restores the
+	board exactly as it was."""
+	p = frappe.parse_json(payload)
+	rows = p.get("rows") or []
+	if not rows:
+		frappe.throw(frappe._("Scan at least one piece before preparing."))
+	items = []
+	grand = 0.0
+	for r in rows:
+		comps = r.get("components") or {}
+		def _sum(keys):
+			return round(sum(flt(comps[k].get("value")) for k in keys
+				if k in comps and comps[k].get("value") not in (None, "")), 2)
+		vals = {
+			"gold_value": _sum(["gold"]),
+			"diamond_value": _sum(["dmd", "pdmd"]),
+			"stone_value": _sum(["cs", "cz", "cvd", "ps"]),
+			"labour_value": _sum(["making"]),
+			"charges_value": _sum([k for k in comps if k in ("hall", "cert") or k.startswith("cert:")]),
+		}
+		total = round(sum(vals.values()), 2)
+		grand += total
+		items.append({"order_bag": r.get("order_bag"), "design": r.get("design"),
+			"design_type": r.get("design_type"), "nett": flt(r.get("nett")),
+			"dmd_ct": flt(r.get("dmd_ct")), "ostone_ct": flt(r.get("ostone_ct")),
+			**vals, "piece_total": total})
+	doc = frappe.get_doc({
+		"doctype": "Sale Preparation", "status": "Draft",
+		"customer": p.get("customer") or None, "price_chart": p.get("price_chart") or None,
+		"gold_rate": flt(p.get("gold_rate")), "remarks": p.get("remarks"),
+		"items": items, "grand_total": round(grand, 2),
+		"board_json": frappe.as_json({"rows": rows, "adjust": p.get("adjust") or []}),
+	})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "grand_total": doc.grand_total}
+
+
+@frappe.whitelist()
+def get_sale_prep_board(name):
+	"""Restore a prepared board on the Sell page."""
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status == "Sold":
+		frappe.throw(frappe._("{0} is already sold ({1}).").format(name, d.sale))
+	return {"name": d.name, "customer": d.customer, "price_chart": d.price_chart,
+		"gold_rate": flt(d.gold_rate), "remarks": d.remarks, "status": d.status,
+		"board": json.loads(d.board_json) if d.board_json else None}
+
+
+@frappe.whitelist()
+def get_prepared_boards():
+	"""The Prepare Sale page: every prep not yet sold/cancelled."""
+	rows = frappe.get_all("Sale Preparation", filters={"status": ["in", ["Draft", "Sent"]]},
+		fields=["name", "customer", "price_chart", "gold_rate", "grand_total", "status",
+			"modified", "owner"], order_by="modified desc")
+	for r in rows:
+		r["pieces"] = frappe.db.count("Sale Preparation Item", {"parent": r["name"]})
+	return {"rows": rows}
+
+
 def _inr(v):
 	"""Indian-grouped rupees for tooltip working lines: 12750 -> \u20b912,750."""
 	n = flt(v)
@@ -7417,6 +7481,8 @@ def create_product_sale(payload):
 			ht.flags.ignore_permissions = True
 			ht.insert(ignore_permissions=True)
 		frappe.db.set_value("Order Bag", nm, {"stock_status": "Sold", "held_by": customer})
+	if p.get("prep") and frappe.db.exists("Sale Preparation", p.get("prep")):
+		frappe.db.set_value("Sale Preparation", p.get("prep"), {"status": "Sold", "sale": sale.name})
 	frappe.db.commit()
 	return {"name": sale.name, "grand_total": sale.grand_total, "stock_entry": se.name, "count": len(rows)}
 

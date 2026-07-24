@@ -14,7 +14,7 @@
 frappe.pages["sell"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Sell", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { rows: [], adjust: [] };
+	const S = { rows: [], adjust: [], prep: null };
 	const esc = frappe.utils.escape_html;
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	// canonical column order; cert:* columns slot in after hall, alphabetically
@@ -58,6 +58,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-sell{margin-left:auto;background:#1d7a33;border:none;color:#fff;font-weight:800;letter-spacing:.8px;padding:12px 30px;border-radius:8px;font-size:14px;cursor:pointer;box-shadow:0 2px 6px rgba(29,122,51,.35);}
 		.sl-sell:hover{background:#155e26;}
 		.sl-sell[disabled]{background:#9aa5a0;cursor:not-allowed;box-shadow:none;}
+		.sl-prep{margin-left:auto;background:#e0a800;border:none;color:#3a2c00;font-weight:800;letter-spacing:.8px;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer;box-shadow:0 2px 6px rgba(224,168,0,.35);}
+		.sl-prep:hover{background:#c79500;}
 		.sl-tip{position:fixed;z-index:2000;display:none;background:#1a1a1a;color:#fff;border-radius:7px;padding:8px 12px;font-size:12px;line-height:1.6;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;pointer-events:none;}
 		.sl-tip .t{font-weight:700;margin-bottom:3px;color:#ffd766;}
 		</style>
@@ -71,7 +73,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			<tbody class="sl-rows"></tbody></table></div>
 		<div class="sl-warn"></div>
 		<div class="sl-strip"><span class="sl-strip-totals" style="display:contents"></span>
-			<button class="sl-sell">${__("SELL")}</button>
+			<button class="sl-prep">${__("PREPARE TO SELL")}</button>
+			<button class="sl-sell" style="margin-left:0;">${__("SELL")}</button>
 		</div>
 		</div>
 	`);
@@ -272,6 +275,29 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		};
 	}
 
+	$(root).find(".sl-prep").on("click", () => {
+		if (!S.rows.length) {
+			frappe.show_alert({ message: __("Scan at least one piece."), indicator: "orange" }, 4);
+			return;
+		}
+		frappe.call({
+			method: API + ".save_sale_prep_board",
+			args: { payload: {
+				customer: buyer.get_value(), price_chart: chart.get_value(),
+				gold_rate: flt(rate.get_value()), remarks: remarks.get_value(),
+				rows: S.rows, adjust: S.adjust,
+			} },
+		}).then((r) => {
+			const m = r.message || {};
+			frappe.show_alert({ message: __("Prepared as {0} — find it on Prepare Sale.", [m.name]), indicator: "yellow" }, 6);
+			S.rows = [];
+			S.adjust = [];
+			S.prep = null;
+			paint();
+			focusScan();
+		});
+	});
+
 	$(root).find(".sl-sell").on("click", () => {
 		if (!S.rows.length) {
 			frappe.show_alert({ message: __("Scan at least one piece."), indicator: "orange" }, 4);
@@ -297,6 +323,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 						...buckets(r),
 					})),
 					adjustments: S.adjust,
+					prep: S.prep,
 				} },
 			}).then((r) => {
 				frappe.dom.unfreeze();
@@ -521,6 +548,27 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 
 	page.add_inner_button(__("Sale Records"), () => frappe.set_route("List", "Product Sale"));
+	page.add_inner_button(__("Prepared"), () => frappe.set_route("prepare-sale"));
+	if (frappe.route_options && frappe.route_options.prep) {
+		const nm = frappe.route_options.prep;
+		frappe.route_options = null;
+		frappe.call({ method: API + ".get_sale_prep_board", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			S.prep = m.name;
+			if (m.customer) buyer.set_value(m.customer);
+			if (m.price_chart) chart.set_value(m.price_chart);
+			if (m.gold_rate) rate.set_value(m.gold_rate);
+			if (m.remarks) remarks.set_value(m.remarks);
+			// restore AFTER the link fields settle so their onchange repricing
+			// cannot wipe the snapshot's edited values
+			setTimeout(() => {
+				S.rows = (m.board || {}).rows || [];
+				S.adjust = (m.board || {}).adjust || [];
+				paint();
+				frappe.show_alert({ message: __("Restored {0} — {1} piece(s).", [m.name, S.rows.length]), indicator: "yellow" }, 5);
+			}, 400);
+		});
+	}
 	paint();
 	focusScan();
 };

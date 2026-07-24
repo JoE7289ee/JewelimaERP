@@ -1,23 +1,40 @@
 {
- "name": "Sale Preparation",
+ "actions": [],
+ "allow_rename": 1,
  "autoname": "SPREP-.#####",
- "track_changes": 1,
+ "creation": "2026-07-21 23:45:00.000000",
  "description": "Prepare-for-sale: pieces priced against a chart, per-line manual overrides recorded (chart vs final, who), the confirmation excel sent to the party \u2014 then Sell moves stock via Product Sale.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "price_chart",
+  "gold_rate",
+  "cb1",
+  "status",
+  "sale",
+  "remarks",
+  "sec_items",
+  "items",
+  "grand_total",
+  "board_json"
+ ],
  "fields": [
   {
    "fieldname": "customer",
    "fieldtype": "Link",
-   "options": "Customer",
-   "label": "Party",
-   "reqd": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Party",
+   "options": "Customer",
+   "reqd": 0
   },
   {
    "fieldname": "price_chart",
    "fieldtype": "Link",
-   "options": "Price Chart",
    "label": "Price Chart",
+   "options": "Price Chart",
    "reqd": 1
   },
   {
@@ -30,19 +47,19 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "Draft",
    "fieldname": "status",
    "fieldtype": "Select",
-   "label": "Status",
-   "options": "Draft\nSent\nSold\nCancelled",
-   "default": "Draft",
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nSent\nSold\nCancelled"
   },
   {
    "fieldname": "sale",
    "fieldtype": "Link",
-   "options": "Product Sale",
    "label": "Product Sale",
+   "options": "Product Sale",
    "read_only": 1
   },
   {
@@ -58,16 +75,29 @@
   {
    "fieldname": "items",
    "fieldtype": "Table",
-   "options": "Sale Preparation Item",
-   "label": "Items"
+   "label": "Items",
+   "options": "Sale Preparation Item"
   },
   {
    "fieldname": "grand_total",
    "fieldtype": "Float",
    "label": "Grand Total",
    "read_only": 1
+  },
+  {
+   "fieldname": "board_json",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Board JSON"
   }
  ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-21 23:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Sale Preparation",
+ "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
@@ -82,31 +112,8 @@
    "write": 1
   }
  ],
- "actions": [],
- "allow_rename": 1,
- "creation": "2026-07-21 23:45:00.000000",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2026-07-21 23:45:00.000000",
- "modified_by": "Administrator",
- "module": "Jewelima",
- "owner": "Administrator",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "field_order": [
-  "customer",
-  "price_chart",
-  "gold_rate",
-  "cb1",
-  "status",
-  "sale",
-  "remarks",
-  "sec_items",
-  "items",
-  "grand_total"
- ]
+ "track_changes": 1
 }
