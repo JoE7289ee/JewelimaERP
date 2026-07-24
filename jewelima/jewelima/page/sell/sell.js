@@ -401,6 +401,20 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
 
+	// Export — the bill as a landscape PDF with the tax summary at the end
+	page.add_inner_button(__("Export PDF"), () => {
+		if (!S.rows.length) {
+			frappe.show_alert({ message: __("Scan pieces first."), indicator: "orange" }, 4);
+			return;
+		}
+		open_url_post("/api/method/" + API + ".export_sale_bill_pdf", {
+			payload: JSON.stringify({
+				customer: buyer.get_value(), price_chart: chart.get_value(),
+				gold_rate: flt(rate.get_value()), rows: S.rows, tax: cint(tax.get_value()),
+			}),
+		});
+	});
+
 	// Pricing Rules — the slabs this bill hit, each with an EDITABLE rate.
 	// Left: component + the slab being used. Middle: the rate (edit it for
 	// THIS SALE ONLY — e.g. hallmark 45 -> 35). Right: what you changed and

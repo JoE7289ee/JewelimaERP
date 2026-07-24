@@ -7038,6 +7038,90 @@ def sell_preparation(name):
 # purity-percent); pass-through charges per piece.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
+def export_sale_bill_pdf(payload):
+	"""The Sell board as a LANDSCAPE A4 PDF: the same dynamic component columns
+	as the page, one row per piece, and a tax summary block at the end."""
+	from frappe.utils.pdf import get_pdf
+	p = frappe.parse_json(payload)
+	rows = p.get("rows") or []
+	if not rows:
+		frappe.throw(frappe._("Nothing on the bill."))
+	order = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall", "cert"]
+	keys = []
+	labels = {}
+	for r in rows:
+		for k, c in (r.get("components") or {}).items():
+			if k not in labels:
+				labels[k] = c.get("label") or k
+	keys = [k for k in order if k in labels] + sorted(k for k in labels if k.startswith("cert:"))
+
+	def val(r, k):
+		c = (r.get("components") or {}).get(k)
+		v = c and c.get("value")
+		return flt(v) if v not in (None, "") else 0.0
+
+	base = 0.0
+	body = []
+	col_tot = {k: 0.0 for k in keys}
+	for r in rows:
+		total = sum(val(r, k) for k in keys)
+		base += total
+		for k in keys:
+			col_tot[k] += val(r, k)
+		body.append("<tr><td>{0}</td><td>{1}</td><td class='r'>{2}</td><td class='r'>{3}</td>{4}<td class='r b'>{5}</td></tr>".format(
+			frappe.utils.escape_html(r.get("order_bag") or ""),
+			frappe.utils.escape_html("{0} {1}".format(r.get("design") or "", r.get("design_type") or "").strip()),
+			round(flt(r.get("nett")), 3), round(flt(r.get("dmd_ct")), 3),
+			"".join("<td class='r'>{0}</td>".format(_inr(val(r, k)) if val(r, k) else "&middot;") for k in keys),
+			_inr(total)))
+	taxed = cint(p.get("tax", 1))
+	tax_amt = round(base * 3 / 100, 2) if taxed else 0.0
+	head = "<tr><th>{0}</th><th>{1}</th><th class='r'>{2}</th><th class='r'>{3}</th>{4}<th class='r'>{5}</th></tr>".format(
+		frappe._("Card"), frappe._("Design"), frappe._("Gold g"), frappe._("DMD ct"),
+		"".join("<th class='r'>{0} &#8377;</th>".format(frappe.utils.escape_html(labels[k])) for k in keys),
+		frappe._("Total &#8377;"))
+	tot_row = "<tr class='tot'><td colspan='4'>{0}</td>{1}<td class='r b'>{2}</td></tr>".format(
+		frappe._("TOTALS"),
+		"".join("<td class='r b'>{0}</td>".format(_inr(col_tot[k]) if col_tot[k] else "&middot;") for k in keys),
+		_inr(base))
+	html = """<html><head><meta charset='utf-8'><style>
+	body{{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#111;}}
+	h2{{margin:0 0 2px;}} .muted{{color:#666;font-size:10px;margin-bottom:10px;}}
+	table{{width:100%;border-collapse:collapse;}}
+	th{{background:#1f4e5f;color:#fff;padding:5px 7px;text-align:left;font-size:10px;}}
+	td{{padding:4px 7px;border-bottom:1px solid #ddd;white-space:nowrap;}}
+	td.r,th.r{{text-align:right;}} td.b{{font-weight:bold;}}
+	tr.tot td{{border-top:2px solid #1f4e5f;border-bottom:none;font-weight:bold;}}
+	.sum{{margin-top:14px;width:280px;margin-left:auto;border:1px solid #1f4e5f;border-radius:6px;padding:10px 14px;}}
+	.sum div{{display:flex;justify-content:space-between;padding:2px 0;}}
+	.sum .g{{font-size:14px;font-weight:bold;border-top:1px solid #1f4e5f;margin-top:4px;padding-top:6px;}}
+	</style></head><body>
+	<h2>{title}</h2>
+	<div class='muted'>{sub}</div>
+	<table><thead>{head}</thead><tbody>{body}{tot}</tbody></table>
+	<div class='sum'>
+		<div><span>{l_base}</span><span>{v_base}</span></div>
+		<div><span>{l_tax}</span><span>{v_tax}</span></div>
+		<div class='g'><span>{l_grand}</span><span>{v_grand}</span></div>
+	</div>
+	</body></html>""".format(
+		title=frappe._("Sale Bill — {0}").format(frappe.utils.escape_html(p.get("customer") or frappe._("(no buyer yet)"))),
+		sub="{0} &middot; {1}: {2} &middot; {3}: {4} &middot; {5} {6}".format(
+			frappe.utils.formatdate(frappe.utils.today()),
+			frappe._("Price Chart"), frappe.utils.escape_html(p.get("price_chart") or "-"),
+			frappe._("Gold Rate"), _inr(flt(p.get("gold_rate"))),
+			len(rows), frappe._("piece(s)")),
+		head=head, body="".join(body), tot=tot_row,
+		l_base=frappe._("Total before tax"), v_base=_inr(base),
+		l_tax=frappe._("Tax 3%") if taxed else frappe._("Tax"),
+		v_tax=_inr(tax_amt) if taxed else frappe._("not applied"),
+		l_grand=frappe._("GRAND TOTAL"), v_grand=_inr(base + tax_amt))
+	frappe.local.response.filename = "SaleBill-{0}.pdf".format((p.get("customer") or "draft").replace(" ", "-"))
+	frappe.local.response.filecontent = get_pdf(html, {"orientation": "Landscape"})
+	frappe.local.response.type = "pdf"
+
+
+@frappe.whitelist()
 def save_sale_prep_board(payload):
 	"""PREPARE TO SELL: snapshot the whole Sell board (rows with components,
 	manual edits, adjustments, buyer/chart/rate/remarks) as a Draft Sale
