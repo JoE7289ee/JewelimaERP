@@ -1,18 +1,26 @@
 {
  "content": null,
- "creation": "2026-07-24 02:30:00.000000",
+ "creation": "2026-07-24 02:30:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-24 02:30:00.000000",
+ "modified": "2026-07-24 10:16:37.268540",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "design-duplicates",
  "owner": "Administrator",
  "page_name": "design-duplicates",
  "roles": [
-  {"role": "System Manager"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Jewelima Design Approver"
+  }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "Design Duplicates"
 }

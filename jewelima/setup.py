@@ -137,6 +137,17 @@ JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item
 JEWELIMA_STONE_ISSUE_ROLE = "Jewelima Stone Issue"
 JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue"]
 JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin", "Warehouse", "Material Issue", "Bag Material Ledger"]
+# Design Bank personas. The base role works the catalog (browse, build cards,
+# feed the photo-update queue); the approver role ADDITIONALLY reviews/approves
+# (Review, Photo Approvals, the one-time Duplicates cleanup). Writes go through
+# page APIs (ignore_permissions) — read on the masters is all the pages need.
+JEWELIMA_DESIGN_BANK_ROLE = "Jewelima Design Bank"
+JEWELIMA_DESIGN_APPROVER_ROLE = "Jewelima Design Approver"
+JEWELIMA_DESIGN_BANK_PAGES = ["design-gallery", "card-builder", "add-design", "design-tags",
+	"photo-update", "design-bank-report"]
+JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-duplicates", "retire-design"]
+JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
+	"Wax Dye", "Design", "File"]
 
 
 def setup_roles():
@@ -154,7 +165,8 @@ def setup_roles():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
-	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE) + JEWELIMA_TRANSFER_ROLES:
+	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
+			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -273,6 +285,24 @@ def setup_roles():
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STONE_ISSUE_ROLE])
 			pg.save(ignore_permissions=True)
+
+	# ---- Design Bank personas -----------------------------------------------------
+	# Base: the catalog pages. Approver: base + the review/approve pages. Both read
+	# the same masters; each stripped from any page outside its own set.
+	for dt in JEWELIMA_DESIGN_BANK_READ:
+		grant(dt, JEWELIMA_DESIGN_BANK_ROLE, {"read": 1})
+		grant(dt, JEWELIMA_DESIGN_APPROVER_ROLE, {"read": 1})
+	for page in JEWELIMA_DESIGN_BANK_PAGES:
+		set_page_roles(page, (JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE))
+	for page in JEWELIMA_DESIGN_APPROVER_PAGES:
+		set_page_roles(page, (JEWELIMA_DESIGN_APPROVER_ROLE,))
+	for role, allowed in ((JEWELIMA_DESIGN_BANK_ROLE, set(JEWELIMA_DESIGN_BANK_PAGES)),
+			(JEWELIMA_DESIGN_APPROVER_ROLE, set(JEWELIMA_DESIGN_BANK_PAGES) | set(JEWELIMA_DESIGN_APPROVER_PAGES))):
+		for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": role}, pluck="parent"):
+			if page not in allowed:
+				pg = frappe.get_doc("Page", page)
+				pg.set("roles", [r for r in pg.roles if r.role != role])
+				pg.save(ignore_permissions=True)
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so
