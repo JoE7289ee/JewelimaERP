@@ -41,7 +41,6 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		.cb-actions{margin-top:16px;display:flex;gap:10px;}
 		</style>
 		<div class="cb-cols">
-			<div class="cb-left"><img class="cb-prev" alt=""></div>
 			<div class="cb-right">
 				<div class="cb-row"><div class="cb-pick"></div><div class="cb-series"></div>
 					<button class="btn btn-default cb-new" style="align-self:end;">${__("New Card")}</button></div>
@@ -65,6 +64,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 					<button class="btn btn-primary cb-save" style="background:#2e7d32;border-color:#2e7d32;">${__("Save — render into Design Bank")}</button>
 				</div>
 			</div>
+			<div class="cb-left"><img class="cb-prev" alt=""></div>
 		</div>
 	`);
 	const root = $(page.main);
