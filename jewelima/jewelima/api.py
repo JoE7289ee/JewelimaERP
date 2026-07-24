@@ -7492,6 +7492,31 @@ def create_product_sale(payload):
 		frappe.db.set_value("Order Bag", nm, {"stock_status": "Sold", "held_by": customer})
 	if p.get("prep") and frappe.db.exists("Sale Preparation", p.get("prep")):
 		frappe.db.set_value("Sale Preparation", p.get("prep"), {"status": "Sold", "sale": sale.name})
+
+	# every OTHER open prep holding a just-sold piece SELF-HEALS: the sold line
+	# drops off (list + snapshot) and the total recomputes; emptied -> extinct
+	sold = set(bags)
+	for prep_nm in {x.parent for x in frappe.get_all("Sale Preparation Item",
+			filters={"order_bag": ["in", list(sold)], "parenttype": "Sale Preparation"}, fields=["parent"])}:
+		if prep_nm == p.get("prep"):
+			continue
+		d2 = frappe.get_doc("Sale Preparation", prep_nm)
+		if d2.status not in ("Draft", "Sent"):
+			continue
+		keep = [it for it in d2.items if it.order_bag not in sold]
+		if not keep:
+			frappe.delete_doc("Sale Preparation", prep_nm, force=True, ignore_permissions=True)
+			continue
+		d2.set("items", keep)
+		d2.grand_total = round(sum(flt(it.piece_total) for it in keep), 2)
+		if d2.board_json:
+			try:
+				bj = json.loads(d2.board_json)
+				bj["rows"] = [r for r in (bj.get("rows") or []) if r.get("order_bag") not in sold]
+				d2.board_json = frappe.as_json(bj)
+			except Exception:
+				pass
+		d2.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": sale.name, "grand_total": sale.grand_total, "stock_entry": se.name, "count": len(rows)}
 
