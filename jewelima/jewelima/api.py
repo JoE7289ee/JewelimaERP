@@ -6704,6 +6704,27 @@ def design_card_remove_raw(name):
 	return {"ok": 1}
 
 
+# provider letter inside new design codes (JR-S-1); extend as providers join
+BANK_PROVIDER_CODES = {"SAMSA": "S"}
+
+
+@frappe.whitelist()
+def new_bank_code(design_type, provider=None):
+	"""Mint the next in-house design number: <type bank code>[-<provider>]-<n>.
+	JR-1, JR-2 ... / SAMSA pieces JR-S-1. Scans live + retired — numbers never
+	reuse."""
+	code = frappe.db.get_value("Design Type", design_type, "bank_code")
+	if not code:
+		frappe.throw(frappe._("{0} has no Bank Code yet — set it on the Design Type.").format(design_type))
+	prefix = code + (("-" + BANK_PROVIDER_CODES[provider]) if provider and provider in BANK_PROVIDER_CODES else "")
+	top = 0
+	for dn in frappe.get_all("Design Bank", filters={"design_no": ["like", prefix + "-%"]}, pluck="design_no"):
+		m = re.fullmatch(re.escape(prefix) + r"-(\d+)", (dn or "").strip().upper())
+		if m:
+			top = max(top, int(m.group(1)))
+	return {"code": "{0}-{1}".format(prefix, top + 1)}
+
+
 @frappe.whitelist()
 def check_design_code(code):
 	"""The new-code guard: exact match against EVERYTHING (live + retired)."""
@@ -6730,6 +6751,7 @@ def next_design_code(prefix):
 def get_design_card(name):
 	d = frappe.get_doc("Design Bank", name)
 	return {"name": d.name, "design_no": d.design_no, "status": d.status,
+		"provider": d.get("provider") or "", "provider_piece_code": d.get("provider_piece_code") or "",
 		"design_type": d.design_type or "", "gross_weight": flt(d.gross_weight),
 		"diamond_weight": flt(d.diamond_weight), "note": d.note or "",
 		"extra_lines": d.extra_lines or "", "photo": d.photo or "", "image": d.image or "",
@@ -6759,6 +6781,10 @@ def save_design_card(payload):
 		d.status = "Pending"
 	d.design_no = code
 	d.design_type = p.get("design_type") or None
+	if "provider" in p:
+		d.provider = p.get("provider") or None
+	if "provider_piece_code" in p:
+		d.provider_piece_code = p.get("provider_piece_code") or ""
 	d.gross_weight = flt(p.get("gross_weight"))
 	d.diamond_weight = flt(p.get("diamond_weight"))
 	d.note = p.get("note") or ""

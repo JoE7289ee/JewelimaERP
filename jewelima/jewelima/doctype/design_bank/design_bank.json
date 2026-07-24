@@ -19,6 +19,8 @@
   "status",
   "priority",
   "design_type",
+  "provider",
+  "provider_piece_code",
   "photoupdate",
   "duplicate_review",
   "wax_dye",
@@ -121,6 +123,20 @@
    "label": "Design Type",
    "in_standard_filter": 1,
    "description": "Mandatory before a card can be Approved."
+  },
+  {
+   "fieldname": "provider",
+   "fieldtype": "Select",
+   "label": "Provider",
+   "options": "\nSAMSA",
+   "in_standard_filter": 1,
+   "description": "Outside piece \u2014 the provider letter joins the code (JR-S-1)."
+  },
+  {
+   "fieldname": "provider_piece_code",
+   "fieldtype": "Data",
+   "label": "Provider Piece Code",
+   "description": "The provider's OWN code for this piece."
   },
   {
    "fieldname": "photoupdate",
@@ -235,7 +251,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 23:30:00.000000",
+ "modified": "2026-07-25 01:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Design Bank",

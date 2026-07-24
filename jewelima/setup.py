@@ -22,6 +22,7 @@ def after_install():
 	seed_voucher_types()
 	seed_certifications()
 	seed_diversion_types()
+	seed_design_type_bank_codes()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -67,6 +68,7 @@ def after_migrate():
 	seed_voucher_types()
 	seed_certifications()
 	seed_diversion_types()
+	seed_design_type_bank_codes()
 	create_manufacturing_warehouses()
 	create_loss_collection_warehouses()
 	create_store_warehouses()
@@ -642,6 +644,24 @@ def seed_certifications():
 				if not frappe.db.exists("Certification Center", {"certification_type": code, "center_name": cname}):
 					frappe.get_doc({"doctype": "Certification Center", "certification_type": code,
 						"center_name": cname, "location": loc}).insert(ignore_permissions=True)
+	frappe.db.commit()
+
+
+DESIGN_TYPE_BANK_CODES = {
+	"BANGLE": "JB", "RING": "JR", "STUD": "JS", "NOSEPIN": "JNP", "NECKLACE": "JN",
+	"PENDANT": "JP", "CHAIN": "JC", "BRACELET": "JBR", "ANKLET": "JA",
+	"BACK CHAIN": "JBC", "PIPE BANGLE": "JPB", "CHAIN BRACELET": "JCB", "CHAIN NECKLACE": "JCN",
+}
+
+
+def seed_design_type_bank_codes():
+	"""Series prefixes for NEW in-house designs (JB-1, JR-1...). Only fills
+	blanks — a code changed by the user stays."""
+	if not frappe.db.exists("DocType", "Design Type"):
+		return
+	for dt, code in DESIGN_TYPE_BANK_CODES.items():
+		if frappe.db.exists("Design Type", dt) and not frappe.db.get_value("Design Type", dt, "bank_code"):
+			frappe.db.set_value("Design Type", dt, "bank_code", code, update_modified=False)
 	frappe.db.commit()
 
 

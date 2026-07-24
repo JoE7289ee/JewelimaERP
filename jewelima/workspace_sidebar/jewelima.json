@@ -1023,10 +1023,23 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "plus-circle",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "New Design",
+   "link_to": "new-design-bank",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "image-plus",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Card Builder",
+   "label": "Card Editor",
    "link_to": "card-builder",
    "link_type": "Page",
    "show_arrow": 0,
@@ -1905,7 +1918,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-24 17:31:58.401258",
+ "modified": "2026-07-24 18:04:33.004637",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

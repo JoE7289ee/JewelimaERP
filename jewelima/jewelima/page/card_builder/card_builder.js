@@ -9,7 +9,7 @@
 // cleared). Edit mode pulls any existing card. Route: /app/card-builder
 
 frappe.pages["card-builder"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Card Builder", single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Card Editor", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	let cur = { name: null, design_no: "", design_type: "", gross_weight: "", diamond_weight: "",
@@ -203,6 +203,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		const p = collect();
 		if (!p.design_no.trim()) return frappe.show_alert({ message: __("Give the design number."), indicator: "orange" }, 3);
 		p.name = cur.name; p.photo = cur.photo;
+		p.provider = cur.provider || ""; p.provider_piece_code = cur.provider_piece_code || "";
 		frappe.dom.freeze(__("Rendering & saving..."));
 		frappe.call({ method: API + ".save_design_card", args: { payload: JSON.stringify(p) } })
 			.then((r) => {
@@ -216,5 +217,17 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 
 	// arriving from the gallery with a card picked
 	if (frappe.route_options && frappe.route_options.card) { loadCard(frappe.route_options.card); frappe.route_options = null; }
+	// arriving from New Design with a freshly minted number
+	else if (frappe.route_options && frappe.route_options.new_design) {
+		const nd = frappe.route_options.new_design;
+		frappe.route_options = null;
+		cur = { name: null, photo: "", stones: [], provider: nd.provider || "",
+			provider_piece_code: nd.provider_piece_code || "" };
+		fNo.set_value(nd.design_no);
+		fNo.$input.prop("readonly", true).css("opacity", .75);
+		fType.set_value(nd.design_type);
+		paintStones(); preview();
+		frappe.show_alert({ message: __("New design {0} — fill the card and Save.", [nd.design_no]), indicator: "blue" }, 5);
+	}
 	else paintStones();
 };
