@@ -407,7 +407,18 @@ def design_bank_report():
 		("Retired", c({"status": "Retired"})),
 		("Dye Available", c({"dye_available": 1})),
 		("Linked to ERP Designs", frappe.db.count("Design Bank Design Link")),
-	]}
+	], "series": _series_breakdown()}
+
+
+def _series_breakdown():
+	# per-Design-Type counts of minted series codes (JB-1, JR-S-4, ...)
+	out = []
+	for dt in frappe.get_all("Design Type", filters={"bank_code": ["is", "set"]},
+			fields=["name", "bank_code"], order_by="bank_code"):
+		n = frappe.db.count("Design Bank", {"design_no": ["like", dt.bank_code + "-%"]})
+		if n:
+			out.append((f"{dt.name} ({dt.bank_code})", n))
+	return out
 
 
 # ---------------------------------------------------------------------------
