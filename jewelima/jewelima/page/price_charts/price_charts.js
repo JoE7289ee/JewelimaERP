@@ -125,19 +125,22 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	const isDirty = () => JSON.stringify(cur) !== snap;
 
 	const num = (v) => (v || v === 0) && flt(v) ? flt(v) : "";
+	// rates render Indian-style (1,85,000); commas are stripped on read
+	const inr = (v) => flt(v) ? flt(v).toLocaleString("en-IN") : "";
+	const deinr = (v) => flt(("" + (v || "")).replace(/,/g, ""));
 	function rowsHtml(kind) {
 		if (kind === "dmd") return cur.diamond_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="sieve_label" value="${esc(r.sieve_label || "")}" placeholder="+2 - 6.5"></td>
 			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td>${qualSel(r.quality || "")}</td>
-			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "sol") return cur.solitaire_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td>${qualSel(r.quality || "")}</td>
-			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "ps") return cur.precious_stone_rates.map((r, i) => `
 			<tr data-i="${i}"><td><select data-f="stone">
@@ -145,7 +148,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				${PSTONES.map((p) => `<option ${r.stone === p ? "selected" : ""}>${esc(p)}</option>`).join("")}
 				${r.stone && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
 			</select></td>
-			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
 			<tr data-i="${i}"><td><select data-f="certification">
@@ -158,13 +161,13 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "set") return cur.setting_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="stone_ct" type="number" step="0.001" value="${num(r.stone_ct)}"></td>
-			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		return cur.special_works.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="work_name" value="${esc(r.work_name || "")}"></td>
 			<td><select data-f="basis">${["Per Gram", "Per Piece", "Per Carat"].map((b) =>
 				`<option ${r.basis === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
-			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 	}
 
@@ -243,7 +246,11 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		const arr = cur[KIND_ARR[$t.data("k")]];
 		const i = cint($(this).closest("tr").data("i"));
 		const f = $(this).data("f");
-		arr[i][f] = this.type === "number" ? flt($(this).val()) : $(this).val();
+		arr[i][f] = $(this).hasClass("inr") ? deinr($(this).val())
+			: this.type === "number" ? flt($(this).val()) : $(this).val();
+	});
+	root.on("blur", "table.pc-t input.inr", function () {
+		$(this).val(inr(deinr($(this).val())));
 	});
 	root.on("click", ".pc-sec .add", function () {
 		const k = $(this).data("k");

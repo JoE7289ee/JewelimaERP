@@ -6401,7 +6401,23 @@ def save_price_chart(payload):
 def _price_chart_letter_html(d):
 	"""The customer-facing rate letter (A4). d = get_price_chart payload."""
 	def money(v):
-		return "{:,.0f}".format(flt(v)) if flt(v) == int(flt(v)) else "{:,.2f}".format(flt(v))
+		"""Indian grouping: 185000 -> 1,85,000."""
+		n = flt(v)
+		neg = n < 0
+		whole = int(abs(n))
+		frac = abs(n) - whole
+		sw = str(whole)
+		if len(sw) > 3:
+			head, tail = sw[:-3], sw[-3:]
+			parts = []
+			while len(head) > 2:
+				parts.insert(0, head[-2:])
+				head = head[:-2]
+			if head:
+				parts.insert(0, head)
+			sw = ",".join(parts + [tail])
+		out = sw + ("{:.2f}".format(frac)[1:] if frac >= 0.005 else "")
+		return ("-" if neg else "") + out
 	def bracket(r):
 		if flt(r["to_ct"]):
 			return "{0} – {1} ct".format(r["from_ct"], r["to_ct"])
