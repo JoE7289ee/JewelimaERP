@@ -556,7 +556,6 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		dlg.show();
 	});
 
-	page.add_inner_button(__("Sale Records"), () => frappe.set_route("List", "Product Sale"));
 	page.add_inner_button(__("Prepared"), () => frappe.set_route("prepare-sale"));
 	if (frappe.route_options && frappe.route_options.prep) {
 		const nm = frappe.route_options.prep;
