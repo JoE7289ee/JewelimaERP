@@ -17,6 +17,22 @@
    "label": "Rate / piece",
    "in_list_view": 1,
    "description": "0 = certified but free on this chart."
+  },
+  {
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "label": "Basis",
+   "options": "Per Piece\nPer Ct",
+   "default": "Per Piece",
+   "in_list_view": 1,
+   "description": "Per Ct = DMD carats x rate, floored at Minimum (never for HALLMARKING)."
+  },
+  {
+   "fieldname": "min_amount",
+   "fieldtype": "Float",
+   "label": "Minimum \u20b9",
+   "in_list_view": 1,
+   "description": "Per Ct floor: 600/ct but never under 150."
   }
  ],
  "actions": [],
@@ -27,7 +43,7 @@
  "engine": "InnoDB",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 23:45:00.000000",
+ "modified": "2026-07-24 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "owner": "Administrator",
@@ -36,6 +52,8 @@
  "states": [],
  "field_order": [
   "certification",
-  "rate"
+  "rate",
+  "basis",
+  "min_amount"
  ]
 }

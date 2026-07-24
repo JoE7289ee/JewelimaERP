@@ -6326,8 +6326,8 @@ def get_price_chart(name):
 		"solitaire_min_ct": flt(d.get("solitaire_min_ct")) or 0.07,
 		"solitaire_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "quality": r.quality, "rate": r.rate}
 			for r in (d.get("solitaire_rates") or [])],
-		"certification_charges": [{"certification": r.certification, "rate": r.rate}
-			for r in (d.get("certification_charges") or [])],
+		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",
+			"rate": r.rate, "min_amount": r.min_amount} for r in (d.get("certification_charges") or [])],
 		"precious_stone_rates": [{"stone": r.stone, "rate": r.rate} for r in (d.get("precious_stone_rates") or [])],
 		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cs_rates") or [])],
 		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cz_rates") or [])],
@@ -6369,8 +6369,12 @@ def save_price_chart(payload):
 		frappe.throw(frappe._("Use EITHER the ALL LABS group price OR individual lab rows — not both ({0}).").format(", ".join(labs_in)))
 	for r in p.get("certification_charges") or []:
 		if (r.get("certification") or "").strip():
-			doc.append("certification_charges", {"certification": r.get("certification").strip().upper(),
-				"rate": flt(r.get("rate"))})
+			cert_code = r.get("certification").strip().upper()
+			basis = r.get("basis") or "Per Piece"
+			if cert_code in ("HALL", "HALLMARKING") and basis == "Per Ct":
+				frappe.throw(frappe._("HALLMARKING is always per piece (per HUID) — Per Ct doesn't apply."))
+			doc.append("certification_charges", {"certification": cert_code, "basis": basis,
+				"rate": flt(r.get("rate")), "min_amount": flt(r.get("min_amount"))})
 	for r in p.get("precious_stone_rates") or []:
 		if (r.get("stone") or "").strip():
 			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(), "rate": flt(r.get("rate"))})
@@ -6425,7 +6429,10 @@ def _price_chart_letter_html(d):
 	sol = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
 		bracket(r), frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d.get("solitaire_rates", []))
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
-		frappe.utils.escape_html(r["certification"]), "₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included")
+		frappe.utils.escape_html(r["certification"]),
+		("₹ {0} / ct (min ₹ {1})".format(money(r["rate"]), money(r.get("min_amount"))) if flt(r.get("min_amount"))
+			else "₹ {0} / ct".format(money(r["rate"]))) if r.get("basis") == "Per Ct"
+		else ("₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included"))
 		for r in d.get("certification_charges", []))
 	psr = "".join("<tr><td>{0}</td><td class='r'>₹ {1} / ct</td></tr>".format(
 		frappe.utils.escape_html(r["stone"]), money(r["rate"])) for r in d.get("precious_stone_rates", []))
@@ -7155,7 +7162,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	# certification the chart hasn't priced BLOCKS the scan (rate 0 = free is fine).
 	cert_detail = []
 	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
-	cert_rows = {(r.certification or "").upper(): flt(r.rate) for r in (chart.get("certification_charges") or [])}
+	cert_rows = {(r.certification or "").upper(): r for r in (chart.get("certification_charges") or [])}
 	if trail and not cert_rows:
 		frappe.throw(frappe._("{0} is certified ({1}) but chart {2} has no Certification Charges — scan denied.").format(
 			nm, ", ".join(trail), chart.chart_name))
@@ -7166,18 +7173,28 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				# labs may be priced individually OR through the ALL LABS group
 				# row (never both — save blocks it); hallmarking only ever
 				# matches its own row
-				rate = cert_rows.get(token)
-				if rate is None and not is_hall:
-					rate = cert_rows.get("ALL LABS")
-				if rate is None:
+				row = cert_rows.get(token)
+				if row is None and not is_hall:
+					row = cert_rows.get("ALL LABS")
+				if row is None:
 					frappe.throw(frappe._("{0} is {1} certified but chart {2} has no price for {1} — scan denied.").format(
 						nm, token, chart.chart_name))
-				# HALLMARKING charges per HUID (a stud pair carries two and pays
-				# twice); other certifications charge once per product
-				mult = pieces if is_hall else 1
-				charges += rate * mult
-				cert_detail.append({"certification": token, "rate": rate, "pieces": mult,
-					"via": "ALL LABS" if (token not in cert_rows and not is_hall) else token})
+				if not is_hall and (row.basis or "Per Piece") == "Per Ct":
+					# lab certs may bill on the piece's DMD carats, floored at
+					# the row's minimum (600/ct but never under 150)
+					val = flt(b.act_dmd_weight) * flt(row.rate)
+					if flt(row.min_amount) and val < flt(row.min_amount):
+						val = flt(row.min_amount)
+					charges += val
+					cert_detail.append({"certification": token, "rate": flt(row.rate),
+						"basis": "Per Ct", "ct": flt(b.act_dmd_weight), "value": round(val, 2),
+						"via": "ALL LABS" if token not in cert_rows else token})
+				else:
+					# per piece; HALLMARKING scales per HUID (a stud pair pays twice)
+					mult = pieces if is_hall else 1
+					charges += flt(row.rate) * mult
+					cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": mult,
+						"via": "ALL LABS" if (token not in cert_rows and not is_hall) else token})
 			else:
 				# legacy chart without the table: the old flat charge covers everything
 				pass

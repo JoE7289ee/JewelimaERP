@@ -176,7 +176,10 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				${CERTS.map((c) => `<option ${r.certification === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
 				${r.certification && r.certification !== "ALL LABS" && !CERTS.includes(r.certification) ? `<option selected>${esc(r.certification)}</option>` : ""}
 			</select></td>
+			<td><select data-f="basis">${["Per Piece", "Per Ct"].map((b) =>
+				`<option ${(r.basis || "Per Piece") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}" placeholder="${__("0 = included")}"></td>
+			<td><input data-f="min_amount" class="inr" inputmode="numeric" value="${inr(r.min_amount)}" placeholder="${__("floor ₹ (Per Ct)")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		return "";
 	}
@@ -198,7 +201,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<table class="pc-t" data-k="sol"><thead><tr><th>${__("From ct/stone")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("sol")}</tbody></table>
 			<div class="pc-sec">${__("Certification Charges — a cert on the bag missing here BLOCKS the scan")}<span class="add" data-k="cert">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Rate ₹/piece")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cert")}</tbody></table>
 			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (rows present = a PS stone without a row blocks the scan)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
@@ -260,7 +263,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		const k = $(this).data("k");
 		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "sol" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
-			: k === "cert" ? { certification: "", rate: "" }
+			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "" }
 			: k === "ps" ? { stone: "", rate: "" }
 			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "" }
 			: ["csr", "czr", "cvr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
