@@ -6328,13 +6328,13 @@ def get_price_chart(name):
 			for r in (d.get("solitaire_rates") or [])],
 		"certification_charges": [{"certification": r.certification, "rate": r.rate}
 			for r in (d.get("certification_charges") or [])],
-		"colour_stone_rate": flt(d.colour_stone_rate), "precious_stone_rate": flt(d.precious_stone_rate),
 		"precious_stone_rates": [{"stone": r.stone, "rate": r.rate} for r in (d.get("precious_stone_rates") or [])],
-		"job_work_pty_rate": flt(d.job_work_pty_rate),
+		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate} for r in (d.get("cs_rates") or [])],
+		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate} for r in (d.get("cz_rates") or [])],
+		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate} for r in (d.get("cvd_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
 			"rate": r.rate, "min_per_piece": r.min_per_piece} for r in (d.get("making_rules") or [])],
-		"hallmark_charge": flt(d.hallmark_charge), "certification_charge": flt(d.certification_charge),
 		"payment_terms": d.payment_terms or "", "terms": d.terms or "",
 		"signatory": d.signatory or "", "signatory_phone": d.signatory_phone or "",
 	}
@@ -6372,12 +6372,14 @@ def save_price_chart(payload):
 		if (r.get("certification") or "").strip():
 			doc.append("certification_charges", {"certification": r.get("certification").strip().upper(),
 				"rate": flt(r.get("rate"))})
-	doc.colour_stone_rate = flt(p.get("colour_stone_rate"))
-	doc.precious_stone_rate = flt(p.get("precious_stone_rate"))
 	for r in p.get("precious_stone_rates") or []:
 		if (r.get("stone") or "").strip():
 			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(), "rate": flt(r.get("rate"))})
-	doc.job_work_pty_rate = flt(p.get("job_work_pty_rate"))
+	for field in ("cs_rates", "cz_rates", "cvd_rates"):
+		for r in p.get(field) or []:
+			if flt(r.get("rate")):
+				doc.append(field, {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
+					"rate": flt(r.get("rate"))})
 	doc.making_rate = flt(p.get("making_rate"))
 	doc.making_min_grams = flt(p.get("making_min_grams"))
 	for r in p.get("making_rules") or []:
@@ -6385,8 +6387,6 @@ def save_price_chart(payload):
 			doc.append("making_rules", {"design_type": r.get("design_type") or None,
 				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
 				"min_per_piece": flt(r.get("min_per_piece"))})
-	doc.hallmark_charge = flt(p.get("hallmark_charge"))
-	doc.certification_charge = flt(p.get("certification_charge"))
 	doc.payment_terms = p.get("payment_terms") or ""
 	doc.terms = p.get("terms") or ""
 	doc.signatory = p.get("signatory") or ""
@@ -6435,20 +6435,15 @@ def _price_chart_letter_html(d):
 		money(r["rate"]) + ("/g" if r["basis"] == "Per Gram" else "/pc"),
 		" · min ₹ " + money(r["min_per_piece"]) if flt(r.get("min_per_piece")) else "")
 		for r in d.get("making_rules", []))
+	def brk(rows):
+		return "".join("<tr><td>{0}</td><td class='r'>₹ {1} / ct</td></tr>".format(
+			("any weight" if not flt(r["from_ct"]) and not flt(r["to_ct"])
+				else ("{0} – {1} ct".format(r["from_ct"], r["to_ct"]) if flt(r["to_ct"])
+				else "{0} ct & above".format(r["from_ct"]))), money(r["rate"])) for r in rows)
+	cs = brk(d.get("cs_rates", []))
+	cz = brk(d.get("cz_rates", []))
+	cvd = brk(d.get("cvd_rates", []))
 	flats = []
-	if not d.get("making_rules") and flt(d["making_rate"]):
-		note = " (min {0} g per piece)".format(d["making_min_grams"]) if flt(d["making_min_grams"]) else ""
-		flats.append(("Making charge", "₹ {0} / g{1}".format(money(d["making_rate"]), note)))
-	if flt(d["colour_stone_rate"]):
-		flats.append(("Colour stone", "₹ {0} / ct".format(money(d["colour_stone_rate"]))))
-	if flt(d["precious_stone_rate"]):
-		flats.append(("Precious stone", "₹ {0} / ct".format(money(d["precious_stone_rate"]))))
-	if flt(d["job_work_pty_rate"]):
-		flats.append(("Setting party diamonds (job work)", "₹ {0} / ct".format(money(d["job_work_pty_rate"]))))
-	if flt(d["hallmark_charge"]):
-		flats.append(("Hallmarking", "₹ {0} / piece".format(money(d["hallmark_charge"]))))
-	if flt(d["certification_charge"]):
-		flats.append(("Certification", "₹ {0}".format(money(d["certification_charge"]))))
 	flat_rows = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(k, v) for k, v in flats)
 	sec = lambda title, table_head, body: (
 		"<div class='sec'><div class='st'>{0}</div><table>{1}<tbody>{2}</tbody></table></div>".format(
@@ -6480,7 +6475,7 @@ def _price_chart_letter_html(d):
 		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
-		{dmd_sec}{sol_sec}{ps_sec}{mk_sec}{flat_sec}{cert_sec}
+		{dmd_sec}{sol_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
 		{payment}{terms}
 		<div class='sign'>
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
@@ -6495,7 +6490,9 @@ def _price_chart_letter_html(d):
 		cert_sec=sec("Certification Charges", "", certs),
 		ps_sec=sec("Precious Stone Rates", "", psr),
 		mk_sec=sec("Making Charges", "<thead><tr><th>Design</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", mkr),
-		flat_sec=sec("Making &amp; Charges", "", flat_rows),
+		cs_sec=sec("Colour Stone Rates", "", cs),
+		cz_sec=sec("CZ Rates", "", cz),
+		cvd_sec=sec("CVD Rates", "", cvd),
 		payment="<div class='sec'><div class='st'>Payment Terms</div><div class='terms'>{0}</div></div>".format(esc(d["payment_terms"])) if d["payment_terms"] else "",
 		terms="<div class='terms'>{0}</div>".format(esc(d["terms"])) if d["terms"] else "",
 		signatory=esc(d["signatory"]), signatory_phone=esc(d["signatory_phone"]))
@@ -7065,13 +7062,29 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		sol_detail.append({"quality": s["quality"], "pcs": s["pcs"], "per_stone": round(s["per_stone"], 3),
 			"ct": round(s["ct"], 3), "rate": rate})
 
-	# ---- other stones + party job work ----------------------------------------
-	# precious stones price PER STONE (Ruby 1ct = 200 — flat ₹/ct, no weight
-	# ranges). Rows present = they are the law: a PS stone without a row blocks
-	# the scan. Empty table = the legacy flat rate.
+	# ---- coloured buckets: CS / CZ / CVD each price from their OWN bracket
+	# table (blank-range row = flat). A bucket present on the piece with no
+	# rows = scan denied. Precious stones: per-stone rows only, same law.
+	def bucket_value(label, field, ct):
+		ct = flt(ct)
+		if ct <= 0:
+			return 0.0
+		rows = list(chart.get(field) or [])
+		if not rows:
+			frappe.throw(frappe._("{0} carries {1} ct {2} but chart {3} has no {2} rates — scan denied.").format(
+				nm, round(ct, 3), label, chart.chart_name))
+		row = next((r for r in rows if flt(r.from_ct) <= ct and (not flt(r.to_ct) or ct < flt(r.to_ct))), None)
+		if not row:
+			frappe.throw(frappe._("{0}: {1} ct {2} falls outside every {2} bracket on chart {3} — scan denied.").format(
+				nm, round(ct, 3), label, chart.chart_name))
+		return ct * flt(row.rate)
+
 	ps_rows = {(r.stone or "").upper(): flt(r.rate) for r in (chart.get("precious_stone_rates") or [])}
 	ps_value = 0.0
 	ps_detail = []
+	if flt(b.act_ps_weight) > 0 and not ps_rows:
+		frappe.throw(frappe._("{0} carries precious stones but chart {1} has no Precious Stone rates — scan denied.").format(
+			nm, chart.chart_name))
 	if ps_rows:
 		for item, qty in _bag_convert_materials([nm])[nm].items():
 			if frappe.db.get_value("Item", item, "stone_type") != "Precious Stone":
@@ -7082,11 +7095,15 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 					nm, item, chart.chart_name))
 			ps_value += flt(qty) * rate
 			ps_detail.append({"stone": item, "ct": round(flt(qty), 3), "rate": rate})
-	else:
-		ps_value = flt(b.act_ps_weight) * flt(chart.precious_stone_rate)
-	stone_value = (flt(b.act_cs_weight) + flt(b.act_cz_weight)) * flt(chart.colour_stone_rate) + ps_value
+	stone_value = (bucket_value("CS", "cs_rates", b.act_cs_weight)
+		+ bucket_value("CZ", "cz_rates", b.act_cz_weight)
+		+ bucket_value("CVD", "cvd_rates", b.act_cvd_weight) + ps_value)
 	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
-	job_work = flt(b.act_pdmd_weight) * flt(chart.job_work_pty_rate)
+	# party diamonds have no pricing route since the flat job-work rate was
+	# retired — a piece carrying them can't be priced yet
+	if flt(b.act_pdmd_weight) > 0:
+		frappe.throw(frappe._("{0} carries party diamonds — no job-work pricing is configured yet.").format(nm))
+	job_work = 0.0
 
 	# ---- gold + making --------------------------------------------------------
 	nett = flt(b.act_nett_weight)
@@ -7127,16 +7144,20 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		if nett < min_g:
 			rule_desc += " (min {0} g)".format(min_g)
 	labour += job_work
-	# hallmark is per HUID — a stud pair carries two HUIDs and pays twice
+	# certifications price ONLY through the chart's certification rows;
+	# HALLMARKING rows scale per HUID (a stud pair carries two and pays twice)
 	huids = [x for x in re.split(r"[,/\s]+", b.huid or "") if x]
 	pieces = max(len(huids), 1)
-	charges = flt(chart.hallmark_charge) * pieces
+	charges = 0.0
 
 	# certifications the bag ACTUALLY carries, charged per the chart's rows. A
 	# certification the chart hasn't priced BLOCKS the scan (rate 0 = free is fine).
 	cert_detail = []
 	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
 	cert_rows = {(r.certification or "").upper(): flt(r.rate) for r in (chart.get("certification_charges") or [])}
+	if trail and not cert_rows:
+		frappe.throw(frappe._("{0} is certified ({1}) but chart {2} has no Certification Charges — scan denied.").format(
+			nm, ", ".join(trail), chart.chart_name))
 	if cert_rows or trail:
 		for token in trail:
 			if cert_rows:
@@ -7159,8 +7180,6 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			else:
 				# legacy chart without the table: the old flat charge covers everything
 				pass
-	if not cert_rows:
-		charges += flt(chart.certification_charge)
 
 	# solitaires ride inside diamond_value but stay OUT of the piece's diamond ct
 	dmd_ct_regular = flt(b.act_dmd_weight) + flt(b.act_pdmd_weight) - solitaire_ct

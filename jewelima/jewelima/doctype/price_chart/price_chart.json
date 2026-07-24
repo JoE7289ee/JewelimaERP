@@ -17,11 +17,11 @@
   "solitaire_rates",
   "certification_charges",
   "stones_section",
-  "colour_stone_rate",
-  "precious_stone_rate",
   "precious_stone_rates",
+  "cs_rates",
+  "cz_rates",
+  "cvd_rates",
   "col_break_stones",
-  "job_work_pty_rate",
   "making_section",
   "making_rate",
   "col_break_making",
@@ -30,8 +30,6 @@
   "setting_section",
   "special_section",
   "charges_section",
-  "hallmark_charge",
-  "certification_charge",
   "terms_section",
   "payment_terms",
   "terms",
@@ -114,18 +112,6 @@
    "label": "Other Stones"
   },
   {
-   "fieldname": "colour_stone_rate",
-   "fieldtype": "Float",
-   "label": "Colour Stone Rate (\u20b9/ct)",
-   "precision": "2"
-  },
-  {
-   "fieldname": "precious_stone_rate",
-   "fieldtype": "Float",
-   "label": "Precious Stone Rate (\u20b9/ct)",
-   "precision": "2"
-  },
-  {
    "fieldname": "precious_stone_rates",
    "fieldtype": "Table",
    "options": "Price Chart Stone Rate",
@@ -133,15 +119,27 @@
    "description": "Per-stone \u20b9/ct (Ruby 1ct = 200). When rows exist they are THE price \u2014 a PS stone without a row blocks the scan; the flat rate above only applies when this table is empty."
   },
   {
-   "fieldname": "col_break_stones",
-   "fieldtype": "Column Break"
+   "fieldname": "cs_rates",
+   "fieldtype": "Table",
+   "options": "Price Chart Bucket Rate",
+   "label": "Colour Stone Rates",
+   "description": "Weight brackets by total CS carats; one blank-range row = flat. Empty + piece carries CS = scan denied."
   },
   {
-   "description": "Setting charge when the customer supplies their own diamonds (party stones are never sold).",
-   "fieldname": "job_work_pty_rate",
-   "fieldtype": "Float",
-   "label": "Job Work \u2014 Party Diamond (\u20b9/ct)",
-   "precision": "2"
+   "fieldname": "cz_rates",
+   "fieldtype": "Table",
+   "options": "Price Chart Bucket Rate",
+   "label": "CZ Rates"
+  },
+  {
+   "fieldname": "cvd_rates",
+   "fieldtype": "Table",
+   "options": "Price Chart Bucket Rate",
+   "label": "CVD Rates"
+  },
+  {
+   "fieldname": "col_break_stones",
+   "fieldtype": "Column Break"
   },
   {
    "description": "Flat rule: pieces under the minimum grams are billed AS the minimum; above it, nett weight \u00d7 rate.",
@@ -190,19 +188,6 @@
    "label": "Pass-through Charges"
   },
   {
-   "description": "Multiplied by the piece count \u2014 a stud pair (qty 2, two HUIDs) is charged twice.",
-   "fieldname": "hallmark_charge",
-   "fieldtype": "Float",
-   "label": "Hallmarking (\u20b9 per pc / HUID)",
-   "precision": "2"
-  },
-  {
-   "fieldname": "certification_charge",
-   "fieldtype": "Float",
-   "label": "Certification (\u20b9/pc)",
-   "precision": "2"
-  },
-  {
    "fieldname": "terms_section",
    "fieldtype": "Section Break",
    "label": "Terms & Signature"
@@ -235,7 +220,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 17:00:00.000000",
+ "modified": "2026-07-24 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",

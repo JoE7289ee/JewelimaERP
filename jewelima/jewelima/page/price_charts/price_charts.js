@@ -112,7 +112,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
-		diamond_quality_note: "", diamond_rates: [],
+		diamond_quality_note: "", diamond_rates: [], cs_rates: [], cz_rates: [], cvd_rates: [],
 		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [], precious_stone_rates: [], making_rules: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
@@ -164,6 +164,11 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹ (Per Gram)")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
+		if (["csr", "czr", "cvr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
+			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
+			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
+			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
 			<tr data-i="${i}"><td><select data-f="certification">
 				<option value=""></option>
@@ -204,14 +209,15 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
-			<div class="pc-sec">${__("Flat Charges")}</div>
-			<div class="pc-flats">
-				<div><label>${__("Colour stone ₹/ct")}</label><input class="pc-f" data-f="colour_stone_rate" type="number" value="${num(cur.colour_stone_rate)}"></div>
-				<div><label>${__("Precious stone ₹/ct")}</label><input class="pc-f" data-f="precious_stone_rate" type="number" value="${num(cur.precious_stone_rate)}"></div>
-				<div><label>${__("Party-diamond job work ₹/ct")}</label><input class="pc-f" data-f="job_work_pty_rate" type="number" value="${num(cur.job_work_pty_rate)}"></div>
-				<div><label>${__("Hallmark ₹/piece")}</label><input class="pc-f" data-f="hallmark_charge" type="number" value="${num(cur.hallmark_charge)}"></div>
-				<div><label>${__("Certification ₹")}</label><input class="pc-f" data-f="certification_charge" type="number" value="${num(cur.certification_charge)}"></div>
-			</div>
+			<div class="pc-sec">${__("Colour Stone Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="csr">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="csr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("csr")}</tbody></table>
+			<div class="pc-sec">${__("CZ Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="czr">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="czr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("czr")}</tbody></table>
+			<div class="pc-sec">${__("CVD Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="cvr">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="cvr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("cvr")}</tbody></table>
 			<div class="pc-sec">${__("Letter — Terms & Signatory")}</div>
 			<div class="pc-wide"><label style="font-size:11px;color:var(--text-muted);">${__("Payment terms")}</label>
 				<textarea class="pc-f" data-f="payment_terms">${esc(cur.payment_terms)}</textarea></div>
@@ -240,7 +246,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[$(this).data("f")] = this.type === "number" ? flt($(this).val()) : $(this).val();
 	});
 	const KIND_ARR = { dmd: "diamond_rates",
-		sol: "solitaire_rates", cert: "certification_charges", ps: "precious_stone_rates", mk: "making_rules" };
+		sol: "solitaire_rates", cert: "certification_charges", ps: "precious_stone_rates", mk: "making_rules",
+		csr: "cs_rates", czr: "cz_rates", cvr: "cvd_rates" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
 		const $t = $(this).closest("table.pc-t");
 		const arr = cur[KIND_ARR[$t.data("k")]];
@@ -259,6 +266,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			: k === "cert" ? { certification: "", rate: "" }
 			: k === "ps" ? { stone: "", rate: "" }
 			: k === "mk" ? { design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
+			: ["csr", "czr", "cvr"].includes(k) ? { from_ct: "", to_ct: "", rate: "" }
 			: { });
 		paintEditor();
 	});
