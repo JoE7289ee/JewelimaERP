@@ -306,57 +306,97 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
 
-	// Pricing Rules — READ-ONLY: exactly which slabs/rules the scanned pieces
-	// hit (diamond bracket + rate, making rule, cert/hallmark rates, stone
-	// buckets), aggregated across the bill.
+	// Pricing Rules — the slabs this bill hit, each with an EDITABLE rate.
+	// Left: component + the slab being used. Middle: the rate (edit it for
+	// THIS SALE ONLY — e.g. hallmark 45 -> 35). Right: what you changed and
+	// its effect on the bill. Apply re-prices the affected cells (they turn
+	// yellow) and the edit rides the sale's audit comment. The chart is
+	// never touched.
 	page.add_inner_button(__("Pricing Rules"), () => {
 		if (!S.rows.length) {
 			frappe.show_alert({ message: __("Scan pieces first — this shows the slabs used by the bill."), indicator: "orange" }, 4);
 			return;
 		}
-		const slabs = {}; // label -> {rule, qty (ct/pcs text), value}
-		const add = (section, label, rule, qty, val) => {
-			const key = section + "|" + label + "|" + rule;
-			if (!slabs[key]) slabs[key] = { section, label, rule, qty: 0, val: 0 };
-			slabs[key].qty += qty;
-			slabs[key].val += val;
+		// slab = one distinct (rule, rate); contributions know how to re-price it
+		const slabs = {};
+		const add = (key, label, slabTxt, rate, unit, contrib) => {
+			if (!slabs[key]) slabs[key] = { label, slabTxt, rate, unit, contribs: [] };
+			slabs[key].contribs.push(contrib);
 		};
-		S.rows.forEach((r) => {
-			(r.dmd_detail || []).forEach((d) => add(__("Diamond"),
-				`${d.quality}${d.sieve ? " · " + d.sieve : ""}`,
-				`${__("bracket")} ${d.bracket || "?"} ct → ${money(d.rate)}/ct`, d.ct, d.ct * d.rate));
-			(r.ps_detail || []).forEach((d) => add(__("Precious"), d.stone, `${money(d.rate)}/ct`, d.ct, d.ct * d.rate));
-			(r.cert_detail || []).forEach((d) => {
-				const hall = ["HALL", "HALLMARKING"].includes(d.certification);
-				add(hall ? __("Hallmark") : __("Certification"),
-					d.certification + (d.via && d.via === "ALL LABS" ? " (ALL LABS)" : ""),
-					d.basis === "Per Ct" ? `${money(d.rate)}/ct` : `${money(d.rate)} ${__("per piece")}`,
-					hall ? (d.pieces || 1) : (d.basis === "Per Ct" ? d.ct : 1),
-					d.basis === "Per Ct" ? (d.value || 0) : d.rate * (d.pieces || 1));
+		S.rows.forEach((r, i) => {
+			(r.dmd_detail || []).forEach((d) => {
+				if (!d.rate && d.rate !== 0) return;
+				add(`dmd|${d.quality}|${d.bracket}|${d.rate}`, `${__("Diamond")} — ${d.quality}`,
+					`${__("bracket")} ${d.bracket || "?"} ct`, d.rate, "ct", { i, key: "dmd", qty: d.ct, det: d });
 			});
-			["cs", "cz", "cvd", "making", "gold"].forEach((k) => {
-				const c = (r.components || {})[k];
-				if (c && c.value !== null && c.value !== "" && !c.needs_price)
-					add(c.label, c.label, c.note || "—", 1, flt(c.value));
+			(r.ps_detail || []).forEach((d) => {
+				add(`ps|${d.stone}|${d.rate}`, `${__("Precious")} — ${d.stone}`, __("per carat"),
+					d.rate, "ct", { i, key: "ps", qty: d.ct, det: d });
 			});
+			["cs", "cz", "cvd", "making", "hall"].concat(Object.keys(r.components || {}).filter((k) => k.startsWith("cert:")))
+				.forEach((k) => {
+					const c = (r.components || {})[k];
+					if (!c || c.needs_price || c.rate === null || c.rate === undefined) return;
+					const slabTxt = c.unit === "g" ? __("per gram") : c.unit === "pc" ? __("per piece") : __("per carat");
+					add(`${k}|${c.rate}`, c.label, slabTxt + (c.note ? ` · ${c.note}` : ""), c.rate, c.unit,
+						{ i, key: k, qty: flt(c.qty) });
+				});
 		});
-		const order = [__("Diamond"), "Gold", "Making", __("Precious"), "CS", "CZ", "CVD", __("Hallmark"), __("Certification")];
-		const list = Object.values(slabs).sort((x, y) => order.indexOf(x.section) - order.indexOf(y.section));
-		const dlg = new frappe.ui.Dialog({ title: __("Pricing rules in effect — this bill"), size: "large",
-			fields: [{ fieldtype: "HTML", fieldname: "b" }] });
+		const list = Object.entries(slabs);
+		if (!list.length) {
+			frappe.show_alert({ message: __("Nothing chart-priced on the bill yet."), indicator: "orange" }, 4);
+			return;
+		}
+		const dlg = new frappe.ui.Dialog({
+			title: __("Pricing rules in effect — this sale only"),
+			size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "b" }],
+			primary_action_label: __("Apply to Bill"),
+			primary_action: () => {
+				const applied = [];
+				dlg.$wrapper.find(".pr-rate").each(function () {
+					const sk = this.getAttribute("data-slab");
+					const sl = slabs[sk];
+					const nr = this.value === "" ? sl.rate : flt(this.value);
+					if (nr === sl.rate) return;
+					sl.contribs.forEach((ct) => {
+						const c = (S.rows[ct.i].components || {})[ct.key];
+						if (c && c.value !== null && c.value !== "")
+							c.value = Math.round((flt(c.value) + ct.qty * (nr - sl.rate)) * 100) / 100;
+						// remember the overridden rate so re-opening shows it
+						if (ct.det) ct.det.rate = nr;
+						else if (c) c.rate = nr;
+					});
+					applied.push(`${sl.label} ${sl.rate}→${nr}/${sl.unit}`);
+				});
+				dlg.hide();
+				if (!applied.length) return;
+				S.adjust = S.adjust.concat(applied);
+				paint();
+				frappe.show_alert({ message: __("Applied: {0}. Recorded in the sale's audit trail.", [applied.join("; ")]), indicator: "blue" }, 6);
+			},
+		});
+		const th = (t, r) => `<th style="text-align:${r ? "right" : "left"};padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${t}</th>`;
+		const td = 'style="padding:5px 8px;border-bottom:1px solid var(--border-color);"';
 		dlg.get_field("b").$wrapper.html(`
-			<table class="pr-tbl" style="width:100%;border-collapse:collapse;font-size:13px;">
-			<thead><tr>
-				<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${__("Component")}</th>
-				<th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${__("Slab / rule used")}</th>
-				<th style="text-align:right;padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${__("Amount ₹")}</th>
-			</tr></thead><tbody>
-			${list.map((x) => `<tr>
-				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);"><b>${esc(x.section === x.label ? x.section : x.section + " — " + x.label)}</b></td>
-				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);">${esc(x.rule)}</td>
-				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);text-align:right;font-variant-numeric:tabular-nums;">${money(x.val)}</td>
+			<table style="width:100%;border-collapse:collapse;font-size:13px;">
+			<thead><tr>${th(__("Component — slab in use"))}${th(__("Rate ₹"), 1)}${th(__("Your change"), 1)}</tr></thead><tbody>
+			${list.map(([sk, x]) => `<tr>
+				<td ${td}><b>${esc(x.label)}</b><div style="font-size:11px;color:var(--text-muted);">${esc(x.slabTxt)} · ₹${flt(x.rate).toLocaleString("en-IN")}/${esc(x.unit)}</div></td>
+				<td ${td} style="text-align:right;"><input class="pr-rate" data-slab="${esc(sk)}" type="number" step="0.5" value="${flt(x.rate)}"
+					style="width:110px;text-align:right;border:1px solid var(--gray-400,#aeb6bf);border-radius:4px;height:26px;padding:1px 6px;background:var(--fg-color);color:var(--text-color);"></td>
+				<td ${td} class="pr-chg" style="text-align:right;color:#9a6700;font-weight:600;font-variant-numeric:tabular-nums;"></td>
 			</tr>`).join("")}
 			</tbody></table>`);
+		// live: show old -> new and the rupee effect on the bill as you type
+		dlg.$wrapper.on("input", ".pr-rate", function () {
+			const sl = slabs[this.getAttribute("data-slab")];
+			const nr = this.value === "" ? sl.rate : flt(this.value);
+			const qty = sl.contribs.reduce((s, c) => s + c.qty, 0);
+			const d = qty * (nr - sl.rate);
+			$(this).closest("tr").find(".pr-chg").html(nr === sl.rate ? "" :
+				`${flt(sl.rate).toLocaleString("en-IN")} → ${flt(nr).toLocaleString("en-IN")}<br><span style="color:${d > 0 ? "#1d7a33" : "#b02a2a"};">${d > 0 ? "+₹" : "−₹"}${money(Math.abs(d)).slice(1)}</span>`);
+		});
 		dlg.show();
 	});
 
