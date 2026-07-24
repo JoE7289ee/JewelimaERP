@@ -7038,6 +7038,27 @@ def sell_preparation(name):
 # purity-percent); pass-through charges per piece.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
+def _inr(v):
+	"""Indian-grouped rupees for tooltip working lines: 12750 -> \u20b912,750."""
+	n = flt(v)
+	whole = int(abs(n))
+	frac = abs(n) - whole
+	sw = str(whole)
+	if len(sw) > 3:
+		head, tail = sw[:-3], sw[-3:]
+		parts = []
+		while len(head) > 2:
+			parts.insert(0, head[-2:])
+			head = head[:-2]
+		if head:
+			parts.insert(0, head)
+		sw = ",".join(parts + [tail])
+	out = ("-" if n < 0 else "") + "\u20b9" + sw
+	if round(frac, 2):
+		out += ("%.2f" % round(frac, 2))[1:]
+	return out
+
+
 def get_sale_piece(barcode, price_chart, gold_rate=0):
 	"""Price one scanned piece against the chart, COMPONENT BY COMPONENT.
 
@@ -7081,7 +7102,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	# ---- gold -------------------------------------------------------------------
 	nett = flt(b.act_nett_weight)
 	if gold_rate > 0:
-		comp("gold", "Gold", nett * gold_rate, note="{0} g x {1}/g".format(round(nett, 3), gold_rate),
+		comp("gold", "Gold", nett * gold_rate,
+			note="{0} g x {1}/g = {2}".format(round(nett, 3), gold_rate, _inr(nett * gold_rate)),
 			rate=gold_rate, qty=nett, unit="g")
 	else:
 		comp("gold", "Gold", needs=True, note="{0} g — no gold rate picked".format(round(nett, 3)))
@@ -7136,8 +7158,9 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				note="no chart rows for {0}".format(", ".join(sorted(dmd_missing))))
 		else:
 			comp("dmd", "Diamond", diamond_value,
-				note="; ".join("{0}{1} {2} ct x {3}".format(
-					d["quality"], " " + d["sieve"] if d["sieve"] else "", d["ct"], d["rate"]) for d in dmd_detail))
+				note="; ".join("{0}{1} {2} ct x {3} = {4}".format(
+					d["quality"], " " + d["sieve"] if d["sieve"] else "", d["ct"], d["rate"],
+					_inr(d["ct"] * d["rate"])) for d in dmd_detail))
 	else:
 		dmd_detail = []
 
@@ -7164,10 +7187,12 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			if not cint(pcs):
 				comp(key, label, needs=True, note="priced per piece but the piece count is 0")
 				return
-			comp(key, label, cint(pcs) * flt(row.rate), note="{0} pcs x {1}".format(cint(pcs), flt(row.rate)),
+			comp(key, label, cint(pcs) * flt(row.rate),
+				note="{0} pcs x {1} = {2}".format(cint(pcs), flt(row.rate), _inr(cint(pcs) * flt(row.rate))),
 				rate=flt(row.rate), qty=cint(pcs), unit="pc")
 		else:
-			comp(key, label, ct * flt(row.rate), note="{0} ct x {1}".format(round(ct, 3), flt(row.rate)),
+			comp(key, label, ct * flt(row.rate),
+				note="{0} ct x {1} = {2}".format(round(ct, 3), flt(row.rate), _inr(ct * flt(row.rate))),
 				rate=flt(row.rate), qty=ct, unit="ct")
 
 	bucket("cs", "CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
@@ -7199,7 +7224,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			comp("ps", "Precious", needs=True, note="no chart rate for {0}".format(", ".join(sorted(ps_missing))))
 		else:
 			comp("ps", "Precious", ps_value,
-				note="; ".join("{0} {1} ct x {2}".format(d["stone"], d["ct"], d["rate"]) for d in ps_detail))
+				note="; ".join("{0} {1} ct x {2} = {3}".format(
+					d["stone"], d["ct"], d["rate"], _inr(d["ct"] * d["rate"])) for d in ps_detail))
 
 	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
 
@@ -7222,14 +7248,16 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				labour = flt(row.min_per_piece)
 				rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
 			rule_desc += " [{0}]".format(row.design_type or "default")
-			comp("making", "Making", labour, note=rule_desc, rate=flt(row.rate), qty=nett, unit="g")
+			comp("making", "Making", labour, note="{0} = {1}".format(rule_desc, _inr(labour)),
+				rate=flt(row.rate), qty=nett, unit="g")
 	elif flt(chart.making_rate):
 		min_g = flt(chart.making_min_grams) or 1
 		billed_g = max(nett, min_g)
 		rule_desc = "{0} g x {1}/g".format(round(billed_g, 3), flt(chart.making_rate))
 		if nett < min_g:
 			rule_desc += " (min {0} g)".format(min_g)
-		comp("making", "Making", billed_g * flt(chart.making_rate), note=rule_desc,
+		comp("making", "Making", billed_g * flt(chart.making_rate),
+			note="{0} = {1}".format(rule_desc, _inr(billed_g * flt(chart.making_rate))),
 			rate=flt(chart.making_rate), qty=billed_g, unit="g")
 	else:
 		comp("making", "Making", needs=True, note="chart has no making rules")
@@ -7264,6 +7292,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			if flt(row.min_amount) and val < flt(row.min_amount):
 				val = flt(row.min_amount)
 				note += " (min {0})".format(flt(row.min_amount))
+			note += " = {0}".format(_inr(val))
 			cert_val += val
 			cert_notes.append(note)
 			cert_detail.append({"certification": token, "rate": flt(row.rate), "basis": "Per Ct",
@@ -7271,12 +7300,12 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				"via": "ALL LABS" if token not in cert_rows else token})
 		elif is_hall:
 			comp("hall", "Hallmark", flt(row.rate) * pieces,
-				note="{0} x {1}".format(pieces, flt(row.rate)) if pieces > 1 else "",
+				note="{0} x {1} = {2}".format(pieces, flt(row.rate), _inr(flt(row.rate) * pieces)),
 				rate=flt(row.rate), qty=pieces, unit="pc")
 			cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": pieces, "via": token})
 		else:
 			cert_val += flt(row.rate)
-			cert_notes.append("{0}: {1}".format(token, flt(row.rate)))
+			cert_notes.append("{0}: {1} = {2}".format(token, flt(row.rate), _inr(flt(row.rate))))
 			cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": 1,
 				"via": "ALL LABS" if token not in cert_rows else token})
 	if cert_missing:
