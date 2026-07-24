@@ -71,7 +71,10 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 	`);
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
-	const fPick = mk(".cb-pick", { fieldtype: "Link", label: __("Edit existing (design no)"), fieldname: "pick", options: "Design Bank" });
+	// only APPROVED cards are editable here — they already carry a proper info
+	// card; everything else gets fixed through Review first
+	const fPick = mk(".cb-pick", { fieldtype: "Link", label: __("Edit existing (approved only)"), fieldname: "pick", options: "Design Bank",
+		get_query: () => ({ filters: { status: "Approved" } }) });
 	const fNo = mk(".cb-no", { fieldtype: "Data", label: __("Design Number"), fieldname: "no" });
 	const fType = mk(".cb-dtype", { fieldtype: "Link", label: __("Design Type"), fieldname: "dt", options: "Design Type" });
 	const fGW = mk(".cb-gw", { fieldtype: "Float", label: __("Gross Weight (g)"), fieldname: "gw" });
@@ -143,6 +146,11 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 	function loadCard(name) {
 		frappe.call({ method: API + ".get_design_card", args: { name } }).then((r) => {
 			const m = r.message || {};
+			if (m.status && m.status !== "Approved") {
+				frappe.show_alert({ message: __("{0} is {1} — only Approved cards edit here; take it through Review.", [m.design_no, m.status]), indicator: "orange" }, 5);
+				fPick.set_value("");
+				return;
+			}
 			cur = { name: m.name, photo: m.photo || "", stones: m.stones || [] };
 			fNo.set_value(m.design_no); fType.set_value(m.design_type);
 			fGW.set_value(m.gross_weight || ""); fDW.set_value(m.diamond_weight || "");
