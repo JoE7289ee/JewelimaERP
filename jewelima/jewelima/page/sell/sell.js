@@ -14,7 +14,7 @@
 frappe.pages["sell"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Sell", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { rows: [] };
+	const S = { rows: [], adjust: [] };
 	const esc = frappe.utils.escape_html;
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	// canonical column order; cert:* columns slot in after hall, alphabetically
@@ -263,6 +263,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 						held_by: r.held_by, nett: r.nett, dmd_ct: r.dmd_ct, ostone_ct: r.ostone_ct,
 						...buckets(r),
 					})),
+					adjustments: S.adjust,
 				} },
 			}).then((r) => {
 				frappe.dom.unfreeze();
@@ -273,6 +274,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 						[m.name, m.count, esc(to), money(m.grand_total), esc(m.stock_entry || "")]),
 				});
 				S.rows = [];
+				S.adjust = [];
 				paint();
 				focusScan();
 			}).catch(() => frappe.dom.unfreeze());
@@ -298,6 +300,62 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		$(root).find(".sl-tip:visible").css({ left: e.clientX + 14, top: e.clientY + 12 });
 	});
 	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
+
+	// Pricing Rules — the chart's rules in effect + bulk % adjustments (discounts)
+	// across the bill. Adjustments ride to create_product_sale and land as an
+	// audit comment on the Product Sale.
+	page.add_inner_button(__("Pricing Rules"), () => {
+		if (!chart.get_value()) {
+			frappe.show_alert({ message: __("Pick a price chart first."), indicator: "orange" }, 4);
+			return;
+		}
+		const cols = activeCols();
+		const fields = [
+			{ fieldtype: "HTML", fieldname: "adj_note", options: `<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">
+				${S.rows.length ? __("Bulk adjust the bill: percentage per component (e.g. -10 = 10% discount). Applies to every scanned line; the sale's audit trail records it.")
+					: __("Scan pieces first to bulk-adjust their prices. Below are the chart's rules in effect.")}</div>` },
+		];
+		if (S.rows.length) {
+			cols.forEach((k, i) => {
+				fields.push({ fieldtype: i % 4 === 0 ? "Section Break" : "Column Break", fieldname: "b" + i });
+				fields.push({ fieldtype: "Float", fieldname: "adj:" + k, label: colLabel(k) + " %" });
+			});
+		}
+		if (S.adjust.length) {
+			fields.push({ fieldtype: "HTML", fieldname: "adj_done", options: `<div style="font-size:12px;color:#9a6700;margin:4px 0;">
+				${__("Already applied")}: ${esc(S.adjust.join("; "))}</div>` });
+		}
+		fields.push({ fieldtype: "Section Break", fieldname: "rl_sec", label: __("Rules in effect — {0}", [chart.get_value()]) });
+		fields.push({ fieldtype: "HTML", fieldname: "rules_html", options: `<div class="sl-rules" style="max-height:50vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;"></div>` });
+		const dlg = new frappe.ui.Dialog({
+			title: __("Pricing Rules"),
+			size: "large",
+			fields,
+			primary_action_label: S.rows.length ? __("Apply Adjustments") : __("Close"),
+			primary_action: (v) => {
+				if (!S.rows.length) return dlg.hide();
+				const applied = [];
+				cols.forEach((k) => {
+					const pct = flt(v["adj:" + k]);
+					if (!pct) return;
+					S.rows.forEach((r) => {
+						const c = (r.components || {})[k];
+						if (c && c.value !== null && c.value !== "") c.value = Math.round(c.value * (1 + pct / 100) * 100) / 100;
+					});
+					applied.push(`${colLabel(k)} ${pct > 0 ? "+" : ""}${pct}%`);
+				});
+				dlg.hide();
+				if (!applied.length) return;
+				S.adjust = S.adjust.concat(applied);
+				paint();
+				frappe.show_alert({ message: __("Applied: {0}. The sale will carry this in its audit trail.", [applied.join("; ")]), indicator: "blue" }, 6);
+			},
+		});
+		dlg.show();
+		// the chart letter IS the rules in effect — render it inside the dialog
+		frappe.call({ method: API + ".price_chart_letter", args: { name: chart.get_value() }, freeze: false })
+			.then((r) => dlg.get_field("rules_html").$wrapper.find(".sl-rules").html((r.message || {}).html || ""));
+	});
 
 	page.add_inner_button(__("Sale Records"), () => frappe.set_route("List", "Product Sale"));
 	paint();

@@ -7324,6 +7324,13 @@ def create_product_sale(payload):
 	})
 	sale.insert(ignore_permissions=True)
 
+	# bulk price adjustments (discounts etc) applied on the Sell board leave an
+	# AUDIT COMMENT on the sale — who, when, what
+	adjustments = p.get("adjustments") or []
+	if adjustments:
+		sale.add_comment("Comment", frappe._("Bulk price adjustment by {0}: {1}").format(
+			frappe.session.user, "; ".join(adjustments)))
+
 	now = frappe.utils.now_datetime()
 	for l in lines:
 		nm = l["order_bag"]
