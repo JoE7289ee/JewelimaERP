@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-24 18:04:35.106692",
+ "modified": "2026-07-24 21:15:01.601946",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "new-design-bank",
@@ -13,6 +13,12 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "Jewelima Design Bank"
+  },
+  {
+   "role": "Jewelima Design Approver"
   }
  ],
  "script": null,

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-24 17:32:00.594895",
+ "modified": "2026-07-24 22:02:38.423748",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "search-design",
@@ -13,6 +13,15 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "Jewelima Design Bank"
+  },
+  {
+   "role": "Jewelima Design Approver"
+  },
+  {
+   "role": "Jewelima Design Viewer"
   }
  ],
  "script": null,

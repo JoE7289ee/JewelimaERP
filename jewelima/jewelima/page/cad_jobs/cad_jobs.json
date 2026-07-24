@@ -1,20 +1,32 @@
 {
  "content": null,
- "creation": "2026-07-03 10:00:00.000000",
+ "creation": "2026-07-03 10:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-03 10:00:00.000000",
+ "modified": "2026-07-21 14:30:49.982539",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "cad-jobs",
  "owner": "Administrator",
  "page_name": "cad-jobs",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "Stock User"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Jewelima CAD"
+  }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "CAD Jobs"
 }

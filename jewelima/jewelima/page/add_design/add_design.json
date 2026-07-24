@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-24 10:16:37.158068",
+ "modified": "2026-07-24 21:15:01.636286",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "add-design",
@@ -19,12 +19,6 @@
   },
   {
    "role": "Stock User"
-  },
-  {
-   "role": "Jewelima Design Bank"
-  },
-  {
-   "role": "Jewelima Design Approver"
   }
  ],
  "script": null,

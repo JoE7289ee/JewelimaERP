@@ -1,10 +1,10 @@
 {
  "content": null,
- "creation": "2026-06-15 18:30:00.000000",
+ "creation": "2026-06-15 18:30:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-06-15 18:30:00.000000",
+ "modified": "2026-07-20 16:13:45.517938",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "purchase-raw-material",
@@ -19,10 +19,14 @@
   },
   {
    "role": "Stock User"
+  },
+  {
+   "role": "Jewelima Purchase"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
+ "system_page": 0,
  "title": "Purchase Raw Material"
 }
