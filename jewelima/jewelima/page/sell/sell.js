@@ -28,6 +28,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-top .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.sl-top .help-box,.sl-top .description{display:none !important;}
 		.sl-buyer{width:230px;}.sl-chart{width:200px;}.sl-rate{width:130px;}.sl-scan{width:200px;}.sl-remarks{width:200px;}
+		.sl-tax{align-self:center;margin-top:14px;}
+		.sl-tax .checkbox{margin:0;} .sl-tax .label-area{font-weight:700;}
 		.sl-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;flex:1 1 auto;min-height:120px;}
 		table.sl-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;}
 		table.sl-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:4px 8px;text-align:left;white-space:nowrap;font-weight:700;}
@@ -66,7 +68,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		<div class="sl-wrap">
 		<div class="sl-top">
 			<div class="sl-buyer"></div><div class="sl-chart"></div><div class="sl-rate"></div>
-			<div class="sl-scan"></div><div class="sl-remarks"></div>
+			<div class="sl-scan"></div><div class="sl-remarks"></div><div class="sl-tax"></div>
 		</div>
 		<div class="sl-box"><table class="sl-tbl">
 			<thead></thead>
@@ -93,6 +95,9 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	const rate = mk(".sl-rate", { fieldtype: "Float", label: __("Gold Rate ₹/g"), fieldname: "rate" });
 	const scan = mk(".sl-scan", { fieldtype: "Data", label: __("Scan card"), fieldname: "scan", placeholder: __("Scan barcode…") });
 	const remarks = mk(".sl-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "remarks" });
+	const tax = mk(".sl-tax", { fieldtype: "Check", label: __("3% Tax"), fieldname: "tax",
+		onchange: () => totals() });
+	tax.set_value(1);
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
 	rate.$input.on("change", () => repriceAll());
 
@@ -177,10 +182,13 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			t[k] = (t[k] || 0) + v;
 			grand += v;
 		}));
+		const taxed = !!cint(tax.get_value());
+		const taxAmt = taxed ? Math.round(grand * 3) / 100 : 0;
 		$(root).find(".sl-strip-totals").html(
 			`<span><span class="k">${__("Pieces")}</span><span class="v">${S.rows.length}</span></span>`
 			+ cols.map((k) => `<span><span class="k">${esc(colLabel(k))}</span><span class="v">${money(t[k] || 0)}</span></span>`).join("")
-			+ `<span class="grand"><span class="k">${__("Grand Total")}</span><span class="v sl-t-grand">${money(grand)}</span></span>`);
+			+ (taxed ? `<span><span class="k">${__("Tax 3%")}</span><span class="v">${money(taxAmt)}</span></span>` : "")
+			+ `<span class="grand"><span class="k">${taxed ? __("Grand Total (incl. tax)") : __("Grand Total (no tax)")}</span><span class="v sl-t-grand">${money(grand + taxAmt)}</span></span>`);
 		$(root).find(".sl-sell").prop("disabled", !!pendingCells());
 	}
 
@@ -285,7 +293,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			args: { payload: {
 				customer: buyer.get_value(), price_chart: chart.get_value(),
 				gold_rate: flt(rate.get_value()), remarks: remarks.get_value(),
-				rows: S.rows, adjust: S.adjust,
+				rows: S.rows, adjust: S.adjust, tax: cint(tax.get_value()),
 			} },
 		}).then((r) => {
 			const m = r.message || {};
@@ -324,6 +332,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					})),
 					adjustments: S.adjust,
 					prep: S.prep,
+					tax_percent: cint(tax.get_value()) ? 3 : 0,
 				} },
 			}).then((r) => {
 				frappe.dom.unfreeze();
@@ -564,6 +573,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			setTimeout(() => {
 				S.rows = (m.board || {}).rows || [];
 				S.adjust = (m.board || {}).adjust || [];
+				if ((m.board || {}).tax !== undefined) tax.set_value(cint(m.board.tax));
 				paint();
 				frappe.show_alert({ message: __("Restored {0} — {1} piece(s).", [m.name, S.rows.length]), indicator: "yellow" }, 5);
 			}, 400);

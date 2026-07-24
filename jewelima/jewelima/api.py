@@ -7072,7 +7072,8 @@ def save_sale_prep_board(payload):
 		"customer": p.get("customer") or None, "price_chart": p.get("price_chart") or None,
 		"gold_rate": flt(p.get("gold_rate")), "remarks": p.get("remarks"),
 		"items": items, "grand_total": round(grand, 2),
-		"board_json": frappe.as_json({"rows": rows, "adjust": p.get("adjust") or []}),
+		"board_json": frappe.as_json({"rows": rows, "adjust": p.get("adjust") or [],
+			"tax": cint(p.get("tax", 1))}),
 	})
 	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
@@ -7451,13 +7452,17 @@ def create_product_sale(payload):
 			"nett": flt(l.get("nett")), "dmd_ct": flt(l.get("dmd_ct")), "ostone_ct": flt(l.get("ostone_ct")),
 			**vals, "piece_total": total,
 		})
+	base_total = round(sum(sums.values()), 2)
+	tax_percent = flt(p.get("tax_percent"))
+	tax_amount = round(base_total * tax_percent / 100, 2)
 	sale = frappe.get_doc({
 		"doctype": "Product Sale",
 		"customer": customer, "sale_date": frappe.utils.today(), "status": "Completed",
 		"price_chart": p.get("price_chart"), "gold_rate": flt(p.get("gold_rate")),
 		"remarks": p.get("remarks"), "stock_entry": se.name, "items": rows,
 		**{k: round(v, 2) for k, v in sums.items()},
-		"grand_total": round(sum(sums.values()), 2),
+		"tax_percent": tax_percent, "tax_amount": tax_amount,
+		"grand_total": round(base_total + tax_amount, 2),
 	})
 	sale.insert(ignore_permissions=True)
 

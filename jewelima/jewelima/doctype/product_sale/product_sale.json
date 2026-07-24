@@ -23,6 +23,8 @@
   "col_break_tot",
   "labour_value",
   "charges_value",
+  "tax_percent",
+  "tax_amount",
   "grand_total"
  ],
  "fields": [
@@ -69,7 +71,7 @@
   {
    "fieldname": "gold_rate",
    "fieldtype": "Float",
-   "label": "Gold Rate (₹/g)",
+   "label": "Gold Rate (\u20b9/g)",
    "precision": "2",
    "read_only": 1
   },
@@ -106,21 +108,21 @@
   {
    "fieldname": "gold_value",
    "fieldtype": "Float",
-   "label": "Gold (₹)",
+   "label": "Gold (\u20b9)",
    "precision": "2",
    "read_only": 1
   },
   {
    "fieldname": "diamond_value",
    "fieldtype": "Float",
-   "label": "Diamonds (₹)",
+   "label": "Diamonds (\u20b9)",
    "precision": "2",
    "read_only": 1
   },
   {
    "fieldname": "stone_value",
    "fieldtype": "Float",
-   "label": "Stones (₹)",
+   "label": "Stones (\u20b9)",
    "precision": "2",
    "read_only": 1
   },
@@ -131,14 +133,14 @@
   {
    "fieldname": "labour_value",
    "fieldtype": "Float",
-   "label": "Labour (₹)",
+   "label": "Labour (\u20b9)",
    "precision": "2",
    "read_only": 1
   },
   {
    "fieldname": "charges_value",
    "fieldtype": "Float",
-   "label": "Charges (₹)",
+   "label": "Charges (\u20b9)",
    "precision": "2",
    "read_only": 1
   },
@@ -147,8 +149,21 @@
    "fieldname": "grand_total",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Grand Total (₹)",
+   "label": "Grand Total (\u20b9)",
    "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tax_percent",
+   "fieldtype": "Float",
+   "label": "Tax %",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tax_amount",
+   "fieldtype": "Currency",
+   "label": "Tax Amount",
    "read_only": 1
   }
  ],
