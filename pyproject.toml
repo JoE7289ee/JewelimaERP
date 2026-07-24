@@ -9,8 +9,10 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=16.0.0" # Installed and managed by bench.
-    "segno>=1.6",  # pure-python QR generation for the Print Barcode labels
-    "pytesseract>=0.3",  # OCR the Design Bank cards (gross/diamond weight). Needs the tesseract binary.
+    # PROD-locked (see PRODUCTION.md): pin the floor to what dev verified,
+    # cap the majors so a server rebuild can't drift silently.
+    "segno>=1.6,<2",       # pure-python QR generation for the Print Barcode labels
+    "pytesseract>=0.3.13,<0.4",  # OCR the Design Bank cards. Needs the tesseract binary (apt).
 ]
 
 [build-system]
@@ -23,7 +25,7 @@ build-backend = "flit_core.buildapi"
 
 # These apt dependencies will be installed from Ubuntu repositories when you host your app on Frappe Cloud
 [deploy.dependencies.apt]
-packages = []
+packages = ["tesseract-ocr"]
 
 [tool.ruff]
 line-length = 110
