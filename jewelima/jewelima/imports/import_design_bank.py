@@ -583,6 +583,73 @@ def list_duplicate_names(path):
 PACK_SETS = "/workspace/designbank/sets"
 
 
+def export_full(out_path=None):
+	"""FULL v2 snapshot: every Design Bank record with every field and child
+	table, names preserved, as one JSONL — plus the Design Tag master. Pairs
+	with import_full() on the server; image files travel by copying the site's
+	public/files (the slot files <code>.photo/info/customer.png + design-bank/).
+
+	bench --site <site> execute jewelima.jewelima.imports.import_design_bank.export_full
+	"""
+	import json as _json
+	out_path = out_path or frappe.get_site_path("private", "design_bank_full.jsonl")
+	tags = frappe.get_all("Design Tag", fields=["name", "color"], order_by="name")
+	n = 0
+	with open(out_path, "w") as fh:
+		fh.write(_json.dumps({"_type": "meta", "tags": tags, "exported": str(frappe.utils.now_datetime())}) + "\n")
+		for nm in frappe.get_all("Design Bank", pluck="name", order_by="name"):
+			d = frappe.get_doc("Design Bank", nm).as_dict()
+			for k in ("owner", "creation", "modified", "modified_by", "docstatus", "idx", "_user_tags",
+					"_comments", "_assign", "_liked_by"):
+				d.pop(k, None)
+			for table in ("tags", "stones", "review_images", "design_links"):
+				d[table] = [{k: v for k, v in row.items() if k in (
+					"tag", "stone", "sieve", "pcs", "ct", "image", "source_file", "design", "diversion_type")}
+					for row in (d.get(table) or [])]
+			fh.write(_json.dumps(d, default=str) + "\n")
+			n += 1
+	print(f"export_full: {n} cards -> {out_path}")
+	return {"cards": n, "path": out_path}
+
+
+def import_full(in_path=None, wipe=True):
+	"""Load an export_full() snapshot: wipe (default) and recreate every card
+	with its ORIGINAL name and every v2 field/child — dedupe decisions, review
+	states, photo slots all intact. Copy the files directory separately."""
+	import json as _json
+	in_path = in_path or frappe.get_site_path("private", "design_bank_full.jsonl")
+	if wipe:
+		for t in ("Design Bank Design Link", "Design Bank Review Image", "Design Bank Stone", "Design Bank Tag"):
+			frappe.db.delete(t)
+		frappe.db.delete("Design Bank")
+		frappe.db.commit()
+	created = failed = 0
+	with open(in_path) as fh:
+		for line in fh:
+			rec = _json.loads(line)
+			if rec.get("_type") == "meta":
+				for t in rec.get("tags", []):
+					if not frappe.db.exists("Design Tag", t["name"]):
+						frappe.get_doc({"doctype": "Design Tag", "tag_name": t["name"],
+							"color": t.get("color") or ""}).insert(ignore_permissions=True)
+				continue
+			try:
+				nm = rec.pop("name")
+				doc = frappe.get_doc(rec)
+				doc.name = nm
+				doc.flags.name_set = True
+				doc.flags.ignore_version = True
+				doc.insert(ignore_permissions=True, set_name=nm)
+				created += 1
+			except Exception:
+				failed += 1
+			if (created + failed) % 500 == 0:
+				frappe.db.commit()
+	frappe.db.commit()
+	print(f"import_full: {created} cards, {failed} failed")
+	return {"created": created, "failed": failed}
+
+
 def export_sets(out_dir=None):
 	"""Snapshot the 3 Design Bank tables to CSV in the pack (run after the team's edits)."""
 	import csv
