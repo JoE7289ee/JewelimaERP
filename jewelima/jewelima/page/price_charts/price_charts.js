@@ -15,6 +15,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let GROUPS = [];
 	let CERTS = [];   // Certification Type codes for the charges dropdown
+	let QUALS = [];   // parent-mapped diamond quality brackets (VVS-EF, VVS/VS-GH, SI-IJ...)
 	let cur = null;      // loaded chart payload (or a blank draft)
 	let snap = "";       // JSON snapshot taken after load; differs = real edits
 
@@ -67,6 +68,13 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Certification Type",
 		fields: ["name"], limit_page_length: 0, order_by: "name" } })
 		.then((r) => { CERTS = (r.message || []).map((x) => x.name); });
+	frappe.call({ method: "jewelima.jewelima.api.get_cert_prep_context" })
+		.then((r) => { QUALS = (r.message || {}).qualities || []; });
+	const qualSel = (v) => `<select data-f="quality">
+		<option value="">${__("any")}</option>
+		${QUALS.map((q) => `<option ${v === q ? "selected" : ""}>${esc(q)}</option>`).join("")}
+		${v && !QUALS.includes(v) ? `<option selected>${esc(v)}</option>` : ""}
+	</select>`;
 
 	function loadList(keep) {
 		frappe.call({ method: API + ".get_price_chart_list" }).then((r) => {
@@ -118,13 +126,13 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<tr data-i="${i}"><td><input data-f="sieve_label" value="${esc(r.sieve_label || "")}" placeholder="+2 - 6.5"></td>
 			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
-			<td><input data-f="quality" value="${esc(r.quality || "")}" placeholder="${__("blank = any")}"></td>
+			<td>${qualSel(r.quality || "")}</td>
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "sol") return cur.solitaire_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
-			<td><input data-f="quality" value="${esc(r.quality || "")}" placeholder="${__("blank = any")}"></td>
+			<td>${qualSel(r.quality || "")}</td>
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
