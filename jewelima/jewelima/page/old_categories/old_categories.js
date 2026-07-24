@@ -45,12 +45,33 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 	`);
 	const root = $(page.main);
 
+	// tree view: top-level parents only; clicking a parent unfolds its
+	// children in place (and shows the whole branch's cards)
+	let openParents = new Set();
 	function paintFolders(filter) {
 		const q = (filter || "").toUpperCase();
-		root.find(".oc-list").html(FOLDERS
-			.filter((f) => !q || f.folder.toUpperCase().includes(q))
-			.map((f) => `<div class="oc-f ${f.folder === curFolder ? "on" : ""}" data-f="${esc(f.folder)}">
-				<span>${esc(f.folder)}</span><span class="c">${f.count}</span></div>`).join(""));
+		const groups = {};
+		FOLDERS.forEach((f) => {
+			const top = f.folder.split("/")[0];
+			const g = groups[top] || (groups[top] = { count: 0, children: [] });
+			g.count += f.count;
+			if (f.folder !== top) g.children.push(f);
+			else g.self = f;
+		});
+		const html = Object.keys(groups).sort().map((top) => {
+			const g = groups[top];
+			const matches = !q || top.toUpperCase().includes(q) ||
+				g.children.some((c) => c.folder.toUpperCase().includes(q));
+			if (!matches) return "";
+			const opened = openParents.has(top) || (q && g.children.some((c) => c.folder.toUpperCase().includes(q)));
+			return `<div class="oc-f parent ${top === curFolder ? "on" : ""}" data-f="${esc(top)}" data-parent="1">
+					<span>${g.children.length ? (opened ? "▾ " : "▸ ") : ""}${esc(top)}</span><span class="c">${g.count}</span></div>` +
+				(opened ? g.children
+					.filter((c) => !q || c.folder.toUpperCase().includes(q) || top.toUpperCase().includes(q))
+					.map((c) => `<div class="oc-f child ${c.folder === curFolder ? "on" : ""}" data-f="${esc(c.folder)}" style="padding-left:30px;font-size:12px;">
+						<span>${esc(c.folder.split("/").slice(1).join("/"))}</span><span class="c">${c.count}</span></div>`).join("") : "");
+		}).join("");
+		root.find(".oc-list").html(html);
 	}
 	frappe.call({ method: API + ".get_old_categories" }).then((r) => {
 		FOLDERS = (r.message || {}).folders || [];
@@ -60,7 +81,7 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 
 	function load(reset) {
 		if (reset) { start = 0; root.find(".oc-grid").empty(); }
-		frappe.call({ method: API + ".get_old_category_designs", args: { folder: curFolder, start, limit: 60 } })
+		frappe.call({ method: API + ".get_old_category_designs", args: { folder: curFolder, start, limit: 60, subtree: curSubtree } })
 			.then((r) => {
 				const m = r.message || { rows: [], total: 0 };
 				root.find(".oc-title").text(`${curFolder} — ${m.total} ${__("design(s)")}`);
@@ -71,8 +92,14 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 				root.find(".oc-more").toggle(start < m.total);
 			});
 	}
+	let curSubtree = 0;
 	root.on("click", ".oc-f", function () {
 		curFolder = $(this).data("f");
+		curSubtree = $(this).data("parent") ? 1 : 0;
+		if (curSubtree) {
+			// toggle the branch open/closed and show the whole branch's cards
+			openParents.has(curFolder) ? openParents.delete(curFolder) : openParents.add(curFolder);
+		}
 		root.find(".oc-hint").hide();
 		paintFolders(root.find(".oc-search").val());
 		load(true);

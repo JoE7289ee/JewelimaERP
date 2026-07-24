@@ -555,9 +555,11 @@ def get_old_categories():
 
 
 @frappe.whitelist()
-def get_old_category_designs(folder, start=0, limit=60):
-	"""The cards that lived in one old folder (read-only browse)."""
-	filters = {"source_folder": folder}
+def get_old_category_designs(folder, start=0, limit=60, subtree=0):
+	"""The cards that lived in one old folder (read-only browse). subtree=1
+	includes every folder underneath (a parent shows its whole branch)."""
+	filters = ({"source_folder": ["like", folder + "%"]} if int(subtree or 0)
+		else {"source_folder": folder})
 	rows = frappe.get_all("Design Bank", filters=filters,
 		fields=["name", "design_no", "status", "image", "raw_image", "photo"],
 		order_by="design_no", start=int(start), limit=int(limit))
