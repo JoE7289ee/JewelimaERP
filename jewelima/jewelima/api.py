@@ -6329,6 +6329,7 @@ def get_price_chart(name):
 		"certification_charges": [{"certification": r.certification, "rate": r.rate}
 			for r in (d.get("certification_charges") or [])],
 		"colour_stone_rate": flt(d.colour_stone_rate), "precious_stone_rate": flt(d.precious_stone_rate),
+		"precious_stone_rates": [{"stone": r.stone, "rate": r.rate} for r in (d.get("precious_stone_rates") or [])],
 		"job_work_pty_rate": flt(d.job_work_pty_rate),
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"setting_rates": [{"stone_ct": r.stone_ct, "rate": r.rate} for r in d.setting_rates],
@@ -6373,6 +6374,9 @@ def save_price_chart(payload):
 				"rate": flt(r.get("rate"))})
 	doc.colour_stone_rate = flt(p.get("colour_stone_rate"))
 	doc.precious_stone_rate = flt(p.get("precious_stone_rate"))
+	for r in p.get("precious_stone_rates") or []:
+		if (r.get("stone") or "").strip():
+			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(), "rate": flt(r.get("rate"))})
 	doc.job_work_pty_rate = flt(p.get("job_work_pty_rate"))
 	doc.making_rate = flt(p.get("making_rate"))
 	doc.making_min_grams = flt(p.get("making_min_grams"))
@@ -6410,6 +6414,8 @@ def _price_chart_letter_html(d):
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
 		frappe.utils.escape_html(r["certification"]), "₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included")
 		for r in d.get("certification_charges", []))
+	psr = "".join("<tr><td>{0}</td><td class='r'>₹ {1} / ct</td></tr>".format(
+		frappe.utils.escape_html(r["stone"]), money(r["rate"])) for r in d.get("precious_stone_rates", []))
 	setting = "".join("<tr><td>{0} ct</td><td class='r'>₹ {1}</td></tr>".format(
 		r["stone_ct"], money(r["rate"])) for r in d["setting_rates"])
 	special = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
@@ -6459,7 +6465,7 @@ def _price_chart_letter_html(d):
 		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
-		{dmd_sec}{sol_sec}{setting_sec}{special_sec}{flat_sec}{cert_sec}
+		{dmd_sec}{sol_sec}{ps_sec}{setting_sec}{special_sec}{flat_sec}{cert_sec}
 		{payment}{terms}
 		<div class='sign'>
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
@@ -6472,6 +6478,7 @@ def _price_chart_letter_html(d):
 		sol_sec=sec("Solitaire Rates (per-stone above {0} ct)".format(d.get("solitaire_min_ct", 0.07)),
 			"<thead><tr><th>Per-stone size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", sol),
 		cert_sec=sec("Certification Charges", "", certs),
+		ps_sec=sec("Precious Stone Rates", "", psr),
 		setting_sec=sec("Setting Rates", "<thead><tr><th>Stone Size</th><th class='r'>Rate</th></tr></thead>", setting),
 		special_sec=sec("Special Works", "<thead><tr><th>Work</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", special),
 		flat_sec=sec("Making &amp; Charges", "", flat_rows),
@@ -7045,7 +7052,25 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			"ct": round(s["ct"], 3), "rate": rate})
 
 	# ---- other stones + party job work ----------------------------------------
-	stone_value = (flt(b.act_cs_weight) + flt(b.act_cz_weight)) * flt(chart.colour_stone_rate) + flt(b.act_ps_weight) * flt(chart.precious_stone_rate)
+	# precious stones price PER STONE (Ruby 1ct = 200 — flat ₹/ct, no weight
+	# ranges). Rows present = they are the law: a PS stone without a row blocks
+	# the scan. Empty table = the legacy flat rate.
+	ps_rows = {(r.stone or "").upper(): flt(r.rate) for r in (chart.get("precious_stone_rates") or [])}
+	ps_value = 0.0
+	ps_detail = []
+	if ps_rows:
+		for item, qty in _bag_convert_materials([nm])[nm].items():
+			if frappe.db.get_value("Item", item, "stone_type") != "Precious Stone":
+				continue
+			rate = ps_rows.get(item.upper())
+			if rate is None:
+				frappe.throw(frappe._("{0} carries {1} but chart {2} has no rate for it — scan denied.").format(
+					nm, item, chart.chart_name))
+			ps_value += flt(qty) * rate
+			ps_detail.append({"stone": item, "ct": round(flt(qty), 3), "rate": rate})
+	else:
+		ps_value = flt(b.act_ps_weight) * flt(chart.precious_stone_rate)
+	stone_value = (flt(b.act_cs_weight) + flt(b.act_cz_weight)) * flt(chart.colour_stone_rate) + ps_value
 	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
 	job_work = flt(b.act_pdmd_weight) * flt(chart.job_work_pty_rate)
 
@@ -7109,6 +7134,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"stone_value": round(stone_value, 2), "labour_value": round(labour, 2),
 		"charges_value": round(charges, 2),
 		"dmd_detail": dmd_detail, "sol_detail": sol_detail, "cert_detail": cert_detail,
+		"ps_detail": ps_detail,
 		"labour_rule": rule_desc,
 	}
 

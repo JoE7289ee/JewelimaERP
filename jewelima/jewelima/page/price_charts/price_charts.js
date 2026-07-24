@@ -68,6 +68,10 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Certification Type",
 		fields: ["name"], limit_page_length: 0, order_by: "name" } })
 		.then((r) => { CERTS = (r.message || []).map((x) => x.name); });
+	let PSTONES = [];
+	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Item",
+		filters: { stone_type: "Precious Stone" }, fields: ["name"], limit_page_length: 0, order_by: "name" } })
+		.then((r) => { PSTONES = (r.message || []).map((x) => x.name); });
 	frappe.call({ method: "jewelima.jewelima.api.get_cert_prep_context" })
 		.then((r) => { QUALS = (r.message || {}).qualities || []; });
 	const qualSel = (v) => `<select data-f="quality">
@@ -105,7 +109,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
 		diamond_quality_note: "", diamond_rates: [], setting_rates: [], special_works: [],
-		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [],
+		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [], precious_stone_rates: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
 		payment_terms: "", terms: "", signatory: "", signatory_phone: "" });
@@ -133,6 +137,14 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td>${qualSel(r.quality || "")}</td>
+			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
+			<td class="del">&times;</td></tr>`).join("");
+		if (kind === "ps") return cur.precious_stone_rates.map((r, i) => `
+			<tr data-i="${i}"><td><select data-f="stone">
+				<option value=""></option>
+				${PSTONES.map((p) => `<option ${r.stone === p ? "selected" : ""}>${esc(p)}</option>`).join("")}
+				${r.stone && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
+			</select></td>
 			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
@@ -178,6 +190,9 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Certification Charges — a cert on the bag missing here BLOCKS the scan")}<span class="add" data-k="cert">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Rate ₹/piece")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cert")}</tbody></table>
+			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (rows present = a PS stone without a row blocks the scan)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Setting Rates")}<span class="add" data-k="set">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="set"><thead><tr><th>${__("Stone ct")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("set")}</tbody></table>
@@ -222,7 +237,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[$(this).data("f")] = this.type === "number" ? flt($(this).val()) : $(this).val();
 	});
 	const KIND_ARR = { dmd: "diamond_rates", set: "setting_rates", spw: "special_works",
-		sol: "solitaire_rates", cert: "certification_charges" };
+		sol: "solitaire_rates", cert: "certification_charges", ps: "precious_stone_rates" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
 		const $t = $(this).closest("table.pc-t");
 		const arr = cur[KIND_ARR[$t.data("k")]];
@@ -235,6 +250,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "sol" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", rate: "" }
+			: k === "ps" ? { stone: "", rate: "" }
 			: k === "set" ? { stone_ct: "", rate: "" } : { work_name: "", basis: "Per Piece", rate: "" });
 		paintEditor();
 	});

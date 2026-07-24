@@ -19,6 +19,7 @@
   "stones_section",
   "colour_stone_rate",
   "precious_stone_rate",
+  "precious_stone_rates",
   "col_break_stones",
   "job_work_pty_rate",
   "making_section",
@@ -124,6 +125,13 @@
    "fieldtype": "Float",
    "label": "Precious Stone Rate (\u20b9/ct)",
    "precision": "2"
+  },
+  {
+   "fieldname": "precious_stone_rates",
+   "fieldtype": "Table",
+   "options": "Price Chart Stone Rate",
+   "label": "Precious Stone Rates",
+   "description": "Per-stone \u20b9/ct (Ruby 1ct = 200). When rows exist they are THE price \u2014 a PS stone without a row blocks the scan; the flat rate above only applies when this table is empty."
   },
   {
    "fieldname": "col_break_stones",
@@ -233,7 +241,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 23:45:00.000000",
+ "modified": "2026-07-24 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",
