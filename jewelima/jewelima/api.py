@@ -6503,7 +6503,7 @@ def _price_chart_letter_html(d):
 		logo=logo_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		qnote="",
-		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieve</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
+		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieves</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
 		sol_sec=sec("Solitaire Rates (per-stone above {0} ct)".format(d.get("solitaire_min_ct", 0.07)),
 			"<thead><tr><th>Per-stone size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", sol),
 		cert_sec=sec("Certification Charges", "", certs),

@@ -193,7 +193,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 					<span style="font-size:11px;color:var(--text-muted);">${esc(cur.name)}</span>` : ""}
 			</div>
 			<div class="pc-sec">${__("Diamond Rates (₹/ct by size bracket)")}<span class="add" data-k="dmd">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("Sieve label")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("Sieves")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("dmd")}</tbody></table>
 			<div class="pc-sec">${__("Solitaire Rates — per-stone above the threshold leaves the diamond totals")}<span class="add" data-k="sol">+ ${__("row")}</span></div>
 			<div class="pc-flats"><div><label>${__("Solitaire threshold ct / stone")}</label>
