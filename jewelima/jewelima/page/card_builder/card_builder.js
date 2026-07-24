@@ -45,8 +45,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		</style>
 		<div class="cb-cols">
 			<div class="cb-right">
-				<div class="cb-row"><div class="cb-pick"></div><div class="cb-series"></div>
-</div>
+				<div class="cb-row"><div class="cb-pick"></div></div>
 				<div class="cb-code"><div class="cb-no"></div><span class="cb-codechk"></span></div>
 				<div class="cb-row"><div class="cb-dtype"></div><div class="cb-gw"></div><div class="cb-dw"></div></div>
 				<div class="cb-sec">${__("Stones / Sieves")}<span class="add cb-addstone">+ ${__("row")}</span></div>
@@ -73,7 +72,6 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	const fPick = mk(".cb-pick", { fieldtype: "Link", label: __("Edit existing (design no)"), fieldname: "pick", options: "Design Bank" });
-	const fSeries = mk(".cb-series", { fieldtype: "Data", label: __("New series prefix (JS / JN...)"), fieldname: "ser" });
 	const fNo = mk(".cb-no", { fieldtype: "Data", label: __("Design Number"), fieldname: "no" });
 	const fType = mk(".cb-dtype", { fieldtype: "Link", label: __("Design Type"), fieldname: "dt", options: "Design Type" });
 	const fGW = mk(".cb-gw", { fieldtype: "Float", label: __("Gross Weight (g)"), fieldname: "gw" });
@@ -140,12 +138,6 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 				.toggleClass("ok", !m.taken || mine).toggleClass("bad", m.taken && !mine)
 				.text(!m.taken || mine ? __("✓ free") : __("✗ taken ({0})", [m.status]));
 		});
-	});
-	fSeries.$input.on("change", () => {
-		const p = (fSeries.get_value() || "").trim();
-		if (!p) return;
-		frappe.call({ method: API + ".next_design_code", args: { prefix: p } })
-			.then((r) => { fNo.set_value((r.message || {}).code || ""); fNo.$input.trigger("input"); preview(); });
 	});
 
 	function loadCard(name) {
