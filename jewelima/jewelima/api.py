@@ -7077,7 +7077,7 @@ def export_sale_bill_pdf(payload):
 	taxed = cint(p.get("tax", 1))
 	tax_amt = round(base * 3 / 100, 2) if taxed else 0.0
 	head = "<tr><th>{0}</th><th>{1}</th><th class='r'>{2}</th><th class='r'>{3}</th>{4}<th class='r'>{5}</th></tr>".format(
-		frappe._("Barcode"), frappe._("Design"), frappe._("Nett Wt"), frappe._("DMD ct"),
+		frappe._("Barcode"), frappe._("Item"), frappe._("Nett Wt"), frappe._("DMD ct"),
 		"".join("<th class='r'>{0} &#8377;</th>".format(frappe.utils.escape_html(labels[k])) for k in keys),
 		frappe._("Total &#8377;"))
 	tot_row = "<tr class='tot'><td colspan='4'>{0}</td>{1}<td class='r b'>{2}</td></tr>".format(
@@ -7152,7 +7152,7 @@ def export_sale_bill_xlsx(payload):
 	ws.append(["Sale Bill", p.get("customer") or "(no buyer yet)", "",
 		"Chart: " + (p.get("price_chart") or "-"), "Gold rate: " + str(flt(p.get("gold_rate")))])
 	ws.append([])
-	cols = ["Barcode", "Design", "Type", "Nett Wt", "DMD ct"] + [labels[k] for k in keys] + ["Total"]
+	cols = ["Barcode", "Item", "Type", "Nett Wt", "DMD ct"] + [labels[k] for k in keys] + ["Total"]
 	ws.append(cols)
 	for c in ws[3]:
 		c.font, c.fill = head_font, head_fill
