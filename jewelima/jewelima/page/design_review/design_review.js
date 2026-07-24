@@ -109,8 +109,6 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	}
 	root.find(".rv-save").on("click", () => save(true));
 	root.find(".rv-skip").on("click", () => save(false));
-	root.find(".rv-retire").on("click", () => frappe.confirm(
-		__("Retire {0}? The code stays reserved forever; the card leaves the active catalog.", [cur.design_no]),
-		() => save(false, true)));
+	root.find(".rv-retire").on("click", () => save(false, true));
 	load();
 };
