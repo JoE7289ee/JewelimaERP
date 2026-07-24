@@ -6332,6 +6332,8 @@ def get_price_chart(name):
 		"precious_stone_rates": [{"stone": r.stone, "rate": r.rate} for r in (d.get("precious_stone_rates") or [])],
 		"job_work_pty_rate": flt(d.job_work_pty_rate),
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
+		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
+			"rate": r.rate, "min_per_piece": r.min_per_piece} for r in (d.get("making_rules") or [])],
 		"setting_rates": [{"stone_ct": r.stone_ct, "rate": r.rate} for r in d.setting_rates],
 		"special_works": [{"work_name": r.work_name, "basis": r.basis, "rate": r.rate} for r in d.special_works],
 		"hallmark_charge": flt(d.hallmark_charge), "certification_charge": flt(d.certification_charge),
@@ -6380,6 +6382,11 @@ def save_price_chart(payload):
 	doc.job_work_pty_rate = flt(p.get("job_work_pty_rate"))
 	doc.making_rate = flt(p.get("making_rate"))
 	doc.making_min_grams = flt(p.get("making_min_grams"))
+	for r in p.get("making_rules") or []:
+		if flt(r.get("rate")):
+			doc.append("making_rules", {"design_type": r.get("design_type") or None,
+				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
+				"min_per_piece": flt(r.get("min_per_piece"))})
 	for r in p.get("setting_rates") or []:
 		if r.get("rate"):
 			doc.append("setting_rates", {"stone_ct": flt(r.get("stone_ct")), "rate": flt(r.get("rate"))})
@@ -6436,8 +6443,13 @@ def _price_chart_letter_html(d):
 		r["stone_ct"], money(r["rate"])) for r in d["setting_rates"])
 	special = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
 		frappe.utils.escape_html(r["work_name"]), r["basis"], money(r["rate"])) for r in d["special_works"])
+	mkr = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}{3}</td></tr>".format(
+		frappe.utils.escape_html(r["design_type"] or "All designs (default)"), r["basis"],
+		money(r["rate"]) + ("/g" if r["basis"] == "Per Gram" else "/pc"),
+		" · min ₹ " + money(r["min_per_piece"]) if flt(r.get("min_per_piece")) else "")
+		for r in d.get("making_rules", []))
 	flats = []
-	if flt(d["making_rate"]):
+	if not d.get("making_rules") and flt(d["making_rate"]):
 		note = " (min {0} g per piece)".format(d["making_min_grams"]) if flt(d["making_min_grams"]) else ""
 		flats.append(("Making charge", "₹ {0} / g{1}".format(money(d["making_rate"]), note)))
 	if flt(d["colour_stone_rate"]):
@@ -6481,7 +6493,7 @@ def _price_chart_letter_html(d):
 		<div class='head'><div class='brand'>JEWELIMA</div><div class='doc'>Rate Chart</div></div>
 		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
 		{qnote}
-		{dmd_sec}{sol_sec}{ps_sec}{setting_sec}{special_sec}{flat_sec}{cert_sec}
+		{dmd_sec}{sol_sec}{ps_sec}{mk_sec}{setting_sec}{special_sec}{flat_sec}{cert_sec}
 		{payment}{terms}
 		<div class='sign'>
 			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
@@ -6495,6 +6507,7 @@ def _price_chart_letter_html(d):
 			"<thead><tr><th>Per-stone size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", sol),
 		cert_sec=sec("Certification Charges", "", certs),
 		ps_sec=sec("Precious Stone Rates", "", psr),
+		mk_sec=sec("Making Charges", "<thead><tr><th>Design</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", mkr),
 		setting_sec=sec("Setting Rates", "<thead><tr><th>Stone Size</th><th class='r'>Rate</th></tr></thead>", setting),
 		special_sec=sec("Special Works", "<thead><tr><th>Work</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", special),
 		flat_sec=sec("Making &amp; Charges", "", flat_rows),
@@ -7090,14 +7103,41 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
 	job_work = flt(b.act_pdmd_weight) * flt(chart.job_work_pty_rate)
 
-	# ---- gold + making (flat rule: under the minimum grams bills AS the minimum)
+	# ---- gold + making --------------------------------------------------------
 	nett = flt(b.act_nett_weight)
 	gold_value = nett * gold_rate
-	min_g = flt(chart.making_min_grams) or 1
-	billed_g = max(nett, min_g) if flt(chart.making_rate) else 0
-	labour = billed_g * flt(chart.making_rate)
+	labour = 0.0
 	rule_desc = ""
-	if flt(chart.making_rate):
+	making_rules = list(chart.get("making_rules") or [])
+	if making_rules:
+		# per design type, blank row = DEFAULT; the minimum is a RUPEE floor
+		# (rate 1500/g but anything under 1250 bills as 1250)
+		row = next((r for r in making_rules if (r.design_type or "") == design_type and design_type), None) \
+			or next((r for r in making_rules if not r.design_type), None)
+		if not row:
+			frappe.throw(frappe._("{0} ({1}) has no making rule on chart {2} and no DEFAULT row — scan denied.").format(
+				nm, design_type or "no type", chart.chart_name))
+		basis = row.basis or "Per Gram"
+		if basis == "Per Gram":
+			labour = nett * flt(row.rate)
+			rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
+			if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
+				labour = flt(row.min_per_piece)
+				rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
+		elif basis == "Per Piece":
+			labour = flt(row.rate)
+			rule_desc = "{0}/pc".format(flt(row.rate))
+		else:
+			frappe.throw(frappe._("Making basis {0} isn't wired yet — use Per Gram or Per Piece.").format(basis))
+		if row.design_type:
+			rule_desc += " [{0}]".format(row.design_type)
+		else:
+			rule_desc += " [default]"
+	elif flt(chart.making_rate):
+		# legacy flat rule: under the minimum grams bills AS the minimum
+		min_g = flt(chart.making_min_grams) or 1
+		billed_g = max(nett, min_g)
+		labour = billed_g * flt(chart.making_rate)
 		rule_desc = "{0} g x {1}/g".format(round(billed_g, 3), flt(chart.making_rate))
 		if nett < min_g:
 			rule_desc += " (min {0} g)".format(min_g)

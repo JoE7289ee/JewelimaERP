@@ -26,6 +26,7 @@
   "making_rate",
   "col_break_making",
   "making_min_grams",
+  "making_rules",
   "setting_section",
   "setting_rates",
   "special_section",
@@ -169,6 +170,13 @@
    "precision": "3"
   },
   {
+   "fieldname": "making_rules",
+   "fieldtype": "Table",
+   "options": "Price Chart Making Rule",
+   "label": "Making Rules",
+   "description": "Per design type; the blank-design-type row is the DEFAULT. Per Gram: labour = max(rate x nett g, minimum rupees)."
+  },
+  {
    "fieldname": "setting_section",
    "fieldtype": "Section Break",
    "label": "Setting Ladder (\u20b9 per stone, by stone size)"
@@ -241,7 +249,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-24 15:00:00.000000",
+ "modified": "2026-07-24 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart",

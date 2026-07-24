@@ -69,6 +69,10 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		fields: ["name"], limit_page_length: 0, order_by: "name" } })
 		.then((r) => { CERTS = (r.message || []).map((x) => x.name); });
 	let PSTONES = [];
+	let DTYPES = [];
+	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Design Type",
+		fields: ["name"], limit_page_length: 0, order_by: "name" } })
+		.then((r) => { DTYPES = (r.message || []).map((x) => x.name); });
 	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Item",
 		filters: { stone_type: "Precious Stone" }, fields: ["name"], limit_page_length: 0, order_by: "name" } })
 		.then((r) => { PSTONES = (r.message || []).map((x) => x.name); });
@@ -109,7 +113,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
 		diamond_quality_note: "", diamond_rates: [], setting_rates: [], special_works: [],
-		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [], precious_stone_rates: [],
+		solitaire_min_ct: 0.07, solitaire_rates: [], certification_charges: [], precious_stone_rates: [], making_rules: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
 		payment_terms: "", terms: "", signatory: "", signatory_phone: "" });
@@ -149,6 +153,16 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				${r.stone && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
 			</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
+			<td class="del">&times;</td></tr>`).join("");
+		if (kind === "mk") return cur.making_rules.map((r, i) => `
+			<tr data-i="${i}"><td><select data-f="design_type">
+				<option value="">${__("DEFAULT (any type)")}</option>
+				${DTYPES.map((t) => `<option ${r.design_type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
+			</select></td>
+			<td><select data-f="basis">${["Per Gram", "Per Piece"].map((b) =>
+				`<option ${(r.basis || "Per Gram") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
+			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹ (Per Gram)")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "cert") return cur.certification_charges.map((r, i) => `
 			<tr data-i="${i}"><td><select data-f="certification">
@@ -202,10 +216,11 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Special Works")}<span class="add" data-k="spw">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="spw"><thead><tr><th>${__("Work")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("spw")}</tbody></table>
-			<div class="pc-sec">${__("Making & Flat Charges")}</div>
+			<div class="pc-sec">${__("Making Charges — per design type; the DEFAULT row catches everything else. Per Gram floors to the minimum ₹ (1500/g but never under 1,250)")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("mk")}</tbody></table>
+			<div class="pc-sec">${__("Flat Charges")}</div>
 			<div class="pc-flats">
-				<div><label>${__("Making ₹/g")}</label><input class="pc-f" data-f="making_rate" type="number" value="${num(cur.making_rate)}"></div>
-				<div><label>${__("Making minimum grams")}</label><input class="pc-f" data-f="making_min_grams" type="number" step="0.1" value="${num(cur.making_min_grams)}"></div>
 				<div><label>${__("Colour stone ₹/ct")}</label><input class="pc-f" data-f="colour_stone_rate" type="number" value="${num(cur.colour_stone_rate)}"></div>
 				<div><label>${__("Precious stone ₹/ct")}</label><input class="pc-f" data-f="precious_stone_rate" type="number" value="${num(cur.precious_stone_rate)}"></div>
 				<div><label>${__("Party-diamond job work ₹/ct")}</label><input class="pc-f" data-f="job_work_pty_rate" type="number" value="${num(cur.job_work_pty_rate)}"></div>
@@ -240,7 +255,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[$(this).data("f")] = this.type === "number" ? flt($(this).val()) : $(this).val();
 	});
 	const KIND_ARR = { dmd: "diamond_rates", set: "setting_rates", spw: "special_works",
-		sol: "solitaire_rates", cert: "certification_charges", ps: "precious_stone_rates" };
+		sol: "solitaire_rates", cert: "certification_charges", ps: "precious_stone_rates", mk: "making_rules" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
 		const $t = $(this).closest("table.pc-t");
 		const arr = cur[KIND_ARR[$t.data("k")]];
@@ -258,6 +273,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			: k === "sol" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", rate: "" }
 			: k === "ps" ? { stone: "", rate: "" }
+			: k === "mk" ? { design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
 			: k === "set" ? { stone_ct: "", rate: "" } : { work_name: "", basis: "Per Piece", rate: "" });
 		paintEditor();
 	});
