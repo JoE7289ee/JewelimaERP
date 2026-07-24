@@ -301,42 +301,32 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
 
-	// Pricing Rules — the chart's rules in effect + bulk % adjustments (discounts)
-	// across the bill. Adjustments ride to create_product_sale and land as an
-	// audit comment on the Product Sale.
+	// Pricing Rules — ONLY the components priced on THIS bill, with a live %
+	// board: type -10 next to Diamond and the reduced amount shows instantly.
+	// Apply rescales the bill's cells (the Price Chart itself is never touched);
+	// re-opening shows the already-reduced amounts. The applied adjustments ride
+	// to create_product_sale and land as an audit comment on the Product Sale.
 	page.add_inner_button(__("Pricing Rules"), () => {
-		if (!chart.get_value()) {
-			frappe.show_alert({ message: __("Pick a price chart first."), indicator: "orange" }, 4);
+		if (!S.rows.length) {
+			frappe.show_alert({ message: __("Scan pieces first — this board adjusts what is on the bill."), indicator: "orange" }, 4);
 			return;
 		}
 		const cols = activeCols();
-		const fields = [
-			{ fieldtype: "HTML", fieldname: "adj_note", options: `<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">
-				${S.rows.length ? __("Bulk adjust the bill: percentage per component (e.g. -10 = 10% discount). Applies to every scanned line; the sale's audit trail records it.")
-					: __("Scan pieces first to bulk-adjust their prices. Below are the chart's rules in effect.")}</div>` },
-		];
-		if (S.rows.length) {
-			cols.forEach((k, i) => {
-				fields.push({ fieldtype: i % 4 === 0 ? "Section Break" : "Column Break", fieldname: "b" + i });
-				fields.push({ fieldtype: "Float", fieldname: "adj:" + k, label: colLabel(k) + " %" });
-			});
-		}
-		if (S.adjust.length) {
-			fields.push({ fieldtype: "HTML", fieldname: "adj_done", options: `<div style="font-size:12px;color:#9a6700;margin:4px 0;">
-				${__("Already applied")}: ${esc(S.adjust.join("; "))}</div>` });
-		}
-		fields.push({ fieldtype: "Section Break", fieldname: "rl_sec", label: __("Rules in effect — {0}", [chart.get_value()]) });
-		fields.push({ fieldtype: "HTML", fieldname: "rules_html", options: `<div class="sl-rules" style="max-height:50vh;overflow:auto;border:1px solid var(--border-color);border-radius:6px;"></div>` });
+		const cur = {};
+		cols.forEach((k) => {
+			cur[k] = S.rows.reduce((s, r) => s + compVal((r.components || {})[k]), 0);
+		});
+		const grand0 = Object.values(cur).reduce((a, b) => a + b, 0);
 		const dlg = new frappe.ui.Dialog({
-			title: __("Pricing Rules"),
+			title: __("Pricing in effect — this sale only"),
 			size: "large",
-			fields,
-			primary_action_label: S.rows.length ? __("Apply Adjustments") : __("Close"),
-			primary_action: (v) => {
-				if (!S.rows.length) return dlg.hide();
+			fields: [{ fieldtype: "HTML", fieldname: "board" }],
+			primary_action_label: __("Apply to Bill"),
+			primary_action: () => {
 				const applied = [];
-				cols.forEach((k) => {
-					const pct = flt(v["adj:" + k]);
+				dlg.$wrapper.find(".pr-pct").each(function () {
+					const k = this.getAttribute("data-k");
+					const pct = flt(this.value);
 					if (!pct) return;
 					S.rows.forEach((r) => {
 						const c = (r.components || {})[k];
@@ -348,13 +338,55 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 				if (!applied.length) return;
 				S.adjust = S.adjust.concat(applied);
 				paint();
-				frappe.show_alert({ message: __("Applied: {0}. The sale will carry this in its audit trail.", [applied.join("; ")]), indicator: "blue" }, 6);
+				frappe.show_alert({ message: __("Applied: {0}. Recorded in the sale's audit trail.", [applied.join("; ")]), indicator: "blue" }, 6);
 			},
 		});
+		dlg.get_field("board").$wrapper.html(`
+			<style>
+			table.pr-tbl{width:100%;border-collapse:collapse;font-size:13px;}
+			table.pr-tbl th{text-align:left;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:4px 8px;border-bottom:1px solid var(--gray-400,#aeb6bf);}
+			table.pr-tbl td{padding:5px 8px;border-bottom:1px solid var(--border-color);font-variant-numeric:tabular-nums;}
+			table.pr-tbl td.r,table.pr-tbl th.r{text-align:right;}
+			table.pr-tbl input.pr-pct{width:80px;text-align:right;border:1px solid var(--gray-400,#aeb6bf);border-radius:4px;height:26px;padding:1px 6px;background:var(--fg-color);color:var(--text-color);}
+			table.pr-tbl .pr-new{font-weight:700;}
+			table.pr-tbl .pr-cut{color:#b02a2a;font-weight:600;}
+			table.pr-tbl tr.pr-grand td{font-weight:800;border-top:2px solid var(--gray-400,#aeb6bf);font-size:14px;}
+			.pr-hist{margin-top:8px;font-size:12px;color:#9a6700;}
+			</style>
+			<table class="pr-tbl">
+				<thead><tr><th>${__("Component")}</th><th class="r">${__("Current ₹")}</th>
+				<th class="r">${__("Adjust %")}</th><th class="r">${__("After ₹")}</th><th class="r">${__("Difference ₹")}</th></tr></thead>
+				<tbody>
+				${cols.map((k) => `
+					<tr data-k="${k}">
+						<td>${esc(colLabel(k))}</td>
+						<td class="r">${money(cur[k])}</td>
+						<td class="r"><input class="pr-pct" data-k="${k}" type="number" step="0.5" placeholder="0"></td>
+						<td class="r pr-new">${money(cur[k])}</td>
+						<td class="r pr-cut"></td>
+					</tr>`).join("")}
+				<tr class="pr-grand"><td>${__("Grand Total")}</td><td class="r">${money(grand0)}</td><td></td>
+					<td class="r pr-gnew">${money(grand0)}</td><td class="r pr-cut pr-gcut"></td></tr>
+				</tbody>
+			</table>
+			${S.adjust.length ? `<div class="pr-hist">${__("Already applied earlier (amounts above include it)")}: ${esc(S.adjust.join("; "))}</div>` : ""}
+		`);
+		// live math while typing
+		dlg.$wrapper.on("input", ".pr-pct", () => {
+			let gnew = 0;
+			dlg.$wrapper.find("tr[data-k]").each(function () {
+				const k = this.getAttribute("data-k");
+				const pct = flt($(this).find(".pr-pct").val());
+				const after = Math.round(cur[k] * (1 + pct / 100) * 100) / 100;
+				gnew += after;
+				$(this).find(".pr-new").text(money(after));
+				$(this).find(".pr-cut").text(pct ? (after >= cur[k] ? "+₹" : "−₹") + money(Math.abs(after - cur[k])).slice(1) : "");
+			});
+			dlg.$wrapper.find(".pr-gnew").text(money(gnew));
+			const d = gnew - grand0;
+			dlg.$wrapper.find(".pr-gcut").text(d ? (d > 0 ? "+₹" : "−₹") + money(Math.abs(d)).slice(1) : "");
+		});
 		dlg.show();
-		// the chart letter IS the rules in effect — render it inside the dialog
-		frappe.call({ method: API + ".price_chart_letter", args: { name: chart.get_value() }, freeze: false })
-			.then((r) => dlg.get_field("rules_html").$wrapper.find(".sl-rules").html((r.message || {}).html || ""));
 	});
 
 	page.add_inner_button(__("Sale Records"), () => frappe.set_route("List", "Product Sale"));
