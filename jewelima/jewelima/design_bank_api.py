@@ -407,7 +407,7 @@ def get_photo_update_queue(start=0, limit=30):
 	"""Cards flagged Upgrade Photo that have NO candidate yet."""
 	filters = {"photoupdate": 1, "pending_photo": ["is", "not set"]}
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name", "design_no", "photo", "image"],
+		fields=["name", "design_no", "photo", "image", "raw_image"],
 		order_by="design_no", start=int(start), limit=int(limit))
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
 
