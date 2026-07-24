@@ -6464,7 +6464,7 @@ def _price_chart_letter_html(d):
 		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 12.5px; }}
 		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 8px; margin-bottom: 12px; }}
 		.head img {{ max-height: 64px; max-width: 320px; }}
-		.foot {{ margin-top: 12px; text-align: center; page-break-inside: avoid; }}
+		.foot {{ margin-top: 12px; text-align: center; }}
 		.foot .rule {{ border-top: 1px solid #1f4e5f; margin-bottom: 8px; }}
 		.foot .tag {{ font-size: 12px; letter-spacing: .35em; color: #1f4e5f; text-transform: lowercase; }}
 		.doc {{ font-size: 13px; color: #666; margin-top: 2px; }}
@@ -6481,7 +6481,8 @@ def _price_chart_letter_html(d):
 		td {{ padding: 5px 8px; border-bottom: 1px solid #eee; }}
 		td.r, th.r {{ text-align: right; white-space: nowrap; }}
 		.terms {{ margin-top: 16px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
-		.sign {{ margin-top: 18px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid; }}
+		.closing {{ page-break-inside: avoid; }}
+		.sign {{ margin-top: 18px; display: flex; justify-content: space-between; align-items: flex-end; }}
 		.sign .who {{ font-weight: 700; }}
 		.sign .line {{ border-top: 1px solid #999; padding-top: 4px; width: 220px; text-align: center; color: #666; font-size: 11px; }}
 	</style></head><body>
@@ -6490,11 +6491,13 @@ def _price_chart_letter_html(d):
 		{qnote}
 		{dmd_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
 		{payment}{terms}
-		<div class='sign'>
-			<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
-			<div class='line'>Authorised Signatory</div>
+		<div class='closing'>
+			<div class='sign'>
+				<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
+				<div class='line'>Authorised Signatory</div>
+			</div>
+			<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
 		</div>
-		<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
 	</body></html>""".format(
 		logo=logo_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
