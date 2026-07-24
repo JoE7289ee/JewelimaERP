@@ -583,6 +583,67 @@ def list_duplicate_names(path):
 PACK_SETS = "/workspace/designbank/sets"
 
 
+def set_priorities(file_path):
+	"""Bulk review priorities from the user's excel/csv. Two shapes accepted:
+	  - columns designno + priority        -> explicit numbers, OR
+	  - a single designno column           -> row ORDER is the priority
+	    (first row = highest). Matching is case-insensitive on design_no;
+	    unknown codes are reported, nothing else is touched.
+
+	bench --site <site> execute ...import_design_bank.set_priorities \
+	    --kwargs "{'file_path': '/tmp/priority.xlsx'}"
+	"""
+	rows = []
+	if file_path.lower().endswith((".xlsx", ".xlsm")):
+		from openpyxl import load_workbook
+		ws = load_workbook(file_path, data_only=True).active
+		data = [[c for c in r] for r in ws.iter_rows(values_only=True)]
+	else:
+		import csv
+		with open(file_path, newline="") as fh:
+			data = [r for r in csv.reader(fh)]
+	if not data:
+		frappe.throw("Empty file.")
+	head = [str(c or "").strip().lower() for c in data[0]]
+	has_header = "designno" in head or "design_no" in head or "priority" in head
+	code_i = 0
+	prio_i = None
+	if has_header:
+		for i, h in enumerate(head):
+			if h in ("designno", "design_no", "design"):
+				code_i = i
+			if h == "priority":
+				prio_i = i
+		data = data[1:]
+	n = len(data)
+	for idx, r in enumerate(data):
+		code = str(r[code_i] or "").strip() if len(r) > code_i else ""
+		if not code:
+			continue
+		prio = None
+		if prio_i is not None and len(r) > prio_i and str(r[prio_i] or "").strip():
+			try:
+				prio = int(float(r[prio_i]))
+			except Exception:
+				prio = None
+		rows.append((code, prio if prio is not None else (n - idx)))
+	updated, missing = 0, []
+	for code, prio in rows:
+		nm = frappe.db.get_value("Design Bank", {"design_no": code}, "name") or \
+			frappe.db.sql("select name from `tabDesign Bank` where upper(design_no) = %s limit 1",
+				code.upper())
+		nm = nm[0][0] if isinstance(nm, (list, tuple)) and nm else nm
+		if nm:
+			frappe.db.set_value("Design Bank", nm, "priority", prio, update_modified=False)
+			updated += 1
+		else:
+			missing.append(code)
+	frappe.db.commit()
+	print(f"set_priorities: {updated} updated, {len(missing)} unknown codes" +
+		(": " + ", ".join(missing[:20]) if missing else ""))
+	return {"updated": updated, "missing": missing}
+
+
 def export_full(out_path=None):
 	"""FULL v2 snapshot: every Design Bank record with every field and child
 	table, names preserved, as one JSONL — plus the Design Tag master. Pairs

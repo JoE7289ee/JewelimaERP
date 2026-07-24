@@ -322,7 +322,7 @@ def get_review_queue(start=0):
 	"""Next cards for review: rebuilt, not duplicate-flagged, still Pending."""
 	filters = {"status": "Pending", "rebuilt": 1, "duplicate_review": 0}
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name"], order_by="design_no", start=int(start), limit=1)
+		fields=["name"], order_by="priority desc, design_no", start=int(start), limit=1)
 	total = frappe.db.count("Design Bank", filters)
 	if not rows:
 		return {"total": total, "card": None}
