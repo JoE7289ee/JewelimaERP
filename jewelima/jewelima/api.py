@@ -6460,11 +6460,11 @@ def _price_chart_letter_html(d):
 	except Exception:
 		logo_html = "<div style='font-size:21px;font-weight:800;color:#1f4e5f;'>JEWELIMA</div>"
 	return """<!doctype html><html><head><meta charset='utf-8'><style>
-		@page {{ size: A4; margin: 18mm 16mm; }}
+		@page {{ size: A4; margin: 12mm 14mm; }}
 		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 12.5px; }}
-		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 10px; margin-bottom: 18px; }}
+		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 8px; margin-bottom: 12px; }}
 		.head img {{ max-height: 64px; max-width: 320px; }}
-		.foot {{ margin-top: 30px; text-align: center; }}
+		.foot {{ margin-top: 12px; text-align: center; page-break-inside: avoid; }}
 		.foot .rule {{ border-top: 1px solid #1f4e5f; margin-bottom: 8px; }}
 		.foot .tag {{ font-size: 12px; letter-spacing: .35em; color: #1f4e5f; text-transform: lowercase; }}
 		.doc {{ font-size: 13px; color: #666; margin-top: 2px; }}
@@ -6472,7 +6472,7 @@ def _price_chart_letter_html(d):
 		.meta b {{ font-size: 16px; }}
 		.meta span {{ float: right; color: #666; }}
 		.qnote {{ color: #444; font-size: 12px; }}
-		.sec {{ margin: 14px 0; page-break-inside: avoid; }}
+		.sec {{ margin: 10px 0; page-break-inside: avoid; }}
 		.st {{ font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
 			color: #1f4e5f; border-bottom: 1px solid #1f4e5f; padding-bottom: 3px; margin-bottom: 6px; }}
 		table {{ width: 100%; border-collapse: collapse; }}
@@ -6481,7 +6481,7 @@ def _price_chart_letter_html(d):
 		td {{ padding: 5px 8px; border-bottom: 1px solid #eee; }}
 		td.r, th.r {{ text-align: right; white-space: nowrap; }}
 		.terms {{ margin-top: 16px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
-		.sign {{ margin-top: 34px; display: flex; justify-content: space-between; align-items: flex-end; }}
+		.sign {{ margin-top: 18px; display: flex; justify-content: space-between; align-items: flex-end; page-break-inside: avoid; }}
 		.sign .who {{ font-weight: 700; }}
 		.sign .line {{ border-top: 1px solid #999; padding-top: 4px; width: 220px; text-align: center; color: #666; font-size: 11px; }}
 	</style></head><body>
