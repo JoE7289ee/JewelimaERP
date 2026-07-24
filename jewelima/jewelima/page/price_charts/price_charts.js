@@ -157,7 +157,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				${CERTS.map((c) => `<option ${r.certification === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
 				${r.certification && r.certification !== "ALL LABS" && !CERTS.includes(r.certification) ? `<option selected>${esc(r.certification)}</option>` : ""}
 			</select></td>
-			<td><input data-f="rate" type="number" step="1" value="${num(r.rate)}" placeholder="${__("0 = included")}"></td>
+			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "set") return cur.setting_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="stone_ct" type="number" step="0.001" value="${num(r.stone_ct)}"></td>
