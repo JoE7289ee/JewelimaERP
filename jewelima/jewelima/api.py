@@ -7081,48 +7081,57 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	else:
 		comp("gold", "Gold", needs=True, note="{0} g — no gold rate picked".format(round(nett, 3)))
 
-	# ---- diamonds: aggregate by parent-mapped quality, bracket by avg per-stone
-	# carats (first-row fallback). A quality with NO rows -> manual cell.
+	# ---- diamonds: PER BOM LINE. Each frozen line is quality + sieve (e.g.
+	# "VVS/VS-GH 22-22.5"), so every line brackets by ITS OWN per-stone carats —
+	# the sieve chart's avg_cts for that sieve (falling back to the piece average,
+	# then the first row). A quality with NO chart rows -> manual cell.
 	qmap = _diamond_qmap()
-	qual_ct = {}
 	mats = _bag_convert_materials([nm])[nm]
+	dmd_lines = []
 	for item, qty in mats.items():
 		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
 		if st != "Diamond":
 			continue
 		q = (grp or "").replace("DIAMOND ", "")
-		q = qmap.get(q, q)
-		qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+		dmd_lines.append({"item": item, "quality": qmap.get(q, q), "ct": flt(qty)})
 
-	if (qual_ct or flt(b.act_dmd_weight) > 0) and not chart:
+	if (dmd_lines or flt(b.act_dmd_weight) > 0) and not chart:
 		comp("dmd", "Diamond", needs=True, note="no price chart picked")
 		dmd_detail = []
-	elif qual_ct or flt(b.act_dmd_weight) > 0:
+	elif dmd_lines or flt(b.act_dmd_weight) > 0:
+		sieve_ct = {d.sieve_size: flt(d.avg_cts) for d in frappe.get_all(
+			"Diamond Sieve", fields=["sieve_size", "avg_cts"]) if flt(d.avg_cts) > 0}
+		avg_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
 		diamond_value = 0.0
 		dmd_detail = []
 		dmd_missing = []
-		per_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
-		for q, ct in qual_ct.items():
-			rows = [r for r in chart.diamond_rates if (r.quality or "") in (q, "")]
+		for line in dmd_lines:
+			rows = [r for r in chart.diamond_rates if (r.quality or "") in (line["quality"], "")]
 			if not rows:
-				dmd_missing.append(q)
+				if line["quality"] not in dmd_missing:
+					dmd_missing.append(line["quality"])
 				continue
-			exact = [r for r in rows if (r.quality or "") == q] or rows
+			exact = [r for r in rows if (r.quality or "") == line["quality"]] or rows
+			# the line's own stone size: its sieve's avg carats, else piece average
+			sieve = line["item"].rsplit(" ", 1)[-1]
+			stone_ct = sieve_ct.get(sieve) or avg_stone
 			row = None
-			if per_stone:
+			if stone_ct:
 				for r in exact:
-					if flt(r.from_ct) <= per_stone and (not flt(r.to_ct) or per_stone < flt(r.to_ct)):
+					if flt(r.from_ct) <= stone_ct and (not flt(r.to_ct) or stone_ct < flt(r.to_ct)):
 						row = r
 						break
 			row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
-			diamond_value += ct * flt(row.rate)
-			dmd_detail.append({"quality": q, "ct": round(ct, 3), "rate": flt(row.rate)})
+			diamond_value += line["ct"] * flt(row.rate)
+			dmd_detail.append({"quality": line["quality"], "sieve": sieve if sieve in sieve_ct else "",
+				"ct": round(line["ct"], 3), "rate": flt(row.rate)})
 		if dmd_missing:
 			comp("dmd", "Diamond", needs=True,
 				note="no chart rows for {0}".format(", ".join(sorted(dmd_missing))))
 		else:
 			comp("dmd", "Diamond", diamond_value,
-				note="; ".join("{0} {1} ct x {2}".format(d["quality"], d["ct"], d["rate"]) for d in dmd_detail))
+				note="; ".join("{0}{1} {2} ct x {3}".format(
+					d["quality"], " " + d["sieve"] if d["sieve"] else "", d["ct"], d["rate"]) for d in dmd_detail))
 	else:
 		dmd_detail = []
 
