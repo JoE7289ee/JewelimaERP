@@ -564,3 +564,40 @@ def get_old_category_designs(folder, start=0, limit=60):
 	for r in rows:
 		r["display"] = r.image if r.status == "Approved" else (r.raw_image or r.photo or r.image or "")
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def get_retired_designs(start=0, limit=60, q=None):
+	"""The Retired shelf — codes stay reserved, but junk scans that were never
+	real designs can be purged from here."""
+	filters = {"status": "Retired"}
+	if q:
+		filters["design_no"] = ["like", "%" + q.strip() + "%"]
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "image", "raw_image", "photo", "source_folder"],
+		order_by="design_no", start=int(start), limit=int(limit))
+	for r in rows:
+		r["display"] = r.raw_image or r.photo or r.image or ""
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def design_delete_forever(name):
+	"""PURGE a retired card that was never a real design: every image (raw,
+	photo, info card, customer, pending) leaves the disk, every File doc goes,
+	and the record itself is deleted — the code becomes reusable again."""
+	d = frappe.get_doc("Design Bank", name)
+	if d.status != "Retired":
+		frappe.throw(frappe._("Only RETIRED cards can be purged — retire {0} first.").format(d.design_no))
+	for url in {d.raw_image, d.photo, d.image, d.customer_image, d.pending_photo}:
+		if url:
+			_delete_bank_file(d.name, url)
+	for r in d.review_images:
+		_delete_bank_file(d.name, r.image)
+	for f in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
+			"attached_to_name": d.name}, pluck="name"):
+		frappe.delete_doc("File", f, force=True, ignore_permissions=True)
+	dn = d.design_no
+	frappe.delete_doc("Design Bank", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": dn, "left": frappe.db.count("Design Bank", {"status": "Retired"})}

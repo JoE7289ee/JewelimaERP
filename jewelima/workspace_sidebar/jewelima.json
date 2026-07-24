@@ -1101,6 +1101,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "archive",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Retired",
+   "link_to": "retired-designs",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "bar-chart-2",
    "indent": 0,
    "keep_closed": 0,
@@ -1918,7 +1931,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-24 21:20:01.886082",
+ "modified": "2026-07-24 21:23:53.193715",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

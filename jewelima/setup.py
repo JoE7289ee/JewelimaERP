@@ -147,7 +147,7 @@ JEWELIMA_DESIGN_BANK_ROLE = "Jewelima Design Bank"
 JEWELIMA_DESIGN_APPROVER_ROLE = "Jewelima Design Approver"
 JEWELIMA_DESIGN_BANK_PAGES = ["design-gallery", "search-design", "old-categories", "new-design-bank",
 	"card-builder", "design-tags", "photo-update", "design-bank-report"]
-JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-duplicates", "retire-design"]
+JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-duplicates", "retire-design", "retired-designs"]
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]
 
