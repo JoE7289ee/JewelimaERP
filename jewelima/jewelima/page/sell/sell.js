@@ -1,12 +1,15 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Sell (Sales) — pick the buyer + price chart + today's gold rate, scan pieces:
-// each line prices itself from the chart (all values editable); lines go RED
-// when the piece is reserved for someone other than the buyer. A fixed strip at
-// the bottom shows the component totals + grand total and the Sell button —
-// selling records a Product Sale, writes the stock off Finished Goods and flips
-// the bags to Sold (kept for returns). Route: /app/sell
+// Sell (Sales) — pick the buyer + price chart + today's gold rate, scan pieces.
+// EXCEL-STYLE board: one column PER COST COMPONENT (Gold, Diamond, CS, CZ, CVD,
+// Precious, Making, Hallmark, each lab cert) and a column only appears when at
+// least one scanned piece carries that cost. Every cell is editable; a
+// component the chart could not price arrives BLANK on amber — type the price
+// by hand, SELL stays blocked until every amber cell is filled. Lines go RED
+// when the piece is reserved for someone other than the buyer. Selling records
+// a Product Sale, writes stock off Finished Goods and flips the bags to Sold.
+// Route: /app/sell
 
 frappe.pages["sell"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Sell", single_column: true });
@@ -14,7 +17,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	const S = { rows: [] };
 	const esc = frappe.utils.escape_html;
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-	const VALS = ["gold_value", "diamond_value", "stone_value", "labour_value", "charges_value"];
+	// canonical column order; cert:* columns slot in after hall, alphabetically
+	const ORDER = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall"];
 
 	$(page.main).append(`
 		<style>
@@ -33,6 +37,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		table.sl-tbl tr.mismatch td.sl-holder{color:#b00020;font-weight:700;}
 		table.sl-tbl input.sl-v{width:92px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);border-radius:4px;height:25px;padding:1px 6px;font-size:12px;text-align:right;color:var(--text-color);box-sizing:border-box;}
 		table.sl-tbl input.sl-v:focus{box-shadow:inset 0 0 0 1px var(--primary);outline:none;}
+		table.sl-tbl input.sl-v.needs{background:#fff6e0;border-color:#e0a800;box-shadow:inset 0 0 0 1px #e0a800;}
+		table.sl-tbl td .sl-dot{color:var(--text-muted);}
 		.sl-bar{font-weight:700;}
 		.sl-sub{color:var(--text-muted);font-size:11px;}
 		.sl-total-cell{font-weight:800;}
@@ -41,13 +47,14 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-empty{padding:24px;text-align:center;color:var(--text-muted);}
 		.sl-warn{margin:8px 0 0;font-size:12px;color:#9a6700;display:none;}
 		.sl-strip{flex:0 0 auto;z-index:1;margin-top:12px;border:1px solid var(--gray-400,#aeb6bf);border-radius:10px;
-			background:var(--fg-color);box-shadow:0 -3px 14px rgba(0,0,0,.10);padding:10px 16px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+			background:var(--fg-color);box-shadow:0 -3px 14px rgba(0,0,0,.10);padding:10px 16px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
 		.sl-strip .k{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;display:block;}
-		.sl-strip .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;}
+		.sl-strip .v{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;}
 		.sl-strip .grand .k{color:#1d7a33;}
 		.sl-strip .grand .v{font-size:24px;font-weight:800;color:#1d7a33;}
 		.sl-sell{margin-left:auto;background:#1d7a33;border:none;color:#fff;font-weight:800;letter-spacing:.8px;padding:12px 30px;border-radius:8px;font-size:14px;cursor:pointer;box-shadow:0 2px 6px rgba(29,122,51,.35);}
 		.sl-sell:hover{background:#155e26;}
+		.sl-sell[disabled]{background:#9aa5a0;cursor:not-allowed;box-shadow:none;}
 		</style>
 		<div class="sl-wrap">
 		<div class="sl-top">
@@ -55,20 +62,10 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			<div class="sl-scan"></div><div class="sl-remarks"></div>
 		</div>
 		<div class="sl-box"><table class="sl-tbl">
-			<thead><tr><th>${__("Card")}</th><th>${__("Design")}</th><th class="sl-holder-h">${__("Held By")}</th>
-			<th class="r">${__("Gold g")}</th><th class="r">${__("DMD ct")}</th>
-			<th class="r">${__("Gold ₹")}</th><th class="r">${__("DMD ₹")}</th><th class="r">${__("Stones ₹")}</th>
-			<th class="r">${__("Labour ₹")}</th><th class="r">${__("Charges ₹")}</th><th class="r">${__("Total ₹")}</th><th style="width:30px"></th></tr></thead>
+			<thead></thead>
 			<tbody class="sl-rows"></tbody></table></div>
 		<div class="sl-warn"></div>
-		<div class="sl-strip">
-			<span><span class="k">${__("Pieces")}</span><span class="v sl-t-n">0</span></span>
-			<span><span class="k">${__("Gold")}</span><span class="v sl-t-gold">₹0.00</span></span>
-			<span><span class="k">${__("Diamonds")}</span><span class="v sl-t-dmd">₹0.00</span></span>
-			<span><span class="k">${__("Stones")}</span><span class="v sl-t-stone">₹0.00</span></span>
-			<span><span class="k">${__("Labour")}</span><span class="v sl-t-lab">₹0.00</span></span>
-			<span><span class="k">${__("Charges")}</span><span class="v sl-t-chg">₹0.00</span></span>
-			<span class="grand"><span class="k">${__("Grand Total")}</span><span class="v sl-t-grand">₹0.00</span></span>
+		<div class="sl-strip"><span class="sl-strip-totals" style="display:contents"></span>
 			<button class="sl-sell">${__("SELL")}</button>
 		</div>
 		</div>
@@ -100,51 +97,85 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		return !missing.length;
 	}
 
+	// the columns THIS bill needs: union of the scanned pieces' components
+	function activeCols() {
+		const keys = new Set();
+		S.rows.forEach((r) => Object.keys(r.components || {}).forEach((k) => keys.add(k)));
+		const certs = [...keys].filter((k) => k.startsWith("cert:")).sort();
+		return ORDER.filter((k) => keys.has(k)).concat(certs);
+	}
+	const colLabel = (k) => {
+		for (const r of S.rows) if (r.components && r.components[k]) return r.components[k].label;
+		return k;
+	};
+	const compVal = (c) => (c && c.value !== null && c.value !== "" ? flt(c.value) : 0);
+
 	function rowTotal(r) {
-		return VALS.reduce((s, k) => s + flt(r[k]), 0);
+		return Object.values(r.components || {}).reduce((s, c) => s + compVal(c), 0);
+	}
+	function pendingCells() {
+		let n = 0;
+		S.rows.forEach((r) => Object.values(r.components || {}).forEach((c) => {
+			if (c.needs_price && (c.value === null || c.value === "")) n++;
+		}));
+		return n;
 	}
 
 	function paint() {
 		const to = buyer.get_value() || "";
+		const cols = activeCols();
+		$(root).find("thead").html(`
+			<tr><th>${__("Card")}</th><th>${__("Design")}</th><th class="sl-holder-h">${__("Held By")}</th>
+			<th class="r">${__("Gold g")}</th><th class="r">${__("DMD ct")}</th>
+			${cols.map((k) => `<th class="r">${esc(colLabel(k))} ₹</th>`).join("")}
+			<th class="r">${__("Total ₹")}</th><th style="width:30px"></th></tr>`);
 		const $b = $(root).find(".sl-rows");
 		$b.html(S.rows.length ? S.rows.map((r, i) => `
 			<tr class="${r.held_by && to && r.held_by !== to && r.held_by !== "JD Stock" ? "mismatch" : ""}" data-i="${i}">
 				<td><span class="sl-bar">${esc(r.order_bag)}</span>${r.huid ? `<div class="sl-sub">HUID ${esc(r.huid)}</div>` : ""}</td>
-				<td>${esc(r.design)}<div class="sl-sub">${esc(r.design_type)}${r.labour_rule ? " · " + esc(r.labour_rule) : ""}</div></td>
+				<td>${esc(r.design)}<div class="sl-sub">${esc(r.design_type)}</div></td>
 				<td class="sl-holder">${esc(r.held_by || "—")}</td>
 				<td class="r">${flt(r.nett).toFixed(3)}</td>
 				<td class="r">${r.dmd_ct ? flt(r.dmd_ct).toFixed(3) : "·"}</td>
-				${VALS.map((k) => `<td class="r"><input class="sl-v" data-k="${k}" type="number" step="0.01" value="${flt(r[k]).toFixed(2)}"></td>`).join("")}
+				${cols.map((k) => {
+					const c = (r.components || {})[k];
+					if (!c) return `<td class="r"><span class="sl-dot">·</span></td>`;
+					const empty = c.value === null || c.value === "";
+					return `<td class="r"><input class="sl-v ${c.needs_price && empty ? "needs" : ""}" data-k="${k}" type="number" step="0.01"
+						value="${empty ? "" : flt(c.value).toFixed(2)}" title="${esc(c.note || "")}"
+						${c.needs_price && empty ? `placeholder="?"` : ""}></td>`;
+				}).join("")}
 				<td class="r sl-total-cell sl-rowtotal">${money(rowTotal(r))}</td>
 				<td><button class="sl-x">✕</button></td>
 			</tr>`).join("")
-			: `<tr><td colspan="12" class="sl-empty">${__("Pick buyer, chart and rate — then scan pieces.")}</td></tr>`);
+			: `<tr><td colspan="${cols.length + 7}" class="sl-empty">${__("Pick buyer, chart and rate — then scan pieces.")}</td></tr>`);
 
-		const mism = S.rows.filter((r) => r.held_by && to && r.held_by !== to).length;
-		$(root).find(".sl-warn").toggle(!!mism)
-			.text(mism ? __("{0} piece(s) in red are reserved for someone else — selling them to {1} anyway will move the hold.", [mism, to]) : "");
+		const mism = S.rows.filter((r) => r.held_by && to && r.held_by !== to && r.held_by !== "JD Stock").length;
+		const pend = pendingCells();
+		const warns = [];
+		if (mism) warns.push(__("{0} piece(s) in red are reserved for someone else — selling them to {1} anyway will move the hold.", [mism, to]));
+		if (pend) warns.push(__("{0} amber cell(s) need a manual price before you can SELL.", [pend]));
+		$(root).find(".sl-warn").toggle(!!warns.length).html(warns.join("<br>"));
 		totals();
 	}
 
 	function totals() {
-		const t = { n: S.rows.length, gold: 0, dmd: 0, stone: 0, lab: 0, chg: 0 };
-		S.rows.forEach((r) => {
-			t.gold += flt(r.gold_value);
-			t.dmd += flt(r.diamond_value);
-			t.stone += flt(r.stone_value);
-			t.lab += flt(r.labour_value);
-			t.chg += flt(r.charges_value);
-		});
-		$(root).find(".sl-t-n").text(t.n);
-		$(root).find(".sl-t-gold").text(money(t.gold));
-		$(root).find(".sl-t-dmd").text(money(t.dmd));
-		$(root).find(".sl-t-stone").text(money(t.stone));
-		$(root).find(".sl-t-lab").text(money(t.lab));
-		$(root).find(".sl-t-chg").text(money(t.chg));
-		$(root).find(".sl-t-grand").text(money(t.gold + t.dmd + t.stone + t.lab + t.chg));
+		const cols = activeCols();
+		const t = {};
+		let grand = 0;
+		S.rows.forEach((r) => cols.forEach((k) => {
+			const v = compVal((r.components || {})[k]);
+			t[k] = (t[k] || 0) + v;
+			grand += v;
+		}));
+		$(root).find(".sl-strip-totals").html(
+			`<span><span class="k">${__("Pieces")}</span><span class="v">${S.rows.length}</span></span>`
+			+ cols.map((k) => `<span><span class="k">${esc(colLabel(k))}</span><span class="v">${money(t[k] || 0)}</span></span>`).join("")
+			+ `<span class="grand"><span class="k">${__("Grand Total")}</span><span class="v sl-t-grand">${money(grand)}</span></span>`);
+		$(root).find(".sl-sell").prop("disabled", !!pendingCells());
 	}
 
-	function fetchPiece(code, silent) {
+	function fetchPiece(code) {
 		return frappe.call({
 			method: API + ".get_sale_piece",
 			args: { barcode: code, price_chart: chart.get_value(), gold_rate: flt(rate.get_value()) },
@@ -180,7 +211,10 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 
 	$(root).on("input", ".sl-v", function () {
 		const i = +$(this).closest("tr").attr("data-i");
-		S.rows[i][this.getAttribute("data-k")] = flt(this.value);
+		const k = this.getAttribute("data-k");
+		const c = S.rows[i].components[k];
+		c.value = this.value === "" ? null : flt(this.value);
+		$(this).toggleClass("needs", !!(c.needs_price && (c.value === null || c.value === "")));
 		$(this).closest("tr").find(".sl-rowtotal").text(money(rowTotal(S.rows[i])));
 		totals();
 	});
@@ -190,12 +224,29 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		focusScan();
 	});
 
+	// components -> the sale's 5 recorded buckets
+	function buckets(r) {
+		const g = (keys) => keys.reduce((s, k) => s + compVal((r.components || {})[k]), 0);
+		const certKeys = Object.keys(r.components || {}).filter((k) => k === "hall" || k.startsWith("cert:"));
+		return {
+			gold_value: g(["gold"]),
+			diamond_value: g(["dmd", "pdmd"]),
+			stone_value: g(["cs", "cz", "cvd", "ps"]),
+			labour_value: g(["making"]),
+			charges_value: g(certKeys),
+		};
+	}
+
 	$(root).find(".sl-sell").on("click", () => {
 		if (!S.rows.length) {
 			frappe.show_alert({ message: __("Scan at least one piece."), indicator: "orange" }, 4);
 			return;
 		}
 		if (!ready()) return;
+		if (pendingCells()) {
+			frappe.show_alert({ message: __("Fill every amber cell first."), indicator: "orange" }, 5);
+			return;
+		}
 		const to = buyer.get_value();
 		const grand = $(root).find(".sl-t-grand").text();
 		frappe.confirm(__("Sell {0} piece(s) to {1} for {2}?<br>Stock writes off and the cards go to SOLD.", [S.rows.length, esc(to), grand]), () => {
@@ -208,7 +259,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					lines: S.rows.map((r) => ({
 						order_bag: r.order_bag, design: r.design, design_type: r.design_type,
 						held_by: r.held_by, nett: r.nett, dmd_ct: r.dmd_ct, ostone_ct: r.ostone_ct,
-						...Object.fromEntries(VALS.map((k) => [k, flt(r[k])])),
+						...buckets(r),
 					})),
 				} },
 			}).then((r) => {

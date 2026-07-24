@@ -7039,9 +7039,15 @@ def sell_preparation(name):
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
 def get_sale_piece(barcode, price_chart, gold_rate=0):
-	"""Price one scanned piece against the chart. Guards: finished + In Stock;
-	every diamond quality in the piece must have a chart row (quality-blank rows
-	accept any). Values are suggestions — the Sell page keeps them editable."""
+	"""Price one scanned piece against the chart, COMPONENT BY COMPONENT.
+
+	Hard guards (unknown bag / not a product / not In Stock) still throw. But a
+	component the chart cannot price no longer denies the scan — it comes back
+	with needs_price=1 and a blank value; the Sell page highlights that cell for
+	a manual price and blocks SELL until every highlighted cell is filled.
+
+	components: ordered dict key -> {label, value|None, needs_price, note}
+	keys: gold, dmd, pdmd, cs, cz, cvd, ps, making, hall, cert:<LAB>"""
 	nm = (barcode or "").strip()
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
@@ -7059,17 +7065,23 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	gold_rate = flt(gold_rate)
 
 	design_type = (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or ""
-	tags = [r.charge_category for r in frappe.get_all(
-		"Order Bag Charge Category", filters={"parent": nm}, fields=["charge_category"])]
 
-	# ---- diamonds ---------------------------------------------------------------
-	# Every diamond line aggregates by its PARENT-MAPPED quality (VVS1-EF rates
-	# as VVS-EF) and prices from the quality's bracket rows; the bracket is
-	# picked by the piece's average per-stone carats, falling back to the first
-	# row when nothing matches (a stone outside every bracket is NEVER denied).
+	comps = {}
+
+	def comp(key, label, value=None, needs=False, note=""):
+		comps[key] = {"label": label, "value": (None if needs else round(flt(value), 2)),
+			"needs_price": 1 if needs else 0, "note": note}
+
+	# ---- gold -------------------------------------------------------------------
+	nett = flt(b.act_nett_weight)
+	comp("gold", "Gold", nett * gold_rate, note="{0} g x {1}/g".format(round(nett, 3), gold_rate))
+
+	# ---- diamonds: aggregate by parent-mapped quality, bracket by avg per-stone
+	# carats (first-row fallback). A quality with NO rows -> manual cell.
 	qmap = _diamond_qmap()
 	qual_ct = {}
-	for item, qty in _bag_convert_materials([nm])[nm].items():
+	mats = _bag_convert_materials([nm])[nm]
+	for item, qty in mats.items():
 		st, grp = frappe.db.get_value("Item", item, ["stone_type", "item_group"]) or ("", "")
 		if st != "Diamond":
 			continue
@@ -7077,158 +7089,161 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		q = qmap.get(q, q)
 		qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
 
-	diamond_value = 0.0
-	dmd_detail = []
-	per_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
-	for q, ct in qual_ct.items():
-		rows = [r for r in chart.diamond_rates if (r.quality or "") in (q, "")]
-		if not rows:
-			frappe.throw(frappe._("{0}: quality {1} is not on chart {2} — scan denied.").format(nm, q, chart.chart_name))
-		exact = [r for r in rows if (r.quality or "") == q] or rows
-		row = None
-		if per_stone:
-			for r in exact:
-				if flt(r.from_ct) <= per_stone and (not flt(r.to_ct) or per_stone < flt(r.to_ct)):
-					row = r
-					break
-		row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
-		diamond_value += ct * flt(row.rate)
-		dmd_detail.append({"quality": q, "ct": round(ct, 3), "rate": flt(row.rate)})
+	if qual_ct or flt(b.act_dmd_weight) > 0:
+		diamond_value = 0.0
+		dmd_detail = []
+		dmd_missing = []
+		per_stone = (flt(b.act_dmd_weight) / cint(b.act_dmd_no)) if cint(b.act_dmd_no) else 0
+		for q, ct in qual_ct.items():
+			rows = [r for r in chart.diamond_rates if (r.quality or "") in (q, "")]
+			if not rows:
+				dmd_missing.append(q)
+				continue
+			exact = [r for r in rows if (r.quality or "") == q] or rows
+			row = None
+			if per_stone:
+				for r in exact:
+					if flt(r.from_ct) <= per_stone and (not flt(r.to_ct) or per_stone < flt(r.to_ct)):
+						row = r
+						break
+			row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
+			diamond_value += ct * flt(row.rate)
+			dmd_detail.append({"quality": q, "ct": round(ct, 3), "rate": flt(row.rate)})
+		if dmd_missing:
+			comp("dmd", "Diamond", needs=True,
+				note="no chart rows for {0}".format(", ".join(sorted(dmd_missing))))
+		else:
+			comp("dmd", "Diamond", diamond_value,
+				note="; ".join("{0} {1} ct x {2}".format(d["quality"], d["ct"], d["rate"]) for d in dmd_detail))
+	else:
+		dmd_detail = []
 
-	# ---- coloured buckets: CS / CZ / CVD each price from their OWN bracket
-	# table (blank-range row = flat). A bucket present on the piece with no
-	# rows = scan denied. Precious stones: per-stone rows only, same law.
-	def bucket_value(label, field, ct, pcs):
-		"""Bracket picked by total carats; the row's basis decides the maths —
-		Per Ct = ct x rate, Per Piece = stone count x rate."""
+	# ---- party diamonds: no job-work route on the chart yet -> always manual
+	if flt(b.act_pdmd_weight) > 0:
+		comp("pdmd", "Party DMD", needs=True,
+			note="{0} ct party diamonds — no job-work pricing on the chart".format(round(flt(b.act_pdmd_weight), 3)))
+
+	# ---- coloured buckets: CS / CZ / CVD from their own bracket tables. Blank
+	# range = flat; out-of-bracket = 0 (ignored); NO rows at all -> manual cell.
+	def bucket(key, label, field, ct, pcs):
 		ct = flt(ct)
 		if ct <= 0:
-			return 0.0
+			return
 		rows = list(chart.get(field) or [])
 		if not rows:
-			frappe.throw(frappe._("{0} carries {1} ct {2} but chart {3} has no {2} rates — scan denied.").format(
-				nm, round(ct, 3), label, chart.chart_name))
+			comp(key, label, needs=True, note="{0} ct {1} but the chart has no {1} rates".format(round(ct, 3), label))
+			return
 		row = next((r for r in rows if flt(r.from_ct) <= ct and (not flt(r.to_ct) or ct < flt(r.to_ct))), None)
 		if not row:
-			return 0.0  # outside every bracket -> ignored, never denied
+			comp(key, label, 0.0, note="outside every bracket — ignored")
+			return
 		if (row.basis or "Per Ct") == "Per Piece":
 			if not cint(pcs):
-				frappe.throw(frappe._("{0}: {1} is priced per piece but the piece count is 0 — scan denied.").format(nm, label))
-			return cint(pcs) * flt(row.rate)
-		return ct * flt(row.rate)
+				comp(key, label, needs=True, note="priced per piece but the piece count is 0")
+				return
+			comp(key, label, cint(pcs) * flt(row.rate), note="{0} pcs x {1}".format(cint(pcs), flt(row.rate)))
+		else:
+			comp(key, label, ct * flt(row.rate), note="{0} ct x {1}".format(round(ct, 3), flt(row.rate)))
 
+	bucket("cs", "CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
+	bucket("cz", "CZ", "cz_rates", b.act_cz_weight, b.act_cz_no)
+	bucket("cvd", "CVD", "cvd_rates", b.act_cvd_weight, b.act_cvd_no)
+
+	# ---- precious stones: per-stone rows, flat or weight-bracketed by ITS carats
 	ps_rows = {}
 	for r in (chart.get("precious_stone_rates") or []):
 		ps_rows.setdefault((r.stone or "").upper(), []).append(r)
-	ps_value = 0.0
 	ps_detail = []
-	if flt(b.act_ps_weight) > 0 and not ps_rows:
-		frappe.throw(frappe._("{0} carries precious stones but chart {1} has no Precious Stone rates — scan denied.").format(
-			nm, chart.chart_name))
-	if ps_rows:
-		for item, qty in _bag_convert_materials([nm])[nm].items():
+	if flt(b.act_ps_weight) > 0:
+		ps_value = 0.0
+		ps_missing = []
+		for item, qty in mats.items():
 			if frappe.db.get_value("Item", item, "stone_type") != "Precious Stone":
 				continue
 			rows = ps_rows.get(item.upper())
 			if not rows:
-				frappe.throw(frappe._("{0} carries {1} but chart {2} has no rate for it — scan denied.").format(
-					nm, item, chart.chart_name))
+				ps_missing.append(item)
+				continue
 			ct = flt(qty)
-			# a stone can be flat (blank range) or weight-bracketed by ITS carats
 			row = next((x for x in rows if flt(x.from_ct) <= ct and (not flt(x.to_ct) or ct < flt(x.to_ct))), None)
 			if row is None:
-				continue  # outside every bracket -> ignored, never denied
+				continue  # outside every bracket -> ignored
 			ps_value += ct * flt(row.rate)
 			ps_detail.append({"stone": item, "ct": round(ct, 3), "rate": flt(row.rate)})
-	stone_value = (bucket_value("CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
-		+ bucket_value("CZ", "cz_rates", b.act_cz_weight, b.act_cz_no)
-		+ bucket_value("CVD", "cvd_rates", b.act_cvd_weight, b.act_cvd_no) + ps_value)
-	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
-	# party diamonds have no pricing route since the flat job-work rate was
-	# retired — a piece carrying them can't be priced yet
-	if flt(b.act_pdmd_weight) > 0:
-		frappe.throw(frappe._("{0} carries party diamonds — no job-work pricing is configured yet.").format(nm))
-	job_work = 0.0
+		if ps_missing:
+			comp("ps", "Precious", needs=True, note="no chart rate for {0}".format(", ".join(sorted(ps_missing))))
+		else:
+			comp("ps", "Precious", ps_value,
+				note="; ".join("{0} {1} ct x {2}".format(d["stone"], d["ct"], d["rate"]) for d in ps_detail))
 
-	# ---- gold + making --------------------------------------------------------
-	nett = flt(b.act_nett_weight)
-	gold_value = nett * gold_rate
-	labour = 0.0
+	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
+
+	# ---- making: per design type (blank row = DEFAULT), PER GRAM with a rupee
+	# floor. No matching rule and no default -> manual cell.
 	rule_desc = ""
 	making_rules = list(chart.get("making_rules") or [])
 	if making_rules:
-		# per design type, blank row = DEFAULT; the minimum is a RUPEE floor
-		# (rate 1500/g but anything under 1250 bills as 1250)
 		row = next((r for r in making_rules if (r.design_type or "") == design_type and design_type), None) \
 			or next((r for r in making_rules if not r.design_type), None)
 		if not row:
-			frappe.throw(frappe._("{0} ({1}) has no making rule on chart {2} and no DEFAULT row — scan denied.").format(
-				nm, design_type or "no type", chart.chart_name))
-		# making is PER GRAM, always — nett x rate, floored at the minimum rupees
-		labour = nett * flt(row.rate)
-		rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
-		if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
-			labour = flt(row.min_per_piece)
-			rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
-		if row.design_type:
-			rule_desc += " [{0}]".format(row.design_type)
+			comp("making", "Making", needs=True,
+				note="no making rule for {0} and no DEFAULT row".format(design_type or "untyped"))
 		else:
-			rule_desc += " [default]"
+			labour = nett * flt(row.rate)
+			rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
+			if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
+				labour = flt(row.min_per_piece)
+				rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
+			rule_desc += " [{0}]".format(row.design_type or "default")
+			comp("making", "Making", labour, note=rule_desc)
 	elif flt(chart.making_rate):
-		# legacy flat rule: under the minimum grams bills AS the minimum
 		min_g = flt(chart.making_min_grams) or 1
 		billed_g = max(nett, min_g)
-		labour = billed_g * flt(chart.making_rate)
 		rule_desc = "{0} g x {1}/g".format(round(billed_g, 3), flt(chart.making_rate))
 		if nett < min_g:
 			rule_desc += " (min {0} g)".format(min_g)
-	labour += job_work
-	# certifications price ONLY through the chart's certification rows;
-	# HALLMARKING rows scale per HUID (a stud pair carries two and pays twice)
+		comp("making", "Making", billed_g * flt(chart.making_rate), note=rule_desc)
+	else:
+		comp("making", "Making", needs=True, note="chart has no making rules")
+
+	# ---- certifications off the bag's trail. HALLMARKING = own column scaled
+	# per HUID; each lab = its own column (individual row or the ALL LABS group,
+	# Per Piece or Per Ct with a minimum). Missing price -> manual cell.
 	huids = [x for x in re.split(r"[,/\s]+", b.huid or "") if x]
 	pieces = max(len(huids), 1)
-	charges = 0.0
-
-	# certifications the bag ACTUALLY carries, charged per the chart's rows. A
-	# certification the chart hasn't priced BLOCKS the scan (rate 0 = free is fine).
 	cert_detail = []
 	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
 	cert_rows = {(r.certification or "").upper(): r for r in (chart.get("certification_charges") or [])}
-	if trail and not cert_rows:
-		frappe.throw(frappe._("{0} is certified ({1}) but chart {2} has no Certification Charges — scan denied.").format(
-			nm, ", ".join(trail), chart.chart_name))
-	if cert_rows or trail:
-		for token in trail:
-			if cert_rows:
-				is_hall = token in ("HALL", "HALLMARKING")
-				# labs may be priced individually OR through the ALL LABS group
-				# row (never both — save blocks it); hallmarking only ever
-				# matches its own row
-				row = cert_rows.get(token)
-				if row is None and not is_hall:
-					row = cert_rows.get("ALL LABS")
-				if row is None:
-					frappe.throw(frappe._("{0} is {1} certified but chart {2} has no price for {1} — scan denied.").format(
-						nm, token, chart.chart_name))
-				if not is_hall and (row.basis or "Per Piece") == "Per Ct":
-					# lab certs may bill on the piece's DMD carats, floored at
-					# the row's minimum (600/ct but never under 150)
-					val = flt(b.act_dmd_weight) * flt(row.rate)
-					if flt(row.min_amount) and val < flt(row.min_amount):
-						val = flt(row.min_amount)
-					charges += val
-					cert_detail.append({"certification": token, "rate": flt(row.rate),
-						"basis": "Per Ct", "ct": flt(b.act_dmd_weight), "value": round(val, 2),
-						"via": "ALL LABS" if token not in cert_rows else token})
-				else:
-					# per piece; HALLMARKING scales per HUID (a stud pair pays twice)
-					mult = pieces if is_hall else 1
-					charges += flt(row.rate) * mult
-					cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": mult,
-						"via": "ALL LABS" if (token not in cert_rows and not is_hall) else token})
-			else:
-				# legacy chart without the table: the old flat charge covers everything
-				pass
+	for token in trail:
+		is_hall = token in ("HALL", "HALLMARKING")
+		key = "hall" if is_hall else "cert:" + token
+		label = "Hallmark" if is_hall else token
+		row = cert_rows.get(token)
+		if row is None and not is_hall:
+			row = cert_rows.get("ALL LABS")
+		if row is None:
+			comp(key, label, needs=True, note="{0} on the bag but not priced on the chart".format(token))
+			continue
+		if not is_hall and (row.basis or "Per Piece") == "Per Ct":
+			val = flt(b.act_dmd_weight) * flt(row.rate)
+			note = "{0} ct x {1}".format(round(flt(b.act_dmd_weight), 3), flt(row.rate))
+			if flt(row.min_amount) and val < flt(row.min_amount):
+				val = flt(row.min_amount)
+				note += " (min {0})".format(flt(row.min_amount))
+			comp(key, label, val, note=note)
+			cert_detail.append({"certification": token, "rate": flt(row.rate), "basis": "Per Ct",
+				"ct": flt(b.act_dmd_weight), "value": round(val, 2),
+				"via": "ALL LABS" if token not in cert_rows else token})
+		else:
+			mult = pieces if is_hall else 1
+			comp(key, label, flt(row.rate) * mult,
+				note="{0} x {1}".format(mult, flt(row.rate)) if mult > 1 else "")
+			cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": mult,
+				"via": "ALL LABS" if (token not in cert_rows and not is_hall) else token})
+
+	# legacy 5-bucket summary (needs_price components count as 0 until filled)
+	def _v(*keys):
+		return round(sum(flt(comps[k]["value"]) for k in keys if k in comps and comps[k]["value"] is not None), 2)
 
 	return {
 		"order_bag": nm, "design": b.design or "", "design_type": design_type,
@@ -7236,13 +7251,14 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"gross": flt(b.act_gross_weight), "nett": nett,
 		"dmd_ct": round(flt(b.act_dmd_weight) + flt(b.act_pdmd_weight), 3),
 		"ostone_ct": round(ostone_ct, 3),
-		"gold_value": round(gold_value, 2),
-		"diamond_value": round(diamond_value, 2),
-		"stone_value": round(stone_value, 2), "labour_value": round(labour, 2),
-		"charges_value": round(charges, 2),
-		"dmd_detail": dmd_detail, "cert_detail": cert_detail,
-		"ps_detail": ps_detail,
+		"gold_value": _v("gold"),
+		"diamond_value": _v("dmd", "pdmd"),
+		"stone_value": _v("cs", "cz", "cvd", "ps"),
+		"labour_value": _v("making"),
+		"charges_value": _v(*[k for k in comps if k == "hall" or k.startswith("cert:")]),
+		"dmd_detail": dmd_detail, "cert_detail": cert_detail, "ps_detail": ps_detail,
 		"labour_rule": rule_desc,
+		"components": comps,
 	}
 
 
