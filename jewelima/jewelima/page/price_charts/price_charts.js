@@ -216,7 +216,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Special Works")}<span class="add" data-k="spw">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="spw"><thead><tr><th>${__("Work")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("spw")}</tbody></table>
-			<div class="pc-sec">${__("Making Charges — per design type; the DEFAULT row catches everything else. Minimum ₹ is a floor (e.g. a rate of 1,500/g with minimum 1,250 never bills below 1,250)")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
+			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
 			<div class="pc-sec">${__("Flat Charges")}</div>
