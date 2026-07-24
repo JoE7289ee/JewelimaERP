@@ -37,7 +37,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		table.sl-tbl tr.mismatch td.sl-holder{color:#b00020;font-weight:700;}
 		table.sl-tbl input.sl-v{width:92px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);border-radius:4px;height:25px;padding:1px 6px;font-size:12px;text-align:right;color:var(--text-color);box-sizing:border-box;}
 		table.sl-tbl input.sl-v:focus{box-shadow:inset 0 0 0 1px var(--primary);outline:none;}
-		table.sl-tbl input.sl-v.needs{background:#fff6e0;border-color:#e0a800;box-shadow:inset 0 0 0 1px #e0a800;}
+		table.sl-tbl input.sl-v.needs{background:#fdecec;border-color:#d9534f;box-shadow:inset 0 0 0 1px #d9534f;}
+		table.sl-tbl input.sl-v.changed{background:#fff6e0;border-color:#e0a800;box-shadow:inset 0 0 0 1px #e0a800;}
 		table.sl-tbl td .sl-dot{color:var(--text-muted);}
 		.sl-bar{font-weight:700;}
 		.sl-sub{color:var(--text-muted);font-size:11px;}
@@ -143,7 +144,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					const c = (r.components || {})[k];
 					if (!c) return `<td class="r"><span class="sl-dot">·</span></td>`;
 					const empty = c.value === null || c.value === "";
-					return `<td class="r"><input class="sl-v ${c.needs_price && empty ? "needs" : ""}" data-k="${k}" type="number" step="0.01"
+					const cls = empty ? "needs" : (c.orig !== null && c.orig !== undefined && flt(c.value) !== flt(c.orig) ? "changed" : "");
+					return `<td class="r"><input class="sl-v ${cls}" data-k="${k}" type="number" step="0.01"
 						value="${empty ? "" : flt(c.value).toFixed(2)}" title="${esc(c.note || "")}"
 						${c.needs_price && empty ? `placeholder="?"` : ""}></td>`;
 				}).join("")}
@@ -187,6 +189,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	function repriceAll() {
 		if (!S.rows.length) return;
 		Promise.all(S.rows.map((r) => fetchPiece(r.order_bag))).then((fresh) => {
+			fresh.forEach((m) => Object.values(m.components || {}).forEach((c) => { c.orig = c.value; }));
 			S.rows = fresh;
 			paint();
 			frappe.show_alert({ message: __("Re-priced {0} line(s) from the chart.", [fresh.length]), indicator: "blue" }, 3);
@@ -204,6 +207,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			return;
 		}
 		fetchPiece(code).then((m) => {
+			Object.values(m.components || {}).forEach((c) => { c.orig = c.value; });
 			S.rows.push(m);
 			paint();
 			focusScan();
@@ -215,7 +219,9 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const k = this.getAttribute("data-k");
 		const c = S.rows[i].components[k];
 		c.value = this.value === "" ? null : flt(this.value);
-		$(this).toggleClass("needs", !!(c.needs_price && (c.value === null || c.value === "")));
+		const emptyNow = c.value === null || c.value === "";
+		$(this).toggleClass("needs", emptyNow);
+		$(this).toggleClass("changed", !emptyNow && c.orig !== null && c.orig !== undefined && flt(c.value) !== flt(c.orig));
 		$(this).closest("tr").find(".sl-rowtotal").text(money(rowTotal(S.rows[i])));
 		totals();
 	});
