@@ -7037,7 +7037,6 @@ def sell_preparation(name):
 # diamonds = ct x cents-bracket rate; labour per rule (gram+min / piece /
 # purity-percent); pass-through charges per piece.
 # ---------------------------------------------------------------------------
-@frappe.whitelist()
 def _inr(v):
 	"""Indian-grouped rupees for tooltip working lines: 12750 -> \u20b912,750."""
 	n = flt(v)
@@ -7059,6 +7058,7 @@ def _inr(v):
 	return out
 
 
+@frappe.whitelist()
 def get_sale_piece(barcode, price_chart, gold_rate=0):
 	"""Price one scanned piece against the chart, COMPONENT BY COMPONENT.
 
