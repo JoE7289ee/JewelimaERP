@@ -294,20 +294,26 @@ def get_duplicate_queue(start=0, limit=20):
 
 @frappe.whitelist()
 def resolve_duplicate(name, image):
-	"""ONE photo wins: it becomes the card's raw source, the review rows clear,
-	duplicate_review drops — the card now flows into the rebuild + review pipe."""
+	"""ONE photo wins: it becomes the card's raw source and every LOSING
+	candidate is deleted from the system FOREVER (File docs + disk). The card
+	then re-enters the crop+rebuild pipe and flows to Review."""
 	d = frappe.get_doc("Design Bank", name)
 	if not d.duplicate_review:
 		frappe.throw(frappe._("{0} is not awaiting duplicate review.").format(d.design_no))
+	losers = {u for u in ([d.raw_image or d.image] + [r.image for r in d.review_images])
+		if u and u != image}
+	for u in losers:
+		_delete_bank_file(d.name, u)
 	d.raw_image = image
-	d.image = d.image or image
+	if d.image in losers or not d.image:
+		d.image = image
 	d.set("review_images", [])
 	d.duplicate_review = 0
 	d.rebuilt = 0  # re-enter the crop+rebuild queue with the chosen photo
 	d.flags.ignore_version = True
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
-	return {"ok": 1, "left": frappe.db.count("Design Bank", {"duplicate_review": 1})}
+	return {"ok": 1, "deleted": len(losers), "left": frappe.db.count("Design Bank", {"duplicate_review": 1})}
 
 
 @frappe.whitelist()
