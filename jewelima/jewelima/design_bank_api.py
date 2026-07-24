@@ -585,6 +585,9 @@ def get_old_category_designs(folder, start=0, limit=60, subtree=0):
 
 @frappe.whitelist()
 def set_design_priority(names, priority):
+	allowed = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver"}
+	if not allowed & set(frappe.get_roles()):
+		frappe.throw("Not permitted to set priorities")
 	"""Bulk-stamp review priority on picked cards (Old Categories selection)."""
 	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
 	priority = int(priority or 0)

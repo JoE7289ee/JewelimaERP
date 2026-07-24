@@ -125,12 +125,14 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 	});
 
 	// selection -> bulk prioritise
+	const canPrio = frappe.user.has_role("Jewelima Design Bank") || frappe.user.has_role("Jewelima Design Approver") || frappe.user.has_role("System Manager");
 	const selected = new Set();
 	function paintPrio() {
-		root.find(".oc-prio").toggle(selected.size > 0)
+		root.find(".oc-prio").toggle(canPrio && selected.size > 0)
 			.text(__("Prioritise {0} selected", [selected.size]));
 	}
 	root.on("click", ".oc-tile", function () {
+		if (!canPrio) return;
 		const nm = $(this).data("name");
 		if (selected.has(nm)) { selected.delete(nm); $(this).removeClass("sel"); }
 		else { selected.add(nm); $(this).addClass("sel"); }
