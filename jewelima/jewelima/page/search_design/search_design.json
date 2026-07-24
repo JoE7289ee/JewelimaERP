@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-07-25 00:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-24 17:32:00.594895",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "search-design",
+ "owner": "Administrator",
+ "page_name": "search-design",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Search Design"
+}

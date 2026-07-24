@@ -58,6 +58,11 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 		<div class="dg-bar">
 			<div class="dg-row1">
 				<input type="text" class="form-control input-sm dg-search" placeholder="Search design no…">
+				<select class="form-control input-sm dg-dtype" style="max-width:150px;margin-left:8px;display:inline-block;"><option value="">${__("All types")}</option></select>
+				<input type="number" class="form-control input-sm dg-gwmin" placeholder="${__("gold ≥ g")}" style="max-width:86px;display:inline-block;">
+				<input type="number" class="form-control input-sm dg-gwmax" placeholder="${__("gold ≤ g")}" style="max-width:86px;display:inline-block;">
+				<input type="number" class="form-control input-sm dg-dwmin" step="0.01" placeholder="${__("dmd ≥ ct")}" style="max-width:86px;display:inline-block;">
+				<input type="number" class="form-control input-sm dg-dwmax" step="0.01" placeholder="${__("dmd ≤ ct")}" style="max-width:86px;display:inline-block;">
 				<div class="btn-group dg-modes" style="margin-left:8px;">
 					<button class="btn btn-xs btn-primary" data-mode="info">${__("Info")}</button>
 					<button class="btn btn-xs btn-default" data-mode="print">${__("Print")}</button>
@@ -136,6 +141,12 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	});
 
 	let searchTimer;
+	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Design Type",
+		fields: ["name"], limit_page_length: 0, order_by: "name" } }).then((r) => {
+		root.find(".dg-dtype").append((r.message || []).map((t) =>
+			`<option>${frappe.utils.escape_html(t.name)}</option>`).join(""));
+	});
+	root.on("change", ".dg-dtype, .dg-gwmin, .dg-gwmax, .dg-dwmin, .dg-dwmax", () => reload());
 	root.on("click", ".dg-modes button", function () {
 		state.mode = $(this).data("mode");
 		root.find(".dg-modes button").removeClass("btn-primary").addClass("btn-default");
@@ -177,6 +188,11 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 		$status.text("Loading…");
 		frappe.call(API + ".get_designs", {
 			mode: state.mode || "info",
+			design_type: root.find(".dg-dtype").val() || null,
+			gw_min: root.find(".dg-gwmin").val() || null,
+			gw_max: root.find(".dg-gwmax").val() || null,
+			dw_min: root.find(".dg-dwmin").val() || null,
+			dw_max: root.find(".dg-dwmax").val() || null,
 			search: state.search,
 			tags: JSON.stringify([...state.tags]),
 			match: state.match,

@@ -70,7 +70,8 @@ def set_tag_color(tag_name, color):
 # --- Designs -----------------------------------------------------------------------
 
 @frappe.whitelist()
-def get_designs(search=None, tags=None, match="any", start=0, limit=60, mode="info"):
+def get_designs(search=None, tags=None, match="any", start=0, limit=60, mode="info",
+		design_type=None, gw_min=None, gw_max=None, dw_min=None, dw_max=None):
 	"""Paginated designs, optionally filtered by a text search on design_no and/or tags.
 
 	match: 'any' (has any selected tag) or 'all' (has every selected tag).
@@ -81,7 +82,16 @@ def get_designs(search=None, tags=None, match="any", start=0, limit=60, mode="in
 	tags = frappe.parse_json(tags) if isinstance(tags, str) else (tags or [])
 	tags = [t for t in tags if t]
 
-	params, join, where = [], "", "WHERE 1=1"
+	# the gallery is the SELLING face — approved cards only
+	params, join, where = [], "", "WHERE db.status = 'Approved'"
+	if design_type:
+		where += " AND db.design_type = %s"
+		params.append(design_type)
+	for cond, val in ((" AND db.gross_weight >= %s", gw_min), (" AND db.gross_weight <= %s", gw_max),
+			(" AND db.diamond_weight >= %s", dw_min), (" AND db.diamond_weight <= %s", dw_max)):
+		if val not in (None, "", 0, "0"):
+			where += cond
+			params.append(float(val))
 	if tags:
 		ph = ", ".join(["%s"] * len(tags))
 		if match == "all":
@@ -515,3 +525,21 @@ def reject_photo_update(name):
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"ok": 1, "left": frappe.db.count("Design Bank", {"pending_photo": ["is", "set"]})}
+
+
+@frappe.whitelist()
+def search_designs(q, limit=60):
+	"""Search Design page: ANY status including Retired. Shows the RAW image
+	unless the card is Approved (then the info card); click = download raw."""
+	q = (q or "").strip()
+	if not q:
+		return {"rows": []}
+	rows = frappe.db.sql("""select name, design_no, status, image, raw_image, photo
+		from `tabDesign Bank`
+		where design_no like %s
+		order by (status = 'Approved') desc, design_no limit %s""",
+		("%" + q + "%", int(limit)), as_dict=True)
+	for r in rows:
+		r["display"] = r.image if r.status == "Approved" else (r.raw_image or r.photo or r.image or "")
+		r["raw"] = r.raw_image or r.photo or r.image or ""
+	return {"rows": rows}
