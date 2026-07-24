@@ -7122,6 +7122,69 @@ def export_sale_bill_pdf(payload):
 
 
 @frappe.whitelist()
+def export_sale_bill_xlsx(payload):
+	"""The Sell board as an excel: same dynamic component columns, TOTALS row,
+	tax summary at the end. (Company-specific formats plug in beside this.)"""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font, PatternFill
+	p = frappe.parse_json(payload)
+	rows = p.get("rows") or []
+	if not rows:
+		frappe.throw(frappe._("Nothing on the bill."))
+	order = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall", "cert"]
+	labels = {}
+	for r in rows:
+		for k, c in (r.get("components") or {}).items():
+			if k not in labels:
+				labels[k] = c.get("label") or k
+	keys = [k for k in order if k in labels] + sorted(k for k in labels if k.startswith("cert:"))
+
+	def val(r, k):
+		c = (r.get("components") or {}).get(k)
+		v = c and c.get("value")
+		return flt(v) if v not in (None, "") else 0.0
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Sale Bill"
+	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+	ws.append(["Sale Bill", p.get("customer") or "(no buyer yet)", "",
+		"Chart: " + (p.get("price_chart") or "-"), "Gold rate: " + str(flt(p.get("gold_rate")))])
+	ws.append([])
+	cols = ["Barcode", "Design", "Type", "Nett Wt", "DMD ct"] + [labels[k] for k in keys] + ["Total"]
+	ws.append(cols)
+	for c in ws[3]:
+		c.font, c.fill = head_font, head_fill
+	base = 0.0
+	col_tot = {k: 0.0 for k in keys}
+	for r in rows:
+		total = sum(val(r, k) for k in keys)
+		base += total
+		for k in keys:
+			col_tot[k] += val(r, k)
+		ws.append([r.get("order_bag"), r.get("design"), r.get("design_type"),
+			flt(r.get("nett")), flt(r.get("dmd_ct"))] + [val(r, k) or None for k in keys] + [total])
+	ws.append(["TOTALS", "", "", None, None] + [col_tot[k] or None for k in keys] + [base])
+	for c in ws[ws.max_row]:
+		c.font = Font(bold=True)
+	taxed = cint(p.get("tax", 1))
+	tax_amt = round(base * 3 / 100, 2) if taxed else 0.0
+	ws.append([])
+	ws.append(["", "", "", "", "", "Total before tax", base])
+	ws.append(["", "", "", "", "", "Tax 3%" if taxed else "Tax", tax_amt if taxed else "not applied"])
+	ws.append(["", "", "", "", "", "GRAND TOTAL", base + tax_amt])
+	ws[ws.max_row][6].font = Font(bold=True)
+	for i, w in enumerate([16, 18, 12, 9, 8] + [12] * len(keys) + [13], 1):
+		ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "SaleBill-{0}.xlsx".format((p.get("customer") or "draft").replace(" ", "-"))
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
 def save_sale_prep_board(payload):
 	"""PREPARE TO SELL: snapshot the whole Sell board (rows with components,
 	manual edits, adjustments, buyer/chart/rate/remarks) as a Draft Sale

@@ -401,18 +401,32 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	});
 	$(root).on("mouseleave", "td.sl-bag", () => $(root).find(".sl-tip").hide());
 
-	// Export — the bill as a landscape PDF with the tax summary at the end
-	page.add_inner_button(__("Export PDF"), () => {
+	// Export — dialog of formats (more company-specific excels plug in here)
+	page.add_inner_button(__("Export"), () => {
 		if (!S.rows.length) {
 			frappe.show_alert({ message: __("Scan pieces first."), indicator: "orange" }, 4);
 			return;
 		}
-		open_url_post("/api/method/" + API + ".export_sale_bill_pdf", {
-			payload: JSON.stringify({
-				customer: buyer.get_value(), price_chart: chart.get_value(),
-				gold_rate: flt(rate.get_value()), rows: S.rows, tax: cint(tax.get_value()),
-			}),
+		const payload = () => JSON.stringify({
+			customer: buyer.get_value(), price_chart: chart.get_value(),
+			gold_rate: flt(rate.get_value()), rows: S.rows, tax: cint(tax.get_value()),
 		});
+		const FORMATS = [
+			{ label: __("PDF — Bill (landscape)"), desc: __("The board as printed: component columns, totals, tax summary."), method: "export_sale_bill_pdf" },
+			{ label: __("Excel — Bill (XLSX)"), desc: __("Same columns in a worksheet, for editing and sending."), method: "export_sale_bill_xlsx" },
+		];
+		const dlg = new frappe.ui.Dialog({ title: __("Export bill"), fields: [{ fieldtype: "HTML", fieldname: "b" }] });
+		dlg.get_field("b").$wrapper.html(FORMATS.map((x, i) => `
+			<div class="ex-opt" data-i="${i}" style="border:1px solid var(--border-color);border-radius:8px;padding:12px 14px;margin-bottom:10px;cursor:pointer;">
+				<div style="font-weight:700;">${x.label}</div>
+				<div style="font-size:12px;color:var(--text-muted);">${x.desc}</div>
+			</div>`).join(""));
+		dlg.$wrapper.on("click", ".ex-opt", function () {
+			const x = FORMATS[+this.getAttribute("data-i")];
+			dlg.hide();
+			open_url_post("/api/method/" + API + "." + x.method, { payload: payload() });
+		});
+		dlg.show();
 	});
 
 	// Pricing Rules — the slabs this bill hit, each with an EDITABLE rate.
