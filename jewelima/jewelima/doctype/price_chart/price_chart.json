@@ -78,11 +78,11 @@
    "options": "Price Chart Diamond Rate"
   },
   {
+   "description": "Per certification on the bag's trail, charged per piece. A certification the bag carries but this table lacks BLOCKS the scan.",
    "fieldname": "certification_charges",
    "fieldtype": "Table",
-   "options": "Price Chart Certification Charge",
    "label": "Certification Charges",
-   "description": "Per certification on the bag's trail, charged per piece. A certification the bag carries but this table lacks BLOCKS the scan."
+   "options": "Price Chart Certification Charge"
   },
   {
    "fieldname": "stones_section",
@@ -90,30 +90,30 @@
    "label": "Other Stones"
   },
   {
+   "description": "Per-stone \u20b9/ct (Ruby 1ct = 200). When rows exist they are THE price \u2014 a PS stone without a row blocks the scan; the flat rate above only applies when this table is empty.",
    "fieldname": "precious_stone_rates",
    "fieldtype": "Table",
-   "options": "Price Chart Stone Rate",
    "label": "Precious Stone Rates",
-   "description": "Per-stone \u20b9/ct (Ruby 1ct = 200). When rows exist they are THE price \u2014 a PS stone without a row blocks the scan; the flat rate above only applies when this table is empty."
+   "options": "Price Chart Stone Rate"
   },
   {
+   "description": "Weight brackets by total CS carats; one blank-range row = flat. Empty + piece carries CS = scan denied.",
    "fieldname": "cs_rates",
    "fieldtype": "Table",
-   "options": "Price Chart Bucket Rate",
    "label": "Colour Stone Rates",
-   "description": "Weight brackets by total CS carats; one blank-range row = flat. Empty + piece carries CS = scan denied."
+   "options": "Price Chart Bucket Rate"
   },
   {
    "fieldname": "cz_rates",
    "fieldtype": "Table",
-   "options": "Price Chart Bucket Rate",
-   "label": "CZ Rates"
+   "label": "CZ Rates",
+   "options": "Price Chart Bucket Rate"
   },
   {
    "fieldname": "cvd_rates",
    "fieldtype": "Table",
-   "options": "Price Chart Bucket Rate",
-   "label": "CVD Rates"
+   "label": "CVD Rates",
+   "options": "Price Chart Bucket Rate"
   },
   {
    "fieldname": "col_break_stones",
@@ -144,11 +144,11 @@
    "precision": "3"
   },
   {
+   "description": "Per design type; the blank-design-type row is the DEFAULT. Per Gram: labour = max(rate x nett g, minimum rupees).",
    "fieldname": "making_rules",
    "fieldtype": "Table",
-   "options": "Price Chart Making Rule",
    "label": "Making Rules",
-   "description": "Per design type; the blank-design-type row is the DEFAULT. Per Gram: labour = max(rate x nett g, minimum rupees)."
+   "options": "Price Chart Making Rule"
   },
   {
    "fieldname": "setting_section",
@@ -230,6 +230,8 @@
    "write": 1
   }
  ],
+ "search_fields": "chart_name",
+ "show_title_field_in_link": 1,
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],
