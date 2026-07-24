@@ -7243,33 +7243,47 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
 	cert_rows = {(r.certification or "").upper(): r
 		for r in ((chart.get("certification_charges") if chart else None) or [])}
+	# lab certs share ONE column (hover shows which); hallmarking stays its own
+	cert_val = 0.0
+	cert_notes = []
+	cert_missing = []
 	for token in trail:
 		is_hall = token in ("HALL", "HALLMARKING")
-		key = "hall" if is_hall else "cert:" + token
-		label = "Hallmark" if is_hall else token
 		row = cert_rows.get(token)
 		if row is None and not is_hall:
 			row = cert_rows.get("ALL LABS")
 		if row is None:
-			comp(key, label, needs=True, note="{0} on the bag but not priced on the chart".format(token))
+			if is_hall:
+				comp("hall", "Hallmark", needs=True, note="{0} on the bag but not priced on the chart".format(token))
+			else:
+				cert_missing.append(token)
 			continue
 		if not is_hall and (row.basis or "Per Piece") == "Per Ct":
 			val = flt(b.act_dmd_weight) * flt(row.rate)
-			note = "{0} ct x {1}".format(round(flt(b.act_dmd_weight), 3), flt(row.rate))
+			note = "{0}: {1} ct x {2}".format(token, round(flt(b.act_dmd_weight), 3), flt(row.rate))
 			if flt(row.min_amount) and val < flt(row.min_amount):
 				val = flt(row.min_amount)
 				note += " (min {0})".format(flt(row.min_amount))
-			comp(key, label, val, note=note, rate=flt(row.rate), qty=flt(b.act_dmd_weight), unit="ct")
+			cert_val += val
+			cert_notes.append(note)
 			cert_detail.append({"certification": token, "rate": flt(row.rate), "basis": "Per Ct",
 				"ct": flt(b.act_dmd_weight), "value": round(val, 2),
 				"via": "ALL LABS" if token not in cert_rows else token})
+		elif is_hall:
+			comp("hall", "Hallmark", flt(row.rate) * pieces,
+				note="{0} x {1}".format(pieces, flt(row.rate)) if pieces > 1 else "",
+				rate=flt(row.rate), qty=pieces, unit="pc")
+			cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": pieces, "via": token})
 		else:
-			mult = pieces if is_hall else 1
-			comp(key, label, flt(row.rate) * mult,
-				note="{0} x {1}".format(mult, flt(row.rate)) if mult > 1 else "",
-				rate=flt(row.rate), qty=mult, unit="pc")
-			cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": mult,
-				"via": "ALL LABS" if (token not in cert_rows and not is_hall) else token})
+			cert_val += flt(row.rate)
+			cert_notes.append("{0}: {1}".format(token, flt(row.rate)))
+			cert_detail.append({"certification": token, "rate": flt(row.rate), "pieces": 1,
+				"via": "ALL LABS" if token not in cert_rows else token})
+	if cert_missing:
+		comp("cert", "Certification", needs=True,
+			note="{0} on the bag but not priced on the chart".format(", ".join(cert_missing)))
+	elif cert_notes:
+		comp("cert", "Certification", cert_val, note="; ".join(cert_notes))
 
 	# legacy 5-bucket summary (needs_price components count as 0 until filled)
 	def _v(*keys):
@@ -7285,7 +7299,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"diamond_value": _v("dmd", "pdmd"),
 		"stone_value": _v("cs", "cz", "cvd", "ps"),
 		"labour_value": _v("making"),
-		"charges_value": _v(*[k for k in comps if k == "hall" or k.startswith("cert:")]),
+		"charges_value": _v(*[k for k in comps if k in ("hall", "cert") or k.startswith("cert:")]),
 		"dmd_detail": dmd_detail, "cert_detail": cert_detail, "ps_detail": ps_detail,
 		"labour_rule": rule_desc,
 		"components": comps,

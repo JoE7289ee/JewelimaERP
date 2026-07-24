@@ -18,7 +18,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	// canonical column order; cert:* columns slot in after hall, alphabetically
-	const ORDER = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall"];
+	const ORDER = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall", "cert"];
 
 	$(page.main).append(`
 		<style>
@@ -262,7 +262,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	// components -> the sale's 5 recorded buckets
 	function buckets(r) {
 		const g = (keys) => keys.reduce((s, k) => s + compVal((r.components || {})[k]), 0);
-		const certKeys = Object.keys(r.components || {}).filter((k) => k === "hall" || k.startsWith("cert:"));
+		const certKeys = Object.keys(r.components || {}).filter((k) => k === "hall" || k === "cert" || k.startsWith("cert:"));
 		return {
 			gold_value: g(["gold"]),
 			diamond_value: g(["dmd", "pdmd"]),
@@ -361,7 +361,15 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 				add(`ps|${d.stone}|${d.rate}`, `${__("Precious")} — ${d.stone}`, __("per carat"),
 					d.rate, "ct", { i, key: "ps", qty: d.ct, det: d });
 			});
-			["cs", "cz", "cvd", "making", "hall"].concat(Object.keys(r.components || {}).filter((k) => k.startsWith("cert:")))
+			(r.cert_detail || []).forEach((d) => {
+				if (["HALL", "HALLMARKING"].includes(d.certification)) return;
+				const perCt = d.basis === "Per Ct";
+				add(`cert|${d.certification}|${d.rate}`,
+					`${__("Certification")} — ${d.certification}${d.via === "ALL LABS" ? " (ALL LABS)" : ""}`,
+					perCt ? __("per carat") : __("per piece"), d.rate, perCt ? "ct" : "pc",
+					{ i, key: "cert", qty: perCt ? d.ct : (d.pieces || 1), det: d });
+			});
+			["cs", "cz", "cvd", "making", "hall"]
 				.forEach((k) => {
 					const c = (r.components || {})[k];
 					if (!c || c.needs_price || c.rate === null || c.rate === undefined) return;
