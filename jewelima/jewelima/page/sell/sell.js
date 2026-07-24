@@ -39,6 +39,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		table.sl-tbl input.sl-v:focus{box-shadow:inset 0 0 0 1px var(--primary);outline:none;}
 		table.sl-tbl input.sl-v.needs{background:#fdecec;border-color:#d9534f;box-shadow:inset 0 0 0 1px #d9534f;}
 		table.sl-tbl input.sl-v.changed{background:#fff6e0;border-color:#e0a800;box-shadow:inset 0 0 0 1px #e0a800;}
+		table.sl-tbl input.sl-v[readonly]{border-color:transparent;background:transparent;cursor:default;}
+		table.sl-tbl input.sl-v.changed[readonly]{background:#fff6e0;border-color:#e0a800;box-shadow:inset 0 0 0 1px #e0a800;}
 		table.sl-tbl td .sl-dot{color:var(--text-muted);}
 		.sl-bar{font-weight:700;}
 		.sl-sub{color:var(--text-muted);font-size:11px;}
@@ -146,7 +148,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					const empty = c.value === null || c.value === "";
 					const cls = empty ? "needs" : (c.orig !== null && c.orig !== undefined && flt(c.value) !== flt(c.orig) ? "changed" : "");
 					return `<td class="r"><input class="sl-v ${cls}" data-k="${k}" type="number" step="0.01"
-						value="${empty ? "" : flt(c.value).toFixed(2)}" title="${esc(c.note || "")}"
+						value="${empty ? "" : flt(c.value).toFixed(2)}" ${empty ? "" : "readonly"}
 						${c.needs_price && empty ? `placeholder="?"` : ""}></td>`;
 				}).join("")}
 				<td class="r sl-total-cell sl-rowtotal">${money(rowTotal(r))}</td>
@@ -214,7 +216,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		}).catch(() => focusScan());
 	});
 
-	$(root).on("input", ".sl-v", function () {
+	$(root).on("input", ".sl-v:not([readonly])", function () {
 		const i = +$(this).closest("tr").attr("data-i");
 		const k = this.getAttribute("data-k");
 		const c = S.rows[i].components[k];
@@ -225,6 +227,32 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		$(this).closest("tr").find(".sl-rowtotal").text(money(rowTotal(S.rows[i])));
 		totals();
 	});
+	// dblclick a priced cell -> small dialog; the edit turns the cell yellow
+	$(root).on("dblclick", ".sl-v[readonly]", function () {
+		const i = +$(this).closest("tr").attr("data-i");
+		const k = this.getAttribute("data-k");
+		const c = S.rows[i].components[k];
+		frappe.prompt({ fieldtype: "Float", fieldname: "v", label: __("{0} ₹ — {1}", [c.label, S.rows[i].order_bag]),
+			default: flt(c.value), reqd: 1 },
+			(vals) => { c.value = flt(vals.v); paint(); focusScan(); },
+			__("Edit {0}", [c.label]));
+	});
+	// hover a priced cell -> how the value came (every bracket line)
+	$(root).on("mouseenter", ".sl-v[readonly]", function (e) {
+		const i = +$(this).closest("tr").attr("data-i");
+		const k = this.getAttribute("data-k");
+		const c = S.rows[i].components[k];
+		const lines = (c.note || "").split("; ").filter(Boolean);
+		if (c.orig !== null && c.orig !== undefined && flt(c.value) !== flt(c.orig))
+			lines.push(__("edited: {0} → {1}", [money(c.orig), money(c.value)]));
+		if (!lines.length) return;
+		$(root).find(".sl-tip").html(`<div class="t">${esc(c.label)}</div>` + lines.map((l) => esc(l)).join("<br>"))
+			.css({ left: e.clientX + 14, top: e.clientY + 12 }).show();
+	});
+	$(root).on("mousemove", ".sl-v[readonly]", function (e) {
+		$(root).find(".sl-tip:visible").css({ left: e.clientX + 14, top: e.clientY + 12 });
+	});
+	$(root).on("mouseleave", ".sl-v[readonly]", () => $(root).find(".sl-tip").hide());
 	$(root).on("click", ".sl-x", function () {
 		S.rows.splice(+$(this).closest("tr").attr("data-i"), 1);
 		paint();
