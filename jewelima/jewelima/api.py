@@ -6609,6 +6609,13 @@ def design_card_autocrop(name):
 	return {"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
 
 
+def _db_img_name(design_no, kind, ext="png"):
+	"""The three slots carry the DESIGN CODE as the filename: '<code>.photo.png',
+	'<code>.info.png', '<code>.customer.png' (raw keeps its imported name)."""
+	safe = re.sub(r"[^A-Za-z0-9 ._-]", "-", (design_no or "design").strip())
+	return "{0}.{1}.{2}".format(safe, kind, ext)
+
+
 @frappe.whitelist()
 def design_card_preview(payload):
 	"""Live preview: compose and hand back base64 — nothing touches the record."""
@@ -6699,18 +6706,20 @@ def save_design_card(payload):
 		if r.get("stone") or r.get("sieve")])
 	if d.is_new():
 		d.insert(ignore_permissions=True)
-	d.photo = _cad_store_image_generic(p.get("photo"), "Design Bank", d.name) or d.photo
+	d.photo = _cad_store_image_generic(p.get("photo"), "Design Bank", d.name,
+		fname=_db_img_name(code, "photo")) or d.photo
 	# render the card; deterministic name so the old render dies with the new save
 	from io import BytesIO
 	rp = dict(p)
 	rp["photo"] = d.photo
 	buf = BytesIO()
 	_card_compose(rp).save(buf, "PNG")
-	tag = "CARD-{0}".format(d.name)
+	info_name = _db_img_name(code, "info")
 	for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
-			"attached_to_name": d.name, "file_name": ["like", tag + "%"]}, pluck="name"):
+			"attached_to_name": d.name,
+			"file_name": ["in", [info_name, "CARD-{0}.png".format(d.name)]]}, pluck="name"):
 		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
-	fdoc = frappe.get_doc({"doctype": "File", "file_name": tag + ".png", "content": buf.getvalue(),
+	fdoc = frappe.get_doc({"doctype": "File", "file_name": info_name, "content": buf.getvalue(),
 		"is_private": 0, "attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
 	d.image = fdoc.file_url
 	d.photoupdate = 0
@@ -6719,7 +6728,7 @@ def save_design_card(payload):
 	return {"name": d.name, "design_no": d.design_no, "image": d.image}
 
 
-def _cad_store_image_generic(ref, doctype, name):
+def _cad_store_image_generic(ref, doctype, name, fname=None):
 	"""data-URL -> stored File on any doc; an existing /files/ url passes through."""
 	if not ref:
 		return ""
@@ -6728,7 +6737,12 @@ def _cad_store_image_generic(ref, doctype, name):
 	import base64
 	head, b64 = ref.split(",", 1)
 	ext = "jpg" if ("jpeg" in head or "jpg" in head) else "png"
-	f = frappe.get_doc({"doctype": "File", "file_name": "photo-{0}.{1}".format(frappe.generate_hash(length=8), ext),
+	if fname:
+		for old_f in frappe.get_all("File", filters={"attached_to_doctype": doctype,
+				"attached_to_name": name, "file_name": ["like", fname.rsplit(".", 1)[0] + "%"]}, pluck="name"):
+			frappe.delete_doc("File", old_f, force=True, ignore_permissions=True)
+	f = frappe.get_doc({"doctype": "File",
+		"file_name": fname or "photo-{0}.{1}".format(frappe.generate_hash(length=8), ext),
 		"content": base64.b64decode(b64), "is_private": 0,
 		"attached_to_doctype": doctype, "attached_to_name": name}).insert(ignore_permissions=True)
 	return f.file_url

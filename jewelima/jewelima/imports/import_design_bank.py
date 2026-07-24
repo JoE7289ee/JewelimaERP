@@ -168,8 +168,9 @@ def rebuild_cards(limit=500):
 			try:
 				crop = design_card_autocrop(d.name)
 				head, b64 = crop["image"].split(",", 1)
+				from jewelima.jewelima.api import _db_img_name
 				fdoc = frappe.get_doc({"doctype": "File",
-					"file_name": "photo-{0}.png".format(frappe.generate_hash(length=8)),
+					"file_name": _db_img_name(d.design_no, "photo"),
 					"content": _b64.b64decode(b64), "is_private": 0,
 					"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
 				d.photo = fdoc.file_url
@@ -183,11 +184,13 @@ def rebuild_cards(limit=500):
 				"stones": [{"stone": x.stone, "sieve": x.sieve, "pcs": x.pcs, "ct": x.ct} for x in d.stones]}
 			buf = BytesIO()
 			_card_compose(payload).save(buf, "PNG")
-			tag = "CARD-{0}".format(d.name)
+			from jewelima.jewelima.api import _db_img_name
+			info_name = _db_img_name(d.design_no, "info")
 			for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
-					"attached_to_name": d.name, "file_name": ["like", tag + "%"]}, pluck="name"):
+					"attached_to_name": d.name,
+					"file_name": ["in", [info_name, "CARD-{0}.png".format(d.name)]]}, pluck="name"):
 				frappe.delete_doc("File", old, force=True, ignore_permissions=True)
-			fdoc = frappe.get_doc({"doctype": "File", "file_name": tag + ".png",
+			fdoc = frappe.get_doc({"doctype": "File", "file_name": info_name,
 				"content": buf.getvalue(), "is_private": 0,
 				"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
 			d.image = fdoc.file_url
