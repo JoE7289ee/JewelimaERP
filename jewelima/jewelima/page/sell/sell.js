@@ -114,7 +114,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const d = new frappe.ui.Dialog({ title: __("Scan history ({0})", [h.length]), size: "large",
 			fields: [{ fieldtype: "HTML", fieldname: "h" }] });
 		d.fields_dict.h.$wrapper.html(h.length
-			? `<table class="table table-bordered" style="font-size:12px;"><thead><tr><th style="width:40px">#</th><th>${__("Time")}</th><th>${__("Card")}</th><th>${__("Result")}</th></tr></thead><tbody>${body}</tbody></table>`
+			? `<table class="table table-bordered" style="font-size:12px;"><thead><tr><th style="width:40px">#</th><th>${__("Time")}</th><th>${__("Barcode")}</th><th>${__("Result")}</th></tr></thead><tbody>${body}</tbody></table>`
 			: `<div class="text-muted" style="padding:12px;">${__("No scans yet this session.")}</div>`);
 		d.show();
 	}
@@ -156,7 +156,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		const to = buyer.get_value() || "";
 		const cols = activeCols();
 		$(root).find("thead").html(`
-			<tr><th>${__("Card")}</th><th>${__("Design")}</th><th class="sl-holder-h">${__("Held By")}</th>
+			<tr><th>${__("Barcode")}</th><th>${__("Design")}</th><th class="sl-holder-h">${__("Held By")}</th>
 			<th class="r">${__("Gold g")}</th><th class="r">${__("DMD ct")}</th>
 			${cols.map((k) => `<th class="r">${esc(colLabel(k))} ₹</th>`).join("")}
 			<th class="r">${__("Total ₹")}</th><th style="width:30px"></th></tr>`);
