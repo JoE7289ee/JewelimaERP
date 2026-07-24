@@ -7108,7 +7108,7 @@ def export_sale_bill_pdf(payload):
 		title=frappe._("Sale Bill — {0}").format(frappe.utils.escape_html(p.get("customer") or frappe._("(no buyer yet)"))),
 		sub="{0} &middot; {1}: {2} &middot; {3}: {4} &middot; {5} {6}".format(
 			frappe.utils.formatdate(frappe.utils.today()),
-			frappe._("Price Chart"), frappe.utils.escape_html(p.get("price_chart") or "-"),
+			frappe._("Price Chart"), frappe.utils.escape_html(_chart_label(p.get("price_chart"))),
 			frappe._("Gold Rate"), _inr(flt(p.get("gold_rate"))),
 			len(rows), frappe._("piece(s)")),
 		head=head, body="".join(body), tot=tot_row,
@@ -7119,6 +7119,11 @@ def export_sale_bill_pdf(payload):
 	frappe.local.response.filename = "SaleBill-{0}.pdf".format((p.get("customer") or "draft").replace(" ", "-"))
 	frappe.local.response.filecontent = get_pdf(html, {"orientation": "Landscape"})
 	frappe.local.response.type = "pdf"
+
+
+def _chart_label(name):
+	"""Exports show the chart's NAME (JD-BTQ), never the PCH code."""
+	return (frappe.db.get_value("Price Chart", name, "chart_name") or name or "-") if name else "-"
 
 
 @frappe.whitelist()
@@ -7151,7 +7156,7 @@ def export_sale_bill_jewelima_xlsx(payload):
 	# ---- header block, same geography as the house sheet
 	ws["D1"] = (p.get("customer") or "").upper()
 	ws["L1"] = "DIAMOND"
-	ws["R1"] = p.get("price_chart") or ""
+	ws["R1"] = _chart_label(p.get("price_chart")) if p.get("price_chart") else ""
 	ws["L2"] = "DATE :"
 	ws["R2"] = frappe.utils.formatdate(frappe.utils.today(), "dd-mm-yyyy")
 	ws["L3"] = "GOLD  RATE :"
@@ -7257,7 +7262,7 @@ def export_sale_bill_xlsx(payload):
 	ws.title = "Sale Bill"
 	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
 	ws.append(["Sale Bill", p.get("customer") or "(no buyer yet)", "",
-		"Chart: " + (p.get("price_chart") or "-"), "Gold rate: " + str(flt(p.get("gold_rate")))])
+		"Chart: " + _chart_label(p.get("price_chart")), "Gold rate: " + str(flt(p.get("gold_rate")))])
 	ws.append([])
 	cols = ["Barcode", "Item", "Type", "Nett Wt", "DMD ct"] + [labels[k] for k in keys] + ["Total"]
 	ws.append(cols)
