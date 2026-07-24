@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 """Whitelisted APIs for the Design Bank gallery + tag manager (custom Design Tag system)."""
 
+import json
 import re
 
 import frappe
