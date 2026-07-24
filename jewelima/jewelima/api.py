@@ -7070,8 +7070,11 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				if token not in cert_rows:
 					frappe.throw(frappe._("{0} is {1} certified but chart {2} has no price for {1} — scan denied.").format(
 						nm, token, chart.chart_name))
-				charges += cert_rows[token] * pieces
-				cert_detail.append({"certification": token, "rate": cert_rows[token], "pieces": pieces})
+				# HALLMARKING charges per HUID (a stud pair carries two and pays
+				# twice); other certifications charge once per product
+				mult = pieces if token in ("HALL", "HALLMARKING") else 1
+				charges += cert_rows[token] * mult
+				cert_detail.append({"certification": token, "rate": cert_rows[token], "pieces": mult})
 			else:
 				# legacy chart without the table: the old flat charge covers everything
 				pass
