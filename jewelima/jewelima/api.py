@@ -6596,7 +6596,7 @@ def _card_compose(p):
 		d.text((W // 2, (top + bottom) // 2), "PHOTO", font=_card_font(36), fill="#bbbbbb", anchor="mm")
 	y = bottom + 30
 	d.line([30, y - 12, W - 30, y - 12], fill="#000000", width=3)
-	big = _card_font(36, True)
+	big = _card_font(39, True)  # team feedback: GW/DW +3pt
 	if flt(p.get("gross_weight")):
 		d.text((30, y), "GW  {0} gm".format(p["gross_weight"]), font=big, fill="#111111")
 	if flt(p.get("diamond_weight")):
@@ -6611,7 +6611,8 @@ def _card_compose(p):
 		bits = [x for x in (st.get("stone"), st.get("sieve"),
 			("{0} pc".format(st["pcs"]) if cint(st.get("pcs")) else ""),
 			("{0} ct".format(st["ct"]) if flt(st.get("ct")) else "")) if x]
-		d.text((30, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#111111")
+		# stone lines read CENTERED (team feedback)
+		d.text((W // 2, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#111111", anchor="ma")
 		y += 42
 	if p.get("note"):
 		d.text((30, y), str(p["note"]), font=f_line, fill="#111111")

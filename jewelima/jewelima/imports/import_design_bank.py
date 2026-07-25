@@ -913,3 +913,41 @@ def normalize_bank_filenames(batch=500):
 	frappe.db.commit()
 	print("normalize_bank_filenames: {0} renamed, {1} skipped, {2} missing".format(renamed, skipped, missing))
 	return {"renamed": renamed, "skipped": skipped, "missing": missing}
+
+
+def rerender_info_cards(start=0, limit=0):
+	"""Re-compose EVERY info card with the current card style (e.g. the
+	GW/DW +3pt + centred stone lines feedback). Pure re-render: fields are
+	untouched, the canonical <code>.info.png is overwritten in place and the
+	record's modified bumps so cached tiles refresh. Batched + gc'd."""
+	import gc
+	from jewelima.jewelima.api import _card_compose, _db_img_name, _write_slot_file
+	from io import BytesIO
+	rows = frappe.db.sql("""select name from `tabDesign Bank`
+		where image like '/files/%%.info.png' order by name limit %s, %s""",
+		(int(start), int(limit) if int(limit) else 10**9), as_dict=True)
+	done = failed = 0
+	for r in rows:
+		try:
+			d = frappe.get_doc("Design Bank", r.name)
+			payload = {"design_no": d.design_no, "design_type": d.design_type,
+				"gross_weight": d.gross_weight, "diamond_weight": d.diamond_weight,
+				"note": d.note, "extra_lines": d.extra_lines, "photo": d.photo,
+				"stones": [{"stone": x.stone, "sieve": x.sieve, "pcs": x.pcs, "ct": x.ct} for x in d.stones]}
+			buf = BytesIO()
+			_card_compose(payload).save(buf, "PNG")
+			_write_slot_file(d.name, _db_img_name(d.design_no, "info"), buf.getvalue())
+			frappe.db.set_value("Design Bank", r.name, "image",
+				"/files/" + _db_img_name(d.design_no, "info"))  # bumps modified -> busts caches
+			done += 1
+		except Exception:
+			failed += 1
+		if (done + failed) % 25 == 0:
+			frappe.db.commit()
+			frappe.clear_document_cache("Design Bank", r.name)
+			gc.collect()
+		if (done + failed) % 200 == 0:
+			print("rerender: {0} done, {1} failed".format(done, failed), flush=True)
+	frappe.db.commit()
+	print("rerender_info_cards: {0} done, {1} failed".format(done, failed))
+	return {"done": done, "failed": failed}
