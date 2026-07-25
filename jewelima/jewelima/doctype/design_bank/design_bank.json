@@ -102,62 +102,62 @@
    "read_only": 1
   },
   {
+   "default": "Pending",
    "fieldname": "status",
    "fieldtype": "Select",
-   "label": "Status",
-   "options": "Pending\nApproved\nRetired",
-   "default": "Pending",
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nApproved\nRetired"
   },
   {
+   "description": "Higher first in the Review queue. Bulk-set from the priority excel.",
    "fieldname": "priority",
    "fieldtype": "Int",
-   "label": "Review Priority",
    "in_standard_filter": 1,
-   "description": "Higher first in the Review queue. Bulk-set from the priority excel."
+   "label": "Review Priority"
   },
   {
+   "description": "Mandatory before a card can be Approved.",
    "fieldname": "design_type",
    "fieldtype": "Link",
-   "options": "Design Type",
-   "label": "Design Type",
    "in_standard_filter": 1,
-   "description": "Mandatory before a card can be Approved."
+   "label": "Design Type",
+   "options": "Design Type"
   },
   {
+   "description": "Outside piece \u2014 the provider letter joins the code (JR-S-1).",
    "fieldname": "provider",
    "fieldtype": "Select",
-   "label": "Provider",
-   "options": "\nSAMSA",
    "in_standard_filter": 1,
-   "description": "Outside piece \u2014 the provider letter joins the code (JR-S-1)."
+   "label": "Provider",
+   "options": "\nSAMSA"
   },
   {
+   "description": "The provider's OWN code for this piece.",
    "fieldname": "provider_piece_code",
    "fieldtype": "Data",
-   "label": "Provider Piece Code",
-   "description": "The provider's OWN code for this piece."
+   "label": "Provider Piece Code"
   },
   {
+   "description": "Crop didn't work / background needs nulling \u2014 the photo-upgrade queue.",
    "fieldname": "photoupdate",
    "fieldtype": "Check",
-   "label": "Upgrade Photo",
    "in_standard_filter": 1,
-   "description": "Crop didn't work / background needs nulling \u2014 the photo-upgrade queue."
+   "label": "Upgrade Photo"
   },
   {
+   "description": "Import found more images for this design \u2014 pick the keeper in Review Images.",
    "fieldname": "duplicate_review",
    "fieldtype": "Check",
-   "label": "Duplicate Review",
    "in_standard_filter": 1,
-   "description": "Import found more images for this design \u2014 pick the keeper in Review Images."
+   "label": "Duplicate Review"
   },
   {
    "fieldname": "wax_dye",
    "fieldtype": "Link",
-   "options": "Wax Dye",
-   "label": "Wax Dye"
+   "label": "Wax Dye",
+   "options": "Wax Dye"
   },
   {
    "fieldname": "dye_available",
@@ -172,8 +172,8 @@
   {
    "fieldname": "design_links",
    "fieldtype": "Table",
-   "options": "Design Bank Design Link",
-   "label": "Design Links"
+   "label": "Design Links",
+   "options": "Design Bank Design Link"
   },
   {
    "fieldname": "sec_review",
@@ -183,26 +183,26 @@
   {
    "fieldname": "review_images",
    "fieldtype": "Table",
-   "options": "Design Bank Review Image",
-   "label": "Review Images"
+   "label": "Review Images",
+   "options": "Design Bank Review Image"
   },
   {
+   "description": "Product-only cutout (usually PNG) \u2014 composes the card and feeds the gallery's PRINT mode.",
    "fieldname": "photo",
    "fieldtype": "Attach Image",
-   "label": "Product Image (print)",
-   "description": "Product-only cutout (usually PNG) \u2014 composes the card and feeds the gallery's PRINT mode."
+   "label": "Product Image (print)"
   },
   {
+   "description": "Lifestyle shot with background (real or AI) \u2014 the gallery's CUSTOMER mode.",
    "fieldname": "customer_image",
    "fieldtype": "Attach Image",
-   "label": "Customer Image",
-   "description": "Lifestyle shot with background (real or AI) \u2014 the gallery's CUSTOMER mode."
+   "label": "Customer Image"
   },
   {
+   "description": "Anything else printed on the card, one line each.",
    "fieldname": "extra_lines",
    "fieldtype": "Small Text",
-   "label": "Extra Lines",
-   "description": "Anything else printed on the card, one line each."
+   "label": "Extra Lines"
   },
   {
    "fieldname": "sec_stones",
@@ -212,35 +212,35 @@
   {
    "fieldname": "stones",
    "fieldtype": "Table",
-   "options": "Design Bank Stone",
-   "label": "Stones"
+   "label": "Stones",
+   "options": "Design Bank Stone"
   },
   {
+   "description": "The imported original card scan \u2014 never touched after the rebuild.",
    "fieldname": "raw_image",
    "fieldtype": "Attach Image",
-   "label": "Raw Image (original scan)",
-   "description": "The imported original card scan \u2014 never touched after the rebuild."
+   "label": "Raw Image (original scan)"
   },
   {
+   "description": "Best sellers queued for a lifestyle/AI shot.",
    "fieldname": "customer_image_needed",
    "fieldtype": "Check",
-   "label": "Customer Image Needed",
    "in_standard_filter": 1,
-   "description": "Best sellers queued for a lifestyle/AI shot."
+   "label": "Customer Image Needed"
   },
   {
+   "description": "Crop + new-format card render done by the batch job.",
    "fieldname": "rebuilt",
    "fieldtype": "Check",
    "label": "Rebuilt",
-   "read_only": 1,
-   "description": "Crop + new-format card render done by the batch job."
+   "read_only": 1
   },
   {
+   "description": "Uploaded on the Photo Update page; replaces the product photo only when APPROVED.",
    "fieldname": "pending_photo",
    "fieldtype": "Attach Image",
    "label": "Pending Photo (awaiting approval)",
-   "read_only": 1,
-   "description": "Uploaded on the Photo Update page; replaces the product photo only when APPROVED."
+   "read_only": 1
   },
   {
    "fieldname": "pending_photo_by",
@@ -249,12 +249,12 @@
    "read_only": 1
   },
   {
+   "description": "The folder this image lived in before the import \u2014 REFERENCE ONLY, not part of the tag system.",
    "fieldname": "source_folder",
    "fieldtype": "Data",
-   "label": "Source Folder (old categorisation)",
-   "read_only": 1,
    "in_standard_filter": 1,
-   "description": "The folder this image lived in before the import \u2014 REFERENCE ONLY, not part of the tag system."
+   "label": "Source Folder (old categorisation)",
+   "read_only": 1
   }
  ],
  "image_field": "image",
@@ -289,6 +289,8 @@
    "write": 1
   }
  ],
+ "search_fields": "design_no",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
