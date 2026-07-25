@@ -1,11 +1,12 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// New Design (Design Bank) — mint the next in-house design number and go.
-// Pick the Design Type (its Bank Code leads the series: BANGLE -> JB-1),
-// optionally the provider (SAMSA -> JR-S-1, with a field for THEIR piece
-// code), see the number the piece WILL get, and Create opens the Card
-// Editor with everything prefilled. Numbers never reuse (retired included).
+// New Design (Design Bank) — the whole birth happens HERE. Pick the Design
+// Type (its Bank Code leads the series: BANGLE -> JB-1) and optionally the
+// provider (SAMSA -> JR-S-1 with their piece code). CREATE locks the number
+// (the record exists from that moment — numbers never reuse), then add the
+// product photo: the info card renders live as you do. SAVE stores photo +
+// card; the design sits in Review at priority 10 for approval.
 // Route: /app/new-design-bank
 
 frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
@@ -15,17 +16,42 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.nd-wrap{max-width:520px;}
+		.nd-cols{display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap;}
+		.nd-wrap{max-width:460px;flex:0 0 auto;}
 		.nd-wrap .frappe-control{margin-bottom:10px;}
 		.nd-code{font-size:34px;font-weight:800;letter-spacing:.03em;margin:16px 0;min-height:46px;}
 		.nd-code .muted{font-size:14px;font-weight:400;color:var(--text-muted);}
+		.nd-locked{display:none;}
+		.nd-locked .l{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+		.nd-photo-btn{margin:8px 0 14px;}
+		.nd-save{background:#2e7d32;border-color:#2e7d32;}
+		.nd-prev{flex:1 1 340px;max-width:430px;display:none;}
+		.nd-prev img{width:100%;border:1px solid var(--border-color);border-radius:8px;background:#fff;}
+		.nd-prev .cap{font-size:11px;color:var(--text-muted);margin-top:4px;}
 		</style>
+		<div class="nd-cols">
 		<div class="nd-wrap">
-			<div class="nd-dtype"></div>
-			<div class="nd-provider"></div>
-			<div class="nd-pcode" style="display:none;"></div>
-			<div class="nd-code"><span class="muted">${__("pick the design type…")}</span></div>
-			<button class="btn btn-primary nd-go" style="background:#2e7d32;border-color:#2e7d32;" disabled>${__("Create — open the Card Editor")}</button>
+			<div class="nd-form">
+				<div class="nd-dtype"></div>
+				<div class="nd-provider"></div>
+				<div class="nd-pcode" style="display:none;"></div>
+				<div class="nd-code"><span class="muted">${__("pick the design type…")}</span></div>
+				<button class="btn btn-primary nd-go" style="background:#2e7d32;border-color:#2e7d32;" disabled>${__("CREATE — lock this number")}</button>
+			</div>
+			<div class="nd-locked">
+				<div class="l">${__("Design number (locked)")}</div>
+				<div class="nd-code nd-code2"></div>
+				<button class="btn btn-default nd-photo-btn">${__("Add product photo…")}</button>
+				<input type="file" class="nd-file" accept="image/*" style="display:none;">
+				<div>
+					<button class="btn btn-primary nd-save" disabled>${__("SAVE — into the bank")}</button>
+					<button class="btn btn-default nd-again" style="margin-left:8px;">${__("New another")}</button>
+				</div>
+				<div style="font-size:12px;color:var(--text-muted);margin-top:10px;">
+					${__("Saves as Pending at priority 10 — top of the Review queue for approval.")}</div>
+			</div>
+		</div>
+		<div class="nd-prev"><img><div class="cap">${__("info card — renders live")}</div></div>
 		</div>
 	`);
 	const root = $(page.main);
@@ -34,6 +60,7 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 	const fProv = mk(".nd-provider", { fieldtype: "Select", label: __("Provider (outside piece)"), fieldname: "pv", options: "\nSAMSA" });
 	const fPCode = mk(".nd-pcode", { fieldtype: "Data", label: __("Provider's own piece code"), fieldname: "pc" });
 	let minted = "";
+	const S = { name: "", code: "", photo: "" };
 
 	function refresh() {
 		const t = fType.get_value();
@@ -50,10 +77,70 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 	fType.$input.on("change awesomplete-selectcomplete", () => setTimeout(refresh, 100));
 	fProv.$input.on("change", refresh);
 
+	function preview() {
+		frappe.call({ method: API + ".design_card_preview", args: { payload: {
+			design_no: S.code, design_type: fType.get_value(), photo: S.photo,
+		} }, freeze: false }).then((r) => {
+			root.find(".nd-prev").show().find("img").attr("src", (r.message || {}).image || "");
+		});
+	}
+
+	// CREATE = the record exists NOW; the number can never be taken by anyone else
 	root.find(".nd-go").on("click", () => {
 		if (!minted) return;
-		frappe.route_options = { new_design: { design_no: minted, design_type: fType.get_value(),
-			provider: fProv.get_value() || "", provider_piece_code: fPCode.get_value() || "" } };
-		frappe.set_route("card-builder");
+		frappe.call({ method: API + ".create_new_design", args: {
+			design_type: fType.get_value(), provider: fProv.get_value() || null,
+			provider_piece_code: fPCode.get_value() || "",
+		} }).then((r) => {
+			const m = r.message || {};
+			S.name = m.name;
+			S.code = m.code;
+			S.photo = "";
+			root.find(".nd-form").hide();
+			root.find(".nd-locked").show();
+			root.find(".nd-code2").text(m.code);
+			root.find(".nd-save").prop("disabled", true);
+			frappe.show_alert({ message: __("{0} locked — now add the photo.", [m.code]), indicator: "green" }, 5);
+			preview();
+		});
 	});
+
+	root.find(".nd-photo-btn").on("click", () => root.find(".nd-file").trigger("click"));
+	root.find(".nd-file").on("change", function () {
+		const file = this.files && this.files[0];
+		if (!file) return;
+		const rd = new FileReader();
+		rd.onload = () => {
+			S.photo = rd.result;
+			root.find(".nd-save").prop("disabled", false);
+			preview();
+		};
+		rd.readAsDataURL(file);
+		this.value = "";
+	});
+
+	root.find(".nd-save").on("click", () => {
+		if (!S.photo) return;
+		frappe.dom.freeze(__("Saving into the bank..."));
+		frappe.call({ method: API + ".save_design_card", args: { payload: {
+			name: S.name, design_no: S.code, design_type: fType.get_value(),
+			provider: fProv.get_value() || "", provider_piece_code: fPCode.get_value() || "",
+			photo: S.photo,
+		} } }).then(() => {
+			frappe.dom.unfreeze();
+			frappe.show_alert({ message: __("{0} saved — in Review at priority 10.", [S.code]), indicator: "green" }, 6);
+			reset();
+		}).catch(() => frappe.dom.unfreeze());
+	});
+
+	function reset() {
+		S.name = "";
+		S.code = "";
+		S.photo = "";
+		root.find(".nd-locked").hide();
+		root.find(".nd-prev").hide();
+		root.find(".nd-form").show();
+		refresh();
+	}
+	root.find(".nd-again").on("click", reset);
 };

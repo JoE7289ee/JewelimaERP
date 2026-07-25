@@ -134,11 +134,13 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 	// selection -> bulk prioritise
 	const canPrio = frappe.user.has_role("Jewelima Design Bank") || frappe.user.has_role("Jewelima Design Approver") || frappe.user.has_role("System Manager");
 	const selected = new Set();
-	const canRetire = frappe.user.has_role("Jewelima Design Approver") || frappe.user.has_role("System Manager");
+	const canRetire = canPrio; // Design Bank, Approver and System Manager may retire
 	function paintPrio() {
-		root.find(".oc-prio").toggle(canPrio && selected.size > 0)
+		// jQuery .toggle() with a NON-boolean argument animates a show/hide flip
+		// (the odd/even-selection bug) — always hand it a real boolean
+		root.find(".oc-prio").toggle(!!(canPrio && selected.size > 0))
 			.text(__("Prioritise {0} selected", [selected.size]));
-		root.find(".oc-ret").toggle(canRetire && selected.size > 0)
+		root.find(".oc-ret").toggle(!!(canRetire && selected.size > 0))
 			.text(__("Retire {0} selected", [selected.size]));
 	}
 	root.on("click", ".oc-tile", function () {

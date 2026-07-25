@@ -601,7 +601,7 @@ def set_design_priority(names, priority):
 def set_design_retired(names):
 	"""Bulk-retire picked cards (Old Categories selection). Approver only —
 	codes stay reserved forever, same as a Review-page retire."""
-	allowed = {"System Manager", "Jewelima Design Approver"}
+	allowed = {"System Manager", "Jewelima Design Approver", "Jewelima Design Bank"}
 	if not allowed & set(frappe.get_roles()):
 		frappe.throw("Not permitted to retire designs")
 	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])

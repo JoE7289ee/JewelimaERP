@@ -6726,6 +6726,27 @@ def new_bank_code(design_type, provider=None):
 
 
 @frappe.whitelist()
+def create_new_design(design_type, provider=None, provider_piece_code=None):
+	"""New Design CREATE: mint AND LOCK the next series code by inserting the
+	Design Bank record on the spot — Pending at priority 10, so it rides the
+	top of the Review queue for approval. Photo + info card follow on the same
+	page via save_design_card."""
+	code = new_bank_code(design_type, provider)["code"]
+	d = frappe.new_doc("Design Bank")
+	d.design_no = code
+	d.design_type = design_type
+	d.provider = provider or None
+	d.provider_piece_code = provider_piece_code or ""
+	d.status = "Pending"
+	d.priority = 10
+	d.insert(ignore_permissions=True)
+	# born digital: nothing to OCR or rebuild
+	frappe.db.set_value("Design Bank", d.name, {"rebuilt": 1, "ocr_done": 1}, update_modified=False)
+	frappe.db.commit()
+	return {"name": d.name, "code": code}
+
+
+@frappe.whitelist()
 def check_design_code(code):
 	"""The new-code guard: exact match against EVERYTHING (live + retired)."""
 	code = (code or "").strip()
