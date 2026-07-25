@@ -359,6 +359,7 @@ def review_save(payload):
 	d.customer_image_needed = 1 if p.get("customer_image_needed") else 0
 	if p.get("approve"):
 		d.status = "Approved"  # validate() enforces design_type
+		d.priority = 0         # the P-flag is a QUEUE marker — done once approved
 	if p.get("retire"):
 		d.status = "Retired"   # code stays reserved forever; sales returns still resolve
 	if p.get("delete_raw") and d.raw_image:
@@ -627,6 +628,20 @@ def get_retired_designs(start=0, limit=60, q=None):
 	for r in rows:
 		r["display"] = r.raw_image or r.photo or r.image or ""
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def design_bring_back(name):
+	"""Un-retire: back to Pending — it rejoins the Review queue."""
+	allowed = {"System Manager", "Jewelima Design Approver"}
+	if not allowed & set(frappe.get_roles()):
+		frappe.throw("Not permitted")
+	d = frappe.get_doc("Design Bank", name)
+	if d.status != "Retired":
+		frappe.throw(frappe._("{0} is not retired.").format(d.design_no or name))
+	frappe.db.set_value("Design Bank", name, {"status": "Pending", "rebuilt": 1}, update_modified=False)
+	frappe.db.commit()
+	return {"name": name, "design_no": d.design_no, "status": "Pending"}
 
 
 @frappe.whitelist()

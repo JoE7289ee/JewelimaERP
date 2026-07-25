@@ -47,6 +47,7 @@ frappe.pages["retired-designs"].on_page_load = function (wrapper) {
 					<img loading="lazy" src="${esc(d.display)}" onerror="this.style.opacity=.2">
 					<div class="n">${esc(d.design_no)}</div>
 					<div class="f">${esc(d.source_folder || "")}</div>
+					<button class="btn btn-xs back" style="background:#2e7d32;border-color:#2e7d32;color:#fff;margin-right:4px;">${__("Bring back")}</button>
 					<button class="btn btn-xs del" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Delete forever")}</button>
 				</div>`).join(""));
 			start += m.rows.length;
@@ -55,6 +56,16 @@ frappe.pages["retired-designs"].on_page_load = function (wrapper) {
 	}
 	root.find(".rd-q").on("input", () => { clearTimeout(timer); timer = setTimeout(() => load(true), 300); });
 	root.find(".rd-more").on("click", () => load());
+
+	// bring back = un-retire, straight into the Review queue (one click)
+	root.on("click", ".rd-tile .back", function () {
+		const tile = $(this).closest(".rd-tile");
+		frappe.call({ method: API + ".design_bring_back", args: { name: tile.data("name") } })
+			.then((r) => {
+				tile.slideUp(150, () => tile.remove());
+				frappe.show_alert({ message: __("{0} is back — Pending in Review.", [(r.message || {}).design_no]), indicator: "green" }, 5);
+			});
+	});
 
 	root.on("click", ".rd-tile .del", function () {
 		const tile = $(this).closest(".rd-tile");
