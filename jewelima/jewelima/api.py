@@ -6683,8 +6683,9 @@ def _write_slot_file(design_name, fname, content):
 	hand-made around them."""
 	import os
 	url = "/files/" + fname
-	for fn in frappe.get_all("File", filters={"file_url": url}, pluck="name"):
-		frappe.delete_doc("File", fn, force=True, ignore_permissions=True)
+	# direct row delete — delete_doc enqueues a cleanup job per call and a bulk
+	# re-render floods the queue until frappe rejects new jobs (QueueOverloaded)
+	frappe.db.delete("File", {"file_url": url})
 	path = frappe.get_site_path("public", "files", fname)
 	with open(path, "wb") as fh:
 		fh.write(content)
