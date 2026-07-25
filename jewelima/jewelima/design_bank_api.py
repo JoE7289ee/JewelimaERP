@@ -341,7 +341,8 @@ def get_review_queue(start=0):
 	d = frappe.db.get_value("Design Bank", rows[0].name,
 		["raw_image", "customer_image", "customer_image_needed"], as_dict=True)
 	card.update({"raw_image": d.raw_image or "", "customer_image": d.customer_image or "",
-		"customer_image_needed": d.customer_image_needed})
+		"customer_image_needed": d.customer_image_needed,
+		"priority": frappe.utils.cint(frappe.db.get_value("Design Bank", rows[0].name, "priority"))})
 	return {"total": total, "card": card}
 
 

@@ -65,15 +65,28 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const fNote = mk(".f-note", { fieldtype: "Data", label: __("Note"), fieldname: "o" });
 
 	const im = (sel, url) => root.find(".rv-im .i." + sel).html(url ? `<img src="${esc(url)}">` : `<div class="none">—</div>`);
+	// stay-pending advances PAST the card (it would otherwise stay top of the
+	// priority queue and look stuck); approve/retire pop it so offset holds
+	let offset = 0;
 	function load() {
 		photoB64 = "";
-		frappe.call({ method: API + ".get_review_queue" }).then((r) => {
+		frappe.call({ method: API + ".get_review_queue", args: { start: offset } }).then((r) => {
 			const m = r.message || {};
+			if (!m.card && m.total > 0 && offset > 0) {
+				// walked past the end of the queue — wrap around to the top
+				offset = 0;
+				frappe.show_alert({ message: __("Seen every card once — starting from the top."), indicator: "blue" }, 4);
+				load();
+				return;
+			}
 			root.find(".rv-top").text(m.total ? __("{0} card(s) in the review queue", [m.total]) : "");
 			if (!m.card) {
 				root.find(".rv-cols").hide();
 				root.find(".rv-done").show().text(__("Review queue is empty — nothing rebuilt is waiting."));
 				return;
+			}
+			if (m.card.priority) {
+				root.find(".rv-top").append(" · " + __("this card is P{0}", [m.card.priority]));
 			}
 			cur = m.card;
 			root.find(".rv-done").hide(); root.find(".rv-cols").css("display", "flex");
@@ -104,7 +117,11 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 			retire: retire ? 1 : 0 };
 		frappe.dom.freeze(__("Saving..."));
 		frappe.call({ method: API + ".review_save", args: { payload: JSON.stringify(p) } })
-			.then(() => { frappe.dom.unfreeze(); load(); })
+			.then(() => {
+				frappe.dom.unfreeze();
+				if (!approve && !retire) offset++;  // stay-pending: move to the NEXT card
+				load();
+			})
 			.catch(() => frappe.dom.unfreeze());
 	}
 	root.find(".rv-save").on("click", () => save(true));
