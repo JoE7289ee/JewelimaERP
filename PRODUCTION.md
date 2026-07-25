@@ -63,3 +63,42 @@ Gmail Workspace via Email Domain "jewelima.com" + Email Account
 system@jewelima.com (app password; outgoing only on dev — enable Incoming on
 ONE site max). Stored password re-entry needed unless site encryption_key
 travels with a DB restore.
+
+## PLANNED: dev-container -> real production stack (same Ubuntu box)
+
+Today the server runs the frappe_docker DEV container (devcontainer-frappe-1,
+`bench start` honcho on :8000, ~/frappe_jewelima bind-mounted, MariaDB root pw
+123). Works, but it is a dev server: single process, no gunicorn/nginx, no
+container restart discipline, dev-grade DB creds. Target: frappe_docker's
+PRODUCTION compose on the same machine.
+
+### Target shape
+- **Custom image** built from frappe_docker's layered Containerfile with
+  `apps.json` = frappe @110f853, erpnext @e9a9224, jewelima release/0.0.1 —
+  plus `apt install tesseract-ocr` baked in (wkhtmltopdf ships in the base).
+- **Compose services**: frontend (nginx) + backend (gunicorn) + websocket +
+  scheduler + short/long workers + mariadb (REAL root password) + redis pair.
+  `restart: unless-stopped` everywhere — replaces the @reboot cron for the app.
+- **Named volume** for sites/ (DB stays in its own volume). Cloudflared tunnel
+  ingress flips from localhost:8000 to the new frontend port.
+
+### Migration steps (half-day, rollback = restart old stack)
+1. Build the image on the server (or push to a registry from the Mac).
+2. Bring up the new stack on ALTERNATE ports alongside the running dev stack.
+3. `bench backup --with-files` on the old site -> restore into the new stack
+   (keep site name development.localhost + default_site, zero URL churn).
+4. rsync the 25G public/files into the new sites volume (backup tarballs skip
+   nothing, but rsync is faster to re-verify).
+5. Smoke test on the alternate port: login, Bank Report numbers, one design
+   image, one certification page, one sell scan.
+6. Cutover: stop old bench, repoint cloudflared + LAN port, done. Old
+   devcontainer stays stopped-but-intact for a week as rollback.
+7. Deploys after migration: EITHER rebuild+restart the image per release
+   (clean, immutable) OR bind-mount apps/jewelima into backend and keep the
+   current `git pull + migrate + build` script (pragmatic, keeps today's
+   workflow). Decide at migration time; start pragmatic, harden later.
+
+### Also in scope while we're at it
+- MariaDB root + site DB passwords rotated to real secrets.
+- `sudo cloudflared service install` (systemd) instead of nohup-from-cron.
+- Nightly `bench backup` cron to /srv (or the spare 223G sda once wiped).
