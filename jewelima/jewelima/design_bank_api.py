@@ -549,7 +549,7 @@ def search_designs(q, limit=60):
 	q = (q or "").strip()
 	if not q:
 		return {"rows": []}
-	rows = frappe.db.sql("""select name, design_no, status, image, raw_image, photo
+	rows = frappe.db.sql("""select name, design_no, status, image, raw_image, photo, priority
 		from `tabDesign Bank`
 		where design_no like %s
 		order by (status = 'Approved') desc, design_no limit %s""",
