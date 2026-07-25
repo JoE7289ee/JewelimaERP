@@ -347,6 +347,32 @@ def get_review_queue(start=0):
 
 
 @frappe.whitelist()
+def get_review_card(q):
+	"""Search-and-approve: pull ONE card into the review pane by design no
+	(exact first, else best like-match; Pending preferred)."""
+	q = (q or "").strip()
+	if not q:
+		frappe.throw(_("Type a design number."))
+	nm = frappe.db.get_value("Design Bank", {"design_no": q}, "name")
+	if not nm:
+		# v16 get_all forbids expressions in order_by — raw SQL for the ranking
+		hits = frappe.db.sql("""select name from `tabDesign Bank`
+			where design_no like %s
+			order by (status = 'Pending') desc, design_no limit 1""", "%" + q + "%")
+		nm = hits[0][0] if hits else None
+	if not nm:
+		frappe.throw(_("No design matches {0}.").format(q))
+	from jewelima.jewelima.api import get_design_card
+	card = get_design_card(nm)
+	d = frappe.db.get_value("Design Bank", nm,
+		["raw_image", "customer_image", "customer_image_needed", "priority"], as_dict=True)
+	card.update({"raw_image": d.raw_image or "", "customer_image": d.customer_image or "",
+		"customer_image_needed": d.customer_image_needed,
+		"priority": frappe.utils.cint(d.priority)})
+	return {"card": card}
+
+
+@frappe.whitelist()
 def review_save(payload):
 	"""Review corrections: values re-render the card; checkboxes stick; optional
 	approve (needs design type); optional PERMANENT raw delete (file off disk)."""

@@ -13,6 +13,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let cur = null;
 	let photoB64 = "";
+	let searched = false; // pane holds a searched card, not the queue head
 
 	$(page.main).append(`
 		<style>
@@ -29,7 +30,13 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		.rv-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 		.rv-done{padding:40px;text-align:center;color:var(--text-muted);font-size:15px;}
 		</style>
-		<div class="rv-top"></div>
+		<div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap;">
+			<div class="rv-top" style="margin:0;"></div>
+			<div style="margin-left:auto;display:flex;gap:6px;">
+				<input type="text" class="form-control rv-q" style="width:220px;" placeholder="${__("search design no & approve…")}">
+				<button class="btn btn-default rv-backq" style="display:none;">${__("Back to queue")}</button>
+			</div>
+		</div>
 		<div class="rv-cols" style="display:none;">
 			<div class="rv-side">
 				<div class="f-no"></div><div class="f-dt"></div>
@@ -65,11 +72,25 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const fNote = mk(".f-note", { fieldtype: "Data", label: __("Note"), fieldname: "o" });
 
 	const im = (sel, url) => root.find(".rv-im .i." + sel).html(url ? `<img src="${esc(url)}">` : `<div class="none">—</div>`);
+	function paintCard(card) {
+		cur = card;
+		root.find(".rv-done").hide(); root.find(".rv-cols").css("display", "flex");
+		im("raw", cur.raw_image); im("card", cur.image); im("photo", cur.photo); im("cust", cur.customer_image);
+		fNo.set_value(cur.design_no); fDT.set_value(cur.design_type);
+		fGW.set_value(cur.gross_weight || ""); fDW.set_value(cur.diamond_weight || "");
+		fNote.set_value(cur.note);
+		root.find(".ck-up").prop("checked", !!cur.photoupdate);
+		root.find(".ck-cn").prop("checked", !!cur.customer_image_needed);
+		root.find(".ck-dr").prop("checked", false);
+	}
+
 	// stay-pending advances PAST the card (it would otherwise stay top of the
 	// priority queue and look stuck); approve/retire pop it so offset holds
 	let offset = 0;
 	function load() {
 		photoB64 = "";
+		searched = false;
+		root.find(".rv-backq").hide();
 		frappe.call({ method: API + ".get_review_queue", args: { start: offset } }).then((r) => {
 			const m = r.message || {};
 			if (!m.card && m.total > 0 && offset > 0) {
@@ -88,17 +109,29 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 			if (m.card.priority) {
 				root.find(".rv-top").append(" · " + __("this card is P{0}", [m.card.priority]));
 			}
-			cur = m.card;
-			root.find(".rv-done").hide(); root.find(".rv-cols").css("display", "flex");
-			im("raw", cur.raw_image); im("card", cur.image); im("photo", cur.photo); im("cust", cur.customer_image);
-			fNo.set_value(cur.design_no); fDT.set_value(cur.design_type);
-			fGW.set_value(cur.gross_weight || ""); fDW.set_value(cur.diamond_weight || "");
-			fNote.set_value(cur.note);
-			root.find(".ck-up").prop("checked", !!cur.photoupdate);
-			root.find(".ck-cn").prop("checked", !!cur.customer_image_needed);
-			root.find(".ck-dr").prop("checked", false);
+			paintCard(m.card);
 		});
 	}
+
+	// search any design no -> the SAME pane, edit + approve out of order
+	function loadSearch(q) {
+		photoB64 = "";
+		frappe.call({ method: API + ".get_review_card", args: { q } }).then((r) => {
+			const m = r.message || {};
+			if (!m.card) return;
+			searched = true;
+			root.find(".rv-backq").show();
+			root.find(".rv-top").text(__("Searched: {0} — {1}{2}", [m.card.design_no, m.card.status,
+				m.card.priority ? " · P" + m.card.priority : ""]));
+			paintCard(m.card);
+		});
+	}
+	root.find(".rv-q").on("keydown", function (e) {
+		if (e.key !== "Enter") return;
+		const q = this.value.trim();
+		if (q) loadSearch(q);
+	});
+	root.find(".rv-backq").on("click", () => { root.find(".rv-q").val(""); load(); });
 	root.find(".rv-up").on("click", () => root.find(".rv-file").get(0).click());
 	root.find(".rv-file").on("change", function () {
 		const file = this.files[0];
@@ -119,6 +152,14 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".review_save", args: { payload: JSON.stringify(p) } })
 			.then(() => {
 				frappe.dom.unfreeze();
+				if (searched) {
+					// searched card handled — back to the queue where we left off
+					frappe.show_alert({ message: __("{0} {1}.", [cur.design_no,
+						approve ? __("approved") : retire ? __("retired") : __("saved")]), indicator: approve ? "green" : "blue" }, 4);
+					root.find(".rv-q").val("");
+					load();
+					return;
+				}
 				if (!approve && !retire) offset++;  // stay-pending: move to the NEXT card
 				load();
 			})
