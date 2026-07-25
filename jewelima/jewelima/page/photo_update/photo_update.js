@@ -32,6 +32,7 @@ frappe.pages["photo-update"].on_page_load = function (wrapper) {
 	`);
 	const root = $(page.main);
 
+	const bust = (u, m) => (u ? u + (u.includes("?") ? "&" : "?") + "m=" + encodeURIComponent(m || Date.now()) : u);
 	function load(reset) {
 		if (reset) { start = 0; root.find(".pu-grid").empty(); }
 		frappe.call({ method: API + ".get_photo_update_queue", args: { start, limit: 30 } }).then((r) => {
@@ -43,7 +44,7 @@ frappe.pages["photo-update"].on_page_load = function (wrapper) {
 				const src = d.raw_image || d.photo || d.image || "";
 				return `
 				<div class="pu-tile" data-name="${esc(d.name)}">
-					<img loading="lazy" src="${esc(d.photo || d.image || "")}">
+					<img loading="lazy" src="${esc(bust(d.photo || d.image || "", d.modified))}">
 					<div class="n">${esc(d.design_no)}</div>
 					<div class="pu-acts">
 						<a class="btn btn-default btn-xs" href="${esc(src)}" download onclick="event.stopPropagation()">${__("Download source")}</a>

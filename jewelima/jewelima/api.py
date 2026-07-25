@@ -4,6 +4,7 @@
 
 import re
 import json
+import os
 
 import frappe
 from frappe.utils import cint, flt
@@ -3586,13 +3587,16 @@ def _cad_image_any(ref):
 	try:
 		from io import BytesIO
 		from PIL import Image
-		try:
-			content = frappe.get_doc("File", {"file_url": ref}).get_content()
-		except Exception:
-			# design-bank images have no File record — read straight from disk
-			from urllib.parse import unquote
-			path = frappe.get_site_path("public", unquote(ref).lstrip("/"))
+		# DISK FIRST: always bytes (File.get_content text-sniffs small binaries
+		# into str and the decode dies); the File doc is only the fallback
+		from urllib.parse import unquote
+		path = frappe.get_site_path("public", unquote(ref).lstrip("/"))
+		if os.path.exists(path):
 			content = open(path, "rb").read()
+		else:
+			content = frappe.get_doc("File", {"file_url": ref}).get_content()
+			if isinstance(content, str):
+				content = content.encode()
 		return Image.open(BytesIO(content)).convert("RGB")
 	except Exception:
 		return None
@@ -6671,6 +6675,26 @@ def design_card_autocrop(name):
 	return {"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
 
 
+def _write_slot_file(design_name, fname, content):
+	"""Slot files live OUTSIDE frappe's content-dedupe (identical bytes must
+	never collapse two slots onto one file): old File rows for the url go
+	first, the bytes land on disk at the CANONICAL name, and the File row is
+	hand-made around them."""
+	import os
+	url = "/files/" + fname
+	for fn in frappe.get_all("File", filters={"file_url": url}, pluck="name"):
+		frappe.delete_doc("File", fn, force=True, ignore_permissions=True)
+	path = frappe.get_site_path("public", "files", fname)
+	with open(path, "wb") as fh:
+		fh.write(content)
+	fd = frappe.get_doc({"doctype": "File", "file_name": fname, "file_url": url,
+		"is_private": 0, "file_size": len(content),
+		"attached_to_doctype": "Design Bank", "attached_to_name": design_name})
+	fd.name = frappe.generate_hash(length=10)
+	fd.db_insert()
+	return url
+
+
 def _db_img_name(design_no, kind, ext="png"):
 	"""The three slots carry the DESIGN CODE as the filename: '<code>.photo.png',
 	'<code>.info.png', '<code>.customer.png' (raw keeps its imported name)."""
@@ -6815,8 +6839,12 @@ def save_design_card(payload):
 		if r.get("stone") or r.get("sieve")])
 	if d.is_new():
 		d.insert(ignore_permissions=True)
-	d.photo = _cad_store_image_generic(p.get("photo"), "Design Bank", d.name,
-		fname=_db_img_name(code, "photo")) or d.photo
+	if (p.get("photo") or "").startswith("data:"):
+		import base64 as _b64
+		d.photo = _write_slot_file(d.name, _db_img_name(code, "photo"),
+			_b64.b64decode(p["photo"].split(",", 1)[1]))
+	else:
+		d.photo = p.get("photo") or d.photo
 	# render the card; deterministic name so the old render dies with the new save
 	from io import BytesIO
 	rp = dict(p)
@@ -6826,11 +6854,9 @@ def save_design_card(payload):
 	info_name = _db_img_name(code, "info")
 	for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
 			"attached_to_name": d.name,
-			"file_name": ["in", [info_name, "CARD-{0}.png".format(d.name)]]}, pluck="name"):
+			"file_name": ["in", ["CARD-{0}.png".format(d.name)]]}, pluck="name"):
 		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
-	fdoc = frappe.get_doc({"doctype": "File", "file_name": info_name, "content": buf.getvalue(),
-		"is_private": 0, "attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
-	d.image = fdoc.file_url
+	d.image = _write_slot_file(d.name, info_name, buf.getvalue())
 	d.photoupdate = 0
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -6853,7 +6879,9 @@ def _cad_store_image_generic(ref, doctype, name, fname=None):
 	f = frappe.get_doc({"doctype": "File",
 		"file_name": fname or "photo-{0}.{1}".format(frappe.generate_hash(length=8), ext),
 		"content": base64.b64decode(b64), "is_private": 0,
-		"attached_to_doctype": doctype, "attached_to_name": name}).insert(ignore_permissions=True)
+		"attached_to_doctype": doctype, "attached_to_name": name})
+	f.flags.ignore_existing_file_check = True  # never content-dedupe a slot
+	f.insert(ignore_permissions=True)
 	return f.file_url
 
 

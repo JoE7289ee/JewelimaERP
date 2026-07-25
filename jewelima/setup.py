@@ -146,7 +146,7 @@ JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin
 JEWELIMA_DESIGN_BANK_ROLE = "Jewelima Design Bank"
 JEWELIMA_DESIGN_APPROVER_ROLE = "Jewelima Design Approver"
 JEWELIMA_DESIGN_BANK_PAGES = ["design-gallery", "search-design", "old-categories", "new-design-bank",
-	"card-builder", "design-tags", "photo-update", "design-bank-report"]
+	"card-builder", "design-tags", "photo-update", "customer-photos", "design-bank-report"]
 JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-duplicates", "retire-design", "retired-designs"]
 # Viewer: browse-and-filter only (no editing pages, no prioritise)
 JEWELIMA_DESIGN_VIEWER_ROLE = "Jewelima Design Viewer"

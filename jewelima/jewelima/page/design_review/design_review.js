@@ -71,7 +71,8 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const fDW = mk(".f-dw", { fieldtype: "Float", label: __("DW ct"), fieldname: "w" });
 	const fNote = mk(".f-note", { fieldtype: "Data", label: __("Note"), fieldname: "o" });
 
-	const im = (sel, url) => root.find(".rv-im .i." + sel).html(url ? `<img src="${esc(url)}">` : `<div class="none">—</div>`);
+	const bust = (u) => (u && !u.startsWith("data:") ? u + (u.includes("?") ? "&" : "?") + "m=" + Date.now() : u);
+	const im = (sel, url) => root.find(".rv-im .i." + sel).html(url ? `<img src="${esc(bust(url))}">` : `<div class="none">—</div>`);
 	function paintCard(card) {
 		cur = card;
 		root.find(".rv-done").hide(); root.find(".rv-cols").css("display", "flex");

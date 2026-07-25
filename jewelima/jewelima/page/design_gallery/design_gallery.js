@@ -34,11 +34,11 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	.dg-actions{display:none;align-items:center;gap:10px;background:var(--bg-light-gray,#f4f5f6);border:1px solid var(--border-color);
 		border-radius:8px;padding:8px 12px;margin:10px 0 2px;font-size:13px;position:sticky;top:118px;z-index:4;}
 	.dg-actions .sel{font-weight:700;}
-	.dg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:14px 2px;}
-	.dg-tile{position:relative;border-radius:10px;overflow:hidden;background:var(--control-bg);aspect-ratio:1/1;
+	.dg-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:14px 2px;}
+	.dg-tile{position:relative;border-radius:10px;overflow:hidden;background:var(--control-bg);aspect-ratio:3/4;
 		cursor:pointer;border:2px solid transparent;}
-	.dg-tile img{width:100%;height:100%;object-fit:cover;display:block;background:#fff;}
-	.dg-tile .code{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;font-size:11px;color:#fff;
+	.dg-tile img{width:100%;height:100%;object-fit:contain;display:block;background:#fff;}
+	.dg-tile .code{position:absolute;left:0;right:0;bottom:0;padding:18px 10px 7px;font-size:15px;font-weight:700;color:#fff;
 		background:linear-gradient(transparent,rgba(0,0,0,.65));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 	.dg-tile .dots{position:absolute;top:6px;right:6px;display:flex;gap:3px;}
 	.dg-tile .dots i{width:8px;height:8px;border-radius:50%;display:block;box-shadow:0 0 0 1px rgba(0,0,0,.2);}
@@ -169,7 +169,7 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 		return `<div class="dg-tile ${selected}" data-name="${esc(d.name)}">
 			<div class="dg-check">&#10003;</div>
 			<div class="dots">${dots}</div>
-			<img loading="lazy" src="${esc(d.image || "")}" onerror="this.style.opacity=.25">
+			<img loading="lazy" src="${esc(d.image ? d.image + (d.image.includes("?") ? "&" : "?") + "m=" + encodeURIComponent(d.modified || "") : "")}" onerror="this.style.opacity=.25">
 			<div class="code">${esc(d.design_no || "")}</div>
 		</div>`;
 	}

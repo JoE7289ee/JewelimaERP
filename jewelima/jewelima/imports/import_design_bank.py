@@ -869,3 +869,47 @@ def backfill_file_docs(batch=1000):
 	flush()
 	print("backfill_file_docs: created {0} File rows, {1} urls missing on disk".format(made, missing))
 	return {"created": made, "missing_disk": missing}
+
+
+def normalize_bank_filenames(batch=500):
+	"""Force every slot file onto the canonical name: <DESIGN NO>.photo.png /
+	.info.png / .customer.png (pending keeps .pending.png). Fixes the
+	hash-suffixed strays (A X.infodba7c8.png) left by saves that collided with
+	unowned disk files: renames on disk, updates the File row and the field.
+	Idempotent."""
+	import os
+	from urllib.parse import unquote
+	from jewelima.jewelima.api import _db_img_name
+	slot_kind = {"photo": "photo", "image": "info", "customer_image": "customer", "pending_photo": "pending"}
+	rows = frappe.get_all("Design Bank", fields=["name", "design_no"] + list(slot_kind))
+	renamed = skipped = missing = 0
+	for i, r in enumerate(rows):
+		for field, kind in slot_kind.items():
+			url = r.get(field)
+			if not url or not url.startswith("/files/"):
+				continue
+			want = _db_img_name(r.design_no, kind)
+			cur = os.path.basename(unquote(url))
+			if cur == want:
+				continue
+			src = frappe.get_site_path("public", unquote(url).lstrip("/"))
+			dst = frappe.get_site_path("public", "files", want)
+			if not os.path.exists(src):
+				missing += 1
+				continue
+			try:
+				os.replace(src, dst)  # canonical name wins, stray overwrites it
+			except OSError:
+				skipped += 1
+				continue
+			new_url = "/files/" + want
+			for fn in frappe.get_all("File", filters={"file_url": url}, pluck="name"):
+				frappe.db.set_value("File", fn, {"file_url": new_url, "file_name": want},
+					update_modified=False)
+			frappe.db.set_value("Design Bank", r.name, field, new_url, update_modified=False)
+			renamed += 1
+		if i and i % batch == 0:
+			frappe.db.commit()
+	frappe.db.commit()
+	print("normalize_bank_filenames: {0} renamed, {1} skipped, {2} missing".format(renamed, skipped, missing))
+	return {"renamed": renamed, "skipped": skipped, "missing": missing}

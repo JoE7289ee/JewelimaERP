@@ -43,8 +43,8 @@ frappe.pages["photo-approvals"].on_page_load = function (wrapper) {
 					<div class="pa-no">${esc(d.design_no)}</div>
 					<div class="pa-by">${__("uploaded by {0}", [esc((d.pending_photo_by || "?").split("@")[0])])}</div>
 					<div class="pa-pair">
-						<div class="pa-im"><div class="t">${__("Current (dies on approve)")}</div><img src="${esc(d.photo || d.image || "")}"></div>
-						<div class="pa-im new"><div class="t">${__("New (pending)")}</div><img src="${esc(d.pending_photo)}"></div>
+						<div class="pa-im"><div class="t">${__("Current (dies on approve)")}</div><img src="${esc(bust(d.photo || d.image || "", d.modified))}"></div>
+						<div class="pa-im new"><div class="t">${__("New (pending)")}</div><img src="${esc(bust(d.pending_photo, d.modified))}"></div>
 					</div>
 					<div class="pa-actions">
 						<button class="btn btn-sm pa-ok" style="background:#2e7d32;border-color:#2e7d32;color:#fff;">${__("APPROVE — replace forever")}</button>
@@ -55,6 +55,7 @@ frappe.pages["photo-approvals"].on_page_load = function (wrapper) {
 			root.find(".pa-more").toggle(start < m.total);
 		});
 	}
+	const bust = (u, m) => (u ? u + (u.includes("?") ? "&" : "?") + "m=" + encodeURIComponent(m || Date.now()) : u);
 	function act(el, method, confirmMsg) {
 		const card = $(el).closest(".pa-card");
 		const go = () => frappe.call({ method: API + "." + method, args: { name: card.data("name") } })
@@ -66,8 +67,9 @@ frappe.pages["photo-approvals"].on_page_load = function (wrapper) {
 			});
 		confirmMsg ? frappe.confirm(confirmMsg, go) : go();
 	}
+	// one click fires the approval — no confirm (house style)
 	root.on("click", ".pa-ok", function () {
-		act(this, "approve_photo_update", __("Approve? The OLD photo is deleted from the system forever."));
+		act(this, "approve_photo_update");
 	});
 	root.on("click", ".pa-no-btn", function () { act(this, "reject_photo_update"); });
 	root.find(".pa-more").on("click", () => load());

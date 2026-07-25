@@ -120,7 +120,7 @@ def get_designs(search=None, tags=None, match="any", start=0, limit=60, mode="in
 		"customer": "COALESCE(NULLIF(db.customer_image, ''), db.image)",
 	}.get(mode, "db.image")
 	rows = frappe.db.sql(
-		f"""SELECT db.name, db.design_no, {img_expr} AS image, db.gross_weight, db.diamond_weight, db.note
+		f"""SELECT db.name, db.design_no, {img_expr} AS image, db.gross_weight, db.diamond_weight, db.note, db.modified
 		    FROM `tabDesign Bank` db {join} {where}
 		    ORDER BY db.design_no LIMIT %s, %s""",
 		params + [start, limit],
@@ -460,7 +460,7 @@ def get_photo_update_queue(start=0, limit=30):
 	"""Cards flagged Upgrade Photo that have NO candidate yet."""
 	filters = {"photoupdate": 1, "pending_photo": ["is", "not set"]}
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name", "design_no", "photo", "image", "raw_image"],
+		fields=["name", "design_no", "photo", "image", "raw_image", "modified"],
 		order_by="design_no", start=int(start), limit=int(limit))
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
 
@@ -474,12 +474,11 @@ def submit_photo_update(name, image_b64):
 	d = frappe.get_doc("Design Bank", name)
 	if not image_b64 or not image_b64.startswith("data:"):
 		frappe.throw(frappe._("Upload the new photo."))
+	from jewelima.jewelima.api import _write_slot_file
 	_delete_bank_file(d.name, d.pending_photo)
 	head, b64 = image_b64.split(",", 1)
-	fdoc = frappe.get_doc({"doctype": "File", "file_name": _db_img_name(d.design_no, "pending"),
-		"content": base64.b64decode(b64), "is_private": 0,
-		"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
-	d.pending_photo = fdoc.file_url
+	d.pending_photo = _write_slot_file(d.name, _db_img_name(d.design_no, "pending"),
+		base64.b64decode(b64))
 	d.pending_photo_by = frappe.session.user
 	d.flags.ignore_version = True
 	d.save(ignore_permissions=True)
@@ -492,9 +491,43 @@ def get_photo_approval_queue(start=0, limit=30):
 	"""Candidates waiting for the approver: old photo vs new, side by side."""
 	filters = {"pending_photo": ["is", "set"]}
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name", "design_no", "photo", "pending_photo", "pending_photo_by", "image"],
+		fields=["name", "design_no", "photo", "pending_photo", "pending_photo_by", "image", "modified"],
 		order_by="modified", start=int(start), limit=int(limit))
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def get_customer_photo_queue(start=0, limit=30):
+	"""Customer Photos page: best-sellers flagged 'customer image needed' that
+	have no customer image yet."""
+	filters = {"customer_image_needed": 1, "customer_image": ["is", "not set"]}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "photo", "image", "raw_image", "modified"],
+		order_by="design_no", start=int(start), limit=int(limit))
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters),
+		"done": frappe.db.count("Design Bank", {"customer_image": ["is", "set"]})}
+
+
+@frappe.whitelist()
+def submit_customer_photo(name, image_b64):
+	"""Store the customer-facing image as <code>.customer.png (replacing any
+	prior one) and clear the needed-flag. No approval leg — customer shots go
+	live directly."""
+	import base64
+	from jewelima.jewelima.api import _db_img_name
+	d = frappe.get_doc("Design Bank", name)
+	if not image_b64 or not image_b64.startswith("data:"):
+		frappe.throw(frappe._("Upload the customer image."))
+	from jewelima.jewelima.api import _write_slot_file
+	_delete_bank_file(d.name, d.customer_image)
+	head, b64 = image_b64.split(",", 1)
+	d.customer_image = _write_slot_file(d.name, _db_img_name(d.design_no, "customer"),
+		base64.b64decode(b64))
+	d.customer_image_needed = 0
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "customer_image": d.customer_image}
 
 
 def _delete_bank_file(name, url):
@@ -526,17 +559,21 @@ def approve_photo_update(name):
 	new_img = _cad_image_any(d.pending_photo)
 	if not new_img:
 		frappe.throw(frappe._("Couldn't read the pending photo."))
+	from jewelima.jewelima.api import _write_slot_file
 	_delete_bank_file(d.name, d.photo)
 	buf = BytesIO()
 	new_img.save(buf, "PNG")
-	fdoc = frappe.get_doc({"doctype": "File", "file_name": _db_img_name(d.design_no, "photo"),
-		"content": buf.getvalue(), "is_private": 0,
-		"attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
+	new_url = _write_slot_file(d.name, _db_img_name(d.design_no, "photo"), buf.getvalue())
 	_delete_bank_file(d.name, d.pending_photo)
-	d.photo = fdoc.file_url
+	d.photo = new_url
 	d.pending_photo = ""
 	d.pending_photo_by = ""
 	d.photoupdate = 0
+	if d.status == "Pending":
+		# a fresh approved photo puts the card FIRST in line for review
+		top = frappe.db.sql("""select coalesce(max(priority), 0) from `tabDesign Bank`
+			where status = 'Pending'""")[0][0]
+		d.priority = max(int(top) + 1, 11)
 	# re-render the info card with the approved photo
 	payload = {"design_no": d.design_no, "design_type": d.design_type,
 		"gross_weight": d.gross_weight, "diamond_weight": d.diamond_weight,
@@ -544,13 +581,7 @@ def approve_photo_update(name):
 		"stones": [{"stone": x.stone, "sieve": x.sieve, "pcs": x.pcs, "ct": x.ct} for x in d.stones]}
 	buf2 = BytesIO()
 	_card_compose(payload).save(buf2, "PNG")
-	info_name = _db_img_name(d.design_no, "info")
-	for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
-			"attached_to_name": d.name, "file_name": info_name}, pluck="name"):
-		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
-	f2 = frappe.get_doc({"doctype": "File", "file_name": info_name, "content": buf2.getvalue(),
-		"is_private": 0, "attached_to_doctype": "Design Bank", "attached_to_name": d.name}).insert(ignore_permissions=True)
-	d.image = f2.file_url
+	d.image = _write_slot_file(d.name, _db_img_name(d.design_no, "info"), buf2.getvalue())
 	d.flags.ignore_version = True
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -577,7 +608,7 @@ def search_designs(q, limit=60):
 	q = (q or "").strip()
 	if not q:
 		return {"rows": []}
-	rows = frappe.db.sql("""select name, design_no, status, image, raw_image, photo, priority
+	rows = frappe.db.sql("""select name, design_no, status, image, raw_image, photo, priority, modified
 		from `tabDesign Bank`
 		where design_no like %s
 		order by (status = 'Approved') desc, design_no limit %s""",
@@ -604,7 +635,7 @@ def get_old_category_designs(folder, start=0, limit=60, subtree=0):
 	filters = ({"source_folder": ["like", folder + "%"]} if int(subtree or 0)
 		else {"source_folder": folder})
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name", "design_no", "status", "image", "raw_image", "photo", "priority"],
+		fields=["name", "design_no", "status", "image", "raw_image", "photo", "priority", "modified"],
 		order_by="design_no", start=int(start), limit=int(limit))
 	for r in rows:
 		r["display"] = r.image if r.status == "Approved" else (r.raw_image or r.photo or r.image or "")
