@@ -598,6 +598,23 @@ def set_design_priority(names, priority):
 
 
 @frappe.whitelist()
+def set_design_retired(names):
+	"""Bulk-retire picked cards (Old Categories selection). Approver only —
+	codes stay reserved forever, same as a Review-page retire."""
+	allowed = {"System Manager", "Jewelima Design Approver"}
+	if not allowed & set(frappe.get_roles()):
+		frappe.throw("Not permitted to retire designs")
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	done = 0
+	for nm in names:
+		if frappe.db.get_value("Design Bank", nm, "status") != "Retired":
+			frappe.db.set_value("Design Bank", nm, "status", "Retired", update_modified=False)
+			done += 1
+	frappe.db.commit()
+	return {"retired": done}
+
+
+@frappe.whitelist()
 def get_retired_designs(start=0, limit=60, q=None):
 	"""The Retired shelf — codes stay reserved, but junk scans that were never
 	real designs can be purged from here."""

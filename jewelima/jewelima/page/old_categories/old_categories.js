@@ -31,6 +31,9 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 		.oc-tile{cursor:pointer;position:relative;}
 		.oc-tile.sel{border-color:#1f618d;box-shadow:0 0 0 2px #1f618d;}
 		.oc-pri{position:absolute;top:6px;left:6px;background:#1f618d;color:#fff;font-size:10px;font-weight:700;border-radius:8px;padding:1px 7px;}
+		.oc-retb{position:absolute;top:6px;right:6px;background:#b02a2a;color:#fff;font-size:9px;font-weight:800;letter-spacing:.05em;border-radius:8px;padding:1px 7px;}
+		.oc-tile.ret img{filter:grayscale(1);opacity:.55;}
+		.oc-tile.ret .n{color:#b02a2a;text-decoration:line-through;}
 		.oc-hint{color:var(--text-muted);padding:20px;font-size:13px;}
 		</style>
 		<div class="oc-cols">
@@ -44,7 +47,10 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 			<div class="oc-right">
 				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
 				<div class="oc-title" style="margin:0;"></div>
-				<button class="btn btn-sm oc-prio" style="background:#1f618d;border-color:#1f618d;color:#fff;display:none;"></button>
+				<div style="display:flex;gap:8px;">
+					<button class="btn btn-sm oc-prio" style="background:#1f618d;border-color:#1f618d;color:#fff;display:none;"></button>
+					<button class="btn btn-sm oc-ret" style="background:#b02a2a;border-color:#b02a2a;color:#fff;display:none;"></button>
+				</div>
 			</div>
 				<div class="oc-grid"></div>
 				<button class="btn btn-default oc-more" style="margin-top:12px;display:none;">${__("Load more")}</button>
@@ -95,8 +101,9 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 				const m = r.message || { rows: [], total: 0 };
 				root.find(".oc-title").text(`${curFolder} — ${m.total} ${__("design(s)")}`);
 				root.find(".oc-grid").append(m.rows.map((d) => `
-					<div class="oc-tile ${selected.has(d.name) ? "sel" : ""}" data-name="${esc(d.name)}">
+					<div class="oc-tile ${selected.has(d.name) ? "sel" : ""} ${d.status === "Retired" ? "ret" : ""}" data-name="${esc(d.name)}">
 					${d.priority ? `<span class="oc-pri" title="${__("already prioritised")}">P${d.priority}</span>` : ""}
+					${d.status === "Retired" ? `<span class="oc-retb">${__("RETIRED")}</span>` : ""}
 					<img loading="lazy" src="${esc(d.display)}" onerror="this.style.opacity=.2">
 					<div class="n">${esc(d.design_no)}</div></div>`).join(""));
 				start += m.rows.length;
@@ -127,9 +134,12 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 	// selection -> bulk prioritise
 	const canPrio = frappe.user.has_role("Jewelima Design Bank") || frappe.user.has_role("Jewelima Design Approver") || frappe.user.has_role("System Manager");
 	const selected = new Set();
+	const canRetire = frappe.user.has_role("Jewelima Design Approver") || frappe.user.has_role("System Manager");
 	function paintPrio() {
 		root.find(".oc-prio").toggle(canPrio && selected.size > 0)
 			.text(__("Prioritise {0} selected", [selected.size]));
+		root.find(".oc-ret").toggle(canRetire && selected.size > 0)
+			.text(__("Retire {0} selected", [selected.size]));
 	}
 	root.on("click", ".oc-tile", function () {
 		if (!canPrio) return;
@@ -145,5 +155,13 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 				frappe.show_alert({ message: __("{0} card(s) set to priority {1}.", [(r.message || {}).updated, v.p]), indicator: "green" }, 4);
 				selected.clear(); paintPrio(); load(true);
 			}), __("Prioritise for review"), __("Set"));
+	});
+	// bulk retire — one click, no confirm (house style); codes stay reserved
+	root.find(".oc-ret").on("click", () => {
+		frappe.call({ method: API + ".set_design_retired", args: { names: JSON.stringify([...selected]) } })
+			.then((r) => {
+				frappe.show_alert({ message: __("{0} card(s) retired.", [(r.message || {}).retired]), indicator: "red" }, 4);
+				selected.clear(); paintPrio(); load(true);
+			});
 	});
 };
