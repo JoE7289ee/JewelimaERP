@@ -942,6 +942,10 @@ def rerender_info_cards(start=0, limit=0):
 			done += 1
 		except Exception:
 			failed += 1
+			if failed <= 5 or failed % 500 == 0:
+				import traceback
+				print("FAIL {0} ({1}):\n{2}".format(r.name, failed, traceback.format_exc()), flush=True)
+			frappe.db.rollback()  # a poisoned transaction must not doom the rest
 		if (done + failed) % 25 == 0:
 			frappe.db.commit()
 			frappe.clear_document_cache("Design Bank", r.name)
