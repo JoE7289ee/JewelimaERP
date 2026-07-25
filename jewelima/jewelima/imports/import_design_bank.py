@@ -821,3 +821,51 @@ def load_sets(in_dir=None):
 
 	print(f"Loaded: {len(new_rows)} new + {updated} updated designs, {len(link_rows)} tag links.")
 	return {"new": len(new_rows), "updated": updated, "links": len(link_rows)}
+
+
+def backfill_file_docs(batch=1000):
+	"""One-time repair after import_full + rsync: the carrier moves field URLs
+	and disk files but NOT tabFile rows — frappe's attach validation then throws
+	"File {'file_url': ...} not found" on every save, and re-renders can't reuse
+	their own filenames (they get hash suffixes). Bulk-insert the missing File
+	rows for every referenced, on-disk bank image. Idempotent."""
+	import os
+	from urllib.parse import unquote
+	fields = ["raw_image", "photo", "image", "customer_image", "pending_photo"]
+	rows = frappe.get_all("Design Bank", fields=["name"] + fields)
+	have = set(frappe.get_all("File", filters={"file_url": ["like", "/files/%"]}, pluck="file_url"))
+	now = frappe.utils.now()
+	made = missing = 0
+	buf = []
+
+	def flush():
+		nonlocal buf
+		if not buf:
+			return
+		frappe.db.bulk_insert("File",
+			["name", "creation", "modified", "modified_by", "owner", "docstatus", "idx",
+			 "file_name", "file_url", "is_private", "is_folder", "folder", "file_size",
+			 "attached_to_doctype", "attached_to_name"],
+			buf, ignore_duplicates=True)
+		frappe.db.commit()
+		buf = []
+
+	for r in rows:
+		for fl in fields:
+			url = r.get(fl)
+			if not url or not url.startswith("/files/") or url in have:
+				continue
+			path = frappe.get_site_path("public", unquote(url).lstrip("/"))
+			if not os.path.exists(path):
+				missing += 1
+				continue
+			have.add(url)
+			buf.append((frappe.generate_hash(length=10), now, now, "Administrator", "Administrator",
+				0, 0, os.path.basename(unquote(url)), url, 0, 0, "Home",
+				os.path.getsize(path), "Design Bank", r.name))
+			made += 1
+			if len(buf) >= batch:
+				flush()
+	flush()
+	print("backfill_file_docs: created {0} File rows, {1} urls missing on disk".format(made, missing))
+	return {"created": made, "missing_disk": missing}
