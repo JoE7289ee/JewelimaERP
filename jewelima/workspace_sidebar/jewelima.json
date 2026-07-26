@@ -72,19 +72,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "pen-tool",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "CAD Jobs",
-   "link_to": "cad-jobs",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "info",
@@ -940,6 +927,19 @@
    "link_type": "",
    "show_arrow": 0,
    "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "pen-tool",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "CAD Jobs",
+   "link_to": "cad-jobs",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
    "url": ""
   },
   {
@@ -2126,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 16:03:53.400754",
+ "modified": "2026-07-26 16:04:48.003213",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
