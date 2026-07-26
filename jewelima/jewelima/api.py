@@ -8237,7 +8237,8 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 		ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
 	buf = BytesIO()
 	wb.save(buf)
-	return "{0}-{1}.xlsx".format(cert_type, tag or frappe.utils.today()), buf.getvalue()
+	fname = (tag if tag else "{0}-{1}".format(cert_type, frappe.utils.today())) + ".xlsx"
+	return fname, buf.getvalue()
 
 
 @frappe.whitelist()
