@@ -6596,15 +6596,15 @@ def _card_compose(p):
 		d.text((W // 2, (top + bottom) // 2), "PHOTO", font=_card_font(36), fill="#bbbbbb", anchor="mm")
 	y = bottom + 30
 	d.line([30, y - 12, W - 30, y - 12], fill="#000000", width=3)
-	big = _card_font(39, True)  # team feedback: GW/DW +3pt
+	big = _card_font(52, True)  # team feedback round 2: readable at gallery scale
 	if flt(p.get("gross_weight")):
 		d.text((30, y), "GW  {0} gm".format(p["gross_weight"]), font=big, fill="#111111")
 	if flt(p.get("diamond_weight")):
 		d.text((W - 30, y), "DW  {0} ct".format(p["diamond_weight"]), font=big, fill="#111111", anchor="ra")
-	y += 58
+	y += 74
 	# stone/note lines print too faint in Light — Regular, sized to actually use
 	# the info band the card reserves for them
-	f_line = _card_font(30, "regular")
+	f_line = _card_font(36, "regular")
 	for st in (p.get("stones") or []):
 		if not (st.get("stone") or st.get("sieve")):
 			continue
@@ -6613,14 +6613,16 @@ def _card_compose(p):
 			("{0} ct".format(st["ct"]) if flt(st.get("ct")) else "")) if x]
 		# stone lines read CENTERED (team feedback)
 		d.text((W // 2, y), "  •  ".join(str(b) for b in bits), font=f_line, fill="#111111", anchor="ma")
-		y += 42
+		y += 48
+	# the imported cards carry their sieve text in NOTE/extra lines — those
+	# centre too (team feedback)
 	if p.get("note"):
-		d.text((30, y), str(p["note"]), font=f_line, fill="#111111")
-		y += 42
+		d.text((W // 2, y), str(p["note"]), font=f_line, fill="#111111", anchor="ma")
+		y += 48
 	for ln in (p.get("extra_lines") or "").split("\n"):
 		if ln.strip():
-			d.text((30, y), ln.strip(), font=f_line, fill="#111111")
-			y += 40
+			d.text((W // 2, y), ln.strip(), font=f_line, fill="#111111", anchor="ma")
+			y += 46
 	d.line([30, H - 52, W - 30, H - 52], fill="#000000", width=2)
 	d.text((W // 2, H - 40), "JEWELIMA", font=_card_font(22, True), fill="#000000", anchor="ma")
 	return img
