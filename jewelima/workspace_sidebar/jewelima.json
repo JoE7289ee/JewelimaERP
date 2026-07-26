@@ -217,19 +217,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "sort-descending",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Prioritisation",
-   "link_to": "prioritization",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "user-check",
    "indent": 1,
    "keep_closed": 0,
@@ -300,6 +287,32 @@
    "keep_closed": 0,
    "label": "Print Barcode",
    "link_to": "print-barcode",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "sort-descending",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Prioritisation",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "sort-descending",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Priority Queue",
+   "link_to": "prioritization",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -2113,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 14:47:34.232592",
+ "modified": "2026-07-26 14:54:56.341501",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
