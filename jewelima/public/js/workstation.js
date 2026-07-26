@@ -69,7 +69,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		root.find(".wk-qbody").html(D.queue.length ? `
 			<table class="wk-t"><thead><tr>
 				${D.ranked ? `<th style="width:40px">P#</th>` : ""}<th>${__("Card")}</th><th>${__("Design")}</th>
-				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>
+				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${D.can_act ? `<th style="width:70px"></th>` : ""}
 			</tr></thead><tbody>
 			${D.queue.map((r) => `<tr>
 				${D.ranked ? `<td><span class="wk-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank || ""}</span></td>` : ""}
@@ -80,6 +80,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				<td>${r.queue_reason
 					? `<span class="wk-qr" data-name="${esc(r.name)}">${esc(r.queue_reason)}</span>`
 					: `<span class="wk-qr add" data-name="${esc(r.name)}">+ ${__("reason")}</span>`}</td>
+				${D.can_act ? `<td><button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
+					style="background:#1f618d;border-color:#1f618d;color:#fff;">${D.flow === "weights" ? __("Issue") : __("Assign")}</button></td>` : ""}
 			</tr>`).join("")}</tbody></table>`
 			: `<div class="wk-none">${__("Nothing waiting — the bench is clear.")}</div>`);
 
@@ -91,6 +93,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				${cd.work_type ? `<span class="wk-wt">${esc(cd.work_type)}</span>` : ""}
 				<span>${esc(cd.status)}</span>
 				<span class="wk-since">${cd.since ? frappe.datetime.comment_when(cd.since) : ""}</span>
+				${D.can_act ? `<button class="btn btn-xs btn-default wk-collect" data-name="${esc(cd.name)}" data-emp="${esc(g.employee)}">${D.flow === "weights" ? __("Receipt") : __("Collect")}</button>` : ""}
 			</div>`).join("")}</div>`).join("")
 			: `<div class="wk-none">${__("Nobody holds a card here right now.")}</div>`);
 	}
@@ -115,6 +118,49 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			(vals) => frappe.call({ method: API + ".set_bench_queue_reason",
 				args: { order_bag: nm, location: bench, reason: vals.v || "" } }).then(load),
 			__("Why is {0} waiting?", [nm]), __("Set"));
+	});
+
+	// issue/assign a waiting card — same backend as the global pages, bench-pinned
+	root.on("click", ".wk-issue", function () {
+		const nm = $(this).data("name");
+		const flds = [{ fieldname: "emp", fieldtype: "Link", label: __("Employee"), options: "Employee", reqd: 1 }];
+		if ((D.work_types || []).length) {
+			flds.push({ fieldname: "wt", fieldtype: "Select", label: __("Type of work"),
+				options: [""].concat(D.work_types).join("\n") });
+		}
+		frappe.prompt(flds, (v) => {
+			frappe.call({ method: API + ".ws_issue_cards", args: {
+				bench, names: JSON.stringify([nm]), employee: v.emp, work_type: v.wt || null,
+			} }).then(() => {
+				frappe.show_alert({ message: __("{0} issued.", [nm]), indicator: "green" }, 4);
+				load();
+			});
+		}, __("{0} — issue {1}", [bench, nm]), D.flow === "weights" ? __("Issue") : __("Assign"));
+	});
+
+	// collect / receipt a working card — weight benches book the metal back
+	root.on("click", ".wk-collect", function () {
+		const nm = $(this).data("name");
+		const emp = $(this).data("emp");
+		const flds = [];
+		if (D.flow === "weights") {
+			flds.push({ fieldname: "w", fieldtype: "Float", label: __("Weight coming back (g)"), reqd: 1 });
+		}
+		if ((D.collection_states || []).length) {
+			flds.push({ fieldname: "cs", fieldtype: "Select", label: __("Collection state"),
+				options: [""].concat(D.collection_states).join("\n") });
+		}
+		const go = (v) => frappe.call({ method: API + ".ws_collect_card", args: {
+			bench, order_bag: nm, collection_state: (v && v.cs) || null,
+			weight_in: v && v.w, employee: emp || null,
+		} }).then((r) => {
+			const m = (r.message || {});
+			frappe.show_alert({ message: __("{0} collected{1}", [nm,
+				m.total_loss ? " — " + __("loss {0} g", [m.total_loss]) : "."]), indicator: "green" }, 5);
+			load();
+		});
+		flds.length ? frappe.prompt(flds, go, __("{0} — collect {1}", [bench, nm]),
+			D.flow === "weights" ? __("Receipt") : __("Collect")) : go(null);
 	});
 
 	load();

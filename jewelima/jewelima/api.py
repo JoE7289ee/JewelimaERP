@@ -4208,6 +4208,51 @@ def priority_remove(code):
 	return get_priority_list()
 
 
+def _ws_bench_role(bench):
+	return "Jewelima Bench " + (bench or "").upper()
+
+
+def _require_ws_access(bench):
+	"""Workstation actions are BENCH-SCOPED: the bench's own role (or the
+	global Stock Manager / System Manager) — a GRINDING user cannot issue at
+	FILING. The global Assign/Collect and Job Work pages keep their own roles."""
+	roles = set(frappe.get_roles())
+	if {"System Manager", "Stock Manager"} & roles:
+		return
+	if _ws_bench_role(bench) in roles:
+		return
+	frappe.throw(frappe._("No workstation access for {0}.").format((bench or "").upper()))
+
+
+@frappe.whitelist()
+def ws_issue_cards(bench, names, employee=None, work_type=None):
+	"""Workstation issue/assign — SAME backend as the global pages: weight
+	benches go through Job Work's issue (weight_out snapshot), the light
+	benches through Assign. Location is pinned to the workstation's bench."""
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS
+	bench = (bench or "").upper()
+	_require_ws_access(bench)
+	if bench in ISSUE_RECEIPT_LOCATIONS:
+		return issue_bench_cards(names, bench, employee=employee, work_type=work_type)
+	return assign_bench_cards(names, bench, employee=employee, work_type=work_type)
+
+
+@frappe.whitelist()
+def ws_collect_card(bench, order_bag, collection_state=None, weight_in=None, employee=None):
+	"""Workstation collect/receipt — same backend as the global pages: weight
+	benches book weight_in + loss via Job Work's receipt, light benches just
+	collect with the state."""
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS
+	bench = (bench or "").upper()
+	_require_ws_access(bench)
+	if bench in ISSUE_RECEIPT_LOCATIONS:
+		if weight_in in (None, ""):
+			frappe.throw(frappe._("{0} books metal — give the weight coming back (g).").format(bench))
+		return receipt_bench_cards(json.dumps([{"order_bag": order_bag, "weight_in": flt(weight_in)}]),
+			bench, employee=employee, collection_state=collection_state)
+	return collect_bench_cards(json.dumps([order_bag]), bench, collection_state=collection_state)
+
+
 @frappe.whitelist()
 def get_bench_workstation(bench):
 	"""The bench WORKSTATION: the small live picture a worker glances at.
@@ -4251,12 +4296,17 @@ def get_bench_workstation(bench):
 	for g in working.values():
 		g["cards"].sort(key=lambda c: c.get("prio_rank") or 9e9)
 
-	reasons = get_bench_work_options(bench)["queue_reasons"]
+	opts = get_bench_work_options(bench)
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
+	can_act = bool({"System Manager", "Stock Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
 	return {"bench": bench, "ranked": ranked,
+		"flow": "weights" if bench in _irl else "light",
+		"can_act": can_act,
+		"work_types": opts["work_types"], "collection_states": opts["collection_states"],
 		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
 			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual")} for r in waiting],
 		"working": sorted(working.values(), key=lambda g: g["employee_name"]),
-		"queue_reasons": reasons,
+		"queue_reasons": opts["queue_reasons"],
 		"counts": {"waiting": len(waiting),
 			"working": sum(len(g["cards"]) for g in working.values()),
 			"total": len(rows)}}

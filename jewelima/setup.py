@@ -138,6 +138,17 @@ JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item
 # page APIs (ignore_permissions); read on the masters the page paints is all it needs.
 JEWELIMA_STONE_ISSUE_ROLE = "Jewelima Stone Issue"
 JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue"]
+# Workstation personas — ONE role per bench: see + act on THAT workstation only
+# (the global Assign/Collect and Job Work pages keep their own wider roles).
+JEWELIMA_WS_PAGES = {
+	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAX INJECTING": "ws-wax-injecting",
+	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
+	"GRINDING": "ws-grinding", "FILING": "ws-filing", "SETTING": "ws-setting",
+	"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
+	"BAG EXTRACTION": "ws-bag-extraction",
+}
+JEWELIMA_WS_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee",
+	"Bench Work Option", "Priority Card", "Bag Material Ledger"]
 JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin", "Warehouse", "Material Issue", "Bag Material Ledger"]
 # Design Bank personas. The base role works the catalog (browse, build cards,
 # feed the photo-update queue); the approver role ADDITIONALLY reviews/approves
@@ -322,6 +333,23 @@ def setup_roles():
 			u = frappe.get_doc("User", user)
 			u.append("roles", {"role": JEWELIMA_DESIGN_VIEWER_ROLE})
 			u.save(ignore_permissions=True)
+
+	# ---- Workstation personas: one role per bench --------------------------------
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	for bench, page in JEWELIMA_WS_PAGES.items():
+		role = "Jewelima Bench " + bench
+		if not frappe.db.exists("Role", role):
+			frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": 1}).insert(ignore_permissions=True)
+		for dt in JEWELIMA_WS_READ + [BENCH_DOCTYPE.get(bench)]:
+			if dt:
+				grant(dt, role, {"read": 1})
+		set_page_roles(page, ("Stock Manager", role))
+		# tight: this role opens ONLY its own workstation
+		for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": role}, pluck="parent"):
+			if pg != page:
+				pgd = frappe.get_doc("Page", pg)
+				pgd.set("roles", [r for r in pgd.roles if r.role != role])
+				pgd.save(ignore_permissions=True)
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so
