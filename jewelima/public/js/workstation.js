@@ -147,19 +147,21 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				cards.forEach((c) => { const k = c.work_type || "—"; m[k] = (m[k] || 0) + 1; });
 				return Object.entries(m).map(([k, n]) => `${esc(k)} ×${n}`).join(", ");
 			};
+			// weight columns only where the bench actually books metal
+			const wcols = D && D.flow === "weights";
 			root.find(".wk-day-body").html(d.done.length ? `
 				<table class="wk-dw"><thead><tr><th>${__("Worker")}</th><th>${__("Cards done")}</th>
-					<th>${__("Work types")}</th><th>${__("In g")}</th><th>${__("Loss g")}</th></tr></thead><tbody>
+					<th>${__("Work types")}</th>${wcols ? `<th>${__("In g")}</th><th>${__("Loss g")}</th>` : ""}</tr></thead><tbody>
 				${d.done.map((g) => `<tr>
 					<td><b>${esc(g.employee_name)}</b></td>
 					<td>${g.cards.length}</td>
 					<td>${types(g.cards)}</td>
-					<td>${g.weight_in ? g.weight_in.toFixed(3) : ""}</td>
-					<td>${g.loss ? g.loss.toFixed(3) : ""}</td>
+					${wcols ? `<td>${g.weight_in ? g.weight_in.toFixed(3) : ""}</td>
+					<td>${g.loss ? g.loss.toFixed(3) : ""}</td>` : ""}
 				</tr>`).join("")}
 				<tr class="emp"><td>${__("TOTAL")}</td><td>${d.done_count}</td><td></td>
-					<td>${sum(d.done, "weight_in") ? sum(d.done, "weight_in").toFixed(3) : ""}</td>
-					<td>${sum(d.done, "loss") ? sum(d.done, "loss").toFixed(3) : ""}</td></tr>
+					${wcols ? `<td>${sum(d.done, "weight_in") ? sum(d.done, "weight_in").toFixed(3) : ""}</td>
+					<td>${sum(d.done, "loss") ? sum(d.done, "loss").toFixed(3) : ""}</td>` : ""}</tr>
 				</tbody></table>`
 				: `<div class="wk-none">${__("No finished work recorded this day.")}</div>`);
 		});
