@@ -36,7 +36,7 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 		.bw-addrow input{flex:1;border:1px solid var(--border-color);border-radius:6px;padding:5px 10px;background:var(--control-bg);}
 		.bw-empty{color:var(--text-muted);font-size:12px;padding:8px 0;}
 		</style>
-		<div class="bw-note">${__("Pick a bench, then manage its Work Types (chosen when work is issued or assigned — e.g. WAX INJECTING: wax inject, dye cutting, dye making) and Collection States (chosen when work comes back — e.g. complete, partial complete, failed, QC failed). Rename is always allowed and follows through to every record; delete only works while no record uses the option.")}</div>
+		<div class="bw-note">${__("Pick a bench, then manage its Work Types (chosen when work is issued or assigned — e.g. WAX INJECTING: wax inject, dye cutting, dye making), Collection States (chosen when work comes back — e.g. complete, partial complete, failed, QC failed) and In Queue Reasons (why a waiting card is stuck — e.g. WAX INJECTING: Awaiting Dye). Rename is always allowed and follows through to every record; delete only works while no record uses the option.")}</div>
 		<div class="bw-pick"></div>
 		<div class="bw-cols">
 			<div class="bw-col"><div class="h">${__("Types of Work")}</div><div class="b">
@@ -46,6 +46,10 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 			<div class="bw-col"><div class="h">${__("States of Collection")}</div><div class="b">
 				<div class="bw-list" data-kind="Collection State"></div>
 				<div class="bw-addrow"><input data-kind="Collection State" placeholder="${__("new collection state + Enter")}"><button class="btn btn-default btn-sm bw-add" data-kind="Collection State">${__("Add")}</button></div>
+			</div></div>
+			<div class="bw-col"><div class="h">${__("In Queue Reasons")}</div><div class="b">
+				<div class="bw-list" data-kind="Queue Reason"></div>
+				<div class="bw-addrow"><input data-kind="Queue Reason" placeholder="${__("new queue reason + Enter")}"><button class="btn btn-default btn-sm bw-add" data-kind="Queue Reason">${__("Add")}</button></div>
 			</div></div>
 		</div>
 	`);
@@ -67,7 +71,7 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 	}
 
 	function paint() {
-		["Work Type", "Collection State"].forEach((kind) => {
+		["Work Type", "Collection State", "Queue Reason"].forEach((kind) => {
 			const list = options.filter((o) => o.kind === kind);
 			const box = root.find(`.bw-list[data-kind="${kind}"]`);
 			if (!list.length) { box.html(`<div class="bw-empty">${__("Nothing configured — the picker stays hidden at this bench.")}</div>`); return; }

@@ -4155,12 +4155,12 @@ def get_bench_board(bench):
 	got = {}
 	if names and frappe.db.exists("DocType", dt):
 		for r in frappe.db.sql("""
-			SELECT t.order_bag, t.status FROM `tab{0}` t
+			SELECT t.order_bag, t.status, t.queue_reason FROM `tab{0}` t
 			JOIN (SELECT order_bag, MAX(creation) mc FROM `tab{0}`
 				WHERE order_bag IN %(bags)s GROUP BY order_bag) x
 			ON x.order_bag = t.order_bag AND x.mc = t.creation
 		""".format(dt), {"bags": tuple(names)}, as_dict=True):
-			got[r.order_bag] = r.status or "In Queue"
+			got[r.order_bag] = (r.status or "In Queue", r.queue_reason or "")
 
 	# per-card stock from the ledgers
 	stock = {n: {"gold_g": 0.0, "pure_g": 0.0, "buckets": {}} for n in names}
@@ -4190,7 +4190,8 @@ def get_bench_board(bench):
 			"name": b.name, "design": b.design or "", "design_type": b.design_type or "",
 			"qty": cint(b.qty) or 1, "party": b.customer or "", "salesman": b.salesman or "",
 			"order_type": b.order_type or "", "due": str(b.due_date or ""),
-			"status": got.get(b.name, "In Queue"),
+			"status": got.get(b.name, ("In Queue", ""))[0],
+			"queue_reason": got.get(b.name, ("In Queue", ""))[1],
 			"gold_g": round(sc["gold_g"], 3), "pure_g": round(sc["pure_g"], 3),
 			"buckets": {k: {"pcs": v["pcs"], "ct": round(v["ct"], 3)}
 				for k, v in sc["buckets"].items() if v["pcs"] or abs(v["ct"]) > 0.0005},
@@ -4933,7 +4934,8 @@ def get_bench_card(order_bag):
 # follows through to every record) but only deleted while nothing uses them.
 # ---------------------------------------------------------------------------
 def _bench_option_field(kind):
-	return "work_type" if kind == "Work Type" else "collection_state"
+	return {"Work Type": "work_type", "Collection State": "collection_state",
+		"Queue Reason": "queue_reason"}.get(kind, "collection_state")
 
 
 def _bench_option_usage(bench, kind, value):
@@ -4943,6 +4945,38 @@ def _bench_option_usage(bench, kind, value):
 	if not dt or not frappe.db.exists("DocType", dt):
 		return 0
 	return frappe.db.count(dt, {_bench_option_field(kind): value})
+
+
+@frappe.whitelist()
+def set_bench_queue_reason(order_bag, location, reason=None):
+	"""Stamp WHY a card is waiting at its bench (e.g. WAX INJECTING ->
+	'Awaiting Dye'). Reason must be one of the bench's configured Queue
+	Reasons (blank clears). Only cards currently In Queue / On Hold take a
+	reason; no bench record yet means the card is In Queue -> one is made."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	loc = (location or "").upper()
+	dt = BENCH_DOCTYPE.get(loc)
+	if not dt or not frappe.db.exists("DocType", dt):
+		frappe.throw(frappe._("Unknown bench: {0}").format(loc or "?"))
+	reason = (reason or "").strip()
+	if reason:
+		ok = frappe.db.exists("Bench Work Option", {"bench": loc, "kind": "Queue Reason", "value": reason})
+		if not ok:
+			frappe.throw(frappe._("{0} is not a configured In-Queue reason for {1}.").format(reason, loc))
+	if frappe.db.get_value("Order Bag", order_bag, "location") != loc:
+		frappe.throw(frappe._("{0} is not at {1}.").format(order_bag, loc))
+	rec = frappe.get_all(dt, filters={"order_bag": order_bag},
+		fields=["name", "status"], order_by="creation desc", limit=1)
+	if rec and rec[0].status not in ("In Queue", "On Hold", None, ""):
+		frappe.throw(frappe._("{0} is {1} — queue reasons only apply while a card waits.").format(
+			order_bag, rec[0].status))
+	if rec:
+		frappe.db.set_value(dt, rec[0].name, "queue_reason", reason)
+	else:
+		frappe.get_doc({"doctype": dt, "order_bag": order_bag, "status": "In Queue",
+			"queue_reason": reason, "time_in": frappe.utils.now_datetime()}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"order_bag": order_bag, "queue_reason": reason}
 
 
 @frappe.whitelist()
@@ -4956,6 +4990,7 @@ def get_bench_work_options(location):
 	return {
 		"work_types": [r.value for r in rows if r.kind == "Work Type"],
 		"collection_states": [r.value for r in rows if r.kind == "Collection State"],
+		"queue_reasons": [r.value for r in rows if r.kind == "Queue Reason"],
 	}
 
 

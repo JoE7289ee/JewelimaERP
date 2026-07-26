@@ -2,19 +2,17 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "TREE-.#####",
- "naming_rule": "Expression (old style)",
  "creation": "2026-06-18 12:00:00.000000",
- "modified": "2026-07-21 21:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "index_web_pages_for_search": 1,
  "field_order": [
   "order_bag",
   "bench",
   "tree",
   "employee",
   "status",
+  "queue_reason",
   "work_type",
   "collection_state",
   "cb_times",
@@ -35,19 +33,19 @@
   {
    "fieldname": "order_bag",
    "fieldtype": "Link",
-   "options": "Order Bag",
-   "label": "Order Bag",
-   "reqd": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Order Bag",
+   "options": "Order Bag",
+   "reqd": 1
   },
   {
+   "default": "Tree Making",
    "fieldname": "bench",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Bench",
-   "default": "Tree Making",
-   "read_only": 1,
-   "in_standard_filter": 1
+   "read_only": 1
   },
   {
    "fieldname": "tree",
@@ -60,34 +58,41 @@
   {
    "fieldname": "employee",
    "fieldtype": "Link",
-   "options": "Employee",
-   "label": "Employee",
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee"
   },
   {
+   "default": "In Queue",
    "fieldname": "status",
    "fieldtype": "Select",
-   "label": "Status",
-   "options": "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted\nExpired",
-   "default": "In Queue",
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "In Queue\nOn Hold\nIssued\nOngoing\nReceipted\nCompleted\nExpired"
+  },
+  {
+   "fieldname": "queue_reason",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "In Queue Reason"
   },
   {
    "fieldname": "work_type",
    "fieldtype": "Data",
-   "label": "Work Type",
    "in_list_view": 1,
    "in_standard_filter": 1,
+   "label": "Work Type",
    "read_only": 1
   },
   {
    "fieldname": "collection_state",
    "fieldtype": "Data",
-   "label": "Collection State",
    "in_list_view": 1,
    "in_standard_filter": 1,
+   "label": "Collection State",
    "read_only": 1
   },
   {
@@ -105,11 +110,11 @@
    "label": "Time Out"
   },
   {
+   "description": "When the card physically left this bench (transfer time). Gap vs Time Out = how long a completed card waited.",
    "fieldname": "transferred_at",
    "fieldtype": "Datetime",
    "label": "Transferred Out At",
-   "read_only": 1,
-   "description": "When the card physically left this bench (transfer time). Gap vs Time Out = how long a completed card waited."
+   "read_only": 1
   },
   {
    "fieldname": "issued_at",
@@ -129,17 +134,17 @@
   {
    "fieldname": "weight_out",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Weight Out (Issued)",
    "precision": "3",
-   "read_only": 1,
-   "in_list_view": 1
+   "read_only": 1
   },
   {
    "fieldname": "weight_in",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Weight In (Received)",
-   "precision": "3",
-   "in_list_view": 1
+   "precision": "3"
   },
   {
    "fieldname": "cb_weights",
@@ -148,10 +153,10 @@
   {
    "fieldname": "loss",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Loss",
    "precision": "3",
-   "read_only": 1,
-   "in_list_view": 1
+   "read_only": 1
   },
   {
    "fieldname": "sec_remarks",
@@ -163,11 +168,14 @@
    "label": "Remarks"
   }
  ],
+ "index_web_pages_for_search": 1,
  "links": [],
+ "modified": "2026-07-21 21:00:00.000000",
+ "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Tree Making",
+ "naming_rule": "Expression (old style)",
  "owner": "Administrator",
- "modified_by": "Administrator",
  "permissions": [
   {
    "create": 1,
@@ -177,9 +185,9 @@
    "print": 1,
    "read": 1,
    "report": 1,
+   "role": "System Manager",
    "share": 1,
-   "write": 1,
-   "role": "System Manager"
+   "write": 1
   },
   {
    "create": 1,
@@ -189,9 +197,9 @@
    "print": 1,
    "read": 1,
    "report": 1,
+   "role": "Stock User",
    "share": 1,
-   "write": 1,
-   "role": "Stock User"
+   "write": 1
   }
  ],
  "sort_field": "creation",

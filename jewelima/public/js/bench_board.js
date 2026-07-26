@@ -15,6 +15,7 @@ const BB_CORE_COLS = [
 	["name", "Card"], ["design", "Design"], ["design_type", "Type"], ["qty", "Qty"],
 	["party", "Party"], ["salesman", "Salesman"], ["order_type", "Order Type"],
 	["due", "Due"], ["gold_g", "Gold g"], ["pure_g", "Pure g"], ["status", "Status"],
+	["queue_reason", "In Queue Reason"],
 ];
 // stone buckets as OPT-IN columns (off by default): pcs / ct per bucket
 const BB_BUCKET_COLS = BB_BUCKETS.map((b) => [b.toLowerCase(), b + " (no/ct)"]);
@@ -26,6 +27,7 @@ const BB_FILTER_FIELDS = [
 	{ key: "design_type", label: "Design Type", type: "select" },
 	{ key: "order_type", label: "Order Type", type: "select" },
 	{ key: "status", label: "Status", type: "select" },
+	{ key: "queue_reason", label: "In Queue Reason", type: "select" },
 	{ key: "name", label: "Card", type: "text" },
 	{ key: "due", label: "Due Date", type: "date" },
 	{ key: "gold_g", label: "Gold (g)", type: "number" },
@@ -57,7 +59,10 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		due: (r) => (r.due ? frappe.datetime.str_to_user(r.due) : ""),
 		gold_g: (r) => (r.gold_g || 0).toFixed(3),
 		pure_g: (r) => (r.pure_g || 0).toFixed(3),
-		status: (r) => `<span class="bb-st">${esc(r.status)}</span>`,
+		status: (r) => `<span class="bb-st">${esc(r.status)}</span>`
+			+ (r.queue_reason ? ` <span class="bb-qr" data-name="${esc(r.name)}" title="${__("click to change")}">${esc(r.queue_reason)}</span>`
+				: (["In Queue", "On Hold"].includes(r.status) ? ` <span class="bb-qr add" data-name="${esc(r.name)}" title="${__("why is it waiting?")}">+ ${__("reason")}</span>` : "")),
+		queue_reason: (r) => esc(r.queue_reason || ""),
 	};
 	BB_BUCKETS.forEach((b) => {
 		BB_CELL[b.toLowerCase()] = (r) => {
@@ -85,6 +90,8 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		table.bb-t td{border:1px solid var(--border-color);padding:4px 10px;}
 		.bb-none{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.bb-st{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:var(--control-bg);}
+		.bb-qr{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:#fff6e0;color:#7a5b00;border:1px solid #e0a800;cursor:pointer;}
+		.bb-qr.add{background:transparent;color:var(--text-muted);border:1px dashed var(--border-color);}
 		</style>
 		<div class="bb-loc"><span class="tag">${__("Bench")}</span>${esc(bench)}</div>
 		<div class="bb-filter"></div>
@@ -161,6 +168,26 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 				<tr><td>${i + 1}</td>${cols.map(([k]) => `<td>${BB_CELL[k](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
 			: `<div class="bb-none">${filterBar.count() ? __("No cards match the filters.") : __("Nothing at {0}.", [bench])}</div>`);
 	}
+	// why is this card waiting? — pick from the bench's configured reasons
+	root.on("click", ".bb-qr", function (e) {
+		e.stopPropagation();
+		const nm = $(this).data("name");
+		frappe.call({ method: API + ".get_bench_work_options", args: { location: bench } }).then((r) => {
+			const reasons = (r.message || {}).queue_reasons || [];
+			if (!reasons.length) {
+				frappe.show_alert({ message: __("No In-Queue reasons configured for {0} — add them on Bench Setup.", [bench]), indicator: "orange" }, 5);
+				return;
+			}
+			frappe.prompt([{ fieldname: "v", fieldtype: "Select", label: __("In Queue reason"),
+				options: [""].concat(reasons).join("\n") }],
+				(vals) => frappe.call({ method: API + ".set_bench_queue_reason",
+					args: { order_bag: nm, location: bench, reason: vals.v || "" } }).then(() => {
+					frappe.show_alert({ message: vals.v ? __("{0}: {1}", [nm, vals.v]) : __("{0}: reason cleared", [nm]), indicator: "blue" }, 4);
+					load();
+				}), __("Why is {0} waiting?", [nm]), __("Set"));
+		});
+	});
+
 	root.on("click", "th[data-sort]", function () {
 		const k = this.getAttribute("data-sort");
 		if (S.sort === k) S.dir = -S.dir;
