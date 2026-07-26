@@ -4346,8 +4346,12 @@ def ws_issue_cards(bench, names, employee=None, work_type=None):
 	bench = (bench or "").upper()
 	_require_ws_access(bench)
 	if bench in ISSUE_RECEIPT_LOCATIONS:
-		return issue_bench_cards(names, bench, employee=employee, work_type=work_type)
-	return assign_bench_cards(names, bench, employee=employee, work_type=work_type)
+		res = issue_bench_cards(names, bench, employee=employee, work_type=work_type)
+	else:
+		res = assign_bench_cards(names, bench, employee=employee, work_type=work_type)
+	if res.get("errors") and not res.get("done"):
+		frappe.throw(frappe._("{0}").format(res["errors"][0].get("error")))
+	return res
 
 
 @frappe.whitelist()
@@ -4361,9 +4365,14 @@ def ws_collect_card(bench, order_bag, collection_state=None, weight_in=None, emp
 	if bench in ISSUE_RECEIPT_LOCATIONS:
 		if weight_in in (None, ""):
 			frappe.throw(frappe._("{0} books metal — give the weight coming back (g).").format(bench))
-		return receipt_bench_cards(json.dumps([{"order_bag": order_bag, "weight_in": flt(weight_in)}]),
+		res = receipt_bench_cards(json.dumps([{"order_bag": order_bag, "weight_in": flt(weight_in)}]),
 			bench, employee=employee, collection_state=collection_state)
-	return collect_bench_cards(json.dumps([order_bag]), bench, collection_state=collection_state)
+	else:
+		res = collect_bench_cards(json.dumps([order_bag]), bench, collection_state=collection_state)
+	# single-card wrapper: a skip IS a failure — say why instead of a false success
+	if res.get("errors"):
+		frappe.throw(frappe._("{0}: {1}").format(order_bag, res["errors"][0].get("error")))
+	return res
 
 
 @frappe.whitelist()
@@ -5572,7 +5581,7 @@ def collect_bench_cards(names, location, collection_state=None):
 				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
 				continue
 			doc = frappe.get_doc(dt, rec)
-			if doc.status != "Issued":
+			if doc.status not in ("Issued", "Ongoing"):
 				errors.append({"name": nm, "error": frappe._("Not assigned (is {0})").format(doc.status)})
 				continue
 			doc.status = "Completed"
