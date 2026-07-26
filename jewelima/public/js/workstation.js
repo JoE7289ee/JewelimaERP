@@ -136,21 +136,27 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				<span class="wk-dt"><span class="k">${__("In today")}</span><span class="v">${d.in.count} · ${d.in.gold_g.toFixed(3)} g</span></span>
 				<span class="wk-dt"><span class="k">${__("Out today")}</span><span class="v">${d.out.count} · ${d.out.gold_g.toFixed(3)} g</span></span>`);
 			root.find(".wk-day-title").text(__("Work done on {0} — {1} card(s)", [frappe.datetime.str_to_user(d.date), d.done_count]));
+			// summary per worker — the card-by-card detail lives in the bench records
+			const sum = (arr, k) => arr.reduce((t, x) => t + (x[k] || 0), 0);
+			const types = (cards) => {
+				const m = {};
+				cards.forEach((c) => { const k = c.work_type || "—"; m[k] = (m[k] || 0) + 1; });
+				return Object.entries(m).map(([k, n]) => `${esc(k)} ×${n}`).join(", ");
+			};
 			root.find(".wk-day-body").html(d.done.length ? `
-				<table class="wk-dw"><thead><tr><th>${__("Card")}</th><th>${__("Work type")}</th><th>${__("State")}</th>
-					<th>${__("Out g")}</th><th>${__("In g")}</th><th>${__("Loss g")}</th><th>${__("When")}</th></tr></thead><tbody>
-				${d.done.map((g) => `
-					<tr class="emp"><td colspan="5">${esc(g.employee_name)} — ${g.cards.length} ${__("card(s)")}</td>
-						<td>${g.loss ? g.loss.toFixed(3) : ""}</td><td></td></tr>
-					${g.cards.map((c) => `<tr>
-						<td><b>${esc(c.order_bag)}</b></td>
-						<td>${esc(c.work_type || "")}</td>
-						<td>${esc(c.collection_state || "")}</td>
-						<td>${c.weight_out ? c.weight_out.toFixed(3) : ""}</td>
-						<td>${c.weight_in ? c.weight_in.toFixed(3) : ""}</td>
-						<td>${c.loss ? c.loss.toFixed(3) : ""}</td>
-						<td>${c.done_at ? frappe.datetime.str_to_user(c.done_at) : ""}</td>
-					</tr>`).join("")}`).join("")}</tbody></table>`
+				<table class="wk-dw"><thead><tr><th>${__("Worker")}</th><th>${__("Cards done")}</th>
+					<th>${__("Work types")}</th><th>${__("In g")}</th><th>${__("Loss g")}</th></tr></thead><tbody>
+				${d.done.map((g) => `<tr>
+					<td><b>${esc(g.employee_name)}</b></td>
+					<td>${g.cards.length}</td>
+					<td>${types(g.cards)}</td>
+					<td>${g.weight_in ? g.weight_in.toFixed(3) : ""}</td>
+					<td>${g.loss ? g.loss.toFixed(3) : ""}</td>
+				</tr>`).join("")}
+				<tr class="emp"><td>${__("TOTAL")}</td><td>${d.done_count}</td><td></td>
+					<td>${sum(d.done, "weight_in") ? sum(d.done, "weight_in").toFixed(3) : ""}</td>
+					<td>${sum(d.done, "loss") ? sum(d.done, "loss").toFixed(3) : ""}</td></tr>
+				</tbody></table>`
 				: `<div class="wk-none">${__("No finished work recorded this day.")}</div>`);
 		});
 	}
