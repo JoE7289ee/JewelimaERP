@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-07-26 17:30:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-26 23:12:30.238663",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "due-soon",
+ "owner": "Administrator",
+ "page_name": "due-soon",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Due Soon"
+}

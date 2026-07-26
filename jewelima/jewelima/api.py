@@ -4316,6 +4316,40 @@ def get_due_risk(days=5):
 
 
 @frappe.whitelist()
+def get_due_soon(days=5):
+	"""Due Soon board: EVERY live card due within N days (or overdue), grouped
+	by bench — cast or not (gold grams shown so the uncast stand out)."""
+	days = cint(days) if cint(days) else 5
+	horizon = frappe.utils.add_days(frappe.utils.today(), days)
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, b.qty, b.location,
+			jo.customer party, jo.order_type, jo.due_date due,
+			DATEDIFF(jo.due_date, CURDATE()) days_left,
+			COALESCE(g.gold_g, 0) gold_g
+		FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		LEFT JOIN (
+			SELECT l.order_bag, SUM(IF(l.direction='Out', -l.qty, l.qty)) gold_g
+			FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+			WHERE IFNULL(i.stone_type, '') = ''
+			GROUP BY l.order_bag
+		) g ON g.order_bag = b.name
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
+		ORDER BY jo.due_date, b.name
+	""", horizon, as_dict=True)
+	listed = set(frappe.get_all("Priority Card", pluck="order_bag"))
+	benches = {}
+	for r in rows:
+		r["due"] = str(r.due or "")
+		r["gold_g"] = round(flt(r.gold_g), 3)
+		r["on_priority"] = 1 if r.name in listed else 0
+		benches.setdefault(r.location or "(no bench)", []).append(r)
+	return {"days": days, "total": len(rows),
+		"benches": [{"bench": k, "rows": v} for k, v in sorted(benches.items())]}
+
+
+@frappe.whitelist()
 def priority_add_many(bags):
 	"""Cards picker on the Prioritisation page: append the batch to the BOTTOM
 	of the manual list (dups and dead cards skipped, reported back)."""

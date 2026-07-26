@@ -319,6 +319,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "sort-descending",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Due Soon",
+   "link_to": "due-soon",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "wrench",
@@ -2074,7 +2087,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 22:53:43.467301",
+ "modified": "2026-07-26 23:12:25.657047",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
