@@ -168,19 +168,28 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		});
 	}
 
-	// one-click "why is it waiting" — the bench's configured reasons
+	// "why is it waiting" — INLINE: the chip swaps into a select right in the cell
 	root.on("click", ".wk-qr", function () {
-		const nm = $(this).data("name");
+		const $chip = $(this);
+		const nm = $chip.data("name");
+		const cur = D.queue.find((q) => q.name === nm);
 		const reasons = D.queue_reasons || [];
 		if (!reasons.length) {
 			frappe.show_alert({ message: __("No In-Queue reasons configured for {0} — add them on Bench Setup.", [bench]), indicator: "orange" }, 5);
 			return;
 		}
-		frappe.prompt([{ fieldname: "v", fieldtype: "Select", label: __("In Queue reason"),
-			options: [""].concat(reasons).join("\n") }],
-			(vals) => frappe.call({ method: API + ".set_bench_queue_reason",
-				args: { order_bag: nm, location: bench, reason: vals.v || "" } }).then(load),
-			__("Why is {0} waiting?", [nm]), __("Set"));
+		if ($chip.next().is("select.wk-qr-sel")) return; // already editing
+		const opts = [""].concat(reasons);
+		const sel = $(`<select class="wk-qr-sel" style="border:1px solid #e0a800;border-radius:6px;height:24px;font-size:11px;background:var(--fg-color);color:var(--text-color);max-width:150px;">`
+			+ opts.map((o) => `<option value="${esc(o)}" ${o === ((cur && cur.queue_reason) || "") ? "selected" : ""}>${o ? esc(o) : "— " + __("none") + " —"}</option>`).join("")
+			+ `</select>`);
+		$chip.hide().after(sel);
+		sel.on("change", function () {
+			frappe.call({ method: API + ".set_bench_queue_reason",
+				args: { order_bag: nm, location: bench, reason: this.value || "" } }).then(load);
+		});
+		sel.on("blur", () => { sel.remove(); $chip.show(); });
+		sel.trigger("focus");
 	});
 
 	// issue/assign a waiting card — same backend as the global pages, bench-pinned
