@@ -701,19 +701,6 @@
    "icon": "hammer",
    "indent": 1,
    "keep_closed": 0,
-   "label": "Ordering",
-   "link_to": "ws-ordering",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "hammer",
-   "indent": 1,
-   "keep_closed": 0,
    "label": "Cad",
    "link_to": "ws-cad-ws",
    "link_type": "Page",
@@ -2126,7 +2113,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 14:56:18.167464",
+ "modified": "2026-07-26 14:57:22.330733",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
