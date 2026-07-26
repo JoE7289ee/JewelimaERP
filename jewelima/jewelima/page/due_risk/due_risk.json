@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-07-26 17:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-26 22:53:48.047465",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "due-risk",
+ "owner": "Administrator",
+ "page_name": "due-risk",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Due Risk"
+}
