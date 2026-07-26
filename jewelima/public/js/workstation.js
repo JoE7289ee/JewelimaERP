@@ -220,29 +220,53 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		}, __("{0} — issue {1}", [bench, nm]), D.flow === "weights" ? __("Issue") : __("Assign"));
 	});
 
-	// collect / receipt a working card — weight benches book the metal back
-	root.on("click", ".wk-collect", function () {
-		const nm = $(this).data("name");
-		const emp = $(this).data("emp");
-		const flds = [];
-		if (D.flow === "weights") {
-			flds.push({ fieldname: "w", fieldtype: "Float", label: __("Weight coming back (g)"), reqd: 1 });
-		}
-		if ((D.collection_states || []).length) {
-			flds.push({ fieldname: "cs", fieldtype: "Select", label: __("Collection state"),
-				options: [""].concat(D.collection_states).join("\n") });
-		}
-		const go = (v) => frappe.call({ method: API + ".ws_collect_card", args: {
-			bench, order_bag: nm, collection_state: (v && v.cs) || null,
-			weight_in: v && v.w, employee: emp || null,
+	// collect / receipt a working card — INLINE, same feel as the reason picker:
+	// the button swaps into (weight g +) state select + a ✓ right in the row
+	function doCollect(nm, emp, state, weight) {
+		return frappe.call({ method: API + ".ws_collect_card", args: {
+			bench, order_bag: nm, collection_state: state || null,
+			weight_in: weight, employee: emp || null,
 		} }).then((r) => {
 			const m = (r.message || {});
 			frappe.show_alert({ message: __("{0} collected{1}", [nm,
 				m.total_loss ? " — " + __("loss {0} g", [m.total_loss]) : "."]), indicator: "green" }, 5);
 			load();
 		});
-		flds.length ? frappe.prompt(flds, go, __("{0} — collect {1}", [bench, nm]),
-			D.flow === "weights" ? __("Receipt") : __("Collect")) : go(null);
+	}
+	root.on("click", ".wk-collect", function () {
+		const $btn = $(this);
+		const nm = $btn.data("name");
+		const emp = $btn.data("emp");
+		const states = D.collection_states || [];
+		const weights = D.flow === "weights";
+		if (!weights && !states.length) {
+			doCollect(nm, emp, "", null);   // nothing to ask — one click collects
+			return;
+		}
+		if ($btn.next().is(".wk-col-inline")) return;
+		const grp = $(`<span class="wk-col-inline" style="display:inline-flex;gap:5px;align-items:center;">
+			${weights ? `<input type="number" step="0.001" class="ci-w" placeholder="${__("g back")}"
+				style="width:82px;border:1px solid #2e7d32;border-radius:6px;height:24px;padding:1px 6px;font-size:11px;background:var(--fg-color);color:var(--text-color);">` : ""}
+			${states.length ? `<select class="ci-s" style="border:1px solid var(--border-color);border-radius:6px;height:24px;font-size:11px;max-width:130px;background:var(--fg-color);color:var(--text-color);">
+				${[""].concat(states).map((o) => `<option value="${esc(o)}">${o ? esc(o) : "— " + __("state") + " —"}</option>`).join("")}</select>` : ""}
+			<button class="btn btn-xs ci-go" style="background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;">✓</button>
+			<button class="btn btn-xs btn-default ci-x">✕</button>
+		</span>`);
+		$btn.hide().after(grp);
+		const done = () => { grp.remove(); $btn.show(); };
+		grp.find(".ci-x").on("click", done);
+		const submit = () => {
+			const w = grp.find(".ci-w").val();
+			if (weights && (w === "" || w === undefined)) {
+				frappe.show_alert({ message: __("Give the weight coming back (g)."), indicator: "orange" }, 3);
+				grp.find(".ci-w").trigger("focus");
+				return;
+			}
+			doCollect(nm, emp, grp.find(".ci-s").val() || "", weights ? w : null);
+		};
+		grp.find(".ci-go").on("click", submit);
+		grp.on("keydown", "input, select", (e) => { if (e.key === "Enter") submit(); });
+		grp.find(weights ? ".ci-w" : ".ci-s").trigger("focus");
 	});
 
 	// Bag Extraction: every card (single qty too) goes through Bag Split —
