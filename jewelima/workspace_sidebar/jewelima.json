@@ -75,7 +75,7 @@
    "child": 0,
    "collapsible": 1,
    "icon": "info",
-   "indent": 1,
+   "indent": 0,
    "keep_closed": 1,
    "label": "Info",
    "link_to": "",
@@ -2126,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 16:04:48.003213",
+ "modified": "2026-07-26 16:05:44.107524",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
