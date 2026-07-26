@@ -292,7 +292,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 					const m = r.message || {};
 					frappe.msgprint({
 						title: __("Imported"), indicator: "green",
-						message: __("{0} piece(s) now In Stock under <a href='/app/job-order/{1}'>{1}</a> (held by {2}).<br>Stock entry: {3}<br><br>{4}<br><br><a href='/app/finished-items'>Finished Items</a> · <a href='/app/print-barcode'>Print Barcode</a>",
+						message: __("{0} piece(s) now In Stock under <a href='/app/job-order/{1}'>{1}</a> (held by {2}).<br>Stock entry: {3}<br><br>{4}<br><br><a href='/app/print-barcode'>Print Barcode</a>",
 							[m.bags.length, m.job_order, esc(customer), esc(m.stock_doc || ""), m.bags.map(esc).join(", ")]),
 					});
 					state.rows = [];

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-26 12:30:00",
+ "modified": "2026-07-26 15:10:13.394697",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-filing",
@@ -16,6 +16,9 @@
   },
   {
    "role": "Stock Manager"
+  },
+  {
+   "role": "Jewelima Bench FILING"
   }
  ],
  "script": null,

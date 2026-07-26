@@ -839,19 +839,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "gem",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Finished Items",
-   "link_to": "finished-items",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "gem",
@@ -1556,19 +1543,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "trophy",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Employee Performance",
-   "link_to": "employee-performance",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "activity",
    "indent": 1,
    "keep_closed": 0,
@@ -2126,7 +2100,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 16:05:44.107524",
+ "modified": "2026-07-26 16:08:46.900660",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
