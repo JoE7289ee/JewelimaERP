@@ -72,6 +72,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "printer",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Print Order Bags",
+   "link_to": "print-order-bags",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "info",
@@ -131,32 +144,6 @@
    "keep_closed": 0,
    "label": "Print Barcode",
    "link_to": "print-barcode",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
-   "icon": "printer",
-   "indent": 1,
-   "keep_closed": 1,
-   "label": "Print & Photos",
-   "link_to": "",
-   "link_type": "",
-   "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "printer",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Print Order Bags",
-   "link_to": "print-order-bags",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -2074,7 +2061,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 16:12:00.024287",
+ "modified": "2026-07-26 16:30:59.308356",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
