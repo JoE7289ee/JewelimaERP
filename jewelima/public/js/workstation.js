@@ -63,6 +63,16 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				<span class="wk-day-tiles" style="display:flex;gap:8px;"></span>
 			</span></div>
 		<div class="wk-kpis"></div>
+		<div class="wk-bulk" style="display:none;border:1px solid #e0a800;border-radius:9px;background:var(--fg-color);padding:10px 14px;margin-bottom:12px;">
+			<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+				<b style="font-size:12px;">${__("Bulk reason")}</b>
+				<select class="wk-bulk-sel" style="border:1px solid var(--border-color);border-radius:6px;height:28px;font-size:12px;background:var(--fg-color);color:var(--text-color);"></select>
+				<input type="text" class="wk-bulk-scan" placeholder="${__("scan card…")}" style="border:1px solid var(--border-color);border-radius:6px;height:28px;padding:2px 8px;font-size:12px;width:170px;background:var(--fg-color);color:var(--text-color);">
+				<button class="btn btn-xs wk-bulk-go" style="background:#e0a800;border-color:#e0a800;color:#3a2c00;font-weight:700;">${__("Apply")}</button>
+				<button class="btn btn-xs btn-default wk-bulk-x">${__("Close")}</button>
+			</div>
+			<div class="wk-bulk-chips" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>
+		</div>
 		<div class="wk-cols">
 			<div class="wk-q"><div class="wk-sec">${__("Waiting — priority order")}</div>
 				<div class="wk-next" style="display:none;"></div><div class="wk-qbody"></div></div>
@@ -316,6 +326,66 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			dlg.show();
 		});
 	}
+
+	// ---- bulk reason: scan several waiting cards, stamp ONE reason on all
+	const BK = { cards: [] };
+	function paintBulk() {
+		root.find(".wk-bulk-chips").html(BK.cards.length
+			? BK.cards.map((c) => `<span style="border:1px solid var(--border-color);border-radius:12px;padding:2px 10px;font-size:12px;">
+				<b>${esc(c)}</b> <span class="wk-bulk-rm" data-name="${esc(c)}" style="cursor:pointer;color:var(--text-muted);">✕</span></span>`).join("")
+			: `<span style="font-size:12px;color:var(--text-muted);">${__("Scan waiting cards — the picked reason lands on all of them.")}</span>`);
+		root.find(".wk-bulk-go").text(BK.cards.length ? __("Apply to {0}", [BK.cards.length]) : __("Apply"));
+	}
+	page.add_inner_button(__("Bulk Reason"), () => {
+		const reasons = (D && D.queue_reasons) || [];
+		if (!reasons.length) {
+			frappe.show_alert({ message: __("No In-Queue reasons configured for {0} — add them on Bench Setup.", [bench]), indicator: "orange" }, 5);
+			return;
+		}
+		root.find(".wk-bulk-sel").html([""].concat(reasons).map((o) =>
+			`<option value="${esc(o)}">${o ? esc(o) : "— " + __("clear reason") + " —"}</option>`).join(""));
+		BK.cards = [];
+		paintBulk();
+		root.find(".wk-bulk").slideDown(120);
+		root.find(".wk-bulk-scan").trigger("focus");
+	});
+	root.find(".wk-bulk-x").on("click", () => root.find(".wk-bulk").slideUp(120));
+	root.on("click", ".wk-bulk-rm", function () {
+		BK.cards = BK.cards.filter((c) => c !== $(this).data("name"));
+		paintBulk();
+	});
+	root.find(".wk-bulk-scan").on("keydown", function (e) {
+		if (e.key !== "Enter") return;
+		const code = this.value.trim();
+		this.value = "";
+		if (!code) return;
+		if (BK.cards.includes(code)) {
+			frappe.show_alert({ message: __("{0} already scanned.", [code]), indicator: "orange" }, 3);
+			return;
+		}
+		if (!(D.queue || []).some((q) => q.name === code)) {
+			frappe.show_alert({ message: __("{0} is not WAITING at {1}.", [code, bench]), indicator: "red" }, 4);
+			return;
+		}
+		BK.cards.push(code);
+		paintBulk();
+	});
+	root.find(".wk-bulk-go").on("click", () => {
+		if (!BK.cards.length) return;
+		const reason = root.find(".wk-bulk-sel").val() || "";
+		frappe.dom.freeze(__("Stamping..."));
+		Promise.all(BK.cards.map((nm) => frappe.call({ method: API + ".set_bench_queue_reason",
+			args: { order_bag: nm, location: bench, reason } })))
+			.then(() => {
+				frappe.dom.unfreeze();
+				frappe.show_alert({ message: reason
+					? __("{0} card(s) → {1}.", [BK.cards.length, reason])
+					: __("Reason cleared on {0} card(s).", [BK.cards.length]), indicator: "green" }, 5);
+				BK.cards = [];
+				root.find(".wk-bulk").slideUp(120);
+				load();
+			}).catch(() => frappe.dom.unfreeze());
+	});
 
 	root.find(".wk-date").val(frappe.datetime.get_today()).on("change", loadDay);
 
