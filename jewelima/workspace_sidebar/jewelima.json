@@ -293,6 +293,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "box",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Make Products",
+   "link_to": "make-products",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
@@ -807,32 +820,6 @@
    "keep_closed": 0,
    "label": "Weight Reduce",
    "link_to": "weight-reduce",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
-   "icon": "package",
-   "indent": 1,
-   "keep_closed": 1,
-   "label": "Products",
-   "link_to": "",
-   "link_type": "",
-   "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "box",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Make Products",
-   "link_to": "make-products",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -2100,7 +2087,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 16:08:46.900660",
+ "modified": "2026-07-26 16:09:40.780463",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
