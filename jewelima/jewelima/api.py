@@ -9298,6 +9298,30 @@ def get_card_passport(order_bag):
 
 
 @frappe.whitelist()
+def transfer_and_issue(names, to_location, employee=None, work_type=None, remarks=None):
+	"""Transfer Plus: move the batch AND put it straight to work at the
+	destination — issue (weight benches) or assign (light benches), employee
+	optional, work type from the TARGET bench's options. Destinations with
+	neither flow just transfer."""
+	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, ISSUE_RECEIPT_LOCATIONS
+	roles = set(frappe.get_roles())
+	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus"} & roles:
+		frappe.throw(frappe._("Transfer-and-issue needs the Jewelima Transfer Plus role."))
+	res = transfer_order_bags(names, to_location, remarks=remarks)
+	to = (to_location or "").upper()
+	moved = res.get("transferred") or []
+	issued = {}
+	if moved:
+		if to in ISSUE_RECEIPT_LOCATIONS:
+			issued = issue_bench_cards(json.dumps(moved), to, employee=employee, work_type=work_type)
+		elif to in ASSIGN_COLLECT_LOCATIONS:
+			issued = assign_bench_cards(json.dumps(moved), to, employee=employee, work_type=work_type)
+	res["issued"] = issued.get("count") or len(issued.get("done") or [])
+	res["issue_errors"] = issued.get("errors") or []
+	return res
+
+
+@frappe.whitelist()
 def get_cards_at_location(location):
 	"""All ACTIVE production cards currently at a location, with each card's current bench
 	status (In Queue / Issued / Completed …) — the Transfer page's Cards picker."""

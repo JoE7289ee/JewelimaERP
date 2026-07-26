@@ -49,6 +49,15 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			<div class="tob-loc"><div class="lbl">Batch location</div><div class="val tob-locval">—</div></div>
 			<div class="tob-to"></div>
 		</div>
+		<div class="tob-plus" style="display:none;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 8px;border:1px dashed var(--border-color);border-radius:8px;padding:7px 12px;">
+			<label style="margin:0;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+				<input type="checkbox" class="tp-on" style="width:15px;height:15px;"> ${__("Issue right after transfer")}</label>
+			<span class="tp-opts" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+				<span class="tp-emp" style="min-width:200px;display:inline-block;"></span>
+				<select class="tp-wt" style="border:1px solid var(--border-color);border-radius:6px;height:28px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+					<option value="">${__("— no work type —")}</option></select>
+			</span>
+		</div>
 		<div class="tob-msg"></div>
 		<div class="tob-mid">
 		<div class="tob-box">
@@ -77,6 +86,34 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	};
 	state.scan = mk(".tob-scan", { fieldtype: "Data", label: "Scan Order Bag", fieldname: "scan", description: "Scan a bag barcode (or type + Enter)." });
 	state.to = mk(".tob-to", { fieldtype: "Select", label: "Transfer all to", fieldname: "to_location", options: TOB_LOCATIONS });
+
+	// ---- Transfer Plus: transfer AND put straight to work at the target ------
+	const TP = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
+		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager"), emp: null };
+	if (TP.allowed) {
+		$(page.main).find(".tob-plus").css("display", "flex");
+		TP.emp = frappe.ui.form.make_control({
+			df: { fieldtype: "Link", label: __("Employee (optional)"), fieldname: "tp_emp", options: "Employee" },
+			parent: $(page.main).find(".tp-emp").get(0), render_input: true,
+		});
+		TP.emp.refresh();
+		$(page.main).find(".tp-on").on("change", function () {
+			$(page.main).find(".tp-opts").css("display", this.checked ? "inline-flex" : "none");
+			if (this.checked) loadTargetOptions();
+		});
+		state.to.$input.on("change", loadTargetOptions);
+	}
+	function loadTargetOptions() {
+		const to = state.to.get_value();
+		const $wt = $(page.main).find(".tp-wt");
+		$wt.html(`<option value="">${__("— no work type —")}</option>`);
+		if (!to || !$(page.main).find(".tp-on").is(":checked")) return;
+		frappe.call({ method: "jewelima.jewelima.api.get_bench_work_options", args: { location: to }, freeze: false })
+			.then((r) => {
+				const wts = (r.message || {}).work_types || [];
+				$wt.append(wts.map((w) => `<option>${frappe.utils.escape_html(w)}</option>`).join(""));
+			});
+	}
 
 	const $body = $(page.main).find(".tob-body");
 	const $msg = $(page.main).find(".tob-msg");
@@ -238,14 +275,25 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one bag first."));
 		if (!to) return frappe.msgprint(__("Pick the destination location ('Transfer all to')."));
 		if (to === state.location) return frappe.msgprint(__("Destination is the same as the current location."));
-		frappe.dom.freeze(__("Transferring…"));
+		const plus = TP.allowed && $(page.main).find(".tp-on").is(":checked");
+		frappe.dom.freeze(plus ? __("Transferring + issuing…") : __("Transferring…"));
 		frappe.call({
-			method: "jewelima.jewelima.api.transfer_order_bags",
-			args: { names: JSON.stringify(state.rows.map((r) => r.name)), to_location: to },
+			method: plus ? "jewelima.jewelima.api.transfer_and_issue" : "jewelima.jewelima.api.transfer_order_bags",
+			args: plus ? {
+				names: JSON.stringify(state.rows.map((r) => r.name)), to_location: to,
+				employee: TP.emp.get_value() || null,
+				work_type: $(page.main).find(".tp-wt").val() || null,
+			} : { names: JSON.stringify(state.rows.map((r) => r.name)), to_location: to },
 		}).then((r) => {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
-			frappe.show_alert({ message: __("Transferred {0} bag(s): {1} → {2}", [res.count, state.location, to]), indicator: "green" }, 6);
+			frappe.show_alert({ message: plus
+				? __("Transferred {0} bag(s) → {1}, issued {2}.", [res.count, to, res.issued || 0])
+				: __("Transferred {0} bag(s): {1} → {2}", [res.count, state.location, to]), indicator: "green" }, 6);
+			if (plus && (res.issue_errors || []).length) {
+				frappe.msgprint({ title: __("Transferred but not issued"), indicator: "orange",
+					message: res.issue_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
+			}
 			if (res.errors && res.errors.length) {
 				frappe.msgprint({ title: __("Some not transferred"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
 			}

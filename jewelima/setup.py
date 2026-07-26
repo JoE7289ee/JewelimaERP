@@ -183,7 +183,7 @@ def setup_roles():
 
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE,
-			JEWELIMA_DESIGN_VIEWER_ROLE) + JEWELIMA_TRANSFER_ROLES:
+			JEWELIMA_DESIGN_VIEWER_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
