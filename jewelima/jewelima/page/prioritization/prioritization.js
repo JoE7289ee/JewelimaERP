@@ -140,6 +140,99 @@ frappe.pages["prioritization"].on_page_load = function (wrapper) {
 		dragBag = null;
 	});
 
+	// ---- Cards picker (same pattern as Transfer Order Bag): browse a
+	// location, filter, tick, add the batch to the bottom of the list
+	const PZ_LOCATIONS = ["ORDERING", "CAD", "CAM", "WAX INJECTING", "TREE MAKING", "CASTING",
+		"GRINDING", "FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH",
+		"WAX CLEANING", "BAG EXTRACTION"];
+	function showCards() {
+		const S = { location: "", status: "All", q: "", rows: [], sel: new Set() };
+		const dlg = new frappe.ui.Dialog({
+			title: __("Pick cards to prioritise"),
+			size: "extra-large",
+			primary_action_label: __("Add to priority list"),
+			primary_action() {
+				if (!S.sel.size) return frappe.msgprint(__("Tick at least one card."));
+				dlg.hide();
+				frappe.call({ method: API + ".priority_add_many", args: { bags: JSON.stringify([...S.sel]) } })
+					.then((r) => {
+						const m = r.message || {};
+						rows = m.rows || [];
+						paint();
+						frappe.show_alert({ message: __("{0} card(s) added at the bottom{1}", [(m.added || []).length,
+							(m.skipped || []).length ? " · " + __("{0} skipped (already listed / not live)", [m.skipped.length]) : "."]), indicator: "blue" }, 6);
+						focusScan();
+					});
+			},
+		});
+		const $b = $(dlg.body);
+		$b.html(`
+			<style>
+			.pc-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+			.pc-top select,.pc-top input[type=text]{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:13px;}
+			.pc-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 14px;font-size:12.5px;cursor:pointer;color:var(--text-muted);}
+			.pc-pill.on{background:var(--btn-primary,#171717);border-color:var(--btn-primary,#171717);color:#fff;font-weight:600;}
+			.pc-count{margin-left:auto;color:var(--text-muted);font-size:12px;}
+			.pc-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;height:calc(100vh - 330px);min-height:280px;}
+			table.pc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
+			table.pc-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
+			table.pc-tbl td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
+			table.pc-tbl tr.on td{background:var(--bg-light-gray,#eef3ee);}
+			.pc-empty{padding:18px;text-align:center;color:var(--text-muted);}
+			</style>
+			<div class="pc-top">
+				<select class="pc-loc"><option value="">— location —</option>${PZ_LOCATIONS.map((l) => `<option>${l}</option>`).join("")}</select>
+				<input type="text" class="pc-q" placeholder="${__("search card / design…")}" style="width:190px;">
+				<span class="pc-pill on" data-s="All">${__("All")}</span>
+				<span class="pc-pill" data-s="In Queue">${__("In Queue")}</span>
+				<button class="btn btn-xs btn-default pc-all">${__("Select all")}</button>
+				<button class="btn btn-xs btn-default pc-none">${__("Clear")}</button>
+				<span class="pc-count"></span>
+			</div>
+			<div class="pc-box"><table class="pc-tbl">
+				<thead><tr><th style="width:34px"></th><th>${__("Order Bag")}</th><th>${__("Design")}</th>
+				<th>${__("Qty")}</th><th>${__("Due")}</th><th>${__("Status")}</th></tr></thead>
+				<tbody class="pc-body"><tr><td colspan="6" class="pc-empty">${__("Pick a location.")}</td></tr></tbody>
+			</table></div>`);
+
+		const listed = new Set(rows.map((r) => r.name));
+		const visible = () => S.rows.filter((r) =>
+			(S.status === "All" || r.status === S.status)
+			&& (!S.q || (r.name + " " + (r.design || "")).toLowerCase().includes(S.q)));
+		function paintDlg() {
+			const vis = visible();
+			$b.find(".pc-body").html(vis.length
+				? vis.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
+					<td><input type="checkbox" data-nm="${esc(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${listed.has(r.name) ? "disabled title='Already on the priority list'" : ""}></td>
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${r.qty || ""}</td>
+					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td></tr>`).join("")
+				: `<tr><td colspan="6" class="pc-empty">${S.location ? __("No cards match.") : __("Pick a location.")}</td></tr>`);
+			$b.find(".pc-count").text(__("{0} selected · {1} shown", [S.sel.size, vis.length]));
+			$b.find(".pc-body input").on("change", function () {
+				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
+				paintDlg();
+			});
+			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to priority list", [S.sel.size]) : __("Add to priority list"));
+		}
+		$b.find(".pc-loc").on("change", function () {
+			S.location = this.value;
+			if (!S.location) { S.rows = []; paintDlg(); return; }
+			frappe.call({ method: API + ".get_cards_at_location", args: { location: S.location } })
+				.then((r) => { S.rows = r.message || []; paintDlg(); });
+		});
+		$b.find(".pc-q").on("input", function () { S.q = this.value.trim().toLowerCase(); paintDlg(); });
+		$b.find(".pc-pill").on("click", function () {
+			$b.find(".pc-pill").removeClass("on");
+			this.classList.add("on");
+			S.status = this.dataset.s;
+			paintDlg();
+		});
+		$b.find(".pc-all").on("click", () => { visible().forEach((r) => { if (!listed.has(r.name)) S.sel.add(r.name); }); paintDlg(); });
+		$b.find(".pc-none").on("click", () => { S.sel.clear(); paintDlg(); });
+		dlg.show();
+	}
+	page.add_inner_button(__("Cards"), showCards);
+
 	load();
 	focusScan();
 };

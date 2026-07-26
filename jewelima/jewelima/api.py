@@ -4264,6 +4264,29 @@ def priority_scan(code):
 
 
 @frappe.whitelist()
+def priority_add_many(bags):
+	"""Cards picker on the Prioritisation page: append the batch to the BOTTOM
+	of the manual list (dups and dead cards skipped, reported back)."""
+	bags = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+	top = cint(frappe.db.sql("select coalesce(max(position), 0) from `tabPriority Card`")[0][0])
+	added, skipped = [], []
+	for nm in bags:
+		if not frappe.db.exists("Order Bag", nm) or frappe.db.exists("Priority Card", {"order_bag": nm}):
+			skipped.append(nm)
+			continue
+		if frappe.db.get_value("Order Bag", nm, "stock_status") == "Sold":
+			skipped.append(nm)
+			continue
+		top += 1
+		frappe.get_doc({"doctype": "Priority Card", "order_bag": nm, "position": top}).insert(ignore_permissions=True)
+		added.append(nm)
+	frappe.db.commit()
+	out = get_priority_list()
+	out.update({"added": added, "skipped": skipped})
+	return out
+
+
+@frappe.whitelist()
 def priority_reorder(bags):
 	"""The drag-drop order, top to bottom, becomes the positions 1..N."""
 	bags = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
