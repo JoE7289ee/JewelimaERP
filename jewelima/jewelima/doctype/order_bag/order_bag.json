@@ -15,6 +15,7 @@
   "size",
   "column_break_main",
   "location",
+  "stone_issue",
   "tree",
   "is_finished",
   "split_of",
@@ -172,6 +173,13 @@
    "in_standard_filter": 1,
    "label": "Location",
    "options": "ORDERING\nCAD\nCAM\nWAX INJECTING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_issue",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Stone Issue Requested",
    "read_only": 1
   },
   {

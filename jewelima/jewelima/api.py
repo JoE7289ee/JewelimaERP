@@ -2289,6 +2289,75 @@ def issue_stones(order_bag, item, qty, pcs=0, bench=None, remarks=None, from_war
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
+STONE_QUEUE_REASON = "Awaiting Stone"
+
+
+@frappe.whitelist()
+def mark_stone_issue(bags):
+	"""Flag cards for stone issue: ONLY flagged cards can be pulled at the
+	Stone Issue station, and each card's bench record gets the system
+	In-Queue reason 'Awaiting Stone' (visible on every board/workstation)."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	bags = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+	done, errors = [], []
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm, ["name", "location", "stock_status", "is_finished", "stone_issue"], as_dict=True)
+		if not b:
+			errors.append({"name": nm, "error": frappe._("not found")})
+			continue
+		if b.is_finished or b.stock_status != "In Production":
+			errors.append({"name": nm, "error": frappe._("{0} — not in production").format(b.stock_status or "?")})
+			continue
+		if cint(b.stone_issue):
+			errors.append({"name": nm, "error": frappe._("already requested")})
+			continue
+		frappe.db.set_value("Order Bag", nm, "stone_issue", 1, update_modified=False)
+		# system reason on the bench record (bypasses the configured-list check)
+		dt = BENCH_DOCTYPE.get((b.location or "").upper())
+		if dt and frappe.db.exists("DocType", dt):
+			rec = frappe.get_all(dt, filters={"order_bag": nm}, fields=["name", "status"],
+				order_by="creation desc", limit=1)
+			if rec and rec[0].status in ("In Queue", "On Hold", None, ""):
+				frappe.db.set_value(dt, rec[0].name, "queue_reason", STONE_QUEUE_REASON)
+			elif not rec:
+				frappe.get_doc({"doctype": dt, "order_bag": nm, "status": "In Queue",
+					"queue_reason": STONE_QUEUE_REASON,
+					"time_in": frappe.utils.now_datetime()}).insert(ignore_permissions=True)
+		done.append(nm)
+	frappe.db.commit()
+	return {"marked": done, "errors": errors}
+
+
+def _clear_stone_issue(order_bag):
+	"""Stones issued -> the request is served: flag off, the system reason off."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	frappe.db.set_value("Order Bag", order_bag, "stone_issue", 0, update_modified=False)
+	loc = (frappe.db.get_value("Order Bag", order_bag, "location") or "").upper()
+	dt = BENCH_DOCTYPE.get(loc)
+	if dt and frappe.db.exists("DocType", dt):
+		rec = frappe.get_all(dt, filters={"order_bag": order_bag, "queue_reason": STONE_QUEUE_REASON},
+			fields=["name"], order_by="creation desc", limit=1)
+		if rec:
+			frappe.db.set_value(dt, rec[0].name, "queue_reason", "")
+
+
+@frappe.whitelist()
+def get_ws_stone_candidates(bench):
+	"""Request-Stones dialog (WAX SETTING / SETTING): every card at the bench
+	not yet requested."""
+	bench = (bench or "").upper()
+	_require_ws_access(bench)
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, b.qty, b.stone_issue, jo.customer party, jo.due_date due
+		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.location = %s AND b.stock_status = 'In Production' AND b.is_finished = 0
+		ORDER BY b.name
+	""", bench, as_dict=True)
+	for r in rows:
+		r["due"] = str(r.due or "")
+	return {"rows": rows}
+
+
 @frappe.whitelist()
 def get_stone_issue_card(barcode):
 	"""Stone Issue station: resolve a scanned card into its BOM's STONE lines with
@@ -2300,6 +2369,9 @@ def get_stone_issue_card(barcode):
 		return {"error": "not_found", "card": nm or "?",
 			"message": frappe._("Card {0} does not exist — check the number and scan again.").format(nm or "?")}
 	bag = frappe.get_doc("Order Bag", nm)
+	if not cint(bag.get("stone_issue")):
+		return {"error": "not_requested", "card": nm,
+			"message": frappe._("{0} is not marked for stone issue — request it first (Stone Request or the bench's Request Stones).").format(nm)}
 	if bag.is_finished or bag.stock_status != "In Production":
 		# spell out WHY the card can't take stones (sold / product / cancelled / …)
 		st = bag.stock_status or "?"
@@ -2511,6 +2583,7 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 			plan_dirty = True
 	if plan_dirty:
 		bag.save(ignore_permissions=True)
+	_clear_stone_issue(order_bag)
 	frappe.db.commit()
 	out = get_stone_issue_card(order_bag)
 	out["material_issue"] = mi.name

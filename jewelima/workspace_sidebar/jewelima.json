@@ -324,6 +324,19 @@
    "icon": "gem",
    "indent": 0,
    "keep_closed": 0,
+   "label": "Stone Request",
+   "link_to": "stone-request",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "gem",
+   "indent": 0,
+   "keep_closed": 0,
    "label": "Stone Issue",
    "link_to": "stone-issue",
    "link_type": "Page",
@@ -2113,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 14:57:22.330733",
+ "modified": "2026-07-26 15:51:05.287729",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

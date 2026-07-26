@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-07-26 15:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-26 15:51:09.559506",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "stone-request",
+ "owner": "Administrator",
+ "page_name": "stone-request",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Stone Request"
+}

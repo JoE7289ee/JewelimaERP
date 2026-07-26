@@ -8,6 +8,7 @@ frappe.provide("jewelima");
 
 const WK_NO_ISSUE = ["CAM"];              // info-only queues
 const WK_EXTRACT = ["BAG EXTRACTION"];    // no assign — straight to Bag Split
+const WK_STONE_REQ = ["WAX SETTING", "SETTING"];  // benches that request stones
 
 jewelima.buildWorkstation = function (wrapper, bench) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Workstation — {0}", [bench]), single_column: true });
@@ -231,6 +232,81 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		frappe.route_options = { order_bag: $(this).data("name") };
 		frappe.set_route("bag-split");
 	});
+
+	// Request Stones (WAX SETTING / SETTING): pick from the bench's cards or
+	// scan, build the list below, one click marks them all -> Awaiting Stone
+	if (WK_STONE_REQ.includes(bench)) {
+		page.set_primary_action(__("Request Stones"), () => {
+			const picked = [];
+			const dlg = new frappe.ui.Dialog({
+				title: __("Request stones — {0}", [bench]), size: "large",
+				fields: [{ fieldtype: "HTML", fieldname: "b" }],
+				primary_action_label: __("Request for 0 card(s)"),
+				primary_action: () => {
+					if (!picked.length) return;
+					frappe.call({ method: API + ".mark_stone_issue", args: { bags: JSON.stringify(picked) } })
+						.then((r) => {
+							const m = r.message || {};
+							dlg.hide();
+							frappe.show_alert({ message: __("{0} card(s) now Awaiting Stone.", [(m.marked || []).length]), indicator: "green" }, 5);
+							load();
+						});
+				},
+			});
+			const $b = dlg.get_field("b").$wrapper;
+			const rebtn = () => dlg.get_primary_btn().text(__("Request for {0} card(s)", [picked.length]));
+			function paintDlg(rows) {
+				$b.html(`
+					<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;">
+						<input type="text" class="form-control rs-scan" style="max-width:220px;" placeholder="${__("scan card…")}">
+						<span style="font-size:11.5px;color:var(--text-muted);">${__("or click rows below — already-requested cards are dimmed")}</span>
+					</div>
+					<div style="max-height:40vh;overflow:auto;border:1px solid var(--border-color);border-radius:7px;">
+					<table class="wk-t"><thead><tr><th></th><th>${__("Card")}</th><th>${__("Design")}</th>
+						<th>${__("Party")}</th><th>${__("Due")}</th></tr></thead><tbody>
+					${rows.map((r) => `<tr class="rs-row" data-name="${esc(r.name)}"
+							style="${r.stone_issue ? "opacity:.4;" : "cursor:pointer;"}">
+						<td>${r.stone_issue ? "✓" : `<input type="checkbox" class="rs-cb" data-name="${esc(r.name)}">`}</td>
+						<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td>
+						<td>${esc(r.party || "")}</td>
+						<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
+					</tr>`).join("")}</tbody></table></div>
+					<div class="rs-picked" style="margin-top:10px;font-size:12.5px;"></div>`);
+				const paintPicked = () => {
+					$b.find(".rs-picked").html(picked.length
+						? __("Requesting:") + " " + picked.map((p) => `<b>${esc(p)}</b>`).join(", ")
+						: `<span style="color:var(--text-muted);">${__("Nothing picked yet.")}</span>`);
+					rebtn();
+				};
+				$b.on("change", ".rs-cb", function () {
+					const nm = $(this).data("name");
+					if (this.checked) { if (!picked.includes(nm)) picked.push(nm); }
+					else picked.splice(picked.indexOf(nm), 1);
+					paintPicked();
+				});
+				$b.on("keydown", ".rs-scan", function (e) {
+					if (e.key !== "Enter") return;
+					const code = this.value.trim();
+					this.value = "";
+					if (!code) return;
+					const row = rows.find((r) => r.name === code);
+					if (!row) {
+						frappe.show_alert({ message: __("{0} is not at {1}.", [code, bench]), indicator: "red" }, 4);
+					} else if (row.stone_issue) {
+						frappe.show_alert({ message: __("{0} already requested.", [code]), indicator: "orange" }, 3);
+					} else if (!picked.includes(code)) {
+						picked.push(code);
+						$b.find(`.rs-cb[data-name="${CSS.escape(code)}"]`).prop("checked", true);
+						paintPicked();
+					}
+				});
+				paintPicked();
+			}
+			frappe.call({ method: API + ".get_ws_stone_candidates", args: { bench } })
+				.then((r) => paintDlg((r.message || {}).rows || []));
+			dlg.show();
+		});
+	}
 
 	root.find(".wk-date").val(frappe.datetime.get_today()).on("change", loadDay);
 
