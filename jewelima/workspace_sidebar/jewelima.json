@@ -217,6 +217,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "sort-descending",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Prioritisation",
+   "link_to": "prioritization",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "user-check",
    "indent": 1,
    "keep_closed": 0,
@@ -1931,7 +1944,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-25 12:28:19.071045",
+ "modified": "2026-07-26 14:39:21.987960",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

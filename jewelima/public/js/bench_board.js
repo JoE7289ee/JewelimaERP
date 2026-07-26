@@ -12,10 +12,11 @@ const BB_STATUSES = ["In Queue", "On Hold", "Issued", "Ongoing", "Receipted", "C
 const BB_BUCKETS = ["DMD", "PS", "CS", "CVD", "PDMD", "POTH"];
 const BB_COLKEY = "jw-bench-cols"; // per-user column choice
 const BB_CORE_COLS = [
+	["prio_rank", "P#"],
 	["name", "Card"], ["design", "Design"], ["design_type", "Type"], ["qty", "Qty"],
 	["party", "Party"], ["salesman", "Salesman"], ["order_type", "Order Type"],
 	["due", "Due"], ["gold_g", "Gold g"], ["pure_g", "Pure g"], ["status", "Status"],
-	["queue_reason", "In Queue Reason"],
+	["queue_reason", "In Queue Reason"], ["worker", "Worker"],
 ];
 // stone buckets as OPT-IN columns (off by default): pcs / ct per bucket
 const BB_BUCKET_COLS = BB_BUCKETS.map((b) => [b.toLowerCase(), b + " (no/ct)"]);
@@ -46,9 +47,16 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		} catch (e) { /* fall through to default */ }
 		return new Set(BB_CORE_COLS.map((c) => c[0]));
 	}
-	const S = { all: [], sort: "name", dir: 1, cols: loadCols() };
+	// batch benches (casting/tree making) have no per-card queue law
+	const BB_RANKED = !["CASTING", "TREE MAKING"].includes(bench);
+	const S = { all: [], sort: BB_RANKED ? "prio_rank" : "name", dir: 1, cols: loadCols() };
+	if (BB_RANKED) S.cols.add("prio_rank");
 
 	const BB_CELL = {
+		prio_rank: (r) => (r.prio_rank
+			? `<span class="bb-pr ${r.prio_manual ? "man" : ""}" title="${r.prio_manual ? __("manually prioritised — set on the Prioritisation page") : __("automatic: due date, CUST first")}">${r.prio_rank}</span>`
+			: ""),
+		worker: (r) => esc(r.worker || ""),
 		name: (r) => `<a href="/app/order-bag/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`,
 		design: (r) => esc(r.design),
 		design_type: (r) => esc(r.design_type),
@@ -92,8 +100,15 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		.bb-st{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:var(--control-bg);}
 		.bb-qr{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:#fff6e0;color:#7a5b00;border:1px solid #e0a800;cursor:pointer;}
 		.bb-qr.add{background:transparent;color:var(--text-muted);border:1px dashed var(--border-color);}
+		.bb-pr{display:inline-block;min-width:26px;text-align:center;border-radius:9px;padding:1px 7px;font-size:11px;font-weight:800;background:var(--control-bg);}
+		.bb-pr.man{background:#d63031;color:#fff;}
+		.bb-next{border:2px solid #d63031;border-radius:10px;padding:10px 16px;margin:0 0 12px;display:none;align-items:center;gap:14px;background:var(--fg-color);}
+		.bb-next .k{font-size:10px;font-weight:800;letter-spacing:.08em;color:#d63031;text-transform:uppercase;}
+		.bb-next .v{font-size:18px;font-weight:800;}
+		.bb-next .sub{font-size:12px;color:var(--text-muted);}
 		</style>
 		<div class="bb-loc"><span class="tag">${__("Bench")}</span>${esc(bench)}</div>
+		<div class="bb-next"></div>
 		<div class="bb-filter"></div>
 		<div class="bb-tiles bb-kpi"></div>
 		<div class="bb-sec">${__("Stock at the filtered cards")}</div>
@@ -120,6 +135,16 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 
 	function recompute() {
 		const rows = filterBar.apply(S.all);
+
+		// the queue law's verdict: what should be picked up NEXT (waiting cards only)
+		if (BB_RANKED) {
+			const next = S.all.filter((r) => ["In Queue", "On Hold"].includes(r.status))
+				.sort((a, b) => (a.prio_rank || 9e9) - (b.prio_rank || 9e9))[0];
+			root.find(".bb-next").css("display", next ? "flex" : "none").html(next ? `
+				<span class="k">${__("Next up")}</span>
+				<span class="v">${esc(next.name)}</span>
+				<span class="sub">${esc(next.design || "")} · ${esc(next.party || "")}${next.due ? " · " + __("due") + " " + frappe.datetime.str_to_user(next.due) : ""}${next.prio_manual ? " · " + __("MANUAL PRIORITY") : ""}</span>` : "");
+		}
 
 		const st = {};
 		rows.forEach((r) => (st[r.status] = (st[r.status] || 0) + 1));

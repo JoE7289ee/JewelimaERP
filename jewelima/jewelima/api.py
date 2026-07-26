@@ -4129,6 +4129,85 @@ def get_cad_card_detail(order_bag):
 		"gold_wt": doc.cad_gold_weight or "", "dia_wt": doc.cad_diamond_weight or ""}
 
 
+# ---------------------------------------------------------------------------
+# Prioritisation — the manual override list (scanned on the Prioritisation
+# page) + the ranking law every bench queue follows:
+#   1. cards on the Priority list, in ITS order (drag to rearrange)
+#   2. earlier due date first
+#   3. same due date: CUST orders beat the rest
+# CASTING and TREE MAKING run batches, not per-card queues — no ranks there.
+# ---------------------------------------------------------------------------
+PRIORITY_EXEMPT_BENCHES = {"CASTING", "TREE MAKING"}
+
+
+def _priority_positions():
+	"""{order_bag: position} for every card on the manual list."""
+	return {r.order_bag: cint(r.position) for r in frappe.get_all(
+		"Priority Card", fields=["order_bag", "position"])}
+
+
+def _priority_sort_key(row, manual):
+	"""row needs: name, due (str/date or ''), order_type."""
+	pos = manual.get(row["name"])
+	due = str(row.get("due") or row.get("due_date") or "9999-12-31")
+	cust = 0 if (row.get("order_type") or "").upper().startswith("CUST") else 1
+	return (0 if pos is not None else 1, pos if pos is not None else 0, due, cust, row["name"])
+
+
+@frappe.whitelist()
+def get_priority_list():
+	"""The Prioritisation page's table: every manually prioritised card, in order."""
+	rows = frappe.db.sql("""
+		SELECT p.order_bag name, p.position, p.added_by, p.added_on,
+			b.design, b.location, b.stock_status, b.qty,
+			jo.customer party, jo.order_type, jo.due_date due
+		FROM `tabPriority Card` p
+		LEFT JOIN `tabOrder Bag` b ON b.name = p.order_bag
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		ORDER BY p.position, p.order_bag
+	""", as_dict=True)
+	for r in rows:
+		r["due"] = str(r.due or "")
+	return {"rows": rows}
+
+
+@frappe.whitelist()
+def priority_scan(code):
+	"""Scan on the Prioritisation page: the card joins the BOTTOM of the manual
+	list (drag it up from there). Only live production cards make sense here."""
+	nm = (code or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
+	if frappe.db.exists("Priority Card", {"order_bag": nm}):
+		frappe.throw(frappe._("{0} is already on the priority list.").format(nm))
+	st = frappe.db.get_value("Order Bag", nm, "stock_status")
+	if st in ("Sold",):
+		frappe.throw(frappe._("{0} is {1} — nothing left to prioritise.").format(nm, st))
+	top = frappe.db.sql("select coalesce(max(position), 0) from `tabPriority Card`")[0][0]
+	frappe.get_doc({"doctype": "Priority Card", "order_bag": nm,
+		"position": cint(top) + 1}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return get_priority_list()
+
+
+@frappe.whitelist()
+def priority_reorder(bags):
+	"""The drag-drop order, top to bottom, becomes the positions 1..N."""
+	bags = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+	for i, nm in enumerate(bags, 1):
+		frappe.db.set_value("Priority Card", {"order_bag": nm}, "position", i, update_modified=False)
+	frappe.db.commit()
+	return {"count": len(bags)}
+
+
+@frappe.whitelist()
+def priority_remove(code):
+	for nm in frappe.get_all("Priority Card", filters={"order_bag": code}, pluck="name"):
+		frappe.delete_doc("Priority Card", nm, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return get_priority_list()
+
+
 @frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with
@@ -4155,12 +4234,12 @@ def get_bench_board(bench):
 	got = {}
 	if names and frappe.db.exists("DocType", dt):
 		for r in frappe.db.sql("""
-			SELECT t.order_bag, t.status, t.queue_reason FROM `tab{0}` t
+			SELECT t.order_bag, t.status, t.queue_reason, t.employee FROM `tab{0}` t
 			JOIN (SELECT order_bag, MAX(creation) mc FROM `tab{0}`
 				WHERE order_bag IN %(bags)s GROUP BY order_bag) x
 			ON x.order_bag = t.order_bag AND x.mc = t.creation
 		""".format(dt), {"bags": tuple(names)}, as_dict=True):
-			got[r.order_bag] = (r.status or "In Queue", r.queue_reason or "")
+			got[r.order_bag] = (r.status or "In Queue", r.queue_reason or "", r.employee or "")
 
 	# per-card stock from the ledgers
 	stock = {n: {"gold_g": 0.0, "pure_g": 0.0, "buckets": {}} for n in names}
@@ -4190,12 +4269,21 @@ def get_bench_board(bench):
 			"name": b.name, "design": b.design or "", "design_type": b.design_type or "",
 			"qty": cint(b.qty) or 1, "party": b.customer or "", "salesman": b.salesman or "",
 			"order_type": b.order_type or "", "due": str(b.due_date or ""),
-			"status": got.get(b.name, ("In Queue", ""))[0],
-			"queue_reason": got.get(b.name, ("In Queue", ""))[1],
+			"status": got.get(b.name, ("In Queue", "", ""))[0],
+			"queue_reason": got.get(b.name, ("In Queue", "", ""))[1],
+			"worker": got.get(b.name, ("In Queue", "", ""))[2],
 			"gold_g": round(sc["gold_g"], 3), "pure_g": round(sc["pure_g"], 3),
 			"buckets": {k: {"pcs": v["pcs"], "ct": round(v["ct"], 3)}
 				for k, v in sc["buckets"].items() if v["pcs"] or abs(v["ct"]) > 0.0005},
 		})
+	# the queue law: rank every card (except the batch benches)
+	if bench not in PRIORITY_EXEMPT_BENCHES:
+		manual = _priority_positions()
+		for r in rows:
+			r["due"] = r.get("due") or ""
+		for i, r in enumerate(sorted(rows, key=lambda x: _priority_sort_key(x, manual)), 1):
+			r["prio_rank"] = i
+			r["prio_manual"] = 1 if r["name"] in manual else 0
 	return {"bench": bench, "rows": rows}
 
 
