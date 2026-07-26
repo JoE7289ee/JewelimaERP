@@ -140,13 +140,10 @@ frappe.pages["prioritization"].on_page_load = function (wrapper) {
 		dragBag = null;
 	});
 
-	// ---- Cards picker (same pattern as Transfer Order Bag): browse a
-	// location, filter, tick, add the batch to the bottom of the list
-	const PZ_LOCATIONS = ["ORDERING", "CAD", "CAM", "WAX INJECTING", "TREE MAKING", "CASTING",
-		"GRINDING", "FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH",
-		"WAX CLEANING", "BAG EXTRACTION"];
+	// ---- Cards picker: browse EVERY live card, filter by party / order
+	// type / due date, tick, add the batch to the bottom of the list
 	function showCards() {
-		const S = { location: "", status: "All", q: "", rows: [], sel: new Set() };
+		const S = { party: "", otype: "", due: "", q: "", rows: [], sel: new Set() };
 		const dlg = new frappe.ui.Dialog({
 			title: __("Pick cards to prioritise"),
 			size: "extra-large",
@@ -169,9 +166,7 @@ frappe.pages["prioritization"].on_page_load = function (wrapper) {
 		$b.html(`
 			<style>
 			.pc-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
-			.pc-top select,.pc-top input[type=text]{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:13px;}
-			.pc-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 14px;font-size:12.5px;cursor:pointer;color:var(--text-muted);}
-			.pc-pill.on{background:var(--btn-primary,#171717);border-color:var(--btn-primary,#171717);color:#fff;font-weight:600;}
+			.pc-top select,.pc-top input{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:13px;}
 			.pc-count{margin-left:auto;color:var(--text-muted);font-size:12px;}
 			.pc-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;height:calc(100vh - 330px);min-height:280px;}
 			table.pc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
@@ -181,52 +176,55 @@ frappe.pages["prioritization"].on_page_load = function (wrapper) {
 			.pc-empty{padding:18px;text-align:center;color:var(--text-muted);}
 			</style>
 			<div class="pc-top">
-				<select class="pc-loc"><option value="">— location —</option>${PZ_LOCATIONS.map((l) => `<option>${l}</option>`).join("")}</select>
-				<input type="text" class="pc-q" placeholder="${__("search card / design…")}" style="width:190px;">
-				<span class="pc-pill on" data-s="All">${__("All")}</span>
-				<span class="pc-pill" data-s="In Queue">${__("In Queue")}</span>
+				<select class="pc-party"><option value="">${__("— party —")}</option></select>
+				<select class="pc-otype"><option value="">${__("— order type —")}</option></select>
+				<label style="font-size:12px;color:var(--text-muted);margin:0;">${__("due by")}
+					<input type="date" class="pc-due" style="margin-left:4px;"></label>
+				<input type="text" class="pc-q" placeholder="${__("search card / design…")}" style="width:180px;">
 				<button class="btn btn-xs btn-default pc-all">${__("Select all")}</button>
 				<button class="btn btn-xs btn-default pc-none">${__("Clear")}</button>
 				<span class="pc-count"></span>
 			</div>
 			<div class="pc-box"><table class="pc-tbl">
 				<thead><tr><th style="width:34px"></th><th>${__("Order Bag")}</th><th>${__("Design")}</th>
-				<th>${__("Qty")}</th><th>${__("Due")}</th><th>${__("Status")}</th></tr></thead>
-				<tbody class="pc-body"><tr><td colspan="6" class="pc-empty">${__("Pick a location.")}</td></tr></tbody>
+				<th>${__("Party")}</th><th>${__("Order Type")}</th><th>${__("Due")}</th><th>${__("At")}</th></tr></thead>
+				<tbody class="pc-body"><tr><td colspan="7" class="pc-empty">${__("Loading…")}</td></tr></tbody>
 			</table></div>`);
 
 		const listed = new Set(rows.map((r) => r.name));
 		const visible = () => S.rows.filter((r) =>
-			(S.status === "All" || r.status === S.status)
+			(!S.party || r.party === S.party)
+			&& (!S.otype || r.order_type === S.otype)
+			&& (!S.due || (r.due && r.due <= S.due))
 			&& (!S.q || (r.name + " " + (r.design || "")).toLowerCase().includes(S.q)));
 		function paintDlg() {
 			const vis = visible();
 			$b.find(".pc-body").html(vis.length
 				? vis.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
 					<td><input type="checkbox" data-nm="${esc(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${listed.has(r.name) ? "disabled title='Already on the priority list'" : ""}></td>
-					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${r.qty || ""}</td>
-					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td></tr>`).join("")
-				: `<tr><td colspan="6" class="pc-empty">${S.location ? __("No cards match.") : __("Pick a location.")}</td></tr>`);
-			$b.find(".pc-count").text(__("{0} selected · {1} shown", [S.sel.size, vis.length]));
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td>
+					<td>${esc(r.party || "")}</td><td>${esc(r.order_type || "")}</td>
+					<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td><td>${esc(r.location || "")}</td></tr>`).join("")
+				: `<tr><td colspan="7" class="pc-empty">${__("No cards match the filters.")}</td></tr>`);
+			$b.find(".pc-count").text(__("{0} selected · {1} shown · {2} live", [S.sel.size, vis.length, S.rows.length]));
 			$b.find(".pc-body input").on("change", function () {
 				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
 				paintDlg();
 			});
 			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to priority list", [S.sel.size]) : __("Add to priority list"));
 		}
-		$b.find(".pc-loc").on("change", function () {
-			S.location = this.value;
-			if (!S.location) { S.rows = []; paintDlg(); return; }
-			frappe.call({ method: API + ".get_cards_at_location", args: { location: S.location } })
-				.then((r) => { S.rows = r.message || []; paintDlg(); });
-		});
-		$b.find(".pc-q").on("input", function () { S.q = this.value.trim().toLowerCase(); paintDlg(); });
-		$b.find(".pc-pill").on("click", function () {
-			$b.find(".pc-pill").removeClass("on");
-			this.classList.add("on");
-			S.status = this.dataset.s;
+		frappe.call({ method: API + ".get_priority_candidates" }).then((r) => {
+			S.rows = (r.message || {}).rows || [];
+			const parties = [...new Set(S.rows.map((x) => x.party).filter(Boolean))].sort();
+			const otypes = [...new Set(S.rows.map((x) => x.order_type).filter(Boolean))].sort();
+			$b.find(".pc-party").append(parties.map((p) => `<option>${esc(p)}</option>`).join(""));
+			$b.find(".pc-otype").append(otypes.map((p) => `<option>${esc(p)}</option>`).join(""));
 			paintDlg();
 		});
+		$b.find(".pc-party").on("change", function () { S.party = this.value; paintDlg(); });
+		$b.find(".pc-otype").on("change", function () { S.otype = this.value; paintDlg(); });
+		$b.find(".pc-due").on("change", function () { S.due = this.value; paintDlg(); });
+		$b.find(".pc-q").on("input", function () { S.q = this.value.trim().toLowerCase(); paintDlg(); });
 		$b.find(".pc-all").on("click", () => { visible().forEach((r) => { if (!listed.has(r.name)) S.sel.add(r.name); }); paintDlg(); });
 		$b.find(".pc-none").on("click", () => { S.sel.clear(); paintDlg(); });
 		dlg.show();

@@ -4264,6 +4264,23 @@ def priority_scan(code):
 
 
 @frappe.whitelist()
+def get_priority_candidates():
+	"""Every live production card for the Prioritisation Cards picker —
+	the dialog filters by party / order type / due date client-side."""
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, b.qty, b.location,
+			jo.customer party, jo.order_type, jo.due_date due
+		FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+		ORDER BY jo.due_date, b.name
+	""", as_dict=True)
+	for r in rows:
+		r["due"] = str(r.due or "")
+	return {"rows": rows}
+
+
+@frappe.whitelist()
 def priority_add_many(bags):
 	"""Cards picker on the Prioritisation page: append the batch to the BOTTOM
 	of the manual list (dups and dead cards skipped, reported back)."""
