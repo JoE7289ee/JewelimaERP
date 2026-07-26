@@ -49,6 +49,12 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			<div class="ac-work" style="display:none;"></div>
 			<div class="ac-state" style="display:none;"></div>
 		</div>
+		<div class="ac-tpx" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px;border:1px dashed var(--border-color);border-radius:8px;padding:6px 12px;">
+			<label style="margin:0;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+				<input type="checkbox" class="ac-tpx-on" style="width:15px;height:15px;"> ${__("Transfer right after")}</label>
+			<select class="ac-tpx-to" style="display:none;border:1px solid var(--border-color);border-radius:6px;height:28px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				<option value="">${__("— destination —")}</option></select>
+		</div>
 		<div class="ac-msg"></div>
 		<div class="ac-box"><table class="ac-grid"><thead class="ac-thead"></thead><tbody class="ac-body"></tbody></table></div>
 		<div class="ac-foot"><span class="ac-count">0</span> card(s) in batch.</div>
@@ -86,6 +92,27 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	const $body = $(page.main).find(".ac-body");
 	const $thead = $(page.main).find(".ac-thead");
 	const $msg = $(page.main).find(".ac-msg");
+	// ---- Transfer Plus: onward transfer right after collect ------------------
+	const TPX = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
+		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager") };
+	if (TPX.allowed) $(page.main).find(".ac-tpx").css("display", "flex");
+	$(page.main).find(".ac-tpx-on").on("change", function () {
+		const $to = $(page.main).find(".ac-tpx-to");
+		$to.toggle(this.checked);
+		if (!this.checked || !state.location) return;
+		frappe.call({ method: "jewelima.jewelima.api.allowed_to_locations",
+			args: { from_location: state.location }, freeze: false }).then((r) => {
+			$to.html(`<option value="">${__("— destination —")}</option>`
+				+ (r.message || []).map((l) => `<option>${frappe.utils.escape_html(l)}</option>`).join(""));
+		});
+	});
+	function tpxDest() {
+		if (!TPX.allowed || !$(page.main).find(".ac-tpx-on").is(":checked")) return null;
+		const to = $(page.main).find(".ac-tpx-to").val();
+		if (!to) { frappe.msgprint(__("Pick the onward destination (or untick 'Transfer right after').")); return "MISSING"; }
+		return to;
+	}
+
 	const $actions = $(page.main).find(".ac-actions");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
 	const empVal = () => state.emp.get_value();
@@ -214,14 +241,23 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	}
 	function doCollect() {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one assigned card first."));
+		const tpxTo = tpxDest();
+		if (tpxTo === "MISSING") return;
 		frappe.dom.freeze(__("Collecting…"));
 		frappe.call({
-			method: "jewelima.jewelima.api.collect_bench_cards",
-			args: { names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, collection_state: state.state.get_value() || null },
+			method: (tpxTo && tpxTo !== "MISSING") ? "jewelima.jewelima.api.collect_and_transfer" : "jewelima.jewelima.api.collect_bench_cards",
+			args: Object.assign({ names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, collection_state: state.state.get_value() || null },
+				(tpxTo && tpxTo !== "MISSING") ? { to_location: tpxTo } : {}),
 		}).then((r) => {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
-			frappe.show_alert({ message: __("Collected {0} card(s) at {1}", [res.count, state.location]), indicator: "green" }, 6);
+			frappe.show_alert({ message: tpxTo && tpxTo !== "MISSING"
+				? __("Collected {0} at {1} → moved {2} to {3}", [res.count, state.location, res.transferred || 0, tpxTo])
+				: __("Collected {0} card(s) at {1}", [res.count, state.location]), indicator: "green" }, 6);
+			if ((res.transfer_errors || []).length) {
+				frappe.msgprint({ title: __("Collected but not moved"), indicator: "orange",
+					message: res.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
+			}
 			showErrors(res.errors);
 			logHistory("—", __("Collected {0}", [res.count]), "ok");
 			clearBatch();

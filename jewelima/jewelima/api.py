@@ -9297,6 +9297,44 @@ def get_card_passport(order_bag):
 	}
 
 
+def _require_transfer_plus():
+	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("This needs the Jewelima Transfer Plus role."))
+
+
+@frappe.whitelist()
+def receipt_and_transfer(lines, location, to_location, employee=None, collection_state=None):
+	"""Transfer Plus, the other direction: RECEIPT the batch at its bench and
+	move the received cards onward in the same breath."""
+	_require_transfer_plus()
+	res = receipt_bench_cards(lines, location, employee=employee, collection_state=collection_state)
+	done = res.get("done") or []
+	if done:
+		tr = transfer_order_bags(json.dumps(done), to_location)
+		res["transferred"] = tr.get("count") or 0
+		res["transfer_errors"] = tr.get("errors") or []
+	else:
+		res["transferred"] = 0
+		res["transfer_errors"] = []
+	return res
+
+
+@frappe.whitelist()
+def collect_and_transfer(names, location, to_location, collection_state=None):
+	"""Transfer Plus: COLLECT at the bench and move the collected cards onward."""
+	_require_transfer_plus()
+	res = collect_bench_cards(names, location, collection_state=collection_state)
+	done = res.get("done") or []
+	if done:
+		tr = transfer_order_bags(json.dumps(done), to_location)
+		res["transferred"] = tr.get("count") or 0
+		res["transfer_errors"] = tr.get("errors") or []
+	else:
+		res["transferred"] = 0
+		res["transfer_errors"] = []
+	return res
+
+
 @frappe.whitelist()
 def transfer_and_issue(names, to_location, employee=None, work_type=None, remarks=None):
 	"""Transfer Plus: move the batch AND put it straight to work at the

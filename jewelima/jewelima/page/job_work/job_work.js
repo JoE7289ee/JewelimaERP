@@ -54,6 +54,12 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			<div class="jw-work" style="display:none;"></div>
 			<div class="jw-state" style="display:none;"></div>
 		</div>
+		<div class="jw-tpx" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px;border:1px dashed var(--border-color);border-radius:8px;padding:6px 12px;">
+			<label style="margin:0;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+				<input type="checkbox" class="jw-tpx-on" style="width:15px;height:15px;"> ${__("Transfer right after")}</label>
+			<select class="jw-tpx-to" style="display:none;border:1px solid var(--border-color);border-radius:6px;height:28px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				<option value="">${__("— destination —")}</option></select>
+		</div>
 		<div class="jw-msg"></div>
 		<div class="jw-box"><table class="jw-grid"><thead class="jw-thead"></thead><tbody class="jw-body"></tbody></table></div>
 		<div class="jw-foot"><span><span class="jw-count">0</span> card(s) collected.</span><span class="jw-total"></span></div>
@@ -92,6 +98,27 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const $body = $(page.main).find(".jw-body");
 	const $thead = $(page.main).find(".jw-thead");
 	const $msg = $(page.main).find(".jw-msg");
+	// ---- Transfer Plus: onward transfer right after receipt ------------------
+	const TPX = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
+		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager") };
+	if (TPX.allowed) $(page.main).find(".jw-tpx").css("display", "flex");
+	$(page.main).find(".jw-tpx-on").on("change", function () {
+		const $to = $(page.main).find(".jw-tpx-to");
+		$to.toggle(this.checked);
+		if (!this.checked || !state.location) return;
+		frappe.call({ method: "jewelima.jewelima.api.allowed_to_locations",
+			args: { from_location: state.location }, freeze: false }).then((r) => {
+			$to.html(`<option value="">${__("— destination —")}</option>`
+				+ (r.message || []).map((l) => `<option>${frappe.utils.escape_html(l)}</option>`).join(""));
+		});
+	});
+	function tpxDest() {
+		if (!TPX.allowed || !$(page.main).find(".jw-tpx-on").is(":checked")) return null;
+		const to = $(page.main).find(".jw-tpx-to").val();
+		if (!to) { frappe.msgprint(__("Pick the onward destination (or untick 'Transfer right after').")); return "MISSING"; }
+		return to;
+	}
+
 	const $actions = $(page.main).find(".jw-actions");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
 	const empVal = () => state.emp.get_value();
@@ -274,14 +301,23 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		frappe.confirm(
 			__("<b>{0}</b> will be credited with <b>{1} g</b> loss across <b>{2}</b> card(s) at <b>{3}</b>.<br><br>Confirm receipt?", [empVal(), total.toFixed(3), state.rows.length, state.location]),
 			() => {
+				const tpxTo = tpxDest();
+				if (tpxTo === "MISSING") return;
 				frappe.dom.freeze(__("Receipting…"));
 				frappe.call({
-					method: "jewelima.jewelima.api.receipt_bench_cards",
-					args: { lines: JSON.stringify(state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }))), location: state.location, employee: empVal(), collection_state: state.cstate.get_value() || null },
+					method: (tpxTo && tpxTo !== "MISSING") ? "jewelima.jewelima.api.receipt_and_transfer" : "jewelima.jewelima.api.receipt_bench_cards",
+					args: Object.assign({ lines: JSON.stringify(state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }))), location: state.location, employee: empVal(), collection_state: state.cstate.get_value() || null },
+						(tpxTo && tpxTo !== "MISSING") ? { to_location: tpxTo } : {}),
 				}).then((r) => {
 					frappe.dom.unfreeze();
 					const res = r.message || {};
-					frappe.show_alert({ message: __("Received {0} card(s) · loss {1} g → {2}", [res.count, (res.total_loss || 0), res.employee]), indicator: "green" }, 7);
+					frappe.show_alert({ message: tpxTo && tpxTo !== "MISSING"
+						? __("Received {0} · loss {1} g → moved {2} to {3}", [res.count, (res.total_loss || 0), res.transferred || 0, tpxTo])
+						: __("Received {0} card(s) · loss {1} g → {2}", [res.count, (res.total_loss || 0), res.employee]), indicator: "green" }, 7);
+					if ((res.transfer_errors || []).length) {
+						frappe.msgprint({ title: __("Received but not moved"), indicator: "orange",
+							message: res.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
+					}
 					showErrors(res.errors);
 					logHistory("—", __("Received {0} · loss {1}g ({2})", [res.count, res.total_loss, res.employee]), "ok");
 					clearBatch();
