@@ -4254,6 +4254,70 @@ def ws_collect_card(bench, order_bag, collection_state=None, weight_in=None, emp
 
 
 @frappe.whitelist()
+def get_bench_day(bench, date=None):
+	"""The workstation's DAY panel — all display, no new capture:
+	- transfers IN / OUT of the bench that day (cards + their gold grams)
+	- the day's finished work grouped by worker: card, work type, state,
+	  weights and loss (weight benches), when it came back."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	bench = (bench or "").upper()
+	if bench not in BENCH_DOCTYPE:
+		frappe.throw(frappe._("Unknown bench: {0}").format(bench or "?"))
+	date = date or frappe.utils.today()
+
+	def _gold(bags):
+		if not bags:
+			return 0.0
+		total = frappe.db.sql("""
+			SELECT SUM(IF(l.direction='Out', -l.qty, l.qty))
+			FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+			WHERE l.order_bag IN %(bags)s AND IFNULL(i.stone_type, '') = ''
+		""", {"bags": tuple(bags)})[0][0]
+		return flt(total)
+
+	tin = frappe.get_all("Order Bag Transfer",
+		filters={"to_location": bench, "transfer_time": ["between", [date + " 00:00:00", date + " 23:59:59"]]},
+		pluck="order_bag")
+	tout = frappe.get_all("Order Bag Transfer",
+		filters={"from_location": bench, "transfer_time": ["between", [date + " 00:00:00", date + " 23:59:59"]]},
+		pluck="order_bag")
+
+	dt = BENCH_DOCTYPE[bench]
+	work = []
+	if frappe.db.exists("DocType", dt):
+		emp_names = {}
+		for r in frappe.db.sql("""
+			SELECT t.order_bag, t.employee, t.work_type, t.collection_state,
+				t.weight_out, t.weight_in, t.loss,
+				COALESCE(t.receipted_at, t.time_out) done_at
+			FROM `tab{0}` t
+			WHERE t.status IN ('Receipted', 'Completed')
+			  AND DATE(COALESCE(t.receipted_at, t.time_out, t.modified)) = %s
+			ORDER BY done_at
+		""".format(dt), date, as_dict=True):
+			emp = r.employee or ""
+			if emp and emp not in emp_names:
+				emp_names[emp] = frappe.db.get_value("Employee", emp, "employee_name") or emp
+			r["employee_name"] = emp_names.get(emp, "(unassigned)")
+			r["done_at"] = str(r.done_at or "")
+			work.append(r)
+
+	by_emp = {}
+	for r in work:
+		g = by_emp.setdefault(r["employee_name"], {"employee_name": r["employee_name"],
+			"cards": [], "weight_in": 0.0, "loss": 0.0})
+		g["cards"].append(r)
+		g["weight_in"] += flt(r["weight_in"])
+		g["loss"] += flt(r["loss"])
+
+	return {"bench": bench, "date": date,
+		"in": {"count": len(set(tin)), "gold_g": round(_gold(list(set(tin))), 3)},
+		"out": {"count": len(set(tout)), "gold_g": round(_gold(list(set(tout))), 3)},
+		"done": sorted(by_emp.values(), key=lambda g: g["employee_name"]),
+		"done_count": len(work)}
+
+
+@frappe.whitelist()
 def get_bench_workstation(bench):
 	"""The bench WORKSTATION: the small live picture a worker glances at.
 	- queue: waiting cards in PRIORITY order (rank, due, reason) — next on top
