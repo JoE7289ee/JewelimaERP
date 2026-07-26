@@ -6,6 +6,9 @@
 
 frappe.provide("jewelima");
 
+const WK_NO_ISSUE = ["CAM"];              // info-only queues
+const WK_EXTRACT = ["BAG EXTRACTION"];    // no assign — straight to Bag Split
+
 jewelima.buildWorkstation = function (wrapper, bench) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Workstation — {0}", [bench]), single_column: true });
 	const API = "jewelima.jewelima.api";
@@ -69,7 +72,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		root.find(".wk-qbody").html(D.queue.length ? `
 			<table class="wk-t"><thead><tr>
 				${D.ranked ? `<th style="width:40px">P#</th>` : ""}<th>${__("Card")}</th><th>${__("Design")}</th>
-				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${D.can_act ? `<th style="width:70px"></th>` : ""}
+				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${D.can_act && !WK_NO_ISSUE.includes(bench) ? `<th style="width:70px"></th>` : ""}
 			</tr></thead><tbody>
 			${D.queue.map((r) => `<tr>
 				${D.ranked ? `<td><span class="wk-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank || ""}</span></td>` : ""}
@@ -80,7 +83,9 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				<td>${r.queue_reason
 					? `<span class="wk-qr" data-name="${esc(r.name)}">${esc(r.queue_reason)}</span>`
 					: `<span class="wk-qr add" data-name="${esc(r.name)}">+ ${__("reason")}</span>`}</td>
-				${D.can_act ? `<td><button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
+				${D.can_act && WK_EXTRACT.includes(bench) ? `<td><button class="btn btn-xs wk-extract" data-name="${esc(r.name)}"
+					style="background:#2e7d32;border-color:#2e7d32;color:#fff;">${__("Extract →")}</button></td>`
+				: D.can_act && !WK_NO_ISSUE.includes(bench) ? `<td><button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
 					style="background:#1f618d;border-color:#1f618d;color:#fff;">${D.flow === "weights" ? __("Issue") : __("Assign")}</button></td>` : ""}
 			</tr>`).join("")}</tbody></table>`
 			: `<div class="wk-none">${__("Nothing waiting — the bench is clear.")}</div>`);
@@ -161,6 +166,13 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		});
 		flds.length ? frappe.prompt(flds, go, __("{0} — collect {1}", [bench, nm]),
 			D.flow === "weights" ? __("Receipt") : __("Collect")) : go(null);
+	});
+
+	// Bag Extraction: every card (single qty too) goes through Bag Split —
+	// jump there with the card already scanned (barcode printing plugs in later)
+	root.on("click", ".wk-extract", function () {
+		frappe.route_options = { order_bag: $(this).data("name") };
+		frappe.set_route("bag-split");
 	});
 
 	load();

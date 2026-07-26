@@ -284,6 +284,12 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		focusScan();
 	}
 
+	// arriving from a workstation with the card already picked
+	if (frappe.route_options && frappe.route_options.order_bag) {
+		const pre = frappe.route_options.order_bag;
+		frappe.route_options = null;
+		setTimeout(() => load(pre), 200);
+	}
 	scan.$input.on("keydown", (e) => {
 		if (e.which === 13 || e.key === "Enter") { e.preventDefault(); const c = scan.$input.val(); scan.set_value(""); load(c); }
 	});
