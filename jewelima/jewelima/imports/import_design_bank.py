@@ -892,6 +892,13 @@ def normalize_bank_filenames(batch=500):
 			cur = os.path.basename(unquote(url))
 			if cur == want:
 				continue
+			# ONLY fix hash-suffixed slot strays. Legacy layouts park RAW SCANS in
+			# these fields (dup-queue cards in image, crop-fails in photo) — renaming
+			# those hijacks the raw (and a later re-render would overwrite it).
+			if "/files/design-bank/" in unquote(url):
+				continue
+			if not re.search(r"\.(photo|info|customer|pending)[0-9a-f]{0,6}\.png$", cur, re.I):
+				continue
 			src = frappe.get_site_path("public", unquote(url).lstrip("/"))
 			dst = frappe.get_site_path("public", "files", want)
 			if not os.path.exists(src):
@@ -924,7 +931,8 @@ def rerender_info_cards(start=0, limit=0):
 	from jewelima.jewelima.api import _card_compose, _db_img_name, _write_slot_file
 	from io import BytesIO
 	rows = frappe.db.sql("""select name from `tabDesign Bank`
-		where image like '/files/%%.info.png' order by name limit %s, %s""",
+		where image like '/files/%%.info.png' and rebuilt = 1 and duplicate_review = 0
+		order by name limit %s, %s""",
 		(int(start), int(limit) if int(limit) else 10**9), as_dict=True)
 	done = failed = 0
 	for r in rows:
