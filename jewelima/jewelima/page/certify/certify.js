@@ -174,7 +174,11 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		root.find(".cf-scanrow").css("display", locked ? "none" : "flex");
 		root.find(".cf-actions").css("display", "flex");
 		root.find(".cf-prep").toggle(!!draft && !prep && src.count > 0);
-		root.find(".cf-xlsx").toggle(igi && src.count > 0);
+		// every lab except HALL gets a submission excel (IGI = its template,
+		// the rest = the generic bracket sheet)
+		const ct = ((prep || draft || {}).cert_type || "").toUpperCase();
+		const hasXlsx = src.count > 0 && ct && !["HALL", "HALLMARKING"].includes(ct);
+		root.find(".cf-xlsx").toggle(hasXlsx).text(__("Export {0} Excel", [ct]));
 		root.find(".cf-mail").toggle(!!prep && src.count > 0 && prep.status !== "Cancelled");
 		root.find(".cf-cancel").toggle(!locked);
 		root.find(".cf-cancel").text(prep ? __("Cancel Batch") : __("Discard Draft"));
@@ -307,8 +311,15 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			dlg.show();
 		});
 	});
-	root.find(".cf-xlsx").on("click", () =>
-		open_url_post("/api/method/jewelima.jewelima.api.export_igi_xlsx", { bags: JSON.stringify(((prep || draft).rows).map((r) => r.order_bag)) }));
+	root.find(".cf-xlsx").on("click", () => {
+		const ct = ((prep || draft || {}).cert_type || "").toUpperCase();
+		const bags = JSON.stringify(((prep || draft).rows).map((r) => r.order_bag));
+		if (ct === "IGI") {
+			open_url_post("/api/method/jewelima.jewelima.api.export_igi_xlsx", { bags });
+		} else {
+			open_url_post("/api/method/jewelima.jewelima.api.export_lab_xlsx", { bags, cert_type: ct });
+		}
+	});
 
 	// hover a card no. -> its ACTUAL frozen BOM, so the row's values are explainable
 	const bomCache = {};

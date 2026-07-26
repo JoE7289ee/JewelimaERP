@@ -8193,9 +8193,71 @@ def get_cert_prep(name):
 		"gross": round(sum(x["gross"] for x in rows), 3), "dmd_ct": round(sum(x["dmd_ct"] for x in rows), 3)}
 
 
+def _lab_xlsx_bytes(bags, cert_type, tag=""):
+	"""The GENERIC lab submission (every lab except IGI's shipped template and
+	HALL): one row per piece with the diamond quality shown as the broad
+	bracket — VVS EF / VVS/VS GH / SI IJ — off the piece's frozen materials."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font, PatternFill
+	qmap = _diamond_qmap()
+	mats = _bag_convert_materials(bags)
+	wb = Workbook()
+	ws = wb.active
+	ws.title = cert_type
+	ws.append(["Sl", "Barcode", "Item", "Type", "HUID", "Gross (g)", "Dmd Pcs", "Dmd (ct)",
+		"Quality", "Other Stones (ct)"])
+	for c in ws[1]:
+		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+	tg = tdc = tpc = 0.0
+	for i, nm in enumerate(bags, 1):
+		b = frappe.db.get_value("Order Bag", nm, [
+			"design", "huid", "act_gross_weight", "act_dmd_weight", "act_dmd_no",
+			"act_ps_weight", "act_cs_weight", "act_cz_weight", "act_cvd_weight", "act_poth_weight"], as_dict=True)
+		dtype = (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or ""
+		# dominant parent bracket by carats (VVS-EF -> "VVS EF")
+		qual_ct = {}
+		for it, qty in (mats.get(nm) or {}).items():
+			st, grp = frappe.db.get_value("Item", it, ["stone_type", "item_group"]) or ("", "")
+			if st != "Diamond":
+				continue
+			q = qmap.get((grp or "").replace("DIAMOND ", ""), (grp or "").replace("DIAMOND ", ""))
+			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+		quality = max(qual_ct, key=qual_ct.get).replace("-", " ") if qual_ct else ""
+		ost = flt(b.act_ps_weight) + flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
+		ws.append([i, nm, b.design or "", dtype, b.huid or "", flt(b.act_gross_weight),
+			cint(b.act_dmd_no), flt(b.act_dmd_weight), quality, round(ost, 3) or None])
+		tg += flt(b.act_gross_weight)
+		tdc += flt(b.act_dmd_weight)
+		tpc += cint(b.act_dmd_no)
+	ws.append(["", "TOTAL", "", "", "", round(tg, 3), int(tpc), round(tdc, 3), "", ""])
+	for c in ws[ws.max_row]:
+		c.font = Font(bold=True)
+	for i, w in enumerate([5, 16, 14, 12, 14, 10, 9, 10, 13, 15], 1):
+		ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	return "{0}-{1}.xlsx".format(cert_type, tag or frappe.utils.today()), buf.getvalue()
+
+
+@frappe.whitelist()
+def export_lab_xlsx(bags, cert_type):
+	"""Download the generic lab submission for the certify desk (non-IGI labs)."""
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	bags = [b for b in bags if b]
+	if not bags:
+		frappe.throw(frappe._("Pick at least one piece."))
+	fname, content = _lab_xlsx_bytes(bags, (cert_type or "LAB").upper())
+	frappe.local.response.filename = fname
+	frappe.local.response.filecontent = content
+	frappe.local.response.type = "download"
+
+
 def _cert_excel_bytes(prep):
 	"""The submission excel for a batch as bytes: IGI = the shipped template
-	(reuses export_igi_xlsx's fill); others = the basic table."""
+	(reuses export_igi_xlsx's fill); every other lab = the generic bracket
+	submission (_lab_xlsx_bytes)."""
 	bags = [r["order_bag"] for r in prep["rows"]]
 	if prep["cert_type"] == "IGI":
 		export_igi_xlsx(json.dumps(bags))
@@ -8203,24 +8265,7 @@ def _cert_excel_bytes(prep):
 		fname = frappe.local.response.filename
 		frappe.local.response.filecontent = frappe.local.response.filename = frappe.local.response.type = None
 		return fname, content
-	from io import BytesIO
-	from openpyxl import Workbook
-	from openpyxl.styles import Font, PatternFill
-	wb = Workbook()
-	ws = wb.active
-	ws.title = prep["cert_type"]
-	ws.append(["Card", "Design", "Type", "Gross (g)", "Diamond (ct)"])
-	for c in ws[1]:
-		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
-	for r in prep["rows"]:
-		ws.append([r["order_bag"], r["design"], r["design_type"], r["gross"], r["dmd_ct"]])
-	ws.append(["TOTAL", "", "", prep["gross"], prep["dmd_ct"]])
-	ws[ws.max_row][0].font = Font(bold=True)
-	for i, w in enumerate([16, 14, 14, 11, 12], 1):
-		ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
-	buf = BytesIO()
-	wb.save(buf)
-	return "{0}-{1}.xlsx".format(prep["cert_type"], prep["name"]), buf.getvalue()
+	return _lab_xlsx_bytes(bags, prep["cert_type"], tag=prep["name"])
 
 
 @frappe.whitelist()
