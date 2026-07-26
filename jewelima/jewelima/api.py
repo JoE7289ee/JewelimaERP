@@ -4209,6 +4209,60 @@ def priority_remove(code):
 
 
 @frappe.whitelist()
+def get_bench_workstation(bench):
+	"""The bench WORKSTATION: the small live picture a worker glances at.
+	- queue: waiting cards in PRIORITY order (rank, due, reason) — next on top
+	- working: who holds what right now, with the work type and since-when
+	CASTING / TREE MAKING run batches; the queue section stays rank-free there."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	bench = (bench or "").upper()
+	board = get_bench_board(bench)
+	rows = board["rows"]
+	ranked = bench not in PRIORITY_EXEMPT_BENCHES
+
+	waiting = [r for r in rows if r["status"] in ("In Queue", "On Hold")]
+	waiting.sort(key=lambda r: r.get("prio_rank") or 9e9) if ranked else waiting.sort(key=lambda r: r["name"])
+
+	# who's working: latest ACTIVE record per card, grouped by employee
+	dt = BENCH_DOCTYPE[bench]
+	working = {}
+	names = [r["name"] for r in rows]
+	if names and frappe.db.exists("DocType", dt):
+		emp_names = {}
+		for r in frappe.db.sql("""
+			SELECT t.order_bag, t.status, t.employee, t.work_type,
+				COALESCE(t.issued_at, t.time_in, t.creation) since
+			FROM `tab{0}` t
+			JOIN (SELECT order_bag, MAX(creation) mc FROM `tab{0}`
+				WHERE order_bag IN %(bags)s GROUP BY order_bag) x
+			ON x.order_bag = t.order_bag AND x.mc = t.creation
+			WHERE t.status IN ('Issued', 'Ongoing')
+		""".format(dt), {"bags": tuple(names)}, as_dict=True):
+			emp = r.employee or ""
+			if emp and emp not in emp_names:
+				emp_names[emp] = frappe.db.get_value("Employee", emp, "employee_name") or emp
+			meta = next((b for b in rows if b["name"] == r.order_bag), {})
+			working.setdefault(emp or "(unassigned)", {"employee": emp,
+				"employee_name": emp_names.get(emp, "(unassigned)"), "cards": []})["cards"].append({
+				"name": r.order_bag, "design": meta.get("design") or "", "status": r.status,
+				"work_type": r.work_type or "", "since": str(r.since or ""),
+				"prio_rank": meta.get("prio_rank"), "due": meta.get("due") or ""})
+	for g in working.values():
+		g["cards"].sort(key=lambda c: c.get("prio_rank") or 9e9)
+
+	reasons = get_bench_work_options(bench)["queue_reasons"]
+	return {"bench": bench, "ranked": ranked,
+		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
+			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual")} for r in waiting],
+		"working": sorted(working.values(), key=lambda g: g["employee_name"]),
+		"queue_reasons": reasons,
+		"counts": {"waiting": len(waiting),
+			"working": sum(len(g["cards"]) for g in working.values()),
+			"total": len(rows)}}
+
+
+@frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with
 	its OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —
