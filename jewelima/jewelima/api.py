@@ -4265,15 +4265,27 @@ def get_bench_day(bench, date=None):
 		frappe.throw(frappe._("Unknown bench: {0}").format(bench or "?"))
 	date = date or frappe.utils.today()
 
-	def _gold(bags):
+	def _contents(bags):
+		"""Gold grams + stone buckets (pcs/ct) across the transferred bags."""
+		out = {"gold_g": 0.0, "stones": {}}
 		if not bags:
-			return 0.0
-		total = frappe.db.sql("""
-			SELECT SUM(IF(l.direction='Out', -l.qty, l.qty))
+			return out
+		for r in frappe.db.sql("""
+			SELECT IFNULL(i.stone_type, '') st,
+				SUM(IF(l.direction='Out', -l.qty, l.qty)) q,
+				SUM(IF(l.direction='Out', -l.pcs, l.pcs)) pcs
 			FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
-			WHERE l.order_bag IN %(bags)s AND IFNULL(i.stone_type, '') = ''
-		""", {"bags": tuple(bags)})[0][0]
-		return flt(total)
+			WHERE l.order_bag IN %(bags)s GROUP BY IFNULL(i.stone_type, '')
+		""", {"bags": tuple(bags)}, as_dict=True):
+			if r.st:
+				bk = (_BUCKET_OF_STONE_TYPE.get(r.st) or "poth").upper()
+				e = out["stones"].setdefault(bk, {"pcs": 0, "ct": 0.0})
+				e["pcs"] += cint(r.pcs)
+				e["ct"] = round(e["ct"] + flt(r.q), 3)
+			else:
+				out["gold_g"] = round(out["gold_g"] + flt(r.q), 3)
+		out["stones"] = {k: v for k, v in out["stones"].items() if v["pcs"] or abs(v["ct"]) > 0.0005}
+		return out
 
 	tin = frappe.get_all("Order Bag Transfer",
 		filters={"to_location": bench, "transfer_time": ["between", [date + " 00:00:00", date + " 23:59:59"]]},
@@ -4310,9 +4322,10 @@ def get_bench_day(bench, date=None):
 		g["weight_in"] += flt(r["weight_in"])
 		g["loss"] += flt(r["loss"])
 
+	cin, cout = _contents(list(set(tin))), _contents(list(set(tout)))
 	return {"bench": bench, "date": date,
-		"in": {"count": len(set(tin)), "gold_g": round(_gold(list(set(tin))), 3)},
-		"out": {"count": len(set(tout)), "gold_g": round(_gold(list(set(tout))), 3)},
+		"in": {"count": len(set(tin)), **cin},
+		"out": {"count": len(set(tout)), **cout},
 		"done": sorted(by_emp.values(), key=lambda g: g["employee_name"]),
 		"done_count": len(work)}
 

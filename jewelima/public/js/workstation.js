@@ -48,7 +48,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		.wk-none{padding:22px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.wk-dt{border:1px solid var(--border-color);border-radius:9px;padding:4px 12px;background:var(--control-bg);text-align:center;}
 		.wk-dt .k{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
-		.wk-dt .v{font-size:14px;font-weight:800;}
+		.wk-dt .v{font-size:14px;font-weight:800;display:block;}
+		.wk-dt .s{font-size:9.5px;color:var(--text-muted);display:block;white-space:nowrap;}
 		.wk-day{margin-top:16px;}
 		table.wk-dw{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
 		table.wk-dw th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:4px 9px;border:1px solid var(--border-color);text-align:left;}
@@ -132,9 +133,12 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		frappe.call({ method: API + ".get_bench_day", args: { bench, date: dayDate() }, freeze: false }).then((r) => {
 			const d = r.message;
 			if (!d) return;
-			root.find(".wk-day-tiles").html(`
-				<span class="wk-dt"><span class="k">${__("In today")}</span><span class="v">${d.in.count} · ${d.in.gold_g.toFixed(3)} g</span></span>
-				<span class="wk-dt"><span class="k">${__("Out today")}</span><span class="v">${d.out.count} · ${d.out.gold_g.toFixed(3)} g</span></span>`);
+			const chips = (st) => Object.entries(st || {})
+				.map(([k, v]) => `${k} ${v.pcs}/${v.ct.toFixed(3)}ct`).join(" · ");
+			const tile = (label, x) => `<span class="wk-dt"><span class="k">${label}</span>
+				<span class="v">${x.count} · ${x.gold_g.toFixed(3)} g</span>
+				${Object.keys(x.stones || {}).length ? `<span class="s">${chips(x.stones)}</span>` : ""}</span>`;
+			root.find(".wk-day-tiles").html(tile(__("In today"), d.in) + tile(__("Out today"), d.out));
 			root.find(".wk-day-title").text(__("Work done on {0} — {1} card(s)", [frappe.datetime.str_to_user(d.date), d.done_count]));
 			// summary per worker — the card-by-card detail lives in the bench records
 			const sum = (arr, k) => arr.reduce((t, x) => t + (x[k] || 0), 0);
