@@ -133,6 +133,56 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		const extraKvs = forPrint ? "" : `${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Party Date", dt(b.customer_date))}${kv("Held By", b.held_by)}`;
 		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
 
+		// ---- everything else we hold (screen only) ---------------------------
+		const ex = d.extras || {};
+		const chips = [];
+		if (b.huid) chips.push(`HUID <b>${esc(b.huid)}</b>`);
+		if (b.certifications) chips.push(`Certs <b>${esc(b.certifications)}</b>`);
+		if ((ex.charge_categories || []).length) chips.push(`Tags <b>${ex.charge_categories.map(esc).join(", ")}</b>`);
+		const identity = !forPrint && chips.length ? `<div class="ci-sec"><h4>Identity</h4><div class="ci-line">${chips.join(" &middot; ")}</div></div>` : "";
+
+		const flags = [];
+		if (b.stone_issue) flags.push(`<span style="color:#9a6700;font-weight:700;">AWAITING STONES</span> since ${dtt(b.stone_issue_on)}`);
+		if (b.stone_oos) flags.push(`<span style="color:#b02a2a;font-weight:700;">OUT OF STOCK</span> ${esc(b.stone_oos_note || "")} (${dtt(b.stone_oos_on)})`);
+		if (ex.bench_now && ex.bench_now.queue_reason) flags.push(`Reason <b>${esc(ex.bench_now.queue_reason)}</b>`);
+		const pr = ex.priority || {};
+		if (pr.manual) flags.push(`<span style="color:#d63031;font-weight:700;">MANUAL PRIORITY #${pr.manual}</span>`);
+		else if (pr.bench_rank) flags.push(`Bench rank <b>P${pr.bench_rank}</b>`);
+		if (ex.bench_now && ex.bench_now.status) flags.push(`Bench status <b>${esc(ex.bench_now.status)}</b>${ex.bench_now.employee_name ? " &middot; " + esc(ex.bench_now.employee_name) : ""}${ex.bench_now.work_type ? " &middot; " + esc(ex.bench_now.work_type) : ""}`);
+		if ((ex.preps || []).length) flags.push(`On prepared bill <b>${ex.preps.map(esc).join(", ")}</b>`);
+		const standing = !forPrint && flags.length ? `<div class="ci-sec"><h4>Standing</h4><div class="ci-line">${flags.join(" &middot; ")}</div></div>` : "";
+
+		const cadSec = !forPrint && b.is_cad ? `<div class="ci-sec"><h4>CAD request</h4><div class="ci-line">
+			${esc(b.cad_design_type || "")} &middot; ${esc(b.cad_karat || "")} &middot; gold ${esc(b.cad_gold_weight || "")} &middot; dmd ${esc(b.cad_diamond_weight || "")} ct &middot; ${b.cad_stone_no || 0} stones${b.cad_reference ? " &middot; ref " + esc(b.cad_reference) : ""}</div></div>` : "";
+
+		let saleSec = "";
+		if (!forPrint && ex.sale) {
+			const sv = ex.sale;
+			const money = (v) => "&#8377;" + (flt(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+			saleSec = `<div class="ci-sec"><h4>Sold</h4><div class="ci-line">
+				<a href="/app/product-sale/${encodeURIComponent(sv.parent)}"><b>${esc(sv.parent)}</b></a>
+				&middot; ${esc(sv.customer)} &middot; ${sv.sale_date ? frappe.datetime.str_to_user(sv.sale_date) : ""}
+				&middot; ${esc(sv.chart_name || "")} @ ${sv.gold_rate}</div>
+				<div class="ci-line">Gold ${money(sv.gold_value)} &middot; DMD ${money(sv.diamond_value)} &middot; Stones ${money(sv.stone_value)}
+				&middot; Labour ${money(sv.labour_value)} &middot; Charges ${money(sv.charges_value)}
+				&middot; <b>Piece ${money(sv.piece_total)}</b>${sv.tax_percent ? " &middot; bill incl. " + sv.tax_percent + "% tax" : ""}</div></div>`;
+		}
+		let holderSec = "";
+		if (!forPrint && (ex.holder_transfers || []).length) {
+			holderSec = `<div class="ci-sec"><h4>Holder history</h4><table class="ci-tbl">
+				<thead><tr><th>From</th><th>To</th><th>When</th><th>By</th><th>Reason</th></tr></thead><tbody>
+				${ex.holder_transfers.map((h) => `<tr><td>${esc(h.from || "—")}</td><td><b>${esc(h.to || "")}</b></td>
+					<td>${dtt(h.when)}</td><td>${esc(h.by || "")}</td><td>${esc(h.reason || "")}</td></tr>`).join("")}
+				</tbody></table></div>`;
+		}
+		const costingSec = !forPrint && frappe.user.has_role("System Manager")
+			? `<div class="ci-sec"><h4>Costing <span class="muted" style="font-weight:400;font-size:11px;">(restricted)</span></h4>
+				<div class="ci-line" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+					<input type="number" class="ci-rate" placeholder="gold rate /g" style="width:110px;border:1px solid var(--border-color);border-radius:6px;height:26px;padding:2px 8px;background:var(--fg-color);color:var(--text-color);">
+					<button class="btn btn-xs ci-cost" data-name="${esc(b.name)}" style="background:#1f618d;border-color:#1f618d;color:#fff;">${__("Compute")}</button>
+					<span class="ci-cost-out" style="font-size:12.5px;"></span>
+				</div></div>` : "";
+
 		return `
 		<div class="ci-head">
 			<div>
@@ -155,9 +205,15 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		</div>
 		<div class="ci-sec"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
 		<div class="ci-sec"><h4>Issue details</h4>${issueTbl}</div>
+		${identity}
+		${standing}
+		${cadSec}
 		${narration}
 		<div class="ci-sec"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
-		<div class="ci-sec"><h4>Who worked on it</h4>${stageTbl}</div>`;
+		<div class="ci-sec"><h4>Who worked on it</h4>${stageTbl}</div>
+		${saleSec}
+		${holderSec}
+		${costingSec}`;
 	}
 
 	function load(code) {
@@ -194,6 +250,23 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		frappe.route_options = null;
 		setTimeout(() => load(pre), 150);
 	}
+	$(page.main).on("click", ".ci-cost", function () {
+		const nm = $(this).data("name");
+		const rate = $(page.main).find(".ci-rate").val() || 0;
+		const $out = $(page.main).find(".ci-cost-out").text(__("computing…"));
+		frappe.call({ method: "jewelima.jewelima.api.get_card_costing",
+			args: { order_bag: nm, gold_rate: rate }, freeze: false }).then((r) => {
+			const m = r.message || {};
+			if (m.error) { $out.html(`<span style="color:#b02a2a;">${frappe.utils.escape_html(m.error)}</span>`); return; }
+			const money = (v) => "₹" + (flt(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+			const parts = Object.values(m.components || {}).map((c) =>
+				`${frappe.utils.escape_html(c.label)} ${c.value === null ? "<span style='color:#b02a2a;'>?</span>" : money(c.value)}`);
+			const total = Object.values(m.components || {}).reduce((s2, c) => s2 + (flt(c.value) || 0), 0);
+			$out.html(`${frappe.utils.escape_html(m.chart_name || "")}: ` + parts.join(" · ")
+				+ ` · <b>${money(total)}</b>`);
+		});
+	});
+
 	scan.$input.on("keydown", (e) => {
 		if (e.which === 13 || e.key === "Enter") {
 			e.preventDefault();

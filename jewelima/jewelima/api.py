@@ -9482,6 +9482,24 @@ def get_print_branding():
 
 
 @frappe.whitelist()
+def get_card_costing(order_bag, price_chart=None, gold_rate=0):
+	"""Card Info's COSTING section — the exact sale engine, admin-eyes only
+	for now (the section is role-gated in the UI and enforced here)."""
+	if "System Manager" not in frappe.get_roles():
+		frappe.throw(frappe._("Costing is restricted."))
+	if not price_chart:
+		price_chart = frappe.db.get_value("Price Chart", {"status": "Active"}, "name")
+	if not price_chart:
+		frappe.throw(frappe._("No active Price Chart."))
+	try:
+		r = get_sale_piece(order_bag, price_chart, gold_rate)
+		r["chart_name"] = _chart_label(price_chart)
+		return r
+	except Exception as e:
+		return {"error": str(e)}
+
+
+@frappe.whitelist()
 def get_card_passport(order_bag):
 	"""Everything about a card for the lookup/print view: header, plan + actual
 	weights, current contents, the transfer trail and the bench stage history."""
@@ -9493,6 +9511,12 @@ def get_card_passport(order_bag):
 			"gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
 			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
 			"act_dmd_no", "act_dmd_weight", "act_ps_no", "act_ps_weight", "act_cs_no", "act_cs_weight",
+			"act_cz_no", "act_cz_weight", "act_cvd_no", "act_cvd_weight",
+			"act_pdmd_no", "act_pdmd_weight", "act_poth_weight",
+			"huid", "certifications", "stone_issue", "stone_issue_on",
+			"stone_oos", "stone_oos_note", "stone_oos_on",
+			"is_cad", "cad_design_type", "cad_karat", "cad_gold_weight",
+			"cad_diamond_weight", "cad_stone_no", "cad_reference",
 		],
 		as_dict=True,
 	)
@@ -9509,10 +9533,56 @@ def get_card_passport(order_bag):
 		FROM `tabBag Material Ledger` l
 		JOIN `tabItem` i ON i.name = l.item
 		LEFT JOIN `tabEmployee` e ON e.name = l.employee
-		WHERE l.order_bag = %s AND l.entry_type IN ('Stone Issue', 'Gold Issue')
+		WHERE l.order_bag = %s AND l.entry_type IN ('Stone Issue', 'Gold Issue', 'Loss', 'Weight Add')
 		ORDER BY l.datetime""", order_bag, as_dict=True)
+	# ---- the afterlife + standing: everything else we hold about this card ----
+	extras = {}
+	extras["charge_categories"] = [r.charge_category for r in frappe.get_all(
+		"Order Bag Charge Category", filters={"parent": order_bag}, fields=["charge_category"])]
+	pos = frappe.db.get_value("Priority Card", {"order_bag": order_bag}, "position")
+	extras["priority"] = {"manual": cint(pos) if pos else 0}
+	loc = (bag.location or "").upper()
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	dt_b = BENCH_DOCTYPE.get(loc)
+	if dt_b and frappe.db.exists("DocType", dt_b):
+		rec = frappe.get_all(dt_b, filters={"order_bag": order_bag},
+			fields=["status", "employee", "work_type", "queue_reason"],
+			order_by="creation desc", limit=1)
+		extras["bench_now"] = rec[0] if rec else None
+		if extras["bench_now"] and extras["bench_now"].get("employee"):
+			extras["bench_now"]["employee_name"] = frappe.db.get_value(
+				"Employee", extras["bench_now"]["employee"], "employee_name")
+	if loc and loc not in PRIORITY_EXEMPT_BENCHES and not bag.is_finished:
+		try:
+			row = next((r for r in get_bench_board(loc)["rows"] if r["name"] == order_bag), None)
+			if row:
+				extras["priority"]["bench_rank"] = row.get("prio_rank")
+		except Exception:
+			pass
+	sale_row = frappe.db.sql("""
+		SELECT i.parent, i.gold_value, i.diamond_value, i.stone_value, i.labour_value,
+			i.charges_value, i.piece_total, s.customer, s.sale_date, s.gold_rate,
+			s.price_chart, s.tax_percent, s.grand_total
+		FROM `tabProduct Sale Item` i JOIN `tabProduct Sale` s ON s.name = i.parent
+		WHERE i.order_bag = %s ORDER BY s.creation DESC LIMIT 1""", order_bag, as_dict=True)
+	extras["sale"] = sale_row[0] if sale_row else None
+	if extras["sale"]:
+		extras["sale"]["sale_date"] = str(extras["sale"]["sale_date"] or "")
+		extras["sale"]["chart_name"] = _chart_label(extras["sale"]["price_chart"])
+	extras["holder_transfers"] = [{"from": h.from_holder, "to": h.to_holder,
+		"when": str(h.transfer_time or ""), "by": h.transferred_by, "reason": h.reason or ""}
+		for h in frappe.get_all("Holder Transfer", filters={"order_bag": order_bag},
+			fields=["from_holder", "to_holder", "transfer_time", "transferred_by", "reason"],
+			order_by="transfer_time")]
+	extras["preps"] = [x.parent for x in frappe.get_all("Sale Preparation Item",
+		filters={"order_bag": order_bag}, fields=["parent"])
+		if frappe.db.get_value("Sale Preparation", x.parent, "status") in ("Draft", "Sent")]
+	for k in ("stone_issue_on", "stone_oos_on"):
+		bag[k] = str(bag.get(k) or "")
+
 	return {
 		"bag": bag,
+		"extras": extras,
 		"contents": get_bag_contents(order_bag),
 		"transfers": frappe.get_all(
 			"Order Bag Transfer", filters={"order_bag": order_bag},

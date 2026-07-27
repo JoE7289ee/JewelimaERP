@@ -264,8 +264,19 @@ def setup_roles():
 		if changed:
 			pg.save(ignore_permissions=True)
 
+	# Jewelima Info — the lookup persona: Card Info + Job Order Status only
+	if not frappe.db.exists("Role", "Jewelima Info"):
+		frappe.get_doc({"doctype": "Role", "role_name": "Jewelima Info", "desk_access": 1}).insert(ignore_permissions=True)
+	for dt in ("Order Bag", "Job Order", "Design", "Item", "Employee"):
+		grant(dt, "Jewelima Info", {"read": 1})
 	for page in JEWELIMA_ORDER_PAGES:
-		set_page_roles(page, ("Jewelima Ordering",))
+		roles = ("Jewelima Ordering", "Jewelima Info") if page in ("card-info", "job-order-status") else ("Jewelima Ordering",)
+		set_page_roles(page, roles)
+	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Info"}, pluck="parent"):
+		if pg not in ("card-info", "job-order-status"):
+			pgd = frappe.get_doc("Page", pg)
+			pgd.set("roles", [r for r in pgd.roles if r.role != "Jewelima Info"])
+			pgd.save(ignore_permissions=True)
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
 		               strip=("Manufacturing Manager", "Manufacturing User"))
