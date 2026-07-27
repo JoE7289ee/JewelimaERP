@@ -189,7 +189,11 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			return;
 		}
 		if ($chip.next().is("select.wk-qr-sel")) return; // already editing
+		// system-stamped reasons (Awaiting Stone / Out of Stock) may not be in
+		// the bench's configured list — keep the current value selectable
+		const curVal = (cur && cur.queue_reason) || "";
 		const opts = [""].concat(reasons);
+		if (curVal && !opts.includes(curVal)) opts.splice(1, 0, curVal);
 		const sel = $(`<select class="wk-qr-sel" style="border:1px solid #e0a800;border-radius:6px;height:24px;font-size:11px;background:var(--fg-color);color:var(--text-color);max-width:150px;">`
 			+ opts.map((o) => `<option value="${esc(o)}" ${o === ((cur && cur.queue_reason) || "") ? "selected" : ""}>${o ? esc(o) : "— " + __("none") + " —"}</option>`).join("")
 			+ `</select>`);

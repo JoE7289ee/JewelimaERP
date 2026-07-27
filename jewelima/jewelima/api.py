@@ -5630,8 +5630,8 @@ def bench_work_option_add(location, kind, value):
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 	if loc not in BENCH_DOCTYPE:
 		frappe.throw(frappe._("{0} is not a bench.").format(loc or "?"))
-	if kind not in ("Work Type", "Collection State"):
-		frappe.throw(frappe._("Kind must be Work Type or Collection State."))
+	if kind not in ("Work Type", "Collection State", "Queue Reason"):
+		frappe.throw(frappe._("Kind must be Work Type, Collection State or Queue Reason."))
 	if not value:
 		frappe.throw(frappe._("Enter a value."))
 	if frappe.db.exists("Bench Work Option", {"bench": loc, "kind": kind, "value": value}):
