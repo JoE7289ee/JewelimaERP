@@ -774,6 +774,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "circle-plus",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Import Stock",
+   "link_to": "import-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "gem",
@@ -927,19 +940,6 @@
    "link_type": "",
    "show_arrow": 0,
    "type": "Section Break",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "circle-plus",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Import Stock",
-   "link_to": "import-stock",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
    "url": ""
   },
   {
@@ -2087,7 +2087,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-26 23:12:25.657047",
+ "modified": "2026-07-27 10:09:27.288198",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
