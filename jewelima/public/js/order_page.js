@@ -761,6 +761,8 @@ const PO_COLUMNS = [
 					} else {
 						nr._profile = row._profile;
 						nr._materials = (row._materials || []).map((m) => ({ ...m }));
+						nr._origMaterials = (row._origMaterials || []).map((m) => ({ ...m }));
+						nr._image = row._image;
 						nr._edited = row._edited; // an edited BOM travels to every bag of the split
 						if (nr.markEdited) nr.markEdited();
 						nr._designType = row._designType;
@@ -771,7 +773,9 @@ const PO_COLUMNS = [
 						if (nr.f.design_type) nr.f.design_type.set(row._designType || "");
 						nr.f.qty.set(qtys[i]);
 						applyProfile(nr);
-						updateDesignBtn(nr);
+						// design.set is async — judging the button NOW sees an empty
+						// field and leaves Materials dead on every split row
+						setTimeout(() => updateDesignBtn(nr), 400);
 					}
 					updateSplitBtn(nr);
 					nr._remark = row._remark; // split bags inherit the line's remark
@@ -779,7 +783,11 @@ const PO_COLUMNS = [
 					prev = nr;
 				}
 				recalcTotals();
-				setTimeout(recalcTotals, 600); // repaint once the async design set_values land
+				// repaint + re-judge buttons once the async design set_values land
+				setTimeout(() => {
+					recalcTotals();
+					state.rows.forEach((r) => { updateDesignBtn(r); updateSplitBtn(r); });
+				}, 600);
 				frappe.show_alert({ message: __("Split into {0} bags: {1}", [n, qtys.join(" + ")]), indicator: "green" });
 			},
 			__("Split Line"),
