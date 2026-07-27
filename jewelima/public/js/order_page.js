@@ -666,7 +666,7 @@ const PO_COLUMNS = [
 					fieldname: "materials", fieldtype: "Table", reqd: 1, options: "Design BOM Item", data: [],
 					description: __("This bag's own BOM (copied from the design). Stones need a Qty + Weight (ct); metals need a Weight (g). The line updates on Apply."),
 					fields: [
-						{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: itemChanged },
+						{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, only_select: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: itemChanged },
 						{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 						{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
 						{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type", onchange: jwSieveQty },
@@ -700,8 +700,12 @@ const PO_COLUMNS = [
 		}
 		// seed the grid with this line's current materials (static-mode dialog grid)
 		const grid = dd.fields_dict.materials.grid;
-		grid.df.data = (row._materials || []).map((m, i) => ({ idx: i + 1, name: "new-mat-" + (i + 1), item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+		grid.df.data = (row._materials || []).map((m, i) => ({ idx: i + 1, name: "new-mat-" + (i + 1), item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type,
+			// gold rows show their PURE grams from the off (weight x purity%)
+			pure: m.stone_type ? 0 : (flt(m.weight) * flt(m.purity)) / 100 }));
 		grid.refresh();
+		// pickers pick — no open-record arrows inside this dialog's grid
+		dd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}</style>").addClass("jw-mat-dlg");
 	}
 
 	function updateRemarkBtn(row) {
