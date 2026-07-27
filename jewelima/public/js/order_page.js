@@ -588,6 +588,7 @@ const PO_COLUMNS = [
 		return frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
 			const msg = r.message || {};
 			row._materials = (msg.materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+			row._origMaterials = row._materials.map((m) => ({ ...m }));
 			row._image = msg.image || "";
 			row._designType = msg.design_type || "";
 			if (row.f.design_type) row.f.design_type.set(row._designType);
@@ -607,6 +608,8 @@ const PO_COLUMNS = [
 			row.f.size.set(""); row.f.qty.set("");
 			frappe.show_alert({ message: __("CAD line cleared."), indicator: "blue" }, 3);
 		} else if (row.f.design.get()) {
+			row._edited = false;
+			if (row.markEdited) row.markEdited();
 			pullDesignBOM(row);
 			frappe.show_alert({ message: __("Line reset to the design's BOM."), indicator: "blue" }, 3);
 		} else {
@@ -625,6 +628,7 @@ const PO_COLUMNS = [
 		frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((r) => {
 			const msg = r.message || {};
 			row._materials = (msg.materials || []).map((m) => ({ item: m.item, qty: m.qty, weight: m.weight, purity: m.purity, uom: m.uom, stone_type: m.stone_type }));
+			row._origMaterials = row._materials.map((m) => ({ ...m }));
 			row._image = msg.image || "";
 			row._profile = planProfile(row._materials);
 			applyProfile(row);
@@ -678,7 +682,11 @@ const PO_COLUMNS = [
 				const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
 				if (bad) return frappe.msgprint(bad.stone_type ? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item]) : __("{0} needs a Weight (grams).", [bad.item]));
 				row._materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0, purity: flt(m.purity) || 0, uom: m.uom || "", stone_type: m.stone_type || "" }));
-				row._edited = true;
+				// yellow ONLY when the list truly differs from the design's BOM —
+				// opening the dialog and hitting Apply unchanged stays clean
+				const norm = (list) => (list || []).map((m) =>
+					[m.item, flt(m.qty) || 0, flt(m.weight) || 0].join("|")).sort().join("~");
+				row._edited = norm(row._materials) !== norm(row._origMaterials);
 				if (row.markEdited) row.markEdited();
 				row._profile = planProfile(row._materials);
 				applyProfile(row);
