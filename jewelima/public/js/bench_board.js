@@ -57,7 +57,7 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 			? `<span class="bb-pr ${r.prio_manual ? "man" : ""}" title="${r.prio_manual ? __("manually prioritised — set on the Prioritisation page") : __("automatic: due date, CUST first")}">${r.prio_rank}</span>`
 			: ""),
 		worker: (r) => esc(r.worker || ""),
-		name: (r) => `<a href="/app/order-bag/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`,
+		name: (r) => `<a class="jw-card-link" href="/app/card-info" data-card="${esc(r.name)}">${esc(r.name)}</a>`,
 		design: (r) => esc(r.design),
 		design_type: (r) => esc(r.design_type),
 		qty: (r) => r.qty,

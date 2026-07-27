@@ -62,7 +62,7 @@ frappe.pages["stone-audit"].on_page_load = function (wrapper) {
 				<tbody>${S.rows.map((r, i) => {
 					const p = PROBLEM[r.problem] || {};
 					return `<tr data-i="${i}">
-						<td><a href="/app/order-bag/${encodeURIComponent(r.order_bag)}">${esc(r.order_bag)}</a></td>
+						<td><a class="jw-card-link" href="/app/card-info" data-card="${esc(r.order_bag)}">${esc(r.order_bag)}</a></td>
 						<td>${esc(r.design)}</td><td>${esc(r.location)}</td><td>${esc(r.item)}</td>
 						<td class="r">${r.net_pcs}</td><td class="r">${r.net_ct.toFixed(3)}</td>
 						<td><span class="sa-tag ${r.problem}" title="${esc(p.hint || "")}">${p.label || r.problem}</span></td>

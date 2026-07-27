@@ -79,7 +79,7 @@ frappe.pages["stone-issues"].on_page_load = function (wrapper) {
 			<td class="r">${x.pcs}</td><td class="r">${x.ct.toFixed(3)}</td><td class="r">${x.lines}</td></tr>`).join("");
 		const lines = m.rows.map((r, i) => `
 			<tr><td>${i + 1}</td><td>${esc(r.item)}</td><td>${esc(r.item_group || "")}</td>
-			<td><a href="/app/order-bag/${encodeURIComponent(r.order_bag)}">${esc(r.order_bag)}</a></td>
+			<td><a class="jw-card-link" href="/app/card-info" data-card="${esc(r.order_bag)}">${esc(r.order_bag)}</a></td>
 			<td class="r">${r.pcs}</td><td class="r">${r.ct.toFixed(3)}</td>
 			<td>${esc(r.who)}</td><td>${frappe.datetime.str_to_user(r.datetime).split(" ").slice(1).join(" ")}</td></tr>`).join("");
 		root.find(".sis-body").html(`

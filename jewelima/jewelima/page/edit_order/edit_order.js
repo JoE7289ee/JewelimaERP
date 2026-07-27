@@ -99,7 +99,7 @@ frappe.pages["edit-order"].on_page_load = function (wrapper) {
 						${__("Party")} <b>${esc(c.customer || "—")}</b> · ${esc(c.salesman || "")}
 						· ${__("Due")} <b>${c.due_date ? frappe.datetime.str_to_user(c.due_date) : "—"}</b><br>
 						${__("At")} <b>${esc(c.location || "—")}</b> · ${esc(c.stock_status || "")}
-						· <a href="/app/order-bag/${encodeURIComponent(c.name)}">${__("open card")}</a>
+						· <a class="jw-card-link" href="/app/card-info" data-card="${esc(c.name)}">${__("open card")}</a>
 					</div>
 					<div class="eo-boxes">
 						<div class="eo-b"><div class="k">${__("GROSS g")}</div><div class="v">${(c.gross_weight || 0).toFixed(3)}</div></div>

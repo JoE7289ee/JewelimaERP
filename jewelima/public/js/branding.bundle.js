@@ -9,6 +9,14 @@ import "./filter_bar"; // jewelima.buildFilterBar — generic reusable filter en
 import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
 import "./workstation"; // jewelima.buildWorkstation — the per-bench workstation pages
 
+// card links everywhere open CARD INFO (not the raw doctype form) with the
+// card already punched in — <a class="jw-card-link" data-card="...">
+$(document).on("click", "a.jw-card-link", function (e) {
+	e.preventDefault();
+	frappe.route_options = { card: this.dataset.card };
+	frappe.set_route("card-info");
+});
+
 frappe.provide("jewelima");
 
 // small inline icons (lucide-style) for the contact line

@@ -188,6 +188,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			CSS + " body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#222;}");
 	}
 
+	// arriving from any card link with the number already punched in
+	if (frappe.route_options && frappe.route_options.card) {
+		const pre = frappe.route_options.card;
+		frappe.route_options = null;
+		setTimeout(() => load(pre), 150);
+	}
 	scan.$input.on("keydown", (e) => {
 		if (e.which === 13 || e.key === "Enter") {
 			e.preventDefault();
