@@ -464,6 +464,17 @@ def sync_workspace_sidebar():
 
 KARAT_GOLDS = {"14K": 58.3, "18K": 75.1, "22K": 91.7}
 GOLD_COLORS = ["YG", "WG", "PG"]  # Yellow / White / Pink(Rose) gold
+# 22K is only ever worked in yellow — 22KPG / 22KWG don't exist in reality
+KARAT_COLOR_LIMIT = {"22K": ["YG"]}
+
+
+def allowed_karat_golds():
+	"""The karat-gold codes the factory actually uses (seeding + pickers)."""
+	out = []
+	for karat in KARAT_GOLDS:
+		for color in KARAT_COLOR_LIMIT.get(karat, GOLD_COLORS):
+			out.append(karat + color)
+	return out
 
 
 def seed_karat_golds():
@@ -479,7 +490,7 @@ def seed_karat_golds():
 			"parent_item_group": "All Item Groups", "is_group": 0,
 		}).insert(ignore_permissions=True)
 	for karat, purity in KARAT_GOLDS.items():
-		for color in GOLD_COLORS:
+		for color in KARAT_COLOR_LIMIT.get(karat, GOLD_COLORS):
 			code = f"{karat}{color}"  # e.g. 22KYG
 			if frappe.db.exists("Item", code):
 				continue

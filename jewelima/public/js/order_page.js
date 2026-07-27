@@ -425,7 +425,7 @@ const PO_COLUMNS = [
 					} },
 				{ fieldname: "size", fieldtype: "Select", label: __("Size"), options: "\nNA", default: c.size },
 				{ fieldname: "karat", fieldtype: "Link", label: __("Purity (karat gold)"), options: "Item", reqd: 1, default: c.karat,
-					get_query: () => ({ filters: { material_group: "GOLD", metal_purity: ["!=", ""] } }) },
+					get_query: () => ({ filters: { material_group: "GOLD", metal_purity: ["!=", ""], name: ["not in", ["22KPG", "22KWG"]] } }) },
 				{ fieldname: "cb", fieldtype: "Column Break" },
 				{ fieldname: "gold_weight", fieldtype: "Data", label: __("Gold Weight Target"), reqd: 1, default: c.gold_weight,
 				description: __("Free text — '8.5', 'MINIMUM 8', 'RANGE 8 to 9'…") },

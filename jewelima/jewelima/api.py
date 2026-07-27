@@ -855,10 +855,12 @@ def get_design_variants(design):
 		frappe.throw(frappe._("No such design"))
 	doc = frappe.get_doc("Design", design)
 
-	karats = frappe.get_all(
+	from jewelima.setup import allowed_karat_golds
+	allowed = set(allowed_karat_golds())
+	karats = [k for k in frappe.get_all(
 		"Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]},
 		fields=["name", "purity_percentage"], order_by="name desc",
-	)
+	) if k.name in allowed]  # 22KPG/22KWG may linger as items — never offer them
 	karat_names = {k.name for k in karats}
 
 	def suffix(item):  # 18KPG -> 18P, 14KWG -> 14W
