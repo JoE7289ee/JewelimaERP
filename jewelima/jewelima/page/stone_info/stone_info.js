@@ -46,9 +46,12 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	const pend = (p) => Object.entries(p || {}).map(([k, v]) => `${k} ${v.pcs}/${v.ct.toFixed(3)}ct`).join(" · ");
-	const ageChip = (d) => {
+	const ageChip = (r) => {
+		const d = r.age_days;
 		const cls = d >= 7 ? "vold" : d >= 3 ? "old" : "";
-		return `<span class="si2-age ${cls}">${d}d</span>`;
+		// under a day the chip talks in HOURS (6H reads better than 0.3d)
+		const label = d < 1 ? `${Math.round(r.age_hours || 0)}H` : `${d}d`;
+		return `<span class="si2-age ${cls}">${label}</span>`;
 	};
 
 	function table(rows, mode) {
@@ -61,7 +64,7 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 		${rows.map((r) => `<tr>
 			<td>${mode === "prio"
 				? `<span class="si2-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank}</span>`
-				: ageChip(r.age_days)}</td>
+				: ageChip(r)}</td>
 			<td><b>${esc(r.name)}</b></td>
 			<td>${esc(r.design || "")}</td>
 			<td>${esc(r.location || "")}</td>

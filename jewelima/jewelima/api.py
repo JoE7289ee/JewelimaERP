@@ -2399,7 +2399,9 @@ def get_stone_info():
 	now = frappe.utils.now_datetime()
 	for b in bags:
 		b["due"] = str(b.due or "")
-		b["age_days"] = round((now - b.marked_on).total_seconds() / 86400, 1) if b.marked_on else 0
+		age_h = (now - b.marked_on).total_seconds() / 3600 if b.marked_on else 0
+		b["age_days"] = round(age_h / 24, 1)
+		b["age_hours"] = round(age_h, 1)
 		b["marked_on"] = str(b.marked_on or "")
 		b["pending"] = per_card.get(b.name) or {}
 		b["prio_manual"] = 1 if b.name in manual else 0
