@@ -42,6 +42,10 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 			<div class="si2-col"><div class="si2-sec">${__("Priority order — issue these first")}</div><div class="si2-left"></div></div>
 			<div class="si2-col"><div class="si2-sec">${__("Aging — waiting the longest")}</div><div class="si2-right"></div></div>
 		</div>
+		<div class="si2-oos-wrap" style="margin-top:18px;">
+			<div class="si2-sec si2-oos-title" style="color:#b02a2a;"></div>
+			<div class="si2-oos"></div>
+		</div>
 	`);
 	const root = $(page.main);
 
@@ -71,7 +75,8 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 			<td>${esc(r.party || "")}</td>
 			<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 			<td class="si2-pend">${pend(r.pending) || "—"}</td>
-			<td><button class="btn btn-xs si2-go" data-name="${esc(r.name)}">${__("Issue")}</button></td>
+			<td style="white-space:nowrap;"><button class="btn btn-xs si2-go" data-name="${esc(r.name)}">${__("Issue")}</button>
+				<button class="btn btn-xs btn-default si2-oosbtn" data-name="${esc(r.name)}" title="${__("mark OUT OF STOCK with a reason")}">✕${__("stock")}</button></td>
 		</tr>`).join("")}</tbody></table>`;
 	}
 
@@ -83,6 +88,31 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 				<div class="v">${v.pcs} / ${v.ct.toFixed(3)} ct</div></div>`).join(""));
 		root.find(".si2-left").html(table(D.priority || [], "prio"));
 		root.find(".si2-right").html(table(D.aging || [], "age"));
+
+		// OUT OF STOCK strip: manual marks (with note) + auto shorts (self-clearing)
+		const oos = D.oos || [];
+		root.find(".si2-oos-title").text(oos.length ? __("Out of stock — {0} card(s)", [oos.length]) : "");
+		root.find(".si2-oos").html(oos.length ? `
+			<table class="si2-t"><thead><tr>
+				<th style="width:44px">${__("Age")}</th><th>${__("Card")}</th><th>${__("Design")}</th>
+				<th>${__("At")}</th><th>${__("Party")}</th><th>${__("Why")}</th><th style="width:110px"></th>
+			</tr></thead><tbody>
+			${oos.map((r) => `<tr>
+				<td>${ageChip(r)}</td>
+				<td><b>${esc(r.name)}</b></td>
+				<td>${esc(r.design || "")}</td>
+				<td>${esc(r.location || "")}</td>
+				<td>${esc(r.party || "")}</td>
+				<td class="si2-pend">${r.stone_oos
+					? `<span style="color:#b02a2a;font-weight:700;">${__("MANUAL")}</span> ${esc(r.stone_oos_note || "")}`
+					: (r.short || []).map((x) => `${esc(x.item)}: ${__("need")} ${x.need} · ${__("have")} ${x.have}`).join("<br>")}</td>
+				<td style="white-space:nowrap;">
+					${r.stone_oos ? `<button class="btn btn-xs si2-back" data-name="${esc(r.name)}"
+						style="background:#2e7d32;border-color:#2e7d32;color:#fff;">${__("Back in stock")}</button>` : ""}
+					<button class="btn btn-xs si2-go" data-name="${esc(r.name)}">${__("Issue")}</button>
+				</td>
+			</tr>`).join("")}</tbody></table>`
+			: `<div style="font-size:12px;color:var(--text-muted);">${__("Nothing out of stock.")}</div>`);
 	}
 
 	function load() {
@@ -96,6 +126,19 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 	root.on("click", ".si2-go", function () {
 		frappe.route_options = { card: $(this).data("name") };
 		frappe.set_route("stone-issue");
+	});
+
+	// manual OUT OF STOCK with a reason (CS/CZ especially — weight on the
+	// shelf can still lack the exact colour/size)
+	root.on("click", ".si2-oosbtn", function () {
+		const nm = $(this).data("name");
+		frappe.prompt([{ fieldname: "n", fieldtype: "Small Text", label: __("What exactly is missing?"),
+			description: __("e.g. CS pink 3mm × 12 — this note is the whole story for generic stones") }],
+			(v) => frappe.call({ method: API + ".mark_stone_oos", args: { order_bag: nm, note: v.n || "" } })
+				.then(load), __("Mark {0} OUT OF STOCK", [nm]), __("Mark"));
+	});
+	root.on("click", ".si2-back", function () {
+		frappe.call({ method: API + ".clear_stone_oos", args: { order_bag: $(this).data("name") } }).then(load);
 	});
 
 	page.add_inner_button(__("Stone Request"), () => frappe.set_route("stone-request"));

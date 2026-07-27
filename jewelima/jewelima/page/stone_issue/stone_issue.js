@@ -381,6 +381,18 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	refreshStock();
 	loadContext();
 
+	page.add_inner_button(__("Out of Stock"), () => {
+		if (!S.card || !S.card.order_bag) {
+			frappe.show_alert({ message: __("Scan a card first."), indicator: "orange" }, 3);
+			return;
+		}
+		const nm = S.card.order_bag;
+		frappe.prompt([{ fieldname: "n", fieldtype: "Small Text", label: __("What exactly is missing?") }],
+			(v) => frappe.call({ method: API + ".mark_stone_oos", args: { order_bag: nm, note: v.n || "" } })
+				.then(() => frappe.show_alert({ message: __("{0} marked OUT OF STOCK.", [nm]), indicator: "red" }, 4)),
+			__("Mark {0} OUT OF STOCK", [nm]), __("Mark"));
+	});
+
 	// arriving from the Stones info page with the card already picked
 	if (frappe.route_options && frappe.route_options.card) {
 		const pre = frappe.route_options.card;

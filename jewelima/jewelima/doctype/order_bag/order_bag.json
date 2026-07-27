@@ -17,6 +17,9 @@
   "location",
   "stone_issue",
   "stone_issue_on",
+  "stone_oos",
+  "stone_oos_note",
+  "stone_oos_on",
   "tree",
   "is_finished",
   "split_of",
@@ -188,6 +191,26 @@
    "fieldtype": "Datetime",
    "hidden": 1,
    "label": "Stone Issue Requested On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_oos",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Stone Out of Stock",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_oos_note",
+   "fieldtype": "Small Text",
+   "label": "Out of Stock Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_oos_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Out of Stock Since",
    "read_only": 1
   },
   {

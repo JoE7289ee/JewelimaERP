@@ -2343,6 +2343,53 @@ def _clear_stone_issue(order_bag):
 			frappe.db.set_value(dt, rec[0].name, "queue_reason", "")
 
 
+# stones the availability check may JUDGE: itemized buckets only. CS/CZ/POTH
+# are generic catch-all items (all colours/sizes under one code) — aggregate
+# weight proves nothing, so they are NEVER auto-judged; mark them manually.
+STONE_AUTO_BUCKETS = {"dmd", "cvd", "ps", "pdmd"}
+STONE_OOS_REASON = "Out of Stock"
+
+
+@frappe.whitelist()
+def mark_stone_oos(order_bag, note=None):
+	"""Manual OUT OF STOCK — any stone, any card, your judgment beats the
+	numbers (a CS with weight on the shelf can still lack the pink 3mm).
+	Stamps the note + the 'Out of Stock' reason on the bench record."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("{0} not found.").format(order_bag))
+	frappe.db.set_value("Order Bag", order_bag, {"stone_oos": 1,
+		"stone_oos_note": (note or "").strip(),
+		"stone_oos_on": frappe.utils.now_datetime()}, update_modified=False)
+	loc = (frappe.db.get_value("Order Bag", order_bag, "location") or "").upper()
+	dt = BENCH_DOCTYPE.get(loc)
+	if dt and frappe.db.exists("DocType", dt):
+		rec = frappe.get_all(dt, filters={"order_bag": order_bag},
+			fields=["name", "status"], order_by="creation desc", limit=1)
+		if rec and rec[0].status in ("In Queue", "On Hold", None, ""):
+			frappe.db.set_value(dt, rec[0].name, "queue_reason", STONE_OOS_REASON)
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+@frappe.whitelist()
+def clear_stone_oos(order_bag):
+	"""Back in stock — the manual flag comes off (also runs when stones are
+	actually issued into the card)."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	frappe.db.set_value("Order Bag", order_bag, {"stone_oos": 0, "stone_oos_note": "",
+		"stone_oos_on": None}, update_modified=False)
+	loc = (frappe.db.get_value("Order Bag", order_bag, "location") or "").upper()
+	dt = BENCH_DOCTYPE.get(loc)
+	if dt and frappe.db.exists("DocType", dt):
+		rec = frappe.get_all(dt, filters={"order_bag": order_bag, "queue_reason": STONE_OOS_REASON},
+			fields=["name"], order_by="creation desc", limit=1)
+		if rec:
+			frappe.db.set_value(dt, rec[0].name, "queue_reason", "")
+	frappe.db.commit()
+	return {"ok": 1}
+
+
 @frappe.whitelist()
 def get_stone_info():
 	"""The Stones INFO page:
@@ -2353,6 +2400,7 @@ def get_stone_info():
 	bags = frappe.db.sql("""
 		SELECT b.name, b.design, b.qty, b.location,
 			COALESCE(b.stone_issue_on, b.modified) marked_on,
+			b.stone_oos, b.stone_oos_note,
 			jo.customer party, jo.order_type, jo.due_date due
 		FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
@@ -2395,6 +2443,36 @@ def get_stone_info():
 			pc["pcs"] += rem_pcs
 			pc["ct"] = round(pc["ct"] + rem_ct, 3)
 
+	# AUTO out-of-stock: itemized buckets only (DMD/CVD/PS) — pending vs live
+	# stock at the Stone Issue warehouse. Generic CS/CZ/POTH are never judged.
+	# Purely computed: stock arriving un-flags these by itself.
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+	short_by_card = {}
+	if names:
+		need = {}
+		imeta2 = {}
+		for p in frappe.db.sql("""
+			SELECT parent bag, item, SUM(weight) ct
+			FROM `tabOrder Bag BOM Item`
+			WHERE parent IN %(bags)s AND IFNULL(stone_type, '') != ''
+			GROUP BY parent, item
+		""", {"bags": tuple(names)}, as_dict=True):
+			if p.item not in imeta2:
+				imeta2[p.item] = frappe.db.get_value("Item", p.item, "stone_type") or ""
+			if (_BUCKET_OF_STONE_TYPE.get(imeta2[p.item]) or "poth") not in STONE_AUTO_BUCKETS:
+				continue
+			got = issued.get((p.bag, p.item))
+			rem = flt(p.ct) - flt(got.ct if got else 0)
+			if rem > 0.0005:
+				need.setdefault(p.item, []).append((p.bag, rem))
+		for item, wants in need.items():
+			avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": wh}, "actual_qty"))
+			for bag, rem in wants:
+				if rem > avail + 0.0005:
+					short_by_card.setdefault(bag, []).append(
+						{"item": item, "need": round(rem, 3), "have": round(avail, 3)})
+
 	manual = _priority_positions()
 	now = frappe.utils.now_datetime()
 	for b in bags:
@@ -2405,11 +2483,17 @@ def get_stone_info():
 		b["marked_on"] = str(b.marked_on or "")
 		b["pending"] = per_card.get(b.name) or {}
 		b["prio_manual"] = 1 if b.name in manual else 0
-	ranked = sorted(bags, key=lambda x: _priority_sort_key(x, manual))
+		b["short"] = short_by_card.get(b.name) or []
+	oos = [b for b in bags if cint(b.stone_oos) or b["short"]]
+	oos_names = {b["name"] for b in oos}
+	issuable = [b for b in bags if b["name"] not in oos_names]
+	ranked = sorted(issuable, key=lambda x: _priority_sort_key(x, manual))
 	for i, b in enumerate(ranked, 1):
 		b["prio_rank"] = i
-	aging = sorted(bags, key=lambda x: -x["age_days"])
-	return {"count": len(bags), "buckets": buckets, "priority": ranked, "aging": aging}
+	aging = sorted(issuable, key=lambda x: -x["age_days"])
+	oos.sort(key=lambda x: -x["age_days"])
+	return {"count": len(bags), "buckets": buckets, "priority": ranked, "aging": aging,
+		"oos": oos, "oos_count": len(oos)}
 
 
 @frappe.whitelist()
@@ -2655,6 +2739,8 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	if plan_dirty:
 		bag.save(ignore_permissions=True)
 	_clear_stone_issue(order_bag)
+	if frappe.db.get_value("Order Bag", order_bag, "stone_oos"):
+		clear_stone_oos(order_bag)
 	frappe.db.commit()
 	out = get_stone_issue_card(order_bag)
 	out["material_issue"] = mi.name
