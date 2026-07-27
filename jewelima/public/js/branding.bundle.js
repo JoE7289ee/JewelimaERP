@@ -9,6 +9,19 @@ import "./filter_bar"; // jewelima.buildFilterBar — generic reusable filter en
 import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
 import "./workstation"; // jewelima.buildWorkstation — the per-bench workstation pages
 
+// HOUSE RULE: pickers pick. only_select on our Link controls also removes
+// frappe's open-record arrow (upstream only_select merely hides "Create new").
+(function () {
+	const orig = frappe.ui.form.make_control;
+	frappe.ui.form.make_control = function (opts) {
+		const c = orig(opts);
+		if (opts && opts.df && opts.df.only_select && c && c.$input_area) {
+			c.$input_area.find(".link-btn").remove();
+		}
+		return c;
+	};
+})();
+
 // card links everywhere open CARD INFO (not the raw doctype form) with the
 // card already punched in — <a class="jw-card-link" data-card="...">
 $(document).on("click", "a.jw-card-link", function (e) {

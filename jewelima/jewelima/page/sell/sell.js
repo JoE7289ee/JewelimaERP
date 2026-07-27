@@ -92,15 +92,20 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	const chart = mk(".sl-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart",
 		only_select: 1, get_query: () => ({ filters: { status: "Active" } }),
 		onchange: () => repriceAll() });
-	// our own arrow: opens the Price Charts EDITOR with this chart loaded
-	$(`<button class="btn btn-xs btn-default sl-chart-open" title="${__("open in Price Charts")}"
-		style="margin:4px 0 0 4px;">↗</button>`).appendTo($(root).find(".sl-chart"))
+	// our own arrow: opens the Price Charts EDITOR with this chart loaded —
+	// seated INSIDE the field, top-right beside the label
+	$(root).find(".sl-chart").css("position", "relative");
+	$(`<span class="sl-chart-open" title="${__("open in Price Charts")}"
+		style="position:absolute;top:0;right:2px;font-size:13px;font-weight:700;cursor:pointer;color:var(--text-muted);line-height:1;">↗</span>`)
+		.appendTo($(root).find(".sl-chart"))
 		.on("click", () => {
 			const nm = chart.get_value();
 			if (!nm) return;
 			frappe.route_options = { chart: nm };
 			frappe.set_route("price-charts");
-		});
+		})
+		.hover(function () { $(this).css("color", "var(--primary, #1f618d)"); },
+			function () { $(this).css("color", "var(--text-muted)"); });
 	const rate = mk(".sl-rate", { fieldtype: "Float", label: __("Gold Rate ₹/g"), fieldname: "rate" });
 	const scan = mk(".sl-scan", { fieldtype: "Data", label: __("Scan card"), fieldname: "scan", placeholder: __("Scan barcode…") });
 	const remarks = mk(".sl-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "remarks" });
