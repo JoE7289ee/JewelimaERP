@@ -380,4 +380,12 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	clearAll();
 	refreshStock();
 	loadContext();
+
+	// arriving from the Stones info page with the card already picked
+	if (frappe.route_options && frappe.route_options.card) {
+		const pre = frappe.route_options.card;
+		frappe.route_options = null;
+		setTimeout(() => loadCard(pre), 400);
+	}
+
 };

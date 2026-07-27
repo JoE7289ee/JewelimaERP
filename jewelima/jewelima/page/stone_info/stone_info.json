@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-07-27 11:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-27 22:13:53.576131",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "stone-info",
+ "owner": "Administrator",
+ "page_name": "stone-info",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Stones \u2014 Info"
+}

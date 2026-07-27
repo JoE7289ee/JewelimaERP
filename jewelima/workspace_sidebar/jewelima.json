@@ -805,6 +805,19 @@
    "icon": "gem",
    "indent": 1,
    "keep_closed": 0,
+   "label": "Stones Info",
+   "link_to": "stone-info",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "gem",
+   "indent": 1,
+   "keep_closed": 0,
    "label": "Stone Request",
    "link_to": "stone-request",
    "link_type": "Page",
@@ -2087,7 +2100,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-27 10:09:27.288198",
+ "modified": "2026-07-27 22:13:48.800605",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

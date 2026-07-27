@@ -2311,7 +2311,8 @@ def mark_stone_issue(bags):
 		if cint(b.stone_issue):
 			errors.append({"name": nm, "error": frappe._("already requested")})
 			continue
-		frappe.db.set_value("Order Bag", nm, "stone_issue", 1, update_modified=False)
+		frappe.db.set_value("Order Bag", nm, {"stone_issue": 1,
+			"stone_issue_on": frappe.utils.now_datetime()}, update_modified=False)
 		# system reason on the bench record (bypasses the configured-list check)
 		dt = BENCH_DOCTYPE.get((b.location or "").upper())
 		if dt and frappe.db.exists("DocType", dt):
@@ -2331,7 +2332,8 @@ def mark_stone_issue(bags):
 def _clear_stone_issue(order_bag):
 	"""Stones issued -> the request is served: flag off, the system reason off."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
-	frappe.db.set_value("Order Bag", order_bag, "stone_issue", 0, update_modified=False)
+	frappe.db.set_value("Order Bag", order_bag, {"stone_issue": 0, "stone_issue_on": None},
+		update_modified=False)
 	loc = (frappe.db.get_value("Order Bag", order_bag, "location") or "").upper()
 	dt = BENCH_DOCTYPE.get(loc)
 	if dt and frappe.db.exists("DocType", dt):
@@ -2339,6 +2341,73 @@ def _clear_stone_issue(order_bag):
 			fields=["name"], order_by="creation desc", limit=1)
 		if rec:
 			frappe.db.set_value(dt, rec[0].name, "queue_reason", "")
+
+
+@frappe.whitelist()
+def get_stone_info():
+	"""The Stones INFO page:
+	- KPIs: cards awaiting stone issue + per-bucket material still to issue
+	  (bag plan minus already-issued, bucketed)
+	- priority: the waiting cards in the factory's priority order
+	- aging: the same cards oldest-request-first"""
+	bags = frappe.db.sql("""
+		SELECT b.name, b.design, b.qty, b.location,
+			COALESCE(b.stone_issue_on, b.modified) marked_on,
+			jo.customer party, jo.order_type, jo.due_date due
+		FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.stone_issue = 1
+	""", as_dict=True)
+	names = [b.name for b in bags]
+
+	buckets = {}
+	per_card = {n: {} for n in names}
+	if names:
+		# plan from the frozen bag BOM (stone lines), minus what's already gone in
+		plan = frappe.db.sql("""
+			SELECT parent bag, item, SUM(weight) ct, SUM(qty) pcs
+			FROM `tabOrder Bag BOM Item`
+			WHERE parent IN %(bags)s AND IFNULL(stone_type, '') != ''
+			GROUP BY parent, item
+		""", {"bags": tuple(names)}, as_dict=True)
+		issued = {}
+		for r in frappe.db.sql("""
+			SELECT l.order_bag bag, l.item, SUM(IF(l.direction='Out', -l.qty, l.qty)) ct,
+				SUM(IF(l.direction='Out', -l.pcs, l.pcs)) pcs
+			FROM `tabBag Material Ledger` l
+			WHERE l.order_bag IN %(bags)s GROUP BY l.order_bag, l.item
+		""", {"bags": tuple(names)}, as_dict=True):
+			issued[(r.bag, r.item)] = r
+		imeta = {}
+		for p in plan:
+			if p.item not in imeta:
+				imeta[p.item] = frappe.db.get_value("Item", p.item, "stone_type") or ""
+			got = issued.get((p.bag, p.item))
+			rem_ct = max(flt(p.ct) - flt(got.ct if got else 0), 0)
+			rem_pcs = max(cint(p.pcs) - cint(got.pcs if got else 0), 0)
+			if rem_ct <= 0.0005 and rem_pcs <= 0:
+				continue
+			bk = (_BUCKET_OF_STONE_TYPE.get(imeta[p.item]) or "poth").upper()
+			e = buckets.setdefault(bk, {"pcs": 0, "ct": 0.0})
+			e["pcs"] += rem_pcs
+			e["ct"] = round(e["ct"] + rem_ct, 3)
+			pc = per_card[p.bag].setdefault(bk, {"pcs": 0, "ct": 0.0})
+			pc["pcs"] += rem_pcs
+			pc["ct"] = round(pc["ct"] + rem_ct, 3)
+
+	manual = _priority_positions()
+	now = frappe.utils.now_datetime()
+	for b in bags:
+		b["due"] = str(b.due or "")
+		b["age_days"] = round((now - b.marked_on).total_seconds() / 86400, 1) if b.marked_on else 0
+		b["marked_on"] = str(b.marked_on or "")
+		b["pending"] = per_card.get(b.name) or {}
+		b["prio_manual"] = 1 if b.name in manual else 0
+	ranked = sorted(bags, key=lambda x: _priority_sort_key(x, manual))
+	for i, b in enumerate(ranked, 1):
+		b["prio_rank"] = i
+	aging = sorted(bags, key=lambda x: -x["age_days"])
+	return {"count": len(bags), "buckets": buckets, "priority": ranked, "aging": aging}
 
 
 @frappe.whitelist()
