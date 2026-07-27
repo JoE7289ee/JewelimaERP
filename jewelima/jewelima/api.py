@@ -843,74 +843,6 @@ def get_cad_jobs():
 
 
 @frappe.whitelist()
-def get_design_variants(design):
-	"""Purity-variant options for a design (the Place Order 'New' button).
-
-	Finds the design BOM's gold row, then for every OTHER karat gold (22KPG, 18KYG, …)
-	returns the would-be variant name (base + karat suffix, e.g. 'A 2849 PB' + 18KPG ->
-	'A 2849 PB 18P') and whether that Design already exists."""
-	import re
-
-	if not design or not frappe.db.exists("Design", design):
-		frappe.throw(frappe._("No such design"))
-	doc = frappe.get_doc("Design", design)
-
-	from jewelima.setup import allowed_karat_golds
-	allowed = set(allowed_karat_golds())
-	karats = [k for k in frappe.get_all(
-		"Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]},
-		fields=["name", "purity_percentage"], order_by="name desc",
-	) if k.name in allowed]  # 22KPG/22KWG may linger as items — never offer them
-	karat_names = {k.name for k in karats}
-
-	def suffix(item):  # 18KPG -> 18P, 14KWG -> 14W
-		m = re.match(r"^(\d+)K([A-Z])G$", item)
-		return f"{m.group(1)}{m.group(2)}" if m else item
-
-	# the BOM's gold row = a karat-gold item (fall back to any metal row)
-	current_gold = next((m.item for m in doc.materials if m.item in karat_names), None)
-	if not current_gold:
-		stones = {i.name for i in frappe.get_all("Item", filters={"name": ["in", [m.item for m in doc.materials]], "stone_type": ["!=", ""]})}
-		current_gold = next((m.item for m in doc.materials if m.item not in stones), None)
-	if not current_gold:
-		frappe.throw(frappe._("{0} has no gold row in its BOM to swap.").format(design))
-
-	# strip an existing karat suffix so variants of variants share one base name
-	base = doc.design_name
-	m = re.match(r"^(.*)\s\d+[A-Z]$", base)
-	root = m.group(1) if m and any(base.endswith(" " + suffix(k.name)) for k in karats) else base
-
-	# the design FAMILY = the root-named design + every 'root <suffix>' design.
-	# Map each member's actual BOM gold -> its name, so a karat counts as "exists" when ANY
-	# family member carries it (e.g. from 'A 2849 PB 18Y', 22KYG = the original 'A 2849 PB' —
-	# no duplicate 'A 2849 PB 22Y' can be created).
-	family = {}
-	for nm in [root] + [f"{root} {suffix(k.name)}" for k in karats]:
-		if not frappe.db.exists("Design", nm):
-			continue
-		mats = frappe.get_all("Design BOM Item", filters={"parent": nm, "parenttype": "Design"}, pluck="item")
-		g = next((i for i in mats if i in karat_names), None)
-		if g and g not in family:
-			family[g] = nm
-
-	out = []
-	for k in karats:
-		if k.name == current_gold:
-			continue
-		existing = family.get(k.name)
-		out.append({
-			"karat": k.name, "purity": flt(k.purity_percentage), "suffix": suffix(k.name),
-			"variant_name": existing or f"{root} {suffix(k.name)}", "exists": bool(existing),
-		})
-	return {
-		"design": design, "base": root, "current_gold": current_gold,
-		"current_purity": flt(frappe.db.get_value("Item", current_gold, "purity_percentage")),
-		"design_type": doc.design_type, "design_style": doc.design_style, "image": doc.image,
-		"variants": out,
-	}
-
-
-@frappe.whitelist()
 def get_allowed_quick_pages(routes):
 	"""Which of these desk-page routes may the current user open? (Ctrl+Space quick
 	menu — items the user has no role for are dropped, not shown dead.)"""
@@ -1515,6 +1447,31 @@ def reserve_order_no():
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return no
+
+
+@frappe.whitelist()
+def attach_order_bag_photos(order_bag, photos):
+	"""Place Order's per-line photos land here the moment the bags exist:
+	each data-URL becomes a File attached to the Order Bag (they show on
+	Order Bag Photos and Card Info like any other bag image)."""
+	import base64
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("{0} not found.").format(order_bag))
+	photos = frappe.parse_json(photos) if isinstance(photos, str) else (photos or [])
+	made = 0
+	for i, ref in enumerate(photos, 1):
+		if not (ref or "").startswith("data:"):
+			continue
+		head, b64 = ref.split(",", 1)
+		ext = "jpg" if ("jpeg" in head or "jpg" in head) else "png"
+		frappe.get_doc({"doctype": "File",
+			"file_name": "{0}-photo-{1}.{2}".format(order_bag.replace("/", "-"), i, ext),
+			"content": base64.b64decode(b64), "is_private": 0,
+			"attached_to_doctype": "Order Bag", "attached_to_name": order_bag,
+		}).insert(ignore_permissions=True)
+		made += 1
+	frappe.db.commit()
+	return {"attached": made}
 
 
 @frappe.whitelist()

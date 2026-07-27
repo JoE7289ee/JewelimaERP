@@ -90,8 +90,8 @@ const PO_COLUMNS = [
 		table.po-grid td.po-act{text-align:center;padding:0 4px;}
 		table.po-grid td.po-act .btn{padding:1px 7px;font-size:11px;height:24px;line-height:1;margin:0 1px;}
 		table.po-grid td.po-act .btn.po-mat-edited{background:#ffc107;border-color:#d39e00;color:#3d3000;font-weight:700;}
+		table.po-grid td.po-act .btn.po-has-photos{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;}
 		table.po-grid td.po-act .btn:disabled{opacity:.4;cursor:not-allowed;}
-		table.po-grid td.po-act .btn.po-new.ready{background:#b00020;border-color:#b00020;color:#fff;font-weight:600;}
 		table.po-grid .po-hide{display:none;}
 		.po-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
@@ -362,8 +362,11 @@ const PO_COLUMNS = [
 		row.$remark.on("click", () => editRemark(row));
 		row.$reset = $('<button class="btn btn-xs btn-default" title="Reset this line to the design\'s BOM">Reset</button>').appendTo($act);
 		row.$reset.on("click", () => resetLine(row)).hide(); // appears once the BOM is edited (Materials yellow)
-		row.$new = $('<button class="btn btn-xs btn-default po-new" title="Create a purity variant of this design (e.g. 22KYG → 18KPG)">New</button>').appendTo($act);
-		row.$new.on("click", () => openVariantPicker(row));
+		row._photos = [];
+		row.$photos = OPTS.mode === "order"
+			? $('<button class="btn btn-xs btn-default po-photos" title="Photos for this bag — copied onto the Order Bag when the order is placed">Photos</button>')
+				.appendTo($act).on("click", () => editPhotos(row))
+			: null;
 		row.$cad = $('<button class="btn btn-xs btn-default" title="CAD job — no design yet; order with target budgets">CAD</button>').appendTo($act);
 		row.$cad.on("click", () => openCadDialog(row));
 		updateNewBtn(row);
@@ -399,11 +402,9 @@ const PO_COLUMNS = [
 		updateNewBtn(row);
 	}
 
-	// "New" goes RED (ready) once a design is chosen on the line
+	// (the purity-variant "New" button is retired — this now only minds CAD)
 	function updateNewBtn(row) {
-		if (!row.$new) return;
 		const has = !!row.f.design.get();
-		row.$new.prop("disabled", !has).toggleClass("ready", has);
 		if (row.$cad) {
 			// CAD is for design-less lines; once a design is picked (or this IS a CAD line) it flips role
 			row.$cad.prop("disabled", has && !row._cad);
@@ -504,49 +505,6 @@ const PO_COLUMNS = [
 	// The per-line "New" flow: show the design's current gold + every other karat gold.
 	// RED = variant doesn't exist yet (click -> prefilled New Design dialog);
 	// BLACK = variant already exists (click -> select it on this line).
-	function openVariantPicker(row) {
-		const design = row.f.design.get();
-		if (!design) return;
-		frappe.call({ method: "jewelima.jewelima.api.get_design_variants", args: { design } }).then((r) => {
-			const v = r.message || {};
-			const esc = frappe.utils.escape_html;
-			const dlg = new frappe.ui.Dialog({ title: __("New purity variant — {0}", [esc(design)]) });
-			const btns = (v.variants || []).map((x, i) =>
-				`<button class="btn btn-sm pv-btn" data-i="${i}" style="min-width:96px;margin:4px;${x.exists
-					? "background:#171717;border-color:#171717;color:#fff;"
-					: "background:#b00020;border-color:#b00020;color:#fff;"}"
-					title="${esc(x.variant_name)}${x.exists ? " — already exists, click to use it" : " — click to create"}">
-					${esc(x.karat)}${x.exists ? " ●" : ""}</button>`
-			).join("");
-			$(dlg.body).html(`
-				<div style="margin:0 0 10px;color:var(--text-muted);font-size:13px;">
-					Current gold: <b style="color:var(--text-color)">${esc(v.current_gold)}</b> (${flt(v.current_purity).toFixed(1)}%)
-					&nbsp;·&nbsp; base name <b style="color:var(--text-color)">${esc(v.base)}</b></div>
-				<div style="display:flex;flex-wrap:wrap;">${btns}</div>
-				<div style="margin-top:10px;color:var(--text-muted);font-size:12px;">
-					<span style="color:#b00020;font-weight:600;">Red</span> = create this variant ·
-					<span style="font-weight:600;">Black ●</span> = exists, click to use it on this line.</div>`);
-			$(dlg.body).find(".pv-btn").on("click", function () {
-				const x = v.variants[+this.getAttribute("data-i")];
-				dlg.hide();
-				if (x.exists) return selectDesign(row, x.variant_name);
-				// build the prefilled BOM: same rows, gold swapped to the chosen karat
-				frappe.call({ method: "jewelima.jewelima.api.get_design_materials", args: { design } }).then((mr) => {
-					const mats = ((mr.message || {}).materials || []).map((m) =>
-						m.item === v.current_gold
-							? { ...m, item: x.karat, purity: x.purity, pure: (flt(m.weight) * flt(x.purity)) / 100 }
-							: { ...m, pure: m.stone_type ? 0 : (flt(m.weight) * flt(m.purity)) / 100 }
-					);
-					openNewDesignDialog(state, {
-						design_name: x.variant_name, design_type: v.design_type,
-						design_style: v.design_style, image: v.image, materials: mats, row,
-					});
-				});
-			});
-			dlg.show();
-		});
-	}
-
 	// Per-piece plan profile from a materials list — mirrors api._plan_values: gross = metal
 	// grams + stone grams (1 ct = 0.2 g), nett = metal grams, gram-weighted metal purity.
 	// Lets edited materials recompute the line's numbers instantly (no round-trip).
@@ -715,6 +673,52 @@ const PO_COLUMNS = [
 	}
 
 	// remark lives in a dialog (not an inline field) to save space; button turns green when set
+	function updatePhotosBtn(row) {
+		if (!row.$photos) return;
+		const n = (row._photos || []).length;
+		row.$photos.text(n ? __("Photos ({0})", [n]) : __("Photos"))
+			.toggleClass("po-has-photos", !!n);
+	}
+	function editPhotos(row) {
+		const dlg = new frappe.ui.Dialog({
+			title: __("Photos for this bag"),
+			fields: [{ fieldtype: "HTML", fieldname: "b" }],
+			primary_action_label: __("Done"),
+			primary_action() { dlg.hide(); },
+		});
+		const $b = dlg.get_field("b").$wrapper;
+		function paint() {
+			$b.html(`
+				<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">${__("Held on this line — copied onto the Order Bag the moment the order is placed (they appear on Order Bag Photos).")}</div>
+				<button class="btn btn-sm btn-default pp-add">${__("Add photos…")}</button>
+				<input type="file" class="pp-file" accept="image/*" multiple style="display:none;">
+				<div class="pp-grid" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+					${(row._photos || []).map((p, i) => `
+						<div style="position:relative;">
+							<img src="${p.dataurl}" style="width:110px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);">
+							<span class="pp-x" data-i="${i}" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;">✕</span>
+						</div>`).join("")}
+				</div>`);
+			$b.find(".pp-add").on("click", () => $b.find(".pp-file").trigger("click"));
+			$b.find(".pp-file").on("change", function () {
+				const files = [...(this.files || [])];
+				this.value = "";
+				files.forEach((file) => {
+					const rd = new FileReader();
+					rd.onload = () => { row._photos.push({ name: file.name, dataurl: rd.result }); paint(); updatePhotosBtn(row); };
+					rd.readAsDataURL(file);
+				});
+			});
+			$b.find(".pp-x").on("click", function () {
+				row._photos.splice(+this.dataset.i, 1);
+				paint();
+				updatePhotosBtn(row);
+			});
+		}
+		paint();
+		dlg.show();
+	}
+
 	function editRemark(row) {
 		frappe.prompt(
 			{ fieldname: "remark", fieldtype: "Small Text", label: __("Remark"), default: row._remark || "" },
@@ -1113,6 +1117,7 @@ function po_readLine(r) {
 		narration: r._remark || undefined,
 		bag_bom: (r._materials || []).map((m) => ({ item: m.item, qty: flt(m.qty) || 0, weight: flt(m.weight) || 0 })),
 		cad: r._cad || null,
+		photos: (r._photos || []).map((p) => p.dataurl),
 	};
 }
 
@@ -1167,7 +1172,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 		state.reservedNo = "";
 		let made = 0;
 		for (const l of lines) {
-			await frappe.db.insert({
+			const bagDoc = await frappe.db.insert({
 				doctype: "Order Bag", job_order: order.name, design: l.design, qty: l.qty || 1,
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
@@ -1182,6 +1187,10 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 					image: l.cad.image || undefined, // the reference photo — the bag's image until the design lands
 				} : {}),
 			});
+			if ((l.photos || []).length && bagDoc && bagDoc.name) {
+				await frappe.call({ method: "jewelima.jewelima.api.attach_order_bag_photos",
+					args: { order_bag: bagDoc.name, photos: JSON.stringify(l.photos) } });
+			}
 			made++;
 		}
 		frappe.dom.unfreeze();
