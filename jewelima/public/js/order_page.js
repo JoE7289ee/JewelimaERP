@@ -135,9 +135,10 @@ const PO_COLUMNS = [
 		state.$noBadge = $('<span class="po-no-badge">…</span>').prependTo($(page.wrapper).find(".page-actions").first());
 	}
 	state.showNo = (no) => state.$noBadge && state.$noBadge.text(no || "…");
-	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer", reqd: OPTS.mode === "order" ? 1 : 0 });
-	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
-	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", get_query: () => ({ filters: { disabled: 0 } }) });
+	// only_select: our users pick, they never open the raw ERP record
+	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer", only_select: 1, reqd: OPTS.mode === "order" ? 1 : 0 });
+	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", only_select: 1, get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
+	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", only_select: 1, get_query: () => ({ filters: { disabled: 0 } }) });
 	if (OPTS.mode === "order") {
 	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date", read_only: 1 });
 	state.header.days = mk(".po-h-days", {

@@ -297,4 +297,13 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 
 	loadList();
+
+	// arriving from Sell's arrow with a chart to open
+	if (frappe.route_options && frappe.route_options.chart) {
+		const pre = frappe.route_options.chart;
+		frappe.route_options = null;
+		setTimeout(() => frappe.call({ method: API + ".get_price_chart", args: { name: pre } })
+			.then((r) => openChart(r.message)), 300);
+	}
+
 };

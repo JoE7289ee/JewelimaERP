@@ -88,10 +88,19 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		return c;
 	};
 	const buyer = mk(".sl-buyer", { fieldtype: "Link", label: __("Selling To"), fieldname: "buyer", options: "Customer",
-		onchange: () => paint() });
+		only_select: 1, onchange: () => paint() });
 	const chart = mk(".sl-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart",
-		get_query: () => ({ filters: { status: "Active" } }),
+		only_select: 1, get_query: () => ({ filters: { status: "Active" } }),
 		onchange: () => repriceAll() });
+	// our own arrow: opens the Price Charts EDITOR with this chart loaded
+	$(`<button class="btn btn-xs btn-default sl-chart-open" title="${__("open in Price Charts")}"
+		style="margin:4px 0 0 4px;">↗</button>`).appendTo($(root).find(".sl-chart"))
+		.on("click", () => {
+			const nm = chart.get_value();
+			if (!nm) return;
+			frappe.route_options = { chart: nm };
+			frappe.set_route("price-charts");
+		});
 	const rate = mk(".sl-rate", { fieldtype: "Float", label: __("Gold Rate ₹/g"), fieldname: "rate" });
 	const scan = mk(".sl-scan", { fieldtype: "Data", label: __("Scan card"), fieldname: "scan", placeholder: __("Scan barcode…") });
 	const remarks = mk(".sl-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "remarks" });
