@@ -46,7 +46,7 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 
 	function paint(D) {
 		const bagChips = (D.bags || []).map((b) =>
-			`<a class="jw-card-link di-chip" data-card="${esc(b.name)}" title="${esc(b.location || "")}">${esc(b.name)}</a>`).join(" ");
+			`<a class="jw-card-link di-chip" data-card="${esc(b.name)}">${esc(b.name)}${b.location ? `<span style="font-family:var(--font-family);font-weight:600;color:var(--text-muted);"> · ${esc(b.location)}</span>` : ""}</a>`).join(" ");
 		const sib = (D.siblings || []).map((s) => s.name === D.name
 			? `<span class="di-chip me">${esc(s.name)}</span>`
 			: `<span class="di-chip di-sib ${s.status === "Retired" ? "retired" : ""}" data-design="${esc(s.name)}">${esc(s.name)}</span>`).join(" ");
