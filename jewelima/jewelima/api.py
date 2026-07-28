@@ -7348,6 +7348,32 @@ BANK_PROVIDER_CODES = {"SAMSA": "S"}
 
 
 @frappe.whitelist()
+def get_system_information():
+	"""Setup > Information — read-only reference of how the system numbers
+	things. Today: the Design Bank series (per design type + provider
+	variants), with minted counts and the NEXT code each would take."""
+	import re as _re
+	rows = []
+	for dt in frappe.get_all("Design Type", filters={"bank_code": ["is", "set"]},
+			fields=["name", "bank_code"], order_by="bank_code"):
+		for prov, suffix in [("", "")] + [(p, "-" + c) for p, c in BANK_PROVIDER_CODES.items()]:
+			prefix = dt.bank_code + suffix
+			top, n = 0, 0
+			for dn in frappe.get_all("Design Bank", filters={"design_no": ["like", prefix + "-%"]}, pluck="design_no"):
+				m = _re.fullmatch(_re.escape(prefix) + r"-(\d+)", (dn or "").strip().upper())
+				if m:
+					n += 1
+					top = max(top, int(m.group(1)))
+			if suffix and not n:
+				continue
+			rows.append({"design_type": dt.name, "provider": prov, "prefix": prefix,
+				"minted": n, "last": (prefix + "-" + str(top)) if top else "",
+				"next": "{0}-{1}".format(prefix, top + 1)})
+	return {"bank_codes": rows,
+		"providers": [{"provider": p, "code": c} for p, c in sorted(BANK_PROVIDER_CODES.items())]}
+
+
+@frappe.whitelist()
 def new_bank_code(design_type, provider=None):
 	"""Mint the next in-house design number: <type bank code>[-<provider>]-<n>.
 	JR-1, JR-2 ... / SAMSA pieces JR-S-1. Scans live + retired — numbers never
