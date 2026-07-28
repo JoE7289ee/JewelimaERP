@@ -7493,21 +7493,73 @@ def get_variant_naming():
 		"karat_color_limit": KARAT_COLOR_LIMIT}
 
 
+# variant token -> the stock item family its stones seed as. EF/GH/SI are
+# diamond grades; CZ/CVD versions REPLACE the card's diamonds with that family.
+DESIGN_TOKEN_STONE_FAMILY = {"EF": "VVS-EF", "GH": "VVS/VS-GH", "SI": "SI-IJ", "CZ": "CZ", "CVD": "CVD"}
+
+
+def _variant_seed(card, karat, quality, color):
+	"""Starter BOM for the Create Design dialog: the karat+colour gold as the
+	metal line, and the card's stone rows translated into the token's item
+	family ("family sieve", qty = pcs). Sieve rows take weight = pcs x the
+	sieve chart average; named stones (RUBY...) match their own item (else the
+	CS catch-all) and keep the card's carats. Plain gold (no token) seeds no
+	stones. Gold grams = card GW minus the seeded stones (1 ct = 0.2 g)."""
+	from jewelima.setup import KARAT_COLOR_LIMIT
+
+	locked = KARAT_COLOR_LIMIT.get(karat)
+	gold_item = karat + ((locked[0] if locked and len(locked) == 1 else (color or "").strip().upper()) or "")
+	rows = []
+	total_ct = 0.0
+	if quality:
+		fam = DESIGN_TOKEN_STONE_FAMILY.get(quality)
+		avg = {s.sieve_size: flt(s.avg_cts) for s in frappe.get_all(
+			"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0)}
+		for r in card.stones or []:
+			st = (r.stone or "").strip().upper()
+			pcs = cint(r.pcs)
+			sieve = (r.sieve or "").strip()
+			named = st and st not in ("DMD", "DIA", "DIAMOND") and not sieve
+			if named:
+				item = st if frappe.db.exists("Item", st) else "CS"
+				weight = flt(r.ct)
+			else:
+				item = "{0} {1}".format(fam, sieve) if sieve else fam
+				if not frappe.db.exists("Item", item):
+					item = fam
+				weight = round(pcs * avg[sieve], 3) if (sieve in avg and pcs) else flt(r.ct)
+			total_ct += weight
+			rows.append({"item": item, "qty": pcs, "weight": weight})
+	gold_weight = max(round(flt(card.gross_weight) - total_ct * 0.2, 3), 0)
+	rows.insert(0, {"item": gold_item, "qty": 0, "weight": gold_weight})
+	# dress the rows with what the grid displays (purity/uom/stone_type/pure)
+	meta = {i.name: i for i in frappe.get_all("Item",
+		filters={"name": ["in", list({r["item"] for r in rows})]},
+		fields=["name", "purity_percentage", "weight_unit", "stone_type"])}
+	for r in rows:
+		m = meta.get(r["item"])
+		r["purity"] = flt(m.purity_percentage) if m else 0
+		r["uom"] = (m.weight_unit or "") if m else ""
+		r["stone_type"] = (m.stone_type or "") if m else ""
+		r["pure"] = 0 if r["stone_type"] else round(r["weight"] * r["purity"] / 100, 3)
+	return rows
+
+
 @frappe.whitelist()
 def resolve_design_variant(design_bank, karat, quality=None, color=None):
 	"""The gallery's Create Design: the canonical variant name for this card +
-	whether that Design already exists. Creation itself happens on the Design
-	form save (a Design needs its BOM) — this only answers WHAT it must be called."""
-	card = frappe.db.get_value("Design Bank", design_bank,
-		["name", "design_no", "design_type", "photo", "image"], as_dict=True)
-	if not card:
-		frappe.throw(frappe._("Design Bank card {0} not found.").format(design_bank))
+	whether that Design already exists, + the starter BOM (gold line and the
+	card's stones translated to the token's items). Creation itself happens
+	via create_design — this answers WHAT it's called and WHERE it starts."""
+	card = frappe.get_doc("Design Bank", design_bank)
 	if not card.design_type:
 		frappe.throw(frappe._("{0} has no Design Type yet — take it through Review first.").format(card.design_no))
 	name = design_variant_name(card.design_no, karat, quality, color)
 	return {"name": name, "exists": bool(frappe.db.exists("Design", name)),
 		"design_type": card.design_type, "image": card.photo or card.image or "",
-		"design_bank": card.name}
+		"design_bank": card.name,
+		"seed": _variant_seed(card, (karat or "").strip().upper(),
+			(quality or "").strip().upper(), color)}
 
 
 @frappe.whitelist()

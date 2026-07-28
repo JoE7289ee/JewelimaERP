@@ -435,6 +435,14 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 								${cur.exists ? __("already exists — the button opens it") : __("new — fill the BOM below and Create")}</div>`);
 						vd.set_primary_action_label(cur.exists ? __("Open") : __("Create Design"));
 						vd.fields_dict.materials.$wrapper.toggle(!cur.exists);
+						// re-seed the BOM for the picked variant: gold line + the
+						// card's stones in the token's item family (edits after this
+						// are the user's — but changing the variant starts fresh)
+						if (!cur.exists) {
+							const g = vd.fields_dict.materials;
+							g.df.data = (cur.seed || []).map((x) => Object.assign({}, x));
+							g.grid.refresh();
+						}
 					})
 					.catch(() => { cur = null; vd.get_field("prev").$wrapper.html(""); });
 			};
