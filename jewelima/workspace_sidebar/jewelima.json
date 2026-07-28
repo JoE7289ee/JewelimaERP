@@ -126,6 +126,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "search",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Design Info",
+   "link_to": "design-info",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "map-pin",
    "indent": 1,
    "keep_closed": 0,
@@ -2113,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-28 10:53:34.330117",
+ "modified": "2026-07-28 22:45:16.261950",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

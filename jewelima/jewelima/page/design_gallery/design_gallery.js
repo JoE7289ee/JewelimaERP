@@ -321,7 +321,8 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 			});
 		body.on("click", "[data-variant]", function () {
 			dlg.hide();
-			frappe.set_route("Form", "Design", $(this).data("variant"));
+			frappe.route_options = { design: $(this).data("variant") };
+			frappe.set_route("design-info");
 		});
 		body.on("click", "[data-rm]", function () {
 			const tag = $(this).data("rm");
@@ -410,7 +411,8 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 					if (!cur || !cur.name) return;
 					if (cur.exists) {
 						vd.hide();
-						frappe.set_route("Form", "Design", cur.name);
+						frappe.route_options = { design: cur.name };
+						frappe.set_route("design-info");
 						return;
 					}
 					const raw = (values.materials || []).filter((m) => m.item);

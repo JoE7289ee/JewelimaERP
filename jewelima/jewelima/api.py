@@ -7546,6 +7546,46 @@ def _variant_seed(card, karat, quality, color):
 
 
 @frappe.whitelist()
+def get_design_info(design):
+	"""Design Info page — everything the floor needs about one Design, nothing
+	ERP: identity, the frozen BOM with per-line item facts, derived totals,
+	sibling variants off the same bank card, and which bags run it."""
+	d = frappe.get_doc("Design", design)
+	meta = {}
+	codes = [m.item for m in d.materials if m.item]
+	if codes:
+		meta = {i.name: i for i in frappe.get_all("Item", filters={"name": ["in", codes]},
+			fields=["name", "purity_percentage", "weight_unit", "stone_type"])}
+	mats, metal_g, stone_ct, pure_g = [], 0.0, 0.0, 0.0
+	for m in d.materials:
+		mi = meta.get(m.item)
+		st = (mi.stone_type or "") if mi else ""
+		pur = flt(mi.purity_percentage) if mi else 0
+		pure = 0 if st else round(flt(m.weight) * pur / 100, 3)
+		if st:
+			stone_ct += flt(m.weight)
+		else:
+			metal_g += flt(m.weight)
+			pure_g += pure
+		mats.append({"item": m.item, "qty": cint(m.qty), "weight": flt(m.weight),
+			"purity": pur, "uom": (mi.weight_unit or "") if mi else "", "stone_type": st, "pure": pure})
+	counts = {k: cint(d.get(k)) for k in ("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no") if cint(d.get(k))}
+	bank = frappe.db.get_value("Design Bank", d.design_bank,
+		["name", "design_no", "gross_weight", "diamond_weight"], as_dict=True) if d.design_bank else None
+	siblings = frappe.get_all("Design", filters={"design_bank": d.design_bank},
+		fields=["name", "status"], order_by="name") if d.design_bank else []
+	return {"name": d.name, "status": d.status, "design_type": d.design_type or "",
+		"design_style": d.design_style or "", "image": d.image or "",
+		"bank": bank, "materials": mats, "counts": counts,
+		"metal_g": round(metal_g, 3), "stone_ct": round(stone_ct, 3),
+		"purity_pct": round(pure_g / metal_g * 100, 2) if metal_g else 0,
+		"siblings": siblings,
+		"bags_total": frappe.db.count("Order Bag", {"design": d.name}),
+		"bags": frappe.get_all("Order Bag", filters={"design": d.name},
+			fields=["name", "location"], order_by="creation desc", limit_page_length=8)}
+
+
+@frappe.whitelist()
 def get_bank_card_summary(design_bank):
 	"""Gallery preview footer: the card's stone rows + every Design variant
 	already minted off this card (so the button can say Create VARIANT)."""

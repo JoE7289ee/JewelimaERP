@@ -111,7 +111,7 @@ JEWELIMA_ORDERING_READ = [
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
-JEWELIMA_ORDER_PAGES = ["card-info", "job-order-status", "order-requests"]
+JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "order-requests"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
 JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order"]
@@ -270,7 +270,7 @@ def setup_roles():
 	for dt in ("Order Bag", "Job Order", "Design", "Item", "Employee"):
 		grant(dt, "Jewelima Info", {"read": 1})
 	for page in JEWELIMA_ORDER_PAGES:
-		roles = ("Jewelima Ordering", "Jewelima Info") if page in ("card-info", "job-order-status") else ("Jewelima Ordering",)
+		roles = ("Jewelima Ordering", "Jewelima Info") if page in ("card-info", "design-info", "job-order-status") else ("Jewelima Ordering",)
 		set_page_roles(page, roles)
 	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Info"}, pluck="parent"):
 		if pg not in ("card-info", "job-order-status"):
