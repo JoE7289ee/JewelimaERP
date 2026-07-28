@@ -329,47 +329,97 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	}
 
 	// ---- variant mint: karat + stone token (+ colour) -> the ONE canonical
-	// Design name (A13047A-22EF / A13047A-18EF-Y). Existing variant opens;
-	// a new one opens a prefilled Design form — created only when saved.
+	// Design name (A13047A-22EF / A13047A-18EF-Y), created RIGHT HERE with its
+	// BOM — same dialog as the order page's New Design. Existing variant opens.
 	let NAMING = null;
 	function createVariant(d) {
 		const go = (N) => {
+			let cur = null; // last resolve result: {name, exists, design_type, image, design_bank}
+			function bomItemChanged() {
+				const row = this.doc || (this.grid_row && this.grid_row.doc);
+				if (!row) return;
+				if (!row.item) { row.purity = 0; row.uom = ""; row.pure = 0; vd.fields_dict.materials.grid.refresh(); return; }
+				frappe.db.get_value("Item", row.item, ["purity_percentage", "weight_unit", "stone_type"]).then((r) => {
+					const v = r.message || {};
+					row.purity = flt(v.purity_percentage);
+					row.uom = v.weight_unit || "";
+					row.stone_type = v.stone_type || "";
+					row.qty = 0; row.weight = 0; row.pure = 0;
+					vd.fields_dict.materials.grid.refresh();
+				});
+			}
+			function bomWeightChanged() {
+				const row = this.doc || (this.grid_row && this.grid_row.doc);
+				if (!row) return;
+				row.pure = row.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
+				vd.fields_dict.materials.grid.refresh();
+			}
 			const vd = new frappe.ui.Dialog({
 				title: __("Create Design — {0}", [d.design_no]),
+				size: "large",
 				fields: [
 					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"), reqd: 1,
 						options: N.karats.join("\n"), default: "22K" },
+					{ fieldname: "cb1", fieldtype: "Column Break" },
 					{ fieldname: "quality", fieldtype: "Select", label: __("Stones"),
 						options: [""].concat(N.tokens).join("\n"),
 						description: __("empty = plain gold, no token in the name") },
+					{ fieldname: "cb2", fieldtype: "Column Break" },
 					{ fieldname: "color", fieldtype: "Select", label: __("Gold colour"),
 						options: N.colors.join("\n"), default: "YG",
 						depends_on: `eval:!${JSON.stringify(N.karat_color_limit)}[doc.karat] || ${JSON.stringify(N.karat_color_limit)}[doc.karat].length > 1` },
+					{ fieldname: "sb_prev", fieldtype: "Section Break" },
 					{ fieldname: "prev", fieldtype: "HTML" },
+					{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
+					{
+						fieldname: "materials", fieldtype: "Table", label: __("Materials"), options: "Design BOM Item", data: [],
+						description: __("Stones need both a Qty (count) and a Weight (carats). Metals need a Weight (grams)."),
+						fields: [
+							{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, only_select: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
+							{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
+							{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
+							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
+							{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: bomWeightChanged },
+							{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
+						],
+					},
 				],
-				primary_action_label: __("Create"),
-				primary_action(v) {
-					frappe.call({ method: API2 + ".resolve_design_variant",
-						args: { design_bank: d.name, karat: v.karat, quality: v.quality || "", color: v.color || "" } })
-						.then((r) => {
-							const m = r.message || {};
-							vd.hide();
-							if (m.exists) {
-								frappe.show_alert({ message: __("{0} already exists — opening it.", [m.name]), indicator: "blue" }, 4);
-								frappe.set_route("Form", "Design", m.name);
-								return;
-							}
-							frappe.model.with_doctype("Design", () => {
-								const nd = frappe.model.get_new_doc("Design");
-								nd.design_name = m.name;        // canonical — the grammar decided it
-								nd.design_type = m.design_type; // burned in from the card
-								nd.image = m.image;
-								nd.design_bank = m.design_bank;
-								frappe.set_route("Form", "Design", nd.name);
-							});
-						});
+				primary_action_label: __("Create Design"),
+				primary_action(values) {
+					if (!cur || !cur.name) return;
+					if (cur.exists) {
+						vd.hide();
+						frappe.set_route("Form", "Design", cur.name);
+						return;
+					}
+					const raw = (values.materials || []).filter((m) => m.item);
+					if (!raw.length) {
+						frappe.msgprint(__("Add at least one material to the design's BOM."));
+						return;
+					}
+					const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
+					if (bad) {
+						frappe.msgprint(bad.stone_type
+							? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item])
+							: __("{0} needs a Weight (grams).", [bad.item]));
+						return;
+					}
+					// metals carry no piece qty
+					const materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0 }));
+					frappe.call({ method: API2 + ".create_design", args: {
+						design_name: cur.name, design_type: cur.design_type,
+						image: cur.image, design_bank: cur.design_bank,
+						materials: JSON.stringify(materials),
+					} }).then((r) => {
+						const res = r.message || {};
+						if (!res.name) return;
+						vd.hide();
+						frappe.show_alert({ message: __("Design {0} created.", [res.name]), indicator: "green" }, 5);
+					});
 				},
 			});
+			// pickers pick — no record arrows inside the grid
+			vd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}</style>").addClass("jw-mat-dlg");
 			// live name preview + exists check on every change
 			const judge = () => {
 				const v = vd.get_values(true) || {};
@@ -377,17 +427,19 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 				frappe.call({ method: API2 + ".resolve_design_variant", freeze: false,
 					args: { design_bank: d.name, karat: v.karat, quality: v.quality || "", color: v.color || "" } })
 					.then((r) => {
-						const m = r.message || {};
+						cur = r.message || null;
+						if (!cur) return;
 						vd.get_field("prev").$wrapper.html(
-							`<div style="font-size:15px;font-weight:800;font-family:var(--font-family-monospace,monospace);margin:4px 0;">${esc(m.name || "")}</div>
-							<div style="font-size:12px;color:${m.exists ? "#e0a800" : "#2e7d32"};font-weight:700;">
-								${m.exists ? __("already exists — Create opens it") : __("new — Create opens a prefilled Design to fill & save")}</div>`);
-						vd.set_primary_action_label(m.exists ? __("Open") : __("Create"));
+							`<div style="font-size:15px;font-weight:800;font-family:var(--font-family-monospace,monospace);margin:4px 0;">${esc(cur.name || "")}</div>
+							<div style="font-size:12px;color:${cur.exists ? "#e0a800" : "#2e7d32"};font-weight:700;">
+								${cur.exists ? __("already exists — the button opens it") : __("new — fill the BOM below and Create")}</div>`);
+						vd.set_primary_action_label(cur.exists ? __("Open") : __("Create Design"));
+						vd.fields_dict.materials.$wrapper.toggle(!cur.exists);
 					})
-					.catch(() => vd.get_field("prev").$wrapper.html(""));
+					.catch(() => { cur = null; vd.get_field("prev").$wrapper.html(""); });
 			};
 			vd.show();
-			vd.$wrapper.on("change", "select", judge);
+			vd.$wrapper.on("change", ".frappe-control[data-fieldname=karat] select, .frappe-control[data-fieldname=quality] select, .frappe-control[data-fieldname=color] select", judge);
 			judge();
 		};
 		if (NAMING) go(NAMING);

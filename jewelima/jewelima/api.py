@@ -957,7 +957,7 @@ def set_design_type_sizes(design_type, sizes):
 
 
 @frappe.whitelist()
-def create_design(design_name, design_type, design_style=None, image=None, materials=None):
+def create_design(design_name, design_type, design_style=None, image=None, materials=None, design_bank=None):
 	"""Quick-create a Design from the Place Order dialog. The Design controller
 	provisions the sellable Item + BOM and derives the stone counts. Returns the
 	new design + its derived stone profile so the caller can fill a line."""
@@ -986,6 +986,7 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 			"design_type": design_type,
 			"design_style": design_style or None,
 			"image": image or None,
+			"design_bank": design_bank or None,
 			"materials": rows,
 		}
 	)
