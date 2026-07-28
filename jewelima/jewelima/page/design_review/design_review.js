@@ -14,6 +14,9 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	let cur = null;
 	let photoB64 = "";
 	let searched = false; // pane holds a searched card, not the queue head
+	let SIEVES = [];
+	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
+		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); if (cur) paintStones(cur.stones || []); });
 
 	$(page.main).append(`
 		<style>
@@ -27,6 +30,13 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		.rv-side{flex:1;}
 		.rv-side .frappe-control{margin:0 0 6px;}
 		.rv-checks label{display:block;font-size:13px;margin:4px 0;cursor:pointer;}
+		.rv-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:10px 0 4px;display:flex;justify-content:space-between;}
+		.rv-sec .add{cursor:pointer;font-weight:400;text-transform:none;color:var(--text-color);}
+		table.rv-t{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px;}
+		table.rv-t th{font-size:10px;text-transform:uppercase;color:var(--text-muted);text-align:left;padding:3px 6px;}
+		table.rv-t td{padding:3px 6px;}
+		table.rv-t input,table.rv-t select{width:100%;border:1px solid var(--border-color);border-radius:5px;padding:4px 8px;background:var(--control-bg);}
+		table.rv-t .del{cursor:pointer;color:#b02a2a;font-weight:700;width:24px;text-align:center;}
 		.rv-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 		.rv-done{padding:40px;text-align:center;color:var(--text-muted);font-size:15px;}
 		</style>
@@ -41,6 +51,9 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 			<div class="rv-side">
 				<div class="f-no"></div><div class="f-dt"></div>
 				<div class="f-gw"></div><div class="f-dw"></div><div class="f-note"></div>
+				<div class="rv-sec">${__("Stones / Sieves")}<span class="add rv-addstone">+ ${__("row")}</span></div>
+				<table class="rv-t"><thead><tr><th>${__("Stone / Colour")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th><th></th></tr></thead>
+					<tbody class="rv-stones"></tbody></table>
 				<div class="rv-checks">
 					<label><input type="checkbox" class="ck-up"> ${__("Upgrade photo (crop off / background)")}</label>
 					<label><input type="checkbox" class="ck-cn"> ${__("Customer image needed (best seller)")}</label>
@@ -71,6 +84,29 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const fDW = mk(".f-dw", { fieldtype: "Float", label: __("DW ct"), fieldname: "w" });
 	const fNote = mk(".f-note", { fieldtype: "Data", label: __("Note"), fieldname: "o" });
 
+	// stones editor — same rows as the Card Builder; whatever stands here on
+	// save goes into the record AND onto the re-rendered info card
+	function paintStones(rows) {
+		root.find(".rv-stones").html((rows && rows.length ? rows : [{}]).map((r) => `
+			<tr><td><input class="s" value="${esc(r.stone || "")}" placeholder="DMD / RUBY..."></td>
+			<td><select class="v">
+				<option value=""></option>
+				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
+				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
+			</select></td>
+			<td><input class="p" type="number" value="${r.pcs || ""}"></td>
+			<td><input class="c" type="number" step="0.001" value="${r.ct || ""}"></td>
+			<td class="del">&times;</td></tr>`).join(""));
+	}
+	function collectStones() {
+		return root.find(".rv-stones tr").map(function () {
+			return { stone: $(this).find(".s").val(), sieve: $(this).find(".v").val(),
+				pcs: cint($(this).find(".p").val()), ct: flt($(this).find(".c").val()) };
+		}).get().filter((r) => r.stone || r.sieve);
+	}
+	root.find(".rv-addstone").on("click", () => { const rows = collectStones(); rows.push({}); paintStones(rows); });
+	root.on("click", ".rv-t .del", function () { $(this).closest("tr").remove(); });
+
 	const bust = (u) => (u && !u.startsWith("data:") ? u + (u.includes("?") ? "&" : "?") + "m=" + Date.now() : u);
 	const im = (sel, url) => root.find(".rv-im .i." + sel).html(url ? `<img src="${esc(bust(url))}">` : `<div class="none">—</div>`);
 	function paintCard(card) {
@@ -80,6 +116,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		fNo.set_value(cur.design_no); fDT.set_value(cur.design_type);
 		fGW.set_value(cur.gross_weight || ""); fDW.set_value(cur.diamond_weight || "");
 		fNote.set_value(cur.note);
+		paintStones(cur.stones || []);
 		root.find(".ck-up").prop("checked", !!cur.photoupdate);
 		root.find(".ck-cn").prop("checked", !!cur.customer_image_needed);
 		root.find(".ck-dr").prop("checked", false);
@@ -144,7 +181,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	function save(approve, retire) {
 		const p = { name: cur.name, design_no: fNo.get_value(), design_type: fDT.get_value(),
 			gross_weight: fGW.get_value(), diamond_weight: fDW.get_value(), note: fNote.get_value(),
-			extra_lines: cur.extra_lines, stones: cur.stones, photo: photoB64 || cur.photo,
+			extra_lines: cur.extra_lines, stones: collectStones(), photo: photoB64 || cur.photo,
 			photoupdate: root.find(".ck-up").is(":checked") ? 1 : 0,
 			customer_image_needed: root.find(".ck-cn").is(":checked") ? 1 : 0,
 			delete_raw: root.find(".ck-dr").is(":checked") ? 1 : 0, approve: approve ? 1 : 0,
