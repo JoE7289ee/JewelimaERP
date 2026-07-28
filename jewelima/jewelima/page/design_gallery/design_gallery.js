@@ -312,6 +312,14 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 					.then(() => { if (!(d.tags || []).includes(tag)) (d.tags = d.tags || []).push(tag); render(d); loadTags(); });
 			});
 		});
+		// straight into the Card Builder with this card loaded (approved cards
+		// edit there; anything else the builder bounces to Review with a hint)
+		dlg.set_secondary_action_label(__("Edit Card"));
+		dlg.set_secondary_action(() => {
+			dlg.hide();
+			frappe.route_options = { card: d.name };
+			frappe.set_route("card-builder");
+		});
 		dlg.set_primary_action(__("Create New Design"), () => {
 			dlg.hide();
 			frappe.model.with_doctype("Design", () => {
