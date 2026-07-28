@@ -41,6 +41,32 @@ frappe.pages["system-information"].on_page_load = function (wrapper) {
 				<td class="c">${esc(x.last || "—")}</td>
 				<td><span class="syi-next">${esc(x.next)}</span></td>
 			</tr>`).join("")}</tbody></table>
-			${(m.providers || []).length ? `<div class="syi-note" style="margin-top:10px;">${__("Provider letters")}: ${m.providers.map((p) => `<b>${esc(p.provider)}</b> → ${esc(p.code)}`).join(" · ")}</div>` : ""}`);
+
+			${(m.provider_pieces || []).length ? `
+			<div class="syi-sec" style="margin-top:22px;">${__("Provider pieces in the bank")}</div>
+			<table class="syi-t"><thead><tr>
+				<th>${__("Code")}</th><th>${__("Provider")}</th><th>${__("Design Type")}</th>
+				<th>${__("GW (g)")}</th><th>${__("DW (ct)")}</th><th>${__("Status")}</th><th>${__("Added")}</th>
+			</tr></thead><tbody>
+			${m.provider_pieces.map((x) => `<tr>
+				<td class="c">${esc(x.design_no || x.name)}</td>
+				<td>${esc(x.provider)}</td>
+				<td>${esc(x.design_type || "")}</td>
+				<td>${x.gross_weight ? x.gross_weight.toFixed(3) : "—"}</td>
+				<td>${x.diamond_weight ? x.diamond_weight.toFixed(3) : "—"}</td>
+				<td>${esc(x.status || "")}</td>
+				<td>${frappe.datetime.str_to_user(x.creation.split(" ")[0])}</td>
+			</tr>`).join("")}</tbody></table>` : ""}
+
+			${(m.providers || []).length ? `
+			<div class="syi-sec" style="margin-top:22px;">${__("Providers")}</div>
+			<table class="syi-t" style="max-width:420px;"><thead><tr>
+				<th>${__("Provider")}</th><th>${__("Letter")}</th><th>${__("Pieces now")}</th>
+			</tr></thead><tbody>
+			${m.providers.map((p) => `<tr>
+				<td><b>${esc(p.provider)}</b></td>
+				<td class="c">${esc(p.code)}</td>
+				<td>${p.pieces}</td>
+			</tr>`).join("")}</tbody></table>` : ""}`);
 	});
 };

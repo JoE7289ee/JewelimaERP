@@ -7369,8 +7369,18 @@ def get_system_information():
 			rows.append({"design_type": dt.name, "provider": prov, "prefix": prefix,
 				"minted": n, "last": (prefix + "-" + str(top)) if top else "",
 				"next": "{0}-{1}".format(prefix, top + 1)})
+	# provider-sourced pieces currently sitting in the bank (SAMSA etc.)
+	pieces = frappe.get_all("Design Bank", filters={"provider": ["is", "set"]},
+		fields=["name", "design_no", "provider", "design_type", "gross_weight",
+			"diamond_weight", "status", "creation"],
+		order_by="creation desc", limit_page_length=0)
+	per_prov = {}
+	for x in pieces:
+		per_prov[x.provider] = per_prov.get(x.provider, 0) + 1
 	return {"bank_codes": rows,
-		"providers": [{"provider": p, "code": c} for p, c in sorted(BANK_PROVIDER_CODES.items())]}
+		"provider_pieces": pieces,
+		"providers": [{"provider": p, "code": c, "pieces": per_prov.get(p, 0)}
+			for p, c in sorted(BANK_PROVIDER_CODES.items())]}
 
 
 @frappe.whitelist()
