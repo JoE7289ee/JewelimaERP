@@ -139,6 +139,20 @@ const PO_COLUMNS = [
 	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer", only_select: 1, reqd: OPTS.mode === "order" ? 1 : 0 });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", only_select: 1, get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
 	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", only_select: 1, get_query: () => ({ filters: { disabled: 0 } }) });
+
+	// ENTER walks the header: Party -> Salesman -> Type -> Days
+	(function () {
+		const hop = (from, to) => from.$input.on("keydown", (e) => {
+			if (e.key !== "Enter") return;
+			// let awesomplete commit the pick first, then move on
+			setTimeout(() => to.$input && to.$input.focus(), 120);
+		});
+		hop(state.header.customer, state.header.salesman);
+		hop(state.header.salesman, state.header.order_type);
+		setTimeout(() => {
+			if (state.header.days) hop(state.header.order_type, state.header.days);
+		}, 0);
+	})();
 	if (OPTS.mode === "order") {
 	state.header.order_date = mk(".po-h-orderdate", { fieldtype: "Date", label: "Order Date", fieldname: "order_date", read_only: 1 });
 	state.header.days = mk(".po-h-days", {
