@@ -22,7 +22,7 @@ frappe.pages["system-information"].on_page_load = function (wrapper) {
 		.syi-next{border-radius:9px;padding:1px 9px;font-size:11px;font-weight:800;background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		</style>
 		<div class="syi-sec">${__("Design Bank — series codes (auto count)")}</div>
-		<div class="syi-note">${__("Every new in-house design takes the next number of its type's series (RING → JR-1, JR-2 …). Provider pieces slot a provider letter into the code (SAMSA ring → JR-S-1). Numbers NEVER reuse — retired codes stay burned. This table is live and read-only; codes are set on the Design Type master.")}</div>
+		<div class="syi-note">${__("Each type numbers its own series (RING → JR-1, JR-2 …); provider pieces add a letter (SAMSA → JR-S-1). Numbers never reuse.")}</div>
 		<div class="syi-body">${__("Loading…")}</div>
 	`);
 	const root = $(page.main);
