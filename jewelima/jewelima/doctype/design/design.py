@@ -107,8 +107,19 @@ class Design(Document):
 		)
 		bom.insert(ignore_permissions=True)
 		bom.submit()
+		self._drop_valuation_noise()
 		self.db_set("item", item_code)
 		self.db_set("bom", bom.name)
+
+	@staticmethod
+	def _drop_valuation_noise():
+		"""ERPNext's BOM toasts 'Valuation Rate not found' per item on insert and
+		again on submit — we run zero-valuation, so the toasts are pure noise on
+		every Create Design. Strip exactly those; anything else still surfaces."""
+		frappe.local.message_log = [
+			m for m in (frappe.local.message_log or [])
+			if "Valuation Rate not found" not in str(m.get("message") if isinstance(m, dict) else m)
+		]
 
 	def _copy_bank_image(self):
 		"""If the image points at the shared design-bank folder, copy it to a Design-owned
