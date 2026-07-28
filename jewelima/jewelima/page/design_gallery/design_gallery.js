@@ -420,20 +420,25 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 			});
 			// pickers pick — no record arrows inside the grid
 			vd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}</style>").addClass("jw-mat-dlg");
-			// live name preview + exists check on every change
+			// live name preview + exists check on every change (seq token: only
+			// the LATEST request may paint — rapid changes race their responses)
+			let judgeSeq = 0;
 			const judge = () => {
 				const v = vd.get_values(true) || {};
 				if (!v.karat) return;
+				const q = ++judgeSeq;
 				frappe.call({ method: API2 + ".resolve_design_variant", freeze: false,
 					args: { design_bank: d.name, karat: v.karat, quality: v.quality || "", color: v.color || "" } })
 					.then((r) => {
+						if (q !== judgeSeq) return;
 						cur = r.message || null;
 						if (!cur) return;
 						vd.get_field("prev").$wrapper.html(
 							`<div style="font-size:15px;font-weight:800;font-family:var(--font-family-monospace,monospace);margin:4px 0;">${esc(cur.name || "")}</div>
 							<div style="font-size:12px;color:${cur.exists ? "#e0a800" : "#2e7d32"};font-weight:700;">
 								${cur.exists ? __("already exists — the button opens it") : __("new — fill the BOM below and Create")}</div>`);
-						vd.set_primary_action_label(cur.exists ? __("Open") : __("Create Design"));
+						// (this frappe build has no set_primary_action_label)
+						vd.get_primary_btn().text(cur.exists ? __("Open") : __("Create Design"));
 						vd.fields_dict.materials.$wrapper.toggle(!cur.exists);
 						// re-seed the BOM for the picked variant: gold line + the
 						// card's stones in the token's item family (edits after this
@@ -448,7 +453,8 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 			};
 			vd.show();
 			vd.$wrapper.on("change", ".frappe-control[data-fieldname=karat] select, .frappe-control[data-fieldname=quality] select, .frappe-control[data-fieldname=color] select", judge);
-			judge();
+			// defaults land async after show() — a synchronous judge reads no karat
+			setTimeout(judge, 150);
 		};
 		if (NAMING) go(NAMING);
 		else frappe.call({ method: API2 + ".get_variant_naming" }).then((r) => { NAMING = r.message; go(NAMING); });
