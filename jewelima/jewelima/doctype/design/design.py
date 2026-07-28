@@ -1,6 +1,8 @@
 # Copyright (c) 2026, efeone and contributors
 # For license information, please see license.txt
 
+import re
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -122,14 +124,16 @@ class Design(Document):
 		]
 
 	def _copy_bank_image(self):
-		"""If the image points at the shared design-bank folder, copy it to a Design-owned
-		File so each design carries its own image (not a reference to the catalog file)."""
-		if not self.image or "/files/design-bank/" not in self.image:
+		"""Copy the source photo to a Design-owned File — the job cards print
+		THIS design's image, so it must be a physical copy, never a reference:
+		catalog files get pruned and slot photos get overwritten by card
+		re-renders, and a prod design must not change under either."""
+		if not self.image or "/files/" not in self.image or self.image.startswith("data:"):
 			return
 		import os
 		from urllib.parse import unquote
 
-		rel = unquote(self.image.split("/files/", 1)[1])  # "design-bank/<file>"
+		rel = unquote(self.image.split("/files/", 1)[1])
 		src = frappe.get_site_path("public", "files", *rel.split("/"))
 		if not os.path.exists(src):
 			return
@@ -138,20 +142,23 @@ class Design(Document):
 		# drop any auto-attached File for the original reference, keep only our copy
 		for old in frappe.get_all("File", filters={"attached_to_doctype": "Design", "attached_to_name": self.name}, pluck="name"):
 			frappe.delete_doc("File", old, force=1, ignore_permissions=True)
-		# bind to the image field so Frappe's post-insert handler reuses it (no duplicate File)
-		f = frappe.get_doc(
-			{
-				"doctype": "File",
-				"file_name": os.path.basename(rel),
-				"content": content,
-				"attached_to_doctype": "Design",
-				"attached_to_name": self.name,
-				"attached_to_field": "image",
-				"is_private": 0,
-			}
-		).insert(ignore_permissions=True)
-		self.image = f.file_url
-		self.db_set("image", f.file_url)
+		# a REAL second copy, outside frappe's content-dedupe (which hands back
+		# the source url for identical bytes even with ignore_existing_file_check):
+		# bytes straight to disk under the design's own name, File row hand-made
+		ext = os.path.splitext(os.path.basename(rel))[1] or ".png"
+		fname = "DESIGN-{0}{1}".format(re.sub(r"[^A-Za-z0-9._-]", "-", self.name), ext)
+		url = "/files/" + fname
+		frappe.db.delete("File", {"file_url": url})
+		with open(frappe.get_site_path("public", "files", fname), "wb") as out:
+			out.write(content)
+		fd = frappe.get_doc({"doctype": "File", "file_name": fname, "file_url": url,
+			"is_private": 0, "file_size": len(content),
+			"attached_to_doctype": "Design", "attached_to_name": self.name,
+			"attached_to_field": "image"})
+		fd.name = frappe.generate_hash(length=10)
+		fd.db_insert()
+		self.image = url
+		self.db_set("image", url)
 
 	@frappe.whitelist()
 	def retire(self):
