@@ -79,7 +79,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	const fNo = mk(".f-no", { fieldtype: "Data", label: __("Design No"), fieldname: "n" });
-	const fDT = mk(".f-dt", { fieldtype: "Link", label: __("Design Type (needed to approve)"), fieldname: "d", options: "Design Type" });
+	const fDT = mk(".f-dt", { fieldtype: "Link", label: __("Design Type (needed to approve)"), fieldname: "d", options: "Design Type", only_select: 1 });
 	const fGW = mk(".f-gw", { fieldtype: "Float", label: __("GW gm"), fieldname: "g" });
 	const fDW = mk(".f-dw", { fieldtype: "Float", label: __("DW ct"), fieldname: "w" });
 	const fNote = mk(".f-note", { fieldtype: "Data", label: __("Note"), fieldname: "o" });

@@ -73,10 +73,10 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	// only APPROVED cards are editable here — they already carry a proper info
 	// card; everything else gets fixed through Review first
-	const fPick = mk(".cb-pick", { fieldtype: "Link", label: __("Edit existing (approved only)"), fieldname: "pick", options: "Design Bank",
+	const fPick = mk(".cb-pick", { fieldtype: "Link", label: __("Edit existing (approved only)"), fieldname: "pick", options: "Design Bank", only_select: 1,
 		get_query: () => ({ filters: { status: "Approved" } }) });
 	const fNo = mk(".cb-no", { fieldtype: "Data", label: __("Design Number"), fieldname: "no" });
-	const fType = mk(".cb-dtype", { fieldtype: "Link", label: __("Design Type"), fieldname: "dt", options: "Design Type" });
+	const fType = mk(".cb-dtype", { fieldtype: "Link", label: __("Design Type"), fieldname: "dt", options: "Design Type", only_select: 1 });
 	const fGW = mk(".cb-gw", { fieldtype: "Float", label: __("Gross Weight (g)"), fieldname: "gw" });
 	const fDW = mk(".cb-dw", { fieldtype: "Float", label: __("Diamond Weight (ct)"), fieldname: "dw" });
 	const fNote = mk(".cb-note", { fieldtype: "Data", label: __("Note (card middle line)"), fieldname: "nt" });
