@@ -440,7 +440,7 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 				},
 			});
 			// pickers pick — no record arrows inside the grid
-			vd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}.jw-mat-dlg .btn-open-row{display:none !important;}</style>").addClass("jw-mat-dlg");
+			vd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}.jw-mat-dlg .data-row > .col:last-child{display:none !important;}</style>").addClass("jw-mat-dlg");
 			// live name preview + exists check on every change (seq token: only
 			// the LATEST request may paint — rapid changes race their responses)
 			let judgeSeq = 0;
