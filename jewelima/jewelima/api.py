@@ -7546,6 +7546,16 @@ def _variant_seed(card, karat, quality, color):
 
 
 @frappe.whitelist()
+def get_bank_card_summary(design_bank):
+	"""Gallery preview footer: the card's stone rows + every Design variant
+	already minted off this card (so the button can say Create VARIANT)."""
+	d = frappe.get_doc("Design Bank", design_bank)
+	return {"stones": [{"stone": r.stone, "sieve": r.sieve, "pcs": r.pcs, "ct": r.ct} for r in d.stones],
+		"variants": frappe.get_all("Design", filters={"design_bank": design_bank},
+			fields=["name", "status"], order_by="name")}
+
+
+@frappe.whitelist()
 def resolve_design_variant(design_bank, karat, quality=None, color=None):
 	"""The gallery's Create Design: the canonical variant name for this card +
 	whether that Design already exists, + the starter BOM (gold line and the

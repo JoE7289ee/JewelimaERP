@@ -54,6 +54,7 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	.dg-prev-tags .t{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;color:#fff;}
 	.dg-prev-tags .t span{cursor:pointer;font-weight:700;opacity:.8;}
 	.dg-meta{font-size:13px;color:var(--text-muted);margin-top:8px;display:flex;gap:18px;flex-wrap:wrap;}
+	.dg-var{font-family:var(--font-family-monospace,monospace);font-weight:700;font-size:12px;border:1px solid var(--border-color);border-radius:6px;padding:2px 8px;cursor:pointer;background:var(--control-bg);}
 	</style>
 	<div class="dg-wrap">
 		<div class="dg-bar">
@@ -285,10 +286,15 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	function preview(d) {
 		const dlg = new frappe.ui.Dialog({ title: d.design_no || "Design", size: "large" });
 		const body = $(dlg.body);
+		let summary = null; // {stones, variants} — fetched once, folded into render
 		const render = (doc) => {
 			const tags = (doc.tags || []).map((t) =>
 				`<span class="t" style="background:${esc(state.tagColor[t] || "#6b7280")}">${esc(t)}
 					<span data-rm="${esc(t)}" title="Remove">&times;</span></span>`).join("");
+			const stones = ((summary && summary.stones) || []).map((s) =>
+				`${esc(s.stone || "DMD")}${s.sieve ? " " + esc(s.sieve) : ""} · ${s.pcs || 0} pc${s.ct ? " · " + s.ct + " ct" : ""}`).join("&ensp;|&ensp;");
+			const variants = ((summary && summary.variants) || []).map((v) =>
+				`<span class="dg-var" data-variant="${esc(v.name)}"${v.status === "Retired" ? ' style="opacity:.5;text-decoration:line-through;"' : ""}>${esc(v.name)}</span>`).join("");
 			body.html(`
 				<img class="dg-prev-img" src="${esc(doc.image || "")}">
 				<div class="dg-meta">
@@ -297,11 +303,26 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 					<span>DW: ${doc.diamond_weight ? doc.diamond_weight + " ct" : "—"}</span>
 					${doc.note ? `<span>Note: ${esc(doc.note)}</span>` : ""}
 				</div>
+				${stones ? `<div class="dg-meta">${__("Stones")}: ${stones}</div>` : ""}
+				${variants ? `<div class="dg-meta" style="align-items:center;">${__("Variants")}:
+					<span style="display:inline-flex;gap:6px;flex-wrap:wrap;">${variants}</span></div>` : ""}
 				<div class="dg-prev-tags">${tags}
 					<span class="t" style="background:var(--gray-600,#5e6b7a);cursor:pointer" data-add="1">+ tag</span>
 				</div>`);
 		};
 		render(d);
+		// stones on the card + variants already minted -> footer info, variant
+		// chips (click opens the Design), and the button's true name
+		frappe.call({ method: API2 + ".get_bank_card_summary", args: { design_bank: d.name }, freeze: false })
+			.then((r) => {
+				summary = r.message || { stones: [], variants: [] };
+				render(d);
+				dlg.get_primary_btn().text((summary.variants || []).length ? __("Create Variant") : __("Create Design"));
+			});
+		body.on("click", "[data-variant]", function () {
+			dlg.hide();
+			frappe.set_route("Form", "Design", $(this).data("variant"));
+		});
 		body.on("click", "[data-rm]", function () {
 			const tag = $(this).data("rm");
 			frappe.call(API + ".set_design_tags", { designs: JSON.stringify([d.name]), remove: JSON.stringify([tag]) })
