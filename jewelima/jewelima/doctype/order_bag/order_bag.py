@@ -10,6 +10,7 @@ class OrderBag(Document):
 	def validate(self):
 		self.seed_bag_bom()
 		self.seed_image()
+		self.set_design_bank()
 		self.guard_bom_locked()
 		self.set_plan_weights()
 
@@ -30,6 +31,12 @@ class OrderBag(Document):
 		design = frappe.get_doc("Design", self.design)
 		for m in design.materials or []:
 			self.append("bag_bom", {"item": m.item, "qty": m.qty, "weight": m.weight})
+
+	def set_design_bank(self):
+		"""The bag carries BOTH identities: the variant it manufactures (design)
+		and the catalog card it sells under (design_bank — reports key on this)."""
+		if self.design and frappe.db.exists("Design", self.design):
+			self.design_bank = frappe.db.get_value("Design", self.design, "design_bank")
 
 	def seed_image(self):
 		"""On creation, hold the linked design's photo on the bag (referenced URL)."""

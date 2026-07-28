@@ -11,6 +11,7 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Design Gallery", single_column: true });
 	const root = $(page.main);
 	const API = "jewelima.jewelima.design_bank_api";
+	const API2 = "jewelima.jewelima.api"; // variant naming lives with the core APIs
 	const esc = frappe.utils.escape_html;
 
 	root.append(`
@@ -320,17 +321,77 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 			frappe.route_options = { card: d.name };
 			frappe.set_route("card-builder");
 		});
-		dlg.set_primary_action(__("Create New Design"), () => {
+		dlg.set_primary_action(__("Create Design"), () => {
 			dlg.hide();
-			frappe.model.with_doctype("Design", () => {
-				const nd = frappe.model.get_new_doc("Design");
-				nd.design_name = d.design_no; // pulled from the catalog (Design name is unique)
-				nd.image = d.image;           // same image, referenced
-				nd.design_bank = d.name;      // link back to this catalog entry
-				frappe.set_route("Form", "Design", nd.name);
-			});
+			createVariant(d);
 		});
 		dlg.show();
+	}
+
+	// ---- variant mint: karat + stone token (+ colour) -> the ONE canonical
+	// Design name (A13047A-22EF / A13047A-18EF-Y). Existing variant opens;
+	// a new one opens a prefilled Design form — created only when saved.
+	let NAMING = null;
+	function createVariant(d) {
+		const go = (N) => {
+			const vd = new frappe.ui.Dialog({
+				title: __("Create Design — {0}", [d.design_no]),
+				fields: [
+					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"), reqd: 1,
+						options: N.karats.join("\n"), default: "22K" },
+					{ fieldname: "quality", fieldtype: "Select", label: __("Stones"),
+						options: [""].concat(N.tokens).join("\n"),
+						description: __("empty = plain gold, no token in the name") },
+					{ fieldname: "color", fieldtype: "Select", label: __("Gold colour"),
+						options: N.colors.join("\n"), default: "YG",
+						depends_on: `eval:!${JSON.stringify(N.karat_color_limit)}[doc.karat] || ${JSON.stringify(N.karat_color_limit)}[doc.karat].length > 1` },
+					{ fieldname: "prev", fieldtype: "HTML" },
+				],
+				primary_action_label: __("Create"),
+				primary_action(v) {
+					frappe.call({ method: API2 + ".resolve_design_variant",
+						args: { design_bank: d.name, karat: v.karat, quality: v.quality || "", color: v.color || "" } })
+						.then((r) => {
+							const m = r.message || {};
+							vd.hide();
+							if (m.exists) {
+								frappe.show_alert({ message: __("{0} already exists — opening it.", [m.name]), indicator: "blue" }, 4);
+								frappe.set_route("Form", "Design", m.name);
+								return;
+							}
+							frappe.model.with_doctype("Design", () => {
+								const nd = frappe.model.get_new_doc("Design");
+								nd.design_name = m.name;        // canonical — the grammar decided it
+								nd.design_type = m.design_type; // burned in from the card
+								nd.image = m.image;
+								nd.design_bank = m.design_bank;
+								frappe.set_route("Form", "Design", nd.name);
+							});
+						});
+				},
+			});
+			// live name preview + exists check on every change
+			const judge = () => {
+				const v = vd.get_values(true) || {};
+				if (!v.karat) return;
+				frappe.call({ method: API2 + ".resolve_design_variant", freeze: false,
+					args: { design_bank: d.name, karat: v.karat, quality: v.quality || "", color: v.color || "" } })
+					.then((r) => {
+						const m = r.message || {};
+						vd.get_field("prev").$wrapper.html(
+							`<div style="font-size:15px;font-weight:800;font-family:var(--font-family-monospace,monospace);margin:4px 0;">${esc(m.name || "")}</div>
+							<div style="font-size:12px;color:${m.exists ? "#e0a800" : "#2e7d32"};font-weight:700;">
+								${m.exists ? __("already exists — Create opens it") : __("new — Create opens a prefilled Design to fill & save")}</div>`);
+						vd.set_primary_action_label(m.exists ? __("Open") : __("Create"));
+					})
+					.catch(() => vd.get_field("prev").$wrapper.html(""));
+			};
+			vd.show();
+			vd.$wrapper.on("change", "select", judge);
+			judge();
+		};
+		if (NAMING) go(NAMING);
+		else frappe.call({ method: API2 + ".get_variant_naming" }).then((r) => { NAMING = r.message; go(NAMING); });
 	}
 
 	// init — honour a preset tag passed from the tag manager ("View")

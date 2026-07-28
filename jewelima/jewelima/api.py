@@ -7443,6 +7443,72 @@ def next_design_code(prefix):
 	return {"code": "{0} {1:04d}".format(prefix, top + 1)}
 
 
+# ---------------------------------------------------------------------------
+# Design variants — one Design Bank card sells under ONE code but manufactures
+# as many Designs, one per karat/quality/colour actually ordered. The name is
+# a fixed grammar so the same inputs ALWAYS land on the same Design:
+#   <bank code, spaces stripped>-<karat no><stone token>[-<colour letter>]
+#   A 13047 A + 22K EF        -> A13047A-22EF   (22K only exists yellow)
+#   A 13047 A + 18K EF + WG   -> A13047A-18EF-W
+#   A 13047 A + 22K, no stone -> A13047A-22     (plain gold: no token)
+# Variants are created only when needed (an order asks for one) and stay
+# linked to the card via design_bank; selling & reports key on the bank code.
+# ---------------------------------------------------------------------------
+DESIGN_STONE_TOKENS = ["CZ", "EF", "GH", "SI", "CVD"]
+DESIGN_COLOR_LETTER = {"YG": "Y", "WG": "W", "PG": "P"}
+
+
+def design_variant_name(bank_code, karat, quality=None, color=None):
+	from jewelima.setup import KARAT_COLOR_LIMIT, KARAT_GOLDS
+
+	karat = (karat or "").strip().upper()
+	quality = (quality or "").strip().upper()
+	color = (color or "").strip().upper()
+	base = "".join((bank_code or "").split()).upper()
+	if not base:
+		frappe.throw(frappe._("Give the bank code."))
+	if karat not in KARAT_GOLDS:
+		frappe.throw(frappe._("Karat must be one of {0}.").format(", ".join(KARAT_GOLDS)))
+	if quality and quality not in DESIGN_STONE_TOKENS:
+		frappe.throw(frappe._("Stone token must be one of {0} — or empty for plain gold.").format(
+			", ".join(DESIGN_STONE_TOKENS)))
+	locked = KARAT_COLOR_LIMIT.get(karat)
+	if locked and len(locked) == 1:
+		suffix = ""  # the karat only comes in one colour — the name says nothing
+	else:
+		if color not in DESIGN_COLOR_LETTER:
+			frappe.throw(frappe._("{0} comes in colours — pick one of {1}.").format(
+				karat, ", ".join(DESIGN_COLOR_LETTER)))
+		suffix = "-" + DESIGN_COLOR_LETTER[color]
+	return "{0}-{1}{2}{3}".format(base, karat.replace("K", ""), quality, suffix)
+
+
+@frappe.whitelist()
+def get_variant_naming():
+	from jewelima.setup import GOLD_COLORS, KARAT_COLOR_LIMIT, KARAT_GOLDS
+
+	return {"karats": list(KARAT_GOLDS), "tokens": DESIGN_STONE_TOKENS,
+		"colors": GOLD_COLORS, "letters": DESIGN_COLOR_LETTER,
+		"karat_color_limit": KARAT_COLOR_LIMIT}
+
+
+@frappe.whitelist()
+def resolve_design_variant(design_bank, karat, quality=None, color=None):
+	"""The gallery's Create Design: the canonical variant name for this card +
+	whether that Design already exists. Creation itself happens on the Design
+	form save (a Design needs its BOM) — this only answers WHAT it must be called."""
+	card = frappe.db.get_value("Design Bank", design_bank,
+		["name", "design_no", "design_type", "photo", "image"], as_dict=True)
+	if not card:
+		frappe.throw(frappe._("Design Bank card {0} not found.").format(design_bank))
+	if not card.design_type:
+		frappe.throw(frappe._("{0} has no Design Type yet — take it through Review first.").format(card.design_no))
+	name = design_variant_name(card.design_no, karat, quality, color)
+	return {"name": name, "exists": bool(frappe.db.exists("Design", name)),
+		"design_type": card.design_type, "image": card.photo or card.image or "",
+		"design_bank": card.name}
+
+
 @frappe.whitelist()
 def get_design_card(name):
 	d = frappe.get_doc("Design Bank", name)

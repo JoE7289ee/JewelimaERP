@@ -10,6 +10,7 @@
   "details_tab",
   "job_order",
   "design",
+  "design_bank",
   "image",
   "qty",
   "size",
@@ -143,6 +144,14 @@
    "in_list_view": 1,
    "label": "Design",
    "options": "Design"
+  },
+  {
+   "description": "The catalog card this piece sells under \u2014 selling and reports key on this code.",
+   "fieldname": "design_bank",
+   "fieldtype": "Link",
+   "label": "Design Bank",
+   "options": "Design Bank",
+   "read_only": 1
   },
   {
    "description": "Held from the design when the bag is created.",
