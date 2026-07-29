@@ -7546,6 +7546,63 @@ def _variant_seed(card, karat, quality, color):
 
 
 @frappe.whitelist()
+def get_design_report():
+	"""Designs > Design Report — the order-ready shelf at a glance. A Design IS
+	the orderable unit (Active + frozen BOM), so the board answers: how many
+	are ready, what karat/stones/type they split into, which are actually
+	being run, and which sit idle."""
+	import re as _re
+
+	designs = frappe.get_all("Design", fields=["name", "status", "design_type", "design_bank", "creation",
+		"dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no"], limit_page_length=0)
+	active = [d for d in designs if d.status == "Active"]
+	# bag usage per design (total ever + still running)
+	use = {r.design: r for r in frappe.db.sql("""select design, count(*) total,
+		sum(if(ifnull(is_finished,0)=0,1,0)) running from `tabOrder Bag`
+		where ifnull(design,'') != '' group by design""", as_dict=True)}
+	known = {d.name for d in designs}
+	pat = _re.compile(r"-(14|18|22)(CZ|EF|GH|SI|CVD)?(?:-[YWP])?$")
+	karats, tokens, types = {}, {}, {}
+	for d in active:
+		m = pat.search(d.name)
+		karats[(m.group(1) + "K") if m else "OTHER"] = karats.get((m.group(1) + "K") if m else "OTHER", 0) + 1
+		tok = (m.group(2) or "PLAIN") if m else "OTHER"
+		tokens[tok] = tokens.get(tok, 0) + 1
+		types[d.design_type or "—"] = types.get(d.design_type or "—", 0) + 1
+	month_start = frappe.utils.get_first_day(frappe.utils.today())
+	stone_free = [d for d in active if not any(cint(d.get(k)) for k in
+		("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no"))]
+	running = [d for d in active if use.get(d.name) and cint(use[d.name].running)]
+	never = [d for d in active if d.name not in use]
+	top = sorted((d for d in active if d.name in use), key=lambda d: -cint(use[d.name].total))[:10]
+	latest = sorted(active, key=lambda d: d.creation, reverse=True)[:10]
+	return {
+		"kpis": [
+			("Ready to Order", len(active)),
+			("Bank Cards Covered", len({d.design_bank for d in active if d.design_bank})),
+			("With Diamonds", sum(1 for d in active if cint(d.dmd_no))),
+			("Plain Gold", len(stone_free)),
+			("In Manufacturing Now", len(running)),
+			# only bags whose design still EXISTS — wiped designs leave dangling
+			# text on old bags and those must not count
+			("Bags Running", sum(cint(u.running) for n, u in use.items() if n in known)),
+			("Pieces Made (all time)", sum(cint(u.total) - cint(u.running) for n, u in use.items() if n in known)),
+			("Never Ordered Yet", len(never)),
+			("Minted This Month", sum(1 for d in active if str(d.creation) >= str(month_start))),
+			("Retired", sum(1 for d in designs if d.status == "Retired")),
+		],
+		"karats": sorted(karats.items()),
+		"tokens": sorted(tokens.items(), key=lambda x: -x[1]),
+		"types": sorted(types.items(), key=lambda x: -x[1]),
+		"top": [{"name": d.name, "design_type": d.design_type or "",
+			"total": cint(use[d.name].total), "running": cint(use[d.name].running)} for d in top],
+		"latest": [{"name": d.name, "design_type": d.design_type or "",
+			"when": frappe.utils.pretty_date(d.creation),
+			"bags": cint(use[d.name].total) if d.name in use else 0} for d in latest],
+	}
+
+
+@frappe.whitelist()
 def get_design_info(design):
 	"""Design Info page — everything the floor needs about one Design, nothing
 	ERP: identity, the frozen BOM with per-line item facts, derived totals,

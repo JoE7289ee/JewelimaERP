@@ -286,7 +286,7 @@ def setup_roles():
 		roles = ("Jewelima Ordering", "Jewelima Info") if page in ("card-info", "design-info", "job-order-status") else ("Jewelima Ordering",)
 		set_page_roles(page, roles)
 	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Info"}, pluck="parent"):
-		if pg not in ("card-info", "job-order-status"):
+		if pg not in ("card-info", "design-info", "job-order-status"):
 			pgd = frappe.get_doc("Page", pg)
 			pgd.set("roles", [r for r in pgd.roles if r.role != "Jewelima Info"])
 			pgd.save(ignore_permissions=True)

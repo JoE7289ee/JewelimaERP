@@ -124,7 +124,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	const RESET_PAGES = new Set([
 		"place-order", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",
 		"bag-split", "transfer-order-bag", "print-barcode", "weight-add", "weight-reduce",
-		"stock-transfer", "make-products", "card-info", "design-info", "job-order-status",
+		"stock-transfer", "make-products", "card-info", "design-info", "design-report", "job-order-status",
 		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
 		"order-masters", "warehouse-management", "print-order-bags", "order-bag-photos",
 		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh", "in-bags", "import-stock", "finished-stock", "at-certification", "certify", "certification-out", "transfer-holder", "sell", "parties", "loss-report", "loss-collection", "loss-writeoff", "user-roles", "add-user", "reset-password", "add-employee", "stone-issue", "stone-issues", "stone-audit", "usage", "day-sheet", "select-photos", "selected-pieces", "bench-cad", "bench-cam", "bench-wax-injecting", "bench-tree-making", "bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish", "bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction",

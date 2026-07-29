@@ -1359,6 +1359,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "palette",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Design Report",
+   "link_to": "design-report",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "image",
@@ -2113,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-29 10:09:34.038812",
+ "modified": "2026-07-29 10:14:01.123710",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
