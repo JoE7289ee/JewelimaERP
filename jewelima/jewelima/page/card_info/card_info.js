@@ -130,7 +130,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		}
 
 		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
-		const extraKvs = forPrint ? "" : `${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Party Date", dt(b.customer_date))}${kv("Held By", b.held_by)}`;
+		const extraKvs = forPrint ? "" : `${kv("Party Date", dt(b.customer_date))}${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Held By", b.held_by)}`;
 		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
 
 		// ---- everything else we hold (screen only) ---------------------------
