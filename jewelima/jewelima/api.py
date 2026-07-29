@@ -9575,8 +9575,7 @@ _IGI_METAL_COLOR = {"YG": "Yellow Gold", "WG": "White Gold", "PG": "Pink Gold"}
 # our diamond quality group -> (Color Criteria, Clarity Criteria) in IGI's wording
 _IGI_QUALITY = {
 	"SI-IJ": ("IJ", "SI"), "VS-FG": ("FG", "VS"), "VS-IJ": ("IJ", "VS"),
-	"VVS-EF": ("EF", "VVS"), "VVS/VS-GH": ("GH", "VS/VVS"), "VVS1-EF": ("EF", "VVS1"),
-	"VVS2": ("", "VVS2"),
+	"VVS-EF": ("EF", "VVS"), "VVS/VS-GH": ("GH", "VS/VVS"),
 }
 
 
