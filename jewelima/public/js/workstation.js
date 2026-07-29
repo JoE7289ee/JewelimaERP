@@ -43,6 +43,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		tr.wk-stok > td:first-child{box-shadow:inset 3px 0 0 #2e7d32;}
 		tr.wk-stneed > td{background:#fff8e6;}
 		tr.wk-stneed > td:first-child{box-shadow:inset 3px 0 0 #e0a800;}
+		.wk-req-done{font-size:10px;font-weight:800;color:#8a6d00;background:#fff3cd;border-radius:9px;padding:2px 8px;white-space:nowrap;}
 		.wk-emp{border:1px solid var(--border-color);border-radius:9px;background:var(--fg-color);margin-bottom:10px;overflow:hidden;}
 		.wk-emp .h{background:var(--control-bg);padding:7px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;}
 		.wk-emp .h .n{color:var(--text-muted);font-weight:600;font-size:12px;}
@@ -114,8 +115,13 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 					: `<span class="wk-qr add" data-name="${esc(r.name)}">+ ${__("reason")}</span>`}</td>
 				${D.can_act && WK_EXTRACT.includes(bench) ? `<td><button class="btn btn-xs wk-extract" data-name="${esc(r.name)}"
 					style="background:#2e7d32;border-color:#2e7d32;color:#fff;">${__("Extract →")}</button></td>`
-				: D.can_act && !WK_NO_ISSUE.includes(bench) ? `<td><button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
-					style="background:#1f618d;border-color:#1f618d;color:#fff;">${D.flow === "weights" ? __("Issue") : __("Assign")}</button></td>` : ""}
+				: D.can_act && !WK_NO_ISSUE.includes(bench) ? `<td>${r.stones_ok === 0
+					? (r.stone_requested
+						? `<span class="wk-req-done">${__("REQUESTED")}</span>`
+						: `<button class="btn btn-xs wk-streq" data-name="${esc(r.name)}"
+							style="background:#e0a800;border-color:#e0a800;color:#3a2c00;font-weight:700;">${__("Stone Request")}</button>`)
+					: `<button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
+						style="background:#1f618d;border-color:#1f618d;color:#fff;">${D.flow === "weights" ? __("Issue") : __("Assign")}</button>`}</td>` : ""}
 			</tr>`).join("")}</tbody></table>`
 			: `<div class="wk-none">${__("Nothing waiting — the bench is clear.")}</div>`);
 
@@ -183,6 +189,17 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 	}
 
 	// "why is it waiting" — INLINE: the chip swaps into a select right in the cell
+	// yellow rows: one click files the stone request — the card lands in the
+	// Stone Issue queue (Stones Info) and the button becomes REQUESTED
+	root.on("click", ".wk-streq", function () {
+		const nm = $(this).data("name");
+		frappe.call({ method: API + ".mark_stone_issue", args: { bags: JSON.stringify([nm]) } })
+			.then(() => {
+				frappe.show_alert({ message: __("{0} sent to the stone issue queue.", [nm]), indicator: "green" }, 4);
+				load();
+			});
+	});
+
 	root.on("click", ".wk-qr", function () {
 		const $chip = $(this);
 		const nm = $chip.data("name");

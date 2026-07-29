@@ -4713,6 +4713,8 @@ def get_bench_workstation(bench):
 			if rem_ct <= 0.0005 and rem_pcs <= 0:
 				continue
 			pend.setdefault(p.bag, []).append("{0} {1}/{2}ct".format(p.item, rem_pcs, round(rem_ct, 3)))
+		requested = {r.name: cint(r.stone_issue) for r in frappe.get_all("Order Bag",
+			filters={"name": ["in", wnames]}, fields=["name", "stone_issue"])}
 		for r in waiting:
 			# paint ONLY cards whose plan carries stones: green = all landed,
 			# yellow = short; a stone-free (or plan-less) card stays white
@@ -4720,6 +4722,7 @@ def get_bench_workstation(bench):
 				continue
 			r["stones_ok"] = 0 if pend.get(r["name"]) else 1
 			r["stones_pending"] = " · ".join(pend.get(r["name"], []))
+			r["stone_requested"] = requested.get(r["name"], 0)
 
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
@@ -4730,7 +4733,7 @@ def get_bench_workstation(bench):
 		"work_types": opts["work_types"], "collection_states": opts["collection_states"],
 		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
 			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual",
-			"stones_ok", "stones_pending")} for r in waiting],
+			"stones_ok", "stones_pending", "stone_requested")} for r in waiting],
 		"working": sorted(working.values(), key=lambda g: g["employee_name"]),
 		"queue_reasons": opts["queue_reasons"],
 		"counts": {"waiting": len(waiting),
