@@ -43,6 +43,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		tr.wk-stok > td:first-child{box-shadow:inset 3px 0 0 #2e7d32;}
 		tr.wk-stneed > td{background:#fff8e6;}
 		tr.wk-stneed > td:first-child{box-shadow:inset 3px 0 0 #e0a800;}
+		.wk-tile.wk-await{cursor:pointer;border-color:#e0a800;background:#fff8e6;}
+		.wk-tile.wk-await .v{color:#8a6d00;}
 		.wk-req-done{font-size:10px;font-weight:800;color:#8a6d00;background:#fff3cd;border-radius:9px;padding:2px 8px;white-space:nowrap;}
 		.wk-emp{border:1px solid var(--border-color);border-radius:9px;background:var(--fg-color);margin-bottom:10px;overflow:hidden;}
 		.wk-emp .h{background:var(--control-bg);padding:7px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;}
@@ -92,7 +94,9 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		root.find(".wk-kpis").html(
 			`<div class="wk-tile"><div class="k">${__("Waiting")}</div><div class="v">${c.waiting}</div></div>
 			<div class="wk-tile"><div class="k">${__("Working")}</div><div class="v">${c.working}</div></div>
-			<div class="wk-tile"><div class="k">${__("Total at bench")}</div><div class="v">${c.total}</div></div>`);
+			<div class="wk-tile"><div class="k">${__("Total at bench")}</div><div class="v">${c.total}</div></div>
+			${D.awaiting_stones ? `<div class="wk-tile wk-await" title="${__("click for the list")}">
+				<div class="k">${__("Awaiting stones")}</div><div class="v">${D.awaiting_stones.length}</div></div>` : ""}`);
 
 		const next = D.queue[0];
 		root.find(".wk-next").css("display", next ? "flex" : "none").html(next ? `
@@ -189,6 +193,26 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 	}
 
 	// "why is it waiting" — INLINE: the chip swaps into a select right in the cell
+	// the AWAITING STONES tile -> the full list in a dialog
+	root.on("click", ".wk-await", function () {
+		const rows = (D && D.awaiting_stones) || [];
+		const dlg = new frappe.ui.Dialog({ title: __("Awaiting stones — {0}", [bench]), size: "large" });
+		$(dlg.body).html(rows.length ? `
+			<table class="wk-t"><thead><tr>
+				<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Party")}</th>
+				<th>${__("Due")}</th><th>${__("Requested")}</th><th>${__("Short")}</th>
+			</tr></thead><tbody>
+			${rows.map((r) => `<tr>
+				<td><a class="jw-card-link" style="font-weight:800;color:#1f618d;cursor:pointer;" data-card="${esc(r.name)}">${esc(r.name)}</a></td>
+				<td>${esc(r.design || "")}</td><td>${esc(r.party || "")}</td>
+				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
+				<td>${r.since ? frappe.datetime.comment_when(r.since) : ""}</td>
+				<td style="font-size:11.5px;color:#8a6d00;">${esc(r.stones_pending || "")}</td>
+			</tr>`).join("")}</tbody></table>`
+			: `<div style="padding:24px;text-align:center;color:var(--text-muted);">${__("Nothing awaiting stones.")}</div>`);
+		dlg.show();
+	});
+
 	// yellow rows: one click files the stone request — the card lands in the
 	// Stone Issue queue (Stones Info) and the button becomes REQUESTED
 	root.on("click", ".wk-streq", function () {

@@ -4681,6 +4681,7 @@ def get_bench_workstation(bench):
 	for g in working.values():
 		g["cards"].sort(key=lambda c: c.get("prio_rank") or 9e9)
 
+	awaiting = []
 	# WAX SETTING / SETTING: paint the queue by stone readiness — green when
 	# every plan stone has landed in the bag, yellow while anything is short
 	# (plan = frozen bag BOM stone lines; landed = Bag Material Ledger)
@@ -4723,6 +4724,16 @@ def get_bench_workstation(bench):
 			r["stones_ok"] = 0 if pend.get(r["name"]) else 1
 			r["stones_pending"] = " · ".join(pend.get(r["name"], []))
 			r["stone_requested"] = requested.get(r["name"], 0)
+		# requested cards leave the working queue — they live under the
+		# AWAITING STONES tile until the stones land
+		awaiting = [r for r in waiting if r.get("stone_requested")]
+		if awaiting:
+			since = {r.name: str(r.stone_issue_on or "") for r in frappe.get_all("Order Bag",
+				filters={"name": ["in", [x["name"] for x in awaiting]]},
+				fields=["name", "stone_issue_on"])}
+			for r in awaiting:
+				r["since"] = since.get(r["name"], "")
+		waiting = [r for r in waiting if not r.get("stone_requested")]
 
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
@@ -4736,6 +4747,8 @@ def get_bench_workstation(bench):
 			"stones_ok", "stones_pending", "stone_requested")} for r in waiting],
 		"working": sorted(working.values(), key=lambda g: g["employee_name"]),
 		"queue_reasons": opts["queue_reasons"],
+		"awaiting_stones": [{k: r.get(k) for k in ("name", "design", "party", "due",
+			"since", "stones_pending", "prio_rank")} for r in awaiting] if bench in ("WAX SETTING", "SETTING") else None,
 		"counts": {"waiting": len(waiting),
 			"working": sum(len(g["cards"]) for g in working.values()),
 			"total": len(rows)}}
