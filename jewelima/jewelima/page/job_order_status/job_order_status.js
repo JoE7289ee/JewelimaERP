@@ -12,7 +12,8 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 
 	const CSS = `
-	.jo-wrap{max-width:900px;}
+	.jo-wrap{max-width:none;width:100%;}
+	#page-job-order-status .container{max-width:100%;}
 	.jo-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:8px;}
 	.jo-code{font-size:20px;font-weight:800;letter-spacing:.4px;}
 	.jo-sub{color:#6b7785;font-size:12px;margin-top:2px;}
