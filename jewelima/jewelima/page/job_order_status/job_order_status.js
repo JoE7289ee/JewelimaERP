@@ -32,7 +32,26 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	.jo-badge.done{background:#e8f0fe;color:#1c56b3;}
 	.jo-badge.prod{background:#eaf6ec;color:#1d7a33;}
 	.jo-when{color:#8a96a3;font-size:11px;}
-	.jo-empty{color:#8a96a3;}`;
+	.jo-empty{color:#8a96a3;}
+	.jo-badge.pre{background:#fdf3e7;color:#9a6b1f;}
+	.jo-badge.sold{background:#eaf6ec;color:#1d7a33;}
+	.jo-due{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11px;font-weight:800;margin-left:6px;}
+	.jo-due.ok{background:#eaf6ec;color:#1d7a33;}
+	.jo-due.warn{background:#fff3cd;color:#8a6d00;}
+	.jo-due.late{background:#fdecea;color:#b02a2a;}
+	.jo-sum{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 10px;}
+	.jo-sum .t{border:1px solid #e2e6ea;border-radius:9px;padding:6px 16px;background:#fff;}
+	.jo-sum .t .k{font-size:10px;color:#8a96a3;text-transform:uppercase;letter-spacing:.06em;}
+	.jo-sum .t .v{font-size:18px;font-weight:800;}
+	.jo-sum .t.pre .v{color:#9a6b1f;}
+	.jo-sum .t.wip .v{color:#b4690e;}
+	.jo-sum .t.prod .v{color:#1d7a33;}
+	.jo-flag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:800;margin:2px 4px 0 0;}
+	.jo-flag.stn{background:#fff3cd;color:#8a6d00;}
+	.jo-flag.oos{background:#fdecea;color:#b02a2a;}
+	.jo-flag.pri{background:#d63031;color:#fff;}
+	.jo-card a{font-weight:800;color:#1f618d;cursor:pointer;}
+	.jo-rem{color:#8a96a3;cursor:help;}`;
 
 	$(page.main).append(`<style>${CSS}</style>
 		<div class="jo-wrap">
@@ -50,11 +69,21 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
 
 	function statusBadge(b) {
-		if (b.is_finished) return `<span class="jo-badge prod">PRODUCT${b.stock_status ? " — " + esc(b.stock_status) : ""}</span>`;
+		if (b.is_finished) return `<span class="jo-badge ${b.stock_status === "Sold" ? "sold" : "prod"}">PRODUCT${b.stock_status ? " — " + esc(b.stock_status) : ""}</span>`;
 		const s = b.status || "";
+		if (!s && !flt(b.gross)) return `<span class="jo-badge pre">NOT STARTED</span>`;
 		const cls = s === "Receipted" ? "recd" : s === "Issued" || s === "Ongoing" ? "wip" : s === "Completed" ? "done" : "queue";
 		const who = (s === "Issued" || s === "Ongoing") && b.employee_name ? ` &rarr; ${esc(b.employee_name)}` : "";
 		return s ? `<span class="jo-badge ${cls}">${esc(s)}${who}</span>` : `<span class="jo-badge queue">In ${esc(b.location)}</span>`;
+	}
+
+	// due-date urgency vs the server's today (no client clock surprises)
+	function dueChip(due, today) {
+		if (!due || !today) return "";
+		const d = frappe.datetime.get_day_diff(due, today);
+		if (d < 0) return `<span class="jo-due late">OVERDUE ${-d}d</span>`;
+		if (d === 0) return `<span class="jo-due warn">DUE TODAY</span>`;
+		return `<span class="jo-due ${d <= 3 ? "warn" : "ok"}">${d}d left</span>`;
 	}
 
 	function buildHTML(d) {
@@ -70,29 +99,41 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 					const when = b.entered
 						? `${frappe.datetime.str_to_user(b.entered)}<div class="jo-when">${frappe.datetime.comment_when(b.entered)}</div>`
 						: "—";
+					const flags = [
+						b.priority ? `<span class="jo-flag pri">P${b.priority}</span>` : "",
+						b.stone_issue ? `<span class="jo-flag stn">AWAITING STONES</span>` : "",
+						b.stone_oos ? `<span class="jo-flag oos" title="${esc(b.stone_oos_note || "")}">OUT OF STOCK</span>` : "",
+					].join("");
 					return `<tr>
 						<td>${i + 1}</td>
-						<td><b>${esc(b.name)}</b></td>
+						<td class="jo-card"><a class="jw-card-link" data-card="${esc(b.name)}">${esc(b.name)}</a>${b.narration ? ` <span class="jo-rem" title="${esc(b.narration)}">&#9998;</span>` : ""}</td>
 						<td>${esc(b.design || "")}</td>
+						<td class="num">${b.qty || ""}</td>
+						<td>${esc(b.size || "")}</td>
 						<td>${esc(b.location)}</td>
-						<td>${statusBadge(b)}</td>
+						<td>${statusBadge(b)}${flags ? "<div>" + flags + "</div>" : ""}</td>
 						<td>${when}</td>
 						<td class="num">${b.gross ? flt(b.gross).toFixed(3) : ""}</td>
 					</tr>`;
 				})
-				.join("") || '<tr><td colspan="7" class="jo-empty">No cards on this job order.</td></tr>';
+				.join("") || '<tr><td colspan="9" class="jo-empty">No cards on this job order.</td></tr>';
 		return `
 		<div class="jo-head">
 			<div>
 				<div class="jo-code">${esc(d.job_order)}</div>
 				<div class="jo-sub">${[h.customer, h.salesman, h.order_type].filter(Boolean).map(esc).join(" &middot; ")}</div>
-				<div class="jo-sub">${h.order_date ? "Ordered " + dt(h.order_date) : ""}${h.due_date ? " &middot; Due " + dt(h.due_date) : ""}</div>
+				<div class="jo-sub">${h.order_date ? "Ordered " + dt(h.order_date) : ""}${h.due_date ? " &middot; Due <b>" + dt(h.due_date) + "</b>" : ""}${h.customer_date ? " &middot; Party Date <b>" + dt(h.customer_date) + "</b>" : ""}${dueChip(h.due_date, d.today)}</div>
 			</div>
 			<div class="jo-tot">Pieces<b>${d.total}</b></div>
 		</div>
+		${(() => { const S = d.summary || {}; return `<div class="jo-sum">
+			<div class="t pre"><div class="k">${__("Not started")}</div><div class="v">${S.pre || 0}</div></div>
+			<div class="t wip"><div class="k">${__("In production")}</div><div class="v">${S.inprod || 0}</div></div>
+			<div class="t prod"><div class="k">${__("Products")}</div><div class="v">${S.product || 0}${S.sold ? ` <span style="font-size:12px;font-weight:700;">(${S.sold} sold)</span>` : ""}</div></div>
+		</div>`; })()}
 		<div class="jo-chips">${chips}</div>
 		<table class="jo-tbl"><thead><tr>
-			<th>#</th><th>Card</th><th>Design</th><th>Location</th><th>Status / Who</th><th>Entered</th><th class="num">GW (g)</th>
+			<th>#</th><th>Card</th><th>Design</th><th class="num">Qty</th><th>Size</th><th>Location</th><th>Status / Who</th><th>Entered</th><th class="num">GW (g)</th>
 		</tr></thead><tbody>${rows}</tbody></table>`;
 	}
 

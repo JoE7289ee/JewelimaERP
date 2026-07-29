@@ -10048,9 +10048,13 @@ def get_job_order_status(job_order):
 
 	bags = frappe.get_all(
 		"Order Bag", filters={"job_order": job_order},
-		fields=["name", "design", "qty", "location", "is_finished", "stock_status", "act_gross_weight"],
+		fields=["name", "design", "qty", "size", "location", "is_finished", "stock_status",
+			"act_gross_weight", "stone_issue", "stone_oos", "stone_oos_note", "narration"],
 		order_by="name asc",
 	)
+	prio = {r.order_bag: r.position for r in frappe.get_all("Priority Card",
+		filters={"order_bag": ["in", [b.name for b in bags]]},
+		fields=["order_bag", "position"])} if bags else {}
 	emp_names, out = {}, []
 	for b in bags:
 		loc = b.location
@@ -10073,19 +10077,31 @@ def get_job_order_status(job_order):
 		if employee and employee not in emp_names:
 			emp_names[employee] = frappe.db.get_value("Employee", employee, "employee_name") or employee
 		out.append({
-			"name": b.name, "design": b.design, "qty": b.qty,
+			"name": b.name, "design": b.design, "qty": b.qty, "size": b.size or "",
 			"location": loc or "—", "is_finished": b.is_finished, "stock_status": b.stock_status,
 			"gross": flt(b.act_gross_weight),
 			"status": status, "employee": employee, "employee_name": emp_names.get(employee),
 			"entered": str(entered) if entered else None,
+			"stone_issue": cint(b.stone_issue), "stone_oos": cint(b.stone_oos),
+			"stone_oos_note": b.stone_oos_note or "", "narration": b.narration or "",
+			"priority": prio.get(b.name),
 		})
 
 	header = frappe.db.get_value(
-		"Job Order", job_order, ["customer", "salesman", "order_type", "order_date", "due_date"], as_dict=True
+		"Job Order", job_order,
+		["customer", "salesman", "order_type", "order_date", "due_date", "customer_date"], as_dict=True
 	) or {}
+	# the order's life-stage summary: paper -> metal -> product (sold split out)
+	summary = {
+		"pre": sum(1 for x in out if not x["is_finished"] and not x["gross"]),
+		"inprod": sum(1 for x in out if not x["is_finished"] and x["gross"]),
+		"product": sum(1 for x in out if x["is_finished"]),
+		"sold": sum(1 for x in out if x["is_finished"] and x["stock_status"] == "Sold"),
+	}
 	return {
 		"job_order": job_order, "header": header, "bags": out, "total": len(out),
 		"by_location": dict(Counter(x["location"] for x in out)),
+		"summary": summary, "today": frappe.utils.nowdate(),
 	}
 
 
