@@ -4695,7 +4695,6 @@ def get_bench_workstation(bench):
 			WHERE p.parent IN %(bags)s
 			GROUP BY p.parent, p.item
 		""", {"bags": tuple(wnames)}, as_dict=True)
-		has_plan = {p.bag for p in plan}
 		landed = {(r.bag, r.item): r for r in frappe.db.sql("""
 			SELECT l.order_bag bag, l.item, SUM(IF(l.direction='Out', -l.qty, l.qty)) ct,
 				SUM(IF(l.direction='Out', -l.pcs, l.pcs)) pcs
@@ -4703,9 +4702,11 @@ def get_bench_workstation(bench):
 			WHERE l.order_bag IN %(bags)s GROUP BY l.order_bag, l.item
 		""", {"bags": tuple(wnames)}, as_dict=True)}
 		pend = {}
+		has_stones = set()
 		for p in plan:
 			if not p.stone_type:
 				continue
+			has_stones.add(p.bag)
 			got = landed.get((p.bag, p.item))
 			rem_ct = max(flt(p.ct) - flt(got.ct if got else 0), 0)
 			rem_pcs = max(cint(p.pcs) - cint(got.pcs if got else 0), 0)
@@ -4713,8 +4714,10 @@ def get_bench_workstation(bench):
 				continue
 			pend.setdefault(p.bag, []).append("{0} {1}/{2}ct".format(p.item, rem_pcs, round(rem_ct, 3)))
 		for r in waiting:
-			if r["name"] not in has_plan:
-				continue  # no plan -> unknown -> no paint
+			# paint ONLY cards whose plan carries stones: green = all landed,
+			# yellow = short; a stone-free (or plan-less) card stays white
+			if r["name"] not in has_stones:
+				continue
 			r["stones_ok"] = 0 if pend.get(r["name"]) else 1
 			r["stones_pending"] = " · ".join(pend.get(r["name"], []))
 
