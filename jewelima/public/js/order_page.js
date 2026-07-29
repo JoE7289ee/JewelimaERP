@@ -76,6 +76,9 @@ const PO_COLUMNS = [
 		table.po-grid td.po-num{color:var(--text-muted);text-align:center;width:30px;background:var(--control-bg);}
 		table.po-grid td.po-num.ok{background:#2e7d32;color:#fff;font-weight:700;}
 		table.po-grid td.po-num.bad{background:#b00020;color:#fff;font-weight:700;}
+		table.po-grid td.po-num.ok{cursor:zoom-in;}
+		.po-imgpop{position:fixed;z-index:2000;background:#fff;border:1px solid var(--border-color);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.28);padding:6px;display:none;pointer-events:none;}
+		.po-imgpop img{max-height:260px;max-width:260px;display:block;border-radius:6px;}
 		table.po-grid tfoot td{position:sticky;bottom:0;z-index:2;background:var(--control-bg, var(--fg-color));border-top:2px solid var(--gray-400, #aeb6bf);border-right:1px solid var(--border-color);font-weight:700;padding:3px 6px;text-align:right;white-space:nowrap;}
 		table.po-grid tfoot td.po-foot-label{text-align:left;}
 		table.po-grid input,table.po-grid select{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
@@ -216,6 +219,19 @@ const PO_COLUMNS = [
 	$headrow.append('<th style="width:34px"></th>');
 
 	const $body = $(page.main).find(".po-body");
+
+	// hover the line number -> the design's photo floats beside it
+	const $imgpop = $('<div class="po-imgpop"><img></div>').appendTo(document.body);
+	$body.on("mouseenter", "td.po-num", function () {
+		const tr = this.closest("tr");
+		const row = state.rows.find((r) => r.$tr && r.$tr.get(0) === tr);
+		if (!row || !row._image) return;
+		const rc = this.getBoundingClientRect();
+		$imgpop.find("img").attr("src", encodeURI(row._image));
+		$imgpop.css({ left: rc.right + 10 + "px", top: Math.max(10, rc.top - 60) + "px" }).show();
+	});
+	$body.on("mouseleave", "td.po-num", () => $imgpop.hide());
+	$(wrapper).on("remove", () => $imgpop.remove());
 
 	// ---- live totals footer ----
 	const $footrow = $(page.main).find(".po-footrow");
