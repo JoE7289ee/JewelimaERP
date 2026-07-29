@@ -18,6 +18,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	.ci-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;margin-top:6px;}
 	.ci-badge.prod{background:#eaf6ec;color:#1d7a33;}
 	.ci-badge.wip{background:#eef2f7;color:#5a6b7b;}
+	.ci-badge.pre{background:#fdf3e7;color:#9a6b1f;}
 	.ci-loc{font-size:11px;color:#8a96a3;text-align:right;}
 	.ci-loc b{font-size:16px;color:#222;display:block;margin-top:2px;}
 	.ci-sec{border:1px solid #e2e6ea;border-radius:9px;padding:9px 14px;background:#fff;margin-bottom:8px;}
@@ -188,7 +189,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			<div>
 				<div class="ci-code">${esc(b.name)}</div>
 				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item ? " &middot; " + esc(b.item) : ""}</div>
-				<span class="ci-badge ${finished ? "prod" : "wip"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : "IN PRODUCTION"}</span>
+				<span class="ci-badge ${finished ? "prod" : flt(b.act_gross_weight) ? "wip" : "pre"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : flt(b.act_gross_weight) ? "IN PRODUCTION" : "IN PREPRODUCTION"}</span>
 			</div>
 			${img}
 			<div class="ci-loc">Location<b>${esc(b.location || "—")}</b></div>
