@@ -33,6 +33,7 @@ def after_install():
 	seed_salesmen()
 	seed_standard_golds()
 	sync_workspace_sidebar()
+	drop_retired_pages()
 	setup_roles()
 	seed_benches()
 	seed_sieve_chart()
@@ -79,6 +80,7 @@ def after_migrate():
 	seed_salesmen()
 	seed_standard_golds()
 	sync_workspace_sidebar()
+	drop_retired_pages()
 	setup_roles()
 	seed_benches()
 	seed_sieve_chart()
@@ -164,6 +166,17 @@ JEWELIMA_DESIGN_VIEWER_ROLE = "Jewelima Design Viewer"
 JEWELIMA_DESIGN_VIEWER_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]
+
+
+# Pages the app no longer ships — migrate does not remove deleted Page docs,
+# so stale rows would keep serving a dead route on every site.
+RETIRED_PAGES = ["design-transfer"]
+
+
+def drop_retired_pages():
+	for pg in RETIRED_PAGES:
+		if frappe.db.exists("Page", pg):
+			frappe.delete_doc("Page", pg, force=1, ignore_permissions=True)
 
 
 def setup_roles():

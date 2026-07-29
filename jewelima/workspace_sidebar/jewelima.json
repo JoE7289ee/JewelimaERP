@@ -1359,19 +1359,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "upload",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Export / Import",
-   "link_to": "design-transfer",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "image",
@@ -2126,7 +2113,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-28 22:45:16.261950",
+ "modified": "2026-07-29 10:09:34.038812",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
