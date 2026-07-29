@@ -244,8 +244,14 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	});
 
 	function load(code) {
-		code = (code || "").trim();
+		code = (code || "").trim().toUpperCase();
 		if (!code) return;
+		// forgiving entry: a bare number means an E-card — 0114.1.1 / 114.1.1
+		// both resolve to E0114.1.1 (job orders are E + 4 digits)
+		if (/^\d/.test(code)) {
+			const p = code.split(".");
+			code = "E" + p[0].padStart(4, "0") + (p.length > 1 ? "." + p.slice(1).join(".") : "");
+		}
 		frappe.call({ method: "jewelima.jewelima.api.get_card_passport", args: { order_bag: code } }).then((r) => {
 			const d = r.message || {};
 			if (!d.bag) {
