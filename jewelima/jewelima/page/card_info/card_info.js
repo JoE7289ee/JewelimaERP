@@ -37,7 +37,27 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	.ci-empty{color:#8a96a3;}
 	`;
 
-	$(page.main).append(`<style>${CSS}</style>
+	// screen-only colour layer — print_window gets CSS only, so paper stays clean
+	const SCREEN_CSS = `
+	.ci-head{border-left:4px solid #1f618d;}
+	.ci-loc b{color:#1f618d;}
+	.ci-kvs > span{font-weight:600;color:#222;}
+	.ci-kvs .k{font-weight:400;color:#8a96a3;margin-right:3px;}
+	.ci-sec{border-left:3px solid #e2e6ea;}
+	.ci-sec.acc-gold{border-left-color:#b7791f;}
+	.ci-sec.acc-gold h4{color:#b7791f;}
+	.ci-sec.acc-blue{border-left-color:#1f618d;}
+	.ci-sec.acc-blue h4{color:#1f618d;}
+	.ci-sec.acc-green{border-left-color:#1d7a33;}
+	.ci-sec.acc-green h4{color:#1d7a33;}
+	.ci-sec.acc-red{border-left-color:#b02a2a;}
+	.ci-sec.acc-red h4{color:#b02a2a;}
+	table.ci-tbl th{background:#f4f7fa;}
+	table.ci-tbl td.num b{color:#b02a2a;}
+	.ci-line b{color:#222;}
+	.ci-chain b{color:#1f618d;}
+	`;
+	$(page.main).append(`<style>${CSS}</style><style>${SCREEN_CSS}</style>
 		<div class="ci-bar" style="max-width:420px;margin:2px 0 12px;"></div>
 		<div class="ci-out ci-wrap"></div>`);
 
@@ -140,7 +160,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		if (b.huid) chips.push(`HUID <b>${esc(b.huid)}</b>`);
 		if (b.certifications) chips.push(`Certs <b>${esc(b.certifications)}</b>`);
 		if ((ex.charge_categories || []).length) chips.push(`Tags <b>${ex.charge_categories.map(esc).join(", ")}</b>`);
-		const identity = !forPrint && chips.length ? `<div class="ci-sec"><h4>Identity</h4><div class="ci-line">${chips.join(" &middot; ")}</div></div>` : "";
+		const identity = !forPrint && chips.length ? `<div class="ci-sec acc-blue"><h4>Identity</h4><div class="ci-line">${chips.join(" &middot; ")}</div></div>` : "";
 
 		const flags = [];
 		if (b.stone_issue) flags.push(`<span style="color:#9a6700;font-weight:700;">AWAITING STONES</span> since ${dtt(b.stone_issue_on)}`);
@@ -151,16 +171,16 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		else if (pr.bench_rank) flags.push(`Bench rank <b>P${pr.bench_rank}</b>`);
 		if (ex.bench_now && ex.bench_now.status) flags.push(`Bench status <b>${esc(ex.bench_now.status)}</b>${ex.bench_now.employee_name ? " &middot; " + esc(ex.bench_now.employee_name) : ""}${ex.bench_now.work_type ? " &middot; " + esc(ex.bench_now.work_type) : ""}`);
 		if ((ex.preps || []).length) flags.push(`On prepared bill <b>${ex.preps.map(esc).join(", ")}</b>`);
-		const standing = !forPrint && flags.length ? `<div class="ci-sec"><h4>Standing</h4><div class="ci-line">${flags.join(" &middot; ")}</div></div>` : "";
+		const standing = !forPrint && flags.length ? `<div class="ci-sec acc-red"><h4>Standing</h4><div class="ci-line">${flags.join(" &middot; ")}</div></div>` : "";
 
-		const cadSec = !forPrint && b.is_cad ? `<div class="ci-sec"><h4>CAD request</h4><div class="ci-line">
+		const cadSec = !forPrint && b.is_cad ? `<div class="ci-sec acc-blue"><h4>CAD request</h4><div class="ci-line">
 			${esc(b.cad_design_type || "")} &middot; ${esc(b.cad_karat || "")} &middot; gold ${esc(b.cad_gold_weight || "")} &middot; dmd ${esc(b.cad_diamond_weight || "")} ct &middot; ${b.cad_stone_no || 0} stones${b.cad_reference ? " &middot; ref " + esc(b.cad_reference) : ""}</div></div>` : "";
 
 		let saleSec = "";
 		if (!forPrint && ex.sale) {
 			const sv = ex.sale;
 			const money = (v) => "&#8377;" + (flt(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
-			saleSec = `<div class="ci-sec"><h4>Sold</h4><div class="ci-line">
+			saleSec = `<div class="ci-sec acc-green"><h4>Sold</h4><div class="ci-line">
 				<a href="/app/product-sale/${encodeURIComponent(sv.parent)}"><b>${esc(sv.parent)}</b></a>
 				&middot; ${esc(sv.customer)} &middot; ${sv.sale_date ? frappe.datetime.str_to_user(sv.sale_date) : ""}
 				&middot; ${esc(sv.chart_name || "")} @ ${sv.gold_rate}</div>
@@ -170,14 +190,14 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		}
 		let holderSec = "";
 		if (!forPrint && (ex.holder_transfers || []).length) {
-			holderSec = `<div class="ci-sec"><h4>Holder history</h4><table class="ci-tbl">
+			holderSec = `<div class="ci-sec acc-blue"><h4>Holder history</h4><table class="ci-tbl">
 				<thead><tr><th>From</th><th>To</th><th>When</th><th>By</th><th>Reason</th></tr></thead><tbody>
 				${ex.holder_transfers.map((h) => `<tr><td>${esc(h.from || "—")}</td><td><b>${esc(h.to || "")}</b></td>
 					<td>${dtt(h.when)}</td><td>${esc(h.by || "")}</td><td>${esc(h.reason || "")}</td></tr>`).join("")}
 				</tbody></table></div>`;
 		}
 		const costingSec = !forPrint && finished && frappe.user.has_role("System Manager")
-			? `<div class="ci-sec"><h4>Costing <span class="muted" style="font-weight:400;font-size:11px;">(restricted)</span></h4>
+			? `<div class="ci-sec acc-red"><h4>Costing <span class="muted" style="font-weight:400;font-size:11px;">(restricted)</span></h4>
 				<div class="ci-line" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
 					<input type="number" class="ci-rate" placeholder="gold rate /g" style="width:110px;border:1px solid var(--border-color);border-radius:6px;height:26px;padding:2px 8px;background:var(--fg-color);color:var(--text-color);">
 					<button class="btn btn-xs ci-cost" data-name="${esc(b.name)}" style="background:#1f618d;border-color:#1f618d;color:#fff;">${__("Compute")}</button>
@@ -199,19 +219,19 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			${kv("Qty", b.qty)}${kv("Size", b.size)}${kv("Ordered", dt(b.order_date))}${kv("Due", dt(b.due_date))}
 			${extraKvs}
 		</div></div>
-		<div class="ci-sec"><h4>Weights</h4>
+		<div class="ci-sec acc-gold"><h4>Weights</h4>
 			${act ? `<div class="ci-line"><span class="tag">Actual</span> ${act}</div>` : ""}
 			${plan ? `<div class="ci-line muted"><span class="tag">Plan</span> ${plan}</div>` : ""}
 			${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
 		</div>
-		<div class="ci-sec"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
-		<div class="ci-sec"><h4>Issue details</h4>${issueTbl}</div>
+		<div class="ci-sec acc-gold"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
+		<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
 		${identity}
 		${standing}
 		${cadSec}
 		${narration}
-		<div class="ci-sec"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
-		<div class="ci-sec"><h4>Who worked on it</h4>${stageTbl}</div>
+		<div class="ci-sec acc-green"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
+		<div class="ci-sec acc-blue"><h4>Who worked on it</h4>${stageTbl}</div>
 		${saleSec}
 		${holderSec}
 		${costingSec}`;
