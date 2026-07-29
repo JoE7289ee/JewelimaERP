@@ -4686,12 +4686,16 @@ def get_bench_workstation(bench):
 	# (plan = frozen bag BOM stone lines; landed = Bag Material Ledger)
 	if bench in ("WAX SETTING", "SETTING") and waiting:
 		wnames = [r["name"] for r in waiting]
+		# stone-ness judged off the ITEM master — child stone_type stamps are
+		# unreliable on older bags; bags with NO plan at all stay unpainted
 		plan = frappe.db.sql("""
-			SELECT parent bag, item, SUM(weight) ct, SUM(qty) pcs
-			FROM `tabOrder Bag BOM Item`
-			WHERE parent IN %(bags)s AND IFNULL(stone_type, '') != ''
-			GROUP BY parent, item
+			SELECT p.parent bag, p.item, SUM(p.weight) ct, SUM(p.qty) pcs,
+				IFNULL(i.stone_type, '') stone_type
+			FROM `tabOrder Bag BOM Item` p LEFT JOIN tabItem i ON i.name = p.item
+			WHERE p.parent IN %(bags)s
+			GROUP BY p.parent, p.item
 		""", {"bags": tuple(wnames)}, as_dict=True)
+		has_plan = {p.bag for p in plan}
 		landed = {(r.bag, r.item): r for r in frappe.db.sql("""
 			SELECT l.order_bag bag, l.item, SUM(IF(l.direction='Out', -l.qty, l.qty)) ct,
 				SUM(IF(l.direction='Out', -l.pcs, l.pcs)) pcs
@@ -4700,6 +4704,8 @@ def get_bench_workstation(bench):
 		""", {"bags": tuple(wnames)}, as_dict=True)}
 		pend = {}
 		for p in plan:
+			if not p.stone_type:
+				continue
 			got = landed.get((p.bag, p.item))
 			rem_ct = max(flt(p.ct) - flt(got.ct if got else 0), 0)
 			rem_pcs = max(cint(p.pcs) - cint(got.pcs if got else 0), 0)
@@ -4707,6 +4713,8 @@ def get_bench_workstation(bench):
 				continue
 			pend.setdefault(p.bag, []).append("{0} {1}/{2}ct".format(p.item, rem_pcs, round(rem_ct, 3)))
 		for r in waiting:
+			if r["name"] not in has_plan:
+				continue  # no plan -> unknown -> no paint
 			r["stones_ok"] = 0 if pend.get(r["name"]) else 1
 			r["stones_pending"] = " · ".join(pend.get(r["name"], []))
 
