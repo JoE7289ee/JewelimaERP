@@ -1,0 +1,26 @@
+{
+ "content": null,
+ "creation": "2026-07-29 12:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-07-29 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "sales-records",
+ "owner": "Administrator",
+ "page_name": "sales-records",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Sales Records"
+}

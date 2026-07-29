@@ -7767,6 +7767,75 @@ def _cad_store_image_generic(ref, doctype, name, fname=None):
 # overrides recorded: chart price vs final price vs who), export the
 # confirmation excel for the party, and only THEN Sell (stock moves, bags Sold).
 # ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_sales_records(q=None, limit=50):
+	"""Sales Records page — the ledger list, newest first."""
+	fields = ["name", "sale_date", "customer", "price_chart", "gold_rate", "grand_total", "status"]
+	if q:
+		rows = frappe.db.sql("""select name, sale_date, customer, price_chart, gold_rate,
+			grand_total, status from `tabProduct Sale`
+			where name like %(q)s or customer like %(q)s
+			order by sale_date desc, creation desc limit %(n)s""",
+			{"q": "%" + q + "%", "n": cint(limit) or 50}, as_dict=True)
+	else:
+		rows = frappe.get_all("Product Sale", fields=fields,
+			order_by="sale_date desc, creation desc", limit_page_length=cint(limit) or 50)
+	pieces = {}
+	if rows:
+		pieces = dict(frappe.db.sql("""select parent, count(*) from `tabProduct Sale Item`
+			where parent in %(p)s group by parent""", {"p": [r.name for r in rows]}))
+	for r in rows:
+		r["pieces"] = cint(pieces.get(r.name))
+	return {"rows": rows}
+
+
+@frappe.whitelist()
+def get_sale_record(sale):
+	"""One sale, floor language: when/to whom/what chart, the pieces with their
+	value split, and every manual override the prep recorded (chart price vs
+	final price, who changed it, why)."""
+	d = frappe.get_doc("Product Sale", sale)
+	prep = frappe.db.get_value("Sale Preparation", {"sale": sale}, "name")
+	# overrides live on the PREP lines — join them onto the sold pieces by bag
+	ov = {}
+	if prep:
+		for r in frappe.get_all("Sale Preparation Item", filters={"parent": prep},
+				fields=["order_bag", "chart_gold", "chart_diamond", "chart_stone", "chart_labour",
+					"chart_charges", "overridden", "override_remark", "changed_by"]):
+			ov[r.order_bag] = r
+	bags = [r.order_bag for r in d.items if r.order_bag]
+	bank = {r.name: r.design_bank for r in frappe.get_all("Order Bag",
+		filters={"name": ["in", bags]}, fields=["name", "design_bank"])} if bags else {}
+	bankno = {}
+	if bank:
+		bankno = {r.name: r.design_no for r in frappe.get_all("Design Bank",
+			filters={"name": ["in", [v for v in bank.values() if v]]}, fields=["name", "design_no"])}
+	items = []
+	for r in d.items:
+		o = ov.get(r.order_bag)
+		chart_total = (flt(o.chart_gold) + flt(o.chart_diamond) + flt(o.chart_stone)
+			+ flt(o.chart_labour) + flt(o.chart_charges)) if o else 0
+		items.append({"order_bag": r.order_bag, "design": r.design or "",
+			"bank_code": bankno.get(bank.get(r.order_bag), ""),
+			"design_type": r.design_type or "", "holder": r.holder_at_sale or "",
+			"nett": flt(r.nett), "dmd_ct": flt(r.dmd_ct), "ostone_ct": flt(r.ostone_ct),
+			"gold_value": flt(r.gold_value), "diamond_value": flt(r.diamond_value),
+			"stone_value": flt(r.stone_value), "labour_value": flt(r.labour_value),
+			"charges_value": flt(r.charges_value), "piece_total": flt(r.piece_total),
+			"overridden": cint(o.overridden) if o else 0,
+			"chart_total": round(chart_total, 2),
+			"override_remark": (o.override_remark or "") if o else "",
+			"changed_by": (o.changed_by or "") if o else ""})
+	return {"name": d.name, "sale_date": str(d.sale_date or ""), "customer": d.customer,
+		"status": d.status, "price_chart": d.price_chart or "", "gold_rate": flt(d.gold_rate),
+		"remarks": d.remarks or "", "prep": prep or "",
+		"totals": {"gold": flt(d.gold_value), "diamond": flt(d.diamond_value),
+			"stone": flt(d.stone_value), "labour": flt(d.labour_value),
+			"charges": flt(d.charges_value), "grand": flt(d.grand_total),
+			"tax_percent": flt(d.tax_percent), "tax_amount": flt(d.tax_amount)},
+		"items": items}
+
+
 PREP_VALUE_FIELDS = ("gold_value", "diamond_value", "stone_value", "labour_value", "charges_value")
 
 

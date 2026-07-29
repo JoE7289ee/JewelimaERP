@@ -1117,9 +1117,9 @@
    "icon": "clipboard-list",
    "indent": 1,
    "keep_closed": 0,
-   "label": "Sale Records",
-   "link_to": "Product Sale",
-   "link_type": "DocType",
+   "label": "Sales Records",
+   "link_to": "sales-records",
+   "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
    "url": ""
@@ -2126,7 +2126,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-29 10:14:01.123710",
+ "modified": "2026-07-29 10:44:23.736106",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
