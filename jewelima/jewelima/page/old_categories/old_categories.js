@@ -48,6 +48,8 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
 				<div class="oc-title" style="margin:0;"></div>
 				<div style="display:flex;gap:8px;">
+					<button class="btn btn-sm btn-default oc-selall" style="display:none;">${__("Select all")}</button>
+					<button class="btn btn-sm btn-default oc-selnone" style="display:none;">${__("Deselect all")}</button>
 					<button class="btn btn-sm oc-prio" style="background:#1f618d;border-color:#1f618d;color:#fff;display:none;"></button>
 					<button class="btn btn-sm oc-ret" style="background:#b02a2a;border-color:#b02a2a;color:#fff;display:none;"></button>
 				</div>
@@ -108,6 +110,7 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 					<div class="n">${esc(d.design_no)}</div></div>`).join(""));
 				start += m.rows.length;
 				root.find(".oc-more").toggle(start < m.total);
+				paintPrio(); // tiles just landed -> Select all appears
 			});
 	}
 	let curSubtree = 0;
@@ -142,7 +145,23 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 			.text(__("Prioritise {0} selected", [selected.size]));
 		root.find(".oc-ret").toggle(!!(canRetire && selected.size > 0))
 			.text(__("Retire {0} selected", [selected.size]));
+		root.find(".oc-selall").toggle(!!(canPrio && root.find(".oc-tile").length));
+		root.find(".oc-selnone").toggle(!!(canPrio && selected.size > 0));
 	}
+	// select all LOADED tiles (Load more first to widen the net); deselect
+	// clears the WHOLE selection, picks from earlier folders included
+	root.find(".oc-selall").on("click", () => {
+		root.find(".oc-tile").each(function () {
+			selected.add($(this).data("name"));
+			$(this).addClass("sel");
+		});
+		paintPrio();
+	});
+	root.find(".oc-selnone").on("click", () => {
+		selected.clear();
+		root.find(".oc-tile").removeClass("sel");
+		paintPrio();
+	});
 	root.on("click", ".oc-tile", function () {
 		if (!canPrio) return;
 		const nm = $(this).data("name");
