@@ -174,5 +174,12 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 		}
 	});
 	page.set_primary_action(__("Print"), printIt, "printer");
+	// arriving from Card Info (or anywhere) with the order pre-picked
+	if (frappe.route_options && frappe.route_options.job_order) {
+		const pre = frappe.route_options.job_order;
+		frappe.route_options = null;
+		scan.set_value(pre);
+		load(pre);
+	}
 	focusScan();
 };

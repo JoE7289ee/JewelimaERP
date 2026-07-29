@@ -151,7 +151,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		}
 
 		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
-		const extraKvs = forPrint ? "" : `${kv("Party Date", dt(b.customer_date))}${kv("Job Order", b.job_order)}${kv("Tree", b.tree)}${kv("Held By", b.held_by)}`;
+		const extraKvs = forPrint ? "" : `${kv("Party Date", dt(b.customer_date))}${b.job_order ? `<span><span class="k">Job Order</span> <a class="ci-jo" data-jo="${esc(b.job_order)}" style="color:#1f618d;font-weight:700;cursor:pointer;">${esc(b.job_order)}</a></span>` : ""}${kv("Tree", b.tree)}${kv("Held By", b.held_by)}`;
 		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
 
 		// ---- everything else we hold (screen only) ---------------------------
@@ -236,6 +236,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		${holderSec}
 		${costingSec}`;
 	}
+
+	// Job Order kv -> the Job Order Status page, pre-loaded
+	$out.on("click", ".ci-jo", function () {
+		frappe.route_options = { job_order: $(this).data("jo") };
+		frappe.set_route("job-order-status");
+	});
 
 	function load(code) {
 		code = (code || "").trim();
