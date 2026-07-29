@@ -94,9 +94,9 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		root.find(".wk-kpis").html(
 			`<div class="wk-tile"><div class="k">${__("Waiting")}</div><div class="v">${c.waiting}</div></div>
 			<div class="wk-tile"><div class="k">${__("Working")}</div><div class="v">${c.working}</div></div>
-			<div class="wk-tile"><div class="k">${__("Total at bench")}</div><div class="v">${c.total}</div></div>
 			${D.awaiting_stones ? `<div class="wk-tile wk-await" title="${__("click for the list")}">
-				<div class="k">${__("Awaiting stones")}</div><div class="v">${D.awaiting_stones.length}</div></div>` : ""}`);
+				<div class="k">${__("Awaiting stones")}</div><div class="v">${D.awaiting_stones.length}</div></div>` : ""}
+			<div class="wk-tile"><div class="k">${__("Total at bench")}</div><div class="v">${c.total}</div></div>`);
 
 		const next = D.queue[0];
 		root.find(".wk-next").css("display", next ? "flex" : "none").html(next ? `
