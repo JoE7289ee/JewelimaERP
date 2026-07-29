@@ -553,11 +553,23 @@ def show_employee_names_in_links():
 	frappe.clear_cache(doctype="Employee")
 
 
-ORDER_TYPES = ["BULK", "CUSTOMER", "Import"]
+ORDER_TYPES = ["BULK", "CUSTOMER", "IMPORT", "WEDDING"]
 
 
 def create_order_types():
 	"""Seed the Job Order 'Type' dropdown values (Order Type master; extensible)."""
+	# house style is UPPERCASE — the old mixed-case Import renames in place.
+	# NOTE: MariaDB compares names case-insensitively, so exists()/rename_doc
+	# can't see a case-only change — fix the stored casing directly.
+	stored = frappe.db.get_value("Order Type", "IMPORT", "name")
+	if stored == "Import":
+		frappe.db.sql("update `tabOrder Type` set name='IMPORT', order_type_name='IMPORT' where name='Import'")
+		for dt, field in (("Job Order", "order_type"), ("Order Bag", "order_type"), ("Order Request", "order_type")):
+			frappe.db.sql("update `tab{0}` set `{1}`='IMPORT' where `{1}`='Import'".format(dt, field))
+		# Jewelima Order Settings is a Single — its value lives in tabSingles
+		frappe.db.sql("""update tabSingles set value='IMPORT'
+			where doctype='Jewelima Order Settings' and field='default_order_type' and value='Import'""")
+		frappe.clear_cache(doctype="Order Type")
 	for name in ORDER_TYPES:
 		if not frappe.db.exists("Order Type", name):
 			frappe.get_doc({"doctype": "Order Type", "order_type_name": name}).insert(ignore_permissions=True)

@@ -6173,13 +6173,13 @@ def import_finished_stock(payload):
 		stock_doc = post_raw_material_purchase(supplier, fg, items=items)["name"]
 
 	# ---- Job Order (type Import) + one finished bag per piece -----------------
-	if not frappe.db.exists("Order Type", "Import"):
-		frappe.get_doc({"doctype": "Order Type", "order_type_name": "Import"}).insert(ignore_permissions=True)
+	if not frappe.db.exists("Order Type", "IMPORT"):
+		frappe.get_doc({"doctype": "Order Type", "order_type_name": "IMPORT"}).insert(ignore_permissions=True)
 	jo = frappe.get_doc({
 		"doctype": "Job Order",
 		"order_date": frappe.utils.today(),
 		"customer": customer,
-		"order_type": "Import",
+		"order_type": "IMPORT",
 	})
 	jo.insert(ignore_permissions=True)
 
@@ -6196,7 +6196,7 @@ def import_finished_stock(payload):
 		bag = frappe.get_doc({
 			"doctype": "Order Bag",
 			"job_order": jo.name, "design": pc.get("design"), "qty": 1,
-			"size": pc.get("size"), "customer": customer, "order_type": "Import",
+			"size": pc.get("size"), "customer": customer, "order_type": "IMPORT",
 			"order_date": jo.order_date, "narration": p.get("remarks"),
 			"huid": (pc.get("huid") or "").strip(), "certifications": (pc.get("certifications") or "").strip(),
 			"charge_categories": [{"charge_category": t} for t in pc.get("tags") or []],
