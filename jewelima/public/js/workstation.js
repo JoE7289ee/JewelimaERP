@@ -39,6 +39,10 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		.wk-pr.man{background:#d63031;color:#fff;}
 		.wk-qr{border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;background:#fff6e0;color:#7a5b00;border:1px solid #e0a800;cursor:pointer;}
 		.wk-qr.add{background:transparent;color:var(--text-muted);border:1px dashed var(--border-color);}
+		tr.wk-stok > td{background:#f0f9f1;}
+		tr.wk-stok > td:first-child{box-shadow:inset 3px 0 0 #2e7d32;}
+		tr.wk-stneed > td{background:#fff8e6;}
+		tr.wk-stneed > td:first-child{box-shadow:inset 3px 0 0 #e0a800;}
 		.wk-emp{border:1px solid var(--border-color);border-radius:9px;background:var(--fg-color);margin-bottom:10px;overflow:hidden;}
 		.wk-emp .h{background:var(--control-bg);padding:7px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;}
 		.wk-emp .h .n{color:var(--text-muted);font-weight:600;font-size:12px;}
@@ -99,7 +103,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				${D.ranked ? `<th style="width:40px">P#</th>` : ""}<th>${__("Card")}</th><th>${__("Design")}</th>
 				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${D.can_act && !WK_NO_ISSUE.includes(bench) ? `<th style="width:70px"></th>` : ""}
 			</tr></thead><tbody>
-			${D.queue.map((r) => `<tr>
+			${D.queue.map((r) => `<tr class="${r.stones_ok == null ? "" : r.stones_ok ? "wk-stok" : "wk-stneed"}"${r.stones_pending ? ` title="${esc(__("Stones short"))}: ${esc(r.stones_pending)}"` : ""}>
 				${D.ranked ? `<td><span class="wk-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank || ""}</span></td>` : ""}
 				<td><b>${esc(r.name)}</b>${r.status === "On Hold" ? " · " + __("On Hold") : ""}</td>
 				<td>${esc(r.design || "")}</td>

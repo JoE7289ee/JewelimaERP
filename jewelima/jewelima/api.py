@@ -4681,6 +4681,35 @@ def get_bench_workstation(bench):
 	for g in working.values():
 		g["cards"].sort(key=lambda c: c.get("prio_rank") or 9e9)
 
+	# WAX SETTING / SETTING: paint the queue by stone readiness — green when
+	# every plan stone has landed in the bag, yellow while anything is short
+	# (plan = frozen bag BOM stone lines; landed = Bag Material Ledger)
+	if bench in ("WAX SETTING", "SETTING") and waiting:
+		wnames = [r["name"] for r in waiting]
+		plan = frappe.db.sql("""
+			SELECT parent bag, item, SUM(weight) ct, SUM(qty) pcs
+			FROM `tabOrder Bag BOM Item`
+			WHERE parent IN %(bags)s AND IFNULL(stone_type, '') != ''
+			GROUP BY parent, item
+		""", {"bags": tuple(wnames)}, as_dict=True)
+		landed = {(r.bag, r.item): r for r in frappe.db.sql("""
+			SELECT l.order_bag bag, l.item, SUM(IF(l.direction='Out', -l.qty, l.qty)) ct,
+				SUM(IF(l.direction='Out', -l.pcs, l.pcs)) pcs
+			FROM `tabBag Material Ledger` l
+			WHERE l.order_bag IN %(bags)s GROUP BY l.order_bag, l.item
+		""", {"bags": tuple(wnames)}, as_dict=True)}
+		pend = {}
+		for p in plan:
+			got = landed.get((p.bag, p.item))
+			rem_ct = max(flt(p.ct) - flt(got.ct if got else 0), 0)
+			rem_pcs = max(cint(p.pcs) - cint(got.pcs if got else 0), 0)
+			if rem_ct <= 0.0005 and rem_pcs <= 0:
+				continue
+			pend.setdefault(p.bag, []).append("{0} {1}/{2}ct".format(p.item, rem_pcs, round(rem_ct, 3)))
+		for r in waiting:
+			r["stones_ok"] = 0 if pend.get(r["name"]) else 1
+			r["stones_pending"] = " · ".join(pend.get(r["name"], []))
+
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
 	can_act = bool({"System Manager", "Stock Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
@@ -4689,7 +4718,8 @@ def get_bench_workstation(bench):
 		"can_act": can_act,
 		"work_types": opts["work_types"], "collection_states": opts["collection_states"],
 		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
-			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual")} for r in waiting],
+			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual",
+			"stones_ok", "stones_pending")} for r in waiting],
 		"working": sorted(working.values(), key=lambda g: g["employee_name"]),
 		"queue_reasons": opts["queue_reasons"],
 		"counts": {"waiting": len(waiting),
