@@ -890,6 +890,10 @@ const PO_COLUMNS = [
 	state.resetPage = resetPage;
 
 	if (OPTS.mode === "order") page.add_inner_button(__("Requests"), () => openRequestsDialog(state));
+	// file the whole form as a REQUEST instead of placing: no E-number is
+	// consumed (Job Order only exists on Place), the request takes its own
+	// code, and the due-days are stripped — requests carry no dates
+	if (OPTS.mode === "order") page.add_inner_button(__("Save as Request"), () => requestOrder());
 	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
 	page.add_inner_button(__("Add Row"), () => addRow());
 	page.add_inner_button(__("Reset"), resetPage);
@@ -978,19 +982,22 @@ const PO_COLUMNS = [
 		if (ghosts) { frappe.msgprint(__("{0} line(s) have a Qty but no Design — add a Design (or set CAD) or clear the Qty.", [ghosts])); return; }
 		if (noQty) { frappe.msgprint(__("{0} line(s) have no Qty — every line needs at least Qty 1 (red rows won't go in).", [noQty])); return; }
 		if (!lines.length) { frappe.msgprint(__("Add at least one line with a Design (or a CAD line).")); return; }
+		const stripDates = OPTS.mode === "order"; // Save as Request: requests carry no dates
+		const dropped = OPTS.mode === "order" && state.rows.some((r) => (r._photos || []).length);
 		const payload = {
 			customer: state.header.customer.get_value(),
 			salesman: state.header.salesman.get_value(),
 			order_type: state.header.order_type.get_value(),
-			days: state.header.days ? cint(state.header.days.get_value()) : 0,
-			cust_days: state.header.cust_days ? cint(state.header.cust_days.get_value()) : 0,
+			days: !stripDates && state.header.days ? cint(state.header.days.get_value()) : 0,
+			cust_days: !stripDates && state.header.cust_days ? cint(state.header.cust_days.get_value()) : 0,
 			notes: state.header.notes ? state.header.notes.get_value() : "",
 			lines,
 		};
 		frappe.call({ method: "jewelima.jewelima.api.save_order_request", args: { payload } }).then((r) => {
-			frappe.show_alert({ message: __("Request {0} filed — no order placed.", [r.message]), indicator: "green" }, 6);
+			frappe.show_alert({ message: __("Request {0} filed — no order placed.", [r.message])
+				+ (dropped ? " " + __("Line photos were dropped — requests don't hold photos.") : ""), indicator: "green" }, 6);
 			state.resetPage();
-			loadMyRequests();
+			if (OPTS.mode === "request") loadMyRequests();
 		});
 	}
 
