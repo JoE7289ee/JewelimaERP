@@ -2457,6 +2457,134 @@ def get_stone_info():
 
 
 @frappe.whitelist()
+def export_daily_orders_xlsx(date=None):
+	"""The DAILY REPORT excel (matches the house hand-kept ledger): only the
+	orders PLACED on the given day, karat sections 14 -> 18 -> 22, columns
+	DATE | ORDER NO | SHOP | ITEMS | NOS | METAL | DESCRIPTION | DUE DATE,
+	each section closing with the CO / BULK summary (NOS · GW · DW)."""
+	import re as _re
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Alignment, Font, PatternFill
+
+	date = date or frappe.utils.nowdate()
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, b.qty, b.design_bank, b.is_cad, b.cad_design_type,
+			b.cad_karat, b.cad_gold_weight, b.cad_diamond_weight,
+			b.gross_weight, b.dmd_weight, b.ps_weight, b.cs_weight,
+			jo.name job_order, jo.customer shop, jo.order_type, jo.due_date,
+			IFNULL(d.design_type, IFNULL(b.cad_design_type, '')) item_type
+		FROM `tabOrder Bag` b
+		JOIN `tabJob Order` jo ON jo.name = b.job_order
+		LEFT JOIN `tabDesign` d ON d.name = b.design
+		WHERE jo.order_date = %(d)s
+		ORDER BY jo.name, b.name
+	""", {"d": date}, as_dict=True)
+
+	pat = _re.compile(r"-(14|18|22)(?:CZ|EF|GH|SI|CVD)?(?:-([YWP]))?$")
+	gold_pat = _re.compile(r"^(14|18|22)K(YG|WG|PG)$")
+	color_word = {"Y": "YELLOW", "W": "WHITE", "P": "ROSE",
+		"YG": "YELLOW", "WG": "WHITE", "PG": "ROSE"}
+
+	def karat_color(r):
+		m = pat.search(r.design or "")
+		if m:
+			return m.group(1) + "K", color_word.get(m.group(2) or "Y", "YELLOW")
+		g = gold_pat.match((r.cad_karat or "").strip().upper())
+		if g:
+			return g.group(1) + "K", color_word[g.group(2)]
+		hit = frappe.db.sql("""select item from `tabOrder Bag BOM Item`
+			where parent=%s and item regexp '^(14|18|22)K(YG|WG|PG)$' limit 1""", r.name)
+		if hit:
+			g = gold_pat.match(hit[0][0])
+			return g.group(1) + "K", color_word[g.group(2)]
+		return "OTHER", ""
+
+	def desc(r):
+		g = flt(r.gross_weight) or (flt(r.cad_gold_weight) if r.is_cad else 0)
+		ct = flt(r.dmd_weight) or (flt(r.cad_diamond_weight) if r.is_cad else 0)
+		other = flt(r.ps_weight) + flt(r.cs_weight)
+		p = []
+		if g:
+			p.append("{0:.3f} GMS".format(g))
+		if ct:
+			p.append("{0:.2f} CT".format(ct))
+		if other:
+			p.append("{0:.2f} CT STONES".format(other))
+		return ", ".join(p)
+
+	sections = {}
+	for r in rows:
+		k, col = karat_color(r)
+		r["metal"] = "22K" if k == "22K" else ("{0} KT {1}".format(k[:-1], col).strip() if k != "OTHER" else "")
+		sections.setdefault(k, []).append(r)
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "DAILY REPORT"
+	bold = Font(bold=True)
+	head_font = Font(bold=True, color="FFFFFF")
+	head_fill = PatternFill("solid", fgColor="1F618D")
+	sec_fill = PatternFill("solid", fgColor="EEF2F7")
+	for ci, w in enumerate((12, 12, 22, 16, 7, 16, 34, 12), start=1):
+		ws.column_dimensions[chr(64 + ci)].width = w
+	HEAD = ["DATE", "ORDER NO", "SHOP", "ITEMS", "NOS", "METAL", "DESCRIPTION", "DUE DATE"]
+	user_date = frappe.utils.formatdate(date)
+
+	def put(vals, font=None, fill=None):
+		ws.append(vals)
+		if font or fill:
+			for c in ws[ws.max_row]:
+				if font:
+					c.font = font
+				if fill:
+					c.fill = fill
+
+	for k in ("14K", "18K", "22K", "OTHER"):
+		sec = sections.get(k)
+		if not sec:
+			continue
+		put(["916 / 22 KT" if k == "22K" else k.replace("K", " KT") if k != "OTHER" else "OTHER"],
+			font=Font(bold=True, size=12), fill=sec_fill)
+		put(HEAD, font=head_font, fill=head_fill)
+		first, last_jo = True, None
+		for r in sec:
+			put([user_date if first else "",
+				r.job_order if r.job_order != last_jo else "",
+				r.shop or "", r.item_type or ("CAD" if r.is_cad else ""),
+				cint(r.qty), r.metal, desc(r),
+				frappe.utils.formatdate(r.due_date) if r.due_date else ""])
+			first, last_jo = False, r.job_order
+		# the CO / BULK block (CO = CUSTOMER orders), then the section total
+		agg = {}
+		for r in sec:
+			key = "CO" if (r.order_type or "").upper().startswith("CUST") else (r.order_type or "BULK").upper()
+			e = agg.setdefault(key, {"nos": 0, "gw": 0.0, "dw": 0.0})
+			e["nos"] += cint(r.qty)
+			e["gw"] += flt(r.gross_weight) or (flt(r.cad_gold_weight) if r.is_cad else 0)
+			e["dw"] += flt(r.dmd_weight) or (flt(r.cad_diamond_weight) if r.is_cad else 0)
+		put(["", "", "", "NOS", "GW", "DW"], font=bold)
+		label = "916" if k == "22K" else k.replace("K", " KT")
+		for key in sorted(agg):
+			e = agg[key]
+			put(["", "{0} {1}".format(label, key), "", e["nos"], round(e["gw"], 3), round(e["dw"], 2)])
+		put(["", "TOTAL", "", sum(e["nos"] for e in agg.values()),
+			round(sum(e["gw"] for e in agg.values()), 3),
+			round(sum(e["dw"] for e in agg.values()), 2)], font=bold)
+		put([])
+
+	if not rows:
+		put(["No orders placed on {0}.".format(user_date)])
+
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "DAILY REPORT {0}.xlsx".format(user_date)
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
 def get_ordering_workstation(date=None):
 	"""The ORDERING desk (standalone — not the bench engine):
 	- top: the day's placement KPIs — orders placed, pieces, and BY WHOM

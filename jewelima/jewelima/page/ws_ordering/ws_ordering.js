@@ -45,6 +45,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		<div class="od-top">
 			<span style="font-size:12px;color:var(--text-muted);">${__("Placed on")}</span>
 			<input type="date" class="od-date" value="${frappe.datetime.get_today()}">
+			<button class="btn btn-sm od-xl" style="background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;">${__("Daily Report ⤓")}</button>
 		</div>
 		<div class="od-kpis"></div>
 		<div class="od-by"></div>
@@ -134,6 +135,10 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 	}
 
 	root.find(".od-date").on("change", load);
+	// the house DAILY REPORT excel for the picked date — karat sections + CO/BULK
+	root.find(".od-xl").on("click", () =>
+		open_url_post("/api/method/jewelima.jewelima.api.export_daily_orders_xlsx",
+			{ date: root.find(".od-date").val() }));
 	root.on("input change", ".od-q, .od-type, .od-kind", paintTable);
 	root.on("click", ".od-t th", function () {
 		const k = $(this).data("k");
