@@ -52,6 +52,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			<button class="btn btn-sm od-xl" style="background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;">${__("Daily Report ⤓")}</button>
 			<button class="btn btn-sm od-tr" style="background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;">${__("Transfer →")}</button>
 			<button class="btn btn-sm od-pr" style="font-weight:700;">${__("Print 0 ⎙")}</button>
+			<button class="btn btn-sm btn-default od-clear" style="display:none;">✕ ${__("Clear selection")}</button>
 		</div>
 		<div class="od-kpis"></div>
 		<div class="od-by"></div>
@@ -99,7 +100,8 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		root.find(".od-count").text(`— ${rows.length} / ${(D.rows || []).length} ${__("card(s)")}`);
 		root.find(".od-body").html(rows.length ? `
 			<table class="od-t"><thead><tr>
-				<th style="width:30px;cursor:default;"><input type="checkbox" class="od-all"></th>
+				<th style="width:30px;cursor:default;"><input type="checkbox" class="od-all"
+					${rows.length && rows.every((r) => picked.has(r.name)) ? "checked" : ""}></th>
 				${COLS.map(([k, l]) => `<th data-k="${k}">${__(l)}${sortKey === k ? ` <span class="dir">${sortDir > 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("")}
 			</tr></thead><tbody>
 			${rows.map((r) => `<tr>
@@ -276,7 +278,15 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 
 	// ---- job-card printing: filter, tick, Print — same cards, same code as
 	// the Print Order Bags page (that one stays the anywhere/reprint desk)
-	const paintPrintBtn = () => root.find(".od-pr").text(__("Print {0} ⎙", [picked.size]));
+	const paintPrintBtn = () => {
+		root.find(".od-pr").text(__("Print {0} ⎙", [picked.size]));
+		root.find(".od-clear").toggle(picked.size > 0);
+	};
+	root.find(".od-clear").on("click", () => {
+		picked.clear();
+		paintTable();
+		paintPrintBtn();
+	});
 	root.on("change", ".od-cb", function () {
 		const nm = $(this).data("name");
 		this.checked ? picked.add(nm) : picked.delete(nm);
