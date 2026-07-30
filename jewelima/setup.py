@@ -1,5 +1,6 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+from frappe.utils import cint
 
 
 def after_install():
@@ -1438,11 +1439,15 @@ SIEVE_CHART = [
 
 
 def seed_sieve_chart():
-	"""Create missing Diamond Sieve rows. Idempotent; NEVER overwrites edits."""
+	"""Create missing Diamond Sieve rows. Idempotent; NEVER overwrites the
+	editable cells (mm/avg) — but idx_order is STRUCTURE, not data, so the
+	chart order always re-syncs to the shipped sequence."""
 	if not frappe.db.exists("DocType", "Diamond Sieve"):
 		return
 	for i, (sieve, mm, avg) in enumerate(SIEVE_CHART):
 		if not frappe.db.exists("Diamond Sieve", sieve):
 			frappe.get_doc({"doctype": "Diamond Sieve", "sieve_size": sieve,
 				"mm_size": mm, "avg_cts": avg, "idx_order": i}).insert(ignore_permissions=True)
+		elif cint(frappe.db.get_value("Diamond Sieve", sieve, "idx_order")) != i:
+			frappe.db.set_value("Diamond Sieve", sieve, "idx_order", i, update_modified=False)
 	frappe.db.commit()
