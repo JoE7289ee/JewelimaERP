@@ -114,7 +114,7 @@ JEWELIMA_ORDERING_READ = [
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
-JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "order-requests"]
+JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "order-requests", "raw-materials"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
 JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order"]
