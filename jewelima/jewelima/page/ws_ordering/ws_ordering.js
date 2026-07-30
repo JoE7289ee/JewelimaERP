@@ -225,9 +225,22 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			},
 		});
 		dlg.get_field("body").$wrapper.html(`
+			<div class="od-ph-have" style="margin-bottom:10px;"></div>
 			<input type="file" class="od-ph-file" accept="image/*" multiple
 				style="display:block;width:100%;border:2px dashed var(--border-color);border-radius:9px;padding:18px;">
 			<div class="od-ph-thumbs"></div>`);
+		// what the bag already carries (design photo first, then attachments)
+		frappe.call({ method: API + ".get_order_bag_images", args: { order_bag: nm }, freeze: false })
+			.then((r) => {
+				const imgs = r.message || [];
+				dlg.get_field("body").$wrapper.find(".od-ph-have").html(imgs.length ? `
+					<div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:5px;">
+						${__("Already on the bag")} — ${imgs.length}</div>
+					<div class="od-ph-thumbs" style="margin-top:0;">
+						${imgs.map((f) => `<a href="${encodeURI(f.file_url)}" target="_blank" title="${esc(f.file_name || "")}">
+							<img src="${encodeURI(f.file_url)}"></a>`).join("")}</div>`
+					: `<div style="font-size:12px;color:var(--text-muted);">${__("No photos on the bag yet.")}</div>`);
+			});
 		dlg.get_field("body").$wrapper.on("change", ".od-ph-file", function () {
 			[...this.files].forEach((file) => {
 				const rd = new FileReader();
