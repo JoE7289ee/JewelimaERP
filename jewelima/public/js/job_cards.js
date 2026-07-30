@@ -57,8 +57,8 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .card .it th:nth-child(3), .card .it td:nth-child(3) { width: 30%; }
 .card .it .sum { margin-top: 1mm; font-size: 8.5px; }
 .card .ft { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; align-items: end; border-top: 1px solid #000; padding-top: 1mm; }
-.card .ft .bc svg { width: 88%; height: 9mm; }
-.card .ft .num { font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+.card .ft .bc svg { width: 26mm; height: 4.5mm; display: block; margin: 0; }
+.card .ft .num { font-size: 9px; font-weight: 700; letter-spacing: .5px; }
 .card .ft .rm { font-size: 8.5px; align-self: start; }
 `;
 
@@ -124,10 +124,10 @@ function pob_barcodeSVG(text, module = 1.0, height = 42) {
 	for (let i = 1; i < codes.length; i++) sum += codes[i] * i;
 	codes.push(sum % 103); // checksum
 	codes.push(106); // Stop
-	const quiet = 10;
+	const quiet = 10; // kept on the RIGHT only — the card's white padding is the left quiet zone, so the bars align with the number's E
 	let widths = "";
 	codes.forEach((c) => (widths += POB_C128[c]));
-	let x = quiet * module;
+	let x = 0;
 	let rects = "";
 	for (let i = 0; i < widths.length; i++) {
 		const w = parseInt(widths[i], 10) * module;
