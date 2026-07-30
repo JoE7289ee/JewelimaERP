@@ -42,6 +42,9 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		.od-age.old{background:#e0a800;color:#3a2c00;}
 		.od-age.vold{background:#b02a2a;}
 		.od-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		.od-imgpop{position:fixed;z-index:2000;background:#fff;border:1px solid var(--border-color);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,.28);padding:6px;display:none;pointer-events:none;}
+		.od-imgpop img{max-height:260px;max-width:260px;display:block;border-radius:6px;}
+		td.od-design{cursor:zoom-in;}
 		.od-photos.od-hasph{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;}
 		.od-ph-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
 		.od-ph-thumbs img{height:74px;border-radius:7px;border:1px solid var(--border-color);}
@@ -107,7 +110,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			${rows.map((r) => `<tr>
 				<td><input type="checkbox" class="od-cb" data-name="${esc(r.name)}" ${picked.has(r.name) ? "checked" : ""}></td>
 				<td><a class="jw-card-link od-card" data-card="${esc(r.name)}">${esc(r.name)}</a></td>
-				<td>${r.is_cad ? `<span style="color:#9a6b1f;font-weight:700;">CAD</span> ${esc(r.design || "")}` : esc(r.design || "")}</td>
+				<td class="od-design" data-name="${esc(r.name)}">${r.is_cad ? `<span style="color:#9a6b1f;font-weight:700;">CAD</span> ${esc(r.design || "")}` : esc(r.design || "")}</td>
 				<td class="num">${r.qty || ""}</td><td>${esc(r.size || "")}</td>
 				<td>${esc(r.party || "")}</td><td>${esc(r.salesman || "")}</td>
 				<td>${esc(r.order_type || "")}</td>
@@ -261,6 +264,18 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		});
 		dlg.show();
 	});
+
+	// hover a design -> the product image that will print on its job card
+	const $imgpop = $('<div class="od-imgpop"><img></div>').appendTo(document.body);
+	root.on("mouseenter", "td.od-design", function () {
+		const r = ((D && D.rows) || []).find((x) => x.name === $(this).data("name"));
+		if (!r || !r.image) return;
+		const rc = this.getBoundingClientRect();
+		$imgpop.find("img").attr("src", encodeURI(r.image));
+		$imgpop.css({ left: rc.right + 10 + "px", top: Math.max(10, rc.top - 80) + "px" }).show();
+	});
+	root.on("mouseleave", "td.od-design", () => $imgpop.hide());
+	$(wrapper).on("remove", () => $imgpop.remove());
 
 	root.find(".od-date").on("change", load);
 	// the house DAILY REPORT excel for the picked date — karat sections + CO/BULK

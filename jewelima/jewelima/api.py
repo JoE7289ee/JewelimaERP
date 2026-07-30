@@ -2604,7 +2604,7 @@ def get_ordering_workstation(date=None):
 	for e in by.values():
 		e["who"] = frappe.db.get_value("User", e["user"], "full_name") or e["user"]
 	rows = frappe.db.sql("""
-		SELECT b.name, b.design, b.qty, b.size, b.is_cad, b.creation,
+		SELECT b.name, b.design, b.qty, b.size, b.is_cad, b.creation, b.image,
 			jo.name job_order, jo.customer party, jo.salesman, jo.order_type,
 			jo.order_date, jo.due_date due
 		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
