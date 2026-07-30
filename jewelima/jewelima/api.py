@@ -2457,6 +2457,46 @@ def get_stone_info():
 
 
 @frappe.whitelist()
+def get_ordering_workstation(date=None):
+	"""The ORDERING desk (standalone — not the bench engine):
+	- top: the day's placement KPIs — orders placed, pieces, and BY WHOM
+	- bottom: every card still sitting in ORDERING (the un-dispatched backlog)"""
+	date = date or frappe.utils.nowdate()
+	placed = frappe.get_all("Job Order", filters={"order_date": date},
+		fields=["name", "owner", "customer"])
+	bag_counts = {}
+	if placed:
+		bag_counts = dict(frappe.db.sql("""select job_order, count(*) from `tabOrder Bag`
+			where job_order in %(jo)s group by job_order""", {"jo": [p.name for p in placed]}))
+	by = {}
+	for p in placed:
+		e = by.setdefault(p.owner, {"user": p.owner, "orders": 0, "bags": 0})
+		e["orders"] += 1
+		e["bags"] += cint(bag_counts.get(p.name))
+	for e in by.values():
+		e["who"] = frappe.db.get_value("User", e["user"], "full_name") or e["user"]
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, b.qty, b.size, b.is_cad, b.creation,
+			jo.name job_order, jo.customer party, jo.salesman, jo.order_type,
+			jo.order_date, jo.due_date due
+		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.location = 'ORDERING' AND b.is_finished = 0
+		ORDER BY b.creation ASC
+	""", as_dict=True)
+	today = frappe.utils.nowdate()
+	for r in rows:
+		r["waiting_days"] = frappe.utils.date_diff(today, frappe.utils.getdate(r.creation))
+		r["creation"] = str(r.creation)
+		r["order_date"] = str(r.order_date or "")
+		r["due"] = str(r.due or "")
+	return {"date": date,
+		"kpis": {"orders": len(placed), "bags": sum(cint(v) for v in bag_counts.values()),
+			"in_ordering": len(rows)},
+		"by": sorted(by.values(), key=lambda x: -x["orders"]),
+		"rows": rows}
+
+
+@frappe.whitelist()
 def get_ws_stone_candidates(bench):
 	"""Request-Stones dialog (WAX SETTING / SETTING): every card at the bench
 	not yet requested."""

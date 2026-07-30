@@ -122,7 +122,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // ---------------------------------------------------------------------------
 (() => {
 	const RESET_PAGES = new Set([
-		"place-order", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",
+		"place-order", "ws-ordering", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",
 		"bag-split", "transfer-order-bag", "print-barcode", "weight-add", "weight-reduce",
 		"stock-transfer", "make-products", "card-info", "design-info", "design-report", "job-order-status",
 		"add-design", "retire-design", "design-gallery", "design-tags", "design-types",
