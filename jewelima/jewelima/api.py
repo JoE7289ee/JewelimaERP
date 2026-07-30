@@ -1242,7 +1242,7 @@ def get_raw_material_tree():
 
 	rows = frappe.get_all(
 		"Item",
-		filters={"item_group": ["in", subtree]},
+		filters={"item_group": ["in", subtree], "disabled": 0},
 		fields=["name", "item_group", "stock_uom", "stone_type", "purity_percentage", "metal_purity", "disabled", "stone_party"],
 	)
 

@@ -52,7 +52,10 @@ CANONICAL = O_SIZES + _half_steps(1, 22.5)  # the standard 48-size run
 # gets a GENERIC base item (just the quality name) for unsized stock.
 # 2026-07-09: VS1-FG, VS2-FG and VVS1-FG retired (no longer used) — existing sites
 # keep them until a fresh rebuild; the registry only ADDS, never deletes.
-DIAMOND_QUALITIES = ["SI-IJ", "VS-FG", "VS-IJ", "VVS-EF", "VVS/VS-GH", "VVS1-EF", "VVS2"]
+# 2026-07-31: VVS1-EF and VVS2 retired ENTIRELY — fresh sites never seed them;
+# existing sites delete what's unused and disable what carries history
+# (setup.retire_diamond_families).
+DIAMOND_QUALITIES = ["SI-IJ", "VS-FG", "VS-IJ", "VVS-EF", "VVS/VS-GH"]
 
 for _q in DIAMOND_QUALITIES:
 	RAW_MATERIALS.append((_q, f"DIAMOND {_q}", "Diamond", 0))  # generic base

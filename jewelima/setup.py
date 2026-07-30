@@ -892,11 +892,24 @@ def setup_item_group_tree():
 					and not frappe.db.count("Item", {"item_group": parent}):
 				frappe.delete_doc("Item Group", parent, force=1, ignore_permissions=True)
 
-	# VVS1-EF and VVS2 families are retired from ACTIVE use: items disabled
-	# (gone from every picker; stock history stays untouched)
+	# VVS1-EF and VVS2 families are retired ENTIRELY: unused items DELETE
+	# (fresh/test sites end up clean), items carrying history disable; the
+	# two family groups go once they empty out
 	def retire_diamond_families():
-		frappe.db.sql("""update tabItem set disabled=1
-			where stone_type='Diamond' and (name like 'VVS1-EF%%' or name like 'VVS2%%')""")
+		for nm in frappe.get_all("Item", filters={"stone_type": "Diamond",
+				"name": ["like", "VVS1-EF%"]}, pluck="name") + \
+				frappe.get_all("Item", filters={"stone_type": "Diamond",
+				"name": ["like", "VVS2%"]}, pluck="name"):
+			try:
+				frappe.delete_doc("Item", nm, ignore_permissions=True)
+			except Exception:
+				frappe.db.set_value("Item", nm, "disabled", 1, update_modified=False)
+		for grp in ("DIAMOND VVS1-EF", "DIAMOND VVS2"):
+			if frappe.db.exists("Item Group", grp) and not frappe.db.count("Item", {"item_group": grp}):
+				try:
+					frappe.delete_doc("Item Group", grp, ignore_permissions=True)
+				except Exception:
+					pass
 
 	# the 5th-level ornament branch: GOLD > GOLD ORNAMENT > karat leaves
 	def home_ornament_gold():

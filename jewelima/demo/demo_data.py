@@ -68,7 +68,7 @@ def _karat_golds():
 def _stone_pool():
 	"""A curated slice of the shipped registry — every bucket represented."""
 	names = (
-		[f"{q} {s}" for q in ("SI-IJ", "VS-FG", "VVS-EF", "VVS2") for s in ("O-1", "1-1.5", "2-2.5", "3-3.5", "5-5.5")]
+		[f"{q} {s}" for q in ("SI-IJ", "VS-FG", "VVS-EF", "VVS/VS-GH") for s in ("O-1", "1-1.5", "2-2.5", "3-3.5", "5-5.5")]
 		+ ["CVD 1-1.5", "CVD 2-2.5", "SW 2-2.5", "SW 4-4.5", "CZ 1-1.5", "CZ 3-3.5", "CS",
 		   "RUBY", "EMERALD", "BLUE SAP", "GARNET", "PEARL"]
 	)
