@@ -46,6 +46,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			<span style="font-size:12px;color:var(--text-muted);">${__("Placed on")}</span>
 			<input type="date" class="od-date" value="${frappe.datetime.get_today()}">
 			<button class="btn btn-sm od-xl" style="background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;">${__("Daily Report ⤓")}</button>
+			<button class="btn btn-sm od-tr" style="background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;">${__("Transfer →")}</button>
 		</div>
 		<div class="od-kpis"></div>
 		<div class="od-by"></div>
@@ -133,6 +134,70 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				paintTable();
 			});
 	}
+
+	// scan-and-transfer: ORDERING is ALWAYS the source, and only the two first
+	// stations are reachable from here — anything else goes through the global
+	// Transfer page (rules, holders, issue combos live there)
+	root.find(".od-tr").on("click", () => {
+		const picked = new Map(); // name -> 1
+		const dlg = new frappe.ui.Dialog({
+			title: __("Transfer from ORDERING"),
+			fields: [
+				{ fieldname: "to", fieldtype: "Select", label: __("To"), reqd: 1,
+					options: "CAD\nWAX INJECTING", default: "CAD" },
+				{ fieldname: "scan", fieldtype: "Data", label: __("Scan card"),
+					description: __("Enter adds the card — it must be sitting in ORDERING") },
+				{ fieldname: "list", fieldtype: "HTML" },
+			],
+			primary_action_label: __("Transfer"),
+			primary_action(v) {
+				const names = [...picked.keys()];
+				if (!names.length) return frappe.show_alert({ message: __("Scan at least one card."), indicator: "orange" }, 3);
+				frappe.call({ method: API + ".transfer_order_bags",
+					args: { names: JSON.stringify(names), to_location: v.to, remarks: "Ordering desk" } })
+					.then((r) => {
+						const m = r.message || {};
+						dlg.hide();
+						if ((m.errors || []).length) {
+							frappe.msgprint(m.errors.map((e) => `<b>${esc(e.name)}</b>: ${esc(e.error)}`).join("<br>"));
+						}
+						frappe.show_alert({ message: __("{0} card(s) → {1}", [m.count || 0, v.to]),
+							indicator: (m.errors || []).length ? "orange" : "green" }, 5);
+						load();
+					});
+			},
+		});
+		const paintList = () => {
+			dlg.get_field("list").$wrapper.html([...picked.keys()].map((n) =>
+				`<span style="display:inline-block;margin:3px 6px 0 0;padding:3px 10px;border:1px solid var(--border-color);border-radius:9px;font-family:var(--font-family-monospace,monospace);font-weight:700;">
+					${esc(n)} <span data-rm="${esc(n)}" style="cursor:pointer;color:#b02a2a;font-weight:800;">&times;</span></span>`).join("")
+				|| `<span style="color:var(--text-muted);font-size:12px;">${__("nothing scanned yet")}</span>`);
+			dlg.get_primary_btn().text(__("Transfer {0} card(s)", [picked.size]));
+		};
+		dlg.get_field("list").$wrapper.on("click", "[data-rm]", function () {
+			picked.delete($(this).data("rm"));
+			paintList();
+		});
+		dlg.get_field("scan").$input.on("keydown", function (e) {
+			if (e.key !== "Enter") return;
+			e.preventDefault();
+			const code = (this.value || "").trim().toUpperCase();
+			this.value = "";
+			if (!code || picked.has(code)) return;
+			frappe.db.get_value("Order Bag", code, ["location", "is_finished"]).then((r) => {
+				const b = (r.message || {});
+				if (!b.location) return frappe.show_alert({ message: __("No card {0}.", [code]), indicator: "red" }, 3);
+				if (b.is_finished) return frappe.show_alert({ message: __("{0} is a product — not from here.", [code]), indicator: "red" }, 4);
+				if (b.location !== "ORDERING")
+					return frappe.show_alert({ message: __("{0} is at {1} — use the Transfer page for anything not in ORDERING.", [code, b.location]), indicator: "orange" }, 5);
+				picked.set(code, 1);
+				paintList();
+			});
+		});
+		dlg.show();
+		paintList();
+		setTimeout(() => dlg.get_field("scan").$input.focus(), 300);
+	});
 
 	root.find(".od-date").on("change", load);
 	// the house DAILY REPORT excel for the picked date — karat sections + CO/BULK
