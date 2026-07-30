@@ -1959,15 +1959,18 @@ def get_order_bag_cards(names):
 		if not frappe.db.exists("Order Bag", nm):
 			continue
 		b = frappe.get_doc("Order Bag", nm)
-		dtype = dstyle = dimg = ""
+		dtype = dstyle = dimg = bank_no = ""
 		materials = []
 		if b.design and frappe.db.exists("Design", b.design):
 			d = frappe.get_doc("Design", b.design)
 			dtype, dstyle, dimg = d.design_type, d.design_style, d.image
+			if d.design_bank:
+				bank_no = frappe.db.get_value("Design Bank", d.design_bank, "design_no") or ""
 			for m in d.materials:
 				materials.append({"item": m.item, "purity": m.purity, "qty": m.qty, "weight": m.weight, "uom": m.uom})
 		cards.append({
 			"name": b.name, "job_order": b.job_order, "design": b.design,
+			"bank_no": bank_no,
 			"design_type": dtype, "design_style": dstyle, "image": dimg or b.image,
 			"size": b.size, "qty": b.qty, "location": b.location,
 			"customer": b.customer, "salesman": b.salesman, "order_type": b.order_type,

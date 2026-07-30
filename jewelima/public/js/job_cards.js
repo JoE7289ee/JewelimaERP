@@ -40,7 +40,7 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .page { width: 198mm; height: 285mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 3mm; page-break-after: always; }
 .page:last-child { page-break-after: auto; }
 .card { border: 1px solid #000; padding: 2mm 2.5mm; display: flex; flex-direction: column; overflow: hidden; font-size: 9px; line-height: 1.25; }
-.card .hd { display: grid; grid-template-columns: 1.1fr 1fr 0.9fr; gap: 4px; border-bottom: 1px solid #000; padding-bottom: 1.5mm; }
+.card .hd { display: grid; grid-template-columns: 1.2fr 1fr 0.9fr; gap: 4px; border-bottom: 1px solid #000; padding-bottom: 1.5mm; font-size: 10.5px; line-height: 1.35; }
 .card .hd b { font-weight: 700; }
 .card .hd .pur { float: right; font-size: 13px; font-weight: 800; margin-left: 4px; }
 .card .md { display: grid; grid-template-columns: 34mm 1fr; gap: 3px; flex: 1 1 auto; min-height: 0; padding: 1.5mm 0; }
@@ -83,7 +83,7 @@ function pob_cardHTML(c) {
 	return `
 	<div class="card">
 		<div class="hd">
-			<div><b>D TYPE:</b> ${pob_esc(c.design_type)}<br><b>D NAME:</b> ${pob_esc(c.design)}<br><b>D SIZE:</b> ${pob_esc(c.size || "NA")}</div>
+			<div><b>D TYPE:</b> ${pob_esc(c.design_type)}<br><b>D NAME:</b> ${pob_esc(c.bank_no || c.design)}<br><b>D VARIANT:</b> ${pob_esc(c.design)}<br><b>D SIZE:</b> ${pob_esc(c.size || "NA")}</div>
 			<div>${pob_esc(c.customer)}<br><b>ORD:</b> ${pob_esc(c.order_date)}<br><b>DUE:</b> ${pob_esc(c.due_date)}</div>
 			<div>${purBadge ? `<span class="pur">${pob_esc(purBadge)}</span>` : ""}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
 		</div>
