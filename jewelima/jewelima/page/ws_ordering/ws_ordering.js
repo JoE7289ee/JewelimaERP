@@ -41,6 +41,9 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		.od-age.old{background:#e0a800;color:#3a2c00;}
 		.od-age.vold{background:#b02a2a;}
 		.od-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		.od-photos.od-hasph{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;}
+		.od-ph-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+		.od-ph-thumbs img{height:74px;border-radius:7px;border:1px solid var(--border-color);}
 		</style>
 		<div class="od-top">
 			<span style="font-size:12px;color:var(--text-muted);">${__("Placed on")}</span>
@@ -65,6 +68,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		["name", "Card"], ["design", "Design"], ["qty", "Qty"], ["size", "Size"],
 		["party", "Party"], ["salesman", "Salesman"], ["order_type", "Type"],
 		["order_date", "Ordered"], ["due", "Due"], ["waiting_days", "Waiting"],
+		["photos", "Photos"],
 	];
 
 	function ageChip(d) {
@@ -104,6 +108,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				<td>${r.order_date ? frappe.datetime.str_to_user(r.order_date) : ""}</td>
 				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 				<td>${ageChip(r.waiting_days)}</td>
+				<td><button class="btn btn-xs ${r.photos ? "od-hasph" : "btn-default"} od-photos" data-name="${esc(r.name)}">📷${r.photos ? " " + r.photos : ""}</button></td>
 			</tr>`).join("")}</tbody></table>`
 			: `<div class="od-none">${__("Nothing sits in Ordering — everything has been dispatched.")}</div>`);
 	}
@@ -197,6 +202,45 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		dlg.show();
 		paintList();
 		setTimeout(() => dlg.get_field("scan").$input.focus(), 300);
+	});
+
+	// per-row photos: pick images -> they attach to the bag (same store the
+	// order page's Photos button and Card Info read)
+	root.on("click", ".od-photos", function () {
+		const nm = $(this).data("name");
+		const shots = [];
+		const dlg = new frappe.ui.Dialog({
+			title: __("Photos — {0}", [nm]),
+			fields: [{ fieldname: "body", fieldtype: "HTML" }],
+			primary_action_label: __("Attach 0"),
+			primary_action() {
+				if (!shots.length) return;
+				frappe.call({ method: API + ".attach_order_bag_photos",
+					args: { order_bag: nm, photos: JSON.stringify(shots) } })
+					.then(() => {
+						dlg.hide();
+						frappe.show_alert({ message: __("{0} photo(s) attached to {1}.", [shots.length, nm]), indicator: "green" }, 4);
+						load();
+					});
+			},
+		});
+		dlg.get_field("body").$wrapper.html(`
+			<input type="file" class="od-ph-file" accept="image/*" multiple
+				style="display:block;width:100%;border:2px dashed var(--border-color);border-radius:9px;padding:18px;">
+			<div class="od-ph-thumbs"></div>`);
+		dlg.get_field("body").$wrapper.on("change", ".od-ph-file", function () {
+			[...this.files].forEach((file) => {
+				const rd = new FileReader();
+				rd.onload = () => {
+					shots.push(rd.result);
+					dlg.get_field("body").$wrapper.find(".od-ph-thumbs").append(`<img src="${rd.result}">`);
+					dlg.get_primary_btn().text(__("Attach {0}", [shots.length]));
+				};
+				rd.readAsDataURL(file);
+			});
+			this.value = "";
+		});
+		dlg.show();
 	});
 
 	root.find(".od-date").on("change", load);

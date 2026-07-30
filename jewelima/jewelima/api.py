@@ -2612,11 +2612,18 @@ def get_ordering_workstation(date=None):
 		ORDER BY b.creation ASC
 	""", as_dict=True)
 	today = frappe.utils.nowdate()
+	photo_counts = {}
+	if rows:
+		photo_counts = dict(frappe.db.sql("""select attached_to_name, count(*)
+			from tabFile where attached_to_doctype='Order Bag'
+			and attached_to_name in %(b)s group by attached_to_name""",
+			{"b": [r.name for r in rows]}))
 	for r in rows:
 		r["waiting_days"] = frappe.utils.date_diff(today, frappe.utils.getdate(r.creation))
 		r["creation"] = str(r.creation)
 		r["order_date"] = str(r.order_date or "")
 		r["due"] = str(r.due or "")
+		r["photos"] = cint(photo_counts.get(r.name))
 	return {"date": date,
 		"kpis": {"orders": len(placed), "bags": sum(cint(v) for v in bag_counts.values()),
 			"in_ordering": len(rows)},
