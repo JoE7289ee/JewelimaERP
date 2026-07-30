@@ -17,15 +17,20 @@ function printCards(cards) {
 	const body = pages
 		.map((group) => `<div class="page">${group.map(pob_cardHTML).join("")}</div>`)
 		.join("");
-	const w = window.open("", "_blank");
-	if (!w) {
-		frappe.msgprint(__("Allow pop-ups for this site to print."));
-		return;
-	}
-	w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Order Bags</title><style>${POB_PRINT_CSS}</style></head><body>${body}</body></html>`);
-	w.document.close();
-	w.focus();
-	setTimeout(() => w.print(), 350);
+	// print IN PLACE through a hidden iframe (same trick as
+	// jewelima.print_window) — no pop-up window, no pop-up blockers, the
+	// dialog opens right over the current page
+	document.getElementById("jw-cards-frame")?.remove();
+	const fr = document.createElement("iframe");
+	fr.id = "jw-cards-frame";
+	fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+	document.body.appendChild(fr);
+	const doc = fr.contentDocument;
+	doc.open();
+	doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Order Bags</title><style>${POB_PRINT_CSS}</style></head><body>${body}</body></html>`);
+	doc.close();
+	// let the photos land before the dialog opens
+	setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 450);
 }
 
 const POB_PRINT_CSS = `
