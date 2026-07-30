@@ -13,6 +13,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let D = null;
 	let sortKey = "creation", sortDir = 1;
+	const picked = new Set(); // print selection — survives filter/sort repaints
 
 	$(page.main).append(`
 		<style>
@@ -50,6 +51,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			<input type="date" class="od-date" value="${frappe.datetime.get_today()}">
 			<button class="btn btn-sm od-xl" style="background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;">${__("Daily Report ⤓")}</button>
 			<button class="btn btn-sm od-tr" style="background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;">${__("Transfer →")}</button>
+			<button class="btn btn-sm od-pr" style="font-weight:700;">${__("Print 0 ⎙")}</button>
 		</div>
 		<div class="od-kpis"></div>
 		<div class="od-by"></div>
@@ -97,9 +99,11 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		root.find(".od-count").text(`— ${rows.length} / ${(D.rows || []).length} ${__("card(s)")}`);
 		root.find(".od-body").html(rows.length ? `
 			<table class="od-t"><thead><tr>
+				<th style="width:30px;cursor:default;"><input type="checkbox" class="od-all"></th>
 				${COLS.map(([k, l]) => `<th data-k="${k}">${__(l)}${sortKey === k ? ` <span class="dir">${sortDir > 0 ? "▲" : "▼"}</span>` : ""}</th>`).join("")}
 			</tr></thead><tbody>
 			${rows.map((r) => `<tr>
+				<td><input type="checkbox" class="od-cb" data-name="${esc(r.name)}" ${picked.has(r.name) ? "checked" : ""}></td>
 				<td><a class="jw-card-link od-card" data-card="${esc(r.name)}">${esc(r.name)}</a></td>
 				<td>${r.is_cad ? `<span style="color:#9a6b1f;font-weight:700;">CAD</span> ${esc(r.design || "")}` : esc(r.design || "")}</td>
 				<td class="num">${r.qty || ""}</td><td>${esc(r.size || "")}</td>
@@ -264,9 +268,36 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 	root.on("input change", ".od-q, .od-type, .od-kind", paintTable);
 	root.on("click", ".od-t th", function () {
 		const k = $(this).data("k");
+		if (!k) return; // the checkbox column doesn't sort
 		if (sortKey === k) sortDir = -sortDir;
 		else { sortKey = k; sortDir = 1; }
 		paintTable();
+	});
+
+	// ---- job-card printing: filter, tick, Print — same cards, same code as
+	// the Print Order Bags page (that one stays the anywhere/reprint desk)
+	const paintPrintBtn = () => root.find(".od-pr").text(__("Print {0} ⎙", [picked.size]));
+	root.on("change", ".od-cb", function () {
+		const nm = $(this).data("name");
+		this.checked ? picked.add(nm) : picked.delete(nm);
+		paintPrintBtn();
+	});
+	root.on("change", ".od-all", function () {
+		const on = this.checked;
+		filtered().forEach((r) => (on ? picked.add(r.name) : picked.delete(r.name)));
+		paintTable();
+		paintPrintBtn();
+	});
+	root.find(".od-pr").on("click", () => {
+		const names = [...picked];
+		if (!names.length) return frappe.show_alert({ message: __("Tick the cards to print."), indicator: "orange" }, 3);
+		frappe.call({ method: API + ".get_order_bag_cards", args: { names: JSON.stringify(names) } })
+			.then((r) => {
+				jewelima.printJobCards(r.message || []);
+				picked.clear();
+				paintTable();
+				paintPrintBtn();
+			});
 	});
 
 	load();
