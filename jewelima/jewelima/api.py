@@ -2606,12 +2606,15 @@ def get_ordering_workstation(date=None):
 	rows = frappe.db.sql("""
 		SELECT b.name, b.design, b.qty, b.size, b.is_cad, b.creation, b.image,
 			jo.name job_order, jo.customer party, jo.salesman, jo.order_type,
-			jo.order_date, jo.due_date due
+			jo.owner placed_by, jo.order_date, jo.due_date due
 		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		WHERE b.location = 'ORDERING' AND b.is_finished = 0
 		ORDER BY b.creation ASC
 	""", as_dict=True)
 	today = frappe.utils.nowdate()
+	# owner -> readable name, resolved once per distinct user
+	fullname = {u: frappe.db.get_value("User", u, "full_name") or u
+		for u in {r.placed_by for r in rows if r.placed_by}}
 	photo_counts = {}
 	if rows:
 		photo_counts = dict(frappe.db.sql("""select attached_to_name, count(*)
@@ -2624,6 +2627,7 @@ def get_ordering_workstation(date=None):
 		r["order_date"] = str(r.order_date or "")
 		r["due"] = str(r.due or "")
 		r["photos"] = cint(photo_counts.get(r.name))
+		r["placed_by"] = fullname.get(r.placed_by, r.placed_by or "")
 	return {"date": date,
 		"kpis": {"orders": len(placed), "bags": sum(cint(v) for v in bag_counts.values()),
 			"in_ordering": len(rows)},

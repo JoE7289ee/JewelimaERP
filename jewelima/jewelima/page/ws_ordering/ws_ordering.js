@@ -72,7 +72,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 
 	const COLS = [
 		["name", "Card"], ["design", "Design"], ["qty", "Qty"], ["size", "Size"],
-		["party", "Party"], ["salesman", "Salesman"], ["order_type", "Type"],
+		["party", "Party"], ["salesman", "Salesman"], ["placed_by", "Placed By"], ["order_type", "Type"],
 		["order_date", "Ordered"], ["due", "Due"], ["waiting_days", "Waiting"],
 		["photos", "Photos"],
 	];
@@ -87,7 +87,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		const ty = root.find(".od-type").val();
 		const kind = root.find(".od-kind").val();
 		let rows = (D.rows || []).filter((r) =>
-			(!q || [r.name, r.design, r.party, r.salesman].some((v) => (v || "").toUpperCase().includes(q)))
+			(!q || [r.name, r.design, r.party, r.salesman, r.placed_by].some((v) => (v || "").toUpperCase().includes(q)))
 			&& (!ty || r.order_type === ty)
 			&& (!kind || (kind === "cad" ? r.is_cad : !r.is_cad)));
 		rows = rows.slice().sort((a, b) => {
@@ -113,6 +113,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				<td class="od-design" data-name="${esc(r.name)}">${r.is_cad ? `<span style="color:#9a6b1f;font-weight:700;">CAD</span> ${esc(r.design || "")}` : esc(r.design || "")}</td>
 				<td class="num">${r.qty || ""}</td><td>${esc(r.size || "")}</td>
 				<td>${esc(r.party || "")}</td><td>${esc(r.salesman || "")}</td>
+				<td>${esc(r.placed_by || "")}</td>
 				<td>${esc(r.order_type || "")}</td>
 				<td>${r.order_date ? frappe.datetime.str_to_user(r.order_date) : ""}</td>
 				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
