@@ -91,13 +91,20 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	});
 	$fr.append("<td></td>");
 
-	// sieve averages: size label -> avg cts/stone (loaded once). Entering CARATS
-	// on a sized diamond row judges the piece COUNT = carats / avg (editable after).
+	// sieve averages per GROUP (DMD / CVD / CZ / SW — one chart, four columns).
+	// Entering CARATS on any sized stone row judges the piece COUNT = carats /
+	// that group's avg (editable after).
 	let SIEVE = {};
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { SIEVE = r.message || {}; });
-	function sieveAvg(item) {
+	function sieveAvg(item, stone_type) {
+		const G = SIEVE._groups || {};
+		const grp = stone_type === "Diamond" ? "DMD"
+			: stone_type === "CVD" ? "CVD"
+			: stone_type === "Cubic Zirconia" ? "CZ"
+			: stone_type === "Color Stone" && (item || "").startsWith("SW") ? "SW" : null;
+		if (!grp) return 0;
 		const size = (item || "").split(" ").slice(1).join(" ");
-		return SIEVE[size] || 0;
+		return (G[grp] || {})[size] || 0;
 	}
 
 	function recalc() {
@@ -126,7 +133,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			row.isStone = !!v.stone_type;
 			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat, $p = row.inputs.purity;
 			if (row.isStone) {
-				row._avg = v.stone_type === "Diamond" ? sieveAvg(item) : 0;   // sieve chart is DIAMOND-only
+				row._avg = sieveAvg(item, v.stone_type); // per-group chart: DMD/CVD/CZ/SW
 				if ($ct && !row._sieveWired) {
 					row._sieveWired = true;
 					$ct.on("input", () => {
