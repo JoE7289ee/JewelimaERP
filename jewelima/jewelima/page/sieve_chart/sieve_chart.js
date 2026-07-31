@@ -19,7 +19,8 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.sv-wrap{max-width:960px;}
+		#page-sieve-chart .container{max-width:100%;}
+		.sv-wrap{max-width:none;width:100%;}
 		.sv-bar{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
 		.sv-count{color:var(--text-muted);font-size:12.5px;}
 		.sv-save{margin-left:auto;background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
