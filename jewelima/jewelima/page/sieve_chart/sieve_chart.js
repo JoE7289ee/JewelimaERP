@@ -14,8 +14,10 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 	let ROWS = [];
 	const dirty = new Set();
 	// the chart is the ONE source of truth for all four groups — everyone
-	// reads, only the System Manager writes
+	// reads, only the System Manager writes, and even the admin must ARM
+	// editing explicitly (no accidental cell changes on a source-of-truth page)
 	const canEdit = frappe.user.has_role("System Manager");
+	let editing = false;
 
 	$(page.main).append(`
 		<style>
@@ -40,7 +42,8 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 		<div class="sv-wrap">
 			<div class="sv-bar">
 				<span class="sv-count"></span>
-				<button class="sv-save" disabled>${__("SAVE")}</button>
+				<button class="btn btn-sm btn-default sv-edit" style="margin-left:auto;display:none;">${__("Edit")}</button>
+				<button class="sv-save" disabled style="margin-left:8px;">${__("SAVE")}</button>
 			</div>
 			<table class="sv-tbl">
 				<thead><tr><th>${__("Sieve")}</th><th>${__("MM Size")}</th>
@@ -61,7 +64,7 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 	}
 
 	function paint() {
-		const ro = canEdit ? "" : "readonly tabindex=-1";
+		const ro = canEdit && editing ? "" : "readonly tabindex=-1";
 		const cell = (r, i, fld, step) => `<td class="cell"><input type="number" step="${step}" ${ro}
 			data-f="${fld}" data-i="${i}" value="${r[fld] ?? ""}"></td>`;
 		root.find("tbody").html(ROWS.map((r, i) => `<tr data-n="${esc(r.name)}">
@@ -72,12 +75,19 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 			${cell(r, i, "cz_avg_cts", "0.0001")}
 			${cell(r, i, "sw_avg_cts", "0.0001")}
 		</tr>`).join(""));
-		root.find(".sv-count").text(__("{0} sieve sizes", [ROWS.length]) + (canEdit ? "" : " · " + __("read only")));
-		root.find(".sv-save").toggle(canEdit).prop("disabled", !dirty.size);
+		root.find(".sv-count").text(__("{0} sieve sizes", [ROWS.length]) + (canEdit && editing ? "" : " · " + __("read only")));
+		root.find(".sv-edit").toggle(canEdit).text(editing ? __("Cancel") : __("Edit"));
+		root.find(".sv-save").toggle(canEdit && editing).prop("disabled", !dirty.size);
 	}
+	// arm / disarm editing; cancel discards any unsaved cell edits
+	root.on("click", ".sv-edit", function () {
+		editing = !editing;
+		if (!editing) return load(); // discard + repaint read-only
+		paint();
+	});
 
 	root.on("input", ".sv-tbl input", function () {
-		if (!canEdit) return;
+		if (!canEdit || !editing) return;
 		const r = ROWS[Number(this.dataset.i)];
 		r[this.dataset.f] = this.value === "" ? 0 : Number(this.value);
 		dirty.add(r.name);
@@ -101,6 +111,7 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".save_sieve_chart", args: { rows: JSON.stringify(rows) } })
 			.then((r) => {
 				frappe.show_alert({ message: __("{0} row(s) saved.", [(r.message || {}).saved || 0]), indicator: "green" }, 3);
+				editing = false; // saved -> back to read-only
 				load();
 			});
 	});
