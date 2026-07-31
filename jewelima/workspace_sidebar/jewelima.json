@@ -891,6 +891,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "package",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Repack Requests",
+   "link_to": "repack-requests",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "pen-tool",
@@ -2139,7 +2152,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-31 04:41:32.473994",
+ "modified": "2026-07-31 20:08:15.734603",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

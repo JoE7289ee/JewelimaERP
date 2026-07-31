@@ -80,14 +80,6 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				</div>
 			</div>
 		</div>
-		<div class="rp2-list">
-			<h4 style="margin:0 0 8px;">${__("Requests")}</h4>
-			<div class="rp2-tabs">
-				<span class="rp2-tab on" data-s="Pending">${__("Pending")}</span>
-				<span class="rp2-tab" data-s="all">${__("All")}</span>
-			</div>
-			<div class="rp2-reqbody"></div>
-		</div>
 	`);
 	const root = $(page.main);
 	let listStatus = "Pending";
@@ -198,58 +190,13 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 			} }).then((r) => {
 				frappe.show_alert({ message: __("Request {0} placed — awaiting approval.", [(r.message || {}).name]), indicator: "green" }, 4);
 				qty.set_value(""); remarks.set_value("");
-				loadSieves(); loadList();
+				loadSieves();
 			});
 		});
 	});
 
-	// ---- requests list + approval ----
-	function loadList() {
-		frappe.call({ method: API + ".list_repack_requests", args: { status: listStatus } }).then((r) => {
-			const rows = r.message || [];
-			root.find(".rp2-reqbody").html(rows.length ? `<table class="rp2-reqtbl"><thead><tr>
-				<th>${__("Request")}</th><th>${__("Source")}</th><th>${__("Split into")}</th><th>${__("By")}</th>
-				<th>${__("Status")}</th><th></th></tr></thead><tbody>` +
-				rows.map((x) => `<tr>
-					<td><b>${esc(x.name)}</b><br><span style="color:var(--text-muted);font-size:11px;">${esc((x.requested_on || "").slice(0, 16))}</span></td>
-					<td>${esc(x.source_item)} · <b>${(x.qty || 0).toFixed(3)} ct</b></td>
-					<td>${x.targets.map((t) => `${esc(t.item)} — ${t.qty.toFixed(3)}${t.pcs ? " ct · " + t.pcs + " pc" : ""}`).join("<br>")}</td>
-					<td>${esc(x.requested_by || "")}</td>
-					<td><span class="rp2-st ${x.status}">${esc(x.status)}</span>
-						${x.stock_entry ? `<br><span style="font-size:11px;color:var(--text-muted);">${esc(x.stock_entry)}</span>` : ""}
-						${x.reject_reason ? `<br><span style="font-size:11px;color:#b02a2a;">${esc(x.reject_reason)}</span>` : ""}</td>
-					<td style="white-space:nowrap;">${x.status === "Pending" && CTX.can_approve
-						? `<button class="btn btn-xs btn-success rp2-ok" data-n="${esc(x.name)}">${__("Approve")}</button>
-						   <button class="btn btn-xs btn-danger rp2-no" data-n="${esc(x.name)}">${__("Reject")}</button>` : ""}</td>
-				</tr>`).join("") + "</tbody></table>"
-				: `<div style="padding:20px;color:var(--text-muted);">${__("No requests.")}</div>`);
-		});
-	}
-
-	root.on("click", ".rp2-tab", function () {
-		root.find(".rp2-tab").removeClass("on"); $(this).addClass("on");
-		listStatus = $(this).attr("data-s");
-		loadList();
-	});
-	root.on("click", ".rp2-ok", function () {
-		const n = $(this).attr("data-n");
-		frappe.confirm(__("Approve <b>{0}</b>? Stock moves immediately (Repack entry).", [esc(n)]), () => {
-			frappe.call({ method: API + ".approve_repack", args: { name: n } }).then((r) => {
-				frappe.show_alert({ message: __("{0} approved — {1}.", [n, (r.message || {}).stock_entry]), indicator: "green" }, 4);
-				loadList(); onSource();
-			});
-		});
-	});
-	root.on("click", ".rp2-no", function () {
-		const n = $(this).attr("data-n");
-		frappe.prompt({ fieldname: "why", label: __("Reason"), fieldtype: "Data" }, (v) => {
-			frappe.call({ method: API + ".reject_repack", args: { name: n, reason: v.why || null } }).then(() => {
-				frappe.show_alert({ message: __("{0} rejected.", [n]), indicator: "red" }, 3);
-				loadList();
-			});
-		}, __("Reject {0}", [n]));
-	});
-
-	frappe.call({ method: API + ".get_repack_context" }).then((r) => { CTX = r.message || CTX; loadList(); });
-	page.set_primary_action(__("Refresh"), () => { loadList(); onSource(); }, "refresh");
+	frappe.call({ method: API + ".get_repack_context" }).then((r) => { CTX = r.message || CTX; });
+	// approvals live on their own desk now — this page only PLACES requests
+	page.add_inner_button(__("Requests"), () => frappe.set_route("repack-requests"));
+	page.set_primary_action(__("Refresh"), () => onSource(), "refresh");
 };
