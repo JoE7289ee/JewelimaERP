@@ -19,26 +19,27 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		#page-repack-stock .container{max-width:100%;}
-		.rp2-grid{display:grid;grid-template-columns:1fr 1.6fr;gap:16px;align-items:start;}
+		.rp2-grid{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:16px;align-items:start;}
 		@media (max-width:900px){.rp2-grid{grid-template-columns:1fr;}}
 		.rp2-card{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:14px 18px;}
 		.rp2-card h4{margin:0 0 10px;font-size:14px;}
 		.rp2-card .control-label{font-size:11px;color:var(--text-muted);}
 		.rp2-meta{font-size:12.5px;color:var(--text-muted);margin:8px 0;}
 		.rp2-meta b{color:var(--text-color);}
-		.rp2-tbl{width:100%;border-collapse:collapse;font-size:13px;}
-		.rp2-tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:4px 8px;}
-		.rp2-tbl td{padding:3px 8px;}
-		.rp2-tbl input.qty{width:110px;border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;
+		.rp2-tbl{border-collapse:collapse;font-size:12.5px;}
+		.rp2-tbl th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:3px 6px;white-space:nowrap;}
+		.rp2-tbl td{padding:2px 6px;white-space:nowrap;}
+		.rp2-tbl input.qty{width:74px;border:1px solid var(--border-color);border-radius:6px;padding:4px 7px;
 			background:var(--control-bg);font-variant-numeric:tabular-nums;text-align:right;}
 		.rp2-x{color:#b02a2a;cursor:pointer;font-weight:800;padding:0 6px;}
-		.rp2-tbl input.pcs{width:80px;border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;
+		.rp2-tbl input.pcs{width:58px;border:1px solid var(--border-color);border-radius:6px;padding:4px 7px;
 			background:var(--control-bg);font-variant-numeric:tabular-nums;text-align:right;}
 		.rp2-tbl td.qc-auto input.pcs{background:#e8f5e9;border-color:#2e7d32;}
 		.rp2-tbl td.qc-man input.pcs{background:#fff3cd;border-color:#e0a800;}
 		.rp2-avg{color:var(--text-muted);font-size:11.5px;white-space:nowrap;}
-		.rp2-sieves{max-height:52vh;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
-		.rp2-sieves .rp2-tbl th{position:sticky;top:0;background:var(--control-bg);z-index:1;}
+		.rp2-sieves{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
+		.rp2-sieves .rp2-tbl th{background:var(--control-bg);}
+		.rp2-sieves .rp2-tbl{border:1px solid var(--border-color);border-radius:8px;}
 		.rp2-bal{margin:10px 0;font-size:13px;font-weight:700;}
 		.rp2-bal.ok{color:#2e7d32;} .rp2-bal.bad{color:#b02a2a;}
 		.rp2-go{background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
@@ -72,11 +73,7 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				<div class="rp2-addrow" style="display:flex;gap:8px;align-items:end;margin-bottom:8px;">
 					<div class="rp2-tgroup" style="flex:1;display:none;"></div>
 				</div>
-				<div class="rp2-sieves">
-				<table class="rp2-tbl"><thead><tr><th>${__("Sieve")}</th><th class="rp2-avg">${__("Avg ct/pc")}</th>
-					<th style="text-align:right">${__("Weight (ct)")}</th><th style="text-align:right">${__("Qty (pcs)")}</th></tr></thead>
-					<tbody class="rp2-tbody"></tbody></table>
-				</div>
+				<div class="rp2-sieves"></div>
 			</div>
 		</div>
 	`);
@@ -137,13 +134,29 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 	}
 
 	function paintTargets() {
-		root.find(".rp2-tbody").html(TARGETS.map((t, i) => `<tr>
+		const row = (t, i) => `<tr>
 			<td>${esc(t.label || t.item)}</td>
 			<td class="rp2-avg">${t.avg ? t.avg.toFixed(4) : "—"}</td>
 			<td style="text-align:right"><input class="qty" type="number" step="0.001" data-i="${i}" value="${t.qty || ""}"></td>
 			<td style="text-align:right" class="${t.qty > 0 ? (t.manual ? "qc-man" : "qc-auto") : ""}">
 				<input class="pcs" type="number" step="1" data-i="${i}" value="${t.pcs || ""}"></td>
-		</tr>`).join("") || `<tr><td colspan="4" style="color:var(--text-muted);padding:14px 8px;">${__("Pick a source (and quality) — its sieve run appears here.")}</td></tr>`);
+		</tr>`;
+		if (!TARGETS.length) {
+			root.find(".rp2-sieves").html(`<div style="color:var(--text-muted);padding:14px 8px;">${__("Pick a source (and quality) — its sieve run appears here.")}</div>`);
+			return balance();
+		}
+		// the run splits into side-by-side column tables — everything visible,
+		// no scroll; the column count follows the space we actually have
+		const cols = Math.max(1, Math.min(3, Math.floor((root.find(".rp2-sieves").width() || 900) / 330)));
+		const per = Math.ceil(TARGETS.length / cols);
+		const head = `<thead><tr><th>${__("Sieve")}</th><th class="rp2-avg">${__("Avg")}</th>
+			<th style="text-align:right">${__("Weight (ct)")}</th><th style="text-align:right">${__("Qty (pcs)")}</th></tr></thead>`;
+		let html = "";
+		for (let c = 0; c < TARGETS.length; c += per) {
+			html += `<table class="rp2-tbl">${head}<tbody>` +
+				TARGETS.slice(c, c + per).map((t, k) => row(t, c + k)).join("") + "</tbody></table>";
+		}
+		root.find(".rp2-sieves").html(html);
 		balance();
 	}
 
