@@ -23,17 +23,18 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 		.si2-tile.main{border-width:2px;background:var(--fg-color);}
 		.si2-tile.main .v{color:#1f618d;}
 		.si2-cols{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
-		.si2-col{flex:1;min-width:460px;}
+		.si2-col{flex:1;min-width:460px;max-width:100%;overflow-x:auto;}
 		.si2-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:0 0 6px;}
 		table.si2-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);}
-		table.si2-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 9px;border:1px solid var(--border-color);text-align:left;}
-		table.si2-t td{border:1px solid var(--border-color);padding:4px 9px;}
+		table.si2-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 7px;border:1px solid var(--border-color);text-align:left;}
+		table.si2-t td{border:1px solid var(--border-color);padding:4px 7px;}
 		.si2-pr{display:inline-block;min-width:24px;text-align:center;border-radius:9px;padding:1px 6px;font-size:11px;font-weight:800;background:var(--control-bg);}
 		.si2-pr.man{background:#d63031;color:#fff;}
 		.si2-age{border-radius:9px;padding:1px 8px;font-size:11px;font-weight:800;color:#fff;background:#7f8c8d;}
 		.si2-age.old{background:#e0a800;color:#3a2c00;}
 		.si2-age.vold{background:#b02a2a;}
-		.si2-pend{font-size:11px;color:var(--text-muted);white-space:nowrap;}
+		.si2-pend{font-size:11px;color:var(--text-muted);max-width:230px;}
+		.si2-left td:nth-child(6),.si2-right td:nth-child(6){white-space:nowrap;}
 		.si2-none{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.si2-go{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
 		</style>
@@ -42,7 +43,7 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 			<div class="si2-col"><div class="si2-sec">${__("Priority order — issue these first")}</div><div class="si2-left"></div></div>
 			<div class="si2-col"><div class="si2-sec">${__("Aging — waiting the longest")}</div><div class="si2-right"></div></div>
 		</div>
-		<div class="si2-oos-wrap" style="margin-top:18px;">
+		<div class="si2-oos-wrap" style="margin-top:18px;overflow-x:auto;">
 			<div class="si2-sec si2-oos-title" style="color:#b02a2a;"></div>
 			<div class="si2-oos"></div>
 		</div>
@@ -76,7 +77,7 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 			<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 			<td class="si2-pend">${pend(r.pending) || "—"}</td>
 			<td style="white-space:nowrap;"><button class="btn btn-xs si2-go" data-name="${esc(r.name)}">${__("Issue")}</button>
-				<button class="btn btn-xs btn-default si2-oosbtn" data-name="${esc(r.name)}" title="${__("mark OUT OF STOCK with a reason")}">✕${__("stock")}</button></td>
+				<button class="btn btn-xs btn-default si2-oosbtn" data-name="${esc(r.name)}" title="${__("mark OUT OF STOCK with a reason")}">✕</button></td>
 		</tr>`).join("")}</tbody></table>`;
 	}
 
