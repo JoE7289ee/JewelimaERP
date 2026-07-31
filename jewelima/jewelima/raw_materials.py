@@ -70,7 +70,7 @@ for _q in DIAMOND_QUALITIES:
 SIZED_STONES = [
 	# (prefix, item group leaf, stone type)
 	("CVD", "CVD", "CVD"),
-	("SW", "SWAROVSKI", "Color Stone"),
+	("SW", "SWAROVSKI", "Swarovski"),
 	("CZ", "CUBIC ZIRCONIA", "Cubic Zirconia"),
 ]
 

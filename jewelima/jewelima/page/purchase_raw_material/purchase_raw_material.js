@@ -101,6 +101,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		const grp = stone_type === "Diamond" ? "DMD"
 			: stone_type === "CVD" ? "CVD"
 			: stone_type === "Cubic Zirconia" ? "CZ"
+			: stone_type === "Swarovski" ? "SW"
 			: stone_type === "Color Stone" && (item || "").startsWith("SW") ? "SW" : null;
 		if (!grp) return 0;
 		const size = (item || "").split(" ").slice(1).join(" ");

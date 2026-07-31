@@ -26,6 +26,7 @@
   "poth_no",
   "pdmd_no",
   "cvd_no",
+  "sw_no",
   "purity",
   "bom_section",
   "materials"
@@ -136,6 +137,12 @@
    "fieldname": "cvd_no",
    "fieldtype": "Int",
    "label": "CVD No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sw_no",
+   "fieldtype": "Int",
+   "label": "SW Stones",
    "read_only": 1
   },
   {

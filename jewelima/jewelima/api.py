@@ -1049,7 +1049,7 @@ def _plan_values(bag_bom, qty):
 	q = max(int(qty or 1), 1)
 	# match the ACTUAL convention: gross = gold + stones, nett = gold (metal)
 	metal = flt(p["gross_weight"])  # _profile_from_materials' "gross" is metal grams
-	buckets = ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth")
+	buckets = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
 	stone_g = sum(flt(p[f"{b}_weight"]) for b in buckets) * 0.2
 	vals = {
 		"gross_weight": round((metal + stone_g) * q, 3),
@@ -1103,7 +1103,7 @@ def refresh_actual_weights(order_bag):
 	including real stone counts (pcs) from the ledger. Once the piece is a finished
 	product its materials are consumed, so the actuals are FROZEN (just return them)."""
 	act_fields = ["act_gross_weight", "act_nett_weight", "act_purity", "act_pure_weight"] + [
-		f"act_{b}_{k}" for b in ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth") for k in ("weight", "no")]
+		f"act_{b}_{k}" for b in ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth") for k in ("weight", "no")]
 	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
 		return frappe.db.get_value("Order Bag", order_bag, act_fields, as_dict=True)
 	p = _actual_profile(order_bag)
@@ -1111,7 +1111,7 @@ def refresh_actual_weights(order_bag):
 		"act_gross_weight": p["gross"], "act_nett_weight": p["nett"], "act_purity": p["purity"],
 		"act_pure_weight": round(p["nett"] * p["purity"] / 100.0, 3),
 	}
-	for b in ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth"):
+	for b in ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"):
 		vals[f"act_{b}_weight"] = p[f"{b}_weight"]
 		vals[f"act_{b}_no"] = p[f"{b}_no"]
 	frappe.db.set_value("Order Bag", order_bag, vals)
@@ -2119,7 +2119,7 @@ def get_bag_transfer_info(order_bag):
 		"gross": p["gross"], "nett": p["nett"],
 		"split_of": sp.split_of or "", "piece_no": cint(sp.piece_no),
 	}
-	for bk in ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth"):
+	for bk in ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"):
 		out[bk + "_weight"] = p[bk + "_weight"]
 		out[bk + "_no"] = p[bk + "_no"]
 	return out
@@ -2727,7 +2727,7 @@ def get_stone_issue_card(barcode):
 	}
 
 
-STONE_BUCKET_CODES = ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth")
+STONE_BUCKET_CODES = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
 STONE_ISSUE_ROLE = "Jewelima Stone Issue"
 
 
@@ -5663,8 +5663,8 @@ def split_bag(order_bag, pieces, employee=None):
 			frappe.throw(frappe._("Not enough {0} in the bag — assigning {1} but only {2} available.").format(code, want, have))
 
 	def piece_fields(j):
-		dmd_no = ps_no = cs_no = cz_no = 0
-		dmd_w = ps_w = cs_w = cz_w = gold = 0.0
+		dmd_no = ps_no = cs_no = cz_no = cvd_no = sw_no = 0
+		dmd_w = ps_w = cs_w = cz_w = cvd_w = sw_w = gold = 0.0
 		for code, arr in amounts.items():
 			w, q, st = arr[j], counts[code][j], stype.get(code)
 			if st == "Diamond":
@@ -5675,9 +5675,13 @@ def split_bag(order_bag, pieces, employee=None):
 				cs_no += q; cs_w += w
 			elif st == "Cubic Zirconia":
 				cz_no += q; cz_w += w
+			elif st == "CVD":
+				cvd_no += q; cvd_w += w
+			elif st == "Swarovski":
+				sw_no += q; sw_w += w
 			else:
 				gold += w
-		gross = gold + (dmd_w + ps_w + cs_w + cz_w) * 0.2
+		gross = gold + (dmd_w + ps_w + cs_w + cz_w + cvd_w + sw_w) * 0.2
 		# the piece's ACTUAL weights (what it physically holds after the split)
 		return {
 			"qty": 1, "act_nett_weight": round(gold, 3), "act_gross_weight": round(gross, 3), "act_purity": bag.purity,
@@ -5685,6 +5689,8 @@ def split_bag(order_bag, pieces, employee=None):
 			"act_ps_no": ps_no, "act_ps_weight": round(ps_w, 3),
 			"act_cs_no": cs_no, "act_cs_weight": round(cs_w, 3),
 			"act_cz_no": cz_no, "act_cz_weight": round(cz_w, 3),
+			"act_cvd_no": cvd_no, "act_cvd_weight": round(cvd_w, 3),
+			"act_sw_no": sw_no, "act_sw_weight": round(sw_w, 3),
 		}
 
 	created = []
@@ -6327,7 +6333,8 @@ def make_products(bags):
 # Stone Type -> the bag's plan/actual bucket prefix.
 _BUCKET_OF_STONE_TYPE = {
 	"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs",
-	"Cubic Zirconia": "cz", "CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth",
+	"Cubic Zirconia": "cz", "CVD": "cvd", "Swarovski": "sw",
+	"Party Diamond": "pdmd", "Party Other": "poth",
 }
 
 
@@ -7206,6 +7213,7 @@ def get_price_chart(name):
 		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cs_rates") or [])],
 		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cz_rates") or [])],
 		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cvd_rates") or [])],
+		"sw_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("sw_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
 			"rate": r.rate, "min_per_piece": r.min_per_piece} for r in (d.get("making_rules") or [])],
@@ -7248,7 +7256,7 @@ def save_price_chart(payload):
 		if (r.get("stone") or "").strip():
 			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(),
 				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")), "rate": flt(r.get("rate"))})
-	for field in ("cs_rates", "cz_rates", "cvd_rates"):
+	for field in ("cs_rates", "cz_rates", "cvd_rates", "sw_rates"):
 		for r in p.get(field) or []:
 			if flt(r.get("rate")):
 				doc.append(field, {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
@@ -7322,6 +7330,7 @@ def _price_chart_letter_html(d):
 	cs = brk(d.get("cs_rates", []))
 	cz = brk(d.get("cz_rates", []))
 	cvd = brk(d.get("cvd_rates", []))
+	sw = brk(d.get("sw_rates", []))
 	flats = []
 	flat_rows = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(k, v) for k, v in flats)
 	sec = lambda title, table_head, body: (
@@ -7330,7 +7339,7 @@ def _price_chart_letter_html(d):
 	esc = frappe.utils.escape_html
 	# one-page discipline: the more rows the chart carries, the denser the type
 	total_rows = (len(d.get("diamond_rates", [])) + len(d.get("precious_stone_rates", []))
-		+ len(d.get("cs_rates", [])) + len(d.get("cz_rates", [])) + len(d.get("cvd_rates", []))
+		+ len(d.get("cs_rates", [])) + len(d.get("cz_rates", [])) + len(d.get("cvd_rates", [])) + len(d.get("sw_rates", []))
 		+ len(d.get("making_rules", [])) + len(d.get("certification_charges", [])))
 	if total_rows > 26:
 		density = "font-size:10px;", "3px 6px", "44px"
@@ -7833,7 +7842,7 @@ def get_design_report():
 		types[d.design_type or "—"] = types.get(d.design_type or "—", 0) + 1
 	month_start = frappe.utils.get_first_day(frappe.utils.today())
 	stone_free = [d for d in active if not any(cint(d.get(k)) for k in
-		("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no"))]
+		("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "sw_no", "pdmd_no", "poth_no"))]
 	running = [d for d in active if use.get(d.name) and cint(use[d.name].running)]
 	never = [d for d in active if d.name not in use]
 	top = sorted((d for d in active if d.name in use), key=lambda d: -cint(use[d.name].total))[:10]
@@ -7888,7 +7897,7 @@ def get_design_info(design):
 			pure_g += pure
 		mats.append({"item": m.item, "qty": cint(m.qty), "weight": flt(m.weight),
 			"purity": pur, "uom": (mi.weight_unit or "") if mi else "", "stone_type": st, "pure": pure})
-	counts = {k: cint(d.get(k)) for k in ("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no") if cint(d.get(k))}
+	counts = {k: cint(d.get(k)) for k in ("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "sw_no", "pdmd_no", "poth_no") if cint(d.get(k))}
 	bank = frappe.db.get_value("Design Bank", d.design_bank,
 		["name", "design_no", "gross_weight", "diamond_weight"], as_dict=True) if d.design_bank else None
 	siblings = frappe.get_all("Design", filters={"design_bank": d.design_bank},
@@ -8573,7 +8582,7 @@ def save_sale_prep_board(payload):
 		vals = {
 			"gold_value": _sum(["gold"]),
 			"diamond_value": _sum(["dmd", "pdmd"]),
-			"stone_value": _sum(["cs", "cz", "cvd", "ps"]),
+			"stone_value": _sum(["cs", "cz", "cvd", "sw", "ps"]),
 			"labour_value": _sum(["making"]),
 			"charges_value": _sum([k for k in comps if k in ("hall", "cert") or k.startswith("cert:")]),
 		}
@@ -8656,8 +8665,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	b = frappe.db.get_value("Order Bag", nm, [
 		"name", "design", "held_by", "stock_status", "is_finished", "huid", "qty", "certifications",
 		"act_gross_weight", "act_nett_weight", "act_dmd_weight", "act_dmd_no",
-		"act_ps_weight", "act_cs_weight", "act_cz_weight", "act_cvd_weight", "act_pdmd_weight", "act_poth_weight",
-		"act_cs_no", "act_cz_no", "act_cvd_no",
+		"act_ps_weight", "act_cs_weight", "act_cz_weight", "act_cvd_weight", "act_sw_weight", "act_pdmd_weight", "act_poth_weight",
+		"act_cs_no", "act_cz_no", "act_cvd_no", "act_sw_no",
 	], as_dict=True)
 	if not b.is_finished:
 		frappe.throw(frappe._("{0} is not a product yet.").format(nm))
@@ -8785,6 +8794,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	bucket("cs", "CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
 	bucket("cz", "CZ", "cz_rates", b.act_cz_weight, b.act_cz_no)
 	bucket("cvd", "CVD", "cvd_rates", b.act_cvd_weight, b.act_cvd_no)
+	bucket("sw", "SW", "sw_rates", b.act_sw_weight, b.act_sw_no)
 
 	# ---- precious stones: per-stone rows, flat or weight-bracketed by ITS carats
 	ps_rows = {}
@@ -8814,7 +8824,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				note="; ".join("{0} {1} ct x {2} = {3}".format(
 					d["stone"], d["ct"], d["rate"], _inr(d["ct"] * d["rate"])) for d in ps_detail))
 
-	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
+	ostone_ct = flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_ps_weight) + flt(b.act_cvd_weight) + flt(b.act_sw_weight) + flt(b.act_poth_weight)
 
 	# ---- making: per design type (blank row = DEFAULT), PER GRAM with a rupee
 	# floor. No matching rule and no default -> manual cell.
@@ -8913,7 +8923,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"ostone_ct": round(ostone_ct, 3),
 		"gold_value": _v("gold"),
 		"diamond_value": _v("dmd", "pdmd"),
-		"stone_value": _v("cs", "cz", "cvd", "ps"),
+		"stone_value": _v("cs", "cz", "cvd", "sw", "ps"),
 		"labour_value": _v("making"),
 		"charges_value": _v(*[k for k in comps if k in ("hall", "cert") or k.startswith("cert:")]),
 		"dmd_detail": dmd_detail, "cert_detail": cert_detail, "ps_detail": ps_detail,
@@ -9047,7 +9057,7 @@ def create_product_sale(payload):
 # Transfer Holder (Delivery) — move a piece's reservation to another customer,
 # every move written to a Holder Transfer record (the full paper trail).
 # ---------------------------------------------------------------------------
-_BUCKET_LABELS = ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth")
+_BUCKET_LABELS = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
 
 
 @frappe.whitelist()
@@ -9428,7 +9438,7 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 			q = qmap.get((grp or "").replace("DIAMOND ", ""), (grp or "").replace("DIAMOND ", ""))
 			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
 		quality = max(qual_ct, key=qual_ct.get).replace("-", " ") if qual_ct else ""
-		ost = flt(b.act_ps_weight) + flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_cvd_weight) + flt(b.act_poth_weight)
+		ost = flt(b.act_ps_weight) + flt(b.act_cs_weight) + flt(b.act_cz_weight) + flt(b.act_cvd_weight) + flt(b.act_sw_weight) + flt(b.act_poth_weight)
 		ws.append([i, nm, b.design or "", dtype, b.huid or "", flt(b.act_gross_weight),
 			cint(b.act_dmd_no), flt(b.act_dmd_weight), quality, round(ost, 3) or None])
 		tg += flt(b.act_gross_weight)
@@ -9952,7 +9962,7 @@ def get_certification_batches():
 
 	def stones_of(bag):
 		a = acts.get(bag)
-		return round(sum(flt(a.get(f"act_{x}_weight")) for x in ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth")), 3) if a else 0
+		return round(sum(flt(a.get(f"act_{x}_weight")) for x in ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")), 3) if a else 0
 
 	out, summary = [], {"pieces_out": 0, "pure_gold": 0.0, "stones_ct": 0.0, "batches_out": 0}
 	for d in docs:
@@ -10061,7 +10071,7 @@ def get_card_passport(order_bag):
 			"gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
 			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
 			"act_dmd_no", "act_dmd_weight", "act_ps_no", "act_ps_weight", "act_cs_no", "act_cs_weight",
-			"act_cz_no", "act_cz_weight", "act_cvd_no", "act_cvd_weight",
+			"act_cz_no", "act_cz_weight", "act_cvd_no", "act_cvd_weight", "act_sw_no", "act_sw_weight",
 			"act_pdmd_no", "act_pdmd_weight", "act_poth_weight",
 			"huid", "certifications", "stone_issue", "stone_issue_on",
 			"stone_oos", "stone_oos_note", "stone_oos_on",

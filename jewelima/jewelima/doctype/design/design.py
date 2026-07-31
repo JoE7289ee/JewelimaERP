@@ -8,10 +8,10 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
-STONE_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no", "Cubic Zirconia": "cz_no", "CVD": "cvd_no", "Party Diamond": "pdmd_no", "Party Other": "poth_no"}
+STONE_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no", "Cubic Zirconia": "cz_no", "CVD": "cvd_no", "Swarovski": "sw_no", "Party Diamond": "pdmd_no", "Party Other": "poth_no"}
 
 # Fields locked after creation (a design is immutable — you can only retire it).
-PROTECTED = ["design_name", "design_type", "design_style", "image", "purity", "dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "pdmd_no", "poth_no"]
+PROTECTED = ["design_name", "design_type", "design_style", "image", "purity", "dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "sw_no", "pdmd_no", "poth_no"]
 
 
 class Design(Document):
@@ -49,7 +49,7 @@ class Design(Document):
 
 	def compute_stone_counts(self):
 		"""Derive DMD/PS/CS counts from the BOM's stone components (by stone_type)."""
-		counts = {"dmd_no": 0, "ps_no": 0, "cs_no": 0, "cz_no": 0, "cvd_no": 0, "pdmd_no": 0, "poth_no": 0}
+		counts = {"dmd_no": 0, "ps_no": 0, "cs_no": 0, "cz_no": 0, "cvd_no": 0, "sw_no": 0, "pdmd_no": 0, "poth_no": 0}
 		codes = list({m.item for m in self.materials if m.item})
 		stype = {}
 		if codes:
@@ -62,6 +62,7 @@ class Design(Document):
 		self.dmd_no, self.ps_no, self.cs_no = counts["dmd_no"], counts["ps_no"], counts["cs_no"]
 		self.cz_no = counts["cz_no"]
 		self.cvd_no, self.pdmd_no, self.poth_no = counts["cvd_no"], counts["pdmd_no"], counts["poth_no"]
+		self.sw_no = counts["sw_no"]
 
 	def block_edits(self):
 		"""A design can't be changed after creation — only retired."""

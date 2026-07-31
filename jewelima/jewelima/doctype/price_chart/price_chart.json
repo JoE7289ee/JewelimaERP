@@ -17,6 +17,7 @@
   "precious_stone_rates",
   "cs_rates",
   "cz_rates",
+  "sw_rates",
   "cvd_rates",
   "col_break_stones",
   "making_section",
@@ -107,6 +108,12 @@
    "fieldname": "cz_rates",
    "fieldtype": "Table",
    "label": "CZ Rates",
+   "options": "Price Chart Bucket Rate"
+  },
+  {
+   "fieldname": "sw_rates",
+   "fieldtype": "Table",
+   "label": "SW Rates",
    "options": "Price Chart Bucket Rate"
   },
   {

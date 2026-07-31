@@ -95,6 +95,8 @@
   "act_col_cvd",
   "act_cvd_no",
   "act_cvd_weight",
+  "act_sw_no",
+  "act_sw_weight",
   "act_col_pdmd",
   "act_pdmd_no",
   "act_pdmd_weight",
@@ -679,6 +681,17 @@
    "label": "Actual CVD Weight (ct)",
    "precision": "3",
    "read_only": 1
+  },
+  {
+   "fieldname": "act_sw_no",
+   "fieldtype": "Int",
+   "label": "Act SW Pcs"
+  },
+  {
+   "fieldname": "act_sw_weight",
+   "fieldtype": "Float",
+   "label": "Act SW Ct",
+   "precision": "3"
   },
   {
    "fieldname": "act_col_pdmd",

@@ -1,6 +1,6 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 
 def after_install():
@@ -33,6 +33,7 @@ def after_install():
 	seed_karat_golds()
 	seed_salesmen()
 	seed_standard_golds()
+	retag_swarovski()
 	sync_workspace_sidebar()
 	drop_retired_pages()
 	setup_roles()
@@ -80,6 +81,7 @@ def after_migrate():
 	seed_karat_golds()
 	seed_salesmen()
 	seed_standard_golds()
+	retag_swarovski()
 	sync_workspace_sidebar()
 	drop_retired_pages()
 	setup_roles()
@@ -172,6 +174,38 @@ JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Divers
 # Pages the app no longer ships — migrate does not remove deleted Page docs,
 # so stale rows would keep serving a dead route on every site.
 RETIRED_PAGES = ["design-transfer"]
+
+
+def retag_swarovski():
+	"""SW gets its OWN bucket (2026-07-31): retag the SW items from Color Stone
+	to Swarovski, and move each unfinished bag's SW carats from the CS actual
+	columns into the new SW ones (recomputed from the bag ledger — finished /
+	sold pieces keep their history untouched)."""
+	if not frappe.db.exists("Stone Type", "Swarovski"):
+		return
+	frappe.db.sql("""update tabItem set stone_type='Swarovski'
+		where (item_group='SWAROVSKI' or name='SW' or name like 'SW %%')
+		and ifnull(stone_type,'') != 'Swarovski'""")
+	rows = frappe.db.sql("""
+		select l.order_bag, sum(if(l.direction='In', l.qty, -l.qty)) ct,
+			sum(if(l.direction='In', l.pcs, -l.pcs)) pcs
+		from `tabBag Material Ledger` l
+		join tabItem i on i.name = l.item and i.stone_type = 'Swarovski'
+		join `tabOrder Bag` b on b.name = l.order_bag and b.is_finished = 0
+		group by l.order_bag""", as_dict=True)
+	for r in rows:
+		if flt(r.ct) <= 0 and cint(r.pcs) <= 0:
+			continue
+		b = frappe.db.get_value("Order Bag", r.order_bag,
+			["act_cs_weight", "act_cs_no", "act_sw_weight"], as_dict=True)
+		if flt(b.act_sw_weight) > 0:
+			continue  # already migrated
+		frappe.db.set_value("Order Bag", r.order_bag, {
+			"act_sw_weight": round(flt(r.ct), 3), "act_sw_no": cint(r.pcs),
+			"act_cs_weight": round(max(flt(b.act_cs_weight) - flt(r.ct), 0), 3),
+			"act_cs_no": max(cint(b.act_cs_no) - cint(r.pcs), 0),
+		}, update_modified=False)
+	frappe.db.commit()
 
 
 def drop_retired_pages():
@@ -1261,7 +1295,7 @@ def create_default_stone_types():
 	stone columns are keyed to these exact names)."""
 	frappe.flags.allow_stone_type_edit = True
 	try:
-		for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Cubic Zirconia", "Party Diamond", "Party Other"]:
+		for stone_type in ["Diamond", "Precious Stone", "Color Stone", "CVD", "Cubic Zirconia", "Swarovski", "Party Diamond", "Party Other"]:
 			if not frappe.db.exists("Stone Type", stone_type):
 				frappe.get_doc(
 					{"doctype": "Stone Type", "stone_type_name": stone_type}

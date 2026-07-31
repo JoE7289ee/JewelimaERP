@@ -31,6 +31,7 @@ function jwSieveQty() {
 	const grp = r.stone_type === "Diamond" ? "DMD"
 		: r.stone_type === "CVD" ? "CVD"
 		: r.stone_type === "Cubic Zirconia" ? "CZ"
+		: r.stone_type === "Swarovski" ? "SW"
 		: r.stone_type === "Color Stone" && (r.item || "").startsWith("SW") ? "SW" : null;
 	if (!grp) return;
 	const avg = (G[grp] || {})[(r.item || "").split(" ").slice(1).join(" ")];

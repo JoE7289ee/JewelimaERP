@@ -139,7 +139,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		});
 	}
 	// stone columns appear only when the batch actually carries that bucket
-	const TOB_BUCKETS = ["dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth"];
+	const TOB_BUCKETS = ["dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"];
 	function renderRows() {
 		const sum = (k) => state.rows.reduce((s, r) => s + flt(r[k]), 0);
 		const active = TOB_BUCKETS.filter((b) => state.rows.some((r) => flt(r[b + "_weight"]) || flt(r[b + "_no"])));

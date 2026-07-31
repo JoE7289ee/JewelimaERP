@@ -112,7 +112,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 
 	const BLANK = () => ({ name: null, chart_name: "", chart_date: frappe.datetime.get_today(), status: "Active",
-		diamond_rates: [], cs_rates: [], cz_rates: [], cvd_rates: [],
+		diamond_rates: [], cs_rates: [], cz_rates: [], cvd_rates: [], sw_rates: [],
 		certification_charges: [], precious_stone_rates: [], making_rules: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
@@ -158,7 +158,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
-		if (["csr", "czr", "cvr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
+		if (["csr", "czr", "cvr", "swr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td><select data-f="basis">${["Per Ct", "Per Piece"].map((b) =>
@@ -203,6 +203,9 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("CZ Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="czr">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="czr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("czr")}</tbody></table>
+			<div class="pc-sec">${__("SW Rates — Swarovski brackets, same rules")}<span class="add" data-k="swr">+ ${__("row")}</span></div>
+			<table class="pc-t" data-k="swr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
+				<tbody>${rowsHtml("swr")}</tbody></table>
 			<div class="pc-sec">${__("CVD Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="cvr">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="cvr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cvr")}</tbody></table>
@@ -239,7 +242,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 	const KIND_ARR = { dmd: "diamond_rates",
 		cert: "certification_charges", ps: "precious_stone_rates", mk: "making_rules",
-		csr: "cs_rates", czr: "cz_rates", cvr: "cvd_rates" };
+		csr: "cs_rates", czr: "cz_rates", cvr: "cvd_rates", swr: "sw_rates" };
 	root.on("input change", "table.pc-t input, table.pc-t select", function () {
 		const $t = $(this).closest("table.pc-t");
 		const arr = cur[KIND_ARR[$t.data("k")]];
@@ -257,7 +260,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "" }
 			: k === "ps" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
 			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "" }
-			: ["csr", "czr", "cvr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
+			: ["csr", "czr", "cvr", "swr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
 			: { });
 		paintEditor();
 	});
