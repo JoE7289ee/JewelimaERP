@@ -155,7 +155,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		state.rows.forEach((r, i) => {
 			$body.append($(`<tr>
 				<td>${i + 1}</td>
-				<td><b>${esc(r.name)}</b></td>
+				<td><b>${esc(r.name)}</b>${r.split_of ? `<div style="font-size:10px;color:#9a6b1f;font-weight:700;">SPLIT · ${esc(r.split_of)} #${r.piece_no || "?"}</div>` : ""}</td>
 				<td>${esc(r.design || "")}</td>
 				<td>${r.qty || ""}</td>
 				<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td>

@@ -112,7 +112,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 				travel = locs.map((l) => `<b>${esc(l)}</b>`).join('<span class="ar">&rarr;</span>');
 			} else {
 				travel = `<table class="ci-tbl"><thead><tr><th>From</th><th>To</th><th>When</th><th>By</th></tr></thead><tbody>${d.transfers
-					.map((t) => `<tr><td>${esc(t.from_location || "—")}</td><td><b>${esc(t.to_location || "")}</b></td><td>${dtt(t.transfer_time)}</td><td>${esc(t.transferred_by || "")}</td></tr>`)
+					.map((t) => `<tr${t.from_parent ? ' style="opacity:.62;"' : ""}><td>${esc(t.from_location || "—")}${t.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td><b>${esc(t.to_location || "")}</b></td><td>${dtt(t.transfer_time)}</td><td>${esc(t.transferred_by || "")}</td></tr>`)
 					.join("")}</tbody></table>`;
 			}
 		}
@@ -125,8 +125,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			const rows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
 			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
 		} else if ((d.stages || []).length) {
-			const rows = d.stages.map((s) => `<tr>
-				<td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td>
+			const rows = d.stages.map((s) => `<tr${s.from_parent ? ' style="opacity:.62;"' : ""}>
+				<td><b>${esc(s.bench || "")}</b>${s.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td>
 				<td>${esc(s.work_type || "")}</td><td>${esc(s.collection_state || "")}</td>
 				<td>${dtt(s.issued_at || s.time_in)}</td><td>${dtt(s.receipted_at || s.time_out)}</td>
 				<td class="num">${flt(s.weight_out) ? g(s.weight_out) : ""}</td>
@@ -141,8 +141,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			const rows = d.issues.map((r) => {
 				const sign = r.direction === "Out" ? "−" : "";
 				const uom = r.stone_type ? "ct" : "g";
-				return `<tr>
-					<td>${r.entry_type === "Stone Issue" ? "Stone" : "Gold"}</td>
+				return `<tr${r.from_parent ? ' style="opacity:.62;"' : ""}>
+					<td>${r.entry_type === "Stone Issue" ? "Stone" : "Gold"}${r.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td>
 					<td><b>${esc(r.item)}</b>${r.stone_type ? ` <span class="muted">(${esc(r.stone_type)})</span>` : ""}</td>
 					<td class="num">${r.pcs ? r.pcs + " / " : ""}${sign}${flt(r.qty).toFixed(3)} ${uom}</td>
 					<td>${esc(r.who || "—")}</td><td>${r.datetime ? frappe.datetime.str_to_user(r.datetime) : "—"}</td></tr>`;
@@ -151,7 +151,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		}
 
 		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
-		const extraKvs = forPrint ? "" : `${kv("Party Date", dt(b.customer_date))}${b.job_order ? `<span><span class="k">Job Order</span> <a class="ci-jo" data-jo="${esc(b.job_order)}" style="color:#1f618d;font-weight:700;cursor:pointer;">${esc(b.job_order)}</a></span>` : ""}${kv("Tree", b.tree)}${kv("Held By", b.held_by)}`;
+		const extraKvs = forPrint ? "" : `${kv("Party Date", dt(b.customer_date))}${b.job_order ? `<span><span class="k">Job Order</span> <a class="ci-jo" data-jo="${esc(b.job_order)}" style="color:#1f618d;font-weight:700;cursor:pointer;">${esc(b.job_order)}</a></span>` : ""}${b.split_of ? `<span><span class="k">Split of</span> <a class="jw-card-link" data-card="${esc(b.split_of)}" style="color:#9a6b1f;font-weight:700;cursor:pointer;">${esc(b.split_of)}</a> · piece #${b.piece_no || "?"}</span>` : ""}${kv("Tree", b.tree)}${kv("Held By", b.held_by)}`;
 		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
 
 		// ---- everything else we hold (screen only) ---------------------------

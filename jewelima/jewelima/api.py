@@ -1881,6 +1881,14 @@ def get_order_bag_images(order_bag):
 	for a in bag.attachments or []:
 		if a.image:
 			files.append({"file_url": a.image, "file_name": a.title or a.image.split("/")[-1]})
+	# split pieces carry the family album: the parent's images ride along
+	split_of = frappe.db.get_value("Order Bag", order_bag, "split_of")
+	if split_of and frappe.db.exists("Order Bag", split_of):
+		for pf in frappe.get_all("File",
+				filters={"attached_to_doctype": "Order Bag", "attached_to_name": split_of},
+				fields=["file_url", "file_name"], order_by="creation desc"):
+			pf["file_name"] = (pf.get("file_name") or "") + " (parent)"
+			files.append(pf)
 	out, seen = [], set()
 	for f in files:
 		url = f.get("file_url")
@@ -2105,9 +2113,11 @@ def get_bag_transfer_info(order_bag):
 	if not bag:
 		return {}
 	p = _actual_profile(order_bag)  # everything from what the bag ACTUALLY holds
+	sp = frappe.db.get_value("Order Bag", order_bag, ["split_of", "piece_no"], as_dict=True)
 	out = {
 		"location": bag.location, "design": bag.design, "qty": bag.qty, "due_date": bag.due_date,
 		"gross": p["gross"], "nett": p["nett"],
+		"split_of": sp.split_of or "", "piece_no": cint(sp.piece_no),
 	}
 	for bk in ("dmd", "ps", "cs", "cz", "cvd", "pdmd", "poth"):
 		out[bk + "_weight"] = p[bk + "_weight"]
@@ -10034,6 +10044,7 @@ def get_card_passport(order_bag):
 		[
 			"name", "design", "qty", "size", "location", "tree", "stock_status", "held_by", "customer", "salesman",
 			"order_type", "order_date", "due_date", "customer_date", "is_finished", "narration", "image", "job_order",
+			"split_of", "piece_no", "creation",
 			"gross_weight", "nett_weight", "purity", "dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
 			"act_gross_weight", "act_nett_weight", "act_pure_weight", "act_purity",
 			"act_dmd_no", "act_dmd_weight", "act_ps_no", "act_ps_weight", "act_cs_no", "act_cs_weight",
@@ -10106,18 +10117,49 @@ def get_card_passport(order_bag):
 	for k in ("stone_issue_on", "stone_oos_on"):
 		bag[k] = str(bag.get(k) or "")
 
+	transfers = frappe.get_all(
+		"Order Bag Transfer", filters={"order_bag": order_bag},
+		fields=["from_location", "to_location", "transfer_time", "transferred_by"], order_by="transfer_time asc",
+	)
+	stages = get_bag_stage_history(order_bag)
+	issue_rows = [{"item": r.item, "stone_type": r.stone_type or "", "entry_type": r.entry_type,
+		"direction": r.direction, "qty": flt(r.qty), "pcs": cint(r.pcs),
+		"datetime": str(r.datetime or ""), "who": r.who, "remarks": r.remarks or ""} for r in issues]
+
+	# a SPLIT PIECE was physically the parent bag until the split moment — its
+	# passport shows the parent's pre-split journey too (marked from_parent)
+	if bag.split_of and frappe.db.exists("Order Bag", bag.split_of):
+		born = str(bag.creation)
+		p_tr = frappe.get_all("Order Bag Transfer", filters={"order_bag": bag.split_of,
+			"transfer_time": ["<", born]},
+			fields=["from_location", "to_location", "transfer_time", "transferred_by"],
+			order_by="transfer_time asc")
+		for t in p_tr:
+			t["from_parent"] = 1
+		transfers = p_tr + transfers
+		p_st = [dict(x, from_parent=1) for x in get_bag_stage_history(bag.split_of)
+			if str(x.get("issued_at") or x.get("time_in") or "") < born]
+		stages = p_st + stages
+		p_iss = frappe.db.sql("""
+			SELECT l.item, i.stone_type, l.entry_type, l.direction, l.qty, l.pcs,
+				l.creation datetime, l.owner who, l.remarks
+			FROM `tabBag Material Ledger` l LEFT JOIN tabItem i ON i.name = l.item
+			WHERE l.order_bag = %(p)s AND l.creation < %(born)s
+				AND l.entry_type IN ('Gold Issue', 'Stone Issue', 'Loss', 'Weight Add')
+			ORDER BY l.creation ASC
+		""", {"p": bag.split_of, "born": born}, as_dict=True)
+		issue_rows = [{"item": r.item, "stone_type": r.stone_type or "", "entry_type": r.entry_type,
+			"direction": r.direction, "qty": flt(r.qty), "pcs": cint(r.pcs),
+			"datetime": str(r.datetime or ""), "who": r.who, "remarks": r.remarks or "",
+			"from_parent": 1} for r in p_iss] + issue_rows
+
 	return {
 		"bag": bag,
 		"extras": extras,
 		"contents": get_bag_contents(order_bag),
-		"transfers": frappe.get_all(
-			"Order Bag Transfer", filters={"order_bag": order_bag},
-			fields=["from_location", "to_location", "transfer_time", "transferred_by"], order_by="transfer_time asc",
-		),
-		"stages": get_bag_stage_history(order_bag),
-		"issues": [{"item": r.item, "stone_type": r.stone_type or "", "entry_type": r.entry_type,
-			"direction": r.direction, "qty": flt(r.qty), "pcs": cint(r.pcs),
-			"datetime": str(r.datetime or ""), "who": r.who, "remarks": r.remarks or ""} for r in issues],
+		"transfers": transfers,
+		"stages": stages,
+		"issues": issue_rows,
 	}
 
 
