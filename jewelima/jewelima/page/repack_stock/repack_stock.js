@@ -32,6 +32,13 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		.rp2-tbl input.qty{width:110px;border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;
 			background:var(--control-bg);font-variant-numeric:tabular-nums;text-align:right;}
 		.rp2-x{color:#b02a2a;cursor:pointer;font-weight:800;padding:0 6px;}
+		.rp2-tbl input.pcs{width:80px;border:1px solid var(--border-color);border-radius:6px;padding:6px 9px;
+			background:var(--control-bg);font-variant-numeric:tabular-nums;text-align:right;}
+		.rp2-tbl td.qc-auto input.pcs{background:#e8f5e9;border-color:#2e7d32;}
+		.rp2-tbl td.qc-man input.pcs{background:#fff3cd;border-color:#e0a800;}
+		.rp2-avg{color:var(--text-muted);font-size:11.5px;white-space:nowrap;}
+		.rp2-sieves{max-height:52vh;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
+		.rp2-sieves .rp2-tbl th{position:sticky;top:0;background:var(--control-bg);z-index:1;}
 		.rp2-bal{margin:10px 0;font-size:13px;font-weight:700;}
 		.rp2-bal.ok{color:#2e7d32;} .rp2-bal.bad{color:#b02a2a;}
 		.rp2-go{background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
@@ -56,15 +63,16 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				<div class="rp2-src"></div>
 				<div class="rp2-qty"></div>
 				<div class="rp2-meta rp2-info">${__("Locked to the Stone Issue warehouse.")}</div>
-			</div>
 			<div class="rp2-card">
 				<h4>${__("Split into")}</h4>
 				<div class="rp2-addrow" style="display:flex;gap:8px;align-items:end;margin-bottom:8px;">
-					<div class="rp2-titem" style="flex:1;"></div>
-					<button class="btn btn-sm btn-default rp2-add">${__("Add line")}</button>
+					<div class="rp2-tgroup" style="flex:1;display:none;"></div>
 				</div>
-				<table class="rp2-tbl"><thead><tr><th>${__("Item")}</th><th style="text-align:right">${__("Qty (ct)")}</th><th></th></tr></thead>
+				<div class="rp2-sieves">
+				<table class="rp2-tbl"><thead><tr><th>${__("Sieve")}</th><th class="rp2-avg">${__("Avg ct/pc")}</th>
+					<th style="text-align:right">${__("Weight (ct)")}</th><th style="text-align:right">${__("Qty (pcs)")}</th></tr></thead>
 					<tbody class="rp2-tbody"></tbody></table>
+				</div>
 				<div class="rp2-bal"></div>
 				<div style="display:flex;gap:10px;align-items:end;">
 					<div class="rp2-remarks" style="flex:1;"></div>
@@ -94,7 +102,8 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		onchange: () => onSource() });
 	const qty = mk(".rp2-qty", { fieldtype: "Float", label: __("Qty being repacked (ct) — auto from the split"), fieldname: "q",
 		read_only: 1 });
-	const titem = mk(".rp2-titem", { fieldtype: "Link", label: __("Target item"), fieldname: "t", options: "Item" });
+	const tgroup = mk(".rp2-tgroup", { fieldtype: "Select", label: __("Split into quality"), fieldname: "tg",
+		onchange: () => loadSieves() });
 	const remarks = mk(".rp2-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "r" });
 
 	function onSource() {
@@ -106,48 +115,71 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 			CTX = r.message || CTX;
 			root.find(".rp2-info").html(__("Warehouse <b>{0}</b> · available there: <b>{1} ct</b> · family: <b>{2}</b>",
 				[esc(CTX.warehouse || "—"), (CTX.available || 0).toFixed(3), esc(CTX.family || "—")]));
-			titem.df.get_query = () => ({ query: "jewelima.jewelima.api.stone_item_search",
-				filters: { item_group: ["in", CTX.target_groups || []], exclude: it } });
+			if (CTX.family === "DIAMOND") {
+				// pick the quality first — then that quality's sieves list
+				root.find(".rp2-tgroup").show();
+				tgroup.df.options = [""].concat(CTX.target_groups || []).join("\n");
+				tgroup.refresh();
+				tgroup.set_value("");
+			} else {
+				root.find(".rp2-tgroup").hide();
+				loadSieves();
+			}
 			balance();
 		});
 	}
 
-	root.find(".rp2-add").on("click", () => {
-		const it = titem.get_value();
+	// the WHOLE family sieve run appears automatically; weights typed in,
+	// piece counts judged from the chart average (editable — green while
+	// auto, yellow once hand-changed)
+	function loadSieves() {
+		const it = src.get_value();
 		if (!it) return;
-		if (TARGETS.some((t) => t.item === it)) {
-			frappe.show_alert({ message: __("{0} is already a line.", [esc(it)]), indicator: "orange" }, 3);
-			return;
-		}
-		TARGETS.push({ item: it, qty: 0 });
-		titem.set_value("");
-		paintTargets();
-	});
+		const g = CTX.family === "DIAMOND" ? tgroup.get_value() : null;
+		if (CTX.family === "DIAMOND" && !g) { TARGETS = []; paintTargets(); return; }
+		frappe.call({ method: API + ".get_repack_sieves", args: { source_item: it, target_group: g } })
+			.then((r) => {
+				const m = r.message || {};
+				TARGETS = (m.items || []).map((x) => ({ item: x.item, label: x.label, avg: x.avg, qty: 0, pcs: 0, manual: false }));
+				paintTargets();
+			});
+	}
 
 	function paintTargets() {
 		root.find(".rp2-tbody").html(TARGETS.map((t, i) => `<tr>
-			<td>${esc(t.item)}</td>
+			<td>${esc(t.label || t.item)}</td>
+			<td class="rp2-avg">${t.avg ? t.avg.toFixed(4) : "—"}</td>
 			<td style="text-align:right"><input class="qty" type="number" step="0.001" data-i="${i}" value="${t.qty || ""}"></td>
-			<td><span class="rp2-x" data-i="${i}">✕</span></td>
-		</tr>`).join("") || `<tr><td colspan="3" style="color:var(--text-muted);padding:14px 8px;">${__("Pick the sieve items this stock splits into.")}</td></tr>`);
+			<td style="text-align:right" class="${t.qty > 0 ? (t.manual ? "qc-man" : "qc-auto") : ""}">
+				<input class="pcs" type="number" step="1" data-i="${i}" value="${t.pcs || ""}"></td>
+		</tr>`).join("") || `<tr><td colspan="4" style="color:var(--text-muted);padding:14px 8px;">${__("Pick a source (and quality) — its sieve run appears here.")}</td></tr>`);
 		balance();
 	}
 
 	root.on("input", ".rp2-tbl input.qty", function () {
-		TARGETS[Number(this.dataset.i)].qty = Number(this.value) || 0;
+		const t = TARGETS[Number(this.dataset.i)];
+		t.qty = Number(this.value) || 0;
+		// carats entered -> pieces judged by the group average (until hand-edited)
+		if (!t.manual) t.pcs = t.avg && t.qty > 0 ? Math.max(1, Math.round(t.qty / t.avg)) : 0;
+		const $tr = $(this).closest("tr");
+		$tr.find("input.pcs").val(t.pcs || "");
+		$tr.find("td").eq(3).attr("class", t.qty > 0 ? (t.manual ? "qc-man" : "qc-auto") : "");
 		balance();
 	});
-	root.on("click", ".rp2-x", function () {
-		TARGETS.splice(Number($(this).attr("data-i")), 1);
-		paintTargets();
+	root.on("input", ".rp2-tbl input.pcs", function () {
+		const t = TARGETS[Number(this.dataset.i)];
+		t.pcs = Number(this.value) || 0;
+		t.manual = true; // hand count beats the average -> yellow
+		$(this).closest("td").attr("class", t.qty > 0 ? "qc-man" : "");
 	});
 
 	function balance() {
 		const sum = TARGETS.reduce((a, t) => a + (t.qty || 0), 0);
+		const lines = TARGETS.filter((t) => t.qty > 0).length;
 		qty.set_value(sum ? Number(sum.toFixed(3)) : "");
 		const avail = CTX.available || 0;
 		const over = sum > avail + 0.0005;
-		const ok = sum > 0 && TARGETS.length && !over && !!src.get_value();
+		const ok = sum > 0 && lines > 0 && !over && !!src.get_value();
 		root.find(".rp2-bal")
 			.toggleClass("ok", ok).toggleClass("bad", !ok && sum > 0)
 			.text(sum ? (over
@@ -158,14 +190,15 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 
 	root.find(".rp2-go").on("click", () => {
 		frappe.confirm(__("Place a repack request for <b>{0} ct</b> of <b>{1}</b> into {2} line(s)?<br>It only moves after approval.",
-			[Number(qty.get_value()).toFixed(3), esc(src.get_value()), TARGETS.length]), () => {
+			[Number(qty.get_value()).toFixed(3), esc(src.get_value()), TARGETS.filter((t) => t.qty > 0).length]), () => {
 			frappe.call({ method: API + ".create_repack_request", args: {
 				source_item: src.get_value(), qty: qty.get_value(),
-				targets: JSON.stringify(TARGETS), remarks: remarks.get_value() || null,
+				targets: JSON.stringify(TARGETS.filter((t) => t.qty > 0).map((t) => ({ item: t.item, qty: t.qty, pcs: t.pcs }))),
+				remarks: remarks.get_value() || null,
 			} }).then((r) => {
 				frappe.show_alert({ message: __("Request {0} placed — awaiting approval.", [(r.message || {}).name]), indicator: "green" }, 4);
-				TARGETS = []; qty.set_value(""); remarks.set_value("");
-				paintTargets(); loadList();
+				qty.set_value(""); remarks.set_value("");
+				loadSieves(); loadList();
 			});
 		});
 	});
@@ -180,7 +213,7 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				rows.map((x) => `<tr>
 					<td><b>${esc(x.name)}</b><br><span style="color:var(--text-muted);font-size:11px;">${esc((x.requested_on || "").slice(0, 16))}</span></td>
 					<td>${esc(x.source_item)} · <b>${(x.qty || 0).toFixed(3)} ct</b></td>
-					<td>${x.targets.map((t) => `${esc(t.item)} — ${t.qty.toFixed(3)}`).join("<br>")}</td>
+					<td>${x.targets.map((t) => `${esc(t.item)} — ${t.qty.toFixed(3)}${t.pcs ? " ct · " + t.pcs + " pc" : ""}`).join("<br>")}</td>
 					<td>${esc(x.requested_by || "")}</td>
 					<td><span class="rp2-st ${x.status}">${esc(x.status)}</span>
 						${x.stock_entry ? `<br><span style="font-size:11px;color:var(--text-muted);">${esc(x.stock_entry)}</span>` : ""}

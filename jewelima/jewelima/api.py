@@ -3471,6 +3471,32 @@ def stone_item_search(doctype, txt, searchfield, start, page_len, filters):
 
 
 @frappe.whitelist()
+def get_repack_sieves(source_item, target_group=None):
+	"""The auto grid for Repack: EVERY sieve item of the target group (family-
+	checked), with the group's chart average so the page can judge piece
+	counts from entered carats."""
+	fam = _stone_family(source_item)
+	group = target_group or (fam if fam != "DIAMOND" else None)
+	if not group:
+		frappe.throw(frappe._("Pick the diamond quality to split into."))
+	if (fam == "DIAMOND" and not (group or "").startswith("DIAMOND")) or (fam != "DIAMOND" and group != fam):
+		frappe.throw(frappe._("{0} is outside the {1} family.").format(group, fam))
+	col = {"CVD": "cvd_avg_cts", "CUBIC ZIRCONIA": "cz_avg_cts", "SWAROVSKI": "sw_avg_cts"}.get(fam, "avg_cts")
+	avg = {r.sieve_size: flt(r.get(col)) for r in frappe.get_all("Diamond Sieve",
+		fields=["sieve_size", "avg_cts", "cvd_avg_cts", "cz_avg_cts", "sw_avg_cts", "idx_order"],
+		order_by="idx_order asc", limit_page_length=0)}
+	order = {label: i for i, label in enumerate(avg)}
+	items = []
+	for it in frappe.get_all("Item", filters={"item_group": group, "disabled": 0}, pluck="name"):
+		if it == source_item or " " not in it:
+			continue  # sieve-sized targets only; never itself
+		label = it.split(" ", 1)[1]
+		items.append({"item": it, "label": label, "avg": avg.get(label, 0)})
+	items.sort(key=lambda x: order.get(x["label"], 999))
+	return {"family": fam, "group": group, "items": items}
+
+
+@frappe.whitelist()
 def get_repack_context(source_item=None):
 	"""What the Repack page needs: the locked warehouse, and (given a source)
 	its available stock there + the items it may legally split into."""
@@ -3513,7 +3539,7 @@ def create_repack_request(source_item, qty, targets, remarks=None):
 			frappe.throw(frappe._("{0} can't be repacked into itself.").format(it))
 		if _stone_family(it) != fam:
 			frappe.throw(frappe._("{0} is outside the {1} family — a stone only repacks within its own group.").format(it, fam))
-		rows.append({"item": it, "qty": q})
+		rows.append({"item": it, "qty": q, "pcs": cint(t.get("pcs"))})
 		total += q
 	if not rows:
 		frappe.throw(frappe._("Add at least one target line."))
@@ -3542,8 +3568,8 @@ def list_repack_requests(status=None, limit=50):
 		order_by="creation desc", limit_page_length=cint(limit) or 50)
 	tmap = {}
 	for t in frappe.get_all("Repack Request Item", filters={"parent": ["in", [r.name for r in rows]]},
-			fields=["parent", "item", "qty"], order_by="idx"):
-		tmap.setdefault(t.parent, []).append({"item": t.item, "qty": flt(t.qty)})
+			fields=["parent", "item", "qty", "pcs"], order_by="idx"):
+		tmap.setdefault(t.parent, []).append({"item": t.item, "qty": flt(t.qty), "pcs": cint(t.pcs)})
 	for r in rows:
 		r["targets"] = tmap.get(r.name, [])
 		r["requested_on"] = str(r.requested_on or "")
