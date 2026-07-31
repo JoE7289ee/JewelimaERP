@@ -63,6 +63,10 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				<div class="rp2-src"></div>
 				<div class="rp2-qty"></div>
 				<div class="rp2-meta rp2-info">${__("Locked to the Stone Issue warehouse.")}</div>
+				<div class="rp2-bal"></div>
+				<div class="rp2-remarks"></div>
+				<button class="rp2-go" disabled style="margin-top:10px;width:100%;">${__("PLACE REQUEST")}</button>
+			</div>
 			<div class="rp2-card">
 				<h4>${__("Split into")}</h4>
 				<div class="rp2-addrow" style="display:flex;gap:8px;align-items:end;margin-bottom:8px;">
@@ -72,11 +76,6 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				<table class="rp2-tbl"><thead><tr><th>${__("Sieve")}</th><th class="rp2-avg">${__("Avg ct/pc")}</th>
 					<th style="text-align:right">${__("Weight (ct)")}</th><th style="text-align:right">${__("Qty (pcs)")}</th></tr></thead>
 					<tbody class="rp2-tbody"></tbody></table>
-				</div>
-				<div class="rp2-bal"></div>
-				<div style="display:flex;gap:10px;align-items:end;">
-					<div class="rp2-remarks" style="flex:1;"></div>
-					<button class="rp2-go" disabled>${__("PLACE REQUEST")}</button>
 				</div>
 			</div>
 		</div>
@@ -172,11 +171,14 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		const avail = CTX.available || 0;
 		const over = sum > avail + 0.0005;
 		const ok = sum > 0 && lines > 0 && !over && !!src.get_value();
+		const srcName = src.get_value() || "";
 		root.find(".rp2-bal")
 			.toggleClass("ok", ok).toggleClass("bad", !ok && sum > 0)
-			.text(sum ? (over
+			.html(!srcName ? "" : over
 				? __("Split {0} ct — only {1} ct available at Stone Issue", [sum.toFixed(3), avail.toFixed(3)])
-				: __("Repacking {0} ct ✓", [sum.toFixed(3)])) : "");
+				: sum
+					? __("Repacking <b>{0} ct</b> ✓ &nbsp;·&nbsp; left in {1}: <b>{2} ct</b>", [sum.toFixed(3), frappe.utils.escape_html(srcName), (avail - sum).toFixed(3)])
+					: __("Available: <b>{0} ct</b> — type the weights on the right", [avail.toFixed(3)]));
 		root.find(".rp2-go").prop("disabled", !ok);
 	}
 
