@@ -3112,7 +3112,7 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 	"""Resolve one audit line. 'zero_pcs': corrective Adjustment row so the count
 	matches the (zero) weight. 'sweep': residual carats go to a stage's -LOSS
 	bucket (Option B — residue is collected, never vanishes)."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	net = frappe.db.sql("""
 		SELECT SUM(IF(direction='Out', -qty, qty)) ct, SUM(IF(direction='Out', -pcs, pcs)) pcs
 		FROM `tabBag Material Ledger` WHERE order_bag = %s AND item = %s
@@ -3236,7 +3236,7 @@ def update_selection_photo(name, design_type=None, provider=None, stock_pcs=None
 @frappe.whitelist()
 def get_selection_review(status="pending", search=None, limit=100):
 	"""The review queue. status: pending | done | all."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	filters = {"active": 1}
 	if status == "pending":
 		filters["reviewed"] = 0
@@ -3257,7 +3257,7 @@ def get_selection_review(status="pending", search=None, limit=100):
 def review_save(name, gold_gms=None, cts=None, stock_pcs=None, reviewed=None,
 		design_type=None, provider=None):
 	"""One review row: save values and/or the Reviewed tick."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	if not frappe.db.exists("Selection Photo", name):
 		frappe.throw(frappe._("Photo {0} not found.").format(name))
 	doc = frappe.get_doc("Selection Photo", name)
@@ -3283,7 +3283,7 @@ def review_rename_code(name, new_code):
 	"""Change a photo's code. If the target code exists, DON'T rename — return
 	both photos so the page can show them side by side; the reviewer then keeps
 	one via review_delete_photo and retries."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	new_code = (new_code or "").strip().upper()
 	if not new_code:
 		frappe.throw(frappe._("Code is required."))
@@ -3307,7 +3307,7 @@ def review_rename_code(name, new_code):
 def review_delete_photo(name):
 	"""Remove a duplicate photo. Any Selection lines pointing at it are dropped
 	and their Selections re-totalled first, so nothing dangles."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	if not frappe.db.exists("Selection Photo", name):
 		frappe.throw(frappe._("Photo {0} not found.").format(name))
 	parents = frappe.get_all("Selection Item", filters={"photo": name}, pluck="parent")
@@ -3327,14 +3327,15 @@ def review_delete_photo(name):
 @frappe.whitelist()
 def get_sieve_chart():
 	"""The whole chart, in chart order, for the excel-style page."""
-	return frappe.get_all("Diamond Sieve", fields=["name", "sieve_size", "mm_size", "avg_cts", "idx_order"],
+	return frappe.get_all("Diamond Sieve",
+		fields=["name", "sieve_size", "mm_size", "avg_cts", "cvd_avg_cts", "cz_avg_cts", "sw_avg_cts", "idx_order"],
 		order_by="idx_order asc, name asc", limit_page_length=0)
 
 
 @frappe.whitelist()
 def save_sieve_chart(rows):
 	"""Save edited cells from the Sieve Chart page. rows = [{name, mm_size, avg_cts}]."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	if isinstance(rows, str):
 		rows = json.loads(rows or "[]")
 	n = 0
@@ -3342,7 +3343,9 @@ def save_sieve_chart(rows):
 		if not frappe.db.exists("Diamond Sieve", r.get("name")):
 			continue
 		frappe.db.set_value("Diamond Sieve", r["name"], {
-			"mm_size": flt(r.get("mm_size")), "avg_cts": flt(r.get("avg_cts"))})
+			"mm_size": flt(r.get("mm_size")), "avg_cts": flt(r.get("avg_cts")),
+			"cvd_avg_cts": flt(r.get("cvd_avg_cts")), "cz_avg_cts": flt(r.get("cz_avg_cts")),
+			"sw_avg_cts": flt(r.get("sw_avg_cts"))})
 		n += 1
 	frappe.db.commit()
 	return {"saved": n}
@@ -3353,8 +3356,16 @@ def get_sieve_map():
 	"""size label -> avg cts/stone, for the pages that auto-fill qty<->carat
 	(purchase entry, BOM entry). The size label matches the tail of the diamond
 	item codes: 'SI-IJ 1-1.5' -> '1-1.5'."""
-	return {r.sieve_size: flt(r.avg_cts) for r in frappe.get_all(
-		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
+	rows = frappe.get_all("Diamond Sieve",
+		fields=["sieve_size", "avg_cts", "cvd_avg_cts", "cz_avg_cts", "sw_avg_cts"], limit_page_length=0)
+	out = {r.sieve_size: flt(r.avg_cts) for r in rows if flt(r.avg_cts) > 0}
+	out["_groups"] = {
+		"DMD": {r.sieve_size: flt(r.avg_cts) for r in rows if flt(r.avg_cts) > 0},
+		"CVD": {r.sieve_size: flt(r.cvd_avg_cts) for r in rows if flt(r.cvd_avg_cts) > 0},
+		"CZ": {r.sieve_size: flt(r.cz_avg_cts) for r in rows if flt(r.cz_avg_cts) > 0},
+		"SW": {r.sieve_size: flt(r.sw_avg_cts) for r in rows if flt(r.sw_avg_cts) > 0},
+	}
+	return out
 
 
 # --- Stone Stock (CAD) — read-only: is that stone FREE to use? -----------------
@@ -3543,7 +3554,7 @@ def list_repack_requests(status=None, limit=50):
 def approve_repack(name):
 	"""The bigger role signs off: checks live stock, writes ONE Repack Stock Entry
 	(source out, sieves in — same warehouse), stamps the request Approved."""
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	doc = frappe.get_doc("Repack Request", name)
 	if doc.status != "Pending":
 		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
@@ -3581,7 +3592,7 @@ def approve_repack(name):
 
 @frappe.whitelist()
 def reject_repack(name, reason=None):
-	frappe.only_for(("System Manager", "Stock Manager"))
+	frappe.only_for("System Manager")
 	doc = frappe.get_doc("Repack Request", name)
 	if doc.status != "Pending":
 		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
@@ -7762,8 +7773,10 @@ def _variant_seed(card, karat, quality, color):
 	total_ct = 0.0
 	if quality:
 		fam = DESIGN_TOKEN_STONE_FAMILY.get(quality)
-		avg = {s.sieve_size: flt(s.avg_cts) for s in frappe.get_all(
-			"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0)}
+		avg_field = {"CVD": "cvd_avg_cts", "CZ": "cz_avg_cts"}.get(fam, "avg_cts")
+		avg = {s.sieve_size: flt(s.get(avg_field)) for s in frappe.get_all(
+			"Diamond Sieve", fields=["sieve_size", "avg_cts", "cvd_avg_cts", "cz_avg_cts"],
+			limit_page_length=0)}
 		for r in card.stones or []:
 			st = (r.stone or "").strip().upper()
 			pcs = cint(r.pcs)

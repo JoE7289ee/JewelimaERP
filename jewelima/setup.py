@@ -1461,4 +1461,13 @@ def seed_sieve_chart():
 				"mm_size": mm, "avg_cts": avg, "idx_order": i}).insert(ignore_permissions=True)
 		elif cint(frappe.db.get_value("Diamond Sieve", sieve, "idx_order")) != i:
 			frappe.db.set_value("Diamond Sieve", sieve, "idx_order", i, update_modified=False)
+	# per-group columns: CVD mirrors DMD today, CZ / SWAROVSKI run x2 by carat.
+	# BLANKS ONLY — admin-entered values are never overwritten.
+	if frappe.db.has_column("Diamond Sieve", "cvd_avg_cts"):
+		frappe.db.sql("""update `tabDiamond Sieve` set cvd_avg_cts = avg_cts
+			where ifnull(cvd_avg_cts, 0) = 0 and ifnull(avg_cts, 0) > 0""")
+		frappe.db.sql("""update `tabDiamond Sieve` set cz_avg_cts = avg_cts * 2
+			where ifnull(cz_avg_cts, 0) = 0 and ifnull(avg_cts, 0) > 0""")
+		frappe.db.sql("""update `tabDiamond Sieve` set sw_avg_cts = avg_cts * 2
+			where ifnull(sw_avg_cts, 0) = 0 and ifnull(avg_cts, 0) > 0""")
 	frappe.db.commit()

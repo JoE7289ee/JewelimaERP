@@ -13,10 +13,13 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let ROWS = [];
 	const dirty = new Set();
+	// the chart is the ONE source of truth for all four groups — everyone
+	// reads, only the System Manager writes
+	const canEdit = frappe.user.has_role("System Manager");
 
 	$(page.main).append(`
 		<style>
-		.sv-wrap{max-width:640px;}
+		.sv-wrap{max-width:960px;}
 		.sv-bar{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
 		.sv-count{color:var(--text-muted);font-size:12.5px;}
 		.sv-save{margin-left:auto;background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
@@ -39,7 +42,9 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 				<button class="sv-save" disabled>${__("SAVE")}</button>
 			</div>
 			<table class="sv-tbl">
-				<thead><tr><th>${__("Sieve")}</th><th>${__("MM Size")}</th><th>${__("Avg Cts / Stone")}</th></tr></thead>
+				<thead><tr><th>${__("Sieve")}</th><th>${__("MM Size")}</th>
+					<th>${__("DMD Avg Cts")}</th><th>${__("CVD Avg Cts")}</th>
+					<th>${__("CZ Avg Cts")}</th><th>${__("SW Avg Cts")}</th></tr></thead>
 				<tbody></tbody>
 			</table>
 		</div>
@@ -55,16 +60,23 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 	}
 
 	function paint() {
+		const ro = canEdit ? "" : "readonly tabindex=-1";
+		const cell = (r, i, fld, step) => `<td class="cell"><input type="number" step="${step}" ${ro}
+			data-f="${fld}" data-i="${i}" value="${r[fld] ?? ""}"></td>`;
 		root.find("tbody").html(ROWS.map((r, i) => `<tr data-n="${esc(r.name)}">
 			<td class="lbl">${esc(r.sieve_size)}</td>
-			<td class="cell"><input type="number" step="0.01" data-f="mm_size" data-i="${i}" value="${r.mm_size ?? ""}"></td>
-			<td class="cell"><input type="number" step="0.0001" data-f="avg_cts" data-i="${i}" value="${r.avg_cts ?? ""}"></td>
+			${cell(r, i, "mm_size", "0.01")}
+			${cell(r, i, "avg_cts", "0.0001")}
+			${cell(r, i, "cvd_avg_cts", "0.0001")}
+			${cell(r, i, "cz_avg_cts", "0.0001")}
+			${cell(r, i, "sw_avg_cts", "0.0001")}
 		</tr>`).join(""));
-		root.find(".sv-count").text(__("{0} sieve sizes", [ROWS.length]));
-		root.find(".sv-save").prop("disabled", !dirty.size);
+		root.find(".sv-count").text(__("{0} sieve sizes", [ROWS.length]) + (canEdit ? "" : " · " + __("read only")));
+		root.find(".sv-save").toggle(canEdit).prop("disabled", !dirty.size);
 	}
 
 	root.on("input", ".sv-tbl input", function () {
+		if (!canEdit) return;
 		const r = ROWS[Number(this.dataset.i)];
 		r[this.dataset.f] = this.value === "" ? 0 : Number(this.value);
 		dirty.add(r.name);
@@ -83,7 +95,8 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 
 	root.find(".sv-save").on("click", () => {
 		const rows = ROWS.filter((r) => dirty.has(r.name))
-			.map((r) => ({ name: r.name, mm_size: r.mm_size, avg_cts: r.avg_cts }));
+			.map((r) => ({ name: r.name, mm_size: r.mm_size, avg_cts: r.avg_cts,
+				cvd_avg_cts: r.cvd_avg_cts, cz_avg_cts: r.cz_avg_cts, sw_avg_cts: r.sw_avg_cts }));
 		frappe.call({ method: API + ".save_sieve_chart", args: { rows: JSON.stringify(rows) } })
 			.then((r) => {
 				frappe.show_alert({ message: __("{0} row(s) saved.", [(r.message || {}).saved || 0]), indicator: "green" }, 3);

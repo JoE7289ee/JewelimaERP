@@ -25,8 +25,15 @@ function jwSieveQty() {
 	// plain handler — resolves its grid at call time (referencing the dialog
 	// variable inside its own constructor is a TDZ error that kills the dialog)
 	const r = this.doc || (this.grid_row && this.grid_row.doc);
-	if (!r || r.stone_type !== "Diamond" || !r.item) return;   // sieve chart is DIAMOND-only
-	const avg = JW_SIEVE[(r.item || "").split(" ").slice(1).join(" ")];
+	if (!r || !r.item) return;
+	// per-group sieve chart: DMD / CVD / CZ / SW each auto-fill from their column
+	const G = (JW_SIEVE._groups || {});
+	const grp = r.stone_type === "Diamond" ? "DMD"
+		: r.stone_type === "CVD" ? "CVD"
+		: r.stone_type === "Cubic Zirconia" ? "CZ"
+		: r.stone_type === "Color Stone" && (r.item || "").startsWith("SW") ? "SW" : null;
+	if (!grp) return;
+	const avg = (G[grp] || {})[(r.item || "").split(" ").slice(1).join(" ")];
 	if (avg && flt(r.qty) > 0) {
 		r.weight = Math.round(flt(r.qty) * avg * 1000) / 1000;
 		r.pure = 0;
