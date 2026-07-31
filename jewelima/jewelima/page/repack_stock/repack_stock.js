@@ -37,9 +37,10 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		.rp2-tbl td.qc-auto input.pcs{background:#e8f5e9;border-color:#2e7d32;}
 		.rp2-tbl td.qc-man input.pcs{background:#fff3cd;border-color:#e0a800;}
 		.rp2-avg{color:var(--text-muted);font-size:11.5px;white-space:nowrap;}
-		.rp2-sieves{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
-		.rp2-sieves .rp2-tbl th{background:var(--control-bg);}
-		.rp2-sieves .rp2-tbl{border:1px solid var(--border-color);border-radius:8px;}
+		.rp2-sieves{border:1px solid var(--border-color);border-radius:8px;overflow:auto;
+			max-height:calc(100vh - 200px);}
+		.rp2-sieves .rp2-tbl{width:100%;}
+		.rp2-sieves .rp2-tbl th{position:sticky;top:0;background:var(--control-bg);z-index:1;}
 		.rp2-bal{margin:10px 0;font-size:13px;font-weight:700;}
 		.rp2-bal.ok{color:#2e7d32;} .rp2-bal.bad{color:#b02a2a;}
 		.rp2-go{background:#2e7d32;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
@@ -145,18 +146,11 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 			root.find(".rp2-sieves").html(`<div style="color:var(--text-muted);padding:14px 8px;">${__("Pick a source (and quality) — its sieve run appears here.")}</div>`);
 			return balance();
 		}
-		// the run splits into side-by-side column tables — everything visible,
-		// no scroll; the column count follows the space we actually have
-		const cols = Math.max(1, Math.min(3, Math.floor((root.find(".rp2-sieves").width() || 900) / 330)));
-		const per = Math.ceil(TARGETS.length / cols);
-		const head = `<thead><tr><th>${__("Sieve")}</th><th class="rp2-avg">${__("Avg")}</th>
-			<th style="text-align:right">${__("Weight (ct)")}</th><th style="text-align:right">${__("Qty (pcs)")}</th></tr></thead>`;
-		let html = "";
-		for (let c = 0; c < TARGETS.length; c += per) {
-			html += `<table class="rp2-tbl">${head}<tbody>` +
-				TARGETS.slice(c, c + per).map((t, k) => row(t, c + k)).join("") + "</tbody></table>";
-		}
-		root.find(".rp2-sieves").html(html);
+		// ONE table, box runs to the bottom of the screen and scrolls inside
+		root.find(".rp2-sieves").html(`<table class="rp2-tbl"><thead><tr>
+			<th>${__("Sieve")}</th><th class="rp2-avg">${__("Avg ct/pc")}</th>
+			<th style="text-align:right">${__("Weight (ct)")}</th><th style="text-align:right">${__("Qty (pcs)")}</th>
+		</tr></thead><tbody>${TARGETS.map((t, i) => row(t, i)).join("")}</tbody></table>`);
 		balance();
 	}
 
