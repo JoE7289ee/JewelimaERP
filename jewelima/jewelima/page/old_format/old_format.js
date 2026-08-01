@@ -94,6 +94,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		</div>
 		<div class="of-bulk" style="display:none;">
 			<span class="of-selcount">0 ${__("selected")}</span>
+			<button class="bapply alt of-selclear" style="background:#8a2f2f;">${__("Clear")}</button>
 			<span class="sep"></span>
 			<span class="lbl">${__("Color")}</span>
 			<input class="of-bcolor" list="of-colors" placeholder="YELLOW">
@@ -323,6 +324,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		this.checked ? SEL.add(uid) : SEL.delete(uid);
 		$(this).closest("tr").toggleClass("of-rowsel", this.checked);
 		refreshStatus();
+	});
+	root.on("click", ".of-selclear", () => {
+		SEL.clear();
+		paint();
 	});
 	root.on("change", ".of-selall", function () {
 		SEL.clear();
