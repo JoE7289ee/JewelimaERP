@@ -8387,7 +8387,10 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		# HUID rate x the number of HUIDs in the cell; cert rate per piece,
 		# all rows or only the picked ones
 		import re as _re
-		huids = [t for t in _re.split(r"[^A-Za-z0-9]+", str(r.get("huid") or "")) if len(t) == 6]
+		# a 6-char token is a HUID code; 'PENDING' means hallmarked but the code
+		# wasn't typed yet — it bills exactly like a code
+		huids = [t for t in _re.split(r"[^A-Za-z0-9]+", str(r.get("huid") or ""))
+			if len(t) == 6 or t.upper() == "PENDING"]
 		huid_va = round(huid_rate * len(huids), 2) if huid_rate and huids else 0.0
 		cert_on = cert_rate > 0 and (cert_set is None or r.get("unique_id") in cert_set)
 		cert_va = round(huid_va + (cert_rate if cert_on else 0), 2)
