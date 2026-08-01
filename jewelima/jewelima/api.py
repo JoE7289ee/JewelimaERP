@@ -8208,12 +8208,17 @@ def parse_old_sale_excel(filedata):
 
 
 @frappe.whitelist()
-def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3):
+def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
+		huid_rate=0, cert_rate=0, cert_uids=None):
 	"""Price the parsed rows EXACTLY like the Sell board would: same brackets,
 	same fallbacks, same never-guess rule (unresolvable cells stay 0 + flagged)."""
 	if isinstance(rows, str):
 		rows = json.loads(rows or "[]")
 	gold_rate = flt(gold_rate)
+	huid_rate = flt(huid_rate)
+	cert_rate = flt(cert_rate)
+	# cert applies to ALL rows unless a subset of unique ids was picked
+	cert_set = set(json.loads(cert_uids) if isinstance(cert_uids, str) else (cert_uids or [])) or None
 	chart = frappe.get_doc("Price Chart", price_chart)
 	making_rules = list(chart.get("making_rules") or [])
 	dmd_rows = [r for r in chart.diamond_rates if (r.quality or "") in ((quality or ""), "")]
@@ -8283,10 +8288,20 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3):
 						flags.append("STN priced per piece but count is 0")
 				else:
 					stn_va = round(flt(r.get("stn_ct")) * flt(row.rate), 2)
-		total = round(gold_va + mc + dmd_va + ps_va + stn_va, 2)
+		# certification: USER-entered (nothing to read from bag or excel) —
+		# HUID rate x the number of HUIDs in the cell; cert rate per piece,
+		# all rows or only the picked ones
+		import re as _re
+		huids = [t for t in _re.split(r"[^A-Za-z0-9]+", str(r.get("huid") or "")) if len(t) >= 4]
+		huid_va = round(huid_rate * len(huids), 2) if huid_rate and huids else 0.0
+		cert_on = cert_rate > 0 and (cert_set is None or r.get("unique_id") in cert_set)
+		cert_va = round(huid_va + (cert_rate if cert_on else 0), 2)
+		total = round(gold_va + mc + dmd_va + ps_va + stn_va + cert_va, 2)
 		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
 			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
-			ps_rt=0, ps_va=ps_va, stn_va=stn_va, total=total, flags=flags))
+			ps_rt=0, ps_va=ps_va, stn_va=stn_va,
+			huid_count=len(huids), huid_va=huid_va, cert_on=cert_on, cert_va=cert_va,
+			total=total, flags=flags))
 	before = round(sum(x["total"] for x in out), 2)
 	gst = round(before * flt(gst_percent) / 100, 2)
 	after = round(before + gst, 2)
@@ -8332,8 +8347,11 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 		for label, key in FILL:
 			col = head.get(label) or head.get(label.replace(" (₹)", ""))
 			if col:
-				ws.cell(row=i, column=col).value = flt(p.get(key))
-				sums[key] += flt(p.get(key))
+				v = flt(p.get(key))
+				if key == "mc":
+					v = round(v + flt(p.get("cert_va")), 2)  # cert/HUID ride the service-charge column
+				ws.cell(row=i, column=col).value = v
+				sums[key] += v
 	# the sheet's own totals row (first row after data with the weight sums)
 	for label, key in FILL:
 		if key.endswith("_rt") or key == "mc_rate":

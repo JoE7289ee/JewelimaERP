@@ -14,6 +14,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const money = (v) => (v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 	let FILE = null;     // {b64, name}
+	const certSel = new Set(); // unique ids the cert charge applies to
 	let PARSED = null;   // {rows, cover}
 	let PRICED = null;   // {rows, totals}
 
@@ -50,6 +51,8 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			<div class="so-rate"></div>
 			<div class="so-qual"></div>
 			<div class="so-gst"></div>
+			<div class="so-huid"></div>
+			<div class="so-cert"></div>
 			<button class="so-price">${__("Price it")}</button>
 			<button class="so-dl">${__("Download priced excel ⤓")}</button>
 		</div>
@@ -64,6 +67,9 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 	const fQual = mk(".so-qual", { fieldtype: "Select", label: __("Diamond quality (whole import)"), fieldname: "q", options: "" });
 	const fGst = mk(".so-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3 });
 	fGst.set_value(3);
+	const fHuid = mk(".so-huid", { fieldtype: "Float", label: __("HUID ₹ (per HUID)"), fieldname: "huid" });
+	const fCert = mk(".so-cert", { fieldtype: "Float", label: __("Cert ₹ / piece"), fieldname: "cert",
+		description: __("untick rows below to exempt them") });
 
 	function loadQualities() {
 		const ch = fChart.get_value();
@@ -88,6 +94,8 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				PARSED = r.message || {};
 				PRICED = null;
 				root.find(".so-dl").hide();
+				certSel.clear();
+				(PARSED.rows || []).forEach((x) => certSel.add(x.unique_id));
 				const cv = PARSED.cover || {};
 				root.find(".so-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s) found",
 					[esc(cv.invoice_no || "—"), esc(cv.party || "—"), PARSED.count || 0]));
@@ -101,13 +109,16 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		const priced = !!totals;
 		root.find(".so-body").html(rows.length ? `
 			<table class="so-t"><thead><tr>
+				<th title="${__("cert applies")}"><input type="checkbox" class="so-call" checked></th>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}</th><th>${__("Item")}</th><th>${__("Design")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD ct/pcs")}</th><th class="num">${__("STN ct")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
 				<th class="num">${__("DMD (rate·bracket)")}</th><th class="num">${__("STN")}</th>
+				<th class="num">${__("Cert/HUID")}</th>
 				<th class="num">${__("TOTAL")}</th><th>${__("Notes")}</th>` : ""}
 			</tr></thead><tbody>
 			${rows.map((r) => `<tr class="${(r.flags || []).length ? "so-flagged" : ""}">
+				<td><input type="checkbox" class="so-cb" data-uid="${esc(r.unique_id)}" ${certSel.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.huid)}</td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.nt}</td>
@@ -117,6 +128,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				<td class="num">₹ ${money(r.mc)}</td>
 				<td class="num">₹ ${money(r.dmd_va)}${r.dmd_rt ? `<div class="so-flag">${r.stone_ct}/st · ${money(r.dmd_rt)} @ ${esc(r.dmd_bracket)}</div>` : ""}</td>
 				<td class="num">₹ ${money(r.stn_va)}</td>
+				<td class="num">₹ ${money(r.cert_va || 0)}${r.huid_count > 1 ? `<div class="so-flag">${r.huid_count} HUID</div>` : ""}</td>
 				<td class="num"><b>₹ ${money(r.total)}</b></td>
 				<td class="so-flag">${(r.flags || []).map(esc).join("<br>")}</td>` : ""}
 			</tr>`).join("")}</tbody></table>
@@ -130,6 +142,17 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			: `<div class="so-none">${__("No pieces found in the Design sheet.")}</div>`);
 	}
 
+	root.on("change", ".so-cb", function () {
+		const uid = $(this).data("uid");
+		this.checked ? certSel.add(uid) : certSel.delete(uid);
+	});
+	root.on("change", ".so-call", function () {
+		const on = this.checked;
+		certSel.clear();
+		if (on) (PARSED && PARSED.rows || []).forEach((x) => certSel.add(x.unique_id));
+		root.find(".so-cb").prop("checked", on);
+	});
+
 	root.find(".so-price").on("click", () => {
 		if (!PARSED) return frappe.show_alert({ message: __("Upload the excel first."), indicator: "orange" }, 3);
 		if (!fChart.get_value()) return frappe.show_alert({ message: __("Pick a price chart."), indicator: "orange" }, 3);
@@ -137,6 +160,8 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			rows: JSON.stringify(PARSED.rows || []), price_chart: fChart.get_value(),
 			gold_rate: fRate.get_value() || 0, quality: fQual.get_value() || "",
 			gst_percent: fGst.get_value() || 0,
+			huid_rate: fHuid.get_value() || 0, cert_rate: fCert.get_value() || 0,
+			cert_uids: JSON.stringify([...certSel]),
 		} }).then((r) => {
 			PRICED = r.message || null;
 			if (!PRICED) return;
