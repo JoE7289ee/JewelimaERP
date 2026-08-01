@@ -390,16 +390,22 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("{0} row(s) tagged {1} — selection cleared, tick the next batch.", [n, v]), indicator: "green" }, 4);
 	});
 
-	// hallmarked but the code wasn't typed — bills exactly like a code
+	// hallmarked but the code wasn't typed — bills exactly like a code.
+	// APPENDS: a row already holding a code or PENDING gets ", PENDING" —
+	// apply twice (or select an already-PENDING row) for two-HUID pieces.
 	root.on("click", ".of-bhuid-pend", () => {
 		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
 		let n = 0;
-		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && !r.huid) { r.huid = "PENDING"; n++; } });
+		ROWS.forEach((r) => {
+			if (!SEL.has(r.unique_id)) return;
+			r.huid = r.huid ? r.huid + ", PENDING" : "PENDING";
+			n++;
+		});
 		if (n) invalidate();
 		SEL.clear();
 		LASTSEL = null;
 		paint();
-		frappe.show_alert({ message: __("{0} row(s) set PENDING (rows that already had a HUID were left alone).", [n]), indicator: "green" }, 4);
+		frappe.show_alert({ message: __("Added one PENDING to {0} row(s) — each counts as a HUID.", [n]), indicator: "green" }, 4);
 	});
 
 	// the agreed physical order: item type -> colour -> below-1g first
