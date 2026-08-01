@@ -113,6 +113,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			<table class="so-t"><thead><tr>
 				<th title="${__("cert applies")}"><input type="checkbox" class="so-call" checked></th>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}</th><th>${__("Item")}</th><th>${__("Design")}</th>
+				<th title="${__("goes to the JOS sheet's Colour column — rows sort by it within each item type")}">${__("Color")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD ct/pcs")}</th><th class="num">${__("STN ct")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
 				<th class="num">${__("DMD (rate·bracket)")}</th><th class="num">${__("STN")}</th>
@@ -123,6 +124,8 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				<td><input type="checkbox" class="so-cb" data-uid="${esc(r.unique_id)}" ${certSel.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.huid)}</td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
+				<td><input class="so-colr" data-uid="${esc(r.unique_id)}" value="${esc(r.colour || "")}"
+					style="width:70px;border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-size:11.5px;text-transform:uppercase;"></td>
 				<td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_ct || ""}${r.dmd_pcs ? " / " + r.dmd_pcs : ""}</td>
 				<td class="num">${r.stn_ct || ""}</td>
@@ -143,6 +146,15 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			</div>` : ""}`
 			: `<div class="so-none">${__("No pieces found in the Design sheet.")}</div>`);
 	}
+
+	// colour is display/sort only (never priced) — patch both row sets in place
+	root.on("change", ".so-colr", function () {
+		const uid = $(this).data("uid");
+		const v = (this.value || "").toUpperCase().trim();
+		this.value = v;
+		[(PARSED && PARSED.rows) || [], (PRICED && PRICED.rows) || []].forEach((set) =>
+			set.forEach((x) => { if (x.unique_id === uid) x.colour = v; }));
+	});
 
 	root.on("change", ".so-cb", function () {
 		const uid = $(this).data("uid");
@@ -181,6 +193,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			title: __("JOS Billing export"),
 			fields: [
 				{ fieldname: "karat", fieldtype: "Data", label: __("Metal purity label"), default: "18 KT", reqd: 1 },
+				{ fieldname: "item_colour", fieldtype: "Data", label: __("Item colour (whole lot)"), default: "YELLOW" },
 				{ fieldname: "igi_flat", fieldtype: "Float", label: __("IGI flat ₹ (up to threshold)"), default: 80 },
 				{ fieldname: "igi_per_ct", fieldtype: "Float", label: __("IGI ₹/ct (above threshold)"), default: 325 },
 				{ fieldname: "igi_threshold", fieldtype: "Float", label: __("IGI threshold (ct)"), default: 0.10 },
@@ -191,7 +204,8 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				open_url_post("/api/method/jewelima.jewelima.api.export_old_sale_jos", {
 					priced: JSON.stringify(PRICED.rows), price_chart: fChart.get_value(),
 					gold_rate: fRate.get_value() || 0, quality: fQual.get_value() || "",
-					karat_label: v.karat, gst_percent: fGst.get_value() || 0,
+					karat_label: v.karat, item_colour: (v.item_colour || "").toUpperCase().trim(),
+					gst_percent: fGst.get_value() || 0,
 					igi_flat: v.igi_flat, igi_per_ct: v.igi_per_ct, igi_threshold: v.igi_threshold,
 					huid_rate: fHuid.get_value() || 0,
 					party: (PARSED && PARSED.cover && PARSED.cover.party) || "",

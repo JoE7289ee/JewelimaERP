@@ -8473,7 +8473,7 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 @frappe.whitelist()
 def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18 KT",
 		gst_percent=3, igi_flat=80, igi_per_ct=325, igi_threshold=0.10,
-		huid_rate=0, party="", filename=None):
+		huid_rate=0, party="", item_colour="", filename=None):
 	"""The JOS BILLING workbook, generated in their exact 42-column layout with
 	LIVE formulas: gold = net x N3, diamonds split into the chart's bracket
 	GROUPS (one group per piece), IGI slab (<=threshold flat, above per-ct),
@@ -8585,7 +8585,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=2, value=p.get("item"))
 		ws.cell(row=r, column=5, value=p.get("colour") or None)
 		ws.cell(row=r, column=6, value=1)
-		ws.cell(row=r, column=7, value=p.get("item_color") or None)
+		ws.cell(row=r, column=7, value=p.get("item_color") or item_colour or None)
 		gross, nt = flt(p.get("gs")), flt(p.get("nt"))
 		ws.cell(row=r, column=8, value=gross)
 		ws.cell(row=r, column=9, value=nt)
