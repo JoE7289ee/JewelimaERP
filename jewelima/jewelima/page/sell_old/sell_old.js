@@ -17,6 +17,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 	let FILE = null;     // {b64, name}
 	const certSel = new Set(); // unique ids the cert charge applies to
 	let PARSED = null;   // {rows, cover}
+	let CHART = null;    // the picked chart's full data (get_price_chart)
 	let PRICED = null;   // {rows, totals}
 
 	$(page.main).append(`
@@ -78,6 +79,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		const ch = fChart.get_value();
 		if (!ch) return;
 		frappe.call({ method: API + ".get_price_chart", args: { name: ch }, freeze: false }).then((r) => {
+			CHART = r.message || null;
 			const quals = [...new Set(((r.message || {}).diamond_rates || []).map((d) => d.quality).filter(Boolean))].sort();
 			fQual.df.options = [""].concat(quals).join("\n");
 			fQual.refresh();
@@ -200,6 +202,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 	// the JOS billing workbook — their 42-column live-formula layout
 	root.on("click", ".so-jos", () => {
 		if (!PRICED || !FILE) return;
+		const hasSlab = ((CHART && CHART.certification_charges) || []).some((c) => flt(c.to_ct) > 0);
 		const d = new frappe.ui.Dialog({
 			title: __("JOS Billing export"),
 			fields: [
@@ -207,10 +210,14 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				{ fieldname: "item_colour", fieldtype: "Data", label: __("Item colour (rows without one)"), default: "YELLOW" },
 				{ fieldname: "party", fieldtype: "Data", label: __("Shop / party"),
 					default: (PARSED && PARSED.cover && PARSED.cover.party) || "" },
+			].concat(hasSlab ? [
+				{ fieldname: "slab_note", fieldtype: "HTML",
+					options: "<div class='text-muted' style='font-size:12px;'>" + __("IGI comes from the price chart's certification slab (single-stone pieces take the Solitaire tiers).") + "</div>" },
+			] : [
 				{ fieldname: "igi_flat", fieldtype: "Float", label: __("IGI flat ₹ (up to threshold)"), default: 80 },
 				{ fieldname: "igi_per_ct", fieldtype: "Float", label: __("IGI ₹/ct (above threshold)"), default: 325 },
 				{ fieldname: "igi_threshold", fieldtype: "Float", label: __("IGI threshold (ct)"), default: 0.10 },
-			],
+			]),
 			primary_action_label: __("Download"),
 			primary_action(v) {
 				d.hide();
@@ -219,7 +226,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 					gold_rate: fRate.get_value() || 0, quality: fQual.get_value() || "",
 					karat_label: v.karat, item_colour: (v.item_colour || "").toUpperCase().trim(),
 					gst_percent: fGst.get_value() || 0,
-					igi_flat: v.igi_flat, igi_per_ct: v.igi_per_ct, igi_threshold: v.igi_threshold,
+					igi_flat: v.igi_flat || 80, igi_per_ct: v.igi_per_ct || 325, igi_threshold: v.igi_threshold || 0.10,
 					huid_rate: fHuid.get_value() || 0,
 					party: v.party || "",
 					filename: FILE.name,

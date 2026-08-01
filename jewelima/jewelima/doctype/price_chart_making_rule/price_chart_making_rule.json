@@ -9,17 +9,18 @@
   "charge_category",
   "basis",
   "rate",
-  "min_per_piece"
+  "min_per_piece",
+  "flat_below_gm"
  ],
  "fields": [
   {
    "columns": 2,
+   "description": "Blank + blank category = the default making rule.",
    "fieldname": "design_type",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Design Type",
-   "options": "Design Type",
-   "description": "Blank + blank category = the default making rule."
+   "options": "Design Type"
   },
   {
    "columns": 2,
@@ -41,28 +42,36 @@
   },
   {
    "columns": 2,
+   "description": "\u20b9/g, \u20b9/pc \u2014 or the billing purity % for Purity Percent (Plain Gold 96, Name Ring 98).",
    "fieldname": "rate",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Rate",
    "precision": "2",
-   "reqd": 1,
-   "description": "₹/g, ₹/pc — or the billing purity % for Purity Percent (Plain Gold 96, Name Ring 98)."
+   "reqd": 1
   },
   {
    "columns": 2,
+   "description": "With Per Gram: labour = max(rate \u00d7 net g, this).",
    "fieldname": "min_per_piece",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Minimum (₹/pc)",
-   "precision": "2",
-   "description": "With Per Gram: labour = max(rate × net g, this)."
+   "label": "Minimum (\u20b9/pc)",
+   "precision": "2"
+  },
+  {
+   "columns": 1,
+   "description": "NT below this weight pays the Minimum flat; at/above it goes per-gram. Blank = classic floor (max of rate x g and the minimum).",
+   "fieldname": "flat_below_gm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Flat below (g)"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-12 13:00:00.000000",
+ "modified": "2026-08-01 13:45:23.879132",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Price Chart Making Rule",

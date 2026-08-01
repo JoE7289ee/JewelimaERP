@@ -7233,7 +7233,8 @@ def get_price_chart(name):
 		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
 			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
 		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",
-			"rate": r.rate, "min_amount": r.min_amount} for r in (d.get("certification_charges") or [])],
+			"rate": r.rate, "min_amount": r.min_amount, "from_ct": r.from_ct, "to_ct": r.to_ct,
+			"solitaire": cint(r.solitaire)} for r in (d.get("certification_charges") or [])],
 		"precious_stone_rates": [{"stone": r.stone, "from_ct": r.from_ct, "to_ct": r.to_ct, "rate": r.rate}
 			for r in (d.get("precious_stone_rates") or [])],
 		"cs_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cs_rates") or [])],
@@ -7242,7 +7243,8 @@ def get_price_chart(name):
 		"sw_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("sw_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
-			"rate": r.rate, "min_per_piece": r.min_per_piece} for r in (d.get("making_rules") or [])],
+			"rate": r.rate, "min_per_piece": r.min_per_piece,
+			"flat_below_gm": r.flat_below_gm} for r in (d.get("making_rules") or [])],
 		"payment_terms": d.payment_terms or "", "terms": d.terms or "",
 		"signatory": d.signatory or "", "signatory_phone": d.signatory_phone or "",
 	}
@@ -7277,7 +7279,9 @@ def save_price_chart(payload):
 			if cert_code in ("HALL", "HALLMARKING") and basis == "Per Ct":
 				frappe.throw(frappe._("HALLMARKING is always per piece (per HUID) — Per Ct doesn't apply."))
 			doc.append("certification_charges", {"certification": cert_code, "basis": basis,
-				"rate": flt(r.get("rate")), "min_amount": flt(r.get("min_amount"))})
+				"rate": flt(r.get("rate")), "min_amount": flt(r.get("min_amount")),
+				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
+				"solitaire": cint(r.get("solitaire"))})
 	for r in p.get("precious_stone_rates") or []:
 		if (r.get("stone") or "").strip():
 			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(),
@@ -7293,7 +7297,8 @@ def save_price_chart(payload):
 		if flt(r.get("rate")):
 			doc.append("making_rules", {"design_type": r.get("design_type") or None,
 				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
-				"min_per_piece": flt(r.get("min_per_piece"))})
+				"min_per_piece": flt(r.get("min_per_piece")),
+				"flat_below_gm": flt(r.get("flat_below_gm"))})
 	doc.payment_terms = p.get("payment_terms") or ""
 	doc.terms = p.get("terms") or ""
 	doc.signatory = p.get("signatory") or ""
@@ -7331,7 +7336,9 @@ def _price_chart_letter_html(d):
 		frappe.utils.escape_html(r["sieve_label"] or ""), bracket(r),
 		frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d["diamond_rates"])
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
-		frappe.utils.escape_html(r["certification"]),
+		frappe.utils.escape_html(r["certification"])
+			+ (" ({0} – {1} ct{2})".format(r["from_ct"], r["to_ct"], ", solitaire" if cint(r.get("solitaire")) else "")
+				if flt(r.get("to_ct")) else ""),
 		("₹ {0} / ct (min ₹ {1})".format(money(r["rate"]), money(r.get("min_amount"))) if flt(r.get("min_amount"))
 			else "₹ {0} / ct".format(money(r["rate"]))) if r.get("basis") == "Per Ct"
 		else ("₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included"))
@@ -7342,10 +7349,11 @@ def _price_chart_letter_html(d):
 			else " ({0} – {1} ct)".format(r["from_ct"], r["to_ct"]) if flt(r.get("to_ct"))
 			else " ({0} ct & above)".format(r["from_ct"])),
 		money(r["rate"])) for r in d.get("precious_stone_rates", []))
-	mkr = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}{3}</td></tr>".format(
+	mkr = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}{3}{4}</td></tr>".format(
 		frappe.utils.escape_html(r["design_type"] or "All designs (default)"), r["basis"],
 		money(r["rate"]) + ("/g" if r["basis"] == "Per Gram" else "/pc"),
-		" · min ₹ " + money(r["min_per_piece"]) if flt(r.get("min_per_piece")) else "")
+		" · min ₹ " + money(r["min_per_piece"]) if flt(r.get("min_per_piece")) else "",
+		" · flat < {0} g".format(flt(r["flat_below_gm"])) if flt(r.get("flat_below_gm")) else "")
 		for r in d.get("making_rules", []))
 	def brk(rows):
 		return "".join("<tr><td>{0}</td><td class='r'>₹ {1} / {2}</td></tr>".format(
@@ -8316,13 +8324,20 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		item_type = ITEM_ALIAS.get(r.get("item") or "", r.get("item") or "")
 		rule = next((m for m in making_rules if (m.design_type or "").upper() == item_type and item_type), None) or next(
 			(m for m in making_rules if not m.design_type), None)
+		band_gm = (flt(rule.flat_below_gm) if rule else 0) or 1.0
 		if rule:
 			mc_rate = flt(rule.rate)
-			mc = flt(r.get("nt")) * mc_rate
-			notes["mc"] = "{0} g x {1}/g [{2}]".format(flt(r.get("nt")), mc_rate, rule.design_type or "DEFAULT")
-			if flt(rule.min_per_piece) and mc < flt(rule.min_per_piece):
+			nt = flt(r.get("nt"))
+			if flt(rule.flat_below_gm) and nt < flt(rule.flat_below_gm):
 				mc = flt(rule.min_per_piece)
-				notes["mc"] += " -> floored to min {0}".format(flt(rule.min_per_piece))
+				notes["mc"] = "{0} g < {1} g -> flat {2} [{3}]".format(nt, flt(rule.flat_below_gm),
+					flt(rule.min_per_piece), rule.design_type or "DEFAULT")
+			else:
+				mc = nt * mc_rate
+				notes["mc"] = "{0} g x {1}/g [{2}]".format(nt, mc_rate, rule.design_type or "DEFAULT")
+				if flt(rule.min_per_piece) and mc < flt(rule.min_per_piece):
+					mc = flt(rule.min_per_piece)
+					notes["mc"] += " -> floored to min {0}".format(flt(rule.min_per_piece))
 		elif flt(chart.making_rate):
 			mc_rate = flt(chart.making_rate)
 			mc = max(flt(r.get("nt")), flt(chart.making_min_grams) or 1) * mc_rate
@@ -8402,6 +8417,7 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		notes["total"] = "gold {0} + making {1} + dmd {2} + ps {3} + stn {4} + cert {5} = {6}".format(
 			_inr(gold_va), _inr(mc), _inr(dmd_va), _inr(ps_va), _inr(stn_va), _inr(cert_va), _inr(total))
 		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
+			wt_band="below" if flt(r.get("nt")) < band_gm else "above",
 			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
 			ps_rt=0, ps_va=ps_va, stn_va=stn_va,
 			huid_count=len(huids), huid_va=huid_va, cert_on=cert_on, cert_va=cert_va,
@@ -8566,6 +8582,27 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	brackets = sorted([r for r in chart.diamond_rates if (r.quality or "") == (quality or "")]
 		or [r for r in chart.diamond_rates if not r.quality],
 		key=lambda r: flt(r.from_ct))[:5]
+	# IGI: the chart's weight-slab rows win over the dialog's three numbers;
+	# a single-stone piece (DMD PCS = 1) is a solitaire and takes those tiers
+	slab = sorted([c for c in (chart.get("certification_charges") or []) if flt(c.to_ct) > 0],
+		key=lambda c: flt(c.from_ct))
+
+	def igi_for(ct, pcs):
+		if ct <= 0:
+			return 0
+		if not slab:
+			return igi_flat if ct <= igi_threshold else round(igi_per_ct * ct, 2)
+		hit = None
+		if cint(pcs) == 1:
+			hit = next((c for c in slab if cint(c.solitaire) and flt(c.from_ct) <= ct <= flt(c.to_ct)), None)
+		if hit is None:
+			plain = [c for c in slab if not cint(c.solitaire)]
+			hit = next((c for c in plain if flt(c.from_ct) <= ct <= flt(c.to_ct)), None)
+			if hit is None and plain:
+				hit = plain[-1] if ct > flt(plain[-1].to_ct) else plain[0]
+		if hit is None:
+			return 0
+		return flt(hit.rate) if (hit.basis or "Per Piece") == "Per Piece" else round(flt(hit.rate) * ct, 2)
 
 	wb = Workbook()
 	ws = wb.active
@@ -8631,9 +8668,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		return 0 if brackets else None
 
 	# one item type at a time, sorted by COLOR (metal colour) within the type,
-	# then by shape — the two colour-ish columns of the house sheet (G, then E)
+	# then below-1g pieces before gram-priced ones, then by shape
+	def band_of(p):
+		return p.get("wt_band") or ("below" if flt(p.get("nt")) < 1.0 else "above")
+
 	priced = sorted(priced, key=lambda p: ((p.get("item") or ""), (p.get("item_color") or ""),
-		(p.get("colour") or ""), cint(p.get("sl"))))
+		0 if band_of(p) == "below" else 1, (p.get("colour") or ""), cint(p.get("sl"))))
 	SUMCOLS = [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]
 	used_groups = set()
 	r0 = 5
@@ -8642,6 +8682,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	sl = 0
 
 	small_bold = Font(bold=True, size=10)  # colour totals sit under the item TOTAL
+	band_bold = Font(bold=True, size=9)   # weight-band totals sit under the colour
 
 	def sum_row(label, formula, font=bold):
 		"""one bold total line; `formula` maps a column letter -> its formula"""
@@ -8686,32 +8727,49 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=34, value="={0}".format("+".join("{0}{1}".format(get_column_letter(cc), r) for _, cc, _ in GRP)))
 		ws.cell(row=r, column=35, value="={0}".format("+".join("{0}{1}".format(get_column_letter(vc), r) for _, _, vc in GRP)))
 		ws.cell(row=r, column=40, value="=J{0}+N{0}+AI{0}".format(r))
-		igi = igi_flat if ct <= igi_threshold else round(igi_per_ct * ct, 2)
-		ws.cell(row=r, column=41, value=igi if ct > 0 else 0)
+		ws.cell(row=r, column=41, value=igi_for(ct, pcs))
 		ws.cell(row=r, column=42, value=p.get("unique_id"))
 		r += 1
 
-	# blocks: item type -> colour runs; a COLOUR TOTAL after each run when the
-	# item carries more than one colour, then the item's TOTAL (sum of those)
+	# blocks: item type -> colour runs -> weight bands. Below-1g rows first with
+	# a BELOW 1G TOTAL, then the gram-priced rows with ABOVE 1G TOTAL (band rows
+	# only when the run actually splits), then COLOUR TOTAL (only when the item
+	# carries more than one colour), then the item's TOTAL. Every parent total
+	# sums its child totals, so nothing ever double-counts.
 	from itertools import groupby
+
+	def plus(rows_):
+		return lambda L, rs=tuple(rows_): "={0}".format("+".join("{0}{1}".format(L, x) for x in rs))
+
+	def span(a_, b_):
+		return lambda L, a=a_, b=b_: "=SUM({0}{1}:{0}{2})".format(L, a, b)
+
 	for item, ig in groupby(priced, key=lambda p: (p.get("item") or "")):
 		cgroups = [(k, list(g)) for k, g in groupby(list(ig), key=lambda p: (p.get("item_color") or ""))]
 		block_start = r
 		ctot = []
-		for colr, run in cgroups:
-			start = r
-			for p in run:
-				write_piece(p)
+		all_btot = []
+		for colr, crun in cgroups:
+			bgroups = [(k, list(g)) for k, g in groupby(crun, key=band_of)]
+			cstart = r
+			btot = []
+			for band, brun in bgroups:
+				bstart = r
+				for p in brun:
+					write_piece(p)
+				if len(bgroups) > 1:
+					btot.append(sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
+						span(bstart, r - 1), font=band_bold))
+			all_btot += btot
 			if len(cgroups) > 1:
 				ctot.append(sum_row("{0} TOTAL".format(colr or "—"),
-					lambda L, a=start, b=r - 1: "=SUM({0}{1}:{0}{2})".format(L, a, b),
-					font=small_bold))
+					plus(btot) if btot else span(cstart, r - 1), font=small_bold))
 		if ctot:
-			sub_rows.append(sum_row("{0} TOTAL".format(item),
-				lambda L, rs=tuple(ctot): "={0}".format("+".join("{0}{1}".format(L, x) for x in rs))))
+			sub_rows.append(sum_row("{0} TOTAL".format(item), plus(ctot)))
+		elif all_btot:
+			sub_rows.append(sum_row("{0} TOTAL".format(item), plus(all_btot)))
 		else:
-			sub_rows.append(sum_row("{0} TOTAL".format(item),
-				lambda L, a=block_start, b=r - 1: "=SUM({0}{1}:{0}{2})".format(L, a, b)))
+			sub_rows.append(sum_row("{0} TOTAL".format(item), span(block_start, r - 1)))
 
 	# unused diamond bracket groups vanish (their legend rides in the same cols)
 	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
@@ -9499,11 +9557,15 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			comp("making", "Making", needs=True,
 				note="no making rule for {0} and no DEFAULT row".format(design_type or "untyped"))
 		else:
-			labour = nett * flt(row.rate)
-			rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
-			if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
+			if flt(row.flat_below_gm) and nett < flt(row.flat_below_gm):
 				labour = flt(row.min_per_piece)
-				rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
+				rule_desc = "{0} g < {1} g -> flat {2}".format(round(nett, 3), flt(row.flat_below_gm), flt(row.min_per_piece))
+			else:
+				labour = nett * flt(row.rate)
+				rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
+				if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
+					labour = flt(row.min_per_piece)
+					rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
 			rule_desc += " [{0}]".format(row.design_type or "default")
 			comp("making", "Making", labour, note="{0} = {1}".format(rule_desc, _inr(labour)),
 				rate=flt(row.rate), qty=nett, unit="g")
@@ -9527,7 +9589,8 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	cert_detail = []
 	trail = [x.strip().upper() for x in (b.certifications or "").split(",") if x.strip()]
 	cert_rows = {(r.certification or "").upper(): r
-		for r in ((chart.get("certification_charges") if chart else None) or [])}
+		for r in ((chart.get("certification_charges") if chart else None) or [])
+		if not flt(r.to_ct)}  # weight-slab rows (IGI style) belong to the ct engine
 	# lab certs share ONE column (hover shows which); hallmarking stays its own
 	cert_val = 0.0
 	cert_notes = []

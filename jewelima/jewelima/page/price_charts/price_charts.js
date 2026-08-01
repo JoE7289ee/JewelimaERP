@@ -157,6 +157,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹")}"></td>
+			<td><input data-f="flat_below_gm" type="number" step="0.001" value="${num(r.flat_below_gm)}" placeholder="${__("e.g. 1")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (["csr", "czr", "cvr", "swr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
@@ -176,6 +177,10 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				`<option ${(r.basis || "Per Piece") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td><input data-f="min_amount" class="inr" inputmode="numeric" value="${inr(r.min_amount)}" placeholder="${__("floor ₹ (Per Ct)")}"></td>
+			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("slab from")}"></td>
+			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("slab to")}"></td>
+			<td><select data-f="solitaire"><option value=""></option>
+				<option value="1" ${cint(r.solitaire) ? "selected" : ""}>${__("Solitaire")}</option></select></td>
 			<td class="del">&times;</td></tr>`).join("");
 		return "";
 	}
@@ -195,7 +200,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th title="${__("NT below this weight pays the Minimum flat; at/above goes per-gram. Blank = classic floor.")}">${__("Flat below g")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
 			<div class="pc-sec">${__("Colour Stone Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="csr">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="csr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
@@ -210,7 +215,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<table class="pc-t" data-k="cvr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cvr")}</tbody></table>
 			<div class="pc-sec">${__("Certification Charges — a cert on the bag missing here BLOCKS the scan")}<span class="add" data-k="cert">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th title="${__("fill From/To ct to make this a weight-slab row (IGI style); Solitaire rows apply only to single-stone pieces")}">${__("From ct")}</th><th>${__("To ct")}</th><th>${__("Solitaire")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cert")}</tbody></table>
 			<div class="pc-sec">${__("Letter — Terms & Signatory")}</div>
 			<div class="pc-wide"><label style="font-size:11px;color:var(--text-muted);">${__("Payment terms")}</label>
@@ -257,9 +262,9 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	root.on("click", ".pc-sec .add", function () {
 		const k = $(this).data("k");
 		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
-			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "" }
+			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "", from_ct: "", to_ct: "", solitaire: "" }
 			: k === "ps" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
-			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "" }
+			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "", flat_below_gm: "" }
 			: ["csr", "czr", "cvr", "swr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
 			: { });
 		paintEditor();

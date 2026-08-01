@@ -1,59 +1,87 @@
 {
- "name": "Price Chart Certification Charge",
- "istable": 1,
- "permissions": [],
- "fields": [
-  {
-   "fieldname": "certification",
-   "fieldtype": "Data",
-   "label": "Certification",
-   "reqd": 1,
-   "in_list_view": 1,
-   "description": "Matches the bag's certifications trail token (HALLMARKING, IGL, ...)."
-  },
-  {
-   "fieldname": "rate",
-   "fieldtype": "Float",
-   "label": "Rate / piece",
-   "in_list_view": 1,
-   "description": "0 = certified but free on this chart."
-  },
-  {
-   "fieldname": "basis",
-   "fieldtype": "Select",
-   "label": "Basis",
-   "options": "Per Piece\nPer Ct",
-   "default": "Per Piece",
-   "in_list_view": 1,
-   "description": "Per Ct = DMD carats x rate, floored at Minimum (never for HALLMARKING)."
-  },
-  {
-   "fieldname": "min_amount",
-   "fieldtype": "Float",
-   "label": "Minimum \u20b9",
-   "in_list_view": 1,
-   "description": "Per Ct floor: 600/ct but never under 150."
-  }
- ],
  "actions": [],
  "allow_rename": 1,
  "creation": "2026-07-21 23:45:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2026-07-24 20:00:00.000000",
- "modified_by": "Administrator",
- "module": "Jewelima",
- "owner": "Administrator",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
  "field_order": [
   "certification",
   "rate",
+  "from_ct",
+  "to_ct",
+  "solitaire",
   "basis",
   "min_amount"
- ]
+ ],
+ "fields": [
+  {
+   "description": "Matches the bag's certifications trail token (HALLMARKING, IGL, ...).",
+   "fieldname": "certification",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Certification",
+   "reqd": 1
+  },
+  {
+   "description": "0 = certified but free on this chart.",
+   "fieldname": "rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Rate / piece"
+  },
+  {
+   "default": "Per Piece",
+   "description": "Per Ct = DMD carats x rate, floored at Minimum (never for HALLMARKING).",
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Basis",
+   "options": "Per Piece\nPer Ct"
+  },
+  {
+   "description": "Per Ct floor: 600/ct but never under 150.",
+   "fieldname": "min_amount",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Minimum \u20b9"
+  },
+  {
+   "columns": 1,
+   "description": "Weight-slab row (IGI style): applies when the piece's diamond ct falls in this range. Blank range = a plain named charge.",
+   "fieldname": "from_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "From ct",
+   "precision": "3"
+  },
+  {
+   "columns": 1,
+   "fieldname": "to_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "To ct",
+   "precision": "3"
+  },
+  {
+   "columns": 1,
+   "description": "This slab row applies only to single-stone pieces.",
+   "fieldname": "solitaire",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Solitaire"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-01 13:45:23.879132",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Price Chart Certification Charge",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
 }
