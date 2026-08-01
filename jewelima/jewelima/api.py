@@ -8412,6 +8412,11 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	after = round(before + gst, 2)
 	return {"rows": out, "totals": {"before_tax": before, "gst": gst, "cess": 0,
 		"after_tax": after, "invoice": after, "gst_percent": flt(gst_percent),
+		"huid_total": round(sum(x["huid_va"] for x in out), 2),
+		"huid_count": sum(x["huid_count"] for x in out),
+		"huid_pieces": sum(1 for x in out if x["huid_count"]),
+		"cert_total": round(sum(x["cert_va"] - x["huid_va"] for x in out), 2),
+		"cert_pieces": sum(1 for x in out if x["cert_on"]),
 		"in_words": frappe.utils.money_in_words(after, "INR")}}
 
 

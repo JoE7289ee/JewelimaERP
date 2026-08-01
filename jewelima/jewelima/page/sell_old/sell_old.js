@@ -150,6 +150,10 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			</tr>`).join("")}</tbody></table>
 			${priced ? `<div class="so-tot">
 				<div class="so-tile"><div class="k">${__("Before tax")}</div><div class="v">₹ ${money(totals.before_tax)}</div></div>
+				<div class="so-tile"><div class="k">${__("HUID / Hallmark")}</div><div class="v">₹ ${money(totals.huid_total)}</div>
+					<div style="font-size:10.5px;color:var(--text-muted);">${__("{0} HUID on {1} pc", [totals.huid_count || 0, totals.huid_pieces || 0])}</div></div>
+				<div class="so-tile"><div class="k">${__("Certification")}</div><div class="v">₹ ${money(totals.cert_total)}</div>
+					<div style="font-size:10.5px;color:var(--text-muted);">${__("{0} of {1} pc tagged", [totals.cert_pieces || 0, rows.length])}</div></div>
 				<div class="so-tile"><div class="k">GST ${totals.gst_percent}%</div><div class="v">₹ ${money(totals.gst)}</div></div>
 				<div class="so-tile grand"><div class="k">${__("Invoice total")}</div><div class="v">₹ ${money(totals.invoice)}</div></div>
 				<div class="so-tile" style="max-width:420px;"><div class="k">${__("In words")}</div>
