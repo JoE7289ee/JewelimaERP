@@ -8220,6 +8220,9 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	# cert applies to ALL rows unless a subset of unique ids was picked
 	cert_set = set(json.loads(cert_uids) if isinstance(cert_uids, str) else (cert_uids or [])) or None
 	chart = frappe.get_doc("Price Chart", price_chart)
+	# the old software's item vocabulary -> our Design Type names
+	ITEM_ALIAS = {"NOSPIN": "NOSEPIN", "NP": "NOSEPIN", "PD": "PENDANT", "NECK": "NECKLACE",
+		"CH BRACELET": "CHAIN BRACELET", "CH NECKLACE": "CHAIN NECKLACE"}
 	making_rules = list(chart.get("making_rules") or [])
 	dmd_rows = [r for r in chart.diamond_rates if (r.quality or "") in ((quality or ""), "")]
 	dmd_exact = [r for r in dmd_rows if (r.quality or "") == (quality or "")] or dmd_rows
@@ -8232,7 +8235,9 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 			flags.append("no gold rate")
 		# making: the row's ITEM is the design type; blank rule row = DEFAULT
 		mc = mc_rate = 0.0
-		rule = next((m for m in making_rules if (m.design_type or "").upper() == r.get("item") and r.get("item")), None) 			or next((m for m in making_rules if not m.design_type), None)
+		item_type = ITEM_ALIAS.get(r.get("item") or "", r.get("item") or "")
+		rule = next((m for m in making_rules if (m.design_type or "").upper() == item_type and item_type), None) or next(
+			(m for m in making_rules if not m.design_type), None)
 		if rule:
 			mc_rate = flt(rule.rate)
 			mc = flt(r.get("nt")) * mc_rate
@@ -8387,6 +8392,38 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 									cell.value = frappe.utils.fmt_money(flt(value), 2, "INR")
 									return True
 			return False
+		# newer covers carry an Amount (₹) column on the item summary lines:
+		# Amount = the item type's MATERIAL value (service charge rides its own row)
+		amount_col = items_hdr_row = None
+		for row in cv.iter_rows():
+			for c in row:
+				if " ".join(str(c.value or "").split()).startswith("Amount"):
+					amount_col, items_hdr_row = c.column, c.row
+					break
+			if amount_col:
+				break
+		if amount_col:
+			by_item = {}
+			for p in priced:
+				key = (p.get("item") or "").upper()
+				by_item[key] = by_item.get(key, 0) + flt(p.get("gold_va")) + flt(p.get("dmd_va")) + flt(p.get("ps_va")) + flt(p.get("stn_va"))
+			total_material = 0.0
+			for i in range(items_hdr_row + 1, cv.max_row + 1):
+				label = str(cv.cell(row=i, column=2).value or "").strip().upper()
+				if label.startswith("TOTAL SERVICE"):
+					if zeroish(cv.cell(row=i, column=amount_col).value):
+						cv.cell(row=i, column=amount_col).value = round(sums.get("mc", 0), 2)
+					continue
+				if label in by_item:
+					cv.cell(row=i, column=amount_col).value = round(by_item[label], 2)
+					total_material += by_item[label]
+					continue
+				if not label and flt(cv.cell(row=i, column=7).value):
+					# the summary total line (weights summed, first col blank)
+					if zeroish(cv.cell(row=i, column=amount_col).value):
+						cv.cell(row=i, column=amount_col).value = round(total_material + sums.get("mc", 0), 2)
+					break
+
 		T = totals or {}
 		put_right("Total Amount Before Tax", flt(T.get("before_tax")))
 		put_right("Total GST", flt(T.get("gst")))
