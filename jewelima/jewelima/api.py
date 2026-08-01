@@ -8168,10 +8168,13 @@ def _old_sale_rows(filedata):
 def _old_sale_rows_billing(wb):
 	ws = wb.active
 	head = {}
+	huid_cols = []  # the file may carry TWO 'HUID' columns (two codes per piece)
 	for j, c in enumerate(ws[1], start=1):
 		key = " ".join(str(c.value or "").split()).upper()
+		if key == "HUID":
+			huid_cols.append(j)
 		if key:
-			head[key] = j
+			head.setdefault(key, j)
 
 	def col(*names):
 		for n in names:
@@ -8207,7 +8210,8 @@ def _old_sale_rows_billing(wb):
 		if not shop:
 			shop = str(g("shop") or "").strip()
 		rows.append({
-			"sl": cint(g("sl")), "unique_id": str(uid).strip(), "huid": str(g("huid") or ""),
+			"sl": cint(g("sl")), "unique_id": str(uid).strip(),
+			"huid": " ".join(str(r[j - 1] or "").strip() for j in huid_cols if r[j - 1]),
 			"item": str(g("item") or "").strip().upper(), "design": "",
 			"gs": gs, "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
 			"dmd_pcs": cint(g("dmd_pcs")), "clarity": tok,
@@ -8383,7 +8387,7 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		# HUID rate x the number of HUIDs in the cell; cert rate per piece,
 		# all rows or only the picked ones
 		import re as _re
-		huids = [t for t in _re.split(r"[^A-Za-z0-9]+", str(r.get("huid") or "")) if len(t) >= 4]
+		huids = [t for t in _re.split(r"[^A-Za-z0-9]+", str(r.get("huid") or "")) if len(t) == 6]
 		huid_va = round(huid_rate * len(huids), 2) if huid_rate and huids else 0.0
 		cert_on = cert_rate > 0 and (cert_set is None or r.get("unique_id") in cert_set)
 		cert_va = round(huid_va + (cert_rate if cert_on else 0), 2)
