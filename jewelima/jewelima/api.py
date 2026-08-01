@@ -8678,7 +8678,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	used_groups = set()
 	r0 = 5
 	r = r0
-	sub_rows = []  # the per-item TOTAL rows — TOTAL GROSS sums exactly these
+	gross_terms = []  # per item block: the cells (or row range) TOTAL GROSS adds up
 	sl = 0
 
 	small_bold = Font(bold=True, size=10)  # colour totals sit under the item TOTAL
@@ -8734,8 +8734,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	# blocks: item type -> colour runs -> weight bands. Below-1g rows first with
 	# a BELOW 1G TOTAL, then the gram-priced rows with ABOVE 1G TOTAL (band rows
 	# only when the run actually splits), then COLOUR TOTAL (only when the item
-	# carries more than one colour), then the item's TOTAL. Every parent total
-	# sums its child totals, so nothing ever double-counts.
+	# carries more than one colour). NO per-item TOTAL row (dropped on request) —
+	# TOTAL GROSS adds each block's top level directly, so nothing double-counts.
 	from itertools import groupby
 
 	def plus(rows_):
@@ -8765,11 +8765,11 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				ctot.append(sum_row("{0} TOTAL".format(colr or "—"),
 					plus(btot) if btot else span(cstart, r - 1), font=small_bold))
 		if ctot:
-			sub_rows.append(sum_row("{0} TOTAL".format(item), plus(ctot)))
+			gross_terms.append(("cells", ctot))
 		elif all_btot:
-			sub_rows.append(sum_row("{0} TOTAL".format(item), plus(all_btot)))
+			gross_terms.append(("cells", all_btot))
 		else:
-			sub_rows.append(sum_row("{0} TOTAL".format(item), span(block_start, r - 1)))
+			gross_terms.append(("range", (block_start, r - 1)))
 
 	# unused diamond bracket groups vanish (their legend rides in the same cols)
 	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
@@ -8789,11 +8789,17 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	for cc in range(1, 43):
 		ws.cell(row=tr, column=cc).border = box
 	ws.cell(row=tr, column=2, value="TOTAL GROSS").font = bold
-	# grand total = the SUM of the per-type TOTAL rows (their two-block style)
+	# grand total = each block's top total level (or its raw rows when a block
+	# is single-colour single-band and therefore carries no subtotal at all)
 	for col in SUMCOLS:
 		L = get_column_letter(col)
-		ws.cell(row=tr, column=col,
-			value="={0}".format("+".join("{0}{1}".format(L, sr) for sr in sub_rows)) if sub_rows else 0).font = bold
+		parts = []
+		for kind, v in gross_terms:
+			if kind == "cells":
+				parts += ["{0}{1}".format(L, x) for x in v]
+			else:
+				parts.append("SUM({0}{1}:{0}{2})".format(L, v[0], v[1]))
+		ws.cell(row=tr, column=col, value="={0}".format("+".join(parts)) if parts else 0).font = bold
 	# ---- footer chain (whole rupees — every line ROUNDed to 0 decimals) ----
 	huid_total = int(round(sum(flt(p.get("huid_va")) for p in priced)))
 	rows = [
