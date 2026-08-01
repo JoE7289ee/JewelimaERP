@@ -8544,11 +8544,12 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18 KT",
 		gst_percent=3, igi_flat=80, igi_per_ct=325, igi_threshold=0.10,
 		huid_rate=0, party="", item_colour="", filename=None):
-	"""The JOS BILLING workbook, generated in their exact 42-column layout with
-	LIVE formulas: gold = net x N3, diamonds split into the chart's bracket
-	GROUPS (one group per piece), IGI slab (<=threshold flat, above per-ct),
-	footer Total -> Hall Marking (HUID) -> Certification (sum IGI) -> GST.
-	Back-chain, gram-stone group and the second-rate column stay blank."""
+	"""The JOS BILLING workbook with LIVE formulas: gold = net x the rate cell,
+	diamonds split into the chart's bracket GROUPS (one group per piece), IGI
+	slab (chart-held when present), footer Total -> Hall Marking (HUID) ->
+	Certification (sum IGI) -> GST. The column plan is DYNAMIC — only columns
+	that carry data exist; unused bracket groups and the legacy back-chain /
+	gram-stone columns are not laid out at all (nothing hidden)."""
 	from io import BytesIO
 
 	from openpyxl import Workbook
@@ -8591,7 +8592,40 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	bold = Font(bold=True)
 	thin = Side(style="thin")
 	box = Border(left=thin, right=thin, top=thin, bottom=thin)
-	# ---- header block (rows 1-3, THEIR geometry — plain, no fills) ----
+
+	def bracket_index(stone_ct):
+		for i, b in enumerate(brackets):
+			if flt(b.from_ct) <= stone_ct and (not flt(b.to_ct) or stone_ct <= flt(b.to_ct)):
+				return i
+		return 0 if brackets else None
+
+	# ---- DYNAMIC column plan: only live columns exist — no hidden ones.
+	# Groups that receive no pieces are not laid out at all; the legacy
+	# back-chain / gram-stone / x-rate columns are gone entirely.
+	used = []
+	for p in priced:
+		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
+		if ct > 0 and brackets:
+			gi = bracket_index(round(ct / pcs, 3) if pcs else 0)
+			if gi not in used:
+				used.append(gi)
+	used.sort()
+	keys = ["sl", "item", "size", "style", "colour", "pcs1", "item_color", "gross", "net", "gold", "mc"]
+	for gi in used:
+		keys += ["g{0}p".format(gi), "g{0}c".format(gi)]
+		if gi == 0:
+			keys.append("g0avg")
+		if gi == 1:
+			keys.append("g1rate")
+		keys.append("g{0}v".format(gi))
+	keys += ["tp", "tc", "tv", "total", "igi", "uid"]
+	C = {k: i + 1 for i, k in enumerate(keys)}
+	NCOLS = len(keys)
+
+	def Lc(k):
+		return get_column_letter(C[k])
+
+	# ---- header block (rows 1-3 — plain, no fills) ----
 	ws["A1"] = "SMITH NAME ADDRESS"
 	ws["F1"] = "jewelima diamonds,"
 	# pure rate = the board rate scaled back to 24K (18K: x24/18 -> 14346 @ 10759.5)
@@ -8606,54 +8640,49 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	ws["M2"] = "DIAMOND QUALITY"
 	ws["P2"] = quality or ""
 	ws["A3"] = "Shop: " + (party or "")
-	ws["J3"] = "Net . Value"
-	ws["N3"] = gold_rate
-	ws["N3"].font = Font(bold=True, size=16)
-	# the bracket legend rides ABOVE each diamond group, their wording
-	GRP_PCS_COLS = (16, 20, 24, 27, 30)
-	for gi, b in enumerate(brackets):
-		ws.cell(row=3, column=GRP_PCS_COLS[gi],
+	ws.cell(row=3, column=C["gold"], value="Net . Value").font = bold
+	rate_cell = ws.cell(row=3, column=C["mc"], value=gold_rate)
+	rate_cell.font = Font(bold=True, size=16)
+	# the bracket legend rides ABOVE each (used) diamond group, their wording
+	for gi in used:
+		b = brackets[gi]
+		ws.cell(row=3, column=C["g{0}p".format(gi)],
 			value="({0}){1}/-PER CT".format((b.sieve_label or "").strip() or "{0}-{1}".format(flt(b.from_ct), flt(b.to_ct) or "∞"),
 				int(flt(b.rate))))
-	ws.cell(row=3, column=33, value="Total diamond")
-	for c in ("A1", "A2", "H2", "M2", "A3", "J3"):
+	ws.cell(row=3, column=C["tp"], value="Total diamond")
+	for c in ("A1", "A2", "H2", "M2", "A3"):
 		ws[c].font = bold
 
-	# ---- column plan: EXACT positions of the house sheet ----
-	# groups g -> (pcs, ct, value) columns; group 2 carries its rate column V
-	GRP = [(16, 17, 19), (20, 21, 23), (24, 25, 26), (27, 28, 29), (30, 31, 32)]
-	HEAD = {1: "Sl. No.", 2: "Item Description", 3: "Size", 4: "Style", 5: "Colour",
-		6: "NO OF PCS", 7: "ITEM COLOR", 8: "Gross Qty (Gm)", 9: "Net Qty (Gm)",
-		10: "Gold\nValue", 13: "back chain wt",
-		14: "Making Charge", 15: "chain mc", 18: "Dimond Rate (Ct.)", 22: "dia.rate",
-		33: "pcs", 34: "cts", 35: "value", 37: "pcs", 38: "in gram",
-		39: "amt (specify ct rate)", 40: "Total value", 41: "IGI", 42: "UNIQUE ID"}
-	for gi, (pc, cc, vc) in enumerate(GRP):
-		HEAD[pc] = "Dpcs"
-		HEAD[cc] = "d.wt/ct"
-		HEAD[vc] = "dia.value"
-	for col, label in HEAD.items():
-		c = ws.cell(row=4, column=col, value=label)
+	HEAD = {"sl": "Sl. No.", "item": "Item Description", "size": "Size", "style": "Style",
+		"colour": "Colour", "pcs1": "NO OF PCS", "item_color": "ITEM COLOR",
+		"gross": "Gross Qty (Gm)", "net": "Net Qty (Gm)", "gold": "Gold\nValue",
+		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
+		"tp": "pcs", "tc": "cts", "tv": "value", "total": "Total value",
+		"igi": "IGI", "uid": "UNIQUE ID"}
+	for gi in used:
+		HEAD["g{0}p".format(gi)] = "Dpcs"
+		HEAD["g{0}c".format(gi)] = "d.wt/ct"
+		HEAD["g{0}v".format(gi)] = "dia.value"
+	for k in keys:
+		c = ws.cell(row=4, column=C[k], value=HEAD.get(k, ""))
 		c.font = bold
 		c.border = box
 		c.alignment = Alignment(wrap_text=True, vertical="center")
-	widths = {1: 4.1, 2: 9.9, 3: 4.9, 5: 8.6, 6: 4.6, 7: 8.1, 8: 9.9, 9: 9.3, 10: 11.1,
-		14: 12.7, 15: 9.3, 40: 12, 41: 8, 42: 12}
-	for col, w in widths.items():
-		ws.column_dimensions[get_column_letter(col)].width = w
-
-	def bracket_index(stone_ct):
-		for i, b in enumerate(brackets):
-			if flt(b.from_ct) <= stone_ct and (not flt(b.to_ct) or stone_ct <= flt(b.to_ct)):
-				return i
-		return 0 if brackets else None
+	widths = {"sl": 4.1, "item": 9.9, "size": 4.9, "colour": 8.6, "pcs1": 4.6,
+		"item_color": 8.1, "gross": 9.9, "net": 9.3, "gold": 11.1, "mc": 12.7,
+		"total": 12, "igi": 8, "uid": 12}
+	for k, w in widths.items():
+		if k in C:
+			ws.column_dimensions[Lc(k)].width = w
 
 	# the imported order IS the physical order (validated at import) — rows are
 	# written as-is with their own SL#, never re-sorted or re-numbered
 	def band_of(p):
 		return p.get("wt_band") or ("below" if flt(p.get("nt")) < 1.0 else "above")
-	SUMCOLS = [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]
-	used_groups = set()
+	SUMCOLS = [C["pcs1"], C["gross"], C["net"], C["gold"], C["mc"]]
+	for gi in used:
+		SUMCOLS += [C["g{0}p".format(gi)], C["g{0}c".format(gi)], C["g{0}v".format(gi)]]
+	SUMCOLS += [C["tp"], C["tc"], C["tv"], C["total"], C["igi"]]
 	r0 = 5
 	r = r0
 	gross_terms = []  # ("cell", row) / ("range", (a, b)) pieces the grand total adds
@@ -8667,43 +8696,43 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			L = get_column_letter(col)
 			ws.cell(row=r, column=col, value=formula(L)).font = font
 		if label:
-			ws.cell(row=r, column=2, value=label).font = font
+			ws.cell(row=r, column=C["item"], value=label).font = font
 		r += 1
 		return r - 1
 
 	def write_piece(p):
 		nonlocal r
-		ws.cell(row=r, column=1, value=cint(p.get("sl")) or None)
-		ws.cell(row=r, column=2, value=p.get("item"))
-		ws.cell(row=r, column=3, value=p.get("size") or None)
-		ws.cell(row=r, column=4, value=p.get("style") or None)
-		ws.cell(row=r, column=5, value=p.get("colour") or None)
-		ws.cell(row=r, column=6, value=1)
-		ws.cell(row=r, column=7, value=p.get("item_color") or item_colour or None)
-		gross, nt = flt(p.get("gs")), flt(p.get("nt"))
-		bc = flt(p.get("back_chain_wt"))
-		ws.cell(row=r, column=8, value=gross)
-		ws.cell(row=r, column=9, value=nt)
-		ws.cell(row=r, column=10, value="=I{0}*N$3".format(r))
-		if bc:
-			ws.cell(row=r, column=13, value=bc)
-		ws.cell(row=r, column=14, value=flt(p.get("mc")))
+		ws.cell(row=r, column=C["sl"], value=cint(p.get("sl")) or None)
+		ws.cell(row=r, column=C["item"], value=p.get("item"))
+		ws.cell(row=r, column=C["size"], value=p.get("size") or None)
+		ws.cell(row=r, column=C["style"], value=p.get("style") or None)
+		ws.cell(row=r, column=C["colour"], value=p.get("colour") or None)
+		ws.cell(row=r, column=C["pcs1"], value=1)
+		ws.cell(row=r, column=C["item_color"], value=p.get("item_color") or item_colour or None)
+		ws.cell(row=r, column=C["gross"], value=flt(p.get("gs")))
+		ws.cell(row=r, column=C["net"], value=flt(p.get("nt")))
+		ws.cell(row=r, column=C["gold"], value="={0}{1}*{2}$3".format(Lc("net"), r, Lc("mc")))
+		ws.cell(row=r, column=C["mc"], value=flt(p.get("mc")))
 		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
 		if ct > 0 and brackets:
 			gi = bracket_index(round(ct / pcs, 3) if pcs else 0)
-			used_groups.add(gi)
-			pc, cc, vc = GRP[gi]
-			ws.cell(row=r, column=pc, value=pcs)
-			ws.cell(row=r, column=cc, value=ct)
-			ws.cell(row=r, column=vc, value="={0}{1}*{2}".format(get_column_letter(cc), r, flt(brackets[gi].rate)))
-			if gi == 1:
-				ws.cell(row=r, column=22, value=flt(brackets[1].rate))
-		ws.cell(row=r, column=33, value="={0}".format("+".join("{0}{1}".format(get_column_letter(pc), r) for pc, _, _ in GRP)))
-		ws.cell(row=r, column=34, value="={0}".format("+".join("{0}{1}".format(get_column_letter(cc), r) for _, cc, _ in GRP)))
-		ws.cell(row=r, column=35, value="={0}".format("+".join("{0}{1}".format(get_column_letter(vc), r) for _, _, vc in GRP)))
-		ws.cell(row=r, column=40, value="=J{0}+N{0}+AI{0}".format(r))
-		ws.cell(row=r, column=41, value=igi_for(ct, pcs))
-		ws.cell(row=r, column=42, value=p.get("unique_id"))
+			ws.cell(row=r, column=C["g{0}p".format(gi)], value=pcs)
+			ws.cell(row=r, column=C["g{0}c".format(gi)], value=ct)
+			ws.cell(row=r, column=C["g{0}v".format(gi)],
+				value="={0}{1}*{2}".format(Lc("g{0}c".format(gi)), r, flt(brackets[gi].rate)))
+			if gi == 1 and "g1rate" in C:
+				ws.cell(row=r, column=C["g1rate"], value=flt(brackets[1].rate))
+		if used:
+			ws.cell(row=r, column=C["tp"], value="={0}".format("+".join("{0}{1}".format(Lc("g{0}p".format(gi)), r) for gi in used)))
+			ws.cell(row=r, column=C["tc"], value="={0}".format("+".join("{0}{1}".format(Lc("g{0}c".format(gi)), r) for gi in used)))
+			ws.cell(row=r, column=C["tv"], value="={0}".format("+".join("{0}{1}".format(Lc("g{0}v".format(gi)), r) for gi in used)))
+		else:
+			ws.cell(row=r, column=C["tp"], value=0)
+			ws.cell(row=r, column=C["tc"], value=0)
+			ws.cell(row=r, column=C["tv"], value=0)
+		ws.cell(row=r, column=C["total"], value="={g}{r}+{m}{r}+{v}{r}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r))
+		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs))
+		ws.cell(row=r, column=C["uid"], value=p.get("unique_id"))
 		r += 1
 
 	# blocks: item type -> colour runs -> weight bands. EVERY band run closes
@@ -8725,24 +8754,14 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 					write_piece(p)
 				gross_terms.append(("cell", sum_row("", span(bstart, r - 1), font=band_bold)))
 
-	# unused diamond bracket groups vanish (their legend rides in the same cols)
-	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
-	for gi, cols in enumerate(GRP):
-		if gi not in used_groups:
-			for col in list(cols) + GRP_EXTRA.get(gi, []):
-				ws.column_dimensions[get_column_letter(col)].hidden = True
-	# the always-ignored legacy columns stay hidden too (incl. neck-wt col K)
-	for col in (11, 12, 13, 15, 36, 37, 38, 39):
-		ws.column_dimensions[get_column_letter(col)].hidden = True
-
 	last = r - 1
 	for rr in range(r0, last + 1):
-		for cc in range(1, 43):
+		for cc in range(1, NCOLS + 1):
 			ws.cell(row=rr, column=cc).border = box
 	tr = last + 1
-	for cc in range(1, 43):
+	for cc in range(1, NCOLS + 1):
 		ws.cell(row=tr, column=cc).border = box
-	ws.cell(row=tr, column=2, value="TOTAL GROSS").font = bold
+	ws.cell(row=tr, column=C["item"], value="TOTAL GROSS").font = bold
 	# grand total = band totals + lone rows + SUM ranges of never-split runs
 	for col in SUMCOLS:
 		L = get_column_letter(col)
@@ -8752,24 +8771,24 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	# ---- footer chain (whole rupees — every line ROUNDed to 0 decimals) ----
 	huid_total = int(round(sum(flt(p.get("huid_va")) for p in priced)))
 	rows = [
-		("Total Value", "=ROUND(AN{0},0)".format(tr)),
+		("Total Value", "=ROUND({0}{1},0)".format(Lc("total"), tr)),
 		("Hall Marking Charge", huid_total or None),
-		("Certification Charge", "=ROUND(AO{0},0)".format(tr)),
+		("Certification Charge", "=ROUND({0}{1},0)".format(Lc("igi"), tr)),
 		("Taxable Value", None),
 		("GST {0}%".format(frappe.utils.fmt_money(gst_percent, 0, None).strip()), None),
 		("Grand Total", None),
 	]
 	fr = tr + 1
 	for j, (label, val) in enumerate(rows):
-		ws.cell(row=fr + j, column=34, value=label).font = bold
-		cell = ws.cell(row=fr + j, column=40)
+		ws.cell(row=fr + j, column=C["tc"], value=label).font = bold
+		cell = ws.cell(row=fr + j, column=C["total"])
 		cell.font = bold
 		cell.number_format = "0"
 		if val is not None:
 			cell.value = val
-	ws.cell(row=fr + 3, column=40, value="=ROUND(SUM(AN{0}:AN{1}),0)".format(fr, fr + 2))
-	ws.cell(row=fr + 4, column=40, value="=ROUND(AN{0}*{1}%,0)".format(fr + 3, gst_percent))
-	ws.cell(row=fr + 5, column=40, value="=ROUND(AN{0}+AN{1},0)".format(fr + 3, fr + 4))
+	ws.cell(row=fr + 3, column=C["total"], value="=ROUND(SUM({0}{1}:{0}{2}),0)".format(Lc("total"), fr, fr + 2))
+	ws.cell(row=fr + 4, column=C["total"], value="=ROUND({0}{1}*{2}%,0)".format(Lc("total"), fr + 3, gst_percent))
+	ws.cell(row=fr + 5, column=C["total"], value="=ROUND({0}{1}+{0}{2},0)".format(Lc("total"), fr + 3, fr + 4))
 
 	buf = BytesIO()
 	wb.save(buf)
