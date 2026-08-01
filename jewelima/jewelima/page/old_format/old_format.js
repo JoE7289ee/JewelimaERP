@@ -368,6 +368,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			if (hit && r.colour !== v) { r.colour = v; n++; }
 		});
 		if (n) invalidate();
+		// every "-> selected" apply hands the selection back for the next batch
+		SEL.clear();
+		LASTSEL = null;
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) coloured {1}.", [n, v]), indicator: "green" }, 3);
 	}
@@ -382,6 +385,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r.cert !== v) { r.cert = v; n++; } });
 		if (n) invalidate();
 		SEL.clear();
+		LASTSEL = null;
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) tagged {1} — selection cleared, tick the next batch.", [n, v]), indicator: "green" }, 4);
 	});
@@ -393,6 +397,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && !r.huid) { r.huid = "PENDING"; n++; } });
 		if (n) invalidate();
 		SEL.clear();
+		LASTSEL = null;
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) set PENDING (rows that already had a HUID were left alone).", [n]), indicator: "green" }, 4);
 	});
