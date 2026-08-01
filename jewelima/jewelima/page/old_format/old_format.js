@@ -175,6 +175,17 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		root.find(".of-jos").hide();
 	}
 
+	// each row wears a whisper of its assigned colour (selection/flags win —
+	// they paint the tds, the tint sits on the tr underneath)
+	const TINTS = { YELLOW: "rgba(212,166,40,.14)", ROSE: "rgba(214,106,128,.14)", WHITE: "rgba(120,134,150,.12)" };
+	const tintOf = (c) => {
+		if (!c) return "";
+		if (TINTS[c]) return TINTS[c];
+		let h = 0;
+		for (const ch of c) h = (h * 31 + ch.charCodeAt(0)) % 360;
+		return "hsla(" + h + ",60%,50%,.12)";
+	};
+
 	// a HUID cell bills its 6-char codes; PENDING = hallmarked, code not typed
 	const huidCount = (h) => (String(h || "").toUpperCase().match(/[A-Z0-9]+/g) || [])
 		.filter((t) => t.length === 6 || t === "PENDING").length;
@@ -263,7 +274,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
 				<th>${__("Cert")}</th>
 			</tr></thead><tbody>
-			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}">
+			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}" style="background:${tintOf(r.colour)}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td>
 				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;"></td>
@@ -296,7 +307,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			${ROWS.map((r) => {
 				const p = P[r.unique_id] || {};
 				const fl = (p.flags || []).length;
-				return `<tr class="${fl ? "of-flagged" : ""}">
+				return `<tr class="${fl ? "of-flagged" : ""}" style="background:${tintOf(r.colour)}">
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
 				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
 				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td>
