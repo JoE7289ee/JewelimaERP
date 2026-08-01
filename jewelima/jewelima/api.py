@@ -8479,7 +8479,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	from io import BytesIO
 
 	from openpyxl import Workbook
-	from openpyxl.styles import Alignment, Font, PatternFill
+	from openpyxl.styles import Alignment, Border, Font, Side
 	from openpyxl.utils import get_column_letter
 
 	if isinstance(priced, str):
@@ -8495,11 +8495,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	ws = wb.active
 	ws.title = "Sheet1"
 	bold = Font(bold=True)
-	head_fill = PatternFill("solid", fgColor="DDEBF7")
-	# ---- header block (rows 1-3, their geometry) ----
+	thin = Side(style="thin")
+	box = Border(left=thin, right=thin, top=thin, bottom=thin)
+	# ---- header block (rows 1-3, THEIR geometry — plain, no fills) ----
 	ws["A1"] = "SMITH NAME ADDRESS"
 	ws["F1"] = "jewelima diamonds,"
-	ws["A2"] = "Pure Rate WITHOUT GST"
+	ws["A2"] = "Pure Rate WITHOUT GST:"
 	ws["H2"] = "METAL PURITY"
 	ws["J2"] = karat_label
 	ws["M2"] = "DIAMOND QUALITY"
@@ -8507,8 +8508,14 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	ws["A3"] = "Shop: " + (party or "")
 	ws["J3"] = "Net . Value"
 	ws["N3"] = gold_rate
-	ws["Q3"] = " · ".join("{0} {1}/-".format(b.sieve_label or "{0}-{1}".format(flt(b.from_ct), flt(b.to_ct) or "∞"),
-		frappe.utils.fmt_money(flt(b.rate), 0, None).strip()) for b in brackets)
+	ws["N3"].font = Font(bold=True, size=16)
+	# the bracket legend rides ABOVE each diamond group, their wording
+	GRP_PCS_COLS = (16, 20, 24, 27, 30)
+	for gi, b in enumerate(brackets):
+		ws.cell(row=3, column=GRP_PCS_COLS[gi],
+			value="({0}){1}/-PER CT".format((b.sieve_label or "").strip() or "{0}-{1}".format(flt(b.from_ct), flt(b.to_ct) or "∞"),
+				int(flt(b.rate))))
+	ws.cell(row=3, column=33, value="Total diamond")
 	for c in ("A1", "A2", "H2", "M2", "A3", "J3"):
 		ws[c].font = bold
 
@@ -8528,9 +8535,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	for col, label in HEAD.items():
 		c = ws.cell(row=4, column=col, value=label)
 		c.font = bold
-		c.fill = head_fill
+		c.border = box
 		c.alignment = Alignment(wrap_text=True, vertical="center")
-	widths = {1: 6, 2: 16, 6: 8, 7: 10, 8: 11, 9: 11, 10: 12, 11: 10, 14: 12, 40: 12, 41: 8, 42: 12}
+	widths = {1: 4.1, 2: 9.9, 3: 4.9, 5: 8.6, 6: 4.6, 7: 8.1, 8: 9.9, 9: 9.3, 10: 11.1,
+		11: 8, 14: 12.7, 15: 9.3, 40: 12, 41: 8, 42: 12}
 	for col, w in widths.items():
 		ws.column_dimensions[get_column_letter(col)].width = w
 
@@ -8574,7 +8582,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=42, value=p.get("unique_id"))
 
 	last = r0 + len(priced) - 1
+	for rr in range(r0, last + 1):
+		for cc in range(1, 43):
+			ws.cell(row=rr, column=cc).border = box
 	tr = last + 1
+	for cc in range(1, 43):
+		ws.cell(row=tr, column=cc).border = box
 	ws.cell(row=tr, column=2, value="TOTAL GROSS").font = bold
 	for col in [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]:
 		L = get_column_letter(col)
