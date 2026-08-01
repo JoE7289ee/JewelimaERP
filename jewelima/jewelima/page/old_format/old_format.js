@@ -63,8 +63,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		table.of-t td{border:1px solid var(--border-color);padding:3px 6px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 		table.of-t td.num{text-align:right;}
 		table.of-t td[title]:not([title=""]){cursor:help;}
-		table.of-t input, table.of-t select{border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-size:11.5px;background:var(--fg-color);color:var(--text-color);}
-		table.of-t input{text-transform:uppercase;}
+		table.of-t input:not([type=checkbox]), table.of-t select{border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-size:11.5px;background:var(--fg-color);color:var(--text-color);}
+		table.of-t input:not([type=checkbox]){text-transform:uppercase;}
+		table.of-t input[type=checkbox]{width:14px;height:14px;accent-color:#1f618d;cursor:pointer;}
 		tr.of-rowsel td{background:#eef4fb;}
 		html[data-theme="dark"] tr.of-rowsel td{background:#1d2a3a;}
 		tr.of-flagged td{background:#fff8e6;}
@@ -232,6 +233,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				ROWS = m.rows || [];
 				COVER = m.cover || {};
 				SEL.clear();
+				LASTSEL = null;
 				invalidate();
 				if (COVER.party && !fParty.get_value()) fParty.set_value(COVER.party);
 				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s)",
@@ -319,10 +321,20 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	}
 
 	// ------------------------------------------------------ prep interactions
-	root.on("change", ".of-sel", function () {
-		const uid = $(this).data("uid");
-		this.checked ? SEL.add(uid) : SEL.delete(uid);
-		$(this).closest("tr").toggleClass("of-rowsel", this.checked);
+	let LASTSEL = null; // row index of the last clicked checkbox (shift ranges)
+	root.on("click", ".of-sel", function (e) {
+		const i = cint($(this).closest("tr").data("i"));
+		const on = this.checked;
+		if (e.shiftKey && LASTSEL !== null && LASTSEL !== i) {
+			const [a, b] = [Math.min(LASTSEL, i), Math.max(LASTSEL, i)];
+			for (let k = a; k <= b; k++) on ? SEL.add(ROWS[k].unique_id) : SEL.delete(ROWS[k].unique_id);
+			LASTSEL = i;
+			paint();
+			return;
+		}
+		LASTSEL = i;
+		on ? SEL.add($(this).data("uid")) : SEL.delete($(this).data("uid"));
+		$(this).closest("tr").toggleClass("of-rowsel", on);
 		refreshStatus();
 	});
 	root.on("click", ".of-selclear", () => {
