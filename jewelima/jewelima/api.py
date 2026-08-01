@@ -8638,23 +8638,21 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	used_groups = set()
 	r0 = 5
 	r = r0
-	sub_rows = []
-	cur_item, block_start = None, r0
-	def close_block(upto):
-		"""write the item's TOTAL row right under its block"""
+	sub_rows = []  # the per-item TOTAL rows — TOTAL GROSS sums exactly these
+	sl = 0
+
+	def sum_row(label, formula):
+		"""one bold total line; `formula` maps a column letter -> its formula"""
 		nonlocal r
 		for col in SUMCOLS:
 			L = get_column_letter(col)
-			ws.cell(row=r, column=col, value="=SUM({0}{1}:{0}{2})".format(L, block_start, upto)).font = bold
-		ws.cell(row=r, column=2, value="{0} TOTAL".format(cur_item or "")).font = bold
-		sub_rows.append(r)
+			ws.cell(row=r, column=col, value=formula(L)).font = bold
+		ws.cell(row=r, column=2, value=label).font = bold
 		r += 1
-	sl = 0
-	for p in priced:
-		if cur_item is not None and (p.get("item") or "") != cur_item:
-			close_block(r - 1)
-			block_start = r
-		cur_item = p.get("item") or ""
+		return r - 1
+
+	def write_piece(p):
+		nonlocal r, sl
 		sl += 1
 		ws.cell(row=r, column=1, value=sl)
 		ws.cell(row=r, column=2, value=p.get("item"))
@@ -8690,8 +8688,27 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=41, value=igi if ct > 0 else 0)
 		ws.cell(row=r, column=42, value=p.get("unique_id"))
 		r += 1
-	if priced:
-		close_block(r - 1)
+
+	# blocks: item type -> colour runs; a COLOUR TOTAL after each run when the
+	# item carries more than one colour, then the item's TOTAL (sum of those)
+	from itertools import groupby
+	for item, ig in groupby(priced, key=lambda p: (p.get("item") or "")):
+		cgroups = [(k, list(g)) for k, g in groupby(list(ig), key=lambda p: (p.get("item_color") or ""))]
+		block_start = r
+		ctot = []
+		for colr, run in cgroups:
+			start = r
+			for p in run:
+				write_piece(p)
+			if len(cgroups) > 1:
+				ctot.append(sum_row("{0} TOTAL".format(colr or "—"),
+					lambda L, a=start, b=r - 1: "=SUM({0}{1}:{0}{2})".format(L, a, b)))
+		if ctot:
+			sub_rows.append(sum_row("{0} TOTAL".format(item),
+				lambda L, rs=tuple(ctot): "={0}".format("+".join("{0}{1}".format(L, x) for x in rs))))
+		else:
+			sub_rows.append(sum_row("{0} TOTAL".format(item),
+				lambda L, a=block_start, b=r - 1: "=SUM({0}{1}:{0}{2})".format(L, a, b)))
 
 	# unused diamond bracket groups vanish (their legend rides in the same cols)
 	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
