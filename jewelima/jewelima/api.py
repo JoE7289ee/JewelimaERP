@@ -8601,7 +8601,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	wb = Workbook()
 	ws = wb.active
 	ws.title = "Sheet1"
-	bold = Font(bold=True)
+	bold = Font(bold=True, size=12)
 	thin = Side(style="thin")
 	box = Border(left=thin, right=thin, top=thin, bottom=thin)
 
@@ -8680,12 +8680,6 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		c.font = bold
 		c.border = box
 		c.alignment = Alignment(wrap_text=True, vertical="center")
-	widths = {"sl": 4.1, "item": 9.9, "size": 4.9, "colour": 8.6, "pcs1": 4.6,
-		"item_color": 8.1, "gross": 9.9, "net": 9.3, "gold": 11.1, "mc": 12.7,
-		"total": 12, "igi": 8, "uid": 12}
-	for k, w in widths.items():
-		if k in C:
-			ws.column_dimensions[Lc(k)].width = w
 
 	# the imported order IS the physical order (validated at import) — rows are
 	# written as-is with their own SL#, never re-sorted or re-numbered
@@ -8699,7 +8693,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	r = r0
 	gross_terms = []  # ("cell", row) / ("range", (a, b)) pieces the grand total adds
 
-	band_bold = Font(bold=True, size=9)   # weight-band totals, the only subtotal level
+	band_bold = Font(bold=True, size=10)  # weight-band totals, the only subtotal level
 
 	def sum_row(label, formula, font=bold):
 		"""one bold total line; `formula` maps a column letter -> its formula"""
@@ -8792,7 +8786,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	]
 	fr = tr + 1
 	for j, (label, val) in enumerate(rows):
-		ws.cell(row=fr + j, column=C["tc"], value=label).font = bold
+		lc = ws.cell(row=fr + j, column=C["tc"], value=label)
+		lc.font = bold
+		# long labels spill LEFT over the empty total-diamond columns
+		lc.alignment = Alignment(horizontal="right")
 		cell = ws.cell(row=fr + j, column=C["total"])
 		cell.font = bold
 		cell.number_format = "0"
@@ -8801,6 +8798,33 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	ws.cell(row=fr + 3, column=C["total"], value="=ROUND(SUM({0}{1}:{0}{2}),0)".format(Lc("total"), fr, fr + 2))
 	ws.cell(row=fr + 4, column=C["total"], value="=ROUND({0}{1}*{2}%,0)".format(Lc("total"), fr + 3, gst_percent))
 	ws.cell(row=fr + 5, column=C["total"], value="=ROUND({0}{1}+{0}{2},0)".format(Lc("total"), fr + 3, fr + 4))
+
+	# ---- sizing: 12pt everywhere (their print reads small otherwise); every
+	# non-bold cell gets the base font, deliberate fonts (headers, totals,
+	# the size-16 rate) stay. Widths come from the DATA so nothing clips at
+	# 12pt — formula cells can't be measured, so money columns get floors.
+	base = Font(size=12)
+	for rr in range(1, fr + 6):
+		for cc in range(1, NCOLS + 1):
+			cell = ws.cell(row=rr, column=cc)
+			if not cell.font.bold:
+				cell.font = base
+	MINW = {"sl": 5, "item": 11, "size": 6, "style": 6, "colour": 8, "pcs1": 5,
+		"item_color": 9, "gross": 10, "net": 10, "gold": 13, "mc": 13,
+		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11, "total": 14,
+		"igi": 9, "uid": 11}
+	for gi in used:
+		MINW["g{0}p".format(gi)] = 6
+		MINW["g{0}c".format(gi)] = 8
+		MINW["g{0}v".format(gi)] = 11
+	for k in keys:
+		w = MINW.get(k, 8)
+		for rr in range(r0, last + 1):
+			v = ws.cell(row=rr, column=C[k]).value
+			if v is None or (isinstance(v, str) and v.startswith("=")):
+				continue
+			w = max(w, len(str(v)) + 1)
+		ws.column_dimensions[Lc(k)].width = round(w * 1.18, 1)
 
 	buf = BytesIO()
 	wb.save(buf)
