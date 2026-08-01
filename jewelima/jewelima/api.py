@@ -8705,10 +8705,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=42, value=p.get("unique_id"))
 		r += 1
 
-	# blocks: item type -> colour runs -> weight bands. Below-1g rows first with
-	# a BELOW 1G TOTAL, then the gram-priced rows with ABOVE 1G TOTAL. NO colour
-	# totals and NO item totals (both dropped on request); a run of ONE line
-	# gets no total row either — the lone row itself feeds TOTAL GROSS.
+	# blocks: item type -> colour runs -> weight bands. EVERY multi-line band
+	# run closes with its BELOW/ABOVE 1G TOTAL (split or not); a run of ONE
+	# line gets no total row — the lone row itself feeds TOTAL GROSS. No
+	# colour totals and no item totals (both dropped on request).
 	from itertools import groupby
 
 	def span(a_, b_):
@@ -8717,22 +8717,16 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	for item, ig in groupby(priced, key=lambda p: (p.get("item") or "")):
 		cgroups = [(k, list(g)) for k, g in groupby(list(ig), key=lambda p: (p.get("item_color") or ""))]
 		for colr, crun in cgroups:
-			bgroups = [(k, list(g)) for k, g in groupby(crun, key=band_of)]
-			cstart = r
-			if len(bgroups) > 1:
-				for band, brun in bgroups:
-					bstart = r
-					for p in brun:
-						write_piece(p)
-					if len(brun) > 1:
-						gross_terms.append(("cell", sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
-							span(bstart, r - 1), font=band_bold)))
-					else:
-						gross_terms.append(("cell", bstart))
-			else:
-				for p in crun:
+			for band, brun in groupby(crun, key=band_of):
+				brun = list(brun)
+				bstart = r
+				for p in brun:
 					write_piece(p)
-				gross_terms.append(("range", (cstart, r - 1)) if len(crun) > 1 else ("cell", cstart))
+				if len(brun) > 1:
+					gross_terms.append(("cell", sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
+						span(bstart, r - 1), font=band_bold)))
+				else:
+					gross_terms.append(("cell", bstart))
 
 	# unused diamond bracket groups vanish (their legend rides in the same cols)
 	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
