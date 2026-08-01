@@ -55,6 +55,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			<div class="so-cert"></div>
 			<button class="so-price">${__("Price it")}</button>
 			<button class="so-dl">${__("Download priced excel ⤓")}</button>
+			<button class="so-dl so-jos" style="background:#9a6b1f;">${__("JOS Billing ⤓")}</button>
 		</div>
 		<div class="so-cover"></div>
 		<div class="so-body"><div class="so-none">${__("Upload the old software's Sales_Quotation excel to begin.")}</div></div>
@@ -172,7 +173,35 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		});
 	});
 
-	root.find(".so-dl").on("click", () => {
+	// the JOS billing workbook — their 42-column live-formula layout
+	root.on("click", ".so-jos", () => {
+		if (!PRICED || !FILE) return;
+		const d = new frappe.ui.Dialog({
+			title: __("JOS Billing export"),
+			fields: [
+				{ fieldname: "karat", fieldtype: "Data", label: __("Metal purity label"), default: "18 KT", reqd: 1 },
+				{ fieldname: "igi_flat", fieldtype: "Float", label: __("IGI flat ₹ (up to threshold)"), default: 80 },
+				{ fieldname: "igi_per_ct", fieldtype: "Float", label: __("IGI ₹/ct (above threshold)"), default: 325 },
+				{ fieldname: "igi_threshold", fieldtype: "Float", label: __("IGI threshold (ct)"), default: 0.10 },
+			],
+			primary_action_label: __("Download"),
+			primary_action(v) {
+				d.hide();
+				open_url_post("/api/method/jewelima.jewelima.api.export_old_sale_jos", {
+					priced: JSON.stringify(PRICED.rows), price_chart: fChart.get_value(),
+					gold_rate: fRate.get_value() || 0, quality: fQual.get_value() || "",
+					karat_label: v.karat, gst_percent: fGst.get_value() || 0,
+					igi_flat: v.igi_flat, igi_per_ct: v.igi_per_ct, igi_threshold: v.igi_threshold,
+					huid_rate: fHuid.get_value() || 0,
+					party: (PARSED && PARSED.cover && PARSED.cover.party) || "",
+					filename: FILE.name,
+				});
+			},
+		});
+		d.show();
+	});
+
+	root.find(".so-dl").not(".so-jos").on("click", () => {
 		if (!PRICED || !FILE) return;
 		open_url_post("/api/method/jewelima.jewelima.api.export_old_sale_xlsx", {
 			filedata: FILE.b64, priced: JSON.stringify(PRICED.rows),

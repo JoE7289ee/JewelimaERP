@@ -8447,6 +8447,147 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 	frappe.local.response.type = "download"
 
 
+@frappe.whitelist()
+def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18 KT",
+		gst_percent=3, igi_flat=80, igi_per_ct=325, igi_threshold=0.10,
+		huid_rate=0, party="", filename=None):
+	"""The JOS BILLING workbook, generated in their exact 42-column layout with
+	LIVE formulas: gold = net x N3, diamonds split into the chart's bracket
+	GROUPS (one group per piece), IGI slab (<=threshold flat, above per-ct),
+	footer Total -> Hall Marking (HUID) -> Certification (sum IGI) -> GST.
+	Back-chain, gram-stone group and the second-rate column stay blank."""
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Alignment, Font, PatternFill
+	from openpyxl.utils import get_column_letter
+
+	if isinstance(priced, str):
+		priced = json.loads(priced or "[]")
+	gold_rate, gst_percent = flt(gold_rate), flt(gst_percent)
+	igi_flat, igi_per_ct, igi_threshold = flt(igi_flat), flt(igi_per_ct), flt(igi_threshold)
+	chart = frappe.get_doc("Price Chart", price_chart)
+	brackets = sorted([r for r in chart.diamond_rates if (r.quality or "") == (quality or "")]
+		or [r for r in chart.diamond_rates if not r.quality],
+		key=lambda r: flt(r.from_ct))[:5]
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Sheet1"
+	bold = Font(bold=True)
+	head_fill = PatternFill("solid", fgColor="DDEBF7")
+	# ---- header block (rows 1-3, their geometry) ----
+	ws["A1"] = "SMITH NAME ADDRESS"
+	ws["F1"] = "jewelima diamonds,"
+	ws["A2"] = "Pure Rate WITHOUT GST"
+	ws["H2"] = "METAL PURITY"
+	ws["J2"] = karat_label
+	ws["M2"] = "DIAMOND QUALITY"
+	ws["P2"] = quality or ""
+	ws["A3"] = "Shop: " + (party or "")
+	ws["J3"] = "Net . Value"
+	ws["N3"] = gold_rate
+	ws["Q3"] = " · ".join("{0} {1}/-".format(b.sieve_label or "{0}-{1}".format(flt(b.from_ct), flt(b.to_ct) or "∞"),
+		frappe.utils.fmt_money(flt(b.rate), 0, None).strip()) for b in brackets)
+	for c in ("A1", "A2", "H2", "M2", "A3", "J3"):
+		ws[c].font = bold
+
+	# ---- column plan: EXACT positions of the house sheet ----
+	# groups g -> (pcs, ct, value) columns; group 2 carries its rate column V
+	GRP = [(16, 17, 19), (20, 21, 23), (24, 25, 26), (27, 28, 29), (30, 31, 32)]
+	HEAD = {1: "Sl. No.", 2: "Item Description", 3: "Size", 4: "Style", 5: "Colour",
+		6: "NO OF PCS", 7: "ITEM COLOR", 8: "Gross Qty (Gm)", 9: "Net Qty (Gm)",
+		10: "Gold\nValue", 11: "neck wt without chain wt", 13: "back chain wt",
+		14: "Making Charge", 15: "chain mc", 18: "Dimond Rate (Ct.)", 22: "dia.rate",
+		33: "pcs", 34: "cts", 35: "value", 37: "pcs", 38: "in gram",
+		39: "amt (specify ct rate)", 40: "Total value", 41: "IGI", 42: "UNIQUE ID"}
+	for gi, (pc, cc, vc) in enumerate(GRP):
+		HEAD[pc] = "Dpcs"
+		HEAD[cc] = "d.wt/ct"
+		HEAD[vc] = "dia.value"
+	for col, label in HEAD.items():
+		c = ws.cell(row=4, column=col, value=label)
+		c.font = bold
+		c.fill = head_fill
+		c.alignment = Alignment(wrap_text=True, vertical="center")
+	widths = {1: 6, 2: 16, 6: 8, 7: 10, 8: 11, 9: 11, 10: 12, 11: 10, 14: 12, 40: 12, 41: 8, 42: 12}
+	for col, w in widths.items():
+		ws.column_dimensions[get_column_letter(col)].width = w
+
+	def bracket_index(stone_ct):
+		for i, b in enumerate(brackets):
+			if flt(b.from_ct) <= stone_ct and (not flt(b.to_ct) or stone_ct <= flt(b.to_ct)):
+				return i
+		return 0 if brackets else None
+
+	r0 = 5
+	igis = []
+	for i, p in enumerate(priced):
+		r = r0 + i
+		ws.cell(row=r, column=1, value=i + 1)
+		ws.cell(row=r, column=2, value=p.get("item"))
+		ws.cell(row=r, column=6, value=1)
+		gross, nt = flt(p.get("gs")), flt(p.get("nt"))
+		ws.cell(row=r, column=8, value=gross)
+		ws.cell(row=r, column=9, value=nt)
+		ws.cell(row=r, column=10, value="=I{0}*N$3".format(r))
+		ws.cell(row=r, column=11, value=gross)
+		ws.cell(row=r, column=14, value=flt(p.get("mc")))
+		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
+		gtotal_formula = []
+		if ct > 0 and brackets:
+			gi = bracket_index(round(ct / pcs, 3) if pcs else 0)
+			pc, cc, vc = GRP[gi]
+			ws.cell(row=r, column=pc, value=pcs)
+			ws.cell(row=r, column=cc, value=ct)
+			ws.cell(row=r, column=vc, value="={0}{1}*{2}".format(get_column_letter(cc), r, flt(brackets[gi].rate)))
+			if gi == 1:
+				ws.cell(row=r, column=22, value=flt(brackets[1].rate))
+		ws.cell(row=r, column=33, value="={0}".format("+".join("{0}{1}".format(get_column_letter(pc), r) for pc, _, _ in GRP)))
+		ws.cell(row=r, column=34, value="={0}".format("+".join("{0}{1}".format(get_column_letter(cc), r) for _, cc, _ in GRP)))
+		ws.cell(row=r, column=35, value="={0}".format("+".join("{0}{1}".format(get_column_letter(vc), r) for _, _, vc in GRP)))
+		ws.cell(row=r, column=40, value="=J{0}+N{0}+AI{0}".format(r))
+		igi = igi_flat if ct <= igi_threshold else round(igi_per_ct * ct, 2)
+		igi = igi if ct > 0 else 0
+		igis.append(igi)
+		ws.cell(row=r, column=41, value=igi)
+		ws.cell(row=r, column=42, value=p.get("unique_id"))
+
+	last = r0 + len(priced) - 1
+	tr = last + 1
+	ws.cell(row=tr, column=2, value="TOTAL GROSS").font = bold
+	for col in [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]:
+		L = get_column_letter(col)
+		ws.cell(row=tr, column=col, value="=SUM({0}{1}:{0}{2})".format(L, r0, last)).font = bold
+	# ---- footer chain ----
+	huid_total = round(sum(flt(p.get("huid_va")) for p in priced), 2)
+	rows = [
+		("Total Value", "=AN{0}".format(tr)),
+		("Hall Marking Charge", huid_total or None),
+		("Certification Charge", "=ROUND(SUM(AO{0}:AO{1}),0)".format(r0, last)),
+		("Taxable Value", None),
+		("GST {0}%".format(frappe.utils.fmt_money(gst_percent, 0, None).strip()), None),
+		("Grand Total", None),
+	]
+	fr = tr + 1
+	for j, (label, val) in enumerate(rows):
+		ws.cell(row=fr + j, column=34, value=label).font = bold
+		cell = ws.cell(row=fr + j, column=40)
+		cell.font = bold
+		if val is not None:
+			cell.value = val
+	ws.cell(row=fr + 3, column=40, value="=SUM(AN{0}:AN{1})".format(fr, fr + 2))
+	ws.cell(row=fr + 4, column=40, value="=AN{0}*{1}%".format(fr + 3, gst_percent))
+	ws.cell(row=fr + 5, column=40, value="=AN{0}+AN{1}".format(fr + 3, fr + 4))
+
+	buf = BytesIO()
+	wb.save(buf)
+	base = (filename or "old-sale").rsplit(".", 1)[0]
+	frappe.local.response.filename = "JOS BILLING {0}.xlsx".format(base)
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
 PREP_VALUE_FIELDS = ("gold_value", "diamond_value", "stone_value", "labour_value", "charges_value")
 
 
