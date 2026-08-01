@@ -8732,9 +8732,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 
 	# blocks: item type -> colour runs -> weight bands. Below-1g rows first with
 	# a BELOW 1G TOTAL, then the gram-priced rows with ABOVE 1G TOTAL (band rows
-	# only when the run actually splits), then COLOUR TOTAL (only when the item
-	# carries more than one colour). NO per-item TOTAL row (dropped on request) —
-	# TOTAL GROSS adds each block's top level directly, so nothing double-counts.
+	# only when the run actually splits), then a COLOUR TOTAL after EVERY colour
+	# run. NO per-item TOTAL row (dropped on request) — TOTAL GROSS adds the
+	# colour totals directly, so nothing double-counts.
 	from itertools import groupby
 
 	def plus(rows_):
@@ -8760,9 +8760,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 					btot.append(sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
 						span(bstart, r - 1), font=band_bold))
 			all_btot += btot
-			if len(cgroups) > 1:
-				ctot.append(sum_row("{0} TOTAL".format(colr or "—"),
-					plus(btot) if btot else span(cstart, r - 1), font=small_bold))
+			ctot.append(sum_row("{0} TOTAL".format((colr or item_colour or "").strip() or "COLOUR"),
+				plus(btot) if btot else span(cstart, r - 1), font=small_bold))
 		if ctot:
 			gross_terms.append(("cells", ctot))
 		elif all_btot:
