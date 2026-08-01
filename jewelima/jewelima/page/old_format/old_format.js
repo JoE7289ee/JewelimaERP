@@ -1,13 +1,15 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// OLD FORMAT — the legacy quotation excel, taken to the very END on one page:
-// upload -> enrich what the old file is missing (per-piece COLOR, size,
-// gents/ladies, shape, certification lab + the CERT NO the team marks on the
-// product physically) -> price with OUR charts -> JOS billing export.
-// Rows are sorted into the agreed physical order (item -> colour -> below-1g)
-// and renumbered before pricing, so the JOS sheet comes out block-perfect.
-// The intermediate NEW-format excel stays downloadable for records / Sell Old.
+// OLD FORMAT — the legacy quotation excel taken to the very END, in TWO
+// states so the screen only carries what the step needs:
+//
+//   PREP   — enrich the pieces: tick rows -> bulk-apply COLOR / CERT lab,
+//            fine-tune per row, then Sort & Number (item -> colour ->
+//            below-1g) to stamp the SL the team marks physically.
+//   EXPORT — pricing only: chart / rates / Price it / JOS billing download
+//            (rows are locked here; go back to prep to change anything).
+//
 // Straight data — nothing stored; refresh and it's gone.
 // Route: /app/old-format
 
@@ -17,11 +19,14 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const money = (v) => (v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
 	const TOKEN_FAMILY = { EF: "VVS-EF", GH: "VVS/VS-GH", SI: "SI-IJ", CZ: "CZ", CVD: "CVD" };
-	let FILE = null;   // {b64, name}
-	let ROWS = [];     // parsed + user-enriched rows (colour = metal colour)
+	let FILE = null;    // {b64, name}
+	let ROWS = [];      // parsed + user-enriched rows (colour = metal colour)
 	let COVER = {};
-	let CHART = null;  // picked chart's full data
-	let PRICED = null; // {rows, totals} — cleared by ANY edit
+	let CHART = null;   // picked chart's full data
+	let PRICED = null;  // {rows, totals}
+	let STATE = "prep"; // "prep" | "export"
+	let SORTED = false; // Sort & Number has been run since the last edit
+	const SEL = new Set(); // selected unique_ids (prep bulk ops)
 
 	$(page.main).append(`
 		<style>
@@ -32,10 +37,24 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		.of-file{border:2px dashed var(--border-color);border-radius:9px;padding:9px 16px;cursor:pointer;font-size:12.5px;color:var(--text-muted);}
 		.of-file.has{border-color:#2e7d32;color:#1d7a33;font-weight:700;}
 		.of-btn{border:none;color:#fff;font-weight:800;padding:9px 20px;border-radius:8px;cursor:pointer;}
-		.of-auto{background:#5b3a8e;display:none;}
-		.of-dl{background:#6b7280;display:none;}
-		.of-price{background:#1f618d;display:none;}
-		.of-jos{background:#9a6b1f;display:none;}
+		.of-btn:disabled{opacity:.45;cursor:not-allowed;}
+		.of-sortnum{background:#5b3a8e;}
+		.of-goexport{background:#1f618d;}
+		.of-back{background:#6b7280;}
+		.of-price{background:#1f618d;}
+		.of-jos{background:#9a6b1f;}
+		.of-dl{background:#6b7280;}
+		.of-bulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--control-bg);
+			border:1px solid var(--border-color);border-radius:10px;padding:8px 14px;margin-bottom:10px;}
+		.of-bulk .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;}
+		.of-bulk input{border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;
+			text-transform:uppercase;width:96px;background:var(--fg-color);color:var(--text-color);}
+		.of-bulk .bapply{border:none;border-radius:6px;padding:4px 12px;font-size:11.5px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;}
+		.of-bulk .bapply.alt{background:#5b3a8e;}
+		.of-bulk .sep{width:1px;height:22px;background:var(--border-color);}
+		.of-selcount{font-size:12px;font-weight:800;}
+		.of-status{font-size:11.5px;color:var(--text-muted);margin-left:auto;}
+		.of-status b{color:#a15c00;}
 		.of-cover{font-size:12.5px;color:var(--text-muted);margin-bottom:10px;}
 		.of-cover b{color:var(--text-color);}
 		table.of-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
@@ -45,6 +64,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		table.of-t td[title]:not([title=""]){cursor:help;}
 		table.of-t input, table.of-t select{border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-size:11.5px;background:var(--fg-color);color:var(--text-color);}
 		table.of-t input{text-transform:uppercase;}
+		tr.of-rowsel td{background:#eef4fb;}
+		html[data-theme="dark"] tr.of-rowsel td{background:#1d2a3a;}
 		tr.of-flagged td{background:#fff8e6;}
 		.of-flag{font-size:10.5px;color:#8a6d00;white-space:normal;}
 		.of-tot{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;}
@@ -55,16 +76,30 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		.of-tile.grand .v{color:#1f618d;}
 		.of-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		</style>
-		<div class="of-bar">
+		<div class="of-bar of-bar-prep">
 			<label class="of-file">${__("📄 Pick the OLD quotation .xlsx")}</label>
 			<input type="file" class="of-input" accept=".xlsx" style="display:none;">
 			<div class="of-qual"></div>
 			<div class="of-party"></div>
-			<div class="of-color"></div>
-			<button class="of-btn of-auto">${__("Auto-number certs")}</button>
-			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
+			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
+			<button class="of-btn of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 		</div>
-		<div class="of-bar">
+		<div class="of-bulk" style="display:none;">
+			<span class="of-selcount">0 ${__("selected")}</span>
+			<span class="sep"></span>
+			<span class="lbl">${__("Color")}</span>
+			<input class="of-bcolor" list="of-colors" placeholder="YELLOW">
+			<button class="bapply of-bcolor-sel">${__("→ selected")}</button>
+			<button class="bapply alt of-bcolor-empty">${__("→ all empty")}</button>
+			<span class="sep"></span>
+			<span class="lbl">${__("Cert lab")}</span>
+			<input class="of-bcert" list="of-labs" placeholder="IGI">
+			<button class="bapply of-bcert-sel">${__("→ selected")}</button>
+			<button class="bapply alt of-bcert-num">${__("Auto-number certs")}</button>
+			<span class="of-status"></span>
+		</div>
+		<div class="of-bar of-bar-export" style="display:none;">
+			<button class="of-btn of-back">${__("← Back to Prep")}</button>
 			<div class="of-chart"></div>
 			<div class="of-rate"></div>
 			<div class="of-cq"></div>
@@ -72,10 +107,11 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-huid"></div>
 			<div class="of-cert"></div>
 			<button class="of-btn of-price">${__("Price it")}</button>
-			<button class="of-btn of-jos">${__("JOS Billing ⤓")}</button>
+			<button class="of-btn of-jos" style="display:none;">${__("JOS Billing ⤓")}</button>
+			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
 		</div>
 		<div class="of-cover"></div>
-		<div class="of-body"><div class="of-none">${__("Upload the OLD quotation excel — fill COLOR (and anything else missing), tag certifications with their number, then price and export the JOS billing right here.")}</div></div>
+		<div class="of-body"><div class="of-none">${__("Upload the OLD quotation excel. PREP: bulk-fill COLOR, tag certifications, Sort & Number. EXPORT: price it and download the JOS billing.")}</div></div>
 		<datalist id="of-colors"><option>YELLOW</option><option>ROSE</option><option>WHITE</option></datalist>
 		<datalist id="of-labs"><option>IGI</option><option>SGL</option><option>DHC</option><option>GIA</option></datalist>
 	`);
@@ -85,8 +121,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		options: Object.keys(TOKEN_FAMILY).join("\n"), default: "EF", onchange: () => applyToken() });
 	fQual.set_value("EF");
 	const fParty = mk(".of-party", { fieldtype: "Data", label: __("Shop / party"), fieldname: "party" });
-	const fColor = mk(".of-color", { fieldtype: "Data", label: __("Fill COLOR on empty rows"), fieldname: "col",
-		description: __("type + Enter, e.g. YELLOW") });
 	const fChart = mk(".of-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
 		get_query: () => ({ filters: { status: "Active" } }), onchange: () => loadQualities() });
 	const fRate = mk(".of-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate" });
@@ -110,10 +144,34 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		});
 	}
 
-	// the file's token names the family — pre-pick the chart quality
 	function applyToken() {
 		const fam = TOKEN_FAMILY[fQual.get_value()] || "";
 		if (fam && !fCq.get_value() && (fCq.df.options || "").split("\n").includes(fam)) fCq.set_value(fam);
+	}
+
+	function setState(st) {
+		STATE = st;
+		root.find(".of-bar-prep, .of-bulk").toggle(st === "prep");
+		root.find(".of-bulk").toggle(st === "prep" && !!ROWS.length);
+		root.find(".of-bar-export").toggle(st === "export");
+		paint();
+	}
+
+	function invalidate() {
+		SORTED = false;
+		PRICED = null;
+		root.find(".of-jos").hide();
+	}
+
+	function refreshStatus() {
+		const noCol = ROWS.filter((r) => !r.colour).length;
+		const half = ROWS.filter((r) => (r.cert && !r.cert_no) || (!r.cert && r.cert_no)).length;
+		const certs = ROWS.filter((r) => r.cert).length;
+		root.find(".of-selcount").text(__("{0} selected", [SEL.size]));
+		root.find(".of-status").html(
+			(noCol ? "<b>" + __("{0} uncoloured", [noCol]) + "</b> · " : __("all coloured") + " · ")
+			+ __("{0} cert-tagged", [certs]) + (half ? " · <b>" + __("{0} incomplete", [half]) + "</b>" : "")
+			+ " · " + (SORTED ? __("numbered ✓") : __("not numbered")));
 	}
 
 	root.find(".of-file").on("click", () => root.find(".of-input").get(0).click());
@@ -128,37 +186,37 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				const m = r.message || {};
 				ROWS = m.rows || [];
 				COVER = m.cover || {};
-				PRICED = null;
+				SEL.clear();
+				invalidate();
 				if (COVER.party && !fParty.get_value()) fParty.set_value(COVER.party);
-				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s) — rows sort + renumber on pricing (item → colour → below-1g first)",
+				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s)",
 					[esc(COVER.invoice_no || "—"), esc(COVER.party || "—"), m.count || 0]));
-				paint();
-				root.find(".of-auto, .of-dl, .of-price").show();
-				root.find(".of-jos").hide();
+				root.find(".of-sortnum, .of-goexport").show();
+				setState("prep");
 			});
 		};
 		rd.readAsDataURL(file);
 	});
 
+	// ------------------------------------------------------------- painting
 	function paint() {
-		const priced = !!PRICED;
-		const P = {};
-		if (priced) PRICED.rows.forEach((x) => { P[x.unique_id] = x; });
-		root.find(".of-body").html(ROWS.length ? `
+		if (!ROWS.length) return;
+		if (STATE === "prep") paintPrep(); else paintExport();
+		refreshStatus();
+	}
+
+	function paintPrep() {
+		root.find(".of-body").html(`
 			<table class="of-t"><thead><tr>
+				<th><input type="checkbox" class="of-selall"></th>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}</th><th>${__("Item")}</th><th>${__("Design")}</th>
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
 				<th>${__("Cert")}</th><th title="${__("marked on the product physically — printed in the JOS export")}">${__("Cert No")}</th>
-				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
-				<th class="num">${__("DMD")}</th><th class="num">${__("Cert/HUID")}</th>
-				<th class="num">${__("TOTAL")}</th><th>${__("Notes")}</th>` : ""}
 			</tr></thead><tbody>
-			${ROWS.map((r, i) => {
-				const p = P[r.unique_id] || {};
-				const fl = (p.flags || []).length;
-				return `<tr data-i="${i}" class="${fl ? "of-flagged" : ""}">
+			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}">
+				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.huid)}</td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
@@ -171,6 +229,29 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td><input data-f="shape" value="${esc(r.shape)}" style="width:64px;"></td>
 				<td><input data-f="cert" list="of-labs" value="${esc(r.cert)}" style="width:56px;"></td>
 				<td><input data-f="cert_no" value="${esc(r.cert_no)}" style="width:56px;"></td>
+			</tr>`).join("")}</tbody></table>`);
+	}
+
+	function paintExport() {
+		const priced = !!PRICED;
+		const P = {};
+		if (priced) PRICED.rows.forEach((x) => { P[x.unique_id] = x; });
+		root.find(".of-body").html(`
+			<table class="of-t"><thead><tr>
+				<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("COLOR")}</th>
+				<th class="num">${__("NT g")}</th><th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
+				<th>${__("HUID")}</th><th>${__("Cert")}</th><th>${__("Cert No")}</th>
+				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
+				<th class="num">${__("DMD")}</th><th class="num">${__("Cert/HUID")}</th>
+				<th class="num">${__("TOTAL")}</th><th>${__("Notes")}</th>` : ""}
+			</tr></thead><tbody>
+			${ROWS.map((r) => {
+				const p = P[r.unique_id] || {};
+				const fl = (p.flags || []).length;
+				return `<tr class="${fl ? "of-flagged" : ""}">
+				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
+				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
+				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td><td>${esc(r.cert_no)}</td>
 				${priced ? `<td class="num" title="${esc((p.notes || {}).gold || "")}">₹ ${money(p.gold_va)}</td>
 				<td class="num" title="${esc((p.notes || {}).mc || "")}">₹ ${money(p.mc)}</td>
 				<td class="num" title="${esc((p.notes || {}).dmd || "")}">₹ ${money(p.dmd_va)}${p.dmd_rt ? `<div class="of-flag">${p.stone_ct}/st @ ${esc(p.dmd_bracket)}</div>` : ""}</td>
@@ -188,9 +269,21 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<div class="of-tile grand"><div class="k">${__("Invoice total")}</div><div class="v">₹ ${money(PRICED.totals.invoice)}</div></div>
 				<div class="of-tile" style="max-width:420px;"><div class="k">${__("In words")}</div>
 					<div style="font-size:11.5px;">${esc(PRICED.totals.in_words || "")}</div></div>
-			</div>` : ""}`
-			: `<div class="of-none">${__("No pieces found in the Design sheet.")}</div>`);
+			</div>` : ""}`);
 	}
+
+	// ------------------------------------------------------ prep interactions
+	root.on("change", ".of-sel", function () {
+		const uid = $(this).data("uid");
+		this.checked ? SEL.add(uid) : SEL.delete(uid);
+		$(this).closest("tr").toggleClass("of-rowsel", this.checked);
+		refreshStatus();
+	});
+	root.on("change", ".of-selall", function () {
+		SEL.clear();
+		if (this.checked) ROWS.forEach((r) => SEL.add(r.unique_id));
+		paint();
+	});
 
 	root.on("change", "table.of-t [data-f]", function () {
 		const i = cint($(this).closest("tr").data("i"));
@@ -199,48 +292,78 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		if (f !== "size" && f !== "cert_no") v = v.toUpperCase();
 		if (this.tagName === "INPUT") this.value = v;
 		ROWS[i][f] = v;
-		if (PRICED) { PRICED = null; root.find(".of-jos").hide(); paint(); }
+		invalidate();
+		refreshStatus();
 	});
 
-	fColor.$input.on("keydown", (e) => {
-		if (e.key !== "Enter") return;
-		const v = (fColor.get_value() || "").trim().toUpperCase();
-		if (!v) return;
+	function bulkColor(onlyEmpty) {
+		const v = (root.find(".of-bcolor").val() || "").trim().toUpperCase();
+		if (!v) return frappe.show_alert({ message: __("Type a color first."), indicator: "orange" }, 3);
+		if (!onlyEmpty && !SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
 		let n = 0;
-		ROWS.forEach((r) => { if (!r.colour) { r.colour = v; n++; } });
-		if (n && PRICED) { PRICED = null; root.find(".of-jos").hide(); }
+		ROWS.forEach((r) => {
+			const hit = onlyEmpty ? !r.colour : SEL.has(r.unique_id);
+			if (hit && r.colour !== v) { r.colour = v; n++; }
+		});
+		if (n) invalidate();
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) coloured {1}.", [n, v]), indicator: "green" }, 3);
+	}
+	root.on("click", ".of-bcolor-sel", () => bulkColor(false));
+	root.on("click", ".of-bcolor-empty", () => bulkColor(true));
+
+	root.on("click", ".of-bcert-sel", () => {
+		const v = (root.find(".of-bcert").val() || "").trim().toUpperCase();
+		if (!v) return frappe.show_alert({ message: __("Type a cert lab first."), indicator: "orange" }, 3);
+		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
+		let n = 0;
+		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r.cert !== v) { r.cert = v; n++; } });
+		if (n) invalidate();
+		SEL.clear();
+		paint();
+		frappe.show_alert({ message: __("{0} row(s) tagged {1} — selection cleared, tick the next batch.", [n, v]), indicator: "green" }, 4);
 	});
 
-	root.on("click", ".of-auto", () => {
+	root.on("click", ".of-bcert-num", () => {
 		let next = 1 + Math.max(0, ...ROWS.map((r) => cint(r.cert_no) || 0));
 		let n = 0;
 		ROWS.forEach((r) => { if (r.cert && !r.cert_no) { r.cert_no = String(next++); n++; } });
-		if (n && PRICED) { PRICED = null; root.find(".of-jos").hide(); }
+		if (n) invalidate();
 		paint();
 		frappe.show_alert({ message: n ? __("{0} cert(s) numbered.", [n]) : __("Nothing to number — set a Cert lab first."), indicator: n ? "green" : "orange" }, 3);
 	});
 
-	function readyCheck() {
-		if (!ROWS.length) return false;
-		const missing = ROWS.filter((r) => !r.colour).length;
-		if (missing) { frappe.show_alert({ message: __("{0} row(s) still have no COLOR — fill them first.", [missing]), indicator: "orange" }, 4); return false; }
-		const half = ROWS.filter((r) => (r.cert && !r.cert_no) || (!r.cert && r.cert_no)).length;
-		if (half) { frappe.show_alert({ message: __("{0} row(s) have a Cert lab without a number (or the other way) — complete them.", [half]), indicator: "orange" }, 4); return false; }
-		return true;
-	}
-
 	// the agreed physical order: item type -> colour -> below-1g first
-	function sortRenumber() {
+	root.on("click", ".of-sortnum", () => {
+		const noCol = ROWS.filter((r) => !r.colour).length;
+		if (noCol) return frappe.show_alert({ message: __("{0} row(s) still have no COLOR — fill them before numbering.", [noCol]), indicator: "orange" }, 4);
 		ROWS.sort((a, b) => (a.item || "").localeCompare(b.item || "")
 			|| (a.colour || "").localeCompare(b.colour || "")
 			|| ((flt(a.nt) < 1 ? 0 : 1) - (flt(b.nt) < 1 ? 0 : 1))
 			|| (cint(a.sl) - cint(b.sl)));
 		ROWS.forEach((r, i) => { r.sl = i + 1; });
+		SORTED = true;
+		PRICED = null;
+		paint();
+		frappe.show_alert({ message: __("Sorted and numbered 1–{0} — mark the pieces physically by #.", [ROWS.length]), indicator: "green" }, 5);
+	});
+
+	function readyCheck() {
+		const missing = ROWS.filter((r) => !r.colour).length;
+		if (missing) { frappe.show_alert({ message: __("{0} row(s) still have no COLOR.", [missing]), indicator: "orange" }, 4); return false; }
+		const half = ROWS.filter((r) => (r.cert && !r.cert_no) || (!r.cert && r.cert_no)).length;
+		if (half) { frappe.show_alert({ message: __("{0} row(s) have a Cert lab without a number (or the other way).", [half]), indicator: "orange" }, 4); return false; }
+		if (!SORTED) { frappe.show_alert({ message: __("Run Sort & Number first — the numbers go on the pieces."), indicator: "orange" }, 4); return false; }
+		return true;
 	}
 
-	// payload rows in Sell Old vocabulary: COLOUR -> item_color, SHAPE -> Colour col
+	root.on("click", ".of-goexport", () => {
+		if (!ROWS.length || !readyCheck()) return;
+		setState("export");
+	});
+	root.on("click", ".of-back", () => setState("prep"));
+
+	// ---------------------------------------------------- export interactions
 	function payloadRows() {
 		return ROWS.map((r) => Object.assign({}, r, {
 			item_color: r.colour, colour: r.shape || "",
@@ -249,7 +372,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	}
 
 	root.on("click", ".of-dl", () => {
-		if (!readyCheck()) return;
 		open_url_post("/api/method/jewelima.jewelima.api.export_old_format_billing", {
 			rows: JSON.stringify(ROWS), quality_token: fQual.get_value() || "EF",
 			party: fParty.get_value() || "",
@@ -258,9 +380,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	});
 
 	root.on("click", ".of-price", () => {
-		if (!readyCheck()) return;
 		if (!fChart.get_value()) return frappe.show_alert({ message: __("Pick a price chart."), indicator: "orange" }, 3);
-		sortRenumber();
 		frappe.call({ method: API + ".price_old_sale", args: {
 			rows: JSON.stringify(payloadRows()), price_chart: fChart.get_value(),
 			gold_rate: fRate.get_value() || 0, quality: fCq.get_value() || "",
