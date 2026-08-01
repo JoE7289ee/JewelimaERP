@@ -8630,7 +8630,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		if gi == 1:
 			keys.append("g1rate")
 		keys.append("g{0}v".format(gi))
-	keys += ["tp", "tc", "tv", "total", "igi", "uid"]
+	keys += ["tp", "tc", "tv", "total", "igi", "huid", "uid"]
 	C = {k: i + 1 for i, k in enumerate(keys)}
 	NCOLS = len(keys)
 
@@ -8670,7 +8670,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"gross": "Gross Qty (Gm)", "net": "Net Qty (Gm)", "gold": "Gold\nValue",
 		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
 		"tp": "pcs", "tc": "cts", "tv": "value", "total": "Total value",
-		"igi": "IGI", "uid": "UNIQUE ID"}
+		"igi": "IGI", "huid": "HUID", "uid": "UNIQUE ID"}
 	for gi in used:
 		HEAD["g{0}p".format(gi)] = "Dpcs"
 		HEAD["g{0}c".format(gi)] = "d.wt/ct"
@@ -8688,7 +8688,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	SUMCOLS = [C["pcs1"], C["gross"], C["net"], C["gold"], C["mc"]]
 	for gi in used:
 		SUMCOLS += [C["g{0}p".format(gi)], C["g{0}c".format(gi)], C["g{0}v".format(gi)]]
-	SUMCOLS += [C["tp"], C["tc"], C["tv"], C["total"], C["igi"]]
+	SUMCOLS += [C["tp"], C["tc"], C["tv"], C["total"], C["igi"], C["huid"]]
 	r0 = 5
 	r = r0
 	gross_terms = []  # ("cell", row) / ("range", (a, b)) pieces the grand total adds
@@ -8738,6 +8738,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			ws.cell(row=r, column=C["tv"], value=0)
 		ws.cell(row=r, column=C["total"], value="={g}{r}+{m}{r}+{v}{r}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r))
 		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs))
+		ws.cell(row=r, column=C["huid"], value=flt(p.get("huid_va")) or 0)
 		ws.cell(row=r, column=C["uid"], value=p.get("unique_id"))
 		r += 1
 
@@ -8775,10 +8776,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			for kind, v in gross_terms]
 		ws.cell(row=tr, column=col, value="={0}".format("+".join(parts)) if parts else 0).font = bold
 	# ---- footer chain (whole rupees — every line ROUNDed to 0 decimals) ----
-	huid_total = int(round(sum(flt(p.get("huid_va")) for p in priced)))
 	rows = [
 		("Total Value", "=ROUND({0}{1},0)".format(Lc("total"), tr)),
-		("Hall Marking Charge", huid_total or None),
+		("Hall Marking Charge", "=ROUND({0}{1},0)".format(Lc("huid"), tr)),
 		("Certification Charge", "=ROUND({0}{1},0)".format(Lc("igi"), tr)),
 		("Taxable Value", None),
 		("GST {0}%".format(frappe.utils.fmt_money(gst_percent, 0, None).strip()), None),
@@ -8812,7 +8812,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	MINW = {"sl": 5, "item": 11, "size": 6, "style": 6, "colour": 8, "pcs1": 5,
 		"item_color": 9, "gross": 10, "net": 10, "gold": 13, "mc": 13,
 		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11, "total": 14,
-		"igi": 9, "uid": 11}
+		"igi": 9, "huid": 9, "uid": 11}
 	for gi in used:
 		MINW["g{0}p".format(gi)] = 6
 		MINW["g{0}c".format(gi)] = 8
