@@ -8133,6 +8133,262 @@ def get_sale_record(sale):
 		"items": items}
 
 
+# ---------------------------------------------------------------------------
+# SELL OLD — price the OLD software's quotation excel with our Price Charts.
+# Nothing is stored and no stock moves: excel in -> same excel out with the
+# pricing columns and cover totals filled. Gold = NT x board rate; making by
+# design type rule; diamonds bracketed by inferred per-stone ct (ct / pcs) at
+# ONE user-picked quality; STN = the CS bracket table; PS stays manual.
+# ---------------------------------------------------------------------------
+def _old_sale_rows(filedata):
+	"""Parse the 'Design' sheet by HEADERS (newline-tolerant) -> row dicts."""
+	import base64
+	from io import BytesIO
+
+	from openpyxl import load_workbook
+
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	wb = load_workbook(BytesIO(raw), data_only=True)
+	if "Design" not in wb.sheetnames:
+		frappe.throw(frappe._("No 'Design' sheet — is this the old software's quotation excel?"))
+	ws = wb["Design"]
+	head = {}
+	for j, c in enumerate(ws[1], start=1):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			head[key] = j
+	def col(*names):
+		for n in names:
+			if n in head:
+				return head[n]
+		return None
+	C = {
+		"sl": col("SL#"), "uid": col("UNIQUE ID"), "huid": col("HUID"),
+		"item": col("ITEM"), "design": col("DESIGN"),
+		"gs": col("GS WT (GM)", "GS WT(GM)", "GS WT"),
+		"ps_pcs": col("PS PCS"), "ps_ct": col("PS (CT)", "PS(CT)", "PS"),
+		"dmd_pcs": col("DMD PCS"), "clarity": col("DMD CLARITY"),
+		"dmd_ct": col("DMD (CT)", "DMD(CT)", "DMD"),
+		"stn_pcs": col("STN PCS"), "stn_ct": col("STN (CT)", "STN(CT)", "STN"),
+		"nt": col("NT WT (GM)", "NT WT(GM)", "NT WT"),
+		"pure": col("PURE (GM)", "PURE(GM)", "PURE"),
+	}
+	rows = []
+	for r in ws.iter_rows(min_row=2, values_only=True):
+		uid = r[C["uid"] - 1] if C["uid"] else None
+		if not uid:
+			continue  # the totals row / blanks
+		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
+		rows.append({
+			"sl": cint(g("sl")), "unique_id": str(uid), "huid": str(g("huid") or ""),
+			"item": str(g("item") or "").strip().upper(), "design": str(g("design") or ""),
+			"gs": flt(g("gs")), "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
+			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
+			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
+			"nt": flt(g("nt")), "pure": flt(g("pure")),
+		})
+	cover = {}
+	if "SALES QUOTATION" in wb.sheetnames:
+		cv = wb["SALES QUOTATION"]
+		for row in cv.iter_rows(min_row=1, max_row=14):
+			vals = [str(c.value or "").strip() for c in row]
+			joined = " ".join(vals)
+			if joined.startswith("Invoice No."):
+				cover["invoice_no"] = next((v for v in vals[5:] if v and v != ":"), "")
+			if joined.startswith("Name") and "party" not in cover:
+				cover["party"] = next((v for v in vals[5:] if v and v != ":"), "")
+	return rows, cover
+
+
+@frappe.whitelist()
+def parse_old_sale_excel(filedata):
+	rows, cover = _old_sale_rows(filedata)
+	charts = frappe.get_all("Price Chart", filters={"status": "Active"}, pluck="name")
+	return {"rows": rows, "cover": cover, "count": len(rows), "charts": charts}
+
+
+@frappe.whitelist()
+def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3):
+	"""Price the parsed rows EXACTLY like the Sell board would: same brackets,
+	same fallbacks, same never-guess rule (unresolvable cells stay 0 + flagged)."""
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	gold_rate = flt(gold_rate)
+	chart = frappe.get_doc("Price Chart", price_chart)
+	making_rules = list(chart.get("making_rules") or [])
+	dmd_rows = [r for r in chart.diamond_rates if (r.quality or "") in ((quality or ""), "")]
+	dmd_exact = [r for r in dmd_rows if (r.quality or "") == (quality or "")] or dmd_rows
+	cs_rows = list(chart.get("cs_rates") or [])
+	out = []
+	for r in rows:
+		flags = []
+		gold_va = round(flt(r.get("nt")) * gold_rate, 2)
+		if not gold_rate:
+			flags.append("no gold rate")
+		# making: the row's ITEM is the design type; blank rule row = DEFAULT
+		mc = mc_rate = 0.0
+		rule = next((m for m in making_rules if (m.design_type or "").upper() == r.get("item") and r.get("item")), None) 			or next((m for m in making_rules if not m.design_type), None)
+		if rule:
+			mc_rate = flt(rule.rate)
+			mc = flt(r.get("nt")) * mc_rate
+			if flt(rule.min_per_piece) and mc < flt(rule.min_per_piece):
+				mc = flt(rule.min_per_piece)
+		elif flt(chart.making_rate):
+			mc_rate = flt(chart.making_rate)
+			mc = max(flt(r.get("nt")), flt(chart.making_min_grams) or 1) * mc_rate
+		else:
+			flags.append("no making rule for {0}".format(r.get("item") or "?"))
+		mc = round(mc, 2)
+		# diamonds: per-stone ct inferred = ct / pcs -> the chart bracket
+		dmd_va = dmd_rt = stone_ct = 0.0
+		bracket = ""
+		if flt(r.get("dmd_ct")) > 0:
+			if not dmd_exact:
+				flags.append("no diamond rows for {0}".format(quality or "?"))
+			else:
+				pcs = cint(r.get("dmd_pcs"))
+				stone_ct = flt(r.get("dmd_ct")) / pcs if pcs else 0
+				row = None
+				if stone_ct:
+					for d in dmd_exact:
+						if flt(d.from_ct) <= stone_ct and (not flt(d.to_ct) or stone_ct < flt(d.to_ct)):
+							row = d
+							break
+				if not row:
+					row = sorted(dmd_exact, key=lambda d: flt(d.from_ct))[0]
+					if pcs:
+						flags.append("dmd avg {0} outside every bracket — first row used".format(round(stone_ct, 4)))
+					else:
+						flags.append("no dmd piece count — first bracket used")
+				dmd_rt = flt(row.rate)
+				dmd_va = round(flt(r.get("dmd_ct")) * dmd_rt, 2)
+				bracket = "{0}-{1}".format(flt(row.from_ct), flt(row.to_ct) or "∞")
+		# precious stones: the chart prices by STONE NAME — the old file has none
+		ps_va = 0.0
+		if flt(r.get("ps_ct")) > 0:
+			flags.append("PS {0} ct — manual (no stone name in the old file)".format(r.get("ps_ct")))
+		# STN = the CS bucket brackets (total ct; Per Piece rows use pcs)
+		stn_va = 0.0
+		if flt(r.get("stn_ct")) > 0:
+			if not cs_rows:
+				flags.append("STN {0} ct but the chart has no CS rates".format(r.get("stn_ct")))
+			else:
+				row = next((c for c in cs_rows if flt(c.from_ct) <= flt(r.get("stn_ct"))
+					and (not flt(c.to_ct) or flt(r.get("stn_ct")) < flt(c.to_ct))), None)
+				if not row:
+					flags.append("STN outside every CS bracket — ignored")
+				elif (row.basis or "Per Ct") == "Per Piece":
+					stn_va = round(cint(r.get("stn_pcs")) * flt(row.rate), 2)
+					if not cint(r.get("stn_pcs")):
+						flags.append("STN priced per piece but count is 0")
+				else:
+					stn_va = round(flt(r.get("stn_ct")) * flt(row.rate), 2)
+		total = round(gold_va + mc + dmd_va + ps_va + stn_va, 2)
+		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
+			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
+			ps_rt=0, ps_va=ps_va, stn_va=stn_va, total=total, flags=flags))
+	before = round(sum(x["total"] for x in out), 2)
+	gst = round(before * flt(gst_percent) / 100, 2)
+	after = round(before + gst, 2)
+	return {"rows": out, "totals": {"before_tax": before, "gst": gst, "cess": 0,
+		"after_tax": after, "invoice": after, "gst_percent": flt(gst_percent),
+		"in_words": frappe.utils.money_in_words(after, "INR")}}
+
+
+@frappe.whitelist()
+def export_old_sale_xlsx(filedata, priced, totals, filename=None):
+	"""Fill the ORIGINAL workbook: the Design sheet's pricing columns row by
+	row, the cover's totals block + amount-in-words. Layout untouched."""
+	import base64
+	from io import BytesIO
+
+	from openpyxl import load_workbook
+
+	if isinstance(priced, str):
+		priced = json.loads(priced or "[]")
+	if isinstance(totals, str):
+		totals = json.loads(totals or "{}")
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	wb = load_workbook(BytesIO(raw))
+	ws = wb["Design"]
+	head = {}
+	for j, c in enumerate(ws[1], start=1):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			head[key] = j
+	uid_col = head.get("UNIQUE ID")
+	by_uid = {p["unique_id"]: p for p in priced}
+	FILL = [("MC RATE", "mc_rate"), ("MC", "mc"), ("PS RT", "ps_rt"), ("PS VA", "ps_va"),
+		("DMD RT", "dmd_rt"), ("DMD VA", "dmd_va"), ("GOLD RT", "gold_rt"), ("GOLD VA", "gold_va"),
+		("STN VA", "stn_va"), ("TOTAL (₹)", "total")]
+	sums = {k: 0.0 for _, k in FILL}
+	last_data_row = 1
+	for i in range(2, ws.max_row + 1):
+		uid = ws.cell(row=i, column=uid_col).value if uid_col else None
+		p = by_uid.get(str(uid)) if uid else None
+		if not p:
+			continue
+		last_data_row = i
+		for label, key in FILL:
+			col = head.get(label) or head.get(label.replace(" (₹)", ""))
+			if col:
+				ws.cell(row=i, column=col).value = flt(p.get(key))
+				sums[key] += flt(p.get(key))
+	# the sheet's own totals row (first row after data with the weight sums)
+	for label, key in FILL:
+		if key.endswith("_rt") or key == "mc_rate":
+			continue
+		col = head.get(label) or head.get(label.replace(" (₹)", ""))
+		if col and ws.max_row > last_data_row:
+			ws.cell(row=last_data_row + 1, column=col).value = round(sums[key], 2)
+
+	if "SALES QUOTATION" in wb.sheetnames:
+		cv = wb["SALES QUOTATION"]
+		merged = set()
+		for m in cv.merged_cells.ranges:
+			for row in cv.iter_rows(min_row=m.min_row, max_row=m.max_row, min_col=m.min_col, max_col=m.max_col):
+				for c in row:
+					if (c.row, c.column) != (m.min_row, m.min_col):
+						merged.add((c.row, c.column))
+		def zeroish(v):
+			if v in (None, "", 0):
+				return True
+			try:  # the old software writes empty money as TEXT: '₹ 0.00'
+				return flt(str(v).replace("₹", "").replace(",", "").strip()) == 0
+			except Exception:
+				return False
+
+		def put_right(label, value):
+			for row in cv.iter_rows():
+				for c in row:
+					if str(c.value or "").strip().startswith(label):
+						for j in range(c.column + 1, min(c.column + 8, cv.max_column + 2)):
+							if (c.row, j) not in merged:
+								cell = cv.cell(row=c.row, column=j)
+								if zeroish(cell.value):
+									cell.value = frappe.utils.fmt_money(flt(value), 2, "INR")
+									return True
+			return False
+		T = totals or {}
+		put_right("Total Amount Before Tax", flt(T.get("before_tax")))
+		put_right("Total GST", flt(T.get("gst")))
+		put_right("Total CESS", 0)
+		put_right("Total Amount After Tax", flt(T.get("after_tax")))
+		put_right("Total Invoice Amount", flt(T.get("invoice")))
+		put_right("Total Service Charge", round(sums.get("mc", 0), 2))
+		for row in cv.iter_rows():
+			for c in row:
+				if str(c.value or "").strip().startswith("Indian Rupee"):
+					c.value = T.get("in_words") or c.value
+
+	buf = BytesIO()
+	wb.save(buf)
+	base = (filename or "old-sale").rsplit(".", 1)[0]
+	frappe.local.response.filename = "PRICED {0}.xlsx".format(base)
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
 PREP_VALUE_FIELDS = ("gold_value", "diamond_value", "stone_value", "labour_value", "charges_value")
 
 

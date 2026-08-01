@@ -1140,6 +1140,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "shopping-cart",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Sell Old",
+   "link_to": "sell-old",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "clipboard-list",
    "indent": 1,
    "keep_closed": 0,
@@ -2152,7 +2165,7 @@
    "url": ""
   }
  ],
- "modified": "2026-07-31 20:08:15.734603",
+ "modified": "2026-08-01 11:38:59.382204",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

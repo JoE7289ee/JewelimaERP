@@ -1,0 +1,157 @@
+// Copyright (c) 2026, efeone and contributors
+// For license information, please see license.txt
+//
+// Sell Old — price the OLD software's quotation excel with OUR price charts.
+// Upload the Sales_Quotation xlsx -> pick chart / gold rate / ONE diamond
+// quality (imports are single-quality) / GST -> preview every piece priced
+// exactly like the Sell board -> download the SAME workbook with the pricing
+// columns and cover totals filled. Nothing stored, no stock moved.
+// Route: /app/sell-old
+
+frappe.pages["sell-old"].on_page_load = function (wrapper) {
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Sell Old", single_column: true });
+	const API = "jewelima.jewelima.api";
+	const esc = frappe.utils.escape_html;
+	const money = (v) => (v || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+	let FILE = null;     // {b64, name}
+	let PARSED = null;   // {rows, cover}
+	let PRICED = null;   // {rows, totals}
+
+	$(page.main).append(`
+		<style>
+		#page-sell-old .container{max-width:100%;}
+		.so-bar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px;}
+		.so-bar .frappe-control{margin:0;min-width:170px;}
+		.so-bar .control-label{font-size:11px;color:var(--text-muted);}
+		.so-file{border:2px dashed var(--border-color);border-radius:9px;padding:9px 16px;cursor:pointer;font-size:12.5px;color:var(--text-muted);}
+		.so-file.has{border-color:#2e7d32;color:#1d7a33;font-weight:700;}
+		.so-price{background:#1f618d;border:none;color:#fff;font-weight:800;padding:9px 24px;border-radius:8px;cursor:pointer;}
+		.so-dl{background:#2e7d32;border:none;color:#fff;font-weight:800;padding:9px 24px;border-radius:8px;cursor:pointer;display:none;}
+		.so-cover{font-size:12.5px;color:var(--text-muted);margin-bottom:10px;}
+		.so-cover b{color:var(--text-color);}
+		table.so-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
+		table.so-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 8px;border:1px solid var(--border-color);text-align:left;white-space:nowrap;}
+		table.so-t td{border:1px solid var(--border-color);padding:4px 8px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+		table.so-t td.num{text-align:right;}
+		tr.so-flagged td{background:#fff8e6;}
+		.so-flag{font-size:10.5px;color:#8a6d00;white-space:normal;}
+		.so-tot{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;}
+		.so-tile{border:1px solid var(--border-color);border-radius:9px;padding:7px 16px;background:var(--control-bg);}
+		.so-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+		.so-tile .v{font-size:16px;font-weight:800;}
+		.so-tile.grand{border-width:2px;background:var(--fg-color);}
+		.so-tile.grand .v{color:#1f618d;}
+		.so-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		</style>
+		<div class="so-bar">
+			<label class="so-file">${__("📄 Pick the old quotation .xlsx")}</label>
+			<input type="file" class="so-input" accept=".xlsx" style="display:none;">
+			<div class="so-chart"></div>
+			<div class="so-rate"></div>
+			<div class="so-qual"></div>
+			<div class="so-gst"></div>
+			<button class="so-price">${__("Price it")}</button>
+			<button class="so-dl">${__("Download priced excel ⤓")}</button>
+		</div>
+		<div class="so-cover"></div>
+		<div class="so-body"><div class="so-none">${__("Upload the old software's Sales_Quotation excel to begin.")}</div></div>
+	`);
+	const root = $(page.main);
+	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
+	const fChart = mk(".so-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
+		get_query: () => ({ filters: { status: "Active" } }), onchange: () => loadQualities() });
+	const fRate = mk(".so-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate" });
+	const fQual = mk(".so-qual", { fieldtype: "Select", label: __("Diamond quality (whole import)"), fieldname: "q", options: "" });
+	const fGst = mk(".so-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3 });
+	fGst.set_value(3);
+
+	function loadQualities() {
+		const ch = fChart.get_value();
+		if (!ch) return;
+		frappe.call({ method: API + ".get_price_chart", args: { name: ch }, freeze: false }).then((r) => {
+			const quals = [...new Set(((r.message || {}).diamond_rates || []).map((d) => d.quality).filter(Boolean))].sort();
+			fQual.df.options = [""].concat(quals).join("\n");
+			fQual.refresh();
+			if (quals.length === 1) fQual.set_value(quals[0]);
+		});
+	}
+
+	root.find(".so-file").on("click", () => root.find(".so-input").get(0).click());
+	root.find(".so-input").on("change", function () {
+		const file = this.files[0];
+		if (!file) return;
+		const rd = new FileReader();
+		rd.onload = () => {
+			FILE = { b64: rd.result, name: file.name };
+			root.find(".so-file").addClass("has").text("📄 " + file.name);
+			frappe.call({ method: API + ".parse_old_sale_excel", args: { filedata: FILE.b64 } }).then((r) => {
+				PARSED = r.message || {};
+				PRICED = null;
+				root.find(".so-dl").hide();
+				const cv = PARSED.cover || {};
+				root.find(".so-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s) found",
+					[esc(cv.invoice_no || "—"), esc(cv.party || "—"), PARSED.count || 0]));
+				paint((PARSED.rows || []).map((x) => x));
+			});
+		};
+		rd.readAsDataURL(file);
+	});
+
+	function paint(rows, totals) {
+		const priced = !!totals;
+		root.find(".so-body").html(rows.length ? `
+			<table class="so-t"><thead><tr>
+				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}</th><th>${__("Item")}</th><th>${__("Design")}</th>
+				<th class="num">${__("NT g")}</th><th class="num">${__("DMD ct/pcs")}</th><th class="num">${__("STN ct")}</th>
+				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
+				<th class="num">${__("DMD (rate·bracket)")}</th><th class="num">${__("STN")}</th>
+				<th class="num">${__("TOTAL")}</th><th>${__("Notes")}</th>` : ""}
+			</tr></thead><tbody>
+			${rows.map((r) => `<tr class="${(r.flags || []).length ? "so-flagged" : ""}">
+				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.huid)}</td>
+				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
+				<td class="num">${r.nt}</td>
+				<td class="num">${r.dmd_ct || ""}${r.dmd_pcs ? " / " + r.dmd_pcs : ""}</td>
+				<td class="num">${r.stn_ct || ""}</td>
+				${priced ? `<td class="num">₹ ${money(r.gold_va)}</td>
+				<td class="num">₹ ${money(r.mc)}</td>
+				<td class="num">₹ ${money(r.dmd_va)}${r.dmd_rt ? `<div class="so-flag">${r.stone_ct}/st · ${money(r.dmd_rt)} @ ${esc(r.dmd_bracket)}</div>` : ""}</td>
+				<td class="num">₹ ${money(r.stn_va)}</td>
+				<td class="num"><b>₹ ${money(r.total)}</b></td>
+				<td class="so-flag">${(r.flags || []).map(esc).join("<br>")}</td>` : ""}
+			</tr>`).join("")}</tbody></table>
+			${priced ? `<div class="so-tot">
+				<div class="so-tile"><div class="k">${__("Before tax")}</div><div class="v">₹ ${money(totals.before_tax)}</div></div>
+				<div class="so-tile"><div class="k">GST ${totals.gst_percent}%</div><div class="v">₹ ${money(totals.gst)}</div></div>
+				<div class="so-tile grand"><div class="k">${__("Invoice total")}</div><div class="v">₹ ${money(totals.invoice)}</div></div>
+				<div class="so-tile" style="max-width:420px;"><div class="k">${__("In words")}</div>
+					<div style="font-size:11.5px;">${esc(totals.in_words || "")}</div></div>
+			</div>` : ""}`
+			: `<div class="so-none">${__("No pieces found in the Design sheet.")}</div>`);
+	}
+
+	root.find(".so-price").on("click", () => {
+		if (!PARSED) return frappe.show_alert({ message: __("Upload the excel first."), indicator: "orange" }, 3);
+		if (!fChart.get_value()) return frappe.show_alert({ message: __("Pick a price chart."), indicator: "orange" }, 3);
+		frappe.call({ method: API + ".price_old_sale", args: {
+			rows: JSON.stringify(PARSED.rows || []), price_chart: fChart.get_value(),
+			gold_rate: fRate.get_value() || 0, quality: fQual.get_value() || "",
+			gst_percent: fGst.get_value() || 0,
+		} }).then((r) => {
+			PRICED = r.message || null;
+			if (!PRICED) return;
+			paint(PRICED.rows, PRICED.totals);
+			root.find(".so-dl").show();
+			const flagged = PRICED.rows.filter((x) => (x.flags || []).length).length;
+			if (flagged) frappe.show_alert({ message: __("{0} row(s) carry notes — check the yellow lines.", [flagged]), indicator: "orange" }, 5);
+		});
+	});
+
+	root.find(".so-dl").on("click", () => {
+		if (!PRICED || !FILE) return;
+		open_url_post("/api/method/jewelima.jewelima.api.export_old_sale_xlsx", {
+			filedata: FILE.b64, priced: JSON.stringify(PRICED.rows),
+			totals: JSON.stringify(PRICED.totals), filename: FILE.name,
+		});
+	});
+};
