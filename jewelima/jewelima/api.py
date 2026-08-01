@@ -8230,7 +8230,9 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	out = []
 	for r in rows:
 		flags = []
+		notes = {}
 		gold_va = round(flt(r.get("nt")) * gold_rate, 2)
+		notes["gold"] = "{0} g NT x {1}/g = {2}".format(flt(r.get("nt")), gold_rate, _inr(gold_va))
 		if not gold_rate:
 			flags.append("no gold rate")
 		# making: the row's ITEM is the design type; blank rule row = DEFAULT
@@ -8241,14 +8243,19 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		if rule:
 			mc_rate = flt(rule.rate)
 			mc = flt(r.get("nt")) * mc_rate
+			notes["mc"] = "{0} g x {1}/g [{2}]".format(flt(r.get("nt")), mc_rate, rule.design_type or "DEFAULT")
 			if flt(rule.min_per_piece) and mc < flt(rule.min_per_piece):
 				mc = flt(rule.min_per_piece)
+				notes["mc"] += " -> floored to min {0}".format(flt(rule.min_per_piece))
 		elif flt(chart.making_rate):
 			mc_rate = flt(chart.making_rate)
 			mc = max(flt(r.get("nt")), flt(chart.making_min_grams) or 1) * mc_rate
+			notes["mc"] = "{0} g (min {1}) x {2}/g flat".format(flt(r.get("nt")), flt(chart.making_min_grams) or 1, mc_rate)
 		else:
 			flags.append("no making rule for {0}".format(r.get("item") or "?"))
 		mc = round(mc, 2)
+		if "mc" in notes:
+			notes["mc"] += " = " + _inr(mc)
 		# diamonds: per-stone ct inferred = ct / pcs -> the chart bracket
 		dmd_va = dmd_rt = stone_ct = 0.0
 		bracket = ""
@@ -8276,6 +8283,8 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 				dmd_rt = flt(row.rate)
 				dmd_va = round(flt(r.get("dmd_ct")) * dmd_rt, 2)
 				bracket = "{0}-{1}".format(flt(row.from_ct), flt(row.to_ct) or "∞")
+				notes["dmd"] = "{0} ct / {1} pcs = {2}/st -> bracket {3} @ {4}/ct; {0} ct x {4} = {5}".format(
+					flt(r.get("dmd_ct")), pcs or "?", round(stone_ct, 4), bracket, dmd_rt, _inr(dmd_va))
 		# precious stones: the chart prices by STONE NAME — the old file has none
 		ps_va = 0.0
 		if flt(r.get("ps_ct")) > 0:
@@ -8292,10 +8301,12 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 					flags.append("STN outside every CS bracket — ignored")
 				elif (row.basis or "Per Ct") == "Per Piece":
 					stn_va = round(cint(r.get("stn_pcs")) * flt(row.rate), 2)
+					notes["stn"] = "{0} pcs x {1}/pc = {2}".format(cint(r.get("stn_pcs")), flt(row.rate), _inr(stn_va))
 					if not cint(r.get("stn_pcs")):
 						flags.append("STN priced per piece but count is 0")
 				else:
 					stn_va = round(flt(r.get("stn_ct")) * flt(row.rate), 2)
+					notes["stn"] = "{0} ct x {1}/ct = {2}".format(flt(r.get("stn_ct")), flt(row.rate), _inr(stn_va))
 		# certification: USER-entered (nothing to read from bag or excel) —
 		# HUID rate x the number of HUIDs in the cell; cert rate per piece,
 		# all rows or only the picked ones
@@ -8304,12 +8315,21 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		huid_va = round(huid_rate * len(huids), 2) if huid_rate and huids else 0.0
 		cert_on = cert_rate > 0 and (cert_set is None or r.get("unique_id") in cert_set)
 		cert_va = round(huid_va + (cert_rate if cert_on else 0), 2)
+		cn = []
+		if huid_va:
+			cn.append("{0} HUID x {1} = {2}".format(len(huids), huid_rate, _inr(huid_va)))
+		if cert_on:
+			cn.append("cert {0}/pc".format(cert_rate))
+		if cn:
+			notes["cert"] = " + ".join(cn) + " = " + _inr(cert_va)
 		total = round(gold_va + mc + dmd_va + ps_va + stn_va + cert_va, 2)
+		notes["total"] = "gold {0} + making {1} + dmd {2} + ps {3} + stn {4} + cert {5} = {6}".format(
+			_inr(gold_va), _inr(mc), _inr(dmd_va), _inr(ps_va), _inr(stn_va), _inr(cert_va), _inr(total))
 		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
 			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
 			ps_rt=0, ps_va=ps_va, stn_va=stn_va,
 			huid_count=len(huids), huid_va=huid_va, cert_on=cert_on, cert_va=cert_va,
-			total=total, flags=flags))
+			total=total, flags=flags, notes=notes))
 	before = round(sum(x["total"] for x in out), 2)
 	gst = round(before * flt(gst_percent) / 100, 2)
 	after = round(before + gst, 2)

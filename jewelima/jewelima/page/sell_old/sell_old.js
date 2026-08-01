@@ -35,6 +35,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		table.so-t td{border:1px solid var(--border-color);padding:4px 8px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 		table.so-t td.num{text-align:right;}
 		tr.so-flagged td{background:#fff8e6;}
+		table.so-t td[title]:not([title=""]){cursor:help;}
 		.so-flag{font-size:10.5px;color:#8a6d00;white-space:normal;}
 		.so-tot{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;}
 		.so-tile{border:1px solid var(--border-color);border-radius:9px;padding:7px 16px;background:var(--control-bg);}
@@ -125,12 +126,12 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				<td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_ct || ""}${r.dmd_pcs ? " / " + r.dmd_pcs : ""}</td>
 				<td class="num">${r.stn_ct || ""}</td>
-				${priced ? `<td class="num">₹ ${money(r.gold_va)}</td>
-				<td class="num">₹ ${money(r.mc)}</td>
-				<td class="num">₹ ${money(r.dmd_va)}${r.dmd_rt ? `<div class="so-flag">${r.stone_ct}/st · ${money(r.dmd_rt)} @ ${esc(r.dmd_bracket)}</div>` : ""}</td>
-				<td class="num">₹ ${money(r.stn_va)}</td>
-				<td class="num">₹ ${money(r.cert_va || 0)}${r.huid_count > 1 ? `<div class="so-flag">${r.huid_count} HUID</div>` : ""}</td>
-				<td class="num"><b>₹ ${money(r.total)}</b></td>
+				${priced ? `<td class="num" title="${esc((r.notes || {}).gold || "")}">₹ ${money(r.gold_va)}</td>
+				<td class="num" title="${esc((r.notes || {}).mc || "")}">₹ ${money(r.mc)}</td>
+				<td class="num" title="${esc((r.notes || {}).dmd || "")}">₹ ${money(r.dmd_va)}${r.dmd_rt ? `<div class="so-flag">${r.stone_ct}/st · ${money(r.dmd_rt)} @ ${esc(r.dmd_bracket)}</div>` : ""}</td>
+				<td class="num" title="${esc((r.notes || {}).stn || "")}">₹ ${money(r.stn_va)}</td>
+				<td class="num" title="${esc((r.notes || {}).cert || "")}">₹ ${money(r.cert_va || 0)}${r.huid_count > 1 ? `<div class="so-flag">${r.huid_count} HUID</div>` : ""}</td>
+				<td class="num" title="${esc((r.notes || {}).total || "")}"><b>₹ ${money(r.total)}</b></td>
 				<td class="so-flag">${(r.flags || []).map(esc).join("<br>")}</td>` : ""}
 			</tr>`).join("")}</tbody></table>
 			${priced ? `<div class="so-tot">
