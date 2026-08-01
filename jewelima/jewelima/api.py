@@ -8503,7 +8503,13 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	# ---- header block (rows 1-3, THEIR geometry — plain, no fills) ----
 	ws["A1"] = "SMITH NAME ADDRESS"
 	ws["F1"] = "jewelima diamonds,"
-	ws["A2"] = "Pure Rate WITHOUT GST:"
+	# pure rate = the board rate scaled back to 24K (18K: x24/18 -> 14346 @ 10759.5)
+	m = re.search(r"\d+(?:\.\d+)?", karat_label or "")
+	karat = flt(m.group()) if m else 0
+	pure_rate = round(gold_rate * 24 / karat, 2) if karat else 0
+	if pure_rate == int(pure_rate):
+		pure_rate = int(pure_rate)
+	ws["A2"] = "Pure Rate WITHOUT GST:{0}".format(pure_rate or "")
 	ws["H2"] = "METAL PURITY"
 	ws["J2"] = karat_label
 	ws["M2"] = "DIAMOND QUALITY"
@@ -8630,10 +8636,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		L = get_column_letter(col)
 		ws.cell(row=tr, column=col,
 			value="={0}".format("+".join("{0}{1}".format(L, sr) for sr in sub_rows)) if sub_rows else 0).font = bold
-	# ---- footer chain ----
-	huid_total = round(sum(flt(p.get("huid_va")) for p in priced), 2)
+	# ---- footer chain (whole rupees — every line ROUNDed to 0 decimals) ----
+	huid_total = int(round(sum(flt(p.get("huid_va")) for p in priced)))
 	rows = [
-		("Total Value", "=AN{0}".format(tr)),
+		("Total Value", "=ROUND(AN{0},0)".format(tr)),
 		("Hall Marking Charge", huid_total or None),
 		("Certification Charge", "=ROUND(AO{0},0)".format(tr)),
 		("Taxable Value", None),
@@ -8645,11 +8651,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=fr + j, column=34, value=label).font = bold
 		cell = ws.cell(row=fr + j, column=40)
 		cell.font = bold
+		cell.number_format = "0"
 		if val is not None:
 			cell.value = val
-	ws.cell(row=fr + 3, column=40, value="=SUM(AN{0}:AN{1})".format(fr, fr + 2))
-	ws.cell(row=fr + 4, column=40, value="=AN{0}*{1}%".format(fr + 3, gst_percent))
-	ws.cell(row=fr + 5, column=40, value="=AN{0}+AN{1}".format(fr + 3, fr + 4))
+	ws.cell(row=fr + 3, column=40, value="=ROUND(SUM(AN{0}:AN{1}),0)".format(fr, fr + 2))
+	ws.cell(row=fr + 4, column=40, value="=ROUND(AN{0}*{1}%,0)".format(fr + 3, gst_percent))
+	ws.cell(row=fr + 5, column=40, value="=ROUND(AN{0}+AN{1},0)".format(fr + 3, fr + 4))
 
 	buf = BytesIO()
 	wb.save(buf)
