@@ -382,6 +382,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		// every "-> selected" apply hands the selection back for the next batch
 		SEL.clear();
 		LASTSEL = null;
+		root.find(".of-bcolor").val("");
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) coloured {1}.", [n, v]), indicator: "green" }, 3);
 	}
@@ -397,6 +398,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		if (n) invalidate();
 		SEL.clear();
 		LASTSEL = null;
+		root.find(".of-bcert").val("");
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) tagged {1} — selection cleared, tick the next batch.", [n, v]), indicator: "green" }, 4);
 	});
