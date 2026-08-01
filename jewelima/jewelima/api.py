@@ -8656,10 +8656,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	used_groups = set()
 	r0 = 5
 	r = r0
-	gross_rows = []  # one row per colour run: its TOTAL row, or the lone data row itself
+	gross_terms = []  # ("cell", row) / ("range", (a, b)) pieces the grand total adds
 
-	small_bold = Font(bold=True, size=10)  # colour totals sit under the item TOTAL
-	band_bold = Font(bold=True, size=9)   # weight-band totals sit under the colour
+	band_bold = Font(bold=True, size=9)   # weight-band totals, the only subtotal level
 
 	def sum_row(label, formula, font=bold):
 		"""one bold total line; `formula` maps a column letter -> its formula"""
@@ -8707,14 +8706,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		r += 1
 
 	# blocks: item type -> colour runs -> weight bands. Below-1g rows first with
-	# a BELOW 1G TOTAL, then the gram-priced rows with ABOVE 1G TOTAL, then the
-	# COLOUR TOTAL. A run of ONE line gets NO total row at any level — the lone
-	# row itself stands in for the total inside the parent's formula. No
-	# per-item TOTAL row; TOTAL GROSS adds one term per colour run.
+	# a BELOW 1G TOTAL, then the gram-priced rows with ABOVE 1G TOTAL. NO colour
+	# totals and NO item totals (both dropped on request); a run of ONE line
+	# gets no total row either — the lone row itself feeds TOTAL GROSS.
 	from itertools import groupby
-
-	def plus(rows_):
-		return lambda L, rs=tuple(rows_): "={0}".format("+".join("{0}{1}".format(L, x) for x in rs))
 
 	def span(a_, b_):
 		return lambda L, a=a_, b=b_: "=SUM({0}{1}:{0}{2})".format(L, a, b)
@@ -8724,19 +8719,20 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		for colr, crun in cgroups:
 			bgroups = [(k, list(g)) for k, g in groupby(crun, key=band_of)]
 			cstart = r
-			bterms = []
-			for band, brun in bgroups:
-				bstart = r
-				for p in brun:
-					write_piece(p)
-				if len(bgroups) > 1:
-					bterms.append(sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
-						span(bstart, r - 1), font=band_bold) if len(brun) > 1 else bstart)
-			if len(crun) > 1:
-				gross_rows.append(sum_row("{0} TOTAL".format((colr or item_colour or "").strip() or "COLOUR"),
-					plus(bterms) if bterms else span(cstart, r - 1), font=small_bold))
+			if len(bgroups) > 1:
+				for band, brun in bgroups:
+					bstart = r
+					for p in brun:
+						write_piece(p)
+					if len(brun) > 1:
+						gross_terms.append(("cell", sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
+							span(bstart, r - 1), font=band_bold)))
+					else:
+						gross_terms.append(("cell", bstart))
 			else:
-				gross_rows.append(cstart)
+				for p in crun:
+					write_piece(p)
+				gross_terms.append(("range", (cstart, r - 1)) if len(crun) > 1 else ("cell", cstart))
 
 	# unused diamond bracket groups vanish (their legend rides in the same cols)
 	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
@@ -8756,11 +8752,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	for cc in range(1, 43):
 		ws.cell(row=tr, column=cc).border = box
 	ws.cell(row=tr, column=2, value="TOTAL GROSS").font = bold
-	# grand total = one term per colour run: its TOTAL row, or its lone data row
+	# grand total = band totals + lone rows + SUM ranges of never-split runs
 	for col in SUMCOLS:
 		L = get_column_letter(col)
-		ws.cell(row=tr, column=col, value="={0}".format(
-			"+".join("{0}{1}".format(L, x) for x in gross_rows)) if gross_rows else 0).font = bold
+		parts = ["{0}{1}".format(L, v) if kind == "cell" else "SUM({0}{1}:{0}{2})".format(L, v[0], v[1])
+			for kind, v in gross_terms]
+		ws.cell(row=tr, column=col, value="={0}".format("+".join(parts)) if parts else 0).font = bold
 	# ---- footer chain (whole rupees — every line ROUNDed to 0 decimals) ----
 	huid_total = int(round(sum(flt(p.get("huid_va")) for p in priced)))
 	rows = [
