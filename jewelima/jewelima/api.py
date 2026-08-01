@@ -8172,6 +8172,8 @@ def _old_sale_rows(filedata):
 		"stn_pcs": col("STN PCS"), "stn_ct": col("STN (CT)", "STN(CT)", "STN"),
 		"nt": col("NT WT (GM)", "NT WT(GM)", "NT WT"),
 		"pure": col("PURE (GM)", "PURE(GM)", "PURE"),
+		"colour": col("COLOUR", "COLOR"),
+		"item_color": col("ITEM COLOR", "ITEM COLOUR"),
 	}
 	rows = []
 	for r in ws.iter_rows(min_row=2, values_only=True):
@@ -8186,6 +8188,7 @@ def _old_sale_rows(filedata):
 			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
 			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
 			"nt": flt(g("nt")), "pure": flt(g("pure")),
+			"colour": str(g("colour") or ""), "item_color": str(g("item_color") or ""),
 		})
 	cover = {}
 	if "SALES QUOTATION" in wb.sheetnames:
@@ -8548,13 +8551,35 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				return i
 		return 0 if brackets else None
 
+	# one item type at a time, sorted by colour within the type
+	priced = sorted(priced, key=lambda p: ((p.get("item") or ""), (p.get("colour") or ""), cint(p.get("sl"))))
+	SUMCOLS = [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]
+	used_groups = set()
 	r0 = 5
-	igis = []
-	for i, p in enumerate(priced):
-		r = r0 + i
-		ws.cell(row=r, column=1, value=i + 1)
+	r = r0
+	sub_rows = []
+	cur_item, block_start = None, r0
+	def close_block(upto):
+		"""write the item's TOTAL row right under its block"""
+		nonlocal r
+		for col in SUMCOLS:
+			L = get_column_letter(col)
+			ws.cell(row=r, column=col, value="=SUM({0}{1}:{0}{2})".format(L, block_start, upto)).font = bold
+		ws.cell(row=r, column=2, value="{0} TOTAL".format(cur_item or "")).font = bold
+		sub_rows.append(r)
+		r += 1
+	sl = 0
+	for p in priced:
+		if cur_item is not None and (p.get("item") or "") != cur_item:
+			close_block(r - 1)
+			block_start = r
+		cur_item = p.get("item") or ""
+		sl += 1
+		ws.cell(row=r, column=1, value=sl)
 		ws.cell(row=r, column=2, value=p.get("item"))
+		ws.cell(row=r, column=5, value=p.get("colour") or None)
 		ws.cell(row=r, column=6, value=1)
+		ws.cell(row=r, column=7, value=p.get("item_color") or None)
 		gross, nt = flt(p.get("gs")), flt(p.get("nt"))
 		ws.cell(row=r, column=8, value=gross)
 		ws.cell(row=r, column=9, value=nt)
@@ -8562,9 +8587,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=11, value=gross)
 		ws.cell(row=r, column=14, value=flt(p.get("mc")))
 		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
-		gtotal_formula = []
 		if ct > 0 and brackets:
 			gi = bracket_index(round(ct / pcs, 3) if pcs else 0)
+			used_groups.add(gi)
 			pc, cc, vc = GRP[gi]
 			ws.cell(row=r, column=pc, value=pcs)
 			ws.cell(row=r, column=cc, value=ct)
@@ -8576,12 +8601,23 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=35, value="={0}".format("+".join("{0}{1}".format(get_column_letter(vc), r) for _, _, vc in GRP)))
 		ws.cell(row=r, column=40, value="=J{0}+N{0}+AI{0}".format(r))
 		igi = igi_flat if ct <= igi_threshold else round(igi_per_ct * ct, 2)
-		igi = igi if ct > 0 else 0
-		igis.append(igi)
-		ws.cell(row=r, column=41, value=igi)
+		ws.cell(row=r, column=41, value=igi if ct > 0 else 0)
 		ws.cell(row=r, column=42, value=p.get("unique_id"))
+		r += 1
+	if priced:
+		close_block(r - 1)
 
-	last = r0 + len(priced) - 1
+	# unused diamond bracket groups vanish (their legend rides in the same cols)
+	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
+	for gi, cols in enumerate(GRP):
+		if gi not in used_groups:
+			for col in list(cols) + GRP_EXTRA.get(gi, []):
+				ws.column_dimensions[get_column_letter(col)].hidden = True
+	# the always-ignored legacy columns stay hidden too
+	for col in (12, 13, 15, 36, 37, 38, 39):
+		ws.column_dimensions[get_column_letter(col)].hidden = True
+
+	last = r - 1
 	for rr in range(r0, last + 1):
 		for cc in range(1, 43):
 			ws.cell(row=rr, column=cc).border = box
@@ -8589,15 +8625,17 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	for cc in range(1, 43):
 		ws.cell(row=tr, column=cc).border = box
 	ws.cell(row=tr, column=2, value="TOTAL GROSS").font = bold
-	for col in [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]:
+	# grand total = the SUM of the per-type TOTAL rows (their two-block style)
+	for col in SUMCOLS:
 		L = get_column_letter(col)
-		ws.cell(row=tr, column=col, value="=SUM({0}{1}:{0}{2})".format(L, r0, last)).font = bold
+		ws.cell(row=tr, column=col,
+			value="={0}".format("+".join("{0}{1}".format(L, sr) for sr in sub_rows)) if sub_rows else 0).font = bold
 	# ---- footer chain ----
 	huid_total = round(sum(flt(p.get("huid_va")) for p in priced), 2)
 	rows = [
 		("Total Value", "=AN{0}".format(tr)),
 		("Hall Marking Charge", huid_total or None),
-		("Certification Charge", "=ROUND(SUM(AO{0}:AO{1}),0)".format(r0, last)),
+		("Certification Charge", "=ROUND(AO{0},0)".format(tr)),
 		("Taxable Value", None),
 		("GST {0}%".format(frappe.utils.fmt_money(gst_percent, 0, None).strip()), None),
 		("Grand Total", None),
