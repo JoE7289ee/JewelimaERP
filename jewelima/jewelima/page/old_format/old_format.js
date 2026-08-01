@@ -263,7 +263,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td>
-				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;" placeholder="${__("or PENDING")}"></td>
+				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;"></td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
