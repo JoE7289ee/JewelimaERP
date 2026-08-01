@@ -115,8 +115,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-rate"></div>
 			<div class="of-cq"></div>
 			<div class="of-gst"></div>
-			<div class="of-huid"></div>
-			<div class="of-cert"></div>
 			<button class="of-btn of-price">${__("Price it")}</button>
 			<button class="of-btn of-jos" style="display:none;">${__("JOS Billing ⤓")}</button>
 			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
@@ -139,9 +137,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const fCq = mk(".of-cq", { fieldtype: "Select", label: __("Chart quality"), fieldname: "cq", options: "" });
 	const fGst = mk(".of-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3 });
 	fGst.set_value(3);
-	const fHuid = mk(".of-huid", { fieldtype: "Float", label: __("HUID ₹ (per HUID)"), fieldname: "huid" });
-	const fCert = mk(".of-cert", { fieldtype: "Float", label: __("Cert ₹ / piece"), fieldname: "cert",
-		description: __("bills the rows with a Cert lab set") });
 
 	function loadQualities() {
 		const ch = fChart.get_value();
@@ -302,7 +297,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<th>${__("HUID")}</th><th>${__("Cert")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
 				<th class="num">${__("DMD")}</th><th class="num">${__("Cert/HUID")}</th>
-				<th class="num">${__("TOTAL")}</th><th>${__("Notes")}</th>` : ""}
+				<th class="num">${__("TOTAL")}</th>` : ""}
 			</tr></thead><tbody>
 			${ROWS.map((r) => {
 				const p = P[r.unique_id] || {};
@@ -314,9 +309,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				${priced ? `<td class="num" title="${esc((p.notes || {}).gold || "")}">₹ ${money(p.gold_va)}</td>
 				<td class="num" title="${esc((p.notes || {}).mc || "")}">₹ ${money(p.mc)}</td>
 				<td class="num" title="${esc((p.notes || {}).dmd || "")}">₹ ${money(p.dmd_va)}${p.dmd_rt ? `<div class="of-flag">${p.stone_ct}/st @ ${esc(p.dmd_bracket)}</div>` : ""}</td>
-				<td class="num" title="${esc((p.notes || {}).cert || "")}">₹ ${money(p.cert_va || 0)}</td>
-				<td class="num" title="${esc((p.notes || {}).total || "")}"><b>₹ ${money(p.total)}</b></td>
-				<td class="of-flag">${(p.flags || []).map(esc).join("<br>")}</td>` : ""}
+				<td class="num" title="${esc([(p.notes || {}).cert || ""].concat(p.flags || []).filter(Boolean).join(" · "))}">₹ ${money(p.cert_va || 0)}</td>
+				<td class="num" title="${esc((p.notes || {}).total || "")}"><b>₹ ${money(p.total)}</b></td>` : ""}
 			</tr>`; }).join("")}</tbody></table>
 			${priced ? `<div class="of-tot">
 				<div class="of-tile"><div class="k">${__("Before tax")}</div><div class="v">₹ ${money(PRICED.totals.before_tax)}</div></div>
@@ -471,8 +465,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			rows: JSON.stringify(payloadRows()), price_chart: fChart.get_value(),
 			gold_rate: fRate.get_value() || 0, quality: fCq.get_value() || "",
 			gst_percent: fGst.get_value() || 0,
-			huid_rate: fHuid.get_value() || 0, cert_rate: fCert.get_value() || 0,
-			cert_uids: JSON.stringify(ROWS.filter((r) => r.cert).map((r) => r.unique_id)),
 		} }).then((r) => {
 			PRICED = r.message || null;
 			if (!PRICED) return;
@@ -511,7 +503,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					karat_label: v.karat, item_colour: (v.item_colour || "").toUpperCase().trim(),
 					gst_percent: fGst.get_value() || 0,
 					igi_flat: v.igi_flat || 80, igi_per_ct: v.igi_per_ct || 325, igi_threshold: v.igi_threshold || 0.10,
-					huid_rate: fHuid.get_value() || 0,
 					party: v.party || "", filename: v.fname,
 				});
 			},

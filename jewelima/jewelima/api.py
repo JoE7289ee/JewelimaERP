@@ -8391,6 +8391,21 @@ def parse_old_sale_excel(filedata):
 	return {"rows": rows, "cover": cover, "count": len(rows), "charts": charts}
 
 
+def _cert_slab_hit(slab, ct, pcs):
+	"""The chart's weight-slab row for this piece (solitaire = single stone)."""
+	if ct <= 0 or not slab:
+		return None
+	hit = None
+	if cint(pcs) == 1:
+		hit = next((c for c in slab if cint(c.solitaire) and flt(c.from_ct) <= ct <= flt(c.to_ct)), None)
+	if hit is None:
+		plain = [c for c in slab if not cint(c.solitaire)]
+		hit = next((c for c in plain if flt(c.from_ct) <= ct <= flt(c.to_ct)), None)
+		if hit is None and plain:
+			hit = plain[-1] if ct > flt(plain[-1].to_ct) else plain[0]
+	return hit
+
+
 @frappe.whitelist()
 def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		huid_rate=0, cert_rate=0, cert_uids=None):
@@ -8408,6 +8423,18 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	ITEM_ALIAS = {"NOSPIN": "NOSEPIN", "NP": "NOSEPIN", "PD": "PENDANT", "NECK": "NECKLACE",
 		"CH BRACELET": "CHAIN BRACELET", "CH NECKLACE": "CHAIN NECKLACE"}
 	making_rules = list(chart.get("making_rules") or [])
+	# certification straight off the chart: flat named rows (HALLMARKING, labs,
+	# ALL LABS) vs weight-slab rows (IGI style, from/to ct)
+	cert_flat, slab = {}, []
+	for c in chart.get("certification_charges") or []:
+		if flt(c.to_ct) > 0:
+			slab.append(c)
+		else:
+			cert_flat[(c.certification or "").strip().upper()] = c
+	slab.sort(key=lambda c: flt(c.from_ct))
+	hall = cert_flat.get("HALLMARKING") or cert_flat.get("HALL")
+	if not huid_rate and hall:
+		huid_rate = flt(hall.rate)
 	dmd_rows = [r for r in chart.diamond_rates if (r.quality or "") in ((quality or ""), "")]
 	dmd_exact = [r for r in dmd_rows if (r.quality or "") == (quality or "")] or dmd_rows
 	cs_rows = list(chart.get("cs_rates") or [])
@@ -8510,13 +8537,44 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		huids = [t for t in _re.split(r"[^A-Za-z0-9]+", str(r.get("huid") or ""))
 			if len(t) == 6 or t.upper() == "PENDING"]
 		huid_va = round(huid_rate * len(huids), 2) if huid_rate and huids else 0.0
-		cert_on = cert_rate > 0 and (cert_set is None or r.get("unique_id") in cert_set)
-		cert_va = round(huid_va + (cert_rate if cert_on else 0), 2)
 		cn = []
 		if huid_va:
 			cn.append("{0} HUID x {1} = {2}".format(len(huids), huid_rate, _inr(huid_va)))
-		if cert_on:
+		elif huids and not huid_rate:
+			flags.append("HUID present but no HALLMARKING price on the chart")
+		# certification: the row's own lab prices off the chart (flat row or
+		# the IGI-style weight slab); the manual per-piece rate only covers
+		# rows WITHOUT a lab (the old Sell Old flow)
+		cert_only = 0.0
+		lab = str(r.get("cert") or "").strip().upper()
+		if lab:
+			row_c = cert_flat.get(lab) or cert_flat.get("ALL LABS")
+			if row_c:
+				if (row_c.basis or "Per Piece") == "Per Ct":
+					cert_only = round(flt(r.get("dmd_ct")) * flt(row_c.rate), 2)
+					if flt(row_c.min_amount) and cert_only < flt(row_c.min_amount):
+						cert_only = flt(row_c.min_amount)
+					cn.append("{0} {1}/ct x {2} ct = {3}".format(lab, flt(row_c.rate), flt(r.get("dmd_ct")), _inr(cert_only)))
+				else:
+					cert_only = flt(row_c.rate)
+					cn.append("{0} {1}/pc".format(lab, flt(row_c.rate)))
+			else:
+				hit = _cert_slab_hit(slab, flt(r.get("dmd_ct")), cint(r.get("dmd_pcs")))
+				if hit:
+					if (hit.basis or "Per Piece") == "Per Piece":
+						cert_only = flt(hit.rate)
+						cn.append("{0} slab {1}-{2} ct = {3}/pc".format(lab, flt(hit.from_ct), flt(hit.to_ct), flt(hit.rate)))
+					else:
+						cert_only = round(flt(hit.rate) * flt(r.get("dmd_ct")), 2)
+						cn.append("{0} slab {1}-{2} ct{3}: {4}/ct x {5} ct = {6}".format(lab, flt(hit.from_ct), flt(hit.to_ct),
+							" solitaire" if cint(hit.solitaire) else "", flt(hit.rate), flt(r.get("dmd_ct")), _inr(cert_only)))
+				else:
+					flags.append("{0} is not priced on the chart".format(lab))
+		elif cert_rate > 0 and (cert_set is None or r.get("unique_id") in cert_set):
+			cert_only = cert_rate
 			cn.append("cert {0}/pc".format(cert_rate))
+		cert_on = cert_only > 0
+		cert_va = round(huid_va + cert_only, 2)
 		if cn:
 			notes["cert"] = " + ".join(cn) + " = " + _inr(cert_va)
 		total = round(gold_va + mc + dmd_va + ps_va + stn_va + cert_va, 2)
@@ -8698,6 +8756,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	# a single-stone piece (DMD PCS = 1) is a solitaire and takes those tiers
 	slab = sorted([c for c in (chart.get("certification_charges") or []) if flt(c.to_ct) > 0],
 		key=lambda c: flt(c.from_ct))
+	# a lot that tags certifications only pays IGI on the tagged pieces;
+	# untagged lots keep the legacy every-diamond-row billing
+	lot_tagged = any(p.get("cert") for p in (priced if isinstance(priced, list) else []))
 
 	def igi_for(ct, pcs):
 		if ct <= 0:
@@ -8861,7 +8922,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			ws.cell(row=r, column=C["tc"], value=0)
 			ws.cell(row=r, column=C["tv"], value=0)
 		ws.cell(row=r, column=C["total"], value="={g}{r}+{m}{r}+{v}{r}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r))
-		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs))
+		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs) if (not lot_tagged or p.get("cert")) else 0)
 		ws.cell(row=r, column=C["huid"], value=flt(p.get("huid_va")) or 0)
 		if "certlab" in C:
 			ws.cell(row=r, column=C["certlab"], value=p.get("cert") or None)
