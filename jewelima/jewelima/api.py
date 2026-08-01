@@ -8257,11 +8257,14 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 				flags.append("no diamond rows for {0}".format(quality or "?"))
 			else:
 				pcs = cint(r.get("dmd_pcs"))
-				stone_ct = flt(r.get("dmd_ct")) / pcs if pcs else 0
+				# per-stone cents ROUND AT THE 4TH DIGIT (0.0086 -> 0.009 goes
+				# NEXT bracket; 0.0183 -> 0.018 stays down) and the upper edge
+				# is inclusive — no more between-bracket gaps
+				stone_ct = round(flt(r.get("dmd_ct")) / pcs, 3) if pcs else 0
 				row = None
 				if stone_ct:
-					for d in dmd_exact:
-						if flt(d.from_ct) <= stone_ct and (not flt(d.to_ct) or stone_ct < flt(d.to_ct)):
+					for d in sorted(dmd_exact, key=lambda d: flt(d.from_ct)):
+						if flt(d.from_ct) <= stone_ct and (not flt(d.to_ct) or stone_ct <= flt(d.to_ct)):
 							row = d
 							break
 				if not row:
@@ -9072,12 +9075,13 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 					dmd_missing.append(line["quality"])
 				continue
 			exact = [r for r in rows if (r.quality or "") == line["quality"]] or rows
-			# the line's ACTUAL cents: its carats over its stone count
-			stone_ct = (line["ct"] / line["pcs"]) if line["pcs"] else avg_stone
+			# the line's ACTUAL cents, ROUNDED AT THE 4TH DIGIT; the upper edge
+			# is inclusive so bracket boundaries never orphan a line
+			stone_ct = round((line["ct"] / line["pcs"]) if line["pcs"] else avg_stone, 3)
 			row = None
 			if stone_ct:
-				for r in exact:
-					if flt(r.from_ct) <= stone_ct and (not flt(r.to_ct) or stone_ct < flt(r.to_ct)):
+				for r in sorted(exact, key=lambda x: flt(x.from_ct)):
+					if flt(r.from_ct) <= stone_ct and (not flt(r.to_ct) or stone_ct <= flt(r.to_ct)):
 						row = r
 						break
 			row = row or sorted(exact, key=lambda r: flt(r.from_ct))[0]
