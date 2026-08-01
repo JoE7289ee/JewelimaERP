@@ -8643,7 +8643,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	GRP = [(16, 17, 19), (20, 21, 23), (24, 25, 26), (27, 28, 29), (30, 31, 32)]
 	HEAD = {1: "Sl. No.", 2: "Item Description", 3: "Size", 4: "Style", 5: "Colour",
 		6: "NO OF PCS", 7: "ITEM COLOR", 8: "Gross Qty (Gm)", 9: "Net Qty (Gm)",
-		10: "Gold\nValue", 11: "neck wt without chain wt", 13: "back chain wt",
+		10: "Gold\nValue", 13: "back chain wt",
 		14: "Making Charge", 15: "chain mc", 18: "Dimond Rate (Ct.)", 22: "dia.rate",
 		33: "pcs", 34: "cts", 35: "value", 37: "pcs", 38: "in gram",
 		39: "amt (specify ct rate)", 40: "Total value", 41: "IGI", 42: "UNIQUE ID"}
@@ -8657,7 +8657,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		c.border = box
 		c.alignment = Alignment(wrap_text=True, vertical="center")
 	widths = {1: 4.1, 2: 9.9, 3: 4.9, 5: 8.6, 6: 4.6, 7: 8.1, 8: 9.9, 9: 9.3, 10: 11.1,
-		11: 8, 14: 12.7, 15: 9.3, 40: 12, 41: 8, 42: 12}
+		14: 12.7, 15: 9.3, 40: 12, 41: 8, 42: 12}
 	for col, w in widths.items():
 		ws.column_dimensions[get_column_letter(col)].width = w
 
@@ -8709,7 +8709,6 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=8, value=gross)
 		ws.cell(row=r, column=9, value=nt)
 		ws.cell(row=r, column=10, value="=I{0}*N$3".format(r))
-		ws.cell(row=r, column=11, value=round(gross - bc, 3) if bc else gross)
 		if bc:
 			ws.cell(row=r, column=13, value=bc)
 		ws.cell(row=r, column=14, value=flt(p.get("mc")))
@@ -8777,8 +8776,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		if gi not in used_groups:
 			for col in list(cols) + GRP_EXTRA.get(gi, []):
 				ws.column_dimensions[get_column_letter(col)].hidden = True
-	# the always-ignored legacy columns stay hidden too
-	for col in (12, 13, 15, 36, 37, 38, 39):
+	# the always-ignored legacy columns stay hidden too (incl. neck-wt col K)
+	for col in (11, 12, 13, 15, 36, 37, 38, 39):
 		ws.column_dimensions[get_column_letter(col)].hidden = True
 
 	last = r - 1
