@@ -8666,7 +8666,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		for col in SUMCOLS:
 			L = get_column_letter(col)
 			ws.cell(row=r, column=col, value=formula(L)).font = font
-		ws.cell(row=r, column=2, value=label).font = font
+		if label:
+			ws.cell(row=r, column=2, value=label).font = font
 		r += 1
 		return r - 1
 
@@ -8705,10 +8706,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=42, value=p.get("unique_id"))
 		r += 1
 
-	# blocks: item type -> colour runs -> weight bands. EVERY multi-line band
-	# run closes with its BELOW/ABOVE 1G TOTAL (split or not); a run of ONE
-	# line gets no total row — the lone row itself feeds TOTAL GROSS. No
-	# colour totals and no item totals (both dropped on request).
+	# blocks: item type -> colour runs -> weight bands. EVERY band run closes
+	# with an UNLABELLED bold total line (even a single-piece run — their
+	# sheet reads that way). No colour totals and no item totals; TOTAL GROSS
+	# sums exactly the band-total rows.
 	from itertools import groupby
 
 	def span(a_, b_):
@@ -8722,11 +8723,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				bstart = r
 				for p in brun:
 					write_piece(p)
-				if len(brun) > 1:
-					gross_terms.append(("cell", sum_row("{0} 1G TOTAL".format("BELOW" if band == "below" else "ABOVE"),
-						span(bstart, r - 1), font=band_bold)))
-				else:
-					gross_terms.append(("cell", bstart))
+				gross_terms.append(("cell", sum_row("", span(bstart, r - 1), font=band_bold)))
 
 	# unused diamond bracket groups vanish (their legend rides in the same cols)
 	GRP_EXTRA = {0: [18], 1: [22]}  # group 1 carries the avg col, group 2 its rate col
