@@ -8149,10 +8149,10 @@ def get_sale_record(sale):
 # ONE user-picked quality; STN = the CS bracket table; PS stays manual.
 # ---------------------------------------------------------------------------
 def _old_sale_rows(filedata):
-	"""Parse the old software's export -> row dicts. Two layouts, auto-detected:
-	QUOTATION (a 'Design' sheet, carries NT WT) and BILLING (one flat sheet with
-	per-row DIAMOND QUALITY / COLOUR / SIZE / SHAPE / BACK CHAIN / SHOP NAME,
-	but NO net weight — derived as GS − 0.2 g/ct × total stone ct)."""
+	"""Parse the old software's BILLING export (one flat sheet with per-row
+	DIAMOND QUALITY / COLOUR / SIZE / SHAPE / BACK CHAIN / SHOP NAME; NO net
+	weight — derived as GS − 0.2 g/ct × total stone ct). The old quotation
+	format is no longer accepted."""
 	import base64
 	from io import BytesIO
 
@@ -8161,7 +8161,7 @@ def _old_sale_rows(filedata):
 	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
 	wb = load_workbook(BytesIO(raw), data_only=True)
 	if "Design" in wb.sheetnames:
-		return _old_sale_rows_quotation(wb)
+		frappe.throw(frappe._("This is the OLD quotation export — no longer supported. Export the BILLING format (flat sheet with COLOUR/SIZE/SHAPE columns) instead."))
 	return _old_sale_rows_billing(wb)
 
 
@@ -8219,6 +8219,7 @@ def _old_sale_rows_billing(wb):
 			"size": str(g("size") or "").strip(), "style": str(g("style") or "").strip(),
 			"back_chain_wt": flt(g("bc_wt")),
 		})
+	_check_old_sale_order(rows)
 	cover = {"format": "billing", "party": shop}
 	if len(tokens) == 1:
 		cover["quality_hint"] = DESIGN_TOKEN_STONE_FAMILY.get(next(iter(tokens)), "")
@@ -8227,58 +8228,38 @@ def _old_sale_rows_billing(wb):
 	return rows, cover
 
 
-def _old_sale_rows_quotation(wb):
-	"""The 'Design' sheet by HEADERS (newline-tolerant) -> row dicts."""
-	ws = wb["Design"]
-	head = {}
-	for j, c in enumerate(ws[1], start=1):
-		key = " ".join(str(c.value or "").split()).upper()
-		if key:
-			head[key] = j
-	def col(*names):
-		for n in names:
-			if n in head:
-				return head[n]
-		return None
-	C = {
-		"sl": col("SL#"), "uid": col("UNIQUE ID"), "huid": col("HUID"),
-		"item": col("ITEM"), "design": col("DESIGN"),
-		"gs": col("GS WT (GM)", "GS WT(GM)", "GS WT"),
-		"ps_pcs": col("PS PCS"), "ps_ct": col("PS (CT)", "PS(CT)", "PS"),
-		"dmd_pcs": col("DMD PCS"), "clarity": col("DMD CLARITY"),
-		"dmd_ct": col("DMD (CT)", "DMD(CT)", "DMD"),
-		"stn_pcs": col("STN PCS"), "stn_ct": col("STN (CT)", "STN(CT)", "STN"),
-		"nt": col("NT WT (GM)", "NT WT(GM)", "NT WT"),
-		"pure": col("PURE (GM)", "PURE(GM)", "PURE"),
-		"colour": col("COLOUR", "COLOR"),
-		"item_color": col("ITEM COLOR", "ITEM COLOUR"),
-	}
-	rows = []
-	for r in ws.iter_rows(min_row=2, values_only=True):
-		uid = r[C["uid"] - 1] if C["uid"] else None
-		if not uid:
-			continue  # the totals row / blanks
-		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
-		rows.append({
-			"sl": cint(g("sl")), "unique_id": str(uid), "huid": str(g("huid") or ""),
-			"item": str(g("item") or "").strip().upper(), "design": str(g("design") or ""),
-			"gs": flt(g("gs")), "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
-			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
-			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
-			"nt": flt(g("nt")), "pure": flt(g("pure")),
-			"colour": str(g("colour") or ""), "item_color": str(g("item_color") or ""),
-		})
-	cover = {"format": "quotation"}
-	if "SALES QUOTATION" in wb.sheetnames:
-		cv = wb["SALES QUOTATION"]
-		for row in cv.iter_rows(min_row=1, max_row=14):
-			vals = [str(c.value or "").strip() for c in row]
-			joined = " ".join(vals)
-			if joined.startswith("Invoice No."):
-				cover["invoice_no"] = next((v for v in vals[5:] if v and v != ":"), "")
-			if joined.startswith("Name") and "party" not in cover:
-				cover["party"] = next((v for v in vals[5:] if v and v != ":"), "")
-	return rows, cover
+def _check_old_sale_order(rows):
+	"""The pieces are physically sorted and numbered before export — that order
+	is law (SL# is kept verbatim, the JOS export never re-sorts). Verify it:
+	item types contiguous, colours contiguous inside the item, and below-1g
+	pieces before above-1g ones inside the colour. Anything off -> reject."""
+	left_items, left_cols = set(), set()
+	prev_item = prev_col = None
+	prev_band = -1
+	errs = []
+	for row in rows:
+		it, co = row["item"], row["item_color"]
+		band = 0 if flt(row["nt"]) < 1.0 else 1
+		if it != prev_item:
+			if prev_item is not None:
+				left_items.add(prev_item)
+				left_cols.add((prev_item, prev_col))
+			if it in left_items:
+				errs.append("SL {0} ({1}): {2} turns up again after other item types".format(row["sl"], row["unique_id"], it))
+			prev_col, prev_band = None, -1
+		if co != prev_col:
+			if prev_col is not None:
+				left_cols.add((it, prev_col))
+			if (it, co) in left_cols:
+				errs.append("SL {0} ({1}): {2} {3} turns up again after other colours".format(row["sl"], row["unique_id"], it, co or "(no colour)"))
+			prev_band = -1
+		if band < prev_band:
+			errs.append("SL {0} ({1}): below-1g piece after an above-1g piece in {2} {3}".format(row["sl"], row["unique_id"], it, co or "(no colour)"))
+		prev_item, prev_col, prev_band = it, co, band
+	if errs:
+		frappe.throw(frappe._("The file is not in the agreed physical order (item type → colour → below-1g first, 1 g on NT). Fix the export and re-import:<br><br>{0}").format(
+			"<br>".join(errs[:8]) + ("<br>…" if len(errs) > 8 else "")))
+
 
 
 @frappe.whitelist()
@@ -8667,19 +8648,15 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				return i
 		return 0 if brackets else None
 
-	# one item type at a time, sorted by COLOR (metal colour) within the type,
-	# then below-1g pieces before gram-priced ones, then by shape
+	# the imported order IS the physical order (validated at import) — rows are
+	# written as-is with their own SL#, never re-sorted or re-numbered
 	def band_of(p):
 		return p.get("wt_band") or ("below" if flt(p.get("nt")) < 1.0 else "above")
-
-	priced = sorted(priced, key=lambda p: ((p.get("item") or ""), (p.get("item_color") or ""),
-		0 if band_of(p) == "below" else 1, (p.get("colour") or ""), cint(p.get("sl"))))
 	SUMCOLS = [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]
 	used_groups = set()
 	r0 = 5
 	r = r0
 	gross_terms = []  # per item block: the cells (or row range) TOTAL GROSS adds up
-	sl = 0
 
 	small_bold = Font(bold=True, size=10)  # colour totals sit under the item TOTAL
 	band_bold = Font(bold=True, size=9)   # weight-band totals sit under the colour
@@ -8695,9 +8672,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		return r - 1
 
 	def write_piece(p):
-		nonlocal r, sl
-		sl += 1
-		ws.cell(row=r, column=1, value=sl)
+		nonlocal r
+		ws.cell(row=r, column=1, value=cint(p.get("sl")) or None)
 		ws.cell(row=r, column=2, value=p.get("item"))
 		ws.cell(row=r, column=3, value=p.get("size") or None)
 		ws.cell(row=r, column=4, value=p.get("style") or None)

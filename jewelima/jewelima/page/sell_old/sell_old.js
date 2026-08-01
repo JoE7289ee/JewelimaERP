@@ -1,12 +1,12 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Sell Old — price the OLD software's export with OUR price charts.
+// Sell Old — price the OLD software's BILLING export with OUR price charts.
 // Upload the BILLING xlsx (flat sheet, per-row quality/colour; NT derived as
-// GS − 0.2 g/ct × stone ct) or the older Sales_Quotation xlsx -> pick chart /
-// gold rate / ONE diamond quality / GST -> preview every piece priced exactly
-// like the Sell board -> download the JOS billing workbook (quotation inputs
-// can also refill their own workbook). Nothing stored, no stock moved.
+// GS − 0.2 g/ct × stone ct; rows MUST already be in physical order: item type
+// -> colour -> below-1g first — the import rejects anything else and SL# is
+// kept verbatim) -> pick chart / gold rate / quality / GST -> preview ->
+// download the JOS billing workbook. Nothing stored, no stock moved.
 // Route: /app/sell-old
 
 frappe.pages["sell-old"].on_page_load = function (wrapper) {
@@ -57,11 +57,10 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			<div class="so-huid"></div>
 			<div class="so-cert"></div>
 			<button class="so-price">${__("Price it")}</button>
-			<button class="so-dl">${__("Download priced excel ⤓")}</button>
 			<button class="so-dl so-jos" style="background:#9a6b1f;">${__("JOS Billing ⤓")}</button>
 		</div>
 		<div class="so-cover"></div>
-		<div class="so-body"><div class="so-none">${__("Upload the old software's BILLING excel to begin (the older Sales_Quotation format also works).")}</div></div>
+		<div class="so-body"><div class="so-none">${__("Upload the old software's BILLING excel to begin — rows must already be in the physical order (item type → colour → below-1g first).")}</div></div>
 	`);
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
@@ -193,7 +192,6 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			if (!PRICED) return;
 			paint(PRICED.rows, PRICED.totals);
 			root.find(".so-dl").show();
-			if (((PARSED || {}).cover || {}).format === "billing") root.find(".so-dl").not(".so-jos").hide();
 			const flagged = PRICED.rows.filter((x) => (x.flags || []).length).length;
 			if (flagged) frappe.show_alert({ message: __("{0} row(s) carry notes — check the yellow lines.", [flagged]), indicator: "orange" }, 5);
 		});
@@ -238,11 +236,4 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		d.show();
 	});
 
-	root.find(".so-dl").not(".so-jos").on("click", () => {
-		if (!PRICED || !FILE) return;
-		open_url_post("/api/method/jewelima.jewelima.api.export_old_sale_xlsx", {
-			filedata: FILE.b64, priced: JSON.stringify(PRICED.rows),
-			totals: JSON.stringify(PRICED.totals), filename: FILE.name,
-		});
-	});
 };
