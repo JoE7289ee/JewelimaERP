@@ -8141,7 +8141,10 @@ def get_sale_record(sale):
 # ONE user-picked quality; STN = the CS bracket table; PS stays manual.
 # ---------------------------------------------------------------------------
 def _old_sale_rows(filedata):
-	"""Parse the 'Design' sheet by HEADERS (newline-tolerant) -> row dicts."""
+	"""Parse the old software's export -> row dicts. Two layouts, auto-detected:
+	QUOTATION (a 'Design' sheet, carries NT WT) and BILLING (one flat sheet with
+	per-row DIAMOND QUALITY / COLOUR / SIZE / SHAPE / BACK CHAIN / SHOP NAME,
+	but NO net weight — derived as GS − 0.2 g/ct × total stone ct)."""
 	import base64
 	from io import BytesIO
 
@@ -8149,8 +8152,75 @@ def _old_sale_rows(filedata):
 
 	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
 	wb = load_workbook(BytesIO(raw), data_only=True)
-	if "Design" not in wb.sheetnames:
-		frappe.throw(frappe._("No 'Design' sheet — is this the old software's quotation excel?"))
+	if "Design" in wb.sheetnames:
+		return _old_sale_rows_quotation(wb)
+	return _old_sale_rows_billing(wb)
+
+
+def _old_sale_rows_billing(wb):
+	ws = wb.active
+	head = {}
+	for j, c in enumerate(ws[1], start=1):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			head[key] = j
+
+	def col(*names):
+		for n in names:
+			if n in head:
+				return head[n]
+		return None
+
+	if not col("UNIQUE ID") or not col("GS WT (GM)", "GS WT(GM)", "GS WT"):
+		frappe.throw(frappe._("Unrecognised layout — expected the old software's BILLING export (or a quotation with a 'Design' sheet)."))
+	C = {
+		"sl": col("SL#"), "uid": col("UNIQUE ID"), "huid": col("HUID"),
+		"item": col("ITEM"), "quality_token": col("DIAMOND QUALITY"),
+		"gs": col("GS WT (GM)", "GS WT(GM)", "GS WT"),
+		"ps_pcs": col("PS PCS"), "ps_ct": col("PS (CT)", "PS(CT)", "PS"),
+		"dmd_pcs": col("DMD PCS"), "dmd_ct": col("DMD (CT)", "DMD(CT)", "DMD"),
+		"stn_pcs": col("STN PCS"), "stn_ct": col("STN (CT)", "STN(CT)", "STN"),
+		"item_color": col("COLOUR", "COLOR", "ITEM COLOR"),
+		"size": col("SIZE"), "style": col("GENTS/LADIES"),
+		"shape": col("SHAPE"), "bc_wt": col("BACK CHAIN WT"),
+		"shop": col("SHOP NAME"),
+	}
+	rows, shop, tokens = [], "", set()
+	for r in ws.iter_rows(min_row=2, values_only=True):
+		uid = r[C["uid"] - 1] if C["uid"] else None
+		if uid is None or not str(uid).strip():
+			continue
+		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
+		gs = flt(g("gs"))
+		stones = flt(g("ps_ct")) + flt(g("dmd_ct")) + flt(g("stn_ct"))
+		tok = str(g("quality_token") or "").strip().upper()
+		if tok:
+			tokens.add(tok)
+		if not shop:
+			shop = str(g("shop") or "").strip()
+		rows.append({
+			"sl": cint(g("sl")), "unique_id": str(uid).strip(), "huid": str(g("huid") or ""),
+			"item": str(g("item") or "").strip().upper(), "design": "",
+			"gs": gs, "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
+			"dmd_pcs": cint(g("dmd_pcs")), "clarity": tok,
+			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
+			"nt": round(gs - 0.2 * stones, 3), "pure": 0,
+			"quality_token": tok,
+			"item_color": str(g("item_color") or "").strip().upper(),
+			"colour": str(g("shape") or "").strip().upper(),
+			"size": str(g("size") or "").strip(), "style": str(g("style") or "").strip(),
+			"back_chain_wt": flt(g("bc_wt")),
+		})
+	cover = {"format": "billing", "party": shop}
+	if len(tokens) == 1:
+		cover["quality_hint"] = DESIGN_TOKEN_STONE_FAMILY.get(next(iter(tokens)), "")
+	elif tokens:
+		cover["quality_tokens"] = sorted(tokens)
+	return rows, cover
+
+
+def _old_sale_rows_quotation(wb):
+	"""The 'Design' sheet by HEADERS (newline-tolerant) -> row dicts."""
 	ws = wb["Design"]
 	head = {}
 	for j, c in enumerate(ws[1], start=1):
@@ -8190,7 +8260,7 @@ def _old_sale_rows(filedata):
 			"nt": flt(g("nt")), "pure": flt(g("pure")),
 			"colour": str(g("colour") or ""), "item_color": str(g("item_color") or ""),
 		})
-	cover = {}
+	cover = {"format": "quotation"}
 	if "SALES QUOTATION" in wb.sheetnames:
 		cv = wb["SALES QUOTATION"]
 		for row in cv.iter_rows(min_row=1, max_row=14):
@@ -8234,6 +8304,9 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	for r in rows:
 		flags = []
 		notes = {}
+		tok = str(r.get("quality_token") or "").strip().upper()
+		if tok and quality and tok not in (quality or "").upper():
+			flags.append("row says {0} but priced at {1}".format(tok, quality))
 		gold_va = round(flt(r.get("nt")) * gold_rate, 2)
 		notes["gold"] = "{0} g NT x {1}/g = {2}".format(flt(r.get("nt")), gold_rate, _inr(gold_va))
 		if not gold_rate:
@@ -8557,8 +8630,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				return i
 		return 0 if brackets else None
 
-	# one item type at a time, sorted by colour within the type
-	priced = sorted(priced, key=lambda p: ((p.get("item") or ""), (p.get("colour") or ""), cint(p.get("sl"))))
+	# one item type at a time, sorted by COLOR (metal colour) within the type,
+	# then by shape — the two colour-ish columns of the house sheet (G, then E)
+	priced = sorted(priced, key=lambda p: ((p.get("item") or ""), (p.get("item_color") or ""),
+		(p.get("colour") or ""), cint(p.get("sl"))))
 	SUMCOLS = [6, 8, 9, 10, 14] + [c for g in GRP for c in g] + [33, 34, 35, 40, 41]
 	used_groups = set()
 	r0 = 5
@@ -8583,14 +8658,19 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		sl += 1
 		ws.cell(row=r, column=1, value=sl)
 		ws.cell(row=r, column=2, value=p.get("item"))
+		ws.cell(row=r, column=3, value=p.get("size") or None)
+		ws.cell(row=r, column=4, value=p.get("style") or None)
 		ws.cell(row=r, column=5, value=p.get("colour") or None)
 		ws.cell(row=r, column=6, value=1)
 		ws.cell(row=r, column=7, value=p.get("item_color") or item_colour or None)
 		gross, nt = flt(p.get("gs")), flt(p.get("nt"))
+		bc = flt(p.get("back_chain_wt"))
 		ws.cell(row=r, column=8, value=gross)
 		ws.cell(row=r, column=9, value=nt)
 		ws.cell(row=r, column=10, value="=I{0}*N$3".format(r))
-		ws.cell(row=r, column=11, value=gross)
+		ws.cell(row=r, column=11, value=round(gross - bc, 3) if bc else gross)
+		if bc:
+			ws.cell(row=r, column=13, value=bc)
 		ws.cell(row=r, column=14, value=flt(p.get("mc")))
 		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
 		if ct > 0 and brackets:

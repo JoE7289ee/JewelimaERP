@@ -1,11 +1,12 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Sell Old — price the OLD software's quotation excel with OUR price charts.
-// Upload the Sales_Quotation xlsx -> pick chart / gold rate / ONE diamond
-// quality (imports are single-quality) / GST -> preview every piece priced
-// exactly like the Sell board -> download the SAME workbook with the pricing
-// columns and cover totals filled. Nothing stored, no stock moved.
+// Sell Old — price the OLD software's export with OUR price charts.
+// Upload the BILLING xlsx (flat sheet, per-row quality/colour; NT derived as
+// GS − 0.2 g/ct × stone ct) or the older Sales_Quotation xlsx -> pick chart /
+// gold rate / ONE diamond quality / GST -> preview every piece priced exactly
+// like the Sell board -> download the JOS billing workbook (quotation inputs
+// can also refill their own workbook). Nothing stored, no stock moved.
 // Route: /app/sell-old
 
 frappe.pages["sell-old"].on_page_load = function (wrapper) {
@@ -46,7 +47,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		.so-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		</style>
 		<div class="so-bar">
-			<label class="so-file">${__("📄 Pick the old quotation .xlsx")}</label>
+			<label class="so-file">${__("📄 Pick the old BILLING .xlsx")}</label>
 			<input type="file" class="so-input" accept=".xlsx" style="display:none;">
 			<div class="so-chart"></div>
 			<div class="so-rate"></div>
@@ -59,7 +60,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			<button class="so-dl so-jos" style="background:#9a6b1f;">${__("JOS Billing ⤓")}</button>
 		</div>
 		<div class="so-cover"></div>
-		<div class="so-body"><div class="so-none">${__("Upload the old software's Sales_Quotation excel to begin.")}</div></div>
+		<div class="so-body"><div class="so-none">${__("Upload the old software's BILLING excel to begin (the older Sales_Quotation format also works).")}</div></div>
 	`);
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
@@ -81,7 +82,15 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			fQual.df.options = [""].concat(quals).join("\n");
 			fQual.refresh();
 			if (quals.length === 1) fQual.set_value(quals[0]);
+			applyQualityHint(quals);
 		});
+	}
+
+	// the BILLING export names the quality on every row — prefill when uniform
+	function applyQualityHint(quals) {
+		const hint = PARSED && PARSED.cover && PARSED.cover.quality_hint;
+		if (hint && !fQual.get_value() && (quals || (fQual.df.options || "").split("\n")).includes(hint))
+			fQual.set_value(hint);
 	}
 
 	root.find(".so-file").on("click", () => root.find(".so-input").get(0).click());
@@ -96,6 +105,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				PARSED = r.message || {};
 				PRICED = null;
 				root.find(".so-dl").hide();
+				applyQualityHint(null);
 				certSel.clear();
 				(PARSED.rows || []).forEach((x) => certSel.add(x.unique_id));
 				const cv = PARSED.cover || {};
@@ -113,7 +123,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			<table class="so-t"><thead><tr>
 				<th title="${__("cert applies")}"><input type="checkbox" class="so-call" checked></th>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}</th><th>${__("Item")}</th><th>${__("Design")}</th>
-				<th title="${__("goes to the JOS sheet's Colour column — rows sort by it within each item type")}">${__("Color")}</th>
+				<th title="${__("metal colour — goes to the JOS sheet's ITEM COLOR column, rows sort by it within each item type")}">${__("Color")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD ct/pcs")}</th><th class="num">${__("STN ct")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
 				<th class="num">${__("DMD (rate·bracket)")}</th><th class="num">${__("STN")}</th>
@@ -124,7 +134,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				<td><input type="checkbox" class="so-cb" data-uid="${esc(r.unique_id)}" ${certSel.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.huid)}</td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
-				<td><input class="so-colr" data-uid="${esc(r.unique_id)}" value="${esc(r.colour || "")}"
+				<td><input class="so-colr" data-uid="${esc(r.unique_id)}" value="${esc(r.item_color || "")}"
 					style="width:70px;border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-size:11.5px;text-transform:uppercase;"></td>
 				<td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_ct || ""}${r.dmd_pcs ? " / " + r.dmd_pcs : ""}</td>
@@ -153,7 +163,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 		const v = (this.value || "").toUpperCase().trim();
 		this.value = v;
 		[(PARSED && PARSED.rows) || [], (PRICED && PRICED.rows) || []].forEach((set) =>
-			set.forEach((x) => { if (x.unique_id === uid) x.colour = v; }));
+			set.forEach((x) => { if (x.unique_id === uid) x.item_color = v; }));
 	});
 
 	root.on("change", ".so-cb", function () {
@@ -181,6 +191,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			if (!PRICED) return;
 			paint(PRICED.rows, PRICED.totals);
 			root.find(".so-dl").show();
+			if (((PARSED || {}).cover || {}).format === "billing") root.find(".so-dl").not(".so-jos").hide();
 			const flagged = PRICED.rows.filter((x) => (x.flags || []).length).length;
 			if (flagged) frappe.show_alert({ message: __("{0} row(s) carry notes — check the yellow lines.", [flagged]), indicator: "orange" }, 5);
 		});
@@ -193,7 +204,9 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 			title: __("JOS Billing export"),
 			fields: [
 				{ fieldname: "karat", fieldtype: "Data", label: __("Metal purity label"), default: "18 KT", reqd: 1 },
-				{ fieldname: "item_colour", fieldtype: "Data", label: __("Item colour (whole lot)"), default: "YELLOW" },
+				{ fieldname: "item_colour", fieldtype: "Data", label: __("Item colour (rows without one)"), default: "YELLOW" },
+				{ fieldname: "party", fieldtype: "Data", label: __("Shop / party"),
+					default: (PARSED && PARSED.cover && PARSED.cover.party) || "" },
 				{ fieldname: "igi_flat", fieldtype: "Float", label: __("IGI flat ₹ (up to threshold)"), default: 80 },
 				{ fieldname: "igi_per_ct", fieldtype: "Float", label: __("IGI ₹/ct (above threshold)"), default: 325 },
 				{ fieldname: "igi_threshold", fieldtype: "Float", label: __("IGI threshold (ct)"), default: 0.10 },
@@ -208,7 +221,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 					gst_percent: fGst.get_value() || 0,
 					igi_flat: v.igi_flat, igi_per_ct: v.igi_per_ct, igi_threshold: v.igi_threshold,
 					huid_rate: fHuid.get_value() || 0,
-					party: (PARSED && PARSED.cover && PARSED.cover.party) || "",
+					party: v.party || "",
 					filename: FILE.name,
 				});
 			},
