@@ -8824,8 +8824,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 
 	buf = BytesIO()
 	wb.save(buf)
-	base = (filename or "old-sale").rsplit(".", 1)[0]
-	frappe.local.response.filename = "JOS BILLING {0}.xlsx".format(base)
+	# the dialog sends the FULL name the user wants; older callers send the
+	# uploaded file's name and get the JOS BILLING prefix as before
+	fname = (filename or "").strip() or "JOS BILLING old-sale.xlsx"
+	if not fname.lower().endswith(".xlsx"):
+		fname += ".xlsx"
+	frappe.local.response.filename = fname
 	frappe.local.response.filecontent = buf.getvalue()
 	frappe.local.response.type = "download"
 

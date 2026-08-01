@@ -210,6 +210,8 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 				{ fieldname: "item_colour", fieldtype: "Data", label: __("Item colour (rows without one)"), default: "YELLOW" },
 				{ fieldname: "party", fieldtype: "Data", label: __("Shop / party"),
 					default: (PARSED && PARSED.cover && PARSED.cover.party) || "" },
+				{ fieldname: "fname", fieldtype: "Data", label: __("File name"), reqd: 1,
+					default: "JOS BILLING " + (FILE.name || "old-sale").replace(/\.xlsx$/i, "") },
 			].concat(hasSlab ? [
 				{ fieldname: "slab_note", fieldtype: "HTML",
 					options: "<div class='text-muted' style='font-size:12px;'>" + __("IGI comes from the price chart's certification slab (single-stone pieces take the Solitaire tiers).") + "</div>" },
@@ -229,7 +231,7 @@ frappe.pages["sell-old"].on_page_load = function (wrapper) {
 					igi_flat: v.igi_flat || 80, igi_per_ct: v.igi_per_ct || 325, igi_threshold: v.igi_threshold || 0.10,
 					huid_rate: fHuid.get_value() || 0,
 					party: v.party || "",
-					filename: FILE.name,
+					filename: v.fname,
 				});
 			},
 		});
