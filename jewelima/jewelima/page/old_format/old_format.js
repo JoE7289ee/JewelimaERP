@@ -4,9 +4,10 @@
 // OLD FORMAT — the legacy quotation excel taken to the very END, in TWO
 // states so the screen only carries what the step needs:
 //
-//   PREP   — enrich the pieces: tick rows -> bulk-apply COLOR / CERT lab,
-//            fine-tune per row, then Sort & Number (item -> colour ->
-//            below-1g) to stamp the SL the team marks physically.
+//   PREP   — enrich the pieces: tick rows -> bulk-apply COLOR / CERT lab /
+//            HUID PENDING, fine-tune per row, then Sort & Number (item ->
+//            colour -> below-1g -> GW) to stamp the SL the team marks
+//            physically; the GW order is how a piece is found from the sheet.
 //   EXPORT — pricing only: chart / rates / Price it / JOS billing download
 //            (rows are locked here; go back to prep to change anything).
 //
@@ -75,6 +76,13 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		.of-tile.grand{border-width:2px;background:var(--fg-color);}
 		.of-tile.grand .v{color:#1f618d;}
 		.of-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		.of-info{display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;margin-bottom:10px;}
+		.of-info .of-tile .v{font-size:15px;}
+		.of-info .sub{font-size:10.5px;color:var(--text-muted);}
+		table.of-mx{border-collapse:collapse;font-size:11px;}
+		table.of-mx th, table.of-mx td{border:1px solid var(--border-color);padding:2px 8px;text-align:right;}
+		table.of-mx th{background:var(--control-bg);font-size:9.5px;text-transform:uppercase;color:var(--text-muted);}
+		table.of-mx td:first-child, table.of-mx th:first-child{text-align:left;}
 		</style>
 		<div class="of-bar of-bar-prep">
 			<label class="of-file">${__("📄 Pick the OLD quotation .xlsx")}</label>
@@ -95,7 +103,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<span class="lbl">${__("Cert lab")}</span>
 			<input class="of-bcert" list="of-labs" placeholder="IGI">
 			<button class="bapply of-bcert-sel">${__("→ selected")}</button>
-			<button class="bapply alt of-bcert-num">${__("Auto-number certs")}</button>
+			<span class="sep"></span>
+			<button class="bapply alt of-bhuid-pend">${__("HUID PENDING → selected")}</button>
 			<span class="of-status"></span>
 		</div>
 		<div class="of-bar of-bar-export" style="display:none;">
@@ -111,6 +120,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
 		</div>
 		<div class="of-cover"></div>
+		<div class="of-info"></div>
 		<div class="of-body"><div class="of-none">${__("Upload the OLD quotation excel. PREP: bulk-fill COLOR, tag certifications, Sort & Number. EXPORT: price it and download the JOS billing.")}</div></div>
 		<datalist id="of-colors"><option>YELLOW</option><option>ROSE</option><option>WHITE</option></datalist>
 		<datalist id="of-labs"><option>IGI</option><option>SGL</option><option>DHC</option><option>GIA</option></datalist>
@@ -163,15 +173,49 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		root.find(".of-jos").hide();
 	}
 
+	// a HUID cell bills its 6-char codes; PENDING = hallmarked, code not typed
+	const huidCount = (h) => (String(h || "").toUpperCase().match(/[A-Z0-9]+/g) || [])
+		.filter((t) => t.length === 6 || t === "PENDING").length;
+
 	function refreshStatus() {
 		const noCol = ROWS.filter((r) => !r.colour).length;
-		const half = ROWS.filter((r) => (r.cert && !r.cert_no) || (!r.cert && r.cert_no)).length;
 		const certs = ROWS.filter((r) => r.cert).length;
 		root.find(".of-selcount").text(__("{0} selected", [SEL.size]));
 		root.find(".of-status").html(
 			(noCol ? "<b>" + __("{0} uncoloured", [noCol]) + "</b> · " : __("all coloured") + " · ")
-			+ __("{0} cert-tagged", [certs]) + (half ? " · <b>" + __("{0} incomplete", [half]) + "</b>" : "")
+			+ __("{0} cert-tagged", [certs])
 			+ " · " + (SORTED ? __("numbered ✓") : __("not numbered")));
+	}
+
+	function paintInfo() {
+		if (!ROWS.length) return root.find(".of-info").empty();
+		const gw = ROWS.reduce((a, r) => a + flt(r.gs), 0);
+		const huids = ROWS.reduce((a, r) => a + huidCount(r.huid), 0);
+		const labs = {};
+		ROWS.forEach((r) => { if (r.cert) labs[r.cert] = (labs[r.cert] || 0) + 1; });
+		const certed = Object.values(labs).reduce((a, b) => a + b, 0);
+		// item type x colour matrix
+		const colours = [...new Set(ROWS.map((r) => r.colour || "—"))].sort();
+		const items = [...new Set(ROWS.map((r) => r.item || "—"))].sort();
+		const cell = {};
+		ROWS.forEach((r) => {
+			const k = (r.item || "—") + "|" + (r.colour || "—");
+			cell[k] = (cell[k] || 0) + 1;
+		});
+		const mx = `<table class="of-mx"><thead><tr><th>${__("Item")}</th>
+			${colours.map((c) => `<th>${esc(c)}</th>`).join("")}<th>${__("Total")}</th></tr></thead><tbody>
+			${items.map((it) => `<tr><td><b>${esc(it)}</b></td>
+				${colours.map((c) => `<td>${cell[it + "|" + c] || ""}</td>`).join("")}
+				<td><b>${ROWS.filter((r) => (r.item || "—") === it).length}</b></td></tr>`).join("")}
+			</tbody></table>`;
+		root.find(".of-info").html(`
+			<div class="of-tile"><div class="k">${__("Total GW")}</div><div class="v">${gw.toFixed(3)} g</div>
+				<div class="sub">${ROWS.length} ${__("pieces")}</div></div>
+			<div class="of-tile"><div class="k">${__("HUIDs")}</div><div class="v">${huids}</div>
+				<div class="sub">${__("incl. PENDING")}</div></div>
+			<div class="of-tile"><div class="k">${__("Certified")}</div><div class="v">${certed}</div>
+				<div class="sub">${Object.keys(labs).sort().map((l) => esc(l) + " × " + labs[l]).join(" · ") || __("none")}</div></div>
+			<div class="of-tile" style="padding:6px 10px;">${mx}</div>`);
 	}
 
 	root.find(".of-file").on("click", () => root.find(".of-input").get(0).click());
@@ -202,6 +246,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	function paint() {
 		if (!ROWS.length) return;
 		if (STATE === "prep") paintPrep(); else paintExport();
+		paintInfo();
 		refreshStatus();
 	}
 
@@ -213,11 +258,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
-				<th>${__("Cert")}</th><th title="${__("marked on the product physically — printed in the JOS export")}">${__("Cert No")}</th>
+				<th>${__("Cert")}</th>
 			</tr></thead><tbody>
 			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
-				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.huid)}</td>
+				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td>
+				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;" placeholder="${__("or PENDING")}"></td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
@@ -228,7 +274,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					<option ${r.style === "LADIES" ? "selected" : ""}>LADIES</option></select></td>
 				<td><input data-f="shape" value="${esc(r.shape)}" style="width:64px;"></td>
 				<td><input data-f="cert" list="of-labs" value="${esc(r.cert)}" style="width:56px;"></td>
-				<td><input data-f="cert_no" value="${esc(r.cert_no)}" style="width:56px;"></td>
 			</tr>`).join("")}</tbody></table>`);
 	}
 
@@ -240,7 +285,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<table class="of-t"><thead><tr>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("COLOR")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
-				<th>${__("HUID")}</th><th>${__("Cert")}</th><th>${__("Cert No")}</th>
+				<th>${__("HUID")}</th><th>${__("Cert")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
 				<th class="num">${__("DMD")}</th><th class="num">${__("Cert/HUID")}</th>
 				<th class="num">${__("TOTAL")}</th><th>${__("Notes")}</th>` : ""}
@@ -251,7 +296,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				return `<tr class="${fl ? "of-flagged" : ""}">
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
 				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
-				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td><td>${esc(r.cert_no)}</td>
+				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td>
 				${priced ? `<td class="num" title="${esc((p.notes || {}).gold || "")}">₹ ${money(p.gold_va)}</td>
 				<td class="num" title="${esc((p.notes || {}).mc || "")}">₹ ${money(p.mc)}</td>
 				<td class="num" title="${esc((p.notes || {}).dmd || "")}">₹ ${money(p.dmd_va)}${p.dmd_rt ? `<div class="of-flag">${p.stone_ct}/st @ ${esc(p.dmd_bracket)}</div>` : ""}</td>
@@ -289,7 +334,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		const i = cint($(this).closest("tr").data("i"));
 		const f = $(this).data("f");
 		let v = ($(this).val() || "").trim();
-		if (f !== "size" && f !== "cert_no") v = v.toUpperCase();
+		if (f !== "size") v = v.toUpperCase();
 		if (this.tagName === "INPUT") this.value = v;
 		ROWS[i][f] = v;
 		invalidate();
@@ -324,13 +369,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("{0} row(s) tagged {1} — selection cleared, tick the next batch.", [n, v]), indicator: "green" }, 4);
 	});
 
-	root.on("click", ".of-bcert-num", () => {
-		let next = 1 + Math.max(0, ...ROWS.map((r) => cint(r.cert_no) || 0));
+	// hallmarked but the code wasn't typed — bills exactly like a code
+	root.on("click", ".of-bhuid-pend", () => {
+		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
 		let n = 0;
-		ROWS.forEach((r) => { if (r.cert && !r.cert_no) { r.cert_no = String(next++); n++; } });
+		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && !r.huid) { r.huid = "PENDING"; n++; } });
 		if (n) invalidate();
+		SEL.clear();
 		paint();
-		frappe.show_alert({ message: n ? __("{0} cert(s) numbered.", [n]) : __("Nothing to number — set a Cert lab first."), indicator: n ? "green" : "orange" }, 3);
+		frappe.show_alert({ message: __("{0} row(s) set PENDING (rows that already had a HUID were left alone).", [n]), indicator: "green" }, 4);
 	});
 
 	// the agreed physical order: item type -> colour -> below-1g first
@@ -340,19 +387,17 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		ROWS.sort((a, b) => (a.item || "").localeCompare(b.item || "")
 			|| (a.colour || "").localeCompare(b.colour || "")
 			|| ((flt(a.nt) < 1 ? 0 : 1) - (flt(b.nt) < 1 ? 0 : 1))
-			|| (cint(a.sl) - cint(b.sl)));
+			|| (flt(a.gs) - flt(b.gs)));
 		ROWS.forEach((r, i) => { r.sl = i + 1; });
 		SORTED = true;
 		PRICED = null;
 		paint();
-		frappe.show_alert({ message: __("Sorted and numbered 1–{0} — mark the pieces physically by #.", [ROWS.length]), indicator: "green" }, 5);
+		frappe.show_alert({ message: __("Sorted by GW inside item → colour → band, numbered 1–{0}.", [ROWS.length]), indicator: "green" }, 5);
 	});
 
 	function readyCheck() {
 		const missing = ROWS.filter((r) => !r.colour).length;
 		if (missing) { frappe.show_alert({ message: __("{0} row(s) still have no COLOR.", [missing]), indicator: "orange" }, 4); return false; }
-		const half = ROWS.filter((r) => (r.cert && !r.cert_no) || (!r.cert && r.cert_no)).length;
-		if (half) { frappe.show_alert({ message: __("{0} row(s) have a Cert lab without a number (or the other way).", [half]), indicator: "orange" }, 4); return false; }
 		if (!SORTED) { frappe.show_alert({ message: __("Run Sort & Number first — the numbers go on the pieces."), indicator: "orange" }, 4); return false; }
 		return true;
 	}

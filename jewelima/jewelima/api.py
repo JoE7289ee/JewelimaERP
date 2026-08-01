@@ -8749,10 +8749,11 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			keys.append("g1rate")
 		keys.append("g{0}v".format(gi))
 	keys += ["tp", "tc", "tv", "total", "igi", "huid"]
-	# the physically-marked certification reference — only when the lot has it
-	has_cert = any((p.get("cert") or p.get("cert_no")) for p in priced)
-	if has_cert:
-		keys += ["certlab", "certno"]
+	# certification columns only when the lot actually carries them
+	if any(p.get("cert") for p in priced):
+		keys.append("certlab")
+	if any(p.get("cert_no") for p in priced):
+		keys.append("certno")
 	keys += ["uid"]
 	C = {k: i + 1 for i, k in enumerate(keys)}
 	NCOLS = len(keys)
@@ -8864,6 +8865,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=C["huid"], value=flt(p.get("huid_va")) or 0)
 		if "certlab" in C:
 			ws.cell(row=r, column=C["certlab"], value=p.get("cert") or None)
+		if "certno" in C:
 			ws.cell(row=r, column=C["certno"], value=cint(p.get("cert_no")) or (p.get("cert_no") or None))
 		ws.cell(row=r, column=C["uid"], value=p.get("unique_id"))
 		r += 1
