@@ -98,12 +98,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="bapply alt of-selclear" style="background:#8a2f2f;">${__("Clear")}</button>
 			<span class="sep"></span>
 			<span class="lbl">${__("Color")}</span>
-			<input class="of-bcolor" list="of-colors" placeholder="YELLOW">
+			<input class="of-bcolor" list="of-colors">
 			<button class="bapply of-bcolor-sel">${__("→ selected")}</button>
 			<button class="bapply alt of-bcolor-empty">${__("→ all empty")}</button>
 			<span class="sep"></span>
 			<span class="lbl">${__("Cert lab")}</span>
-			<input class="of-bcert" list="of-labs" placeholder="IGI">
+			<input class="of-bcert" list="of-labs">
 			<button class="bapply of-bcert-sel">${__("→ selected")}</button>
 			<span class="sep"></span>
 			<button class="bapply alt of-bhuid-pend">${__("HUID PENDING → selected")}</button>
