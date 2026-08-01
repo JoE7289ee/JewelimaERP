@@ -8641,13 +8641,15 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	sub_rows = []  # the per-item TOTAL rows — TOTAL GROSS sums exactly these
 	sl = 0
 
-	def sum_row(label, formula):
+	small_bold = Font(bold=True, size=10)  # colour totals sit under the item TOTAL
+
+	def sum_row(label, formula, font=bold):
 		"""one bold total line; `formula` maps a column letter -> its formula"""
 		nonlocal r
 		for col in SUMCOLS:
 			L = get_column_letter(col)
-			ws.cell(row=r, column=col, value=formula(L)).font = bold
-		ws.cell(row=r, column=2, value=label).font = bold
+			ws.cell(row=r, column=col, value=formula(L)).font = font
+		ws.cell(row=r, column=2, value=label).font = font
 		r += 1
 		return r - 1
 
@@ -8702,7 +8704,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				write_piece(p)
 			if len(cgroups) > 1:
 				ctot.append(sum_row("{0} TOTAL".format(colr or "—"),
-					lambda L, a=start, b=r - 1: "=SUM({0}{1}:{0}{2})".format(L, a, b)))
+					lambda L, a=start, b=r - 1: "=SUM({0}{1}:{0}{2})".format(L, a, b),
+					font=small_bold))
 		if ctot:
 			sub_rows.append(sum_row("{0} TOTAL".format(item),
 				lambda L, rs=tuple(ctot): "={0}".format("+".join("{0}{1}".format(L, x) for x in rs))))
