@@ -8165,6 +8165,120 @@ def _old_sale_rows(filedata):
 	return _old_sale_rows_billing(wb)
 
 
+@frappe.whitelist()
+def parse_old_format_excel(filedata):
+	"""OLD FORMAT page: read the old software's QUOTATION excel (the 'Design'
+	sheet) so the user can enrich it — colour, size, style, shape, cert lab +
+	cert no — and download it as the NEW billing-format template."""
+	import base64
+	from io import BytesIO
+
+	from openpyxl import load_workbook
+
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	wb = load_workbook(BytesIO(raw), data_only=True)
+	if "Design" not in wb.sheetnames:
+		frappe.throw(frappe._("No 'Design' sheet — this page takes the OLD quotation export. (The BILLING export goes straight to Sell Old.)"))
+	ws = wb["Design"]
+	head = {}
+	for j, c in enumerate(ws[1], start=1):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			head.setdefault(key, j)
+
+	def col(*names):
+		for n in names:
+			if n in head:
+				return head[n]
+		return None
+
+	C = {
+		"sl": col("SL#"), "uid": col("UNIQUE ID"), "huid": col("HUID"),
+		"item": col("ITEM"), "design": col("DESIGN"),
+		"gs": col("GS WT (GM)", "GS WT(GM)", "GS WT"),
+		"ps_pcs": col("PS PCS"), "ps_ct": col("PS (CT)", "PS(CT)", "PS"),
+		"dmd_pcs": col("DMD PCS"), "clarity": col("DMD CLARITY"),
+		"dmd_ct": col("DMD (CT)", "DMD(CT)", "DMD"),
+		"stn_pcs": col("STN PCS"), "stn_ct": col("STN (CT)", "STN(CT)", "STN"),
+		"nt": col("NT WT (GM)", "NT WT(GM)", "NT WT"),
+	}
+	rows = []
+	for r in ws.iter_rows(min_row=2, values_only=True):
+		uid = r[C["uid"] - 1] if C["uid"] else None
+		if not uid:
+			continue
+		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
+		rows.append({
+			"sl": cint(g("sl")), "unique_id": str(uid), "huid": str(g("huid") or ""),
+			"item": str(g("item") or "").strip().upper(), "design": str(g("design") or ""),
+			"gs": flt(g("gs")), "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
+			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
+			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
+			"nt": flt(g("nt")),
+			"colour": "", "size": "", "style": "", "shape": "", "cert": "", "cert_no": "",
+		})
+	cover = {}
+	if "SALES QUOTATION" in wb.sheetnames:
+		cv = wb["SALES QUOTATION"]
+		for row in cv.iter_rows(min_row=1, max_row=14):
+			vals = [str(c.value or "").strip() for c in row]
+			joined = " ".join(vals)
+			if joined.startswith("Invoice No."):
+				cover["invoice_no"] = next((v for v in vals[5:] if v and v != ":"), "")
+			if joined.startswith("Name") and "party" not in cover:
+				cover["party"] = next((v for v in vals[5:] if v and v != ":"), "")
+	return {"rows": rows, "cover": cover, "count": len(rows)}
+
+
+@frappe.whitelist()
+def export_old_format_billing(rows, quality_token="EF", party="", filename=None):
+	"""OLD FORMAT page: write the enriched rows as the NEW billing-format
+	template — sorted into the agreed physical order (item type -> colour ->
+	below-1g first) and RENUMBERED 1..N, so Sell Old accepts it as-is. The
+	CERT / CERT NO columns ride along into the JOS export; the team marks
+	the number on the product physically."""
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	rows = sorted(rows, key=lambda p: ((p.get("item") or ""), (p.get("colour") or ""),
+		0 if flt(p.get("nt")) < 1.0 else 1, cint(p.get("sl"))))
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Sheet1"
+	heads = ["SL#", "UNIQUE ID", "HUID", "ITEM", "DIAMOND QUALITY", "GS WT (gm)",
+		"PS PCS", "PS (ct)", "DMD PCS", "DMD (ct)", "STN PCS", "STN (ct)",
+		"COLOUR", "SIZE", "GENTS/LADIES", "SHAPE", "BACK CHAIN BARCODE",
+		"BACK CHAIN WT", "SHOP NAME", "CERT", "CERT NO"]
+	ws.append(heads)
+	for c in ws[1]:
+		c.font = Font(bold=True)
+	tok = (quality_token or "").strip().upper()
+	for i, p in enumerate(rows, start=1):
+		ws.append([i, p.get("unique_id"), p.get("huid") or "", p.get("item"), tok,
+			flt(p.get("gs")), cint(p.get("ps_pcs")), flt(p.get("ps_ct")),
+			cint(p.get("dmd_pcs")), flt(p.get("dmd_ct")),
+			cint(p.get("stn_pcs")), flt(p.get("stn_ct")),
+			(p.get("colour") or "").strip().upper(), p.get("size") or "",
+			(p.get("style") or "").strip().upper(), (p.get("shape") or "").strip().upper(),
+			"", "", party or "", (p.get("cert") or "").strip().upper(), p.get("cert_no") or ""])
+	widths = {1: 5, 2: 12, 3: 15, 4: 12, 5: 9, 6: 10, 13: 10, 14: 7, 15: 9, 16: 9, 19: 14, 20: 8, 21: 9}
+	from openpyxl.utils import get_column_letter
+	for c, w in widths.items():
+		ws.column_dimensions[get_column_letter(c)].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	fname = (filename or "").strip() or "NEW FORMAT.xlsx"
+	if not fname.lower().endswith(".xlsx"):
+		fname += ".xlsx"
+	frappe.local.response.filename = fname
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
 def _old_sale_rows_billing(wb):
 	ws = wb.active
 	head = {}
@@ -8195,6 +8309,7 @@ def _old_sale_rows_billing(wb):
 		"size": col("SIZE"), "style": col("GENTS/LADIES"),
 		"shape": col("SHAPE"), "bc_wt": col("BACK CHAIN WT"),
 		"shop": col("SHOP NAME"),
+		"cert": col("CERT", "CERTIFICATION"), "cert_no": col("CERT NO", "CERT NO.", "CERTNO"),
 	}
 	rows, shop, tokens = [], "", set()
 	for r in ws.iter_rows(min_row=2, values_only=True):
@@ -8222,6 +8337,9 @@ def _old_sale_rows_billing(wb):
 			"colour": str(g("shape") or "").strip().upper(),
 			"size": str(g("size") or "").strip(), "style": str(g("style") or "").strip(),
 			"back_chain_wt": flt(g("bc_wt")),
+			"cert": str(g("cert") or "").strip().upper(),
+			"cert_no": (str(cint(g("cert_no"))) if isinstance(g("cert_no"), (int, float))
+				else str(g("cert_no") or "").strip()),
 		})
 	_check_old_sale_order(rows)
 	cover = {"format": "billing", "party": shop}
@@ -8630,7 +8748,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		if gi == 1:
 			keys.append("g1rate")
 		keys.append("g{0}v".format(gi))
-	keys += ["tp", "tc", "tv", "total", "igi", "huid", "uid"]
+	keys += ["tp", "tc", "tv", "total", "igi", "huid"]
+	# the physically-marked certification reference — only when the lot has it
+	has_cert = any((p.get("cert") or p.get("cert_no")) for p in priced)
+	if has_cert:
+		keys += ["certlab", "certno"]
+	keys += ["uid"]
 	C = {k: i + 1 for i, k in enumerate(keys)}
 	NCOLS = len(keys)
 
@@ -8670,7 +8793,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"gross": "Gross Qty (Gm)", "net": "Net Qty (Gm)", "gold": "Gold\nValue",
 		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
 		"tp": "pcs", "tc": "cts", "tv": "value", "total": "Total value",
-		"igi": "IGI", "huid": "HUID", "uid": "UNIQUE ID"}
+		"igi": "IGI", "huid": "HUID", "certlab": "CERT", "certno": "CERT NO", "uid": "UNIQUE ID"}
 	for gi in used:
 		HEAD["g{0}p".format(gi)] = "Dpcs"
 		HEAD["g{0}c".format(gi)] = "d.wt/ct"
@@ -8739,6 +8862,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=C["total"], value="={g}{r}+{m}{r}+{v}{r}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r))
 		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs))
 		ws.cell(row=r, column=C["huid"], value=flt(p.get("huid_va")) or 0)
+		if "certlab" in C:
+			ws.cell(row=r, column=C["certlab"], value=p.get("cert") or None)
+			ws.cell(row=r, column=C["certno"], value=cint(p.get("cert_no")) or (p.get("cert_no") or None))
 		ws.cell(row=r, column=C["uid"], value=p.get("unique_id"))
 		r += 1
 
@@ -8812,7 +8938,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	MINW = {"sl": 5, "item": 11, "size": 6, "style": 6, "colour": 8, "pcs1": 5,
 		"item_color": 9, "gross": 10, "net": 10, "gold": 13, "mc": 13,
 		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11, "total": 14,
-		"igi": 9, "huid": 9, "uid": 11}
+		"igi": 9, "huid": 9, "certlab": 7, "certno": 9, "uid": 11}
 	for gi in used:
 		MINW["g{0}p".format(gi)] = 6
 		MINW["g{0}c".format(gi)] = 8
