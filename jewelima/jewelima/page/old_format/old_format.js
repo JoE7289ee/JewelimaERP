@@ -11,7 +11,8 @@
 //   EXPORT — pricing only: chart / rates / Price it / JOS billing download
 //            (rows are locked here; go back to prep to change anything).
 //
-// Straight data — nothing stored; refresh and it's gone.
+// Save keeps the working session as an Old Format Import doc — import
+// today, price and export another day (JOS download marks it Exported).
 // Route: /app/old-format
 
 frappe.pages["old-format"].on_page_load = function (wrapper) {
@@ -26,6 +27,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	let CHART = null;   // picked chart's full data
 	let PRICED = null;  // {rows, totals}
 	let STATE = "prep"; // "prep" | "export"
+	let SESSION = null; // Old Format Import name when saved/loaded
+	let LOADING = false; // guards the session picker's onchange during set_value
 	let SORTED = false; // Sort & Number has been run since the last edit
 	const SEL = new Set(); // selected unique_ids (prep bulk ops)
 
@@ -88,8 +91,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		<div class="of-bar of-bar-prep">
 			<label class="of-file">${__("📄 Pick the OLD quotation .xlsx")}</label>
 			<input type="file" class="of-input" accept=".xlsx" style="display:none;">
+			<div class="of-sess"></div>
 			<div class="of-qual"></div>
 			<div class="of-party"></div>
+			<button class="of-btn of-save" style="display:none;background:#2e7d32;">${__("Save")}</button>
 			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
 			<button class="of-btn of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 		</div>
@@ -131,6 +136,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		options: Object.keys(TOKEN_FAMILY).join("\n"), default: "EF", onchange: () => applyToken() });
 	fQual.set_value("EF");
 	const fParty = mk(".of-party", { fieldtype: "Data", label: __("Shop / party"), fieldname: "party" });
+	const fSess = mk(".of-sess", { fieldtype: "Link", label: __("Saved import"), fieldname: "sess",
+		options: "Old Format Import", only_select: 1, onchange: () => { if (!LOADING) loadSession(fSess.get_value()); } });
 	const fChart = mk(".of-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
 		get_query: () => ({ filters: { status: "Active" } }), onchange: () => loadQualities() });
 	const fRate = mk(".of-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate" });
@@ -226,6 +233,48 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-tile" style="padding:6px 10px;">${mx}</div>`);
 	}
 
+	function loadSession(name) {
+		if (!name) return;
+		frappe.call({ method: API + ".get_old_format_session", args: { name } }).then((r) => {
+			const m = r.message || {};
+			SESSION = m.name;
+			ROWS = m.rows || [];
+			COVER = m.cover || {};
+			SORTED = !!m.sorted;
+			PRICED = null;
+			SEL.clear();
+			LASTSEL = null;
+			FILE = { name: m.source_file || m.title };
+			fParty.set_value(m.party || "");
+			fQual.set_value(m.quality_token || "EF");
+			root.find(".of-file").addClass("has").text("💾 " + m.title);
+			root.find(".of-cover").html(__("Saved import <b>{0}</b> ({1}) · party <b>{2}</b> · <b>{3}</b> piece(s)",
+				[esc(m.title), esc(m.status), esc(m.party || "—"), ROWS.length]));
+			root.find(".of-save, .of-sortnum, .of-goexport").show();
+			root.find(".of-jos").hide();
+			setState("prep");
+		});
+	}
+
+	function saveSession(status, silent) {
+		if (!ROWS.length) return;
+		frappe.call({ method: API + ".save_old_format_session", args: { name: SESSION || undefined,
+			payload: JSON.stringify({
+				title: (FILE && FILE.name) || "Old format import",
+				party: fParty.get_value() || "", invoice_no: COVER.invoice_no || "",
+				source_file: (FILE && FILE.name) || "", quality_token: fQual.get_value() || "EF",
+				rows: ROWS, cover: COVER, sorted: SORTED, status: status || undefined,
+			}) } }).then((r) => {
+			const m = r.message || {};
+			SESSION = m.name;
+			LOADING = true;
+			fSess.set_value(SESSION);
+			LOADING = false;
+			if (!silent) frappe.show_alert({ message: __("Saved as {0} — pick it under Saved import to continue later.", [m.name]), indicator: "green" }, 5);
+		});
+	}
+	root.on("click", ".of-save", () => saveSession());
+
 	root.find(".of-file").on("click", () => root.find(".of-input").get(0).click());
 	root.find(".of-input").on("change", function () {
 		const file = this.files[0];
@@ -238,13 +287,17 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				const m = r.message || {};
 				ROWS = m.rows || [];
 				COVER = m.cover || {};
+				SESSION = null;
+				LOADING = true;
+				fSess.set_value("");
+				LOADING = false;
 				SEL.clear();
 				LASTSEL = null;
 				invalidate();
 				if (COVER.party && !fParty.get_value()) fParty.set_value(COVER.party);
 				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s)",
 					[esc(COVER.invoice_no || "—"), esc(COVER.party || "—"), m.count || 0]));
-				root.find(".of-sortnum, .of-goexport").show();
+				root.find(".of-save, .of-sortnum, .of-goexport").show();
 				setState("prep");
 			});
 		};
@@ -476,7 +529,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	});
 
 	root.on("click", ".of-jos", () => {
-		if (!PRICED || !FILE) return;
+		if (!PRICED) return;
 		const hasSlab = ((CHART && CHART.certification_charges) || []).some((c) => flt(c.to_ct) > 0);
 		const d = new frappe.ui.Dialog({
 			title: __("JOS Billing export"),
@@ -497,6 +550,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			primary_action_label: __("Download"),
 			primary_action(v) {
 				d.hide();
+				if (SESSION) saveSession("Exported", true);
 				open_url_post("/api/method/jewelima.jewelima.api.export_old_sale_jos", {
 					priced: JSON.stringify(PRICED.rows), price_chart: fChart.get_value(),
 					gold_rate: fRate.get_value() || 0, quality: fCq.get_value() || "",

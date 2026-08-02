@@ -8279,6 +8279,37 @@ def export_old_format_billing(rows, quality_token="EF", party="", filename=None)
 	frappe.local.response.type = "download"
 
 
+@frappe.whitelist()
+def save_old_format_session(payload, name=None):
+	"""OLD FORMAT page: persist the working session (enriched rows as JSON) so
+	the team can import today and price/export another day."""
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	doc = frappe.get_doc("Old Format Import", name) if name else frappe.new_doc("Old Format Import")
+	doc.title = (p.get("title") or "").strip() or (p.get("source_file") or "Old format import")
+	doc.party = p.get("party") or ""
+	doc.invoice_no = p.get("invoice_no") or ""
+	doc.source_file = p.get("source_file") or ""
+	doc.quality_token = p.get("quality_token") or "EF"
+	if p.get("status"):
+		doc.status = p.get("status")
+	rows = p.get("rows") or []
+	doc.piece_count = len(rows)
+	doc.data = json.dumps({"rows": rows, "cover": p.get("cover") or {}, "sorted": bool(p.get("sorted"))})
+	doc.save()
+	return {"name": doc.name, "title": doc.title, "status": doc.status}
+
+
+@frappe.whitelist()
+def get_old_format_session(name):
+	doc = frappe.get_doc("Old Format Import", name)
+	blob = json.loads(doc.data or "{}")
+	return {"name": doc.name, "title": doc.title, "party": doc.party or "",
+		"invoice_no": doc.invoice_no or "", "source_file": doc.source_file or "",
+		"quality_token": doc.quality_token or "EF", "status": doc.status,
+		"rows": blob.get("rows") or [], "cover": blob.get("cover") or {},
+		"sorted": bool(blob.get("sorted"))}
+
+
 def _old_sale_rows_billing(wb):
 	ws = wb.active
 	head = {}
