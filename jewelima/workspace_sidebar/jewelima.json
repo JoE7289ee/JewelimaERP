@@ -1216,6 +1216,32 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "bar-chart-2",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Party Gold",
+   "link_to": "party-gold",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Party Groups",
+   "link_to": "Party Group Map",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "images",
@@ -2204,7 +2230,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-02 12:07:35.246471",
+ "modified": "2026-08-03 09:50:26.482055",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

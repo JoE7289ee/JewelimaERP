@@ -8280,6 +8280,144 @@ def export_old_format_billing(rows, quality_token="EF", party="", filename=None)
 
 
 @frappe.whitelist()
+def parse_party_selection_excel(filedata):
+	"""PARTY GOLD page: read the old software's PARTY SELECTION report (one
+	flat sheet; header row found by its SL# cell) -> slim per-piece rows the
+	page aggregates party/group-wise with aging."""
+	import base64
+	from io import BytesIO
+
+	from openpyxl import load_workbook
+
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	wb = load_workbook(BytesIO(raw), data_only=True)
+	ws = wb.active
+	head_row = next((r for r in range(1, 16)
+		if str(ws.cell(row=r, column=1).value or "").strip().upper() == "SL#"), None)
+	if not head_row:
+		frappe.throw(frappe._("No SL# header found — is this the PARTY SELECTION report?"))
+	head = {}
+	for j, c in enumerate(ws[head_row], start=1):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			head.setdefault(key, j)
+
+	def col(*names):
+		for n in names:
+			if n in head:
+				return head[n]
+		return None
+
+	C = {
+		"party": col("PARTY"), "nt": col("NET WEIGHT( GM )", "NET WEIGHT (GM)", "NET WEIGHT"),
+		"gs": col("GROSS WEIGHT( GM )", "GROSS WEIGHT (GM)", "GROSS WEIGHT"),
+		"purity": col("PURITY"), "days": col("HOLDING PERIOD (DAYS)", "HOLDING PERIOD"),
+	}
+	if not C["party"] or not C["nt"]:
+		frappe.throw(frappe._("Party / Net Weight columns not found — is this the PARTY SELECTION report?"))
+	rows = []
+	for r in ws.iter_rows(min_row=head_row + 1, values_only=True):
+		if not isinstance(r[0], (int, float)):
+			continue  # footer Total rows / blanks
+		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
+		pur = str(g("purity") or "").replace("%", "").strip()
+		rows.append({
+			"party": str(g("party") or "").strip().upper(),
+			"nt": flt(g("nt")), "gs": flt(g("gs")),
+			"purity": round(flt(pur) / 100, 4) if pur else 0,
+			"days": cint(str(g("days") or "0").strip() or 0),
+		})
+	return {"rows": rows, "count": len(rows),
+		"parties": sorted({x["party"] for x in rows if x["party"]})}
+
+
+@frappe.whitelist()
+def get_party_group_map():
+	return {r.party_name: r.group_name for r in frappe.get_all("Party Group Map",
+		fields=["party_name", "group_name"], as_list=0, limit=0)}
+
+
+@frappe.whitelist()
+def set_party_group(parties, group):
+	"""Upsert the lookup: every given raw party name -> this group."""
+	parties = json.loads(parties) if isinstance(parties, str) else (parties or [])
+	group = (group or "").strip().upper()
+	if not group:
+		frappe.throw(frappe._("Give the group a name."))
+	for p in parties:
+		p = (p or "").strip().upper()
+		if not p:
+			continue
+		if frappe.db.exists("Party Group Map", p):
+			doc = frappe.get_doc("Party Group Map", p)
+			doc.group_name = group
+			doc.save()
+		else:
+			frappe.get_doc({"doctype": "Party Group Map", "party_name": p, "group_name": group}).insert()
+	return {"count": len(parties), "group": group}
+
+
+@frappe.whitelist()
+def export_party_gold_xlsx(rows, filename=None):
+	"""PARTY GOLD report workbook: group blocks with party lines and a bold
+	subtotal each, grand total last. `rows` come pre-aggregated by the page:
+	[{group, party, pcs, gw, nt, pure, b0..b3 (pure g per aging bucket), oldest}]."""
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Party Gold"
+	bold = Font(bold=True)
+	ws.append(["PARTY GOLD OUTSTANDING", "", "", "", "", "", "generated " + frappe.utils.nowdate()])
+	ws["A1"].font = Font(bold=True, size=14)
+	ws.append([])
+	heads = ["GROUP / PARTY", "PCS", "GW (g)", "NT (g)", "PURE (g)",
+		"0-30 d", "31-90 d", "91-180 d", "180+ d", "OLDEST (d)"]
+	ws.append(heads)
+	for c in ws[3]:
+		c.font = bold
+	from itertools import groupby
+	# rows arrive in the page's display order (groups by pure desc)
+	gt = [0] * 8
+	for gname, grp in groupby(rows, key=lambda x: x.get("group") or ""):
+		grp = list(grp)
+		tot = [sum(flt(x.get(k)) for x in grp) for k in ("pcs", "gw", "nt", "pure", "b0", "b1", "b2", "b3")]
+		oldest = max(cint(x.get("oldest")) for x in grp)
+		ws.append([gname, cint(tot[0]), round(tot[1], 3), round(tot[2], 3), round(tot[3], 3),
+			round(tot[4], 3), round(tot[5], 3), round(tot[6], 3), round(tot[7], 3), oldest])
+		for c in ws[ws.max_row]:
+			c.font = bold
+		if len(grp) > 1 or (grp and grp[0].get("party") != gname):
+			for x in grp:
+				ws.append(["    " + (x.get("party") or ""), cint(x.get("pcs")), round(flt(x.get("gw")), 3),
+					round(flt(x.get("nt")), 3), round(flt(x.get("pure")), 3),
+					round(flt(x.get("b0")), 3), round(flt(x.get("b1")), 3),
+					round(flt(x.get("b2")), 3), round(flt(x.get("b3")), 3), cint(x.get("oldest"))])
+		gt = [a + b for a, b in zip(gt, tot)]
+	ws.append([])
+	ws.append(["TOTAL", cint(gt[0]), round(gt[1], 3), round(gt[2], 3), round(gt[3], 3),
+		round(gt[4], 3), round(gt[5], 3), round(gt[6], 3), round(gt[7], 3), ""])
+	for c in ws[ws.max_row]:
+		c.font = bold
+	ws.column_dimensions["A"].width = 34
+	for L in "BCDEFGHIJ":
+		ws.column_dimensions[L].width = 11
+	buf = BytesIO()
+	wb.save(buf)
+	fname = (filename or "").strip() or "PARTY GOLD {0}.xlsx".format(frappe.utils.nowdate())
+	if not fname.lower().endswith(".xlsx"):
+		fname += ".xlsx"
+	frappe.local.response.filename = fname
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
 def save_old_format_session(payload, name=None):
 	"""OLD FORMAT page: persist the working session (enriched rows as JSON) so
 	the team can import today and price/export another day."""
