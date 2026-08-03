@@ -5,7 +5,8 @@
 // much gold is outstanding with aging (0-30 / 31-90 / 91-180 / 180+ days on
 // the file's own holding period; the buckets carry NT grams). Two views:
 //   PARTIES      — group -> raw parties (via the Party Group Map lookup;
-//                  unmapped spellings pool under OTHER) · "General print"
+//                  a spelling seen for the FIRST time is auto-saved into the
+//                  OTHER group — redistribute it on Party Groups) · "General print"
 //   DESIGN TYPES — design type -> which groups hold it · "DesignType print"
 // Click a party line for its printable statement (pieces, oldest first).
 // The mapping persists; the report data doesn't.
@@ -21,7 +22,6 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	let MAP = {};     // party -> group (Party Group Map)
 	let VIEW = "party"; // "party" | "dtype"
 	let OPEN = new Set(); // expanded level-1 names (per view)
-	const PICK = new Set(); // unmapped party chips picked for assignment
 
 	$(page.main).append(`
 		<style>
@@ -41,14 +41,6 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		.pg-tile.g{padding:5px 12px;}
 		.pg-tile.g .v{font-size:13px;}
 		.pg-tile.g .s{font-size:10px;color:var(--text-muted);}
-		.pg-map{display:none;background:var(--control-bg);border:1px solid var(--border-color);border-radius:10px;padding:8px 14px;margin-bottom:10px;}
-		.pg-map .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;margin-right:8px;}
-		.pg-chip{display:inline-block;border:1px solid var(--border-color);border-radius:14px;padding:2px 10px;margin:2px 4px 2px 0;
-			font-size:11.5px;cursor:pointer;background:var(--fg-color);}
-		.pg-chip.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
-		.pg-map input{border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;
-			text-transform:uppercase;width:150px;background:var(--fg-color);color:var(--text-color);}
-		.pg-map .bapply{border:none;border-radius:6px;padding:4px 12px;font-size:11.5px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;}
 		table.pg-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
 		table.pg-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 8px;border:1px solid var(--border-color);text-align:right;white-space:nowrap;}
 		table.pg-t th:first-child{text-align:left;}
@@ -69,9 +61,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		</div>
 		<div class="pg-tiles"></div>
 		<div class="pg-gtiles"></div>
-		<div class="pg-map"></div>
 		<div class="pg-body"><div class="pg-none">${__("Upload the old software's PARTY SELECTION report — parties group by the lookup, gold and aging come out per group.")}</div></div>
-		<datalist id="pg-groups"></datalist>
 	`);
 	const root = $(page.main);
 
@@ -90,8 +80,18 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				RAW = (r1.message || {}).rows || [];
 				MAP = r2.message || {};
 				OPEN.clear();
-				PICK.clear();
 				root.find(".pg-dl, .pg-print, .pg-view").show();
+				// a spelling this scan brings in for the first time is saved
+				// straight into OTHER — sort it out on Party Groups later
+				const fresh = [...new Set(RAW.map((r) => r.party).filter((p) => p && !MAP[p]))];
+				if (fresh.length) {
+					frappe.call({ method: API + ".set_party_group",
+						args: { parties: JSON.stringify(fresh), group: "OTHER" } }).then(() => {
+						fresh.forEach((p) => { MAP[p] = "OTHER"; });
+						paint();
+						frappe.show_alert({ message: __("{0} new part(ies) filed under OTHER — sort them on Party Groups when needed.", [fresh.length]), indicator: "blue" }, 5);
+					});
+				}
 				paint();
 			});
 		};
@@ -151,10 +151,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		RAW.forEach((r) => addTo(tot, r));
 		const groups = aggBy(groupOf, partyOf);
 		const gnames = sortedKeys(groups);
-		const unmapped = [...new Set(RAW.map((r) => r.party).filter((p) => p && !MAP[p]))].sort();
 		root.find(".pg-view").text(VIEW === "party" ? __("View: Design Types ⇄") : __("View: Parties ⇄"));
-		root.find("#pg-groups").html([...new Set(Object.values(MAP))].sort()
-			.map((g) => `<option>${esc(g)}</option>`).join(""));
 		root.find(".pg-tiles").html(`
 			<div class="pg-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
 			<div class="pg-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
@@ -163,13 +160,6 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		root.find(".pg-gtiles").html(gnames.map((g) => `
 			<div class="pg-tile g"><div class="k">${esc(g)}</div><div class="v">${g3(groups[g].nt)} g</div>
 				<div class="s">${groups[g].pcs} ${__("pc")} · GW ${g3(groups[g].gw)} g</div></div>`).join(""));
-		root.find(".pg-map").toggle(!!unmapped.length).html(unmapped.length ? `
-			<span class="lbl">${__("Unmapped parties — tap to pick, name the group, Assign")}</span><br>
-			${unmapped.map((p) => `<span class="pg-chip ${PICK.has(p) ? "on" : ""}" data-p="${esc(p)}">${esc(p)}</span>`).join("")}
-			<div style="margin-top:6px;">
-				<input class="pg-gname" list="pg-groups" placeholder="${__("GROUP NAME")}">
-				<button class="bapply pg-assign">${__("Assign")}</button>
-			</div>` : "");
 		const l2label = VIEW === "party" ? __("Group / Party") : __("Design type / Group");
 		root.find(".pg-body").html(`
 			<table class="pg-t"><thead><tr>
@@ -210,22 +200,6 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		printStatement($(this).data("p"));
 	});
 
-	root.on("click", ".pg-chip", function () {
-		const p = $(this).data("p");
-		PICK.has(p) ? PICK.delete(p) : PICK.add(p);
-		$(this).toggleClass("on", PICK.has(p));
-	});
-	root.on("click", ".pg-assign", () => {
-		const gname = (root.find(".pg-gname").val() || "").trim().toUpperCase();
-		if (!gname) return frappe.show_alert({ message: __("Type the group name first."), indicator: "orange" }, 3);
-		if (!PICK.size) return frappe.show_alert({ message: __("Tap some parties first."), indicator: "orange" }, 3);
-		frappe.call({ method: API + ".set_party_group", args: { parties: JSON.stringify([...PICK]), group: gname } }).then(() => {
-			[...PICK].forEach((p) => { MAP[p] = gname; });
-			PICK.clear();
-			paint();
-			frappe.show_alert({ message: __("Grouped under {0} — saved for every future report.", [gname]), indicator: "green" }, 4);
-		});
-	});
 
 	// ------------------------------------------------------------- printing
 	function printDoc(title, sub, headHtml, bodyHtml) {
