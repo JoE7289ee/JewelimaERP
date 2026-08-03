@@ -8312,6 +8312,9 @@ def parse_party_selection_excel(filedata):
 		"party": col("PARTY"), "nt": col("NET WEIGHT( GM )", "NET WEIGHT (GM)", "NET WEIGHT"),
 		"gs": col("GROSS WEIGHT( GM )", "GROSS WEIGHT (GM)", "GROSS WEIGHT"),
 		"purity": col("PURITY"), "days": col("HOLDING PERIOD (DAYS)", "HOLDING PERIOD"),
+		"dmd": col("DMD WEIGHT( CT )", "DMD WEIGHT (CT)", "DMD WEIGHT"),
+		"ps": col("PS WEIGHT( CT )", "PS WEIGHT (CT)", "PS WEIGHT"),
+		"cs": col("CS WEIGHT( CT )", "CS WEIGHT (CT)", "CS WEIGHT"),
 	}
 	if not C["party"] or not C["nt"]:
 		frappe.throw(frappe._("Party / Net Weight columns not found — is this the PARTY SELECTION report?"))
@@ -8326,6 +8329,7 @@ def parse_party_selection_excel(filedata):
 			"nt": flt(g("nt")), "gs": flt(g("gs")),
 			"purity": round(flt(pur) / 100, 4) if pur else 0,
 			"days": cint(str(g("days") or "0").strip() or 0),
+			"dmd": flt(g("dmd")), "ps": flt(g("ps")), "cs": flt(g("cs")),
 		})
 	return {"rows": rows, "count": len(rows),
 		"parties": sorted({x["party"] for x in rows if x["party"]})}
@@ -8404,8 +8408,8 @@ def export_party_gold_xlsx(rows, filename=None):
 	ws.append(["PARTY GOLD OUTSTANDING", "", "", "", "", "", "generated " + frappe.utils.nowdate()])
 	ws["A1"].font = Font(bold=True, size=14)
 	ws.append([])
-	heads = ["GROUP / PARTY", "PCS", "GW (g)", "NT (g)", "PURE (g)",
-		"0-30 d", "31-90 d", "91-180 d", "180+ d", "OLDEST (d)"]
+	heads = ["GROUP / PARTY", "PCS", "GW (g)", "NT (g)", "DMD (ct)",
+		"NT 0-30 d", "NT 31-90 d", "NT 91-180 d", "NT 180+ d", "OLDEST (d)"]
 	ws.append(heads)
 	for c in ws[3]:
 		c.font = bold
@@ -8414,7 +8418,7 @@ def export_party_gold_xlsx(rows, filename=None):
 	gt = [0] * 8
 	for gname, grp in groupby(rows, key=lambda x: x.get("group") or ""):
 		grp = list(grp)
-		tot = [sum(flt(x.get(k)) for x in grp) for k in ("pcs", "gw", "nt", "pure", "b0", "b1", "b2", "b3")]
+		tot = [sum(flt(x.get(k)) for x in grp) for k in ("pcs", "gw", "nt", "dmd", "b0", "b1", "b2", "b3")]
 		oldest = max(cint(x.get("oldest")) for x in grp)
 		ws.append([gname, cint(tot[0]), round(tot[1], 3), round(tot[2], 3), round(tot[3], 3),
 			round(tot[4], 3), round(tot[5], 3), round(tot[6], 3), round(tot[7], 3), oldest])
@@ -8423,7 +8427,7 @@ def export_party_gold_xlsx(rows, filename=None):
 		if len(grp) > 1 or (grp and grp[0].get("party") != gname):
 			for x in grp:
 				ws.append(["    " + (x.get("party") or ""), cint(x.get("pcs")), round(flt(x.get("gw")), 3),
-					round(flt(x.get("nt")), 3), round(flt(x.get("pure")), 3),
+					round(flt(x.get("nt")), 3), round(flt(x.get("dmd")), 3),
 					round(flt(x.get("b0")), 3), round(flt(x.get("b1")), 3),
 					round(flt(x.get("b2")), 3), round(flt(x.get("b3")), 3), cint(x.get("oldest"))])
 		gt = [a + b for a, b in zip(gt, tot)]
