@@ -1205,19 +1205,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "save",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Saved Imports",
-   "link_to": "Old Format Import",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "bar-chart-2",
    "indent": 1,
    "keep_closed": 0,
@@ -1235,8 +1222,8 @@
    "indent": 1,
    "keep_closed": 0,
    "label": "Party Groups",
-   "link_to": "Party Group Map",
-   "link_type": "DocType",
+   "link_to": "party-groups",
+   "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
    "url": ""
@@ -2230,7 +2217,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-03 09:50:26.482055",
+ "modified": "2026-08-03 12:16:15.969497",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

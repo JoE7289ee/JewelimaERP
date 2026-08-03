@@ -8358,6 +8358,34 @@ def set_party_group(parties, group):
 
 
 @frappe.whitelist()
+def remove_party_group(parties):
+	"""Unmap raw party names (they fall back to standing alone)."""
+	parties = json.loads(parties) if isinstance(parties, str) else (parties or [])
+	n = 0
+	for p in parties:
+		p = (p or "").strip().upper()
+		if p and frappe.db.exists("Party Group Map", p):
+			frappe.delete_doc("Party Group Map", p)
+			n += 1
+	return {"count": n}
+
+
+@frappe.whitelist()
+def rename_party_group(old, new):
+	"""Every mapping under `old` moves to `new`."""
+	old = (old or "").strip().upper()
+	new = (new or "").strip().upper()
+	if not new:
+		frappe.throw(frappe._("Give the group a name."))
+	names = frappe.get_all("Party Group Map", filters={"group_name": old}, pluck="name")
+	for n in names:
+		doc = frappe.get_doc("Party Group Map", n)
+		doc.group_name = new
+		doc.save()
+	return {"count": len(names), "group": new}
+
+
+@frappe.whitelist()
 def export_party_gold_xlsx(rows, filename=None):
 	"""PARTY GOLD report workbook: group blocks with party lines and a bold
 	subtotal each, grand total last. `rows` come pre-aggregated by the page:
@@ -8435,6 +8463,19 @@ def save_old_format_session(payload, name=None):
 	doc.data = json.dumps({"rows": rows, "cover": p.get("cover") or {}, "sorted": bool(p.get("sorted"))})
 	doc.save()
 	return {"name": doc.name, "title": doc.title, "status": doc.status}
+
+
+@frappe.whitelist()
+def list_old_format_sessions():
+	return frappe.get_all("Old Format Import",
+		fields=["name", "title", "party", "status", "piece_count", "modified"],
+		order_by="modified desc", limit=100)
+
+
+@frappe.whitelist()
+def delete_old_format_session(name):
+	frappe.delete_doc("Old Format Import", name)
+	return {"deleted": name}
 
 
 @frappe.whitelist()

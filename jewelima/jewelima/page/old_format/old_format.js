@@ -87,6 +87,16 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		table.of-mx th, table.of-mx td{border:1px solid var(--border-color);padding:2px 8px;text-align:right;}
 		table.of-mx th{background:var(--control-bg);font-size:9.5px;text-transform:uppercase;color:var(--text-muted);}
 		table.of-mx td:first-child, table.of-mx th:first-child{text-align:left;}
+		.of-sessions{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:10px;}
+		.of-sesscard{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:10px 14px;}
+		.of-sesscard .t{font-weight:800;font-size:13px;margin-bottom:2px;}
+		.of-sesscard .m{font-size:11.5px;color:var(--text-muted);margin-bottom:8px;}
+		.of-badge{display:inline-block;border-radius:10px;padding:1px 9px;font-size:10.5px;font-weight:700;}
+		.of-badge.prog{background:#fff3d6;color:#8a6d00;}
+		.of-badge.done{background:#e2f4e5;color:#1d7a33;}
+		.of-sesscard button{border:none;border-radius:6px;padding:4px 14px;font-size:11.5px;font-weight:700;color:#fff;cursor:pointer;margin-right:6px;}
+		.of-resume{background:#1f618d;}
+		.of-delsess{background:#8a2f2f;}
 		</style>
 		<div class="of-bar of-bar-prep">
 			<label class="of-file">${__("📄 Pick the OLD quotation .xlsx")}</label>
@@ -232,6 +242,39 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<div class="sub">${Object.keys(labs).sort().map((l) => esc(l) + " × " + labs[l]).join(" · ") || __("none")}</div></div>
 			<div class="of-tile" style="padding:6px 10px;">${mx}</div>`);
 	}
+
+	function paintSessions() {
+		if (ROWS.length) return;
+		frappe.call({ method: API + ".list_old_format_sessions" }).then((r) => {
+			if (ROWS.length) return; // a file/session arrived meanwhile
+			const list = r.message || [];
+			root.find(".of-body").html(`
+				<div class="of-none">${__("Upload the OLD quotation excel to start a new lot — or resume a saved one below.")}</div>
+				${list.length ? `<div class="of-sessions">
+				${list.map((x) => `<div class="of-sesscard">
+					<div class="t">${esc(x.title)}</div>
+					<div class="m"><span class="of-badge ${x.status === "Exported" ? "done" : "prog"}">${esc(x.status)}</span>
+						· ${x.piece_count || 0} ${__("pcs")} · ${esc(x.party || "—")} · ${frappe.datetime.comment_when(x.modified)}</div>
+					<button class="of-resume" data-name="${esc(x.name)}">${__("Resume →")}</button>
+					<button class="of-delsess" data-name="${esc(x.name)}" data-title="${esc(x.title)}">${__("Delete")}</button>
+				</div>`).join("")}</div>` : ""}`);
+		});
+	}
+
+	root.on("click", ".of-resume", function () {
+		loadSession($(this).data("name"));
+	});
+	root.on("click", ".of-delsess", function () {
+		const name = $(this).data("name");
+		const title = $(this).data("title");
+		frappe.confirm(__("Delete the saved import <b>{0}</b> ({1})? This cannot be undone.", [esc(title), esc(name)]), () => {
+			frappe.call({ method: API + ".delete_old_format_session", args: { name } }).then(() => {
+				if (SESSION === name) SESSION = null;
+				frappe.show_alert({ message: __("{0} deleted.", [name]), indicator: "green" }, 3);
+				paintSessions();
+			});
+		});
+	});
 
 	function loadSession(name) {
 		if (!name) return;
@@ -563,4 +606,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		});
 		d.show();
 	});
+
+	paintSessions();
 };
