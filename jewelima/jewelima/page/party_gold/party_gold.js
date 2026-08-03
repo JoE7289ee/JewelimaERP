@@ -90,7 +90,8 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		const groups = {};
 		RAW.forEach((r) => {
 			const party = r.party || __("(NO PARTY)");
-			const gname = MAP[party] || party;
+			// unmapped spellings pool under OTHER until someone assigns them
+			const gname = MAP[party] || "OTHER";
 			const pure = (r.nt || 0) * (r.purity || 0);
 			const b = bucketOf(r.days || 0);
 			const G = (groups[gname] = groups[gname] || { parties: {}, pcs: 0, gw: 0, nt: 0, pure: 0, b: [0, 0, 0, 0], oldest: 0 });
