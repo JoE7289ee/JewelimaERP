@@ -8315,6 +8315,8 @@ def parse_party_selection_excel(filedata):
 		"dmd": col("DMD WEIGHT( CT )", "DMD WEIGHT (CT)", "DMD WEIGHT"),
 		"ps": col("PS WEIGHT( CT )", "PS WEIGHT (CT)", "PS WEIGHT"),
 		"cs": col("CS WEIGHT( CT )", "CS WEIGHT (CT)", "CS WEIGHT"),
+		"design": col("DESIGN"), "barcode": col("BARCODE"),
+		"dtype": col("DESIGN TYPE"),
 	}
 	if not C["party"] or not C["nt"]:
 		frappe.throw(frappe._("Party / Net Weight columns not found — is this the PARTY SELECTION report?"))
@@ -8330,6 +8332,9 @@ def parse_party_selection_excel(filedata):
 			"purity": round(flt(pur) / 100, 4) if pur else 0,
 			"days": cint(str(g("days") or "0").strip() or 0),
 			"dmd": flt(g("dmd")), "ps": flt(g("ps")), "cs": flt(g("cs")),
+			"design": str(g("design") or "").strip(),
+			"barcode": str(g("barcode") or "").strip(),
+			"dtype": str(g("dtype") or "").strip().upper() or "(NO TYPE)",
 		})
 	return {"rows": rows, "count": len(rows),
 		"parties": sorted({x["party"] for x in rows if x["party"]})}

@@ -2,10 +2,13 @@
 // For license information, please see license.txt
 //
 // Party Gold — upload the old software's PARTY SELECTION report and see how
-// much gold is outstanding PARTY-WISE with aging (0-30 / 31-90 / 91-180 /
-// 180+ days on the file's own holding period). Raw party spellings group
-// through the Party Group Map lookup (assign unmapped ones right here —
-// the mapping persists, the report data doesn't).
+// much gold is outstanding with aging (0-30 / 31-90 / 91-180 / 180+ days on
+// the file's own holding period; the buckets carry NT grams). Two views:
+//   PARTIES      — group -> raw parties (via the Party Group Map lookup;
+//                  unmapped spellings pool under OTHER) · "General print"
+//   DESIGN TYPES — design type -> which groups hold it · "DesignType print"
+// Click a party line for its printable statement (pieces, oldest first).
+// The mapping persists; the report data doesn't.
 // Route: /app/party-gold
 
 frappe.pages["party-gold"].on_page_load = function (wrapper) {
@@ -14,9 +17,10 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const g3 = (v) => (v || 0).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 	let FILE = null;  // {b64, name}
-	let RAW = [];     // slim per-piece rows {party, nt, gs, purity, days}
+	let RAW = [];     // per-piece rows {party, nt, gs, purity, days, dmd, ps, cs, design, barcode, dtype}
 	let MAP = {};     // party -> group (Party Group Map)
-	let OPEN = new Set(); // expanded group names
+	let VIEW = "party"; // "party" | "dtype"
+	let OPEN = new Set(); // expanded level-1 names (per view)
 	const PICK = new Set(); // unmapped party chips picked for assignment
 
 	$(page.main).append(`
@@ -27,17 +31,23 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		.pg-file.has{border-color:#2e7d32;color:#1d7a33;font-weight:700;}
 		.pg-btn{border:none;color:#fff;font-weight:800;padding:9px 20px;border-radius:8px;cursor:pointer;}
 		.pg-dl{background:#2e7d32;display:none;}
-		.pg-tiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+		.pg-print{background:#5b3a8e;display:none;}
+		.pg-view{background:#1f618d;display:none;}
+		.pg-tiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
+		.pg-gtiles{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
 		.pg-tile{border:1px solid var(--border-color);border-radius:9px;padding:7px 16px;background:var(--control-bg);}
 		.pg-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
 		.pg-tile .v{font-size:16px;font-weight:800;}
+		.pg-tile.g{padding:5px 12px;}
+		.pg-tile.g .v{font-size:13px;}
+		.pg-tile.g .s{font-size:10px;color:var(--text-muted);}
 		.pg-map{display:none;background:var(--control-bg);border:1px solid var(--border-color);border-radius:10px;padding:8px 14px;margin-bottom:10px;}
 		.pg-map .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;margin-right:8px;}
 		.pg-chip{display:inline-block;border:1px solid var(--border-color);border-radius:14px;padding:2px 10px;margin:2px 4px 2px 0;
 			font-size:11.5px;cursor:pointer;background:var(--fg-color);}
 		.pg-chip.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
 		.pg-map input{border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;
-			text-transform:uppercase;width:130px;background:var(--fg-color);color:var(--text-color);}
+			text-transform:uppercase;width:150px;background:var(--fg-color);color:var(--text-color);}
 		.pg-map .bapply{border:none;border-radius:6px;padding:4px 12px;font-size:11.5px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;}
 		table.pg-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
 		table.pg-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 8px;border:1px solid var(--border-color);text-align:right;white-space:nowrap;}
@@ -46,18 +56,22 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		table.pg-t td:first-child{text-align:left;}
 		tr.pg-grp td{background:var(--control-bg);font-weight:800;cursor:pointer;}
 		tr.pg-party td:first-child{padding-left:26px;color:var(--text-muted);}
+		tr.pg-party.stmt{cursor:pointer;}
 		td.pg-old{color:#a15c00;font-weight:700;}
 		.pg-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		</style>
 		<div class="pg-bar">
 			<label class="pg-file">${__("📄 Pick the PARTY SELECTION .xlsx")}</label>
 			<input type="file" class="pg-input" accept=".xlsx" style="display:none;">
+			<button class="pg-btn pg-view"></button>
+			<button class="pg-btn pg-print">${__("Print 🖨")}</button>
 			<button class="pg-btn pg-dl">${__("Report ⤓")}</button>
-			<button class="pg-btn pg-print" style="background:#5b3a8e;display:none;">${__("Print 🖨")}</button>
 		</div>
 		<div class="pg-tiles"></div>
+		<div class="pg-gtiles"></div>
 		<div class="pg-map"></div>
 		<div class="pg-body"><div class="pg-none">${__("Upload the old software's PARTY SELECTION report — parties group by the lookup, gold and aging come out per group.")}</div></div>
+		<datalist id="pg-groups"></datalist>
 	`);
 	const root = $(page.main);
 
@@ -77,7 +91,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				MAP = r2.message || {};
 				OPEN.clear();
 				PICK.clear();
-				root.find(".pg-dl, .pg-print").show();
+				root.find(".pg-dl, .pg-print, .pg-view").show();
 				paint();
 			});
 		};
@@ -85,83 +99,117 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	});
 
 	const bucketOf = (d) => (d <= 30 ? 0 : d <= 90 ? 1 : d <= 180 ? 2 : 3);
+	const partyOf = (r) => r.party || __("(NO PARTY)");
+	// unmapped spellings pool under OTHER until someone assigns them
+	const groupOf = (r) => MAP[partyOf(r)] || "OTHER";
 
-	// group -> {parties: {party -> agg}, agg} where agg = pcs/gw/nt/dmd/b(nt g per age band)/oldest
-	function aggregate() {
-		const groups = {};
+	function blankAgg() {
+		return { pcs: 0, gw: 0, nt: 0, dmd: 0, ps: 0, cs: 0, b: [0, 0, 0, 0], oldest: 0 };
+	}
+
+	function addTo(x, r) {
+		x.pcs += 1;
+		x.gw += r.gs || 0;
+		x.nt += r.nt || 0;
+		x.dmd += r.dmd || 0;
+		x.ps += r.ps || 0;
+		x.cs += r.cs || 0;
+		x.b[bucketOf(r.days || 0)] += r.nt || 0;
+		x.oldest = Math.max(x.oldest, r.days || 0);
+	}
+
+	// two-level rollup: key1 -> {items: {key2 -> agg}, ...agg}
+	function aggBy(k1, k2) {
+		const out = {};
 		RAW.forEach((r) => {
-			const party = r.party || __("(NO PARTY)");
-			// unmapped spellings pool under OTHER until someone assigns them
-			const gname = MAP[party] || "OTHER";
-			const b = bucketOf(r.days || 0);
-			const G = (groups[gname] = groups[gname] || { parties: {}, pcs: 0, gw: 0, nt: 0, dmd: 0, b: [0, 0, 0, 0], oldest: 0 });
-			const P = (G.parties[party] = G.parties[party] || { pcs: 0, gw: 0, nt: 0, dmd: 0, b: [0, 0, 0, 0], oldest: 0 });
-			[G, P].forEach((x) => {
-				x.pcs += 1;
-				x.gw += r.gs || 0;
-				x.nt += r.nt || 0;
-				x.dmd += r.dmd || 0;
-				x.b[b] += r.nt || 0;
-				x.oldest = Math.max(x.oldest, r.days || 0);
-			});
+			const a = k1(r), b = k2(r);
+			const L1 = (out[a] = out[a] || Object.assign({ items: {} }, blankAgg()));
+			const L2 = (L1.items[b] = L1.items[b] || blankAgg());
+			addTo(L1, r);
+			addTo(L2, r);
 		});
-		return groups;
+		return out;
+	}
+
+	const rollup = () => (VIEW === "party" ? aggBy(groupOf, partyOf) : aggBy((r) => r.dtype, groupOf));
+
+	function sortedKeys(obj) {
+		return Object.keys(obj).sort((a, b) => obj[b].nt - obj[a].nt);
+	}
+
+	function cellsHtml(x) {
+		return `<td>${x.pcs}</td><td>${g3(x.gw)}</td><td><b>${g3(x.nt)}</b></td><td>${g3(x.dmd)}</td>
+			<td>${g3(x.b[0])}</td><td>${g3(x.b[1])}</td><td>${g3(x.b[2])}</td><td>${g3(x.b[3])}</td>
+			<td class="${x.oldest > 180 ? "pg-old" : ""}">${x.oldest}</td>`;
 	}
 
 	function paint() {
 		if (!RAW.length) return;
-		const groups = aggregate();
-		const gnames = Object.keys(groups).sort((a, b) => groups[b].nt - groups[a].nt);
-		const tot = { pcs: 0, gw: 0, nt: 0, dmd: 0, oldest: 0 };
-		gnames.forEach((g) => {
-			tot.pcs += groups[g].pcs; tot.gw += groups[g].gw; tot.nt += groups[g].nt;
-			tot.dmd += groups[g].dmd; tot.oldest = Math.max(tot.oldest, groups[g].oldest);
-		});
+		const R = rollup();
+		const l1 = sortedKeys(R);
+		const tot = blankAgg();
+		RAW.forEach((r) => addTo(tot, r));
+		const groups = aggBy(groupOf, partyOf);
+		const gnames = sortedKeys(groups);
 		const unmapped = [...new Set(RAW.map((r) => r.party).filter((p) => p && !MAP[p]))].sort();
+		root.find(".pg-view").text(VIEW === "party" ? __("View: Design Types ⇄") : __("View: Parties ⇄"));
+		root.find("#pg-groups").html([...new Set(Object.values(MAP))].sort()
+			.map((g) => `<option>${esc(g)}</option>`).join(""));
 		root.find(".pg-tiles").html(`
 			<div class="pg-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
-			<div class="pg-tile"><div class="k">${__("Gross")}</div><div class="v">${g3(tot.gw)} g</div></div>
 			<div class="pg-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
 			<div class="pg-tile"><div class="k">${__("DMD")}</div><div class="v">${g3(tot.dmd)} ct</div></div>
-			<div class="pg-tile"><div class="k">${__("Groups")}</div><div class="v">${gnames.length}</div></div>
 			<div class="pg-tile"><div class="k">${__("Oldest")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
+		root.find(".pg-gtiles").html(gnames.map((g) => `
+			<div class="pg-tile g"><div class="k">${esc(g)}</div><div class="v">${g3(groups[g].nt)} g</div>
+				<div class="s">${groups[g].pcs} ${__("pc")} · GW ${g3(groups[g].gw)} g</div></div>`).join(""));
 		root.find(".pg-map").toggle(!!unmapped.length).html(unmapped.length ? `
 			<span class="lbl">${__("Unmapped parties — tap to pick, name the group, Assign")}</span><br>
 			${unmapped.map((p) => `<span class="pg-chip ${PICK.has(p) ? "on" : ""}" data-p="${esc(p)}">${esc(p)}</span>`).join("")}
 			<div style="margin-top:6px;">
-				<input class="pg-gname" placeholder="${__("GROUP NAME")}">
+				<input class="pg-gname" list="pg-groups" placeholder="${__("GROUP NAME")}">
 				<button class="bapply pg-assign">${__("Assign")}</button>
 			</div>` : "");
+		const l2label = VIEW === "party" ? __("Group / Party") : __("Design type / Group");
 		root.find(".pg-body").html(`
 			<table class="pg-t"><thead><tr>
-				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
+				<th>${l2label}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
 				<th title="${__("NT grams per holding-age band")}">0–30 d</th><th>31–90 d</th><th>91–180 d</th><th>180+ d</th><th>${__("Oldest")}</th>
 			</tr></thead><tbody>
-			${gnames.map((gname) => {
-				const G = groups[gname];
-				const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].nt - G.parties[a].nt);
-				const solo = pnames.length === 1 && pnames[0] === gname;
-				return `<tr class="pg-grp" data-g="${esc(gname)}">
-					<td>${OPEN.has(gname) || solo ? "" : "▸ "}${esc(gname)}${solo ? "" : ` <span style="font-weight:400;color:var(--text-muted);">(${pnames.length})</span>`}</td>
-					<td>${G.pcs}</td><td>${g3(G.gw)}</td><td><b>${g3(G.nt)}</b></td><td>${g3(G.dmd)}</td>
-					<td>${g3(G.b[0])}</td><td>${g3(G.b[1])}</td><td>${g3(G.b[2])}</td><td>${g3(G.b[3])}</td>
-					<td class="${G.oldest > 180 ? "pg-old" : ""}">${G.oldest}</td>
-				</tr>` + (OPEN.has(gname) && !solo ? pnames.map((p) => {
-					const P = G.parties[p];
-					return `<tr class="pg-party">
-					<td>${esc(p)}</td>
-					<td>${P.pcs}</td><td>${g3(P.gw)}</td><td>${g3(P.nt)}</td><td>${g3(P.dmd)}</td>
-					<td>${g3(P.b[0])}</td><td>${g3(P.b[1])}</td><td>${g3(P.b[2])}</td><td>${g3(P.b[3])}</td>
-					<td class="${P.oldest > 180 ? "pg-old" : ""}">${P.oldest}</td>
-				</tr>`; }).join("") : "");
+			${l1.map((name) => {
+				const G = R[name];
+				const kids = sortedKeys(G.items);
+				const solo = VIEW === "party" && kids.length === 1 && kids[0] === name;
+				return `<tr class="pg-grp" data-g="${esc(name)}">
+					<td>${OPEN.has(name) || solo ? "" : "▸ "}${esc(name)}${solo ? "" : ` <span style="font-weight:400;color:var(--text-muted);">(${kids.length})</span>`}</td>
+					${cellsHtml(G)}
+				</tr>` + (OPEN.has(name) && !solo ? kids.map((k) => `<tr class="pg-party ${VIEW === "party" ? "stmt" : ""}" data-p="${esc(k)}"
+					${VIEW === "party" ? `title="${__("click for the party statement print")}"` : ""}>
+					<td>${esc(k)}</td>${cellsHtml(G.items[k])}
+				</tr>`).join("") : "");
 			}).join("")}</tbody></table>`);
 	}
 
+	root.on("click", ".pg-view", () => {
+		VIEW = VIEW === "party" ? "dtype" : "party";
+		OPEN.clear();
+		paint();
+	});
+
 	root.on("click", "tr.pg-grp", function () {
 		const g = $(this).data("g");
+		if (VIEW === "party") {
+			const groups = aggBy(groupOf, partyOf);
+			const kids = Object.keys((groups[g] || { items: {} }).items);
+			if (kids.length === 1 && kids[0] === g) return printStatement(g);
+		}
 		OPEN.has(g) ? OPEN.delete(g) : OPEN.add(g);
 		paint();
 	});
+	root.on("click", "tr.pg-party.stmt", function () {
+		printStatement($(this).data("p"));
+	});
+
 	root.on("click", ".pg-chip", function () {
 		const p = $(this).data("p");
 		PICK.has(p) ? PICK.delete(p) : PICK.add(p);
@@ -179,28 +227,9 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		});
 	});
 
-	root.on("click", ".pg-print", () => {
-		if (!RAW.length) return;
-		const groups = aggregate();
-		const gnames = Object.keys(groups).sort((a, b) => groups[b].nt - groups[a].nt);
-		const tot = { pcs: 0, gw: 0, nt: 0, dmd: 0, b: [0, 0, 0, 0], oldest: 0 };
-		gnames.forEach((g) => {
-			const G = groups[g];
-			tot.pcs += G.pcs; tot.gw += G.gw; tot.nt += G.nt; tot.dmd += G.dmd;
-			G.b.forEach((v, i) => { tot.b[i] += v; });
-			tot.oldest = Math.max(tot.oldest, G.oldest);
-		});
-		const cells = (x) => `<td>${x.pcs}</td><td>${g3(x.gw)}</td><td><b>${g3(x.nt)}</b></td><td>${g3(x.dmd)}</td>
-			<td>${g3(x.b[0])}</td><td>${g3(x.b[1])}</td><td>${g3(x.b[2])}</td><td>${g3(x.b[3])}</td>
-			<td class="${x.oldest > 180 ? "old" : ""}">${x.oldest}</td>`;
-		const body = gnames.map((gname) => {
-			const G = groups[gname];
-			const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].nt - G.parties[a].nt);
-			const solo = pnames.length === 1 && pnames[0] === gname;
-			return `<tr class="grp"><td>${esc(gname)}</td>${cells(G)}</tr>`
-				+ (solo ? "" : pnames.map((p) => `<tr class="pty"><td>${esc(p)}</td>${cells(G.parties[p])}</tr>`).join(""));
-		}).join("");
-		const html = `<!doctype html><html><head><meta charset="utf-8"><title>${__("Party Gold")}</title><style>
+	// ------------------------------------------------------------- printing
+	function printDoc(title, sub, headHtml, bodyHtml) {
+		const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
 			@page{size:A4 landscape;margin:10mm;}
 			body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;}
 			h1{font-size:17px;margin:0 0 2px;}
@@ -208,6 +237,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			table{width:100%;border-collapse:collapse;font-size:10.5px;}
 			th,td{border:1px solid #999;padding:3px 6px;text-align:right;white-space:nowrap;}
 			th:first-child,td:first-child{text-align:left;}
+			td.l{text-align:left;}
 			th{background:#eee;text-transform:uppercase;font-size:9px;letter-spacing:.04em;}
 			tr.grp td{background:#f2f2f2;font-weight:bold;}
 			tr.pty td:first-child{padding-left:22px;color:#444;}
@@ -215,15 +245,8 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			td.old{color:#a15c00;font-weight:bold;}
 			tr{page-break-inside:avoid;}
 		</style></head><body>
-			<h1>${__("PARTY GOLD OUTSTANDING")}</h1>
-			<div class="sub">${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
-				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct · ${gnames.length} ${__("groups")}</div>
-			<table><thead><tr>
-				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
-				<th>NT 0–30 d</th><th>NT 31–90 d</th><th>NT 91–180 d</th><th>NT 180+ d</th><th>${__("Oldest")}</th>
-			</tr></thead><tbody>${body}
-			<tr class="tot"><td>${__("TOTAL")}</td>${cells(tot)}</tr>
-			</tbody></table>
+			<h1>${title}</h1><div class="sub">${sub}</div>
+			<table><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>
 		</body></html>`;
 		document.getElementById("pg-print-frame")?.remove();
 		const fr = document.createElement("iframe");
@@ -232,17 +255,69 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		document.body.appendChild(fr);
 		fr.srcdoc = html;
 		fr.onload = () => setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 150);
+	}
+
+	const pcells = (x) => `<td>${x.pcs}</td><td>${g3(x.gw)}</td><td><b>${g3(x.nt)}</b></td>
+		<td>${g3(x.dmd)}</td><td>${g3(x.ps)}</td><td>${g3(x.cs)}</td>
+		<td>${g3(x.b[0])}</td><td>${g3(x.b[1])}</td><td>${g3(x.b[2])}</td><td>${g3(x.b[3])}</td>
+		<td class="${x.oldest > 180 ? "old" : ""}">${x.oldest}</td>`;
+	const PHEAD = `<th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th>
+		<th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th>
+		<th>NT 0–30 d</th><th>NT 31–90 d</th><th>NT 91–180 d</th><th>NT 180+ d</th><th>${__("Oldest")}</th>`;
+
+	// General print (parties) / DesignType print — every level opened
+	root.on("click", ".pg-print", () => {
+		if (!RAW.length) return;
+		const R = rollup();
+		const l1 = sortedKeys(R);
+		const tot = blankAgg();
+		RAW.forEach((r) => addTo(tot, r));
+		const body = l1.map((name) => {
+			const G = R[name];
+			const kids = sortedKeys(G.items);
+			const solo = VIEW === "party" && kids.length === 1 && kids[0] === name;
+			return `<tr class="grp"><td>${esc(name)}</td>${pcells(G)}</tr>`
+				+ (solo ? "" : kids.map((k) => `<tr class="pty"><td>${esc(k)}</td>${pcells(G.items[k])}</tr>`).join(""));
+		}).join("") + `<tr class="tot"><td>${__("TOTAL")}</td>${pcells(tot)}</tr>`;
+		printDoc(
+			VIEW === "party" ? __("PARTY GOLD — GENERAL PRINT") : __("PARTY GOLD — DESIGNTYPE PRINT"),
+			`${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
+				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`,
+			`<th>${VIEW === "party" ? __("Group / Party") : __("Design type / Group")}</th>${PHEAD}`,
+			body);
 	});
 
+	// party statement: its pieces, oldest first
+	function printStatement(party) {
+		const pieces = RAW.filter((r) => partyOf(r) === party).sort((a, b) => (b.days || 0) - (a.days || 0));
+		if (!pieces.length) return;
+		const tot = blankAgg();
+		pieces.forEach((r) => addTo(tot, r));
+		const body = pieces.map((r, i) => `<tr>
+			<td>${i + 1}</td><td class="l">${esc(r.barcode)}</td><td class="l">${esc(r.design)}</td><td class="l">${esc(r.dtype)}</td>
+			<td>${g3(r.gs)}</td><td>${g3(r.nt)}</td><td>${g3(r.dmd)}</td><td>${g3(r.ps)}</td><td>${g3(r.cs)}</td>
+			<td class="${(r.days || 0) > 180 ? "old" : ""}">${r.days || 0}</td>
+		</tr>`).join("") + `<tr class="tot"><td></td><td class="l">${__("TOTAL")}</td><td></td><td>${tot.pcs} ${__("pcs")}</td>
+			<td>${g3(tot.gw)}</td><td>${g3(tot.nt)}</td><td>${g3(tot.dmd)}</td><td>${g3(tot.ps)}</td><td>${g3(tot.cs)}</td><td></td></tr>`;
+		printDoc(
+			__("PARTY STATEMENT — {0}", [esc(party)]),
+			`${__("group")} <b>${esc(MAP[party] || "OTHER")}</b> · ${esc((FILE && FILE.name) || "")}
+				· ${__("generated")} ${frappe.datetime.now_datetime()}
+				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct · ${__("oldest")} ${tot.oldest} ${__("days")}`,
+			`<th>#</th><th>${__("Barcode")}</th><th>${__("Design")}</th><th>${__("Type")}</th>
+				<th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th><th>${__("Days")}</th>`,
+			body);
+	}
+
+	// excel report follows the parties view
 	root.on("click", ".pg-dl", () => {
 		if (!RAW.length) return;
-		const groups = aggregate();
-		const gnames = Object.keys(groups).sort((a, b) => groups[b].nt - groups[a].nt);
+		const groups = aggBy(groupOf, partyOf);
 		const rows = [];
-		gnames.forEach((gname) => {
+		sortedKeys(groups).forEach((gname) => {
 			const G = groups[gname];
-			Object.keys(G.parties).sort((a, b) => G.parties[b].nt - G.parties[a].nt).forEach((p) => {
-				const P = G.parties[p];
+			sortedKeys(G.items).forEach((p) => {
+				const P = G.items[p];
 				rows.push({ group: gname, party: p, pcs: P.pcs, gw: P.gw, nt: P.nt, dmd: P.dmd,
 					b0: P.b[0], b1: P.b[1], b2: P.b[2], b3: P.b[3], oldest: P.oldest });
 			});
