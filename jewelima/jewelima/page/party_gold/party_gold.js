@@ -86,7 +86,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 
 	const bucketOf = (d) => (d <= 30 ? 0 : d <= 90 ? 1 : d <= 180 ? 2 : 3);
 
-	// group -> {parties: {party -> agg}, agg} where agg = pcs/gw/nt/pure/b0..b3/oldest
+	// group -> {parties: {party -> agg}, agg} where agg = pcs/gw/nt/dmd/b(nt g per age band)/oldest
 	function aggregate() {
 		const groups = {};
 		RAW.forEach((r) => {
