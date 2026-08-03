@@ -9,7 +9,8 @@
 //   PARTY    — party group -> locations (whose orders are stuck where;
 //              the Party Group Map lookup, new spellings auto-file to OTHER)
 //   CUST     — customer-marked bags (Salesman = CUST): each location as a
-//              title with its pieces beneath, oldest order first
+//              title with its pieces beneath, most past DUE first; tick a
+//              location out to drop it from the CUST print
 // Aging runs on the ORDER date (due dates in these files are junk); the
 // age buckets carry PIECES. Straight data — nothing stored.
 // Route: /app/bag-status
@@ -24,6 +25,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	let MAP = {};     // party -> group (Party Group Map)
 	let VIEW = "loc"; // "loc" | "user" | "party" | "cust"
 	let OPEN = new Set();
+	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
 
 	const VIEWS = {
 		loc: { label: __("Location"), l2: __("Location / Design type") },
@@ -186,7 +188,8 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			}).join("")}</tbody></table>`);
 	}
 
-	// CUST bags: each location a title, its pieces beneath, oldest first
+	// CUST bags: each location a title, its pieces beneath, MOST-OVERDUE first
+	// (sorted on the due date; positive Overdue = past due)
 	function custSections() {
 		const bags = RAW.filter((r) => r.cust);
 		const locs = {};
@@ -194,36 +197,50 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		return Object.keys(locs)
 			.sort((a, b) => locs[b].length - locs[a].length)
 			.map((loc) => {
-				const list = locs[loc].sort((a, b) => (b.days || 0) - (a.days || 0));
+				const list = locs[loc].sort((a, b) => (b.overdue || 0) - (a.overdue || 0));
 				const t = blankAgg();
-				list.forEach((r) => addTo(t, r));
+				t.maxover = 0;
+				list.forEach((r) => { addTo(t, r); t.maxover = Math.max(t.maxover, r.overdue || 0); });
 				return { loc, list, t };
 			});
 	}
 
 	const CUST_HEAD = (l) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th><th class="${l || ""}">${__("Type")}</th>
-		<th>${__("Qty")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
-		<th class="${l || ""}">${__("Party")}</th><th class="${l || ""}">${__("Order date")}</th><th>${__("Days")}</th>`;
+		<th class="${l || ""}">${__("Purity")}</th><th class="${l || ""}">${__("User")}</th>
+		<th>${__("Qty")}</th><th>${__("DMD ct")}</th>
+		<th class="${l || ""}">${__("Party")}</th><th class="${l || ""}">${__("Due date")}</th><th title="${__("days past the due date — negative means not due yet")}">${__("Overdue d")}</th>`;
 
 	function custRow(r, old) {
 		return `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.dtype)}</td>
-			<td>${r.qty}</td><td>${g3(r.gw)}</td><td>${g3(r.nt)}</td><td>${g3(r.dmd)}</td>
-			<td class="l">${esc(r.party)}</td><td class="l">${esc(r.odate)}</td>
-			<td class="${(r.days || 0) > 180 ? old : ""}">${r.days || 0}</td>`;
+			<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td>
+			<td>${r.qty}</td><td>${g3(r.dmd)}</td>
+			<td class="l">${esc(r.party)}</td><td class="l">${esc(r.ddate)}</td>
+			<td class="${(r.overdue || 0) > 0 ? old : ""}">${r.overdue || 0}</td>`;
+	}
+
+	function custTitleRow(s, extra) {
+		return `<td class="l" colspan="5">${extra || ""}${esc(s.loc)}
+				<span style="font-weight:400;color:var(--text-muted);">(${s.t.bags} ${__("bags")})</span></td>
+			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td><td></td>
+			<td class="${s.t.maxover > 0 ? "bs-old" : ""}">${s.t.maxover}</td>`;
 	}
 
 	function paintCust() {
 		const secs = custSections();
 		root.find(".bs-body").html(secs.length ? `
 			<table class="bs-t"><thead><tr>${CUST_HEAD("l")}</tr></thead><tbody>
-			${secs.map((s) => `<tr class="bs-grp flat"><td class="l" colspan="3">${esc(s.loc)}</td>
-				<td>${s.t.pcs}</td><td>${g3(s.t.gw)}</td><td>${g3(s.t.nt)}</td><td>${g3(s.t.dmd)}</td>
-				<td class="l">${s.t.bags} ${__("bags")}</td><td></td>
-				<td class="${s.t.oldest > 180 ? "bs-old" : ""}">${s.t.oldest}</td></tr>
+			${secs.map((s) => `<tr class="bs-grp flat">${custTitleRow(s,
+				`<input type="checkbox" class="bs-custloc" data-loc="${esc(s.loc)}" ${CUSTOFF.has(s.loc) ? "" : "checked"}
+					title="${__("untick to leave this location out of the CUST print")}" style="margin-right:7px;"> `)}</tr>
 			${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old")}</tr>`).join("")}`).join("")}
 			</tbody></table>`
 			: `<div class="bs-none">${__("No CUST-marked bags in this report.")}</div>`);
 	}
+
+	root.on("change", ".bs-custloc", function () {
+		const loc = $(this).data("loc");
+		this.checked ? CUSTOFF.delete(loc) : CUSTOFF.add(loc);
+	});
 
 	root.on("click", ".bs-views button", function () {
 		VIEW = $(this).data("v");
@@ -280,17 +297,14 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		const sub = `${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
 			· ${tot.bags} ${__("bags")} · ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`;
 		if (VIEW === "cust") {
-			const secs = custSections();
+			const secs = custSections().filter((s) => !CUSTOFF.has(s.loc));
+			if (!secs.length) return frappe.show_alert({ message: __("Every location is ticked out — nothing to print."), indicator: "orange" }, 4);
 			const ctot = blankAgg();
-			RAW.filter((r) => r.cust).forEach((r) => addTo(ctot, r));
-			const body = secs.map((s) => `<tr class="grp"><td class="l" colspan="3">${esc(s.loc)}</td>
-				<td>${s.t.pcs}</td><td>${g3(s.t.gw)}</td><td>${g3(s.t.nt)}</td><td>${g3(s.t.dmd)}</td>
-				<td class="l">${s.t.bags} ${__("bags")}</td><td></td>
-				<td class="${s.t.oldest > 180 ? "old" : ""}">${s.t.oldest}</td></tr>
+			secs.forEach((s) => s.list.forEach((r) => addTo(ctot, r)));
+			const body = secs.map((s) => `<tr class="grp">${custTitleRow(s)}</tr>
 				${s.list.map((r) => `<tr class="kid">${custRow(r, "old")}</tr>`).join("")}`).join("")
-				+ `<tr class="tot"><td class="l" colspan="3">${__("TOTAL CUST")}</td>
-				<td>${ctot.pcs}</td><td>${g3(ctot.gw)}</td><td>${g3(ctot.nt)}</td><td>${g3(ctot.dmd)}</td>
-				<td class="l">${ctot.bags} ${__("bags")}</td><td></td><td></td></tr>`;
+				+ `<tr class="tot"><td class="l" colspan="5">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
+				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td><td></td><td></td></tr>`;
 			return printDoc(__("BAG STATUS — CUST PRINT"), sub, CUST_HEAD("l"), body);
 		}
 		const R = rollup();

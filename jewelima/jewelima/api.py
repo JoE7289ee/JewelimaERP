@@ -8382,29 +8382,29 @@ def parse_bag_status_excel(filedata):
 		"ps": col("PS WEIGHT( CT )", "PS WEIGHT (CT)", "PS WEIGHT"),
 		"cs": col("CS WEIGHT( CT )", "CS WEIGHT (CT)", "CS WEIGHT"),
 		"order_no": col("ORDER NUMBER"), "odate": col("ORDER DATE"),
+		"ddate": col("DUE DATE"), "purity": col("PURITY"),
 		"party": col("PARTY"), "salesman": col("SALESMAN"),
 	}
 	if not C["loc"] or not C["bag"]:
 		frappe.throw(frappe._("Location / Bag name columns not found — is this the BAG STATUS report?"))
 	today = date.today()
 
-	def age_days(v):
+	def any_date(v):
 		if isinstance(v, datetime):
-			d = v.date()
-		elif isinstance(v, date):
-			d = v
-		else:
-			sv = str(v or "").strip().split(" ")[0]
-			d = None
-			for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"):
-				try:
-					d = datetime.strptime(sv, fmt).date()
-					break
-				except ValueError:
-					continue
-			if d is None:
-				return 0
-		return max((today - d).days, 0)
+			return v.date()
+		if isinstance(v, date):
+			return v
+		sv = str(v or "").strip().split(" ")[0]
+		for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"):
+			try:
+				return datetime.strptime(sv, fmt).date()
+			except ValueError:
+				continue
+		return None
+
+	def age_days(v):
+		d = any_date(v)
+		return max((today - d).days, 0) if d else 0
 
 	rows = []
 	for r in ws.iter_rows(min_row=head_row + 1, values_only=True):
@@ -8412,6 +8412,8 @@ def parse_bag_status_excel(filedata):
 			continue
 		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
 		odate = g("odate")
+		ddate = g("ddate")
+		dd = any_date(ddate)
 		rows.append({
 			"user": str(g("user") or "").strip(), "loc": str(g("loc") or "").strip() or "(NO LOCATION)",
 			"bag": str(g("bag") or "").strip(), "item": str(g("item") or "").strip(),
@@ -8421,6 +8423,9 @@ def parse_bag_status_excel(filedata):
 			"order_no": str(g("order_no") or "").strip(),
 			"odate": (str(odate).split(" ")[0] if odate is not None else ""),
 			"days": age_days(odate),
+			"ddate": (dd.strftime("%d-%m-%Y") if dd else ""),
+			"overdue": ((today - dd).days if dd else 0),
+			"purity": str(g("purity") or "").strip(),
 			"party": str(g("party") or "").strip().upper(),
 			"cust": 1 if "CUST" in str(g("salesman") or "").upper() else 0,
 		})
