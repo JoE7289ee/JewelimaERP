@@ -8341,6 +8341,93 @@ def parse_party_selection_excel(filedata):
 
 
 @frappe.whitelist()
+def parse_bag_status_excel(filedata):
+	"""BAG STATUS page: read the old software's BAG STATUS report (flat sheet,
+	header row found by its SL# cell) -> slim per-bag rows. Aging runs on the
+	ORDER date (the due dates in these files are unreliable); a bag whose
+	Salesman cell says CUST is a customer order."""
+	import base64
+	from datetime import date, datetime
+	from io import BytesIO
+
+	from openpyxl import load_workbook
+
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	wb = load_workbook(BytesIO(raw), data_only=True)
+	ws = wb.active
+	head_row = next((r for r in range(1, 16)
+		if str(ws.cell(row=r, column=1).value or "").strip().upper() == "SL#"), None)
+	if not head_row:
+		frappe.throw(frappe._("No SL# header found — is this the BAG STATUS report?"))
+	head = {}
+	for j, c in enumerate(ws[head_row], start=1):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			head.setdefault(key, j)
+
+	def col(*names):
+		for n in names:
+			if n in head:
+				return head[n]
+		return None
+
+	C = {
+		"user": col("USER"), "loc": col("LOCATION"), "bag": col("BAG NAME"),
+		"item": col("ITEM"), "size": col("SIZE"), "dtype": col("DESIGN TYPE"),
+		"qty": col("QTY( NO )", "QTY (NO)", "QTY"),
+		"gw": col("GROSSWEIGHT( GM )", "GROSS WEIGHT( GM )", "GROSSWEIGHT"),
+		"nt": col("NET WEIGHT( GM )", "NET WEIGHT (GM)", "NET WEIGHT"),
+		"dmd_q": col("DMD QTY( NO )", "DMD QTY (NO)", "DMD QTY"),
+		"dmd": col("DMD WEIGHT( CT )", "DMD WEIGHT (CT)", "DMD WEIGHT"),
+		"ps": col("PS WEIGHT( CT )", "PS WEIGHT (CT)", "PS WEIGHT"),
+		"cs": col("CS WEIGHT( CT )", "CS WEIGHT (CT)", "CS WEIGHT"),
+		"order_no": col("ORDER NUMBER"), "odate": col("ORDER DATE"),
+		"party": col("PARTY"), "salesman": col("SALESMAN"),
+	}
+	if not C["loc"] or not C["bag"]:
+		frappe.throw(frappe._("Location / Bag name columns not found — is this the BAG STATUS report?"))
+	today = date.today()
+
+	def age_days(v):
+		if isinstance(v, datetime):
+			d = v.date()
+		elif isinstance(v, date):
+			d = v
+		else:
+			sv = str(v or "").strip().split(" ")[0]
+			d = None
+			for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y"):
+				try:
+					d = datetime.strptime(sv, fmt).date()
+					break
+				except ValueError:
+					continue
+			if d is None:
+				return 0
+		return max((today - d).days, 0)
+
+	rows = []
+	for r in ws.iter_rows(min_row=head_row + 1, values_only=True):
+		if not isinstance(r[0], (int, float)):
+			continue
+		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
+		odate = g("odate")
+		rows.append({
+			"user": str(g("user") or "").strip(), "loc": str(g("loc") or "").strip() or "(NO LOCATION)",
+			"bag": str(g("bag") or "").strip(), "item": str(g("item") or "").strip(),
+			"size": str(g("size") or "").strip(), "dtype": str(g("dtype") or "").strip().upper() or "(NO TYPE)",
+			"qty": cint(g("qty")), "gw": flt(g("gw")), "nt": flt(g("nt")),
+			"dmd_q": cint(g("dmd_q")), "dmd": flt(g("dmd")), "ps": flt(g("ps")), "cs": flt(g("cs")),
+			"order_no": str(g("order_no") or "").strip(),
+			"odate": (str(odate).split(" ")[0] if odate is not None else ""),
+			"days": age_days(odate),
+			"party": str(g("party") or "").strip().upper(),
+			"cust": 1 if "CUST" in str(g("salesman") or "").upper() else 0,
+		})
+	return {"rows": rows, "count": len(rows)}
+
+
+@frappe.whitelist()
 def get_party_group_map():
 	return {r.party_name: r.group_name for r in frappe.get_all("Party Group Map",
 		fields=["party_name", "group_name"], as_list=0, limit=0)}
