@@ -1205,6 +1205,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "save",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Saved Imports",
+   "link_to": "saved-imports",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "bar-chart-2",
    "indent": 1,
    "keep_closed": 0,
@@ -2217,7 +2230,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-03 12:16:15.969497",
+ "modified": "2026-08-03 12:26:23.999254",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
