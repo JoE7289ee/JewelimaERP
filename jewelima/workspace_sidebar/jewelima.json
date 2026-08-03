@@ -1216,6 +1216,19 @@
    "url": ""
   },
   {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "bar-chart-2",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Party Selection Report",
+   "link_to": "",
+   "link_type": "",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
    "child": 1,
    "collapsible": 0,
    "icon": "bar-chart-2",
@@ -2230,7 +2243,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-03 12:26:23.999254",
+ "modified": "2026-08-03 12:29:27.343214",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
