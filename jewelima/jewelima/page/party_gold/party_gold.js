@@ -53,6 +53,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			<label class="pg-file">${__("📄 Pick the PARTY SELECTION .xlsx")}</label>
 			<input type="file" class="pg-input" accept=".xlsx" style="display:none;">
 			<button class="pg-btn pg-dl">${__("Report ⤓")}</button>
+			<button class="pg-btn pg-print" style="background:#5b3a8e;display:none;">${__("Print 🖨")}</button>
 		</div>
 		<div class="pg-tiles"></div>
 		<div class="pg-map"></div>
@@ -76,7 +77,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				MAP = r2.message || {};
 				OPEN.clear();
 				PICK.clear();
-				root.find(".pg-dl").show();
+				root.find(".pg-dl, .pg-print").show();
 				paint();
 			});
 		};
@@ -177,6 +178,61 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			paint();
 			frappe.show_alert({ message: __("Grouped under {0} — saved for every future report.", [gname]), indicator: "green" }, 4);
 		});
+	});
+
+	root.on("click", ".pg-print", () => {
+		if (!RAW.length) return;
+		const groups = aggregate();
+		const gnames = Object.keys(groups).sort((a, b) => groups[b].pure - groups[a].pure);
+		const tot = { pcs: 0, gw: 0, nt: 0, pure: 0, b: [0, 0, 0, 0], oldest: 0 };
+		gnames.forEach((g) => {
+			const G = groups[g];
+			tot.pcs += G.pcs; tot.gw += G.gw; tot.nt += G.nt; tot.pure += G.pure;
+			G.b.forEach((v, i) => { tot.b[i] += v; });
+			tot.oldest = Math.max(tot.oldest, G.oldest);
+		});
+		const cells = (x) => `<td>${x.pcs}</td><td>${g3(x.gw)}</td><td>${g3(x.nt)}</td><td><b>${g3(x.pure)}</b></td>
+			<td>${g3(x.b[0])}</td><td>${g3(x.b[1])}</td><td>${g3(x.b[2])}</td><td>${g3(x.b[3])}</td>
+			<td class="${x.oldest > 180 ? "old" : ""}">${x.oldest}</td>`;
+		const body = gnames.map((gname) => {
+			const G = groups[gname];
+			const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].pure - G.parties[a].pure);
+			const solo = pnames.length === 1 && pnames[0] === gname;
+			return `<tr class="grp"><td>${esc(gname)}</td>${cells(G)}</tr>`
+				+ (solo ? "" : pnames.map((p) => `<tr class="pty"><td>${esc(p)}</td>${cells(G.parties[p])}</tr>`).join(""));
+		}).join("");
+		const html = `<!doctype html><html><head><meta charset="utf-8"><title>${__("Party Gold")}</title><style>
+			@page{size:A4 landscape;margin:10mm;}
+			body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;}
+			h1{font-size:17px;margin:0 0 2px;}
+			.sub{font-size:11px;color:#555;margin-bottom:10px;}
+			table{width:100%;border-collapse:collapse;font-size:10.5px;}
+			th,td{border:1px solid #999;padding:3px 6px;text-align:right;white-space:nowrap;}
+			th:first-child,td:first-child{text-align:left;}
+			th{background:#eee;text-transform:uppercase;font-size:9px;letter-spacing:.04em;}
+			tr.grp td{background:#f2f2f2;font-weight:bold;}
+			tr.pty td:first-child{padding-left:22px;color:#444;}
+			tr.tot td{font-weight:bold;border-top:2px solid #333;}
+			td.old{color:#a15c00;font-weight:bold;}
+			tr{page-break-inside:avoid;}
+		</style></head><body>
+			<h1>${__("PARTY GOLD OUTSTANDING")}</h1>
+			<div class="sub">${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
+				· ${tot.pcs} ${__("pieces")} · ${__("pure")} ${g3(tot.pure)} g · ${gnames.length} ${__("groups")}</div>
+			<table><thead><tr>
+				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("Pure g")}</th>
+				<th>0–30 d</th><th>31–90 d</th><th>91–180 d</th><th>180+ d</th><th>${__("Oldest")}</th>
+			</tr></thead><tbody>${body}
+			<tr class="tot"><td>${__("TOTAL")}</td>${cells(tot)}</tr>
+			</tbody></table>
+		</body></html>`;
+		document.getElementById("pg-print-frame")?.remove();
+		const fr = document.createElement("iframe");
+		fr.id = "pg-print-frame";
+		fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+		document.body.appendChild(fr);
+		fr.srcdoc = html;
+		fr.onload = () => setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 150);
 	});
 
 	root.on("click", ".pg-dl", () => {
