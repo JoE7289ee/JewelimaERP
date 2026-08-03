@@ -93,16 +93,15 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			const party = r.party || __("(NO PARTY)");
 			// unmapped spellings pool under OTHER until someone assigns them
 			const gname = MAP[party] || "OTHER";
-			const pure = (r.nt || 0) * (r.purity || 0);
 			const b = bucketOf(r.days || 0);
-			const G = (groups[gname] = groups[gname] || { parties: {}, pcs: 0, gw: 0, nt: 0, pure: 0, b: [0, 0, 0, 0], oldest: 0 });
-			const P = (G.parties[party] = G.parties[party] || { pcs: 0, gw: 0, nt: 0, pure: 0, b: [0, 0, 0, 0], oldest: 0 });
+			const G = (groups[gname] = groups[gname] || { parties: {}, pcs: 0, gw: 0, nt: 0, dmd: 0, b: [0, 0, 0, 0], oldest: 0 });
+			const P = (G.parties[party] = G.parties[party] || { pcs: 0, gw: 0, nt: 0, dmd: 0, b: [0, 0, 0, 0], oldest: 0 });
 			[G, P].forEach((x) => {
 				x.pcs += 1;
 				x.gw += r.gs || 0;
 				x.nt += r.nt || 0;
-				x.pure += pure;
-				x.b[b] += pure;
+				x.dmd += r.dmd || 0;
+				x.b[b] += r.nt || 0;
 				x.oldest = Math.max(x.oldest, r.days || 0);
 			});
 		});
@@ -112,18 +111,18 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	function paint() {
 		if (!RAW.length) return;
 		const groups = aggregate();
-		const gnames = Object.keys(groups).sort((a, b) => groups[b].pure - groups[a].pure);
-		const tot = { pcs: 0, gw: 0, nt: 0, pure: 0, oldest: 0 };
+		const gnames = Object.keys(groups).sort((a, b) => groups[b].nt - groups[a].nt);
+		const tot = { pcs: 0, gw: 0, nt: 0, dmd: 0, oldest: 0 };
 		gnames.forEach((g) => {
 			tot.pcs += groups[g].pcs; tot.gw += groups[g].gw; tot.nt += groups[g].nt;
-			tot.pure += groups[g].pure; tot.oldest = Math.max(tot.oldest, groups[g].oldest);
+			tot.dmd += groups[g].dmd; tot.oldest = Math.max(tot.oldest, groups[g].oldest);
 		});
 		const unmapped = [...new Set(RAW.map((r) => r.party).filter((p) => p && !MAP[p]))].sort();
 		root.find(".pg-tiles").html(`
 			<div class="pg-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
 			<div class="pg-tile"><div class="k">${__("Gross")}</div><div class="v">${g3(tot.gw)} g</div></div>
 			<div class="pg-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
-			<div class="pg-tile"><div class="k">${__("Pure gold")}</div><div class="v">${g3(tot.pure)} g</div></div>
+			<div class="pg-tile"><div class="k">${__("DMD")}</div><div class="v">${g3(tot.dmd)} ct</div></div>
 			<div class="pg-tile"><div class="k">${__("Groups")}</div><div class="v">${gnames.length}</div></div>
 			<div class="pg-tile"><div class="k">${__("Oldest")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
 		root.find(".pg-map").toggle(!!unmapped.length).html(unmapped.length ? `
@@ -135,23 +134,23 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			</div>` : "");
 		root.find(".pg-body").html(`
 			<table class="pg-t"><thead><tr>
-				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("Pure g")}</th>
-				<th>0–30 d</th><th>31–90 d</th><th>91–180 d</th><th>180+ d</th><th>${__("Oldest")}</th>
+				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
+				<th title="${__("NT grams per holding-age band")}">0–30 d</th><th>31–90 d</th><th>91–180 d</th><th>180+ d</th><th>${__("Oldest")}</th>
 			</tr></thead><tbody>
 			${gnames.map((gname) => {
 				const G = groups[gname];
-				const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].pure - G.parties[a].pure);
+				const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].nt - G.parties[a].nt);
 				const solo = pnames.length === 1 && pnames[0] === gname;
 				return `<tr class="pg-grp" data-g="${esc(gname)}">
 					<td>${OPEN.has(gname) || solo ? "" : "▸ "}${esc(gname)}${solo ? "" : ` <span style="font-weight:400;color:var(--text-muted);">(${pnames.length})</span>`}</td>
-					<td>${G.pcs}</td><td>${g3(G.gw)}</td><td>${g3(G.nt)}</td><td><b>${g3(G.pure)}</b></td>
+					<td>${G.pcs}</td><td>${g3(G.gw)}</td><td><b>${g3(G.nt)}</b></td><td>${g3(G.dmd)}</td>
 					<td>${g3(G.b[0])}</td><td>${g3(G.b[1])}</td><td>${g3(G.b[2])}</td><td>${g3(G.b[3])}</td>
 					<td class="${G.oldest > 180 ? "pg-old" : ""}">${G.oldest}</td>
 				</tr>` + (OPEN.has(gname) && !solo ? pnames.map((p) => {
 					const P = G.parties[p];
 					return `<tr class="pg-party">
 					<td>${esc(p)}</td>
-					<td>${P.pcs}</td><td>${g3(P.gw)}</td><td>${g3(P.nt)}</td><td>${g3(P.pure)}</td>
+					<td>${P.pcs}</td><td>${g3(P.gw)}</td><td>${g3(P.nt)}</td><td>${g3(P.dmd)}</td>
 					<td>${g3(P.b[0])}</td><td>${g3(P.b[1])}</td><td>${g3(P.b[2])}</td><td>${g3(P.b[3])}</td>
 					<td class="${P.oldest > 180 ? "pg-old" : ""}">${P.oldest}</td>
 				</tr>`; }).join("") : "");
@@ -183,20 +182,20 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	root.on("click", ".pg-print", () => {
 		if (!RAW.length) return;
 		const groups = aggregate();
-		const gnames = Object.keys(groups).sort((a, b) => groups[b].pure - groups[a].pure);
-		const tot = { pcs: 0, gw: 0, nt: 0, pure: 0, b: [0, 0, 0, 0], oldest: 0 };
+		const gnames = Object.keys(groups).sort((a, b) => groups[b].nt - groups[a].nt);
+		const tot = { pcs: 0, gw: 0, nt: 0, dmd: 0, b: [0, 0, 0, 0], oldest: 0 };
 		gnames.forEach((g) => {
 			const G = groups[g];
-			tot.pcs += G.pcs; tot.gw += G.gw; tot.nt += G.nt; tot.pure += G.pure;
+			tot.pcs += G.pcs; tot.gw += G.gw; tot.nt += G.nt; tot.dmd += G.dmd;
 			G.b.forEach((v, i) => { tot.b[i] += v; });
 			tot.oldest = Math.max(tot.oldest, G.oldest);
 		});
-		const cells = (x) => `<td>${x.pcs}</td><td>${g3(x.gw)}</td><td>${g3(x.nt)}</td><td><b>${g3(x.pure)}</b></td>
+		const cells = (x) => `<td>${x.pcs}</td><td>${g3(x.gw)}</td><td><b>${g3(x.nt)}</b></td><td>${g3(x.dmd)}</td>
 			<td>${g3(x.b[0])}</td><td>${g3(x.b[1])}</td><td>${g3(x.b[2])}</td><td>${g3(x.b[3])}</td>
 			<td class="${x.oldest > 180 ? "old" : ""}">${x.oldest}</td>`;
 		const body = gnames.map((gname) => {
 			const G = groups[gname];
-			const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].pure - G.parties[a].pure);
+			const pnames = Object.keys(G.parties).sort((a, b) => G.parties[b].nt - G.parties[a].nt);
 			const solo = pnames.length === 1 && pnames[0] === gname;
 			return `<tr class="grp"><td>${esc(gname)}</td>${cells(G)}</tr>`
 				+ (solo ? "" : pnames.map((p) => `<tr class="pty"><td>${esc(p)}</td>${cells(G.parties[p])}</tr>`).join(""));
@@ -218,10 +217,10 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		</style></head><body>
 			<h1>${__("PARTY GOLD OUTSTANDING")}</h1>
 			<div class="sub">${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
-				· ${tot.pcs} ${__("pieces")} · ${__("pure")} ${g3(tot.pure)} g · ${gnames.length} ${__("groups")}</div>
+				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct · ${gnames.length} ${__("groups")}</div>
 			<table><thead><tr>
-				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("Pure g")}</th>
-				<th>0–30 d</th><th>31–90 d</th><th>91–180 d</th><th>180+ d</th><th>${__("Oldest")}</th>
+				<th>${__("Group / Party")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
+				<th>NT 0–30 d</th><th>NT 31–90 d</th><th>NT 91–180 d</th><th>NT 180+ d</th><th>${__("Oldest")}</th>
 			</tr></thead><tbody>${body}
 			<tr class="tot"><td>${__("TOTAL")}</td>${cells(tot)}</tr>
 			</tbody></table>
@@ -238,13 +237,13 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	root.on("click", ".pg-dl", () => {
 		if (!RAW.length) return;
 		const groups = aggregate();
-		const gnames = Object.keys(groups).sort((a, b) => groups[b].pure - groups[a].pure);
+		const gnames = Object.keys(groups).sort((a, b) => groups[b].nt - groups[a].nt);
 		const rows = [];
 		gnames.forEach((gname) => {
 			const G = groups[gname];
-			Object.keys(G.parties).sort((a, b) => G.parties[b].pure - G.parties[a].pure).forEach((p) => {
+			Object.keys(G.parties).sort((a, b) => G.parties[b].nt - G.parties[a].nt).forEach((p) => {
 				const P = G.parties[p];
-				rows.push({ group: gname, party: p, pcs: P.pcs, gw: P.gw, nt: P.nt, pure: P.pure,
+				rows.push({ group: gname, party: p, pcs: P.pcs, gw: P.gw, nt: P.nt, dmd: P.dmd,
 					b0: P.b[0], b1: P.b[1], b2: P.b[2], b3: P.b[3], oldest: P.oldest });
 			});
 		});
