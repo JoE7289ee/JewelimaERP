@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-01 12:00:00",
+ "modified": "2026-08-03 13:17:48.022269",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "sell-old",
@@ -16,6 +16,9 @@
   },
   {
    "role": "Stock Manager"
+  },
+  {
+   "role": "ESMITH"
   }
  ],
  "script": null,

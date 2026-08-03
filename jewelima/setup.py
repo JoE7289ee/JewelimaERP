@@ -117,6 +117,9 @@ JEWELIMA_ORDERING_READ = [
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
 JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "order-requests", "ws-ordering"]
+
+# every page in the E-SMITH menu — the ESMITH role gets exactly these
+ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
 JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order"]
@@ -328,6 +331,18 @@ def setup_roles():
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
 		               strip=("Manufacturing Manager", "Manufacturing User"))
+
+	# ---- ESMITH — the E-SMITH helper desk ------------------------------------
+	# Everything in that menu: Sell Old, OLD FORMAT (+ saved sessions),
+	# Party Gold / Party Groups, Bag Status. The pages price through the
+	# charts (read) and persist sessions + the party lookup (full control).
+	if not frappe.db.exists("Role", "ESMITH"):
+		frappe.get_doc({"doctype": "Role", "role_name": "ESMITH", "desk_access": 1}).insert(ignore_permissions=True)
+	for dt in ("Old Format Import", "Party Group Map"):
+		grant(dt, "ESMITH", {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1})
+	grant("Price Chart", "ESMITH", {"read": 1, "report": 1})
+	for page in ESMITH_PAGES:
+		set_page_roles(page, ("ESMITH",))
 
 	# ---- Jewelima Purchase: the stock buyer -------------------------------------
 	# One page (Purchase Raw Material), read on the masters its pickers paint —
