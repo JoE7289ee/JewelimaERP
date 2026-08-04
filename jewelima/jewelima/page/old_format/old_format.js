@@ -108,6 +108,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="bapply of-bcolor-sel">${__("→ selected")}</button>
 			<button class="bapply alt of-bcolor-empty">${__("→ all empty")}</button>
 			<span class="sep"></span>
+			<span class="lbl">${__("G/L")}</span>
+			<select class="of-bgl" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				<option value=""></option>
+				<option>GENTS</option>
+				<option>LADIES</option>
+				<option>GENTS / LADIES</option>
+			</select>
+			<button class="bapply of-bgl-sel">${__("→ selected")}</button>
+			<span class="sep"></span>
 			<span class="lbl">${__("Cert lab")}</span>
 			<input class="of-bcert" list="of-labs">
 			<button class="bapply of-bcert-sel">${__("→ selected")}</button>
@@ -351,7 +360,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td><input data-f="size" value="${esc(r.size)}" style="width:48px;"></td>
 				<td><select data-f="style"><option value=""></option>
 					<option ${r.style === "GENTS" ? "selected" : ""}>GENTS</option>
-					<option ${r.style === "LADIES" ? "selected" : ""}>LADIES</option></select></td>
+					<option ${r.style === "LADIES" ? "selected" : ""}>LADIES</option>
+					<option ${r.style === "GENTS / LADIES" ? "selected" : ""}>GENTS / LADIES</option></select></td>
 				<td><input data-f="shape" value="${esc(r.shape)}" style="width:64px;"></td>
 				<td><input data-f="cert" list="of-labs" value="${esc(r.cert)}" style="width:56px;"></td>
 			</tr>`).join("")}</tbody></table>`);
@@ -453,6 +463,20 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	}
 	root.on("click", ".of-bcolor-sel", () => bulkColor(false));
 	root.on("click", ".of-bcolor-empty", () => bulkColor(true));
+
+	root.on("click", ".of-bgl-sel", () => {
+		const v = root.find(".of-bgl").val() || "";
+		if (!v) return frappe.show_alert({ message: __("Pick GENTS / LADIES first."), indicator: "orange" }, 3);
+		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
+		let n = 0;
+		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r.style !== v) { r.style = v; n++; } });
+		if (n) invalidate();
+		SEL.clear();
+		LASTSEL = null;
+		root.find(".of-bgl").val("");
+		paint();
+		frappe.show_alert({ message: __("{0} row(s) set {1}.", [n, v]), indicator: "green" }, 3);
+	});
 
 	root.on("click", ".of-bcert-sel", () => {
 		const v = (root.find(".of-bcert").val() || "").trim().toUpperCase();
