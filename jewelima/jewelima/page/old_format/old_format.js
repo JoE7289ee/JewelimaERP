@@ -343,7 +343,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			</tr></thead><tbody>
 			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}" style="background:${tintOf(r.colour)}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
-				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td>
+				<td>${r.sl}${isChain(r) ? ` <button class="of-merge" data-i="${i}" title="${__("a back chain belongs on a piece — merge it into one")}"
+					style="border:none;border-radius:5px;padding:1px 8px;font-size:10.5px;font-weight:700;color:#fff;background:#9a6b1f;cursor:pointer;">⛓ ${__("Merge")}</button>` : ""}</td>
+				<td><b>${esc(r.unique_id)}</b>${r.back_chain_wt ? ` <span title="${__("back chain {0} ({1} g) merged in", [esc(r.back_chain_barcode || ""), r.back_chain_wt])}" style="cursor:help;">⛓</span>` : ""}</td>
 				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;"></td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
@@ -527,6 +529,46 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		PRICED = null;
 		paint();
 		frappe.show_alert({ message: __("Item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length]), indicator: "green" }, 5);
+	});
+
+	// BACK CHAIN rows are not pieces — they ride on one. Merge folds the
+	// chain's gold into the target (GS+NT), records it as back_chain_wt /
+	// barcode (the NEW-format columns), carries any HUID over, and drops
+	// the chain row.
+	const isChain = (r) => (r.item || "").includes("BACK CHAIN");
+
+	root.on("click", ".of-merge", function () {
+		const i = cint($(this).data("i"));
+		const chain = ROWS[i];
+		const targets = ROWS.filter((r) => !isChain(r));
+		if (!targets.length) return frappe.show_alert({ message: __("No piece to merge into."), indicator: "orange" }, 3);
+		const opts = targets.map((r) => `${r.sl} · ${r.unique_id} · ${r.item} ${r.design || ""}`.trim());
+		const d = new frappe.ui.Dialog({
+			title: __("Merge back chain {0} into…", [chain.unique_id]),
+			fields: [
+				{ fieldname: "note", fieldtype: "HTML", options: `<div class="text-muted" style="font-size:12px;margin-bottom:6px;">
+					${__("Chain {0}: {1} g GS / {2} g NT — its gold joins the piece's weights.", [esc(chain.unique_id), chain.gs, chain.nt])}</div>` },
+				{ fieldname: "t", fieldtype: "Select", label: __("Piece"), options: opts.join("\n"), reqd: 1 },
+			],
+			primary_action_label: __("Merge"),
+			primary_action(v) {
+				d.hide();
+				const uid = (v.t.split("·")[1] || "").trim();
+				const t = ROWS.find((r) => r.unique_id === uid);
+				if (!t) return;
+				t.gs = flt((t.gs + chain.gs).toFixed(3));
+				t.nt = flt((t.nt + chain.nt).toFixed(3));
+				t.back_chain_wt = flt(((t.back_chain_wt || 0) + chain.nt).toFixed(3));
+				t.back_chain_barcode = [t.back_chain_barcode, chain.unique_id].filter(Boolean).join(", ");
+				if (chain.huid) t.huid = [t.huid, chain.huid].filter(Boolean).join(", ");
+				ROWS.splice(ROWS.indexOf(chain), 1);
+				SEL.delete(chain.unique_id);
+				invalidate();
+				paint();
+				frappe.show_alert({ message: __("{0} merged into {1} — weights joined.", [chain.unique_id, uid]), indicator: "green" }, 5);
+			},
+		});
+		d.show();
 	});
 
 	function readyCheck() {

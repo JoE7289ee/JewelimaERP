@@ -8285,7 +8285,8 @@ def export_old_format_billing(rows, quality_token="EF", party="", filename=None)
 			cint(p.get("stn_pcs")), flt(p.get("stn_ct")),
 			(p.get("colour") or "").strip().upper(), p.get("size") or "",
 			(p.get("style") or "").strip().upper(), (p.get("shape") or "").strip().upper(),
-			"", "", party or "", (p.get("cert") or "").strip().upper(), p.get("cert_no") or ""])
+			p.get("back_chain_barcode") or "", flt(p.get("back_chain_wt")) or "",
+			party or "", (p.get("cert") or "").strip().upper(), p.get("cert_no") or ""])
 	widths = {1: 5, 2: 12, 3: 15, 4: 12, 5: 9, 6: 10, 13: 10, 14: 7, 15: 9, 16: 9, 19: 14, 20: 8, 21: 9}
 	from openpyxl.utils import get_column_letter
 	for c, w in widths.items():
