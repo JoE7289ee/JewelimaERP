@@ -1217,8 +1217,9 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 		state.reservedNo = "";
 		let made = 0;
 		for (const l of lines) {
-			const bagDoc = await frappe.db.insert({
-				doctype: "Order Bag", job_order: order.name, design: l.design, qty: l.qty || 1,
+			// records are view-only in the desk — bags go through the page API
+			const br = await frappe.call({ method: "jewelima.jewelima.api.create_order_bag", args: { payload: {
+				job_order: order.name, design: l.design, qty: l.qty || 1,
 				size: l.size, gross_weight: l.gross_weight, nett_weight: l.nett_weight, purity: l.purity,
 				dmd_no: l.dmd_no, dmd_weight: l.dmd_weight, ps_no: l.ps_no, ps_weight: l.ps_weight,
 				cs_no: l.cs_no, cs_weight: l.cs_weight,
@@ -1231,7 +1232,8 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 					cad_stone_no: l.cad.stone_no, cad_reference: l.cad.reference, cad_remarks: l.cad.remarks,
 					image: l.cad.image || undefined, // the reference photo — the bag's image until the design lands
 				} : {}),
-			});
+			} } });
+			const bagDoc = { name: br.message };
 			if ((l.photos || []).length && bagDoc && bagDoc.name) {
 				await frappe.call({ method: "jewelima.jewelima.api.attach_order_bag_photos",
 					args: { order_bag: bagDoc.name, photos: JSON.stringify(l.photos) } });

@@ -1002,8 +1002,8 @@ def _profile_from_materials(mats):
 	(by item.stone_type) -> dmd/ps/cs counts + carat weights; metal -> nett grams +
 	gram-weighted purity. gross = metal grams; nett = gross - stone grams (1 ct = 0.2 g)."""
 	out = {
-		"dmd_no": 0, "ps_no": 0, "cs_no": 0, "cz_no": 0, "cvd_no": 0, "pdmd_no": 0, "poth_no": 0,
-		"dmd_weight": 0.0, "ps_weight": 0.0, "cs_weight": 0.0, "cz_weight": 0.0, "cvd_weight": 0.0, "pdmd_weight": 0.0, "poth_weight": 0.0,
+		"dmd_no": 0, "ps_no": 0, "cs_no": 0, "cz_no": 0, "cvd_no": 0, "sw_no": 0, "pdmd_no": 0, "poth_no": 0,
+		"dmd_weight": 0.0, "ps_weight": 0.0, "cs_weight": 0.0, "cz_weight": 0.0, "cvd_weight": 0.0, "sw_weight": 0.0, "pdmd_weight": 0.0, "poth_weight": 0.0,
 		"gross_weight": 0.0, "nett_weight": 0.0, "purity": 0.0,
 	}
 	rows = mats or []
@@ -1013,8 +1013,8 @@ def _profile_from_materials(mats):
 		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
 			stype[it.name] = it.stone_type
 			purity_map[it.name] = flt(it.purity_percentage)
-	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no", "Cubic Zirconia": "cz_no", "CVD": "cvd_no", "Party Diamond": "pdmd_no", "Party Other": "poth_no"}
-	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight", "Cubic Zirconia": "cz_weight", "CVD": "cvd_weight", "Party Diamond": "pdmd_weight", "Party Other": "poth_weight"}
+	NO_BUCKET = {"Diamond": "dmd_no", "Precious Stone": "ps_no", "Color Stone": "cs_no", "Cubic Zirconia": "cz_no", "CVD": "cvd_no", "Swarovski": "sw_no", "Party Diamond": "pdmd_no", "Party Other": "poth_no"}
+	WT_BUCKET = {"Diamond": "dmd_weight", "Precious Stone": "ps_weight", "Color Stone": "cs_weight", "Cubic Zirconia": "cz_weight", "CVD": "cvd_weight", "Swarovski": "sw_weight", "Party Diamond": "pdmd_weight", "Party Other": "poth_weight"}
 	metal_g = 0.0
 	purity_num = 0.0
 	metal_purities = []
@@ -1071,7 +1071,7 @@ def _actual_profile(order_bag):
 	if codes:
 		for i in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type", "purity_percentage"]):
 			meta[i.name] = (i.stone_type, flt(i.purity_percentage))
-	BUCKET = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs", "Cubic Zirconia": "cz", "CVD": "cvd", "Party Diamond": "pdmd", "Party Other": "poth"}
+	BUCKET = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs", "Cubic Zirconia": "cz", "CVD": "cvd", "Swarovski": "sw", "Party Diamond": "pdmd", "Party Other": "poth"}
 	w = {b: 0.0 for b in BUCKET.values()}
 	n = {b: 0 for b in BUCKET.values()}
 	gold = pnum = 0.0
@@ -1499,6 +1499,26 @@ def create_job_order(payload):
 	})
 	doc.insert(ignore_permissions=True, set_name=no)
 	frappe.db.commit()
+	return doc.name
+
+
+@frappe.whitelist()
+def create_order_bag(payload):
+	"""Place Order writes its bags through HERE. Desk records are view-only by
+	design (every mutation goes through page APIs) — the client-side
+	frappe.db.insert this replaces died on that permission wall for the
+	Ordering role."""
+	p = frappe.parse_json(payload)
+	fields = ("job_order", "design", "qty", "size", "gross_weight", "nett_weight", "purity",
+		"dmd_no", "dmd_weight", "ps_no", "ps_weight", "cs_no", "cs_weight",
+		"cz_no", "cz_weight", "cvd_no", "cvd_weight", "pdmd_no", "pdmd_weight",
+		"poth_no", "poth_weight", "narration", "bag_bom",
+		"is_cad", "cad_design_type", "cad_karat", "cad_gold_weight", "cad_diamond_weight",
+		"cad_stone_no", "cad_reference", "cad_remarks", "image")
+	doc = frappe.get_doc(dict({"doctype": "Order Bag"},
+		**{k: p.get(k) for k in fields if p.get(k) is not None}))
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()  # bags land one by one from the page's loop
 	return doc.name
 
 
