@@ -1216,6 +1216,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "file-text",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "View PC",
+   "link_to": "view-pc",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "bar-chart-2",
@@ -2269,7 +2282,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-03 13:12:41.398907",
+ "modified": "2026-08-04 21:26:38.984753",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

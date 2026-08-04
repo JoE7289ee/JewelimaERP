@@ -119,7 +119,7 @@ JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Orde
 JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "order-requests", "ws-ordering"]
 
 # every page in the E-SMITH menu — the ESMITH role gets exactly these
-ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status"]
+ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
 JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order"]
