@@ -271,7 +271,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	}
 
 	function custTitleRow(s, withOdate) {
-		return `<td class="l" colspan="6">${esc(s.loc)}
+		return `<td class="l" colspan="6">${esc(s.loc)} ${__("TOTAL")}
 				<span style="font-weight:400;color:var(--text-muted);">(${s.t.bags} ${__("bags")})</span></td>
 			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td>${withOdate ? "<td></td>" : ""}<td></td>
 			<td class="${s.t.maxover > 0 ? "bs-old" : ""}">${s.t.maxover}</td>`;
@@ -289,8 +289,8 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<div style="margin-bottom:8px;">${strip}</div>
 			${secs.length ? `
 			<table class="bs-t"><thead><tr>${CUST_HEAD("l", true)}</tr></thead><tbody>
-			${secs.map((s) => `<tr class="bs-grp flat">${custTitleRow(s, true)}</tr>
-			${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old", true)}</tr>`).join("")}`).join("")}
+			${secs.map((s) => `${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old", true)}</tr>`).join("")}
+			<tr class="bs-grp flat">${custTitleRow(s, true)}</tr>`).join("")}
 			</tbody></table>`
 			: `<div class="bs-none">${__("No CUST bags match the location ticks / due filter.")}</div>`}`);
 	}
@@ -370,8 +370,8 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			const ctot = blankAgg();
 			secs.forEach((s) => s.list.forEach((r) => addTo(ctot, r)));
 			const w = PRINT_ODATE;
-			const body = secs.map((s) => `<tr class="grp">${custTitleRow(s, w)}</tr>
-				${s.list.map((r) => `<tr class="kid">${custRow(r, "old", w)}</tr>`).join("")}`).join("")
+			const body = secs.map((s) => `${s.list.map((r) => `<tr class="kid">${custRow(r, "old", w)}</tr>`).join("")}
+				<tr class="grp">${custTitleRow(s, w)}</tr>`).join("")
 				+ `<tr class="tot"><td class="l" colspan="6">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
 				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td><td></td></tr>`;
 			return printDoc(__("BAG STATUS — CUST PRINT"), sub
