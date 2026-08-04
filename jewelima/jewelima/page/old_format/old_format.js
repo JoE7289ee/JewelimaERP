@@ -121,6 +121,18 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<input class="of-bcert" list="of-labs">
 			<button class="bapply of-bcert-sel">${__("→ selected")}</button>
 			<span class="sep"></span>
+			<span class="lbl">${__("Size")}</span>
+			<input class="of-bsize" style="text-transform:none;width:70px;">
+			<button class="bapply of-bsize-sel">${__("→ selected")}</button>
+			<span class="sep"></span>
+			<span class="lbl">${__("Shape")}</span>
+			<select class="of-bshape" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				<option value=""></option>
+				<option>OVAL</option>
+				<option>CHAIN</option>
+			</select>
+			<button class="bapply of-bshape-sel">${__("→ selected")}</button>
+			<span class="sep"></span>
 			<button class="bapply alt of-bhuid-pend">${__("HUID PENDING → selected")}</button>
 			<span class="of-status"></span>
 		</div>
@@ -139,6 +151,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		<div class="of-body"><div class="of-none">${__("Upload the OLD quotation excel. PREP: bulk-fill COLOR, tag certifications, Sort & Number. EXPORT: price it and download the JOS billing.")}</div></div>
 		<datalist id="of-colors"><option>YELLOW</option><option>ROSE</option><option>WHITE</option></datalist>
 		<datalist id="of-labs"><option>IGI</option><option>SGL</option><option>DHC</option><option>GIA</option></datalist>
+		<datalist id="of-shapes"><option>OVAL</option><option>CHAIN</option></datalist>
 	`);
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
@@ -362,7 +375,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					<option ${r.style === "GENTS" ? "selected" : ""}>GENTS</option>
 					<option ${r.style === "LADIES" ? "selected" : ""}>LADIES</option>
 					<option ${r.style === "GENTS / LADIES" ? "selected" : ""}>GENTS / LADIES</option></select></td>
-				<td><input data-f="shape" value="${esc(r.shape)}" style="width:64px;"></td>
+				<td><input data-f="shape" list="of-shapes" value="${esc(r.shape)}" style="width:64px;"></td>
 				<td><input data-f="cert" list="of-labs" value="${esc(r.cert)}" style="width:56px;"></td>
 			</tr>`).join("")}</tbody></table>`);
 	}
@@ -476,6 +489,31 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		root.find(".of-bgl").val("");
 		paint();
 		frappe.show_alert({ message: __("{0} row(s) set {1}.", [n, v]), indicator: "green" }, 3);
+	});
+
+	function bulkField(field, value, label) {
+		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
+		let n = 0;
+		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r[field] !== value) { r[field] = value; n++; } });
+		if (n) invalidate();
+		SEL.clear();
+		LASTSEL = null;
+		paint();
+		frappe.show_alert({ message: __("{0} row(s) set {1}.", [n, label || value]), indicator: "green" }, 3);
+	}
+
+	root.on("click", ".of-bsize-sel", () => {
+		const v = (root.find(".of-bsize").val() || "").trim();
+		if (!v) return frappe.show_alert({ message: __("Type a size first."), indicator: "orange" }, 3);
+		bulkField("size", v);
+		root.find(".of-bsize").val("");
+	});
+
+	root.on("click", ".of-bshape-sel", () => {
+		const v = root.find(".of-bshape").val() || "";
+		if (!v) return frappe.show_alert({ message: __("Pick a shape first."), indicator: "orange" }, 3);
+		bulkField("shape", v);
+		root.find(".of-bshape").val("");
 	});
 
 	root.on("click", ".of-bcert-sel", () => {
