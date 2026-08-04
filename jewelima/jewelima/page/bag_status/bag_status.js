@@ -8,9 +8,11 @@
 //   USER     — holder -> locations (who's holding how much)
 //   PARTY    — party group -> locations (whose orders are stuck where;
 //              the Party Group Map lookup, new spellings auto-file to OTHER)
-//   CUST     — customer-marked bags (Salesman = CUST): each location as a
-//              title with its pieces beneath, most past DUE first; tick a
-//              location out to drop it from the CUST print
+//   CUST     — customer-marked bags (Salesman = CUST / CO-*): each location a
+//              title with its pieces beneath, most past DUE first; the top
+//              strip of location ticks filters table AND print; due filter =
+//              past-due or a picked date; order date prints only when ticked.
+// Rejection-location bags are dropped at the door (a tile counts them).
 // Aging runs on the ORDER date (due dates in these files are junk); the
 // age buckets carry PIECES. Straight data — nothing stored.
 // Route: /app/bag-status
@@ -26,7 +28,9 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	let VIEW = "loc"; // "loc" | "user" | "party" | "cust"
 	let OPEN = new Set();
 	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
-	let CUSTDUE = "all"; // due filter: all | past | d7 | d30
+	let CUSTDUE = "all"; // due filter: all | past | bydate
+	let REJN = 0; // Rejection bags dropped at load
+	let PRINT_ODATE = false; // CUST print carries the order date only when ticked
 
 	const VIEWS = {
 		loc: { label: __("Location"), l2: __("Location / Design type") },
@@ -70,9 +74,11 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<select class="bs-due" style="display:none;border:1px solid var(--border-color);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;background:var(--control-bg);color:var(--text-color);">
 				<option value="all">${__("Due: all")}</option>
 				<option value="past">${__("Already past due")}</option>
-				<option value="d7">${__("Due within 7 d (incl. past)")}</option>
-				<option value="d30">${__("Due within 30 d (incl. past)")}</option>
+				<option value="bydate">${__("Due on/before…")}</option>
 			</select>
+			<input type="date" class="bs-duedate" style="display:none;border:1px solid var(--border-color);border-radius:8px;padding:7px 10px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+			<label class="bs-podate" style="display:none;align-items:center;gap:5px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
+				<input type="checkbox" class="bs-podate-cb">${__("Order date in print")}</label>
 			<button class="bs-btn bs-print">${__("Print 🖨")}</button>
 		</div>
 		<div class="bs-tiles"></div>
@@ -92,7 +98,10 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				frappe.call({ method: API + ".parse_bag_status_excel", args: { filedata: FILE.b64 } }),
 				frappe.call({ method: API + ".get_party_group_map" }),
 			]).then(([r1, r2]) => {
-				RAW = (r1.message || {}).rows || [];
+				const all = (r1.message || {}).rows || [];
+				// Rejection is noise for every view — dropped at the door
+				RAW = all.filter((r) => (r.loc || "").toUpperCase() !== "REJECTION");
+				REJN = all.length - RAW.length;
 				MAP = r2.message || {};
 				OPEN.clear();
 				root.find(".bs-views").css("display", "inline-flex");
@@ -168,7 +177,8 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		root.find(".bs-views button").each(function () {
 			$(this).toggleClass("on", $(this).data("v") === VIEW);
 		});
-		root.find(".bs-due").toggle(VIEW === "cust");
+		root.find(".bs-due, .bs-podate").css("display", VIEW === "cust" ? "inline-flex" : "none");
+		root.find(".bs-duedate").toggle(VIEW === "cust" && CUSTDUE === "bydate");
 		root.find(".bs-tiles").html(`
 			<div class="bs-tile"><div class="k">${__("Bags")}</div><div class="v">${tot.bags}</div></div>
 			<div class="bs-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
@@ -176,7 +186,8 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<div class="bs-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
 			<div class="bs-tile"><div class="k">${__("DMD")}</div><div class="v">${g3(tot.dmd)} ct</div></div>
 			<div class="bs-tile"><div class="k">${__("CUST bags")}</div><div class="v">${custN}</div></div>
-			<div class="bs-tile"><div class="k">${__("Oldest order")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
+			<div class="bs-tile"><div class="k">${__("Oldest order")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>
+			${REJN ? `<div class="bs-tile"><div class="k">${__("Rejection")}</div><div class="v" style="color:var(--text-muted);">${REJN} ${__("hidden")}</div></div>` : ""}`);
 		if (VIEW === "cust") return paintCust();
 		const R = rollup();
 		root.find(".bs-body").html(`
@@ -198,12 +209,33 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 
 	// CUST bags: each location a title, its pieces beneath, MOST-OVERDUE first
 	// (sorted on the due date; positive Overdue = past due)
-	const DUE_PRED = { all: () => true, past: (r) => (r.overdue || 0) > 0,
-		d7: (r) => (r.overdue || 0) >= -7, d30: (r) => (r.overdue || 0) >= -30 };
-	const DUE_LABEL = { all: "", past: __("already past due"), d7: __("due within 7 d"), d30: __("due within 30 d") };
+	function duePass(r) {
+		if (CUSTDUE === "past") return (r.overdue || 0) > 0;
+		if (CUSTDUE === "bydate") {
+			const d = root.find(".bs-duedate").val();
+			if (!d) return true;
+			// due <= chosen  ⟺  overdue >= today − chosen
+			return (r.overdue || 0) >= frappe.datetime.get_day_diff(frappe.datetime.get_today(), d);
+		}
+		return true;
+	}
+
+	function dueLabel() {
+		if (CUSTDUE === "past") return __("already past due");
+		if (CUSTDUE === "bydate" && root.find(".bs-duedate").val())
+			return __("due on/before {0}", [frappe.datetime.str_to_user(root.find(".bs-duedate").val())]);
+		return "";
+	}
+
+	// every CUST location, before the tick-out filter (the top strip lists them)
+	function custLocs() {
+		const locs = {};
+		RAW.filter((r) => r.cust).forEach((r) => { locs[r.loc] = (locs[r.loc] || 0) + 1; });
+		return Object.keys(locs).sort((a, b) => locs[b] - locs[a]).map((l) => [l, locs[l]]);
+	}
 
 	function custSections() {
-		const bags = RAW.filter((r) => r.cust && DUE_PRED[CUSTDUE](r));
+		const bags = RAW.filter((r) => r.cust && !CUSTOFF.has(r.loc) && duePass(r));
 		const locs = {};
 		bags.forEach((r) => { (locs[r.loc] = locs[r.loc] || []).push(r); });
 		return Object.keys(locs)
@@ -217,47 +249,60 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			});
 	}
 
-	const CUST_HEAD = (l) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th><th class="${l || ""}">${__("Type")}</th>
+	// withOdate: the screen always carries Order date; the print only when ticked
+	const CUST_HEAD = (l, withOdate) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th><th class="${l || ""}">${__("Type")}</th>
 		<th class="${l || ""}" title="${__("the order-lane marker from the file: CUST, CO-HP (WED)…")}">${__("Mark")}</th>
 		<th class="${l || ""}">${__("Purity")}</th><th class="${l || ""}">${__("User")}</th>
 		<th>${__("Qty")}</th><th>${__("DMD ct")}</th>
-		<th class="${l || ""}">${__("Party")}</th><th class="${l || ""}">${__("Due date")}</th><th title="${__("days past the due date — negative means not due yet")}">${__("Overdue d")}</th>`;
+		<th class="${l || ""}">${__("Party")}</th>${withOdate ? `<th class="${l || ""}">${__("Order date")}</th>` : ""}<th class="${l || ""}">${__("Due date")}</th><th title="${__("days past the due date — negative means not due yet")}">${__("Overdue d")}</th>`;
 
-	function custRow(r, old) {
+	function custRow(r, old, withOdate) {
 		return `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.dtype)}</td>
 			<td class="l">${esc(r.mark)}</td>
 			<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td>
 			<td>${r.qty}</td><td>${g3(r.dmd)}</td>
-			<td class="l">${esc(r.party)}</td><td class="l">${esc(r.ddate)}</td>
+			<td class="l">${esc(r.party)}</td>${withOdate ? `<td class="l">${esc(r.odate)}</td>` : ""}<td class="l">${esc(r.ddate)}</td>
 			<td class="${(r.overdue || 0) > 0 ? old : ""}">${r.overdue || 0}</td>`;
 	}
 
-	function custTitleRow(s, extra) {
-		return `<td class="l" colspan="6">${extra || ""}${esc(s.loc)}
+	function custTitleRow(s, withOdate) {
+		return `<td class="l" colspan="6">${esc(s.loc)}
 				<span style="font-weight:400;color:var(--text-muted);">(${s.t.bags} ${__("bags")})</span></td>
-			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td><td></td>
+			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td>${withOdate ? "<td></td>" : ""}<td></td>
 			<td class="${s.t.maxover > 0 ? "bs-old" : ""}">${s.t.maxover}</td>`;
 	}
 
 	function paintCust() {
 		const secs = custSections();
-		root.find(".bs-body").html(secs.length ? `
-			<table class="bs-t"><thead><tr>${CUST_HEAD("l")}</tr></thead><tbody>
-			${secs.map((s) => `<tr class="bs-grp flat">${custTitleRow(s,
-				`<input type="checkbox" class="bs-custloc" data-loc="${esc(s.loc)}" ${CUSTOFF.has(s.loc) ? "" : "checked"}
-					title="${__("untick to leave this location out of the CUST print")}" style="margin-right:7px;"> `)}</tr>
-			${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old")}</tr>`).join("")}`).join("")}
+		const strip = custLocs().map(([l, n]) => `
+			<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-color);border-radius:14px;
+				padding:2px 10px;margin:2px 6px 2px 0;font-size:11.5px;cursor:pointer;background:${CUSTOFF.has(l) ? "var(--control-bg)" : "var(--fg-color)"};
+				${CUSTOFF.has(l) ? "opacity:.55;" : ""}">
+				<input type="checkbox" class="bs-custloc" data-loc="${esc(l)}" ${CUSTOFF.has(l) ? "" : "checked"}
+					style="width:13px;height:13px;accent-color:#1f618d;">${esc(l)} <span style="color:var(--text-muted);">(${n})</span></label>`).join("");
+		root.find(".bs-body").html(`
+			<div style="margin-bottom:8px;">${strip}</div>
+			${secs.length ? `
+			<table class="bs-t"><thead><tr>${CUST_HEAD("l", true)}</tr></thead><tbody>
+			${secs.map((s) => `<tr class="bs-grp flat">${custTitleRow(s, true)}</tr>
+			${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old", true)}</tr>`).join("")}`).join("")}
 			</tbody></table>`
-			: `<div class="bs-none">${CUSTDUE === "all" ? __("No CUST-marked bags in this report.") : __("No CUST bags match the due filter.")}</div>`);
+			: `<div class="bs-none">${__("No CUST bags match the location ticks / due filter.")}</div>`}`);
 	}
 
 	root.on("change", ".bs-custloc", function () {
 		const loc = $(this).data("loc");
 		this.checked ? CUSTOFF.delete(loc) : CUSTOFF.add(loc);
+		paint();
 	});
 	root.on("change", ".bs-due", function () {
 		CUSTDUE = this.value;
+		root.find(".bs-duedate").toggle(CUSTDUE === "bydate");
 		paint();
+	});
+	root.on("change", ".bs-duedate", () => paint());
+	root.on("change", ".bs-podate-cb", function () {
+		PRINT_ODATE = this.checked;
 	});
 
 	root.on("click", ".bs-views button", function () {
@@ -315,16 +360,18 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		const sub = `${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
 			· ${tot.bags} ${__("bags")} · ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`;
 		if (VIEW === "cust") {
-			const secs = custSections().filter((s) => !CUSTOFF.has(s.loc));
-			if (!secs.length) return frappe.show_alert({ message: __("Every location is ticked out — nothing to print."), indicator: "orange" }, 4);
+			const secs = custSections();
+			if (!secs.length) return frappe.show_alert({ message: __("Nothing matches the location ticks / due filter."), indicator: "orange" }, 4);
 			const ctot = blankAgg();
 			secs.forEach((s) => s.list.forEach((r) => addTo(ctot, r)));
-			const body = secs.map((s) => `<tr class="grp">${custTitleRow(s)}</tr>
-				${s.list.map((r) => `<tr class="kid">${custRow(r, "old")}</tr>`).join("")}`).join("")
+			const w = PRINT_ODATE;
+			const body = secs.map((s) => `<tr class="grp">${custTitleRow(s, w)}</tr>
+				${s.list.map((r) => `<tr class="kid">${custRow(r, "old", w)}</tr>`).join("")}`).join("")
 				+ `<tr class="tot"><td class="l" colspan="6">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
-				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td><td></td><td></td></tr>`;
+				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td><td></td></tr>`;
 			return printDoc(__("BAG STATUS — CUST PRINT"), sub
-				+ (CUSTDUE !== "all" ? ` · <b>${DUE_LABEL[CUSTDUE]}</b>` : ""), CUST_HEAD("l"), body);
+				+ (dueLabel() ? ` · <b>${dueLabel()}</b>` : "")
+				+ (CUSTOFF.size ? ` · ${__("{0} location(s) ticked out", [CUSTOFF.size])}` : ""), CUST_HEAD("l", w), body);
 		}
 		const R = rollup();
 		const body = sortedKeys(R).map((name) => {
