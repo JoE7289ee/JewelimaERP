@@ -103,37 +103,16 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<span class="of-selcount">0 ${__("selected")}</span>
 			<button class="bapply alt of-selclear" style="background:#8a2f2f;">${__("Clear")}</button>
 			<span class="sep"></span>
-			<span class="lbl">${__("Color")}</span>
-			<input class="of-bcolor" list="of-colors">
-			<button class="bapply of-bcolor-sel">${__("→ selected")}</button>
-			<button class="bapply alt of-bcolor-empty">${__("→ all empty")}</button>
-			<span class="sep"></span>
-			<span class="lbl">${__("G/L")}</span>
-			<select class="of-bgl" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
-				<option value=""></option>
-				<option>GENTS</option>
-				<option>LADIES</option>
-				<option>GENTS / LADIES</option>
+			<span class="lbl">${__("Set")}</span>
+			<select class="of-bfield" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;font-weight:700;background:var(--fg-color);color:var(--text-color);">
+				<option value="colour">${__("Color")}</option>
+				<option value="style">${__("G/L")}</option>
+				<option value="cert">${__("Cert lab")}</option>
+				<option value="size">${__("Size")}</option>
+				<option value="shape">${__("Shape")}</option>
+				<option value="pending">${__("HUID PENDING")}</option>
 			</select>
-			<button class="bapply of-bgl-sel">${__("→ selected")}</button>
-			<span class="sep"></span>
-			<span class="lbl">${__("Cert lab")}</span>
-			<input class="of-bcert" list="of-labs">
-			<button class="bapply of-bcert-sel">${__("→ selected")}</button>
-			<span class="sep"></span>
-			<span class="lbl">${__("Size")}</span>
-			<input class="of-bsize" style="text-transform:none;width:70px;">
-			<button class="bapply of-bsize-sel">${__("→ selected")}</button>
-			<span class="sep"></span>
-			<span class="lbl">${__("Shape")}</span>
-			<select class="of-bshape" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
-				<option value=""></option>
-				<option>OVAL</option>
-				<option>CHAIN</option>
-			</select>
-			<button class="bapply of-bshape-sel">${__("→ selected")}</button>
-			<span class="sep"></span>
-			<button class="bapply alt of-bhuid-pend">${__("HUID PENDING → selected")}</button>
+			<span class="of-bslot" style="display:inline-flex;gap:8px;align-items:center;"></span>
 			<span class="of-status"></span>
 		</div>
 		<div class="of-bar of-bar-export" style="display:none;">
@@ -457,96 +436,75 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		refreshStatus();
 	});
 
-	function bulkColor(onlyEmpty) {
-		const v = (root.find(".of-bcolor").val() || "").trim().toUpperCase();
-		if (!v) return frappe.show_alert({ message: __("Type a color first."), indicator: "orange" }, 3);
+	// ---- ONE bulk applier: pick the field, the right control appears ---------
+	const BULK = {
+		colour: { input: "text", list: "of-colors", upper: true, allEmpty: true },
+		style: { input: "select", options: ["GENTS", "LADIES", "GENTS / LADIES"] },
+		cert: { input: "text", list: "of-labs", upper: true },
+		size: { input: "text", upper: false },
+		shape: { input: "select", options: ["OVAL", "CHAIN"] },
+		pending: { input: "none" },
+	};
+
+	function renderBulkSlot() {
+		const field = root.find(".of-bfield").val();
+		const cfg = BULK[field];
+		let html = "";
+		if (cfg.input === "text") {
+			html = `<input class="of-bval" ${cfg.list ? `list="${cfg.list}"` : ""}
+				style="border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;width:96px;
+				background:var(--fg-color);color:var(--text-color);${cfg.upper ? "text-transform:uppercase;" : ""}">`;
+		} else if (cfg.input === "select") {
+			html = `<select class="of-bval" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				<option value=""></option>${cfg.options.map((o) => `<option>${o}</option>`).join("")}</select>`;
+		} else {
+			html = `<span style="font-size:11px;color:var(--text-muted);">${__("adds one PENDING per selected row (stacks for two-HUID pieces)")}</span>`;
+		}
+		html += `<button class="bapply of-bapply">${__("→ selected")}</button>`;
+		if (cfg.allEmpty) html += `<button class="bapply alt of-bapply-empty">${__("→ all empty")}</button>`;
+		root.find(".of-bslot").html(html);
+	}
+	root.on("change", ".of-bfield", renderBulkSlot);
+	renderBulkSlot();
+
+	function bulkApply(onlyEmpty) {
+		const field = root.find(".of-bfield").val();
+		const cfg = BULK[field];
+		if (field === "pending") {
+			// hallmarked but the code wasn't typed — bills exactly like a code.
+			// APPENDS: apply again (or to an already-PENDING row) for two HUIDs.
+			if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
+			let n = 0;
+			ROWS.forEach((r) => {
+				if (!SEL.has(r.unique_id)) return;
+				r.huid = r.huid ? r.huid + ", PENDING" : "PENDING";
+				n++;
+			});
+			if (n) invalidate();
+			SEL.clear();
+			LASTSEL = null;
+			paint();
+			return frappe.show_alert({ message: __("Added one PENDING to {0} row(s) — each counts as a HUID.", [n]), indicator: "green" }, 4);
+		}
+		let v = (root.find(".of-bval").val() || "").trim();
+		if (cfg.upper) v = v.toUpperCase();
+		if (!v) return frappe.show_alert({ message: __("Type or pick the value first."), indicator: "orange" }, 3);
 		if (!onlyEmpty && !SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
 		let n = 0;
 		ROWS.forEach((r) => {
-			const hit = onlyEmpty ? !r.colour : SEL.has(r.unique_id);
-			if (hit && r.colour !== v) { r.colour = v; n++; }
+			const hit = onlyEmpty ? !r[field] : SEL.has(r.unique_id);
+			if (hit && r[field] !== v) { r[field] = v; n++; }
 		});
 		if (n) invalidate();
-		// every "-> selected" apply hands the selection back for the next batch
+		// every apply hands the selection back for the next batch
 		SEL.clear();
 		LASTSEL = null;
-		root.find(".of-bcolor").val("");
 		paint();
-		frappe.show_alert({ message: __("{0} row(s) coloured {1}.", [n, v]), indicator: "green" }, 3);
-	}
-	root.on("click", ".of-bcolor-sel", () => bulkColor(false));
-	root.on("click", ".of-bcolor-empty", () => bulkColor(true));
-
-	root.on("click", ".of-bgl-sel", () => {
-		const v = root.find(".of-bgl").val() || "";
-		if (!v) return frappe.show_alert({ message: __("Pick GENTS / LADIES first."), indicator: "orange" }, 3);
-		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
-		let n = 0;
-		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r.style !== v) { r.style = v; n++; } });
-		if (n) invalidate();
-		SEL.clear();
-		LASTSEL = null;
-		root.find(".of-bgl").val("");
-		paint();
+		renderBulkSlot();
 		frappe.show_alert({ message: __("{0} row(s) set {1}.", [n, v]), indicator: "green" }, 3);
-	});
-
-	function bulkField(field, value, label) {
-		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
-		let n = 0;
-		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r[field] !== value) { r[field] = value; n++; } });
-		if (n) invalidate();
-		SEL.clear();
-		LASTSEL = null;
-		paint();
-		frappe.show_alert({ message: __("{0} row(s) set {1}.", [n, label || value]), indicator: "green" }, 3);
 	}
-
-	root.on("click", ".of-bsize-sel", () => {
-		const v = (root.find(".of-bsize").val() || "").trim();
-		if (!v) return frappe.show_alert({ message: __("Type a size first."), indicator: "orange" }, 3);
-		bulkField("size", v);
-		root.find(".of-bsize").val("");
-	});
-
-	root.on("click", ".of-bshape-sel", () => {
-		const v = root.find(".of-bshape").val() || "";
-		if (!v) return frappe.show_alert({ message: __("Pick a shape first."), indicator: "orange" }, 3);
-		bulkField("shape", v);
-		root.find(".of-bshape").val("");
-	});
-
-	root.on("click", ".of-bcert-sel", () => {
-		const v = (root.find(".of-bcert").val() || "").trim().toUpperCase();
-		if (!v) return frappe.show_alert({ message: __("Type a cert lab first."), indicator: "orange" }, 3);
-		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
-		let n = 0;
-		ROWS.forEach((r) => { if (SEL.has(r.unique_id) && r.cert !== v) { r.cert = v; n++; } });
-		if (n) invalidate();
-		SEL.clear();
-		LASTSEL = null;
-		root.find(".of-bcert").val("");
-		paint();
-		frappe.show_alert({ message: __("{0} row(s) tagged {1} — selection cleared, tick the next batch.", [n, v]), indicator: "green" }, 4);
-	});
-
-	// hallmarked but the code wasn't typed — bills exactly like a code.
-	// APPENDS: a row already holding a code or PENDING gets ", PENDING" —
-	// apply twice (or select an already-PENDING row) for two-HUID pieces.
-	root.on("click", ".of-bhuid-pend", () => {
-		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
-		let n = 0;
-		ROWS.forEach((r) => {
-			if (!SEL.has(r.unique_id)) return;
-			r.huid = r.huid ? r.huid + ", PENDING" : "PENDING";
-			n++;
-		});
-		if (n) invalidate();
-		SEL.clear();
-		LASTSEL = null;
-		paint();
-		frappe.show_alert({ message: __("Added one PENDING to {0} row(s) — each counts as a HUID.", [n]), indicator: "green" }, 4);
-	});
+	root.on("click", ".of-bapply", () => bulkApply(false));
+	root.on("click", ".of-bapply-empty", () => bulkApply(true));
 
 	// the agreed physical order: the item ladder -> YELLOW/ROSE/WHITE ->
 	// below-1g band first -> GW ascending inside the band
