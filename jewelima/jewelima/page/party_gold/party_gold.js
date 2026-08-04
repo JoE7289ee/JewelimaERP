@@ -21,6 +21,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	let RAW = [];     // per-piece rows {party, nt, gs, purity, days, dmd, ps, cs, design, barcode, dtype}
 	let MAP = {};     // party -> group (Party Group Map)
 	let VIEW = "party"; // "party" | "dtype"
+	let GDAYS = 0;      // report-wide: only pieces held >= N days count
 	let OPEN = new Set(); // expanded level-1 names (per view)
 	let STMT = null;      // party whose statement view is open
 	const SOFF = new Set(); // statement: design types ticked out
@@ -61,6 +62,11 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			<label class="pg-file">${__("📄 Pick the PARTY SELECTION .xlsx")}</label>
 			<input type="file" class="pg-input" accept=".xlsx" style="display:none;">
 			<button class="pg-btn pg-view"></button>
+			<span class="pg-gdays-w" style="display:none;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);">
+				${__("held ≥")}
+				<input type="number" min="0" class="pg-gdays" placeholder="${__("all")}"
+					style="width:64px;border:1px solid var(--border-color);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				${__("days")}</span>
 			<button class="pg-btn pg-print">${__("Print 🖨")}</button>
 			<button class="pg-btn pg-dl">${__("Report ⤓")}</button>
 		</div>
@@ -87,6 +93,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				OPEN.clear();
 				STMT = null;
 				root.find(".pg-dl, .pg-print, .pg-view").show();
+				root.find(".pg-gdays-w").css("display", "inline-flex");
 				// a spelling this scan brings in for the first time is saved
 				// straight into OTHER — sort it out on Party Groups later
 				const fresh = [...new Set(RAW.map((r) => r.party).filter((p) => p && !MAP[p]))];
@@ -124,10 +131,13 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		x.oldest = Math.max(x.oldest, r.days || 0);
 	}
 
+	// the whole report narrows to pieces held >= GDAYS (blank = all)
+	const gRows = () => (GDAYS ? RAW.filter((r) => (r.days || 0) >= GDAYS) : RAW);
+
 	// two-level rollup: key1 -> {items: {key2 -> agg}, ...agg}
 	function aggBy(k1, k2) {
 		const out = {};
-		RAW.forEach((r) => {
+		gRows().forEach((r) => {
 			const a = k1(r), b = k2(r);
 			const L1 = (out[a] = out[a] || Object.assign({ items: {} }, blankAgg()));
 			const L2 = (L1.items[b] = L1.items[b] || blankAgg());
@@ -152,11 +162,12 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	function paint() {
 		if (!RAW.length) return;
 		root.find(".pg-view, .pg-dl").toggle(!STMT);
+		root.find(".pg-gdays-w").css("display", STMT ? "none" : "inline-flex");
 		if (STMT) return paintStatement();
 		const R = rollup();
 		const l1 = sortedKeys(R);
 		const tot = blankAgg();
-		RAW.forEach((r) => addTo(tot, r));
+		gRows().forEach((r) => addTo(tot, r));
 		const groups = aggBy(groupOf, partyOf);
 		const gnames = sortedKeys(groups);
 		root.find(".pg-view").text(VIEW === "party" ? __("View: Design Types ⇄") : __("View: Parties ⇄"));
@@ -187,6 +198,11 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				</tr>`).join("") : "");
 			}).join("")}</tbody></table>`);
 	}
+
+	root.on("input", ".pg-gdays", function () {
+		GDAYS = cint(this.value) || 0;
+		if (!STMT) paint();
+	});
 
 	root.on("click", ".pg-view", () => {
 		STMT = null;
@@ -286,7 +302,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		const R = rollup();
 		const l1 = sortedKeys(R);
 		const tot = blankAgg();
-		RAW.forEach((r) => addTo(tot, r));
+		gRows().forEach((r) => addTo(tot, r));
 		const body = l1.map((name) => {
 			const G = R[name];
 			const kids = sortedKeys(G.items);
@@ -297,7 +313,8 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		printDoc(
 			VIEW === "party" ? __("PARTY GOLD — GENERAL PRINT") : __("PARTY GOLD — DESIGNTYPE PRINT"),
 			`${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
-				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`,
+				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`
+				+ (GDAYS ? ` · <b>${__("held ≥ {0} d", [GDAYS])}</b>` : ""),
 			`<th>${VIEW === "party" ? __("Group / Party") : __("Design type / Group")}</th>${PHEAD}`,
 			body);
 	});
