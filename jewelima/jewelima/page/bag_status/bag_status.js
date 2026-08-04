@@ -322,14 +322,14 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	});
 
 	// ------------------------------------------------------------- printing
-	function printDoc(title, sub, headHtml, bodyHtml) {
+	function printDoc(title, sub, headHtml, bodyHtml, portrait) {
 		const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>
-			@page{size:A4 landscape;margin:10mm;}
+			@page{size:A4 ${portrait ? "portrait" : "landscape"};margin:10mm;}
 			body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;}
 			h1{font-size:17px;margin:0 0 2px;}
 			.sub{font-size:11px;color:#555;margin-bottom:10px;}
-			table{width:100%;border-collapse:collapse;font-size:10.5px;}
-			th,td{border:1px solid #999;padding:3px 6px;text-align:right;white-space:nowrap;}
+			table{width:100%;border-collapse:collapse;font-size:${portrait ? "9px" : "10.5px"};}
+			th,td{border:1px solid #999;padding:${portrait ? "2px 4px" : "3px 6px"};text-align:right;white-space:nowrap;}
 			th.l,td.l{text-align:left;}
 			th{background:#eee;text-transform:uppercase;font-size:9px;letter-spacing:.04em;}
 			tr.grp td{background:#f2f2f2;font-weight:bold;}
@@ -376,7 +376,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td><td></td></tr>`;
 			return printDoc(__("BAG STATUS — CUST PRINT"), sub
 				+ (dueLabel() ? ` · <b>${dueLabel()}</b>` : "")
-				+ (CUSTOFF.size ? ` · ${__("{0} location(s) ticked out", [CUSTOFF.size])}` : ""), CUST_HEAD("l", w), body);
+				+ (CUSTOFF.size ? ` · ${__("{0} location(s) ticked out", [CUSTOFF.size])}` : ""), CUST_HEAD("l", w), body, true);
 		}
 		const R = rollup();
 		const body = sortedKeys(R).map((name) => {
