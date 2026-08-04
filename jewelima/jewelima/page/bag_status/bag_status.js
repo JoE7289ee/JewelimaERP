@@ -26,6 +26,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	let VIEW = "loc"; // "loc" | "user" | "party" | "cust"
 	let OPEN = new Set();
 	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
+	let CUSTDUE = "all"; // due filter: all | past | d7 | d30
 
 	const VIEWS = {
 		loc: { label: __("Location"), l2: __("Location / Design type") },
@@ -66,6 +67,12 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<div class="bs-views">
 				${Object.keys(VIEWS).map((v) => `<button data-v="${v}">${VIEWS[v].label}</button>`).join("")}
 			</div>
+			<select class="bs-due" style="display:none;border:1px solid var(--border-color);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;background:var(--control-bg);color:var(--text-color);">
+				<option value="all">${__("Due: all")}</option>
+				<option value="past">${__("Already past due")}</option>
+				<option value="d7">${__("Due within 7 d (incl. past)")}</option>
+				<option value="d30">${__("Due within 30 d (incl. past)")}</option>
+			</select>
 			<button class="bs-btn bs-print">${__("Print 🖨")}</button>
 		</div>
 		<div class="bs-tiles"></div>
@@ -161,6 +168,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		root.find(".bs-views button").each(function () {
 			$(this).toggleClass("on", $(this).data("v") === VIEW);
 		});
+		root.find(".bs-due").toggle(VIEW === "cust");
 		root.find(".bs-tiles").html(`
 			<div class="bs-tile"><div class="k">${__("Bags")}</div><div class="v">${tot.bags}</div></div>
 			<div class="bs-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
@@ -190,8 +198,12 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 
 	// CUST bags: each location a title, its pieces beneath, MOST-OVERDUE first
 	// (sorted on the due date; positive Overdue = past due)
+	const DUE_PRED = { all: () => true, past: (r) => (r.overdue || 0) > 0,
+		d7: (r) => (r.overdue || 0) >= -7, d30: (r) => (r.overdue || 0) >= -30 };
+	const DUE_LABEL = { all: "", past: __("already past due"), d7: __("due within 7 d"), d30: __("due within 30 d") };
+
 	function custSections() {
-		const bags = RAW.filter((r) => r.cust);
+		const bags = RAW.filter((r) => r.cust && DUE_PRED[CUSTDUE](r));
 		const locs = {};
 		bags.forEach((r) => { (locs[r.loc] = locs[r.loc] || []).push(r); });
 		return Object.keys(locs)
@@ -206,12 +218,14 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	}
 
 	const CUST_HEAD = (l) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th><th class="${l || ""}">${__("Type")}</th>
+		<th class="${l || ""}" title="${__("the order-lane marker from the file: CUST, CO-HP (WED)…")}">${__("Mark")}</th>
 		<th class="${l || ""}">${__("Purity")}</th><th class="${l || ""}">${__("User")}</th>
 		<th>${__("Qty")}</th><th>${__("DMD ct")}</th>
 		<th class="${l || ""}">${__("Party")}</th><th class="${l || ""}">${__("Due date")}</th><th title="${__("days past the due date — negative means not due yet")}">${__("Overdue d")}</th>`;
 
 	function custRow(r, old) {
 		return `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.dtype)}</td>
+			<td class="l">${esc(r.mark)}</td>
 			<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td>
 			<td>${r.qty}</td><td>${g3(r.dmd)}</td>
 			<td class="l">${esc(r.party)}</td><td class="l">${esc(r.ddate)}</td>
@@ -219,7 +233,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	}
 
 	function custTitleRow(s, extra) {
-		return `<td class="l" colspan="5">${extra || ""}${esc(s.loc)}
+		return `<td class="l" colspan="6">${extra || ""}${esc(s.loc)}
 				<span style="font-weight:400;color:var(--text-muted);">(${s.t.bags} ${__("bags")})</span></td>
 			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td><td></td>
 			<td class="${s.t.maxover > 0 ? "bs-old" : ""}">${s.t.maxover}</td>`;
@@ -234,12 +248,16 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 					title="${__("untick to leave this location out of the CUST print")}" style="margin-right:7px;"> `)}</tr>
 			${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old")}</tr>`).join("")}`).join("")}
 			</tbody></table>`
-			: `<div class="bs-none">${__("No CUST-marked bags in this report.")}</div>`);
+			: `<div class="bs-none">${CUSTDUE === "all" ? __("No CUST-marked bags in this report.") : __("No CUST bags match the due filter.")}</div>`);
 	}
 
 	root.on("change", ".bs-custloc", function () {
 		const loc = $(this).data("loc");
 		this.checked ? CUSTOFF.delete(loc) : CUSTOFF.add(loc);
+	});
+	root.on("change", ".bs-due", function () {
+		CUSTDUE = this.value;
+		paint();
 	});
 
 	root.on("click", ".bs-views button", function () {
@@ -303,9 +321,10 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			secs.forEach((s) => s.list.forEach((r) => addTo(ctot, r)));
 			const body = secs.map((s) => `<tr class="grp">${custTitleRow(s)}</tr>
 				${s.list.map((r) => `<tr class="kid">${custRow(r, "old")}</tr>`).join("")}`).join("")
-				+ `<tr class="tot"><td class="l" colspan="5">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
+				+ `<tr class="tot"><td class="l" colspan="6">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
 				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td><td></td><td></td></tr>`;
-			return printDoc(__("BAG STATUS — CUST PRINT"), sub, CUST_HEAD("l"), body);
+			return printDoc(__("BAG STATUS — CUST PRINT"), sub
+				+ (CUSTDUE !== "all" ? ` · <b>${DUE_LABEL[CUSTDUE]}</b>` : ""), CUST_HEAD("l"), body);
 		}
 		const R = rollup();
 		const body = sortedKeys(R).map((name) => {

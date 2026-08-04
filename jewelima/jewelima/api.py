@@ -8427,7 +8427,12 @@ def parse_bag_status_excel(filedata):
 			"overdue": ((today - dd).days if dd else 0),
 			"purity": str(g("purity") or "").strip(),
 			"party": str(g("party") or "").strip().upper(),
-			"cust": 1 if "CUST" in str(g("salesman") or "").upper() else 0,
+			# the Salesman cell is the order-lane marker: CUST, CO-HP (WED)…
+			# — anything CUST-ish or CO-prefixed is a customer order
+			"mark": str(g("salesman") or "").strip().upper(),
+			"cust": 1 if ("CUST" in str(g("salesman") or "").upper()
+				or str(g("salesman") or "").strip().upper().startswith("CO-")
+				or str(g("salesman") or "").strip().upper().startswith("CO ")) else 0,
 		})
 	return {"rows": rows, "count": len(rows)}
 
