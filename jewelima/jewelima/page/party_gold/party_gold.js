@@ -327,6 +327,14 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		stmtIncluded().forEach((x) => addTo(tot, x.r));
 		root.find(".pg-stot").html(`${__("in print")}: <b>${tot.pcs}</b> ${__("pc")} · GW <b>${g3(tot.gw)}</b> g
 			· NT <b>${g3(tot.nt)}</b> g · DMD <b>${g3(tot.dmd)}</b> ct · ${__("oldest")} <b>${tot.oldest}</b> d`);
+		// the KPI tiles follow the statement while it is open (Back restores)
+		root.find(".pg-tiles").html(`
+			<div class="pg-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
+			<div class="pg-tile"><div class="k">${__("Gross")}</div><div class="v">${g3(tot.gw)} g</div></div>
+			<div class="pg-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
+			<div class="pg-tile"><div class="k">${__("DMD")}</div><div class="v">${g3(tot.dmd)} ct</div></div>
+			<div class="pg-tile"><div class="k">${__("Oldest")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
+		root.find(".pg-gtiles").empty();
 	}
 
 	function paintStatement() {
