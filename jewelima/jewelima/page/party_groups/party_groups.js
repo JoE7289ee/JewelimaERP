@@ -48,19 +48,20 @@ frappe.pages["party-groups"].on_page_load = function (wrapper) {
 			<button class="gm-btn warn gm-clear">${__("Clear")}</button>
 			<span class="gm-sep"></span>
 			<span class="lbl">${__("Move picked to")}</span>
-			<input class="gm-move up" style="width:140px;">
+			<input class="gm-move up" list="gm-groups" style="width:140px;">
 			<button class="gm-btn gm-move-go">${__("Move")}</button>
 			<button class="gm-btn warn gm-unmap">${__("Unmap picked")}</button>
 			<span class="gm-sep"></span>
 			<span class="lbl">${__("Add mapping")}</span>
 			<input class="gm-add-p up" placeholder="${__("party as in the report")}" style="width:190px;">
 			<span class="lbl">→</span>
-			<input class="gm-add-g up" style="width:130px;">
+			<input class="gm-add-g up" list="gm-groups" style="width:130px;">
 			<button class="gm-btn alt gm-add-go">${__("Add")}</button>
 			<span class="gm-sep"></span>
 			<input class="gm-search" placeholder="${__("search…")}" style="width:150px;margin-left:auto;">
 		</div>
 		<div class="gm-body"><div class="gm-none">${__("Loading…")}</div></div>
+		<datalist id="gm-groups"></datalist>
 	`);
 	const root = $(page.main);
 
@@ -81,6 +82,7 @@ frappe.pages["party-groups"].on_page_load = function (wrapper) {
 		const gnames = Object.keys(groups).sort().filter((g) =>
 			!q || g.includes(q) || groups[g].some((p) => p.includes(q)));
 		root.find(".gm-count").text(__("{0} picked", [PICK.size]));
+		root.find("#gm-groups").html(Object.keys(groups).sort().map((g) => `<option>${esc(g)}</option>`).join(""));
 		root.find(".gm-body").html(gnames.length ? `<div class="gm-grid">
 			${gnames.map((g) => `<div class="gm-card">
 				<div class="hd"><span class="nm">${esc(g)}</span>
@@ -101,6 +103,7 @@ frappe.pages["party-groups"].on_page_load = function (wrapper) {
 		PICK.has(p) ? PICK.delete(p) : PICK.add(p);
 		$(this).toggleClass("on", PICK.has(p));
 		root.find(".gm-count").text(__("{0} picked", [PICK.size]));
+		root.find("#gm-groups").html(Object.keys(groups).sort().map((g) => `<option>${esc(g)}</option>`).join(""));
 	});
 	root.on("click", ".gm-chip .x", function () {
 		const p = $(this).data("p");
