@@ -225,7 +225,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	});
 	root.on("input", ".pg-sdays", function () {
 		SDAYS = cint(this.value) || 0;
-		paint();
+		renderStmtTable();
 	});
 	root.on("change", ".pg-srow", function () {
 		const i = cint($(this).data("i"));
@@ -302,10 +302,10 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		return RAW.filter((r) => partyOf(r) === STMT).sort((a, b) => (b.days || 0) - (a.days || 0));
 	}
 
-	// after dtype ticks + the days floor; keeps the original index for SX
+	// after dtype ticks + the exact-days match; keeps the original index for SX
 	function stmtFiltered() {
 		return stmtAll().map((r, i) => ({ r, i }))
-			.filter((x) => !SOFF.has(x.r.dtype) && (x.r.days || 0) >= SDAYS);
+			.filter((x) => !SOFF.has(x.r.dtype) && (!SDAYS || (x.r.days || 0) === SDAYS));
 	}
 
 	function stmtIncluded() {
@@ -335,14 +335,20 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				<button class="pg-btn pg-back-stmt" style="background:#6b7280;padding:6px 16px;">${__("← Back")}</button>
 				<span style="font-weight:800;font-size:14px;">${esc(STMT)}</span>
 				<span style="color:var(--text-muted);font-size:11.5px;">${__("group")} ${esc(MAP[STMT] || "OTHER")}</span>
-				<span style="font-size:11.5px;color:var(--text-muted);">${__("held ≥")}</span>
-				<input type="number" min="0" class="pg-sdays" value="${SDAYS || ""}" placeholder="0"
+				<span style="font-size:11.5px;color:var(--text-muted);">${__("held =")}</span>
+				<input type="number" min="0" class="pg-sdays" value="${SDAYS || ""}" placeholder="${__("all")}"
 					style="width:64px;border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
 				<span style="font-size:11.5px;color:var(--text-muted);">${__("days")}</span>
 				<span class="pg-stot" style="margin-left:auto;font-size:11.5px;color:var(--text-muted);"></span>
 			</div>
 			<div style="margin-bottom:8px;">${chips}</div>
-			${list.length ? `<table class="pg-t"><thead><tr>
+			<div class="pg-sbody"></div>`);
+		renderStmtTable();
+	}
+
+	function renderStmtTable() {
+		const list = stmtFiltered();
+		root.find(".pg-sbody").html(list.length ? `<table class="pg-t"><thead><tr>
 				<th style="text-align:left;" title="${__("untick a line to leave it out of the print")}">✓</th>
 				<th>#</th><th style="text-align:left;">${__("Barcode")}</th><th style="text-align:left;">${__("Design")}</th><th style="text-align:left;">${__("Type")}</th>
 				<th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th><th>${__("Days")}</th>
@@ -354,7 +360,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				<td>${g3(x.r.gs)}</td><td>${g3(x.r.nt)}</td><td>${g3(x.r.dmd)}</td><td>${g3(x.r.ps)}</td><td>${g3(x.r.cs)}</td>
 				<td class="${(x.r.days || 0) > 180 ? "pg-old" : ""}">${x.r.days || 0}</td>
 			</tr>`).join("")}</tbody></table>`
-			: `<div class="pg-none">${__("Nothing matches the filters.")}</div>`}`);
+			: `<div class="pg-none">${__("Nothing matches the filters.")}</div>`);
 		refreshStmtTotals();
 	}
 
@@ -376,7 +382,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				· ${__("generated")} ${frappe.datetime.now_datetime()}
 				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct · ${__("oldest")} ${tot.oldest} ${__("days")}`
 				+ (SOFF.size ? ` · ${__("{0} type(s) ticked out", [SOFF.size])}` : "")
-				+ (SDAYS ? ` · ${__("held ≥ {0} d", [SDAYS])}` : "")
+				+ (SDAYS ? ` · ${__("held = {0} d", [SDAYS])}` : "")
 				+ (SX.size ? ` · ${__("{0} line(s) unticked", [SX.size])}` : ""),
 			`<th>#</th><th>${__("Barcode")}</th><th>${__("Design")}</th><th>${__("Type")}</th>
 				<th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th><th>${__("Days")}</th>`,
