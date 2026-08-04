@@ -103,7 +103,6 @@ frappe.pages["party-groups"].on_page_load = function (wrapper) {
 		PICK.has(p) ? PICK.delete(p) : PICK.add(p);
 		$(this).toggleClass("on", PICK.has(p));
 		root.find(".gm-count").text(__("{0} picked", [PICK.size]));
-		root.find("#gm-groups").html(Object.keys(groups).sort().map((g) => `<option>${esc(g)}</option>`).join(""));
 	});
 	root.on("click", ".gm-chip .x", function () {
 		const p = $(this).data("p");
