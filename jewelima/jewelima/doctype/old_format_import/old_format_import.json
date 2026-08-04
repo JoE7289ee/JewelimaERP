@@ -72,7 +72,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-01 17:00:00",
+ "modified": "2026-08-04 10:00:00",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Old Format Import",
@@ -104,6 +104,8 @@
    "write": 1
   }
  ],
+ "search_fields": "title,party",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
