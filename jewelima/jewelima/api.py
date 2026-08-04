@@ -8432,11 +8432,14 @@ def parse_bag_status_excel(filedata):
 		if not isinstance(r[0], (int, float)):
 			continue
 		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
+		loc = str(g("loc") or "").strip() or "(NO LOCATION)"
+		if loc.upper() == "REJECTION":
+			continue  # rejection bags are dead stock — killed at import
 		odate = g("odate")
 		ddate = g("ddate")
 		dd = any_date(ddate)
 		rows.append({
-			"user": str(g("user") or "").strip(), "loc": str(g("loc") or "").strip() or "(NO LOCATION)",
+			"user": str(g("user") or "").strip(), "loc": loc,
 			"bag": str(g("bag") or "").strip(), "item": str(g("item") or "").strip(),
 			"size": str(g("size") or "").strip(), "dtype": str(g("dtype") or "").strip().upper() or "(NO TYPE)",
 			"qty": cint(g("qty")), "gw": flt(g("gw")), "nt": flt(g("nt")),

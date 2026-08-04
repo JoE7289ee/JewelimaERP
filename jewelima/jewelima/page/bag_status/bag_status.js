@@ -29,7 +29,6 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	let OPEN = new Set();
 	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
 	let CUSTDUE = "all"; // due filter: all | past | bydate
-	let REJN = 0; // Rejection bags dropped at load
 	let PRINT_ODATE = false; // CUST print carries the order date only when ticked
 
 	const VIEWS = {
@@ -98,10 +97,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				frappe.call({ method: API + ".parse_bag_status_excel", args: { filedata: FILE.b64 } }),
 				frappe.call({ method: API + ".get_party_group_map" }),
 			]).then(([r1, r2]) => {
-				const all = (r1.message || {}).rows || [];
-				// Rejection is noise for every view — dropped at the door
-				RAW = all.filter((r) => (r.loc || "").toUpperCase() !== "REJECTION");
-				REJN = all.length - RAW.length;
+				RAW = (r1.message || {}).rows || [];
 				MAP = r2.message || {};
 				OPEN.clear();
 				root.find(".bs-views").css("display", "inline-flex");
@@ -172,8 +168,16 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	function paint() {
 		if (!RAW.length) return;
 		const tot = blankAgg();
-		RAW.forEach((r) => addTo(tot, r));
-		const custN = RAW.filter((r) => r.cust).length;
+		let custN;
+		if (VIEW === "cust") {
+			// tiles follow the location ticks + due filter — what you see is
+			// what the numbers count
+			custSections().forEach((sec) => sec.list.forEach((r) => addTo(tot, r)));
+			custN = tot.bags;
+		} else {
+			RAW.forEach((r) => addTo(tot, r));
+			custN = RAW.filter((r) => r.cust).length;
+		}
 		root.find(".bs-views button").each(function () {
 			$(this).toggleClass("on", $(this).data("v") === VIEW);
 		});
@@ -186,8 +190,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<div class="bs-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
 			<div class="bs-tile"><div class="k">${__("DMD")}</div><div class="v">${g3(tot.dmd)} ct</div></div>
 			<div class="bs-tile"><div class="k">${__("CUST bags")}</div><div class="v">${custN}</div></div>
-			<div class="bs-tile"><div class="k">${__("Oldest order")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>
-			${REJN ? `<div class="bs-tile"><div class="k">${__("Rejection")}</div><div class="v" style="color:var(--text-muted);">${REJN} ${__("hidden")}</div></div>` : ""}`);
+			<div class="bs-tile"><div class="k">${__("Oldest order")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
 		if (VIEW === "cust") return paintCust();
 		const R = rollup();
 		root.find(".bs-body").html(`
