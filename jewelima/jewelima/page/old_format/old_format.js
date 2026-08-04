@@ -548,11 +548,19 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("Added one PENDING to {0} row(s) — each counts as a HUID.", [n]), indicator: "green" }, 4);
 	});
 
-	// the agreed physical order: item type -> colour -> below-1g first
+	// the agreed physical order: the item ladder -> YELLOW/ROSE/WHITE ->
+	// below-1g band first -> GW ascending inside the band
+	const ITEM_RANK = { NOSEPIN: 0, NOSPIN: 0, NP: 0, PENDANT: 1, PD: 1, STUD: 2, RING: 3,
+		BRACELET: 4, "CH BRACELET": 4, BANGLE: 5, "PIPE BANGLE": 5,
+		"CHAIN NECKLACE": 6, "CH NECKLACE": 6, NECKLACE: 7, NECK: 7 };
+	const COLOR_RANK = { YELLOW: 0, ROSE: 1, WHITE: 2 };
+	const rankOf = (m, k) => (k in m ? m[k] : 50);
 	root.on("click", ".of-sortnum", () => {
 		const noCol = ROWS.filter((r) => !r.colour).length;
 		if (noCol) return frappe.show_alert({ message: __("{0} row(s) still have no COLOR — fill them before numbering.", [noCol]), indicator: "orange" }, 4);
-		ROWS.sort((a, b) => (a.item || "").localeCompare(b.item || "")
+		ROWS.sort((a, b) => (rankOf(ITEM_RANK, a.item || "") - rankOf(ITEM_RANK, b.item || ""))
+			|| (a.item || "").localeCompare(b.item || "")
+			|| (rankOf(COLOR_RANK, a.colour || "") - rankOf(COLOR_RANK, b.colour || ""))
 			|| (a.colour || "").localeCompare(b.colour || "")
 			|| ((flt(a.nt) < 1 ? 0 : 1) - (flt(b.nt) < 1 ? 0 : 1))
 			|| (flt(a.gs) - flt(b.gs)));
@@ -560,7 +568,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		SORTED = true;
 		PRICED = null;
 		paint();
-		frappe.show_alert({ message: __("Sorted by GW inside item → colour → band, numbered 1–{0}.", [ROWS.length]), indicator: "green" }, 5);
+		frappe.show_alert({ message: __("Item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length]), indicator: "green" }, 5);
 	});
 
 	function readyCheck() {

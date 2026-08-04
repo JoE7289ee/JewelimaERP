@@ -8264,8 +8264,9 @@ def export_old_format_billing(rows, quality_token="EF", party="", filename=None)
 
 	if isinstance(rows, str):
 		rows = json.loads(rows or "[]")
-	rows = sorted(rows, key=lambda p: ((p.get("item") or ""), (p.get("colour") or ""),
-		0 if flt(p.get("nt")) < 1.0 else 1, cint(p.get("sl"))))
+	# the page's Sort & Number already put the rows in the physical order
+	# (item ladder -> YELLOW/ROSE/WHITE -> band -> GW) — honour its SL
+	rows = sorted(rows, key=lambda p: cint(p.get("sl")))
 	wb = Workbook()
 	ws = wb.active
 	ws.title = "Sheet1"
