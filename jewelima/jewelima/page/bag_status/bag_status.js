@@ -28,7 +28,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	let VIEW = "loc"; // "loc" | "user" | "party" | "cust"
 	let OPEN = new Set();
 	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
-	let CUSTDUE = "all"; // due filter: all | past | bydate
+	let CUSTDUE = "all"; // due filter: all | past | within (N days to due, past excluded)
 	let PRINT_ODATE = false; // CUST print carries the order date only when ticked
 
 	const VIEWS = {
@@ -73,9 +73,10 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<select class="bs-due" style="display:none;border:1px solid var(--border-color);border-radius:8px;padding:8px 10px;font-size:12px;font-weight:700;background:var(--control-bg);color:var(--text-color);">
 				<option value="all">${__("Due: all")}</option>
 				<option value="past">${__("Already past due")}</option>
-				<option value="bydate">${__("Due on/before…")}</option>
+				<option value="within">${__("Due in next … days")}</option>
 			</select>
-			<input type="date" class="bs-duedate" style="display:none;border:1px solid var(--border-color);border-radius:8px;padding:7px 10px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+			<input type="number" min="0" step="1" class="bs-duein" placeholder="${__("days")}"
+				style="display:none;width:74px;border:1px solid var(--border-color);border-radius:8px;padding:7px 10px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
 			<label class="bs-podate" style="display:none;align-items:center;gap:5px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
 				<input type="checkbox" class="bs-podate-cb">${__("Order date in print")}</label>
 			<button class="bs-btn bs-print">${__("Print 🖨")}</button>
@@ -182,7 +183,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			$(this).toggleClass("on", $(this).data("v") === VIEW);
 		});
 		root.find(".bs-due, .bs-podate").css("display", VIEW === "cust" ? "inline-flex" : "none");
-		root.find(".bs-duedate").toggle(VIEW === "cust" && CUSTDUE === "bydate");
+		root.find(".bs-duein").toggle(VIEW === "cust" && CUSTDUE === "within");
 		root.find(".bs-tiles").html(`
 			<div class="bs-tile"><div class="k">${__("Bags")}</div><div class="v">${tot.bags}</div></div>
 			<div class="bs-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
@@ -214,19 +215,20 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	// (sorted on the due date; positive Overdue = past due)
 	function duePass(r) {
 		if (CUSTDUE === "past") return (r.overdue || 0) > 0;
-		if (CUSTDUE === "bydate") {
-			const d = root.find(".bs-duedate").val();
-			if (!d) return true;
-			// due <= chosen  ⟺  overdue >= today − chosen
-			return (r.overdue || 0) >= frappe.datetime.get_day_diff(frappe.datetime.get_today(), d);
+		if (CUSTDUE === "within") {
+			const n = cint(root.find(".bs-duein").val());
+			if (!n && n !== 0) return true;
+			// due today..today+N — the already-late ones are the PAST filter's job
+			const o = r.overdue || 0;
+			return o <= 0 && o >= -n;
 		}
 		return true;
 	}
 
 	function dueLabel() {
 		if (CUSTDUE === "past") return __("already past due");
-		if (CUSTDUE === "bydate" && root.find(".bs-duedate").val())
-			return __("due on/before {0}", [frappe.datetime.str_to_user(root.find(".bs-duedate").val())]);
+		if (CUSTDUE === "within" && root.find(".bs-duein").val())
+			return __("due in the next {0} day(s)", [cint(root.find(".bs-duein").val())]);
 		return "";
 	}
 
@@ -300,10 +302,10 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	});
 	root.on("change", ".bs-due", function () {
 		CUSTDUE = this.value;
-		root.find(".bs-duedate").toggle(CUSTDUE === "bydate");
+		root.find(".bs-duein").toggle(CUSTDUE === "within");
 		paint();
 	});
-	root.on("change", ".bs-duedate", () => paint());
+	root.on("input", ".bs-duein", () => paint());
 	root.on("change", ".bs-podate-cb", function () {
 		PRINT_ODATE = this.checked;
 	});
