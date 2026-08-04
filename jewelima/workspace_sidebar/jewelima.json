@@ -48,7 +48,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "edit",
+   "icon": "square-pen",
    "indent": 1,
    "keep_closed": 0,
    "label": "Edit Order",
@@ -308,7 +308,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "sort-descending",
+   "icon": "arrow-down-wide-narrow",
    "indent": 0,
    "keep_closed": 0,
    "label": "Prioritisation",
@@ -321,7 +321,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "sort-descending",
+   "icon": "arrow-down-wide-narrow",
    "indent": 1,
    "keep_closed": 0,
    "label": "Priority Queue",
@@ -334,7 +334,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "sort-descending",
+   "icon": "arrow-down-wide-narrow",
    "indent": 1,
    "keep_closed": 0,
    "label": "Due Risk",
@@ -347,7 +347,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "sort-descending",
+   "icon": "arrow-down-wide-narrow",
    "indent": 1,
    "keep_closed": 0,
    "label": "Due Soon",
@@ -867,7 +867,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "grid",
+   "icon": "grid-2x2",
    "indent": 1,
    "keep_closed": 0,
    "label": "Sieve Chart",
@@ -1062,7 +1062,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "check-circle",
+   "icon": "circle-check",
    "indent": 0,
    "keep_closed": 0,
    "label": "Confirm",
@@ -1166,7 +1166,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "tool",
+   "icon": "drill",
    "indent": 0,
    "keep_closed": 1,
    "label": "E-SMITH",
@@ -1231,7 +1231,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "bar-chart-2",
+   "icon": "chart-column-big",
    "indent": 1,
    "keep_closed": 1,
    "label": "Party Selection Report",
@@ -1244,7 +1244,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "bar-chart-2",
+   "icon": "chart-column-big",
    "indent": 1,
    "keep_closed": 0,
    "label": "Party Gold",
@@ -1348,7 +1348,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "plus-circle",
+   "icon": "circle-plus",
    "indent": 0,
    "keep_closed": 0,
    "label": "New Design",
@@ -1426,7 +1426,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "check-square",
+   "icon": "square-check",
    "indent": 0,
    "keep_closed": 0,
    "label": "Photo Approvals",
@@ -1452,7 +1452,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "bar-chart-2",
+   "icon": "chart-column-big",
    "indent": 0,
    "keep_closed": 0,
    "label": "Bank Report",
@@ -1569,7 +1569,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "grid",
+   "icon": "grid-2x2",
    "indent": 1,
    "keep_closed": 0,
    "label": "Selected Pieces",
@@ -2282,7 +2282,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-04 21:26:38.984753",
+ "modified": "2026-08-04 21:33:18.159300",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
