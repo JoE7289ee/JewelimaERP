@@ -28,6 +28,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	let PRICED = null;  // {rows, totals}
 	let STATE = "prep"; // "prep" | "export"
 	let SESSION = null; // Old Format Import name when saved/loaded
+	let TITLE = "";     // the saved session's name-as-shown (Save as… sets it)
 	let LOADING = false; // guards the session picker's onchange during set_value
 	let SORTED = false; // Sort & Number has been run since the last edit
 	const SEL = new Set(); // selected unique_ids (prep bulk ops)
@@ -94,7 +95,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-sess"></div>
 			<div class="of-qual"></div>
 			<div class="of-party"></div>
-			<button class="of-btn of-save" style="display:none;background:#2e7d32;">${__("Save")}</button>
+			<button class="of-btn of-save" style="display:none;background:#2e7d32;">${__("Save as…")}</button>
 			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
 			<button class="of-btn of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 		</div>
@@ -171,6 +172,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		paint();
 	}
 
+	function refreshSaveBtn() {
+		root.find(".of-save").text(SESSION ? __("Update") : __("Save as…"));
+	}
+
 	function invalidate() {
 		SORTED = false;
 		PRICED = null;
@@ -238,6 +243,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_old_format_session", args: { name } }).then((r) => {
 			const m = r.message || {};
 			SESSION = m.name;
+			TITLE = m.title || "";
 			ROWS = m.rows || [];
 			COVER = m.cover || {};
 			SORTED = !!m.sorted;
@@ -252,6 +258,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				[esc(m.title), esc(m.status), esc(m.party || "—"), ROWS.length]));
 			root.find(".of-save, .of-sortnum, .of-goexport").show();
 			root.find(".of-jos").hide();
+			refreshSaveBtn();
 			setState("prep");
 		});
 	}
@@ -260,20 +267,29 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		if (!ROWS.length) return;
 		frappe.call({ method: API + ".save_old_format_session", args: { name: SESSION || undefined,
 			payload: JSON.stringify({
-				title: (FILE && FILE.name) || "Old format import",
+				title: TITLE || (FILE && FILE.name) || "Old format import",
 				party: fParty.get_value() || "", invoice_no: COVER.invoice_no || "",
 				source_file: (FILE && FILE.name) || "", quality_token: fQual.get_value() || "EF",
 				rows: ROWS, cover: COVER, sorted: SORTED, status: status || undefined,
 			}) } }).then((r) => {
 			const m = r.message || {};
 			SESSION = m.name;
+			TITLE = m.title || TITLE;
 			LOADING = true;
 			fSess.set_value(SESSION);
 			LOADING = false;
-			if (!silent) frappe.show_alert({ message: __("Saved as {0} — pick it under Saved import to continue later.", [m.name]), indicator: "green" }, 5);
+			refreshSaveBtn();
+			if (!silent) frappe.show_alert({ message: __("{0} saved — pick it under Saved import to continue later.", [m.title || m.name]), indicator: "green" }, 5);
 		});
 	}
-	root.on("click", ".of-save", () => saveSession());
+	// first save asks for the name (Save as…); a saved session just updates
+	root.on("click", ".of-save", () => {
+		if (!ROWS.length) return;
+		if (SESSION) return saveSession();
+		frappe.prompt({ fieldname: "t", fieldtype: "Data", label: __("Save as"), reqd: 1,
+			default: TITLE || ((FILE && FILE.name) || "").replace(/\.xlsx$/i, "") },
+			(v) => { TITLE = (v.t || "").trim(); saveSession(); }, __("Save this import"));
+	});
 
 	root.find(".of-file").on("click", () => root.find(".of-input").get(0).click());
 	root.find(".of-input").on("change", function () {
@@ -288,9 +304,11 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				ROWS = m.rows || [];
 				COVER = m.cover || {};
 				SESSION = null;
+				TITLE = "";
 				LOADING = true;
 				fSess.set_value("");
 				LOADING = false;
+				refreshSaveBtn();
 				SEL.clear();
 				LASTSEL = null;
 				invalidate();
