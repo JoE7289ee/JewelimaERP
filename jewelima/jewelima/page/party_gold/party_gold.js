@@ -22,6 +22,10 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	let MAP = {};     // party -> group (Party Group Map)
 	let VIEW = "party"; // "party" | "dtype"
 	let OPEN = new Set(); // expanded level-1 names (per view)
+	let STMT = null;      // party whose statement view is open
+	const SOFF = new Set(); // statement: design types ticked out
+	let SDAYS = 0;        // statement: only pieces held >= N days
+	const SX = new Set(); // statement: individual pieces unticked (by index)
 
 	$(page.main).append(`
 		<style>
@@ -80,6 +84,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				RAW = (r1.message || {}).rows || [];
 				MAP = r2.message || {};
 				OPEN.clear();
+				STMT = null;
 				root.find(".pg-dl, .pg-print, .pg-view").show();
 				// a spelling this scan brings in for the first time is saved
 				// straight into OTHER — sort it out on Party Groups later
@@ -145,6 +150,8 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 
 	function paint() {
 		if (!RAW.length) return;
+		root.find(".pg-view, .pg-dl").toggle(!STMT);
+		if (STMT) return paintStatement();
 		const R = rollup();
 		const l1 = sortedKeys(R);
 		const tot = blankAgg();
@@ -181,23 +188,49 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	}
 
 	root.on("click", ".pg-view", () => {
+		STMT = null;
 		VIEW = VIEW === "party" ? "dtype" : "party";
 		OPEN.clear();
 		paint();
 	});
 
+	function openStatement(party) {
+		STMT = party;
+		SOFF.clear();
+		SX.clear();
+		SDAYS = 0;
+		paint();
+	}
 	root.on("click", "tr.pg-grp", function () {
 		const g = $(this).data("g");
 		if (VIEW === "party") {
 			const groups = aggBy(groupOf, partyOf);
 			const kids = Object.keys((groups[g] || { items: {} }).items);
-			if (kids.length === 1 && kids[0] === g) return printStatement(g);
+			if (kids.length === 1 && kids[0] === g) return openStatement(g);
 		}
 		OPEN.has(g) ? OPEN.delete(g) : OPEN.add(g);
 		paint();
 	});
 	root.on("click", "tr.pg-party.stmt", function () {
-		printStatement($(this).data("p"));
+		openStatement($(this).data("p"));
+	});
+	root.on("click", ".pg-back-stmt", () => {
+		STMT = null;
+		paint();
+	});
+	root.on("change", ".pg-sdt", function () {
+		const t = $(this).data("t");
+		this.checked ? SOFF.delete(t) : SOFF.add(t);
+		paint();
+	});
+	root.on("input", ".pg-sdays", function () {
+		SDAYS = cint(this.value) || 0;
+		paint();
+	});
+	root.on("change", ".pg-srow", function () {
+		const i = cint($(this).data("i"));
+		this.checked ? SX.delete(i) : SX.add(i);
+		refreshStmtTotals();
 	});
 
 
@@ -239,9 +272,11 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		<th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th>
 		<th>NT 0–30 d</th><th>NT 31–90 d</th><th>NT 91–180 d</th><th>NT 180+ d</th><th>${__("Oldest")}</th>`;
 
-	// General print (parties) / DesignType print — every level opened
+	// General print (parties) / DesignType print — every level opened;
+	// in the statement view the same button prints the filtered statement
 	root.on("click", ".pg-print", () => {
 		if (!RAW.length) return;
+		if (STMT) return printStatement();
 		const R = rollup();
 		const l1 = sortedKeys(R);
 		const tot = blankAgg();
@@ -261,10 +296,72 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			body);
 	});
 
-	// party statement: its pieces, oldest first
-	function printStatement(party) {
-		const pieces = RAW.filter((r) => partyOf(r) === party).sort((a, b) => (b.days || 0) - (a.days || 0));
-		if (!pieces.length) return;
+	// ---- party statement: an on-screen view first, print follows it ---------
+	// all of the party's pieces, oldest first, indexed for the tick-outs
+	function stmtAll() {
+		return RAW.filter((r) => partyOf(r) === STMT).sort((a, b) => (b.days || 0) - (a.days || 0));
+	}
+
+	// after dtype ticks + the days floor; keeps the original index for SX
+	function stmtFiltered() {
+		return stmtAll().map((r, i) => ({ r, i }))
+			.filter((x) => !SOFF.has(x.r.dtype) && (x.r.days || 0) >= SDAYS);
+	}
+
+	function stmtIncluded() {
+		return stmtFiltered().filter((x) => !SX.has(x.i));
+	}
+
+	function refreshStmtTotals() {
+		const tot = blankAgg();
+		stmtIncluded().forEach((x) => addTo(tot, x.r));
+		root.find(".pg-stot").html(`${__("in print")}: <b>${tot.pcs}</b> ${__("pc")} · GW <b>${g3(tot.gw)}</b> g
+			· NT <b>${g3(tot.nt)}</b> g · DMD <b>${g3(tot.dmd)}</b> ct · ${__("oldest")} <b>${tot.oldest}</b> d`);
+	}
+
+	function paintStatement() {
+		const all = stmtAll();
+		const dts = {};
+		all.forEach((r) => { dts[r.dtype] = (dts[r.dtype] || 0) + 1; });
+		const chips = Object.keys(dts).sort((a, b) => dts[b] - dts[a]).map((t) => `
+			<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-color);border-radius:14px;
+				padding:2px 10px;margin:2px 6px 2px 0;font-size:11.5px;cursor:pointer;background:${SOFF.has(t) ? "var(--control-bg)" : "var(--fg-color)"};
+				${SOFF.has(t) ? "opacity:.55;" : ""}">
+				<input type="checkbox" class="pg-sdt" data-t="${esc(t)}" ${SOFF.has(t) ? "" : "checked"}
+					style="width:13px;height:13px;accent-color:#1f618d;">${esc(t)} <span style="color:var(--text-muted);">(${dts[t]})</span></label>`).join("");
+		const list = stmtFiltered();
+		root.find(".pg-body").html(`
+			<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+				<button class="pg-btn pg-back-stmt" style="background:#6b7280;padding:6px 16px;">${__("← Back")}</button>
+				<span style="font-weight:800;font-size:14px;">${esc(STMT)}</span>
+				<span style="color:var(--text-muted);font-size:11.5px;">${__("group")} ${esc(MAP[STMT] || "OTHER")}</span>
+				<span style="font-size:11.5px;color:var(--text-muted);">${__("held ≥")}</span>
+				<input type="number" min="0" class="pg-sdays" value="${SDAYS || ""}" placeholder="0"
+					style="width:64px;border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
+				<span style="font-size:11.5px;color:var(--text-muted);">${__("days")}</span>
+				<span class="pg-stot" style="margin-left:auto;font-size:11.5px;color:var(--text-muted);"></span>
+			</div>
+			<div style="margin-bottom:8px;">${chips}</div>
+			${list.length ? `<table class="pg-t"><thead><tr>
+				<th style="text-align:left;" title="${__("untick a line to leave it out of the print")}">✓</th>
+				<th>#</th><th style="text-align:left;">${__("Barcode")}</th><th style="text-align:left;">${__("Design")}</th><th style="text-align:left;">${__("Type")}</th>
+				<th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th><th>${__("Days")}</th>
+			</tr></thead><tbody>
+			${list.map((x, n) => `<tr>
+				<td style="text-align:left;"><input type="checkbox" class="pg-srow" data-i="${x.i}" ${SX.has(x.i) ? "" : "checked"}
+					style="width:13px;height:13px;accent-color:#1f618d;"></td>
+				<td>${n + 1}</td><td style="text-align:left;">${esc(x.r.barcode)}</td><td style="text-align:left;">${esc(x.r.design)}</td><td style="text-align:left;">${esc(x.r.dtype)}</td>
+				<td>${g3(x.r.gs)}</td><td>${g3(x.r.nt)}</td><td>${g3(x.r.dmd)}</td><td>${g3(x.r.ps)}</td><td>${g3(x.r.cs)}</td>
+				<td class="${(x.r.days || 0) > 180 ? "pg-old" : ""}">${x.r.days || 0}</td>
+			</tr>`).join("")}</tbody></table>`
+			: `<div class="pg-none">${__("Nothing matches the filters.")}</div>`}`);
+		refreshStmtTotals();
+	}
+
+	function printStatement() {
+		const pieces = stmtIncluded().map((x) => x.r);
+		if (!pieces.length) return frappe.show_alert({ message: __("Everything is unticked — nothing to print."), indicator: "orange" }, 4);
+		const party = STMT;
 		const tot = blankAgg();
 		pieces.forEach((r) => addTo(tot, r));
 		const body = pieces.map((r, i) => `<tr>
@@ -277,7 +374,10 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 			__("PARTY STATEMENT — {0}", [esc(party)]),
 			`${__("group")} <b>${esc(MAP[party] || "OTHER")}</b> · ${esc((FILE && FILE.name) || "")}
 				· ${__("generated")} ${frappe.datetime.now_datetime()}
-				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct · ${__("oldest")} ${tot.oldest} ${__("days")}`,
+				· ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct · ${__("oldest")} ${tot.oldest} ${__("days")}`
+				+ (SOFF.size ? ` · ${__("{0} type(s) ticked out", [SOFF.size])}` : "")
+				+ (SDAYS ? ` · ${__("held ≥ {0} d", [SDAYS])}` : "")
+				+ (SX.size ? ` · ${__("{0} line(s) unticked", [SX.size])}` : ""),
 			`<th>#</th><th>${__("Barcode")}</th><th>${__("Design")}</th><th>${__("Type")}</th>
 				<th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th><th>${__("Days")}</th>`,
 			body);
