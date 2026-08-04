@@ -8591,7 +8591,8 @@ def save_old_format_session(payload, name=None):
 		doc.status = p.get("status")
 	rows = p.get("rows") or []
 	doc.piece_count = len(rows)
-	doc.data = json.dumps({"rows": rows, "cover": p.get("cover") or {}, "sorted": bool(p.get("sorted"))})
+	doc.data = json.dumps({"rows": rows, "cover": p.get("cover") or {}, "sorted": bool(p.get("sorted")),
+		"chains": p.get("chains") or []})
 	doc.save()
 	return {"name": doc.name, "title": doc.title, "status": doc.status}
 
@@ -8617,7 +8618,7 @@ def get_old_format_session(name):
 		"invoice_no": doc.invoice_no or "", "source_file": doc.source_file or "",
 		"quality_token": doc.quality_token or "EF", "status": doc.status,
 		"rows": blob.get("rows") or [], "cover": blob.get("cover") or {},
-		"sorted": bool(blob.get("sorted"))}
+		"chains": blob.get("chains") or [], "sorted": bool(blob.get("sorted"))}
 
 
 def _old_sale_rows_billing(wb):

@@ -23,6 +23,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const TOKEN_FAMILY = { EF: "VVS-EF", GH: "VVS/VS-GH", SI: "SI-IJ", CZ: "CZ", CVD: "CVD" };
 	let FILE = null;    // {b64, name}
 	let ROWS = [];      // parsed + user-enriched rows (colour = metal colour)
+	let CHAINS = [];    // BACK CHAIN rows — never table lines, assigned by scan
 	let COVER = {};
 	let CHART = null;   // picked chart's full data
 	let PRICED = null;  // {rows, totals}
@@ -230,6 +231,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td><b>${ROWS.filter((r) => (r.item || "—") === it).length}</b></td></tr>`).join("")}
 			</tbody></table>`;
 		root.find(".of-info").html(`
+			${CHAINS.length ? `<div class="of-tile of-chainbtn" style="cursor:pointer;border-color:#9a6b1f;">
+				<div class="k" style="color:#9a6b1f;">${__("Back chains")}</div>
+				<div class="v" style="color:#9a6b1f;">⛓ ${CHAINS.length} ${__("unassigned")}</div>
+				<div class="sub">${__("click to scan-assign")}</div></div>` : ""}
 			<div class="of-tile"><div class="k">${__("Total GW")}</div><div class="v">${gw.toFixed(3)} g</div>
 				<div class="sub">${ROWS.length} ${__("pieces")}</div></div>
 			<div class="of-tile"><div class="k">${__("HUIDs")}</div><div class="v">${huids}</div>
@@ -245,7 +250,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			const m = r.message || {};
 			SESSION = m.name;
 			TITLE = m.title || "";
-			ROWS = m.rows || [];
+			splitChains((m.rows || []).concat(m.chains || []));
 			COVER = m.cover || {};
 			SORTED = !!m.sorted;
 			PRICED = null;
@@ -271,7 +276,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				title: TITLE || (FILE && FILE.name) || "Old format import",
 				party: fParty.get_value() || "", invoice_no: COVER.invoice_no || "",
 				source_file: (FILE && FILE.name) || "", quality_token: fQual.get_value() || "EF",
-				rows: ROWS, cover: COVER, sorted: SORTED, status: status || undefined,
+				rows: ROWS, chains: CHAINS, cover: COVER, sorted: SORTED, status: status || undefined,
 			}) } }).then((r) => {
 			const m = r.message || {};
 			SESSION = m.name;
@@ -302,7 +307,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			root.find(".of-file").addClass("has").text("📄 " + file.name);
 			frappe.call({ method: API + ".parse_old_format_excel", args: { filedata: FILE.b64 } }).then((r) => {
 				const m = r.message || {};
-				ROWS = m.rows || [];
+				splitChains(m.rows || []);
 				COVER = m.cover || {};
 				SESSION = null;
 				TITLE = "";
@@ -343,8 +348,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			</tr></thead><tbody>
 			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}" style="background:${tintOf(r.colour)}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
-				<td>${r.sl}${isChain(r) ? ` <button class="of-merge" data-i="${i}" title="${__("a back chain belongs on a piece — merge it into one")}"
-					style="border:none;border-radius:5px;padding:1px 8px;font-size:10.5px;font-weight:700;color:#fff;background:#9a6b1f;cursor:pointer;">⛓ ${__("Merge")}</button>` : ""}</td>
+				<td>${r.sl}</td>
 				<td><b>${esc(r.unique_id)}</b>${r.back_chain_wt ? ` <span title="${__("back chain {0} ({1} g) merged in", [esc(r.back_chain_barcode || ""), r.back_chain_wt])}" style="cursor:help;">⛓</span>` : ""}</td>
 				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;"></td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
@@ -531,47 +535,85 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("Item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length]), indicator: "green" }, 5);
 	});
 
-	// BACK CHAIN rows are not pieces — they ride on one. Merge folds the
-	// chain's gold into the target (GS+NT), records it as back_chain_wt /
-	// barcode (the NEW-format columns), carries any HUID over, and drops
-	// the chain row.
+	// BACK CHAIN rows are never pieces in the table. They wait in CHAINS and
+	// get scanned onto a piece: the piece only RECORDS the chain (bag no +
+	// its GW in the back-chain columns) — weights are NOT merged.
 	const isChain = (r) => (r.item || "").includes("BACK CHAIN");
 
-	root.on("click", ".of-merge", function () {
-		const i = cint($(this).data("i"));
-		const chain = ROWS[i];
-		const targets = ROWS.filter((r) => !isChain(r));
-		if (!targets.length) return frappe.show_alert({ message: __("No piece to merge into."), indicator: "orange" }, 3);
-		const opts = targets.map((r) => `${r.sl} · ${r.unique_id} · ${r.item} ${r.design || ""}`.trim());
+	function splitChains(all) {
+		ROWS = all.filter((r) => !isChain(r));
+		CHAINS = all.filter(isChain);
+	}
+
+	function assignChain(chain, t) {
+		t.back_chain_barcode = [t.back_chain_barcode, chain.unique_id].filter(Boolean).join(", ");
+		t.back_chain_wt = flt(((t.back_chain_wt || 0) + (chain.gs || 0)).toFixed(3));
+		if (chain.huid) t.huid = [t.huid, chain.huid].filter(Boolean).join(", ");
+		CHAINS.splice(CHAINS.indexOf(chain), 1);
+		invalidate();
+		paint();
+	}
+
+	root.on("click", ".of-chainbtn", () => {
+		let cur = null;
 		const d = new frappe.ui.Dialog({
-			title: __("Merge back chain {0} into…", [chain.unique_id]),
+			title: __("Assign back chains — scan the chain, then the piece"),
 			fields: [
-				{ fieldname: "note", fieldtype: "HTML", options: `<div class="text-muted" style="font-size:12px;margin-bottom:6px;">
-					${__("Chain {0}: {1} g GS / {2} g NT — its gold joins the piece's weights.", [esc(chain.unique_id), chain.gs, chain.nt])}</div>` },
-				{ fieldname: "t", fieldtype: "Select", label: __("Piece"), options: opts.join("\n"), reqd: 1 },
+				{ fieldname: "st", fieldtype: "HTML" },
+				{ fieldname: "scan", fieldtype: "Data", label: __("Scan / type bag no") },
 			],
-			primary_action_label: __("Merge"),
-			primary_action(v) {
-				d.hide();
-				const uid = (v.t.split("·")[1] || "").trim();
-				const t = ROWS.find((r) => r.unique_id === uid);
-				if (!t) return;
-				t.gs = flt((t.gs + chain.gs).toFixed(3));
-				t.nt = flt((t.nt + chain.nt).toFixed(3));
-				t.back_chain_wt = flt(((t.back_chain_wt || 0) + chain.nt).toFixed(3));
-				t.back_chain_barcode = [t.back_chain_barcode, chain.unique_id].filter(Boolean).join(", ");
-				if (chain.huid) t.huid = [t.huid, chain.huid].filter(Boolean).join(", ");
-				ROWS.splice(ROWS.indexOf(chain), 1);
-				SEL.delete(chain.unique_id);
-				invalidate();
-				paint();
-				frappe.show_alert({ message: __("{0} merged into {1} — weights joined.", [chain.unique_id, uid]), indicator: "green" }, 5);
-			},
+		});
+		const $st = () => d.fields_dict.st.$wrapper;
+		function refresh(msg, color) {
+			const chips = CHAINS.map((c) => `<span class="of-cchip" data-uid="${esc(c.unique_id)}"
+				style="display:inline-block;border:1px solid ${cur === c ? "#1f618d" : "var(--border-color)"};border-radius:14px;
+				padding:2px 10px;margin:2px 4px 2px 0;font-size:11.5px;cursor:pointer;
+				background:${cur === c ? "#1f618d" : "var(--control-bg)"};color:${cur === c ? "#fff" : "var(--text-color)"};">
+				⛓ ${esc(c.unique_id)} <span style="opacity:.7;">${c.gs} g</span></span>`).join("");
+			$st().html(`
+				<div style="font-size:13px;font-weight:700;margin-bottom:4px;color:${color || "var(--text-color)"};">
+					${msg || (cur ? __("Chain {0} — now scan the PIECE", [esc(cur.unique_id)]) : __("Scan a BACK CHAIN (or tap one below)"))}</div>
+				<div style="margin-bottom:6px;">${chips || "<span style='color:var(--text-muted);font-size:12px;'>" + __("all chains assigned 🎉") + "</span>"}</div>`);
+		}
+		function handle(v) {
+			v = (v || "").trim();
+			if (!v) return;
+			if (!cur) {
+				const c = CHAINS.find((x) => x.unique_id === v);
+				if (!c) return refresh(__("{0} is not an unassigned back chain", [esc(v)]), "#b02a2a");
+				cur = c;
+				return refresh(null);
+			}
+			const t = ROWS.find((x) => x.unique_id === v);
+			if (!t) {
+				const other = CHAINS.find((x) => x.unique_id === v);
+				if (other) { cur = other; return refresh(null); }
+				return refresh(__("{0} is not a piece in this lot", [esc(v)]), "#b02a2a");
+			}
+			const done = cur;
+			assignChain(cur, t);
+			cur = null;
+			refresh(__("✓ chain {0} → {1} ({2})", [esc(done.unique_id), esc(t.unique_id), esc(t.item)]), "#1d7a33");
+			if (!CHAINS.length) setTimeout(() => { d.hide(); }, 900);
+		}
+		d.$wrapper.on("click", ".of-cchip", function () {
+			cur = CHAINS.find((x) => x.unique_id === $(this).data("uid")) || null;
+			refresh(null);
+		});
+		d.fields_dict.scan.$input.on("keydown", function (e) {
+			if (e.key !== "Enter") return;
+			e.preventDefault();
+			handle(this.value);
+			this.value = "";
+			this.focus();
 		});
 		d.show();
+		refresh(null);
+		setTimeout(() => d.fields_dict.scan.$input.focus(), 300);
 	});
 
 	function readyCheck() {
+		if (CHAINS.length) { frappe.show_alert({ message: __("{0} back chain(s) still unassigned — scan them onto their pieces first.", [CHAINS.length]), indicator: "orange" }, 5); return false; }
 		const missing = ROWS.filter((r) => !r.colour).length;
 		if (missing) { frappe.show_alert({ message: __("{0} row(s) still have no COLOR.", [missing]), indicator: "orange" }, 4); return false; }
 		if (!SORTED) { frappe.show_alert({ message: __("Run Sort & Number first — the numbers go on the pieces."), indicator: "orange" }, 4); return false; }
