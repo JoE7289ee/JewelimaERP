@@ -575,6 +575,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 };
 
 frappe.pages["old-format"].on_page_show = function (wrapper) {
+	// the RESET hook rebuilds a stale page right after this fires — leave the
+	// session handoff for the rebuild's on_page_load, or it loads into a DOM
+	// that is about to be wiped and the fresh page comes up empty
+	if (frappe.pages["old-format"].__jw_stale) return;
 	const ro = frappe.route_options || {};
 	if (ro.session && wrapper.of_load_session) {
 		const n = ro.session;
