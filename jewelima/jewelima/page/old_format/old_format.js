@@ -98,6 +98,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-party"></div>
 			<button class="of-btn of-save" style="display:none;background:#2e7d32;">${__("Save as…")}</button>
 			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
+			<button class="of-btn of-find" style="display:none;background:#0e7490;">${__("Find #")}</button>
 			<button class="of-btn of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 		</div>
 		<div class="of-bulk" style="display:none;">
@@ -262,7 +263,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			root.find(".of-file").addClass("has").text("💾 " + m.title);
 			root.find(".of-cover").html(__("Saved import <b>{0}</b> ({1}) · party <b>{2}</b> · <b>{3}</b> piece(s)",
 				[esc(m.title), esc(m.status), esc(m.party || "—"), ROWS.length]));
-			root.find(".of-save, .of-sortnum, .of-goexport").show();
+			root.find(".of-save, .of-sortnum, .of-find, .of-goexport").show();
 			root.find(".of-jos").hide();
 			refreshSaveBtn();
 			setState("prep");
@@ -321,7 +322,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				if (COVER.party && !fParty.get_value()) fParty.set_value(COVER.party);
 				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s)",
 					[esc(COVER.invoice_no || "—"), esc(COVER.party || "—"), m.count || 0]));
-				root.find(".of-save, .of-sortnum, .of-goexport").show();
+				root.find(".of-save, .of-sortnum, .of-find, .of-goexport").show();
 				setState("prep");
 			});
 		};
@@ -606,6 +607,54 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			handle(this.value);
 			this.value = "";
 			this.focus();
+		});
+		d.show();
+		refresh(null);
+		setTimeout(() => d.fields_dict.scan.$input.focus(), 300);
+	});
+
+	// Find # — scan a piece, read the serial to write on it physically
+	root.on("click", ".of-find", () => {
+		if (!SORTED) return frappe.show_alert({ message: __("Run Sort & Number first — the serials come from it."), indicator: "orange" }, 4);
+		const seen = []; // newest first: {sl, uid, item, colour, gs}
+		const d = new frappe.ui.Dialog({
+			title: __("Find # — scan pieces, write the number on them"),
+			size: "large",
+			fields: [
+				{ fieldname: "scan", fieldtype: "Data", label: __("Scan / type bag no") },
+				{ fieldname: "st", fieldtype: "HTML" },
+			],
+		});
+		const $st = () => d.fields_dict.st.$wrapper;
+		function refresh(msg, color, big) {
+			$st().html(`
+				${big ? `<div style="text-align:center;margin:8px 0 2px;">
+					<span style="font-size:64px;font-weight:900;line-height:1;">#${big.sl}</span><br>
+					<span style="font-size:13px;color:var(--text-muted);">${esc(big.uid)} · ${esc(big.item)} · ${esc(big.colour)} · ${big.gs} g</span>
+				</div>` : ""}
+				${msg ? `<div style="text-align:center;font-size:13px;font-weight:700;margin:4px 0;color:${color};">${msg}</div>` : ""}
+				${seen.length ? `<table class="of-t" style="margin-top:8px;"><thead><tr>
+					<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("Color")}</th><th class="num">${__("GW g")}</th>
+				</tr></thead><tbody>
+				${seen.map((x) => `<tr><td><b style="font-size:15px;">${x.sl}</b></td><td>${esc(x.uid)}</td>
+					<td>${esc(x.item)}</td><td>${esc(x.colour)}</td><td class="num">${x.gs}</td></tr>`).join("")}
+				</tbody></table>` : `<div style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:8px;">${__("scanned pieces stack up here")}</div>`}`);
+		}
+		d.fields_dict.scan.$input.on("keydown", function (e) {
+			if (e.key !== "Enter") return;
+			e.preventDefault();
+			const v = (this.value || "").trim();
+			this.value = "";
+			this.focus();
+			if (!v) return;
+			const r = ROWS.find((x) => x.unique_id === v);
+			if (!r) return refresh(__("{0} is not in this lot", [esc(v)]), "#b02a2a");
+			const dup = seen.find((x) => x.uid === r.unique_id);
+			if (dup) return refresh(__("already scanned — it is #{0}", [dup.sl]), "#a15c00",
+				{ sl: r.sl, uid: r.unique_id, item: r.item, colour: r.colour, gs: r.gs });
+			seen.unshift({ sl: r.sl, uid: r.unique_id, item: r.item, colour: r.colour, gs: r.gs });
+			refresh(__("✓ write #{0} on the piece", [r.sl]), "#1d7a33",
+				{ sl: r.sl, uid: r.unique_id, item: r.item, colour: r.colour, gs: r.gs });
 		});
 		d.show();
 		refresh(null);
