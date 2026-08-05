@@ -579,7 +579,7 @@ const PO_COLUMNS = [
 	// Create lands the Design and selects it on this line.
 	let NAMING = null;
 	function openVariantCreate(row, bank) {
-		const API2 = "jewelima.jewelima.design_bank_api";
+		const API2 = "jewelima.jewelima.api"; // variant naming lives with the core APIs
 		const esc = frappe.utils.escape_html;
 		const go = (N, bankNo) => {
 			let cur = null;
