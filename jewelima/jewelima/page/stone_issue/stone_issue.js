@@ -108,7 +108,10 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		<div class="si-strip">
 			<div class="si-buckets" style="display:flex;gap:10px;"></div>
 			<div class="b tot"><div class="bk">${__("TOTAL")}</div><div class="bv si-strip-tot">0 / 0.000</div></div>
-			<button class="btn btn-primary si-go">${__("Issue Stones")}</button>
+			<label class="si-partial-w" style="display:none;align-items:center;gap:6px;font-size:12px;color:#a15c00;font-weight:700;cursor:pointer;">
+				<input type="checkbox" class="si-partial" style="width:14px;height:14px;accent-color:#a15c00;">
+				${__("Partial issue — card stays pending")}</label>
+			<button class="btn btn-primary si-go" style="display:none;">${__("Issue Stones")}</button>
 		</div>
 		</div>
 	`);
@@ -366,8 +369,30 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 				<div class="bk">${b}</div><div class="bv">${agg[b].pcs} / ${agg[b].ct.toFixed(3)}</div>
 			</div>`).join(""));
 		root.find(".si-strip-tot").text(`${pcs} / ${ct.toFixed(3)}`);
+		// the Issue button earns its place: FULL coverage (every open line's
+		// pieces met) shows it outright; HALF-filled needs the partial tick,
+		// and the card then stays pending for the rest
+		let entered = 0;
+		let met = true;
+		root.find("table.si-grid tbody tr").each(function () {
+			if ($(this).hasClass("si-locked")) return;
+			const i = cint(this.getAttribute("data-i"));
+			const l = S.card.lines[i];
+			const p = cint($(this).find(".si-pcs").val());
+			const c0 = flt($(this).find(".si-ct").val());
+			if (p || c0) entered++;
+			const remaining = Math.max(cint(l.plan_pcs) - cint(l.issued_pcs), 0);
+			if (remaining > 0 && p < remaining) met = false;
+		});
+		const full = entered > 0 && met;
+		const partial = entered > 0 && !met;
+		root.find(".si-partial-w").css("display", partial ? "inline-flex" : "none");
+		if (!partial) root.find(".si-partial").prop("checked", false);
+		const show = full || (partial && root.find(".si-partial").prop("checked"));
+		root.find(".si-go").toggle(!!show).text(full ? __("Issue Stones") : __("Issue Partial"));
 	}
 	root.on("input", ".si-pcs,.si-ct", sum);
+	root.on("change", ".si-partial", sum);
 
 	// Enter walks the grid: Pcs -> Ct -> next row's Pcs -> … -> Issue button
 	root.on("keydown", ".si-pcs,.si-ct", function (e) {
@@ -392,7 +417,10 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			frappe.call({ method: API + ".stone_issue_apply", args: { order_bag: S.card.order_bag, lines, issued_by: by } })
 				.then((r) => {
 					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("Stones issued into {0}.", [S.card.order_bag]), indicator: "green" }, 5);
+					frappe.show_alert({ message: (r.message || {}).fully_issued
+						? __("Stones issued into {0} — fully served.", [S.card.order_bag])
+						: __("PARTIAL issue into {0} — the card stays pending for the rest.", [S.card.order_bag]),
+						indicator: (r.message || {}).fully_issued ? "green" : "orange" }, 6);
 					logScan(S.card.order_bag, "issued", __("{0} ct across {1} line(s)", [ct.toFixed(3), lines.length]));
 					S.card = r.message; // refreshed issued/available numbers
 					paint();

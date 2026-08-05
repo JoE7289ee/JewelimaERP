@@ -2910,12 +2910,17 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 			plan_dirty = True
 	if plan_dirty:
 		bag.save(ignore_permissions=True)
-	_clear_stone_issue(order_bag)
-	if frappe.db.get_value("Order Bag", order_bag, "stone_oos"):
-		clear_stone_oos(order_bag)
-	frappe.db.commit()
 	out = get_stone_issue_card(order_bag)
+	# PARTIAL issues keep the card pending in the stone-issue queue — the
+	# request only clears when every line's pieces are fully served
+	full = all(cint(l.get("issued_pcs")) >= cint(l.get("plan_pcs")) for l in (out.get("lines") or []))
+	if full:
+		_clear_stone_issue(order_bag)
+		if frappe.db.get_value("Order Bag", order_bag, "stone_oos"):
+			clear_stone_oos(order_bag)
+	frappe.db.commit()
 	out["material_issue"] = mi.name
+	out["fully_issued"] = 1 if full else 0
 	return out
 
 
