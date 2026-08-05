@@ -2875,6 +2875,10 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	bom_items = {r.item for r in bag.bag_bom}
 	wh = _wh(STONE_ISSUE_WAREHOUSE)
 
+	# planned lines cap at what is still owed (blank-plan lines define theirs)
+	_pre = get_stone_issue_card(order_bag)
+	_remaining = {l["item"]: max(cint(l.get("plan_pcs")) - cint(l.get("issued_pcs")), 0)
+		for l in (_pre.get("lines") or []) if cint(l.get("plan_pcs")) > 0}
 	for l in lines:
 		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
 		if item not in bom_items:
@@ -2898,6 +2902,9 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	plan_dirty = False
 	for l in lines:
 		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
+		if item in _remaining and pcs > _remaining[item]:
+			frappe.throw(frappe._("{0}: only {1} pc(s) remain to issue — {2} is more than the plan.").format(
+				item, _remaining[item], pcs))
 		_bag_ledger(order_bag, item, "In", ct, "Stone Issue", pcs=pcs, employee=issued_by,
 			remarks="Stone Issue station", reference=mi.name)
 		_stock_move(item, ct, wh, _wh(IN_PRODUCTION_WAREHOUSE))
