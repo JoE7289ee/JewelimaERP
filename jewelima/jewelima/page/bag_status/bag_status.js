@@ -101,6 +101,9 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				RAW = (r1.message || {}).rows || [];
 				MAP = r2.message || {};
 				OPEN.clear();
+				// CUST starts with every location unticked — the user opts in
+				CUSTOFF.clear();
+				RAW.filter((r) => r.cust).forEach((r) => CUSTOFF.add(r.loc));
 				root.find(".bs-views").css("display", "inline-flex");
 				root.find(".bs-print").show();
 				// first-time spellings persist straight into OTHER (same rule
@@ -255,14 +258,14 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	}
 
 	// withOdate: the screen always carries Order date; the print only when ticked
-	const CUST_HEAD = (l, withOdate) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th><th class="${l || ""}">${__("Type")}</th>
+	const CUST_HEAD = (l, withOdate) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th>
 		<th class="${l || ""}" title="${__("the order-lane marker from the file: CUST, CO-HP (WED)…")}">${__("Mark")}</th>
 		<th class="${l || ""}">${__("Purity")}</th><th class="${l || ""}">${__("User")}</th>
 		<th>${__("Qty")}</th><th>${__("DMD ct")}</th>
 		<th class="${l || ""}">${__("Party")}</th>${withOdate ? `<th class="${l || ""}">${__("Order date")}</th>` : ""}<th class="${l || ""}">${__("Due date")}</th><th title="${__("days past the due date — negative means not due yet")}">${__("Overdue d")}</th>`;
 
 	function custRow(r, old, withOdate) {
-		return `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.dtype)}</td>
+		return `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td>
 			<td class="l">${esc(r.mark)}</td>
 			<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td>
 			<td>${r.qty}</td><td>${g3(r.dmd)}</td>
@@ -271,7 +274,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	}
 
 	function custTitleRow(s, withOdate) {
-		return `<td class="l" colspan="6">${esc(s.loc)} ${__("TOTAL")}
+		return `<td class="l" colspan="5">${esc(s.loc)} ${__("TOTAL")}
 				<span style="font-weight:400;color:var(--text-muted);">(${s.t.bags} ${__("bags")})</span></td>
 			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td>${withOdate ? "<td></td>" : ""}<td></td>
 			<td class="${s.t.maxover > 0 ? "bs-old" : ""}">${s.t.maxover}</td>`;
@@ -286,7 +289,10 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				<input type="checkbox" class="bs-custloc" data-loc="${esc(l)}" ${CUSTOFF.has(l) ? "" : "checked"}
 					style="width:13px;height:13px;accent-color:#1f618d;">${esc(l)} <span style="color:var(--text-muted);">(${n})</span></label>`).join("");
 		root.find(".bs-body").html(`
-			<div style="margin-bottom:8px;">${strip}</div>
+			<div style="margin-bottom:8px;">
+				<button class="bs-locall" style="border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;margin-right:4px;">${__("Select all")}</button>
+				<button class="bs-locnone" style="border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;color:#fff;background:#8a2f2f;cursor:pointer;margin-right:8px;">${__("Unselect all")}</button>
+				${strip}</div>
 			${secs.length ? `
 			<table class="bs-t"><thead><tr>${CUST_HEAD("l", true)}</tr></thead><tbody>
 			${secs.map((s) => `${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old", true)}</tr>`).join("")}
@@ -295,6 +301,14 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			: `<div class="bs-none">${__("No CUST bags match the location ticks / due filter.")}</div>`}`);
 	}
 
+	root.on("click", ".bs-locall", () => {
+		CUSTOFF.clear();
+		paint();
+	});
+	root.on("click", ".bs-locnone", () => {
+		RAW.filter((r) => r.cust).forEach((r) => CUSTOFF.add(r.loc));
+		paint();
+	});
 	root.on("change", ".bs-custloc", function () {
 		const loc = $(this).data("loc");
 		this.checked ? CUSTOFF.delete(loc) : CUSTOFF.add(loc);
@@ -372,7 +386,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			const w = PRINT_ODATE;
 			const body = secs.map((s) => `${s.list.map((r) => `<tr class="kid">${custRow(r, "old", w)}</tr>`).join("")}
 				<tr class="grp">${custTitleRow(s, w)}</tr>`).join("")
-				+ `<tr class="tot"><td class="l" colspan="6">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
+				+ `<tr class="tot"><td class="l" colspan="5">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
 				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td><td></td></tr>`;
 			return printDoc(__("BAG STATUS — CUST PRINT"), sub
 				+ (dueLabel() ? ` · <b>${dueLabel()}</b>` : "")
