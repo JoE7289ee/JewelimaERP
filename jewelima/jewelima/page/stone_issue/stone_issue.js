@@ -181,10 +181,21 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_stone_issuer_today", args: { employee: emp } }).then((r) => {
 			const t = r.message || {};
 			root.find(".si-today-t").text(__("{0} pcs · {1} ct", [t.pcs || 0, (t.ct || 0).toFixed(3)]));
-			const rows = (t.lines || []).map((l) => `
-				<tr><td>${esc(l.item)}</td><td class="r">${l.pcs} / ${l.ct.toFixed(3)}</td>
-				<td class="r">${esc(l.order_bag)}</td>
-				<td class="r text-muted">${frappe.datetime.str_to_user(l.time).split(" ").slice(1).join(" ")}</td></tr>`).join("");
+			// grouped by stone bucket: a bold family line, its issues beneath
+			const groups = {};
+			(t.lines || []).forEach((l) => { (groups[l.bucket || "POTH"] = groups[l.bucket || "POTH"] || []).push(l); });
+			const order = ["DMD", "PS", "CS", "CZ", "CVD", "SW", "PDMD", "POTH"].filter((b) => groups[b]);
+			const rows = order.map((b) => {
+				const ls = groups[b];
+				const pcs = ls.reduce((a, l) => a + l.pcs, 0);
+				const ct = ls.reduce((a, l) => a + l.ct, 0);
+				return `<tr style="background:var(--control-bg);font-weight:700;">
+					<td>${b}</td><td class="r">${pcs} / ${ct.toFixed(3)}</td><td></td><td></td></tr>`
+					+ ls.map((l) => `
+					<tr><td style="padding-left:14px;">${esc(l.item)}</td><td class="r">${l.pcs} / ${l.ct.toFixed(3)}</td>
+					<td class="r">${esc(l.order_bag)}</td>
+					<td class="r text-muted">${frappe.datetime.str_to_user(l.time).split(" ").slice(1).join(" ")}</td></tr>`).join("");
+			}).join("");
 			root.find(".si-today-b").html(rows
 				? `<table><tbody>${rows}</tbody></table>`
 				: `<div class="p-empty">${__("Nothing issued today yet.")}</div>`);
@@ -202,22 +213,36 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		});
 	}, 100));
 
-	// RIGHT PANEL 2 — everything in the Stone Issue warehouse
+	// RIGHT PANEL 2 — ONLY the scanned card's stones (not the whole warehouse)
+	let STOCK = { items: [], total_ct: 0 };
+	function paintStock() {
+		if (!S.card) {
+			root.find(".si-stock-t").text("");
+			root.find(".si-stock-b").html(`<div class="p-empty">${__("Scan a card — the stock of ITS stones shows here.")}</div>`);
+			return;
+		}
+		const wanted = new Set(S.card.lines.map((l) => l.item));
+		const items = (STOCK.items || []).filter((l) => wanted.has(l.item));
+		const have = new Set(items.map((l) => l.item));
+		// the card's stones with NO stock at all still show, at zero, in red
+		const rows = items.map((l) => `
+			<tr><td>${esc(l.item)}</td><td class="r">${l.ct.toFixed(3)} ct</td></tr>`)
+			.concat([...wanted].filter((i) => !have.has(i)).map((i) => `
+			<tr><td>${esc(i)}</td><td class="r low">0.000 ct</td></tr>`)).join("");
+		root.find(".si-stock-t").text(__("{0} ct", [items.reduce((a, l) => a + l.ct, 0).toFixed(3)]));
+		root.find(".si-stock-b").html(`<table><tbody>${rows}</tbody></table>`);
+	}
 	function refreshStock() {
 		frappe.call({ method: API + ".get_stone_issue_stock" }).then((r) => {
-			const s = r.message || {};
-			root.find(".si-stock-t").text(__("{0} ct", [(s.total_ct || 0).toFixed(3)]));
-			const rows = (s.items || []).map((l) => `
-				<tr><td>${esc(l.item)}</td><td class="r">${l.ct.toFixed(3)} ct</td></tr>`).join("");
-			root.find(".si-stock-b").html(rows
-				? `<table><tbody>${rows}</tbody></table>`
-				: `<div class="p-empty">${__("The warehouse is empty.")}</div>`);
+			STOCK = r.message || { items: [], total_ct: 0 };
+			paintStock();
 		});
 	}
 
 	function clearAll() {
 		S.card = null;
 		scan.set_value("");
+		paintStock();
 		root.find(".si-head, table.si-grid, .si-foot, .si-strip, .si-callout").hide();
 		scan.$input.focus();
 	}
@@ -272,6 +297,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			}
 			S.card = m;
 			paint();
+			paintStock();
 			// mixed card, partial access (e.g. CS + DMD, issuer allowed CS only) —
 			// the blocked lines grey out; say so, and log the load
 			const blocked = allowedBuckets ? m.lines.filter((l) => !allowedBuckets.has(l.bucket || "POTH")) : [];

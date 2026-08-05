@@ -16,6 +16,7 @@
   "allow_cz",
   "cb_buckets",
   "allow_cvd",
+  "allow_sw",
   "allow_pdmd",
   "allow_poth"
  ],
@@ -78,6 +79,12 @@
   },
   {
    "default": "1",
+   "fieldname": "allow_sw",
+   "fieldtype": "Check",
+   "label": "Allow Swarovski"
+  },
+  {
+   "default": "1",
    "fieldname": "allow_pdmd",
    "fieldtype": "Check",
    "label": "PDMD (Party Diamond)"
@@ -91,7 +98,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 20:00:00.000000",
+ "modified": "2026-08-05 06:49:33.906907",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Stone Issue Access",

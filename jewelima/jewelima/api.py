@@ -2942,11 +2942,20 @@ def get_stone_issuer_today(employee):
 		WHERE m.issue_type = 'Stone' AND m.issued_by = %s AND DATE(m.posting) = CURDATE()
 		ORDER BY m.posting DESC
 	""", employee, as_dict=True)
+	# bucket per line so the panel can group the history by stone family
+	BUCKET = {"Diamond": "DMD", "Precious Stone": "PS", "Color Stone": "CS",
+		"Cubic Zirconia": "CZ", "CVD": "CVD", "Swarovski": "SW",
+		"Party Diamond": "PDMD", "Party Other": "POTH"}
+	stypes = {}
+	codes = list({r.item for r in rows})
+	if codes:
+		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
+			stypes[it.name] = BUCKET.get(it.stone_type or "", "POTH")
 	return {
 		"pcs": sum(cint(r.pcs) for r in rows),
 		"ct": round(sum(flt(r.qty) for r in rows), 3),
 		"cards": len({r.order_bag for r in rows}),
-		"lines": [{"item": r.item, "pcs": cint(r.pcs), "ct": flt(r.qty),
+		"lines": [{"item": r.item, "pcs": cint(r.pcs), "ct": flt(r.qty), "bucket": stypes.get(r.item, "POTH"),
 			"order_bag": r.order_bag, "time": str(r.posting)} for r in rows],
 	}
 
