@@ -322,7 +322,12 @@ const PO_COLUMNS = [
 			if (col.type === "stone" && state.hiddenStones && state.hiddenStones.has(col.key)) $td.addClass("po-hide");
 			if (col.type === "link") {
 				const df = { fieldtype: "Link", options: col.options, fieldname: col.key, placeholder: col.label };
-				if (col.key === "bank") df.get_query = () => ({ filters: { status: "Approved" } });
+				if (col.key === "bank") {
+					// bank names are HASHES (the code lives in design_no) — typed
+					// text is never a valid value, so force a dropdown pick
+					df.only_select = 1;
+					df.get_query = () => ({ filters: { status: "Approved" } });
+				}
 				if (col.key === "design") df.get_query = () => {
 					const bank = row.f.bank && row.f.bank.get();
 					return { filters: Object.assign({ status: "Active" }, bank ? { design_bank: bank } : {}) };
