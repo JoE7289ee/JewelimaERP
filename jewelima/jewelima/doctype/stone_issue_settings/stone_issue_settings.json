@@ -1,0 +1,89 @@
+{
+ "actions": [],
+ "creation": "2026-08-05 10:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "tol_dmd",
+  "tol_ps",
+  "tol_cs",
+  "tol_cz",
+  "tol_cvd",
+  "tol_sw",
+  "tol_pdmd",
+  "tol_poth"
+ ],
+ "fields": [
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_dmd",
+   "fieldtype": "Float",
+   "label": "DMD tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_ps",
+   "fieldtype": "Float",
+   "label": "PS tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_cs",
+   "fieldtype": "Float",
+   "label": "CS tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_cz",
+   "fieldtype": "Float",
+   "label": "CZ tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_cvd",
+   "fieldtype": "Float",
+   "label": "CVD tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_sw",
+   "fieldtype": "Float",
+   "label": "SW tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_pdmd",
+   "fieldtype": "Float",
+   "label": "PDMD tolerance %"
+  },
+  {
+   "description": "0 = no check",
+   "fieldname": "tol_poth",
+   "fieldtype": "Float",
+   "label": "POTH tolerance %"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-05 10:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stone Issue Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

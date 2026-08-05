@@ -2322,6 +2322,50 @@ def mark_stone_issue(bags):
 	return {"marked": done, "errors": errors}
 
 
+@frappe.whitelist()
+def get_stone_issue_tolerance():
+	d = frappe.get_single("Stone Issue Settings")
+	return {("tol_" + c): flt(d.get("tol_" + c)) for c in STONE_BUCKET_CODES}
+
+
+@frappe.whitelist()
+def save_stone_issue_tolerance(payload):
+	frappe.only_for(("System Manager",))
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	d = frappe.get_single("Stone Issue Settings")
+	for c in STONE_BUCKET_CODES:
+		d.set("tol_" + c, flt(p.get("tol_" + c)))
+	d.save(ignore_permissions=True)
+	return get_stone_issue_tolerance()
+
+
+def _check_issue_weight(item, pcs, ct):
+	"""Per-piece weight sanity: ct/pcs must sit within the bucket's tolerance
+	of the sieve-chart average for this item's sieve. No tolerance set, no
+	pieces, or no average on the chart -> no check."""
+	if not pcs or ct <= 0:
+		return
+	st = frappe.db.get_value("Item", item, "stone_type") or ""
+	code = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs",
+		"Cubic Zirconia": "cz", "CVD": "cvd", "Swarovski": "sw",
+		"Party Diamond": "pdmd", "Party Other": "poth"}.get(st)
+	if not code:
+		return
+	tol = flt(frappe.db.get_single_value("Stone Issue Settings", "tol_" + code))
+	if tol <= 0:
+		return
+	sieve = " ".join(item.split(" ")[1:])  # '<quality> <sieve>' -> the sieve key
+	col = {"dmd": "avg_cts", "cvd": "cvd_avg_cts", "cz": "cz_avg_cts", "sw": "sw_avg_cts"}.get(code)
+	avg = flt(frappe.db.get_value("Diamond Sieve", {"sieve_size": sieve}, col)) if col and sieve else 0
+	if avg <= 0:
+		return
+	per = ct / pcs
+	if abs(per - avg) > avg * tol / 100.0:
+		frappe.throw(frappe._(
+			"{0}: {1} ct over {2} pc(s) is {3} ct/stone — outside ±{4}% of the sieve average {5} ct. Re-check the weigh.").format(
+			item, ct, pcs, round(per, 4), tol, avg))
+
+
 def _clear_stone_issue(order_bag):
 	"""Stones issued -> the request is served: flag off, the system reason off."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
@@ -2905,6 +2949,7 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 		if item in _remaining and pcs > _remaining[item]:
 			frappe.throw(frappe._("{0}: only {1} pc(s) remain to issue — {2} is more than the plan.").format(
 				item, _remaining[item], pcs))
+		_check_issue_weight(item, pcs, ct)
 		_bag_ledger(order_bag, item, "In", ct, "Stone Issue", pcs=pcs, employee=issued_by,
 			remarks="Stone Issue station", reference=mi.name)
 		_stock_move(item, ct, wh, _wh(IN_PRODUCTION_WAREHOUSE))
