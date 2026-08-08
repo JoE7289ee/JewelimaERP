@@ -847,21 +847,12 @@ def _qp(route):
 	return frappe.db.exists("Page", route) and frappe.get_cached_doc("Page", route).is_permitted()
 
 
-# the ONLY pages a Quick Menu slot may hold (route, label) — curated, not open
-QUICK_PAGE_CATALOG = [
-	("transfer-order-bag", "Transfer Order Bag"), ("assign-collect", "Assign / Collect"),
-	("job-work", "Job Work"), ("place-order", "Place Order"), ("card-info", "Card Info"),
-	("design-info", "Design Info"), ("job-order-status", "Job Order Status"),
-	("sell", "Sell"), ("sell-old", "Sell Old"), ("old-format", "OLD FORMAT"),
-	("party-gold", "Party Gold"), ("bag-status", "Bag Status"), ("view-pc", "View PC"),
-	("transfer-holder", "Transfer Holder"), ("item-stock", "Item Stock"),
-	("design-gallery", "Design Gallery"), ("ws-ordering", "Ordering Desk"),
-	("repack-stock", "Repack Stock"), ("stone-issue", "Stone Issue"),
-	("purchase-raw-material", "Purchase Raw Material"), ("print-barcode", "Print Barcode"),
-	("order-requests", "Order Requests"), ("melt-gold", "Melt Gold"),
-	("finished-stock", "Finished Stock"), ("stock-analysis", "Stock Analysis"),
-	("make-products", "Make Products"),
-]
+def _quick_catalog():
+	"""EVERY Jewelima desk page is slot-eligible — the per-target access
+	filter (_quick_pages_for) is what narrows the library."""
+	rows = frappe.get_all("Page", filters={"module": "Jewelima", "system_page": 0},
+		fields=["name", "title"], order_by="title asc")
+	return [(r.name, r.title or r.name) for r in rows]
 QUICK_DEFAULT_SLOTS = ["transfer-order-bag", "assign-collect", "job-work", "place-order",
 	"card-info", "sell", "transfer-holder", "item-stock", None]
 
@@ -884,7 +875,7 @@ def get_quick_menu():
 			slots = json.loads(pref[0].routes or "[]")
 	if slots is None:
 		slots = list(QUICK_DEFAULT_SLOTS)
-	labels = dict(QUICK_PAGE_CATALOG)
+	labels = dict(_quick_catalog())
 	out = []
 	for i, r in enumerate(slots[:9]):
 		if r and r in labels and _qp(r):
@@ -916,7 +907,7 @@ def _quick_pages_for(key):
 	else:
 		roleset = set(frappe.get_roles(key["for_user"]))
 	ok = []
-	for route, label in QUICK_PAGE_CATALOG:
+	for route, label in _quick_catalog():
 		if not frappe.db.exists("Page", route):
 			continue
 		proles = {r.role for r in frappe.get_cached_doc("Page", route).roles}
