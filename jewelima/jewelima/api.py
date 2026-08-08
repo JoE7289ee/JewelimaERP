@@ -1069,6 +1069,9 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 	"""Quick-create a Design from the Place Order dialog. The Design controller
 	provisions the sellable Item + BOM and derives the stone counts. Returns the
 	new design + its derived stone profile so the caller can fill a line."""
+	if not {"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
+			"Jewelima Design Approver"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Not permitted to create designs"), frappe.PermissionError)
 	if isinstance(materials, str):
 		materials = json.loads(materials or "[]")
 	materials = materials or []

@@ -4,7 +4,7 @@
 // Search Design (Design Bank) — find ANY design number, retired included.
 // Tiles show the RAW scan unless the card is Approved (then the info card);
 // clicking a tile opens it BIG with Download raw / Prioritise / Retire —
-// the latter two hidden from view-only (Design Viewer) users.
+// the latter two hidden from read-only (Jewelima Info) users.
 // Route: /app/search-design
 
 frappe.pages["search-design"].on_page_load = function (wrapper) {

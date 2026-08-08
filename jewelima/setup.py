@@ -167,9 +167,13 @@ JEWELIMA_DESIGN_APPROVER_ROLE = "Jewelima Design Approver"
 JEWELIMA_DESIGN_BANK_PAGES = ["design-gallery", "search-design", "old-categories", "new-design-bank",
 	"card-builder", "design-tags", "photo-update", "customer-photos", "design-bank-report"]
 JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-duplicates", "retire-design", "retired-designs"]
-# Viewer: browse-and-filter only (no editing pages, no prioritise)
-JEWELIMA_DESIGN_VIEWER_ROLE = "Jewelima Design Viewer"
-JEWELIMA_DESIGN_VIEWER_PAGES = ["design-gallery", "search-design", "old-categories"]
+# Info: THE read-only persona (the old "Jewelima Design Viewer" merged in,
+# 2026-08-08): card/job lookups + browse-and-filter on the catalog. Read
+# grants only — and every mutating page API refuses the role server-side.
+JEWELIMA_INFO_ROLE = "Jewelima Info"
+JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
+JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status"]
+JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]
 
@@ -217,6 +221,36 @@ def drop_retired_pages():
 			frappe.delete_doc("Page", pg, force=1, ignore_permissions=True)
 
 
+def merge_design_viewer_into_info():
+	"""One-time fold (2026-08-08): "Jewelima Design Viewer" becomes part of
+	Jewelima Info. Holders keep their access through Info; the old role's
+	page tags, perms and Quick Menu role layout all follow; then the role
+	itself is deleted. No-op once the old role is gone."""
+	old = "Jewelima Design Viewer"
+	if not frappe.db.exists("Role", old):
+		return
+	for user in frappe.get_all("Has Role", filters={"parenttype": "User", "role": old}, pluck="parent"):
+		if not frappe.db.exists("User", user):
+			continue
+		u = frappe.get_doc("User", user)
+		u.set("roles", [r for r in u.roles if r.role != old])
+		if not any(r.role == JEWELIMA_INFO_ROLE for r in u.roles):
+			u.append("roles", {"role": JEWELIMA_INFO_ROLE})
+		u.save(ignore_permissions=True)
+	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": old}, pluck="parent"):
+		p = frappe.get_doc("Page", pg)
+		p.set("roles", [r for r in p.roles if r.role != old])
+		p.save(ignore_permissions=True)
+	for qm in frappe.get_all("Quick Menu", filters={"for_role": old}, pluck="name"):
+		if frappe.db.exists("Quick Menu", {"for_role": JEWELIMA_INFO_ROLE}):
+			frappe.delete_doc("Quick Menu", qm, ignore_permissions=True, force=1)
+		else:
+			frappe.db.set_value("Quick Menu", qm, "for_role", JEWELIMA_INFO_ROLE)
+	frappe.db.delete("Custom DocPerm", {"role": old})
+	frappe.db.delete("Has Role", {"role": old})
+	frappe.delete_doc("Role", old, ignore_permissions=True, force=1)
+
+
 def setup_roles():
 	"""Create the Jewelima roles + permissions. Idempotent (runs on after_migrate).
 
@@ -234,7 +268,7 @@ def setup_roles():
 
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE,
-			JEWELIMA_DESIGN_VIEWER_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
+			JEWELIMA_INFO_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -315,18 +349,18 @@ def setup_roles():
 		if changed:
 			pg.save(ignore_permissions=True)
 
-	# Jewelima Info — the lookup persona: Card Info + Job Order Status only
-	if not frappe.db.exists("Role", "Jewelima Info"):
-		frappe.get_doc({"doctype": "Role", "role_name": "Jewelima Info", "desk_access": 1}).insert(ignore_permissions=True)
-	for dt in ("Order Bag", "Job Order", "Design", "Item", "Employee"):
-		grant(dt, "Jewelima Info", {"read": 1})
+	# Jewelima Info — THE read-only persona: card/job lookups + catalog
+	# browsing (the old Design Viewer, merged in). Reads only, everywhere.
+	merge_design_viewer_into_info()
+	for dt in ("Order Bag", "Job Order", "Design", "Item", "Employee") + tuple(JEWELIMA_DESIGN_BANK_READ):
+		grant(dt, JEWELIMA_INFO_ROLE, {"read": 1})
 	for page in JEWELIMA_ORDER_PAGES:
-		roles = ("Jewelima Ordering", "Jewelima Info") if page in ("card-info", "design-info", "job-order-status") else ("Jewelima Ordering",)
+		roles = ("Jewelima Ordering", JEWELIMA_INFO_ROLE) if page in JEWELIMA_INFO_LOOKUP_PAGES else ("Jewelima Ordering",)
 		set_page_roles(page, roles)
-	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": "Jewelima Info"}, pluck="parent"):
-		if pg not in ("card-info", "design-info", "job-order-status"):
+	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_INFO_ROLE}, pluck="parent"):
+		if pg not in set(JEWELIMA_INFO_PAGES):
 			pgd = frappe.get_doc("Page", pg)
-			pgd.set("roles", [r for r in pgd.roles if r.role != "Jewelima Info"])
+			pgd.set("roles", [r for r in pgd.roles if r.role != JEWELIMA_INFO_ROLE])
 			pgd.save(ignore_permissions=True)
 	for page in JEWELIMA_ORDERING_ONLY_PAGES:
 		set_page_roles(page, ("Jewelima Ordering",),
@@ -383,16 +417,15 @@ def setup_roles():
 	for dt in JEWELIMA_DESIGN_BANK_READ:
 		grant(dt, JEWELIMA_DESIGN_BANK_ROLE, {"read": 1})
 		grant(dt, JEWELIMA_DESIGN_APPROVER_ROLE, {"read": 1})
-		grant(dt, JEWELIMA_DESIGN_VIEWER_ROLE, {"read": 1})
 	for page in JEWELIMA_DESIGN_BANK_PAGES:
 		roles = (JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE)
-		if page in JEWELIMA_DESIGN_VIEWER_PAGES:
-			roles = roles + (JEWELIMA_DESIGN_VIEWER_ROLE,)
+		if page in JEWELIMA_INFO_GALLERY_PAGES:
+			roles = roles + (JEWELIMA_INFO_ROLE,)
 		set_page_roles(page, roles)
 	for page in JEWELIMA_DESIGN_APPROVER_PAGES:
 		set_page_roles(page, (JEWELIMA_DESIGN_APPROVER_ROLE,))
 	for role, allowed in ((JEWELIMA_DESIGN_BANK_ROLE, set(JEWELIMA_DESIGN_BANK_PAGES)),
-			(JEWELIMA_DESIGN_VIEWER_ROLE, set(JEWELIMA_DESIGN_VIEWER_PAGES)),
+			(JEWELIMA_INFO_ROLE, set(JEWELIMA_INFO_PAGES)),
 			(JEWELIMA_DESIGN_APPROVER_ROLE, set(JEWELIMA_DESIGN_BANK_PAGES) | set(JEWELIMA_DESIGN_APPROVER_PAGES))):
 		for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": role}, pluck="parent"):
 			if page not in allowed:
@@ -400,12 +433,12 @@ def setup_roles():
 				pg.set("roles", [r for r in pg.roles if r.role != role])
 				pg.save(ignore_permissions=True)
 
-	# every CAD user can browse the bank: sync the viewer role onto them
+	# every CAD user can browse the bank: sync the Info role onto them
 	for user in frappe.get_all("Has Role", filters={"parenttype": "User", "role": "Jewelima CAD"}, pluck="parent"):
 		if frappe.db.exists("User", user) and not frappe.db.exists(
-				"Has Role", {"parenttype": "User", "parent": user, "role": JEWELIMA_DESIGN_VIEWER_ROLE}):
+				"Has Role", {"parenttype": "User", "parent": user, "role": JEWELIMA_INFO_ROLE}):
 			u = frappe.get_doc("User", user)
-			u.append("roles", {"role": JEWELIMA_DESIGN_VIEWER_ROLE})
+			u.append("roles", {"role": JEWELIMA_INFO_ROLE})
 			u.save(ignore_permissions=True)
 
 	# ---- Workstation personas: one role per bench --------------------------------

@@ -8,6 +8,19 @@ import re
 import frappe
 from frappe import _
 
+# Server-side write gates. The catalog pages hide edit UI from read-only
+# roles (Jewelima Info), but whitelisted methods are callable by ANY logged-in
+# user — so every mutator checks roles itself. Editors work the catalog;
+# only approvers touch the review / approve / purge lane.
+DESIGN_EDITOR_ROLES = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver"}
+DESIGN_APPROVER_ROLES = {"System Manager", "Jewelima Design Approver"}
+
+
+def _require(roles):
+	if not roles & set(frappe.get_roles()):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+
 
 # --- Tags --------------------------------------------------------------------------
 
@@ -28,6 +41,7 @@ def get_tags(with_counts=1):
 
 @frappe.whitelist()
 def create_tag(tag_name, color=None):
+	_require(DESIGN_EDITOR_ROLES)
 	tag_name = (tag_name or "").strip()
 	if not tag_name:
 		frappe.throw(_("Tag name is required"))
@@ -41,6 +55,7 @@ def create_tag(tag_name, color=None):
 
 @frappe.whitelist()
 def rename_tag(old, new):
+	_require(DESIGN_EDITOR_ROLES)
 	new = (new or "").strip()
 	if not new:
 		frappe.throw(_("New name is required"))
@@ -54,6 +69,7 @@ def rename_tag(old, new):
 
 @frappe.whitelist()
 def delete_tag(tag_name):
+	_require(DESIGN_EDITOR_ROLES)
 	frappe.db.delete("Design Bank Tag", {"tag": tag_name})
 	frappe.delete_doc("Design Tag", tag_name, force=True, ignore_permissions=True)
 	frappe.db.commit()
@@ -62,6 +78,7 @@ def delete_tag(tag_name):
 
 @frappe.whitelist()
 def set_tag_color(tag_name, color):
+	_require(DESIGN_EDITOR_ROLES)
 	frappe.db.set_value("Design Tag", tag_name, "color", color)
 	frappe.db.commit()
 	return {"ok": 1}
@@ -143,6 +160,7 @@ def get_designs(search=None, tags=None, match="any", start=0, limit=60, mode="in
 @frappe.whitelist()
 def set_design_tags(designs, add=None, remove=None):
 	"""Add and/or remove tags on a set of designs (gallery bulk-tagging)."""
+	_require(DESIGN_EDITOR_ROLES)
 	designs = frappe.parse_json(designs) if isinstance(designs, str) else designs
 	add = frappe.parse_json(add) if isinstance(add, str) else (add or [])
 	remove = frappe.parse_json(remove) if isinstance(remove, str) else (remove or [])
@@ -215,6 +233,7 @@ def next_design_no(prefix=None):
 @frappe.whitelist()
 def create_design_bank(design_no, gross_weight=None, diamond_weight=None, note=None, image=None, tags=None):
 	"""Create a Design Bank entry from the Add Design page. Unknown tags are created."""
+	_require(DESIGN_EDITOR_ROLES)
 	design_no = (design_no or "").strip()
 	if not design_no:
 		frappe.throw(_("Design No is required"))
@@ -308,6 +327,7 @@ def resolve_duplicate(name, image):
 	"""ONE photo wins: it becomes the card's raw source and every LOSING
 	candidate is deleted from the system FOREVER (File docs + disk). The card
 	then re-enters the crop+rebuild pipe and flows to Review."""
+	_require(DESIGN_APPROVER_ROLES)
 	d = frappe.get_doc("Design Bank", name)
 	if not d.duplicate_review:
 		frappe.throw(frappe._("{0} is not awaiting duplicate review.").format(d.design_no))
@@ -376,6 +396,7 @@ def get_review_card(q):
 def review_save(payload):
 	"""Review corrections: values re-render the card; checkboxes stick; optional
 	approve (needs design type); optional PERMANENT raw delete (file off disk)."""
+	_require(DESIGN_APPROVER_ROLES)
 	from jewelima.jewelima.api import save_design_card
 	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	res = save_design_card(json.dumps({k: p.get(k) for k in
@@ -469,6 +490,7 @@ def get_photo_update_queue(start=0, limit=30):
 def submit_photo_update(name, image_b64):
 	"""The worker's upload — parked as the PENDING candidate, named
 	<code>.pending.png. Replaces a prior unapproved candidate."""
+	_require(DESIGN_EDITOR_ROLES)
 	import base64
 	from jewelima.jewelima.api import _db_img_name
 	d = frappe.get_doc("Design Bank", name)
@@ -513,6 +535,7 @@ def submit_customer_photo(name, image_b64):
 	"""Store the customer-facing image as <code>.customer.png (replacing any
 	prior one) and clear the needed-flag. No approval leg — customer shots go
 	live directly."""
+	_require(DESIGN_EDITOR_ROLES)
 	import base64
 	from jewelima.jewelima.api import _db_img_name
 	d = frappe.get_doc("Design Bank", name)
@@ -550,6 +573,7 @@ def _delete_bank_file(name, url):
 def approve_photo_update(name):
 	"""APPROVE: the old product photo is deleted FOREVER, the candidate becomes
 	<code>.photo.png, the info card re-renders, both flags clear."""
+	_require(DESIGN_APPROVER_ROLES)
 	import base64
 	from io import BytesIO
 	from jewelima.jewelima.api import _card_compose, _db_img_name, _cad_image_any
@@ -591,6 +615,7 @@ def approve_photo_update(name):
 @frappe.whitelist()
 def reject_photo_update(name):
 	"""REJECT: the candidate is binned; the card stays on the update queue."""
+	_require(DESIGN_APPROVER_ROLES)
 	d = frappe.get_doc("Design Bank", name)
 	_delete_bank_file(d.name, d.pending_photo)
 	d.pending_photo = ""
@@ -707,6 +732,7 @@ def design_delete_forever(name):
 	"""PURGE a retired card that was never a real design: every image (raw,
 	photo, info card, customer, pending) leaves the disk, every File doc goes,
 	and the record itself is deleted — the code becomes reusable again."""
+	_require(DESIGN_APPROVER_ROLES)
 	d = frappe.get_doc("Design Bank", name)
 	if d.status != "Retired":
 		frappe.throw(frappe._("Only RETIRED cards can be purged — retire {0} first.").format(d.design_no))
