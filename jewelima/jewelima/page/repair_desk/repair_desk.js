@@ -97,6 +97,7 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 			BOOT = r.message || {};
 			root.find("#rd-parties").html((BOOT.parties || [])
 				.filter((p) => p.active).map((p) => `<option value="${esc(p.name)}">`).join(""));
+			paint();
 			paintOpen();
 			if (then) then();
 		});
@@ -161,7 +162,7 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 		});
 	});
 
-	const typeOpts = (sel) => `<option value=""></option>` + (BOOT.item_types || [])
+	const typeOpts = (sel) => `<option value=""></option>` + ((BOOT && BOOT.item_types) || [])
 		.map((t) => `<option data-mc="${t.polish_rate}" ${t.name === sel ? "selected" : ""}>${esc(t.name)}</option>`).join("");
 
 	function blankLine() {
@@ -173,6 +174,7 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 	const NUM = (l, i, k, step) => `<td class="n"><input type="number" step="${step || 1}" class="rd-f" data-i="${i}" data-k="${k}" value="${l[k] || ""}"></td>`;
 
 	function paint() {
+		if (!BOOT) return; // first paint comes from boot() — never before
 		LINES.forEach(calc);
 		const locked = STATUS === "Delivered";
 		root.find(".rd-rates").html(
