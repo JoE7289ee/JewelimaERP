@@ -3,8 +3,9 @@
 //
 // User Roles (Setup > Employee) — who holds which roles, at a glance: rows =
 // enabled system users, columns = the Jewelima roles (+ System / Stock
-// Manager), everything else as chips. Read-only — click a user to open their
-// User form for changes. Route: /app/user-roles
+// Manager), everything else as chips. Click a user to ASSIGN / RE-ASSIGN
+// their roles right here (Administrator stays hands-off; you cannot strip
+// System Manager from yourself). Route: /app/user-roles
 
 frappe.pages["user-roles"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "User Roles", single_column: true });
@@ -64,8 +65,46 @@ frappe.pages["user-roles"].on_page_load = function (wrapper) {
 			: `<tr><td colspan="${cols.length + 2}" class="ur-empty">${__("No users match.")}</td></tr>`;
 	}
 
+	// click a user -> the assign dialog (tick roles, Save; Jewelima's first)
 	$(root).on("click", ".ur-name", function () {
-		frappe.set_route("Form", "User", this.getAttribute("data-user"));
+		const user = this.getAttribute("data-user");
+		if (user === "Administrator") {
+			frappe.show_alert({ message: __("Administrator's roles are not managed here."), indicator: "orange" }, 4);
+			return;
+		}
+		frappe.call({ method: "jewelima.jewelima.api.get_user_role_editor", args: { user } }).then((r) => {
+			const m = r.message || {};
+			const has = new Set(m.has || []);
+			const cb = (role) => `<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;padding:3px 2px;cursor:pointer;">
+				<input type="checkbox" class="ur-cb" value="${esc(role)}" ${has.has(role) ? "checked" : ""}
+					style="width:15px;height:15px;accent-color:#1f618d;">${esc(role)}</label>`;
+			const grid = (roles) => `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 14px;">
+				${roles.map(cb).join("")}</div>`;
+			const d = new frappe.ui.Dialog({
+				title: __("Roles — {0}", [m.full_name || user]),
+				size: "large",
+				fields: [{ fieldtype: "HTML", fieldname: "b" }],
+				primary_action_label: __("Save"),
+				primary_action() {
+					const picked = [];
+					d.$wrapper.find(".ur-cb:checked").each(function () { picked.push(this.value); });
+					frappe.call({ method: "jewelima.jewelima.api.set_user_roles",
+						args: { user, roles: JSON.stringify(picked) } }).then(() => {
+						d.hide();
+						frappe.show_alert({ message: __("{0} now holds {1} role(s).", [m.full_name || user, picked.length]), indicator: "green" }, 4);
+						load();
+					});
+				},
+			});
+			d.get_field("b").$wrapper.html(`
+				<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-bottom:5px;">${__("Jewelima roles")}</div>
+				${grid(m.jewelima || [])}
+				<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin:14px 0 5px;">${__("Other roles")}</div>
+				${grid(m.others || [])}
+				<div style="margin-top:12px;font-size:11.5px;">
+					<a href="/app/user/${encodeURIComponent(user)}">${__("open the full User form instead")}</a></div>`);
+			d.show();
+		});
 	});
 	root.querySelector(".ur-search").addEventListener("input", frappe.utils.debounce(function () {
 		S.term = this.value || "";

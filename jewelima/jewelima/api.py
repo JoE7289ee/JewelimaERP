@@ -6807,6 +6807,42 @@ def get_loss_report():
 # User Roles (Setup > Employee) — who holds which roles, at a glance.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
+def get_user_role_editor(user):
+	"""User Roles page: everything needed to (re)assign one user's roles —
+	the assignable role list (Jewelima's first) and what they hold now."""
+	frappe.only_for(("System Manager",))
+	hidden = {"All", "Guest", "Administrator"}
+	roles = [r.name for r in frappe.get_all("Role", filters={"disabled": 0}, fields=["name"], order_by="name")
+		if r.name not in hidden]
+	jw = [r for r in roles if r.startswith("Jewelima") or r == "ESMITH"]
+	rest = [r for r in roles if r not in jw]
+	has = set(frappe.get_roles(user))
+	return {"jewelima": jw, "others": rest, "has": [r for r in jw + rest if r in has],
+		"full_name": frappe.db.get_value("User", user, "full_name") or user}
+
+
+@frappe.whitelist()
+def set_user_roles(user, roles):
+	"""Replace the user's role set (Administrator untouchable; you cannot
+	strip System Manager from YOURSELF — no self-lockout)."""
+	frappe.only_for(("System Manager",))
+	if user == "Administrator":
+		frappe.throw(frappe._("Administrator's roles are not managed here."))
+	roles = set(json.loads(roles) if isinstance(roles, str) else (roles or []))
+	roles -= {"All", "Guest", "Administrator"}
+	bad = [r for r in roles if not frappe.db.exists("Role", r)]
+	if bad:
+		frappe.throw(frappe._("Unknown role(s): {0}").format(", ".join(bad)))
+	if user == frappe.session.user and "System Manager" in frappe.get_roles(user) \
+			and "System Manager" not in roles:
+		frappe.throw(frappe._("You cannot remove System Manager from yourself."))
+	doc = frappe.get_doc("User", user)
+	doc.set("roles", [{"role": r} for r in sorted(roles)])
+	doc.save(ignore_permissions=True)
+	return {"user": user, "roles": sorted(roles)}
+
+
+@frappe.whitelist()
 def get_user_roles():
 	"""Every enabled system user with their roles. Jewelima roles (+ the two
 	ERPNext roles that gate our pages) come as matrix columns; the rest as chips."""
