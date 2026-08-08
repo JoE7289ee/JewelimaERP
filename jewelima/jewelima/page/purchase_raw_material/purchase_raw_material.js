@@ -61,6 +61,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		return c;
 	};
 	state.header.voucher = mk(".pr-h-voucher", { fieldtype: "Link", label: "Voucher Type", fieldname: "voucher_type", options: "Voucher Type", reqd: 1 });
+	state.header.voucher.set_value("SIN"); // Stock Import unless the buyer says otherwise
 	state.header.supplier = mk(".pr-h-supplier", { fieldtype: "Link", label: "Supplier", fieldname: "supplier", options: "Supplier" });
 	state.header.posting_date = mk(".pr-h-date", { fieldtype: "Date", label: "Date", fieldname: "posting_date", read_only: 1 });
 	state.header.warehouse = mk(".pr-h-wh", { fieldtype: "Link", label: "Warehouse", fieldname: "warehouse", options: "Warehouse", get_query: () => ({ filters: { is_group: 0, custom_is_purchase_location: 1 } }) });

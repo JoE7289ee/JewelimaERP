@@ -126,7 +126,10 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // the tick (the "4 ticks" glyph). One rule, app-wide, ends it.
 (() => {
 	const st = document.createElement("style");
-	st.textContent = "input[type=checkbox]{background-repeat:no-repeat !important;background-position:center !important;}";
+	st.textContent = "input[type=checkbox]{background-repeat:no-repeat !important;background-position:center !important;}"
+		// the link-field arrow that jumps into raw ERP records — nobody browses
+		// records from our pages; every action goes through the pages themselves
+		+ ".link-btn{display:none !important;}";
 	document.head.appendChild(st);
 })();
 
