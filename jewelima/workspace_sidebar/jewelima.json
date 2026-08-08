@@ -724,6 +724,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "history",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Purchase History",
+   "link_to": "purchase-history",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
@@ -2360,7 +2373,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-08 20:21:07.948320",
+ "modified": "2026-08-08 22:26:19.495719",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

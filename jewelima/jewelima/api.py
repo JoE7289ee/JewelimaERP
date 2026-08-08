@@ -20,6 +20,16 @@ def _abbr():
 	return frappe.db.get_value("Company", _company(), "abbr")
 
 
+# Stock-desk gate: buying, moving and melting stock is the JW Stock desk
+# (the tight buyer role keeps purchase-only access).
+STOCK_ROLES = {"System Manager", "Stock Manager", "Jewelima Stock"}
+
+
+def _require_stock(extra=()):
+	if not (STOCK_ROLES | set(extra)) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+
+
 def _wh(name):
 	"""Full '<name> - <abbr>' warehouse, or None if it doesn't exist."""
 	full = "{0} - {1}".format(name, _abbr())
@@ -55,6 +65,7 @@ def _stock_move(item, qty, source, target):
 
 @frappe.whitelist()
 def melt_gold(warehouse, output_item, output_weight, inputs, send_to_casting=0):
+	_require_stock()
 	"""Convert fine gold + alloy into a karat gold (e.g. 999 -> 18KPG) in ONE warehouse.
 	Repack Stock Entry: consume each input (gold, alloy) and produce `output_weight` grams
 	of `output_item` in the same warehouse. inputs = [{item, weight}, ...]. Output weight
@@ -168,6 +179,7 @@ def set_warehouse_flag(warehouse, flag, value):
 
 @frappe.whitelist()
 def transfer_stock(from_warehouse, to_warehouse, items):
+	_require_stock()
 	"""Move stock between two warehouses (Material Transfer). items = [{item, weight}].
 	Refuses to transfer more than is available in the source for any item."""
 	if isinstance(items, str):
@@ -208,6 +220,7 @@ def transfer_stock(from_warehouse, to_warehouse, items):
 
 @frappe.whitelist()
 def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=None, voucher_type=None):
+	_require_stock(extra=("Jewelima Purchase",))
 	"""Create + submit a Purchase Receipt for raw materials (from the Purchase
 	Raw Material page) AND write Jewelima's own Purchase Record — named by the
 	voucher type's code series (SIN-0001) — storing what/how much/who/total."""
@@ -273,6 +286,49 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 	rec.insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": pr.name, "record": rec.name, "total": rec.total_amount}
+
+
+@frappe.whitelist()
+def list_purchase_records(voucher_type=None, supplier=None, from_date=None, to_date=None):
+	"""Purchase History page: every Purchase Record with its lines, newest
+	first, plus gold-gram / stone-carat / amount totals over the filter."""
+	_require_stock(extra=("Jewelima Purchase",))
+	f = {}
+	if voucher_type:
+		f["voucher_type"] = voucher_type
+	if supplier:
+		f["supplier"] = supplier
+	if from_date and to_date:
+		f["purchase_date"] = ["between", [from_date, to_date]]
+	elif from_date:
+		f["purchase_date"] = [">=", from_date]
+	elif to_date:
+		f["purchase_date"] = ["<=", to_date]
+	rows = frappe.get_all("Purchase Record", filters=f,
+		fields=["name", "voucher_type", "supplier", "purchase_date", "warehouse",
+			"purchase_receipt", "recorded_by", "total_amount"],
+		order_by="purchase_date desc, creation desc", limit_page_length=500)
+	vt_title = {v.name: v.title for v in frappe.get_all("Voucher Type", fields=["name", "title"])}
+	stone_of = {}
+	tot = {"n": 0, "gold": 0.0, "ct": 0.0, "pcs": 0, "amount": 0.0}
+	for r in rows:
+		items = frappe.get_all("Purchase Record Item", filters={"parent": r.name},
+			fields=["item", "weight", "count", "purity", "rate"], order_by="idx")
+		for it in items:
+			if it["item"] not in stone_of:
+				stone_of[it["item"]] = bool(frappe.db.get_value("Item", it["item"], "stone_type"))
+			it["is_stone"] = 1 if stone_of[it["item"]] else 0
+		r["items"] = items
+		r["voucher_title"] = vt_title.get(r.voucher_type, r.voucher_type)
+		r["gold"] = sum(flt(i["weight"]) for i in items if not i["is_stone"])
+		r["ct"] = sum(flt(i["weight"]) for i in items if i["is_stone"])
+		r["pcs"] = sum(cint(i["count"]) for i in items if i["is_stone"])
+		tot["n"] += 1
+		tot["gold"] += r["gold"]
+		tot["ct"] += r["ct"]
+		tot["pcs"] += r["pcs"]
+		tot["amount"] += flt(r.total_amount)
+	return {"rows": rows, "totals": tot}
 
 
 @frappe.whitelist()

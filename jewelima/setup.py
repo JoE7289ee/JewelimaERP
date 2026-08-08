@@ -135,8 +135,13 @@ JEWELIMA_TRANSFER_ROLES = ("Jewelima Transfer", "Jewelima Transfer Plus")
 # The stock buyer: books raw-material purchases and nothing else. One page;
 # posting writes a submitted Purchase Receipt server-side (ignore_permissions),
 # so read on the pickers is all the role needs.
-JEWELIMA_PURCHASE_PAGES = ["purchase-raw-material"]
+JEWELIMA_PURCHASE_PAGES = ["purchase-raw-material", "purchase-history"]
 JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", "UOM"]
+# JW Stock — the stock desk: buy (purchase page + history), move stock
+# between warehouses, melt gold. Purchase stays the tighter buy-only role.
+JEWELIMA_STOCK_ROLE = "Jewelima Stock"
+JEWELIMA_STOCK_PAGES = ["purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
+JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type"]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
 JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "bench-cad", "order-bag-photos"]
 JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item", "Item Group", "Customer", "Supplier", "Diamond Sieve", "Bin", "Warehouse", "File"]
@@ -293,7 +298,7 @@ def setup_roles():
 
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE,
-			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
+			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -430,6 +435,19 @@ def setup_roles():
 		if page not in set(JEWELIMA_PURCHASE_PAGES):
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != "Jewelima Purchase"])
+			pg.save(ignore_permissions=True)
+
+	# ---- Jewelima Stock: the stock desk ------------------------------------------
+	# Buy + history + warehouse transfer + melt. Reads only; every mutation
+	# goes through the STOCK_ROLES-gated APIs.
+	for dt in JEWELIMA_STOCK_READ:
+		grant(dt, JEWELIMA_STOCK_ROLE, {"read": 1})
+	for page in JEWELIMA_STOCK_PAGES:
+		set_page_roles(page, (JEWELIMA_STOCK_ROLE,))
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_STOCK_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_STOCK_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STOCK_ROLE])
 			pg.save(ignore_permissions=True)
 
 	# ---- Jewelima CAD: the workstation persona ----------------------------------
