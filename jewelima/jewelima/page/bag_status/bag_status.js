@@ -12,6 +12,9 @@
 //              title with its pieces beneath, most past DUE first; the top
 //              strip of location ticks filters table AND print; due filter =
 //              past-due or a picked date; order date prints only when ticked.
+//   KPI      — the analyst dashboard: WIP exposure, aging, bottleneck
+//              stages, holder load, CUST delivery risk, oldest-bag hunt
+//              list. Read-only; location/user lines drill into the views.
 // Rejection-location bags are dropped at the door (a tile counts them).
 // Aging runs on the ORDER date (due dates in these files are junk); the
 // age buckets carry PIECES. Straight data — nothing stored.
@@ -36,6 +39,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		user: { label: __("User"), l2: __("User / Location") },
 		party: { label: __("Party"), l2: __("Party group / Location") },
 		cust: { label: __("CUST"), l2: "" },
+		kpi: { label: __("KPI 📊"), l2: "" },
 	};
 
 	$(page.main).append(`
@@ -63,6 +67,20 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		tr.bs-kid td.l:first-child{padding-left:26px;color:var(--text-muted);}
 		td.bs-old{color:#a15c00;font-weight:700;}
 		.bs-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		.bs-ksec{margin-bottom:16px;}
+		.bs-kh{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px;}
+		.bs-khs{font-weight:400;text-transform:none;letter-spacing:0;}
+		.bs-ktiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
+		.bs-tile .ks{font-size:10.5px;color:var(--text-muted);margin-top:1px;}
+		.bs-kbars{max-width:600px;margin-top:6px;}
+		.bs-kbrow{display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:11.5px;}
+		.bs-kbrow .lbl{width:64px;color:var(--text-muted);text-align:right;flex:none;}
+		.bs-kbrow .tr{flex:1;background:var(--control-bg);border-radius:4px;height:12px;overflow:hidden;}
+		.bs-kbrow .bar{display:block;height:100%;border-radius:4px;}
+		.bs-kbrow .val{width:180px;flex:none;font-variant-numeric:tabular-nums;}
+		.bs-kcols{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;}
+		.bs-klist{flex:1;min-width:330px;}
+		tr.bs-kj{cursor:pointer;}
 		</style>
 		<div class="bs-bar">
 			<label class="bs-file">${__("📄 Pick the BAG STATUS .xlsx")}</label>
@@ -171,6 +189,15 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 
 	function paint() {
 		if (!RAW.length) return;
+		root.find(".bs-views button").each(function () {
+			$(this).toggleClass("on", $(this).data("v") === VIEW);
+		});
+		root.find(".bs-print").toggle(VIEW !== "kpi");
+		if (VIEW === "kpi") {
+			root.find(".bs-due, .bs-podate, .bs-duein").hide();
+			root.find(".bs-tiles").empty();
+			return paintKPI();
+		}
 		const tot = blankAgg();
 		let custN;
 		if (VIEW === "cust") {
@@ -182,9 +209,6 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			RAW.forEach((r) => addTo(tot, r));
 			custN = RAW.filter((r) => r.cust).length;
 		}
-		root.find(".bs-views button").each(function () {
-			$(this).toggleClass("on", $(this).data("v") === VIEW);
-		});
 		root.find(".bs-due, .bs-podate").css("display", VIEW === "cust" ? "inline-flex" : "none");
 		root.find(".bs-duein").toggle(VIEW === "cust" && CUSTDUE === "within");
 		root.find(".bs-tiles").html(`
@@ -334,6 +358,119 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		OPEN.has(g) ? OPEN.delete(g) : OPEN.add(g);
 		paint();
 	});
+
+	// KPI drill-through: a location/user line opens the real view on it
+	root.on("click", "tr.bs-kj", function () {
+		VIEW = $(this).data("view");
+		OPEN = new Set([$(this).data("key")]);
+		paint();
+	});
+
+	// ---- KPI view: the analyst read on the WIP map — where production
+	// stalls, who carries the load, and how hot the CUST deliveries are.
+	function paintKPI() {
+		const tot = blankAgg();
+		let wdTot = 0, over180pcs = 0, over90pcs = 0;
+		RAW.forEach((r) => {
+			addTo(tot, r);
+			wdTot += (r.qty || 0) * (r.days || 0);
+			if ((r.days || 0) > 90) over90pcs += r.qty || 0;
+			if ((r.days || 0) > 180) over180pcs += r.qty || 0;
+		});
+		const by = (key) => {
+			const m = {};
+			RAW.forEach((r) => {
+				const k = key(r);
+				const x = (m[k] = m[k] || Object.assign({ wd: 0 }, blankAgg()));
+				addTo(x, r);
+				x.wd += (r.qty || 0) * (r.days || 0);
+			});
+			return m;
+		};
+		const locs = by((r) => r.loc), users = by((r) => r.user || "(NO USER)"), pgroups = by(groupOf);
+		const lk = sortedKeys(locs), uk = sortedKeys(users), gk = sortedKeys(pgroups);
+		const wavg = (x) => (x.pcs ? x.wd / x.pcs : 0);
+		const pctP = (v) => (tot.pcs ? ((v / tot.pcs) * 100).toFixed(1) : "0.0");
+		const daysArr = RAW.map((r) => r.days || 0).sort((a, b) => a - b);
+		const median = daysArr[Math.floor(daysArr.length / 2)] || 0;
+		const oldestRow = RAW.reduce((a, r) => ((r.days || 0) > (a.days || 0) ? r : a), RAW[0]);
+		// CUST delivery risk — the whole lane, no location ticks here
+		const cust = RAW.filter((r) => r.cust);
+		const cpast = cust.filter((r) => (r.overdue || 0) > 0);
+		const cdue7 = cust.filter((r) => (r.overdue || 0) <= 0 && (r.overdue || 0) >= -7);
+		const worstOver = cpast.reduce((m, r) => Math.max(m, r.overdue || 0), 0);
+		const tile = (k, v, sub) => `<div class="bs-tile"><div class="k">${k}</div><div class="v">${v}</div>${sub ? `<div class="ks">${sub}</div>` : ""}</div>`;
+		const BUCKETS = ["0–30 d", "31–90 d", "91–180 d", "180+ d"];
+		const BCOL = ["#2e7d32", "#1f618d", "#b45309", "#b02a2a"];
+		const bmax = Math.max(...tot.b, 1);
+		const locTable = (keys, title, hint) => `
+			<div class="bs-klist"><div class="bs-kh">${title} <span class="bs-khs">· ${hint}</span></div>
+			<table class="bs-t"><thead><tr><th class="l">${__("Location")}</th><th>${__("Bags")}</th><th>${__("Pcs")}</th><th>${__("% pcs")}</th><th>${__("avg d")}</th><th>${__("oldest")}</th></tr></thead><tbody>
+			${keys.slice(0, 10).map((l) => {
+				const x = locs[l];
+				return `<tr class="bs-kj" data-view="loc" data-key="${esc(l)}"><td class="l">${esc(l)}</td>
+					<td>${x.bags}</td><td><b>${x.pcs}</b></td><td>${pctP(x.pcs)}</td>
+					<td><b>${Math.round(wavg(x))}</b></td><td class="${x.oldest > 180 ? "bs-old" : ""}">${x.oldest}</td></tr>`;
+			}).join("")}</tbody></table></div>`;
+		root.find(".bs-body").html(`
+			<div class="bs-ksec"><div class="bs-kh">${__("WIP on the floor")}</div><div class="bs-ktiles">
+				${tile(__("Bags"), tot.bags)}
+				${tile(__("Pieces"), tot.pcs)}
+				${tile(__("Gross"), g3(tot.gw) + " g")}
+				${tile(__("Net gold"), g3(tot.nt) + " g")}
+				${tile("DMD", g3(tot.dmd) + " ct")}
+				${tile("PS", g3(tot.ps) + " ct")}
+				${tile("CS", g3(tot.cs) + " ct")}
+				${tile(__("Locations"), lk.length, __("{0} user(s)", [uk.length]))}
+			</div></div>
+			<div class="bs-ksec"><div class="bs-kh">${__("Order aging — how long WIP has been open")}</div><div class="bs-ktiles">
+				${tile(__("Avg days"), Math.round(tot.pcs ? wdTot / tot.pcs : 0), __("piece-weighted"))}
+				${tile(__("Median days"), median, __("per bag"))}
+				${tile(__("Pcs past 90 d"), over90pcs, pctP(over90pcs) + __("% of pieces"))}
+				${tile(__("Pcs past 180 d"), over180pcs, pctP(over180pcs) + __("% of pieces"))}
+				${tile(__("Oldest order"), (oldestRow.days || 0) + " " + __("d"), esc(oldestRow.bag) + " · " + esc(oldestRow.loc))}
+			</div>
+			<div class="bs-kbars">${BUCKETS.map((b, i) => `
+				<div class="bs-kbrow"><span class="lbl">${b}</span>
+					<span class="tr"><span class="bar" style="width:${(tot.b[i] / bmax) * 100}%;background:${BCOL[i]};"></span></span>
+					<span class="val">${tot.b[i]} ${__("pcs")} · ${pctP(tot.b[i])}%</span></div>`).join("")}
+			</div></div>
+			<div class="bs-ksec"><div class="bs-kh">${__("CUST deliveries — the promised lane")}</div><div class="bs-ktiles">
+				${tile(__("CUST bags"), cust.length, cust.reduce((n, r) => n + (r.qty || 0), 0) + " " + __("pcs"))}
+				${tile(__("Past due"), cpast.length, __("bags already late"))}
+				${tile(__("Worst overdue"), worstOver + " " + __("d"))}
+				${tile(__("Due in 7 d"), cdue7.length, __("bags — this week's fires"))}
+			</div></div>
+			<div class="bs-kcols">
+				${locTable(lk.slice().sort((a, b) => wavg(locs[b]) - wavg(locs[a])), __("Bottlenecks — stalest stages"), __("piece-weighted avg days, click to open"))}
+				${locTable(lk, __("Heaviest stages"), __("most pieces sitting, click to open"))}
+				<div class="bs-klist"><div class="bs-kh">${__("Holders — who carries the load")} <span class="bs-khs">· ${__("click to open")}</span></div>
+				<table class="bs-t"><thead><tr><th class="l">${__("User")}</th><th>${__("Bags")}</th><th>${__("Pcs")}</th><th>${__("% pcs")}</th><th>${__("avg d")}</th><th>${__("oldest")}</th></tr></thead><tbody>
+				${uk.slice(0, 10).map((u) => {
+					const x = users[u];
+					return `<tr class="bs-kj" data-view="user" data-key="${esc(u)}"><td class="l">${esc(u)}</td>
+						<td>${x.bags}</td><td><b>${x.pcs}</b></td><td>${pctP(x.pcs)}</td>
+						<td>${Math.round(wavg(x))}</td><td class="${x.oldest > 180 ? "bs-old" : ""}">${x.oldest}</td></tr>`;
+				}).join("")}</tbody></table></div>
+			</div>
+			<div class="bs-kcols" style="margin-top:16px;">
+				<div class="bs-klist"><div class="bs-kh">${__("Party groups — whose orders are on the floor")}</div>
+				<table class="bs-t"><thead><tr><th class="l">${__("Group")}</th><th>${__("Bags")}</th><th>${__("Pcs")}</th><th>${__("% pcs")}</th><th>${__("avg d")}</th><th>${__("oldest")}</th></tr></thead><tbody>
+				${gk.slice(0, 10).map((g) => {
+					const x = pgroups[g];
+					return `<tr><td class="l">${esc(g)}</td><td>${x.bags}</td><td><b>${x.pcs}</b></td>
+						<td>${pctP(x.pcs)}</td><td>${Math.round(wavg(x))}</td>
+						<td class="${x.oldest > 180 ? "bs-old" : ""}">${x.oldest}</td></tr>`;
+				}).join("")}</tbody></table></div>
+				<div class="bs-klist"><div class="bs-kh">${__("Hunt list — the 10 oldest bags on the floor")}</div>
+				<table class="bs-t"><thead><tr><th class="l">${__("Bag")}</th><th class="l">${__("Item")}</th><th class="l">${__("Location")}</th><th class="l">${__("User")}</th><th>${__("Qty")}</th><th>${__("Days")}</th></tr></thead><tbody>
+				${RAW.slice().sort((a, b) => (b.days || 0) - (a.days || 0)).slice(0, 10).map((r) => `
+					<tr><td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.loc)}</td>
+					<td class="l">${esc(r.user)}</td><td>${r.qty || 0}</td>
+					<td class="${(r.days || 0) > 180 ? "bs-old" : ""}"><b>${r.days || 0}</b></td></tr>`).join("")}
+				</tbody></table></div>
+			</div>`);
+	}
 
 	// ------------------------------------------------------------- printing
 	function printDoc(title, sub, headHtml, bodyHtml, portrait) {
