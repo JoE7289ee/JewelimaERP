@@ -907,6 +907,24 @@ def _qm_target(target_type, target):
 	return {"for_user": target}
 
 
+def _quick_pages_for(key):
+	"""The catalog narrowed to what the TARGET can actually open — a user's
+	roles, or exactly the one role being laid out. A page with no roles on it
+	is open to everyone."""
+	if "for_role" in key:
+		roleset = {key["for_role"]}
+	else:
+		roleset = set(frappe.get_roles(key["for_user"]))
+	ok = []
+	for route, label in QUICK_PAGE_CATALOG:
+		if not frappe.db.exists("Page", route):
+			continue
+		proles = {r.role for r in frappe.get_cached_doc("Page", route).roles}
+		if not proles or proles & roleset:
+			ok.append((route, label))
+	return ok
+
+
 @frappe.whitelist()
 def get_quick_menu_setup(target_type=None, target=None):
 	key = _qm_target(target_type, target)
@@ -916,8 +934,10 @@ def get_quick_menu_setup(target_type=None, target=None):
 	else:
 		# a fresh personal layout starts from the house default; a role's from blank
 		slots = list(QUICK_DEFAULT_SLOTS) if "for_user" in key else [None] * 9
-	slots = (slots + [None] * 9)[:9]
-	return {"catalog": [{"route": r, "label": l} for r, l in QUICK_PAGE_CATALOG],
+	allowed = _quick_pages_for(key)
+	valid = {r for r, _ in allowed}
+	slots = [(r if r in valid else None) for r in (slots + [None] * 9)[:9]]
+	return {"catalog": [{"route": r, "label": l} for r, l in allowed],
 		"slots": slots, "can_target": "System Manager" in frappe.get_roles()}
 
 
@@ -925,7 +945,8 @@ def get_quick_menu_setup(target_type=None, target=None):
 def save_quick_menu(target_type=None, target=None, routes=None):
 	key = _qm_target(target_type, target)
 	slots = json.loads(routes) if isinstance(routes, str) else (routes or [])
-	valid = {r for r, _ in QUICK_PAGE_CATALOG}
+	# whitelisted AND openable by the target — anything else strips to empty
+	valid = {r for r, _ in _quick_pages_for(key)}
 	clean = []
 	for r in (slots + [None] * 9)[:9]:
 		clean.append(r if (r and r in valid) else None)
