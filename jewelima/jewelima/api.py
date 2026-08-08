@@ -3087,6 +3087,168 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	return out
 
 
+# =========================== Cancellation ====================================
+# Killing a wrongly placed order. A bag with NO materials cancels outright;
+# a bag holding gold/stones first RETURNS them (In Bags -> one of the two
+# ISSUE warehouses, per line) and then cancels. A Job Order cancels only
+# when every open bag is material-free — otherwise the desk says which
+# bags to clear manually first.
+
+CANCEL_ROLES = {"System Manager", "Stock Manager", "Jewelima Ordering"}
+
+
+def _require_cancel():
+	if not CANCEL_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Not permitted to cancel orders"), frappe.PermissionError)
+
+
+def _cancel_guard(bag):
+	"""Why this bag cannot be cancelled — None when it can."""
+	if bag.stock_status == "Cancelled":
+		return frappe._("{0} is already cancelled.").format(bag.name)
+	if bag.stock_status == "Sold":
+		return frappe._("{0} is SOLD — sold pieces don't cancel.").format(bag.name)
+	if bag.stock_status == "At Certification":
+		return frappe._("{0} is at certification — bring it back first.").format(bag.name)
+	if bag.is_finished or bag.stock_status == "In Stock":
+		return frappe._("{0} is a finished product — handle it through stock/sale, not cancellation.").format(bag.name)
+	return None
+
+
+def _cancel_materials(order_bag):
+	"""The bag's net holdings, each tagged stone/metal with its DEFAULT return
+	warehouse (stones -> Stone Issue, metal -> Gold Issue)."""
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE, STONE_ISSUE_WAREHOUSE
+	gold_wh, stone_wh = _wh(GOLD_ISSUE_WAREHOUSE), _wh(STONE_ISSUE_WAREHOUSE)
+	mats = []
+	for it in get_bag_contents(order_bag)["items"]:
+		if flt(it["qty"]) <= 0:
+			continue  # negative nets are audit noise, not returnable stock
+		stone = bool(frappe.db.get_value("Item", it["item"], "stone_type"))
+		mats.append({"item": it["item"], "uom": it["uom"], "qty": flt(it["qty"]),
+			"pcs": cint(it["pcs"]), "is_stone": 1 if stone else 0,
+			"warehouse": stone_wh if stone else gold_wh})
+	return mats, {gold_wh, stone_wh} - {None}
+
+
+def _cancel_one_bag(bag, returns=None):
+	"""Return materials (when any) and flip the bag to Cancelled. `returns` maps
+	item -> chosen issue warehouse; every material line must be covered."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+	mats, allowed_whs = _cancel_materials(bag.name)
+	moved = []
+	if mats:
+		returns = returns or {}
+		for m in mats:
+			wh = returns.get(m["item"]) or m["warehouse"]
+			if wh not in allowed_whs:
+				frappe.throw(frappe._("{0}: materials only return to the ISSUE warehouses ({1})." ).format(
+					m["item"], ", ".join(sorted(allowed_whs))))
+			se = _stock_move(m["item"], m["qty"], _wh(IN_PRODUCTION_WAREHOUSE), wh)
+			_bag_ledger(bag.name, m["item"], "Out", m["qty"], "Cancel Return", pcs=m["pcs"],
+				remarks=frappe._("Cancellation — returned to {0}").format(wh), reference=se)
+			moved.append({"item": m["item"], "qty": m["qty"], "pcs": m["pcs"], "warehouse": wh, "stock_entry": se})
+	frappe.db.set_value("Order Bag", bag.name, "stock_status", "Cancelled")
+	# a dead card leaves every queue it was standing in
+	try:
+		_clear_stone_issue(bag.name)
+	except Exception:
+		pass
+	if frappe.db.exists("Priority Card", {"order_bag": bag.name}):
+		frappe.db.delete("Priority Card", {"order_bag": bag.name})
+	return moved
+
+
+@frappe.whitelist()
+def get_cancel_bag(order_bag):
+	"""Scan step: the card, its blockers, and what it holds (with the default
+	return warehouse per line)."""
+	_require_cancel()
+	order_bag = (order_bag or "").strip()
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	bag = frappe.get_doc("Order Bag", order_bag)
+	mats, allowed_whs = _cancel_materials(order_bag)
+	return {"name": bag.name, "design": bag.design, "job_order": bag.job_order,
+		"qty": bag.qty, "location": bag.location, "status": bag.stock_status,
+		"customer": frappe.db.get_value("Job Order", bag.job_order, "customer") if bag.job_order else None,
+		"blocker": _cancel_guard(bag), "materials": mats,
+		"issue_warehouses": sorted(allowed_whs)}
+
+
+@frappe.whitelist()
+def cancel_order_bag(order_bag, returns=None):
+	"""Cancel ONE bag. No materials -> direct. With materials the client sends
+	`returns` = {item: issue-warehouse}; stock moves In Bags -> there, the bag
+	ledger closes with Cancel Return rows, then the card goes Cancelled."""
+	_require_cancel()
+	bag = frappe.get_doc("Order Bag", order_bag)
+	why = _cancel_guard(bag)
+	if why:
+		frappe.throw(why)
+	returns = frappe.parse_json(returns) if isinstance(returns, str) else (returns or {})
+	moved = _cancel_one_bag(bag, returns)
+	frappe.db.commit()
+	return {"name": bag.name, "moved": moved}
+
+
+@frappe.whitelist()
+def get_cancel_job_order(job_order):
+	"""The whole order laid out for the cancel desk: every bag, its status,
+	holdings and whether IT is the one standing in the way."""
+	_require_cancel()
+	job_order = (job_order or "").strip()
+	if not frappe.db.exists("Job Order", job_order):
+		frappe.throw(frappe._("Job Order {0} not found.").format(job_order))
+	jo = frappe.db.get_value("Job Order", job_order,
+		["customer", "order_date", "due_date", "salesman", "order_type"], as_dict=True)
+	bags = []
+	for b in frappe.get_all("Order Bag", filters={"job_order": job_order},
+			fields=["name", "design", "qty", "location", "stock_status", "is_finished"],
+			order_by="name"):
+		row = dict(b)
+		if b.stock_status in ("Cancelled", "Sold"):
+			row["skip"] = 1
+			row["materials"] = []
+		else:
+			doc = frappe.get_doc("Order Bag", b.name)
+			row["blocker"] = _cancel_guard(doc)
+			row["materials"], _ = _cancel_materials(b.name)
+		bags.append(row)
+	open_bags = [b for b in bags if not b.get("skip")]
+	blocked = [b for b in open_bags if b.get("blocker") or b.get("materials")]
+	return {"job_order": job_order, "info": jo, "bags": bags,
+		"open_count": len(open_bags), "blocked": [b["name"] for b in blocked],
+		"can_cancel": bool(open_bags) and not blocked}
+
+
+@frappe.whitelist()
+def cancel_job_order(job_order):
+	"""Cancel EVERY open bag of the order — allowed only when none of them
+	holds materials (clear those one by one on the bag side first)."""
+	_require_cancel()
+	state = get_cancel_job_order(job_order)
+	if not state["open_count"]:
+		frappe.throw(frappe._("{0} has no open bags — nothing to cancel.").format(job_order))
+	holders = [b["name"] for b in state["bags"] if not b.get("skip") and b.get("materials")]
+	if holders:
+		frappe.throw(frappe._(
+			"Not possible to cancel {0} — these bags still HOLD materials:<br><b>{1}</b><br><br>"
+			"Cancel them one by one (scan each on the bag side, return the materials), then try again."
+		).format(job_order, ", ".join(holders)))
+	other = [b["blocker"] for b in state["bags"] if not b.get("skip") and b.get("blocker")]
+	if other:
+		frappe.throw(frappe._("Not possible to cancel {0}:<br>{1}").format(job_order, "<br>".join(other)))
+	done = []
+	for b in state["bags"]:
+		if b.get("skip"):
+			continue
+		_cancel_one_bag(frappe.get_doc("Order Bag", b["name"]))
+		done.append(b["name"])
+	frappe.db.commit()
+	return {"job_order": job_order, "cancelled": done}
+
+
 def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, items=None):
 	"""One Material Issue record — the who/what/when paper trail, fully built."""
 	return frappe.get_doc({

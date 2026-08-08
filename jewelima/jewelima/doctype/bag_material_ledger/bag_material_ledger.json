@@ -71,7 +71,7 @@
    "reqd": 1
   },
   {
-   "description": "Stone count (number of pieces) for this line — 0 for metal.",
+   "description": "Stone count (number of pieces) for this line \u2014 0 for metal.",
    "fieldname": "pcs",
    "fieldtype": "Int",
    "in_list_view": 1,
@@ -83,7 +83,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Entry Type",
-   "options": "Gold Issue\nStone Issue\nLoss\nConvert\nSplit Out\nSplit In\nAdjustment\nWeight Add\nWeight Reduce\nCasting"
+   "options": "Gold Issue\nStone Issue\nLoss\nConvert\nSplit Out\nSplit In\nAdjustment\nWeight Add\nWeight Reduce\nCasting\nCancel Return"
   },
   {
    "fieldname": "context_section",
