@@ -121,6 +121,15 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // -> the page rebuilds fresh. Staying on the page (kept open in a tab, switching
 // browser tabs/windows, reloads) never resets — only in-app navigation does.
 // ---------------------------------------------------------------------------
+// Frappe paints checkboxes with a tick SVG but leaves background-repeat
+// alone — a bare <input type=checkbox> outside a .checkbox wrapper tiles
+// the tick (the "4 ticks" glyph). One rule, app-wide, ends it.
+(() => {
+	const st = document.createElement("style");
+	st.textContent = "input[type=checkbox]{background-repeat:no-repeat !important;background-position:center !important;}";
+	document.head.appendChild(st);
+})();
+
 (() => {
 	const RESET_PAGES = new Set([
 		"place-order", "ws-ordering", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",

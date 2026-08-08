@@ -58,13 +58,13 @@ frappe.pages["repair-setup"].on_page_load = function (wrapper) {
 			<table class="rs-t"><thead><tr><th>${__("Party")}</th><th style="width:110px;">${__("Dia rate")}</th><th style="width:120px;">${__("Extras")}</th></tr></thead><tbody>
 			${(BOOT.parties || []).map((p) => `<tr>
 				<td><b>${esc(p.name)}</b>${p.active ? "" : ` <span style="color:#b02a2a;font-size:10px;">${__("inactive")}</span>`}</td>
-				<td><input type="number" class="rs-prate" data-p="${esc(p.name)}" value="${p.dia_rate || ""}"></td>
+				<td><input type="number" min="0" class="rs-prate" data-p="${esc(p.name)}" value="${p.dia_rate || ""}"></td>
 				<td><span class="rs-extras" data-p="${esc(p.name)}">${(p.extras || []).length
 					? (p.extras || []).map((e) => `${esc(e.charge_name)} ${e.rate}`).join(", ")
 					: __("+ extra charge")}</span></td>
 			</tr>`).join("")}
 			<tr><td><input class="rs-newp" placeholder="${__("new party…")}"></td>
-				<td><input type="number" class="rs-newp-rate" placeholder="0"></td>
+				<td><input type="number" min="0" class="rs-newp-rate" placeholder="0"></td>
 				<td><button class="rs-btn rs-addp" style="margin:0;padding:4px 12px;">＋</button></td></tr>
 			</tbody></table>
 			<button class="rs-btn rs-savep">${__("Save party rates")}</button>`);
@@ -72,22 +72,22 @@ frappe.pages["repair-setup"].on_page_load = function (wrapper) {
 			<table class="rs-t"><thead><tr><th>${__("Item type")}</th><th style="width:110px;">${__("Polish MC")}</th><th style="width:40px;"></th></tr></thead><tbody>
 			${(BOOT.item_types || []).map((t) => `<tr>
 				<td><b>${esc(t.name)}</b></td>
-				<td><input type="number" class="rs-trate" data-t="${esc(t.name)}" value="${t.polish_rate || 0}"></td>
+				<td><input type="number" min="0" class="rs-trate" data-t="${esc(t.name)}" value="${t.polish_rate || 0}"></td>
 				<td><span class="rs-x rs-delt" data-t="${esc(t.name)}">×</span></td>
 			</tr>`).join("")}
 			<tr><td><input class="rs-newt" placeholder="${__("new type…")}"></td>
-				<td><input type="number" class="rs-newt-rate" placeholder="200"></td>
+				<td><input type="number" min="0" class="rs-newt-rate" placeholder="200"></td>
 				<td><button class="rs-btn rs-addt" style="margin:0;padding:4px 12px;">＋</button></td></tr>
 			</tbody></table>
 			<button class="rs-btn rs-savet">${__("Save polish rates")}</button>`);
 		const s = BOOT.settings || {};
 		root.find(".rs-settings").html(`
 			<div class="rs-set">
-				<span>${__("Soldering / joint")}</span><input type="number" class="rs-s" data-k="soldering_rate" value="${s.soldering_rate || 0}">
-				<span>${__("Stone fix / unit")}</span><input type="number" class="rs-s" data-k="stone_fix_rate" value="${s.stone_fix_rate || 0}">
-				<span>${__("GST % stripped from TM")}</span><input type="number" class="rs-s" data-k="gst_percent" value="${s.gst_percent || 0}">
-				<span>${__("75-add — % of base rate")}</span><input type="number" class="rs-s" data-k="factor_75" value="${s.factor_75 || 0}">
-				<span>${__("92-add — % of base rate")}</span><input type="number" class="rs-s" data-k="factor_92" value="${s.factor_92 || 0}">
+				<span>${__("Soldering / joint")}</span><input type="number" min="0" class="rs-s" data-k="soldering_rate" value="${s.soldering_rate || 0}">
+				<span>${__("Stone fix / unit")}</span><input type="number" min="0" class="rs-s" data-k="stone_fix_rate" value="${s.stone_fix_rate || 0}">
+				<span>${__("GST % stripped from TM")}</span><input type="number" min="0" class="rs-s" data-k="gst_percent" value="${s.gst_percent || 0}">
+				<span>${__("75-add — % of base rate")}</span><input type="number" min="0" class="rs-s" data-k="factor_75" value="${s.factor_75 || 0}">
+				<span>${__("92-add — % of base rate")}</span><input type="number" min="0" class="rs-s" data-k="factor_92" value="${s.factor_92 || 0}">
 				<span>${__("Repair warehouse")} <span style="color:var(--text-muted);font-size:10px;">(${__("Phase 2 — parked")})</span></span>
 				<input class="rs-s" data-k="repair_warehouse" value="${esc(BOOT.repair_warehouse || "")}" placeholder="${__("warehouse name")}">
 			</div>

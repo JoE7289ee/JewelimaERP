@@ -20,7 +20,14 @@ class RepairBill(Document):
 		self.rate_18k = base * flt(st.factor_75) / 100
 		self.rate_22k = base * flt(st.factor_92) / 100
 		tot = {"pcs": 0, "rep": 0.0, "dmd": 0.0, "w75": 0.0, "w75a": 0.0, "w92": 0.0, "w92a": 0.0, "grand": 0.0}
+		self.tm_rate = max(flt(self.tm_rate), 0)
+		self.dia_rate = max(flt(self.dia_rate), 0)
 		for it in self.items:
+			# no negative work — whatever the client sent, floors at zero
+			for f in ("qty", "solder_count", "dmd_qty"):
+				it.set(f, max(cint(it.get(f)), 0))
+			for f in ("polish_rate", "other_amt", "stn_fix_units", "add_wt_75", "add_wt_92", "dmd_wt"):
+				it.set(f, max(flt(it.get(f)), 0))
 			it.solder_amt = cint(it.solder_count) * flt(st.soldering_rate)
 			it.polish_amt = cint(it.qty) * flt(it.polish_rate) if it.polish else 0
 			it.stn_fix_amt = flt(it.stn_fix_units) * flt(st.stone_fix_rate)

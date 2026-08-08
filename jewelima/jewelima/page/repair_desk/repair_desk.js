@@ -55,8 +55,8 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 		<div class="rd-bar">
 			<span><label>${__("Party")}</label><input list="rd-parties" class="rd-party" style="width:200px;"><datalist id="rd-parties"></datalist></span>
 			<span><label>${__("Bill date")}</label><input type="date" class="rd-date"></span>
-			<span><label>${__("TM (24K /g)")}</label><input type="number" class="rd-tm" style="width:110px;"></span>
-			<span><label>${__("Dia rate /ct")}</label><input type="number" class="rd-dia" style="width:110px;"></span>
+			<span><label>${__("TM (24K /g)")}</label><input type="number" min="0" class="rd-tm" style="width:110px;"></span>
+			<span><label>${__("Dia rate /ct")}</label><input type="number" min="0" class="rd-dia" style="width:110px;"></span>
 			<button class="rd-btn rd-pull" style="background:#1f618d;">${__("Pull receipts")}</button>
 			<button class="rd-btn rd-save" style="background:#2e7d32;">${__("Save")}</button>
 			<button class="rd-btn rd-bill" style="background:#5b3a8e;display:none;">${__("Mark Billed")}</button>
@@ -171,7 +171,7 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 			add_wt_75: 0, add_wt_92: 0, dmd_qty: 0, dmd_wt: 0, service: 0, remarks: "" };
 	}
 
-	const NUM = (l, i, k, step) => `<td class="n"><input type="number" step="${step || 1}" class="rd-f" data-i="${i}" data-k="${k}" value="${l[k] || ""}"></td>`;
+	const NUM = (l, i, k, step) => `<td class="n"><input type="number" min="0" step="${step || 1}" class="rd-f" data-i="${i}" data-k="${k}" value="${l[k] || ""}"></td>`;
 
 	function paint() {
 		if (!BOOT) return; // first paint comes from boot() — never before
@@ -255,7 +255,11 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 		const k = this.getAttribute("data-k");
 		const l = LINES[i];
 		if (this.type === "checkbox") l[k] = this.checked ? 1 : 0;
-		else if (this.type === "number") l[k] = flt(this.value);
+		else if (this.type === "number") {
+			// no negative work: a minus sign silently clamps to zero
+			l[k] = Math.max(0, flt(this.value));
+			if (flt(this.value) < 0) this.value = 0;
+		}
 		else l[k] = this.value;
 		if (k === "item_type") {
 			const t = (BOOT.item_types || []).find((x) => x.name === l.item_type);
