@@ -8,6 +8,9 @@
 //                  a spelling seen for the FIRST time is auto-saved into the
 //                  OTHER group — redistribute it on Party Groups) · "General print"
 //   DESIGN TYPES — design type -> which groups hold it · "DesignType print"
+//   KPI          — the analyst dashboard: exposure / aging / concentration
+//                  tiles, payment watchlist, stalest design types. Read-only,
+//                  same rows, and the held >= N days box still narrows it.
 // Click a party line for its printable statement (pieces, oldest first).
 // The mapping persists; the report data doesn't.
 // Route: /app/party-gold
@@ -21,6 +24,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 	let RAW = [];     // per-piece rows {party, nt, gs, purity, days, dmd, ps, cs, design, barcode, dtype}
 	let MAP = {};     // party -> group (Party Group Map)
 	let VIEW = "party"; // "party" | "dtype"
+	let KPI = false;    // analyst dashboard — numbers only, on top of the same rows
 	let GDAYS = 0;      // report-wide: only pieces held >= N days count
 	let OPEN = new Set(); // expanded level-1 names (per view)
 	let STMT = null;      // party whose statement view is open
@@ -57,11 +61,27 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		tr.pg-party.stmt{cursor:pointer;}
 		td.pg-old{color:#a15c00;font-weight:700;}
 		.pg-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		.pg-kpi{background:#0f766e;display:none;}
+		.pg-ksec{margin-bottom:16px;}
+		.pg-kh{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px;}
+		.pg-khs{font-weight:400;text-transform:none;letter-spacing:0;}
+		.pg-ktiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
+		.pg-tile .ks{font-size:10.5px;color:var(--text-muted);margin-top:1px;}
+		.pg-kbars{max-width:600px;margin-top:6px;}
+		.pg-kbrow{display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:11.5px;}
+		.pg-kbrow .lbl{width:64px;color:var(--text-muted);text-align:right;flex:none;}
+		.pg-kbrow .tr{flex:1;background:var(--control-bg);border-radius:4px;height:12px;overflow:hidden;}
+		.pg-kbrow .bar{display:block;height:100%;border-radius:4px;}
+		.pg-kbrow .val{width:180px;flex:none;font-variant-numeric:tabular-nums;}
+		.pg-kcols{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;}
+		.pg-klist{flex:1;min-width:330px;}
+		tr.pg-kp{cursor:pointer;}
 		</style>
 		<div class="pg-bar">
 			<label class="pg-file">${__("📄 Pick the PARTY SELECTION .xlsx")}</label>
 			<input type="file" class="pg-input" accept=".xlsx" style="display:none;">
 			<button class="pg-btn pg-view"></button>
+			<button class="pg-btn pg-kpi"></button>
 			<span class="pg-gdays-w" style="display:none;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);">
 				${__("held ≥")}
 				<input type="number" min="0" class="pg-gdays" placeholder="${__("all")}"
@@ -92,7 +112,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				MAP = r2.message || {};
 				OPEN.clear();
 				STMT = null;
-				root.find(".pg-dl, .pg-print, .pg-view").show();
+				root.find(".pg-dl, .pg-print, .pg-view, .pg-kpi").show();
 				root.find(".pg-gdays-w").css("display", "inline-flex");
 				// a spelling this scan brings in for the first time is saved
 				// straight into OTHER — sort it out on Party Groups later
@@ -161,9 +181,13 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 
 	function paint() {
 		if (!RAW.length) return;
-		root.find(".pg-view, .pg-dl").toggle(!STMT);
-		root.find(".pg-gdays-w").css("display", STMT ? "none" : "inline-flex");
+		const mode = STMT ? "stmt" : KPI ? "kpi" : "tables";
+		root.find(".pg-view, .pg-dl").toggle(mode === "tables");
+		root.find(".pg-print").toggle(mode !== "kpi");
+		root.find(".pg-kpi").toggle(mode !== "stmt").text(KPI ? __("← Tables") : __("KPI 📊"));
+		root.find(".pg-gdays-w").css("display", mode === "stmt" ? "none" : "inline-flex");
 		if (STMT) return paintStatement();
+		if (KPI) return paintKPI();
 		const R = rollup();
 		const l1 = sortedKeys(R);
 		const tot = blankAgg();
@@ -255,6 +279,125 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		refreshStmtTotals();
 	});
 
+
+	root.on("click", ".pg-kpi", () => {
+		STMT = null;
+		KPI = !KPI;
+		paint();
+	});
+	root.on("click", "tr.pg-kp", function () {
+		openStatement($(this).data("p"));
+	});
+
+	// ---- KPI view: the analyst read on the same rows. Nothing here edits
+	// anything — it answers "how exposed are we, to whom, and how stale".
+	// The held >= N days box still narrows everything.
+	function paintKPI() {
+		root.find(".pg-tiles, .pg-gtiles").empty();
+		const rows = gRows();
+		if (!rows.length) {
+			root.find(".pg-body").html(`<div class="pg-none">${__("Nothing matches the days filter.")}</div>`);
+			return;
+		}
+		const tot = blankAgg();
+		let fine = 0, wdTot = 0, over180pcs = 0;
+		rows.forEach((r) => {
+			addTo(tot, r);
+			fine += (r.nt || 0) * (r.purity || 0);
+			wdTot += (r.nt || 0) * (r.days || 0);
+			if ((r.days || 0) > 180) over180pcs += 1;
+		});
+		const by = (key) => {
+			const m = {};
+			rows.forEach((r) => {
+				const k = key(r);
+				const x = (m[k] = m[k] || Object.assign({ wd: 0 }, blankAgg()));
+				addTo(x, r);
+				x.wd += (r.nt || 0) * (r.days || 0);
+			});
+			return m;
+		};
+		const parties = by(partyOf), groups = by(groupOf), dtypes = by((r) => r.dtype);
+		const pk = sortedKeys(parties), gk = sortedKeys(groups);
+		const pct = (v) => (tot.nt ? ((v / tot.nt) * 100).toFixed(1) : "0.0");
+		const wavg = (x) => (x.nt ? x.wd / x.nt : 0);
+		const daysArr = rows.map((r) => r.days || 0).sort((a, b) => a - b);
+		const median = daysArr[Math.floor(daysArr.length / 2)] || 0;
+		const aged90 = tot.b[2] + tot.b[3];
+		const top5 = pk.slice(0, 5).reduce((sum, p) => sum + parties[p].nt, 0);
+		const oldestRow = rows.reduce((a, r) => ((r.days || 0) > (a.days || 0) ? r : a), rows[0]);
+		// watchlist: parties whose gold is ESSENTIALLY ALL stale — chase these
+		const stale = pk.map((p) => ({ p, x: parties[p], aged: parties[p].b[2] + parties[p].b[3] }))
+			.filter((e) => e.x.nt > 0 && e.aged / e.x.nt >= 0.8)
+			.sort((a, b) => b.aged - a.aged);
+		const tile = (k, v, sub) => `<div class="pg-tile"><div class="k">${k}</div><div class="v">${v}</div>${sub ? `<div class="ks">${sub}</div>` : ""}</div>`;
+		const BUCKETS = ["0–30 d", "31–90 d", "91–180 d", "180+ d"];
+		const BCOL = ["#2e7d32", "#1f618d", "#b45309", "#b02a2a"];
+		const bmax = Math.max(...tot.b, 0.001);
+		let cum = 0;
+		root.find(".pg-body").html(`
+			<div class="pg-ksec"><div class="pg-kh">${__("Exposure — ready to ship, awaiting payment / confirmation")}</div><div class="pg-ktiles">
+				${tile(__("Pieces"), tot.pcs)}
+				${tile(__("Gross"), g3(tot.gw) + " g")}
+				${tile(__("Net gold"), g3(tot.nt) + " g")}
+				${tile(__("Fine gold"), fine ? g3(fine) + " g" : "—", __("NT × purity"))}
+				${tile("DMD", g3(tot.dmd) + " ct")}
+				${tile("PS", g3(tot.ps) + " ct")}
+				${tile("CS", g3(tot.cs) + " ct")}
+				${tile(__("Parties"), pk.length, __("{0} group(s)", [gk.length]))}
+			</div></div>
+			<div class="pg-ksec"><div class="pg-kh">${__("Aging — how stale is the gold")}</div><div class="pg-ktiles">
+				${tile(__("Avg days"), Math.round(tot.nt ? wdTot / tot.nt : 0), __("NT-weighted"))}
+				${tile(__("Median days"), median, __("per piece"))}
+				${tile(__("NT past 90 d"), g3(aged90) + " g", pct(aged90) + __("% of NT"))}
+				${tile(__("NT past 180 d"), g3(tot.b[3]) + " g", pct(tot.b[3]) + __("% of NT · {0} pc", [over180pcs]))}
+				${tile(__("Oldest piece"), (oldestRow.days || 0) + " " + __("d"), esc(partyOf(oldestRow)))}
+			</div>
+			<div class="pg-kbars">${BUCKETS.map((b, i) => `
+				<div class="pg-kbrow"><span class="lbl">${b}</span>
+					<span class="tr"><span class="bar" style="width:${(tot.b[i] / bmax) * 100}%;background:${BCOL[i]};"></span></span>
+					<span class="val">${g3(tot.b[i])} g · ${pct(tot.b[i])}%</span></div>`).join("")}
+			</div></div>
+			<div class="pg-ksec"><div class="pg-kh">${__("Concentration — who holds the exposure")}</div><div class="pg-ktiles">
+				${tile(__("Top party"), esc(pk[0]), g3(parties[pk[0]].nt) + " g · " + pct(parties[pk[0]].nt) + "%")}
+				${tile(__("Top 5 parties"), pct(top5) + "%", __("of all NT"))}
+				${tile(__("Top group"), esc(gk[0]), g3(groups[gk[0]].nt) + " g · " + pct(groups[gk[0]].nt) + "%")}
+			</div></div>
+			<div class="pg-kcols">
+				<div class="pg-klist">
+					<div class="pg-kh">${__("Top 10 parties by net gold")} <span class="pg-khs">· ${__("click for the statement")}</span></div>
+					<table class="pg-t"><thead><tr><th style="text-align:left;">${__("Party")}</th><th>NT g</th><th>%</th><th>${__("cum %")}</th><th>${__("avg d")}</th><th>${__("oldest")}</th></tr></thead><tbody>
+					${pk.slice(0, 10).map((p) => {
+						const x = parties[p];
+						cum += x.nt;
+						return `<tr class="pg-kp" data-p="${esc(p)}"><td>${esc(p)}</td><td><b>${g3(x.nt)}</b></td>
+							<td>${pct(x.nt)}</td><td>${pct(cum)}</td><td>${Math.round(wavg(x))}</td>
+							<td class="${x.oldest > 180 ? "pg-old" : ""}">${x.oldest}</td></tr>`;
+					}).join("")}
+					</tbody></table>
+				</div>
+				<div class="pg-klist">
+					<div class="pg-kh">${__("Payment watchlist")} <span class="pg-khs">· ${__("≥80% of the party's NT is past 90 d")}</span></div>
+					${stale.length ? `<table class="pg-t"><thead><tr><th style="text-align:left;">${__("Party")}</th><th>NT g</th><th>${__("past 90 d")}</th><th>${__("share")}</th><th>${__("oldest")}</th></tr></thead><tbody>
+					${stale.slice(0, 10).map((e) => `<tr class="pg-kp" data-p="${esc(e.p)}">
+						<td>${esc(e.p)}</td><td>${g3(e.x.nt)}</td><td><b>${g3(e.aged)}</b></td>
+						<td>${Math.round((e.aged / e.x.nt) * 100)}%</td>
+						<td class="${e.x.oldest > 180 ? "pg-old" : ""}">${e.x.oldest}</td></tr>`).join("")}
+					</tbody></table>` : `<div class="pg-none" style="padding:18px;">${__("Empty — nobody's stock is heavily aged.")}</div>`}
+				</div>
+				<div class="pg-klist">
+					<div class="pg-kh">${__("Design types — where gold stalls")} <span class="pg-khs">· ${__("stalest first")}</span></div>
+					<table class="pg-t"><thead><tr><th style="text-align:left;">${__("Type")}</th><th>${__("Pcs")}</th><th>NT g</th><th>%</th><th>${__("avg d")}</th></tr></thead><tbody>
+					${Object.keys(dtypes).filter((t) => dtypes[t].nt > 0)
+						.sort((a, b) => wavg(dtypes[b]) - wavg(dtypes[a])).slice(0, 10)
+						.map((t) => {
+							const x = dtypes[t];
+							return `<tr><td>${esc(t)}</td><td>${x.pcs}</td><td>${g3(x.nt)}</td><td>${pct(x.nt)}</td><td><b>${Math.round(wavg(x))}</b></td></tr>`;
+						}).join("")}
+					</tbody></table>
+				</div>
+			</div>`);
+	}
 
 	// ------------------------------------------------------------- printing
 	function printDoc(title, sub, headHtml, bodyHtml, portrait) {
