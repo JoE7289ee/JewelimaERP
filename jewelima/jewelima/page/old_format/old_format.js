@@ -124,6 +124,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-cq"></div>
 			<div class="of-gst"></div>
 			<button class="of-btn of-price">${__("Price it")}</button>
+			<button class="of-btn of-rules" style="display:none;background:#0e7490;">${__("Pricing Rules")}</button>
 			<button class="of-btn of-jos" style="display:none;">${__("JOS Billing ⤓")}</button>
 			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
 		</div>
@@ -182,7 +183,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	function invalidate() {
 		SORTED = false;
 		PRICED = null;
-		root.find(".of-jos").hide();
+		root.find(".of-jos, .of-rules").hide();
 	}
 
 	// each row wears a whisper of its assigned colour (selection/flags win —
@@ -701,10 +702,81 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			PRICED = r.message || null;
 			if (!PRICED) return;
 			paint();
-			root.find(".of-jos").show();
+			root.find(".of-jos, .of-rules").show();
 			const flagged = PRICED.rows.filter((x) => (x.flags || []).length).length;
 			if (flagged) frappe.show_alert({ message: __("{0} row(s) carry notes — check the yellow lines.", [flagged]), indicator: "orange" }, 5);
 		});
+	});
+
+	// Pricing Rules — READ-ONLY: the slabs this lot actually hit (no edits,
+	// no discounts — the chart is the law; this just shows which lines of it
+	// were used and how much rode on each).
+	root.on("click", ".of-rules", () => {
+		if (!PRICED) return;
+		const R = PRICED.rows;
+		const groups = []; // {section, rule, rows, qty, total}
+		// gold: one rate over the whole lot
+		const goldNT = R.reduce((a, x) => a + flt(x.nt), 0);
+		const goldVA = R.reduce((a, x) => a + flt(x.gold_va), 0);
+		if (R.length) groups.push({ sec: __("Gold"), rule: __("₹{0}/g on NT", [R[0].gold_rt]),
+			rows: R.length, qty: goldNT.toFixed(3) + " g", total: goldVA });
+		// diamond brackets actually used
+		const dmd = {};
+		R.forEach((x) => {
+			if (!flt(x.dmd_va)) return;
+			const k = `${x.dmd_bracket}|${x.dmd_rt}`;
+			const e = dmd[k] || (dmd[k] = { rows: 0, ct: 0, va: 0, b: x.dmd_bracket, rt: x.dmd_rt });
+			e.rows++; e.ct += flt(x.dmd_ct); e.va += flt(x.dmd_va);
+		});
+		Object.values(dmd).forEach((e) => groups.push({ sec: __("Diamond"),
+			rule: __("bracket {0} — ₹{1}/ct", [e.b || "?", money(e.rt)]),
+			rows: e.rows, qty: e.ct.toFixed(3) + " ct", total: e.va }));
+		// making rules: [TYPE] + flat/per-gram parsed off the row's own math
+		const mk2 = {};
+		R.forEach((x) => {
+			const note = (x.notes || {}).mc || "";
+			if (!note) return;
+			const tag = (note.match(/\[([^\]]+)\]/) || [])[1] || "?";
+			const flat = note.includes("flat");
+			const k = `${tag}|${x.mc_rate}|${flat}`;
+			const e = mk2[k] || (mk2[k] = { rows: 0, va: 0, tag, rate: x.mc_rate, flat });
+			e.rows++; e.va += flt(x.mc);
+		});
+		Object.values(mk2).forEach((e) => groups.push({ sec: __("Making"),
+			rule: e.flat ? __("{0} — flat below 1 g", [e.tag]) : __("{0} — ₹{1}/g", [e.tag, money(e.rate)]),
+			rows: e.rows, qty: "", total: e.va }));
+		// HUID + certification, from each row's own note (per-row numbers stripped)
+		let huidN = 0, huidVA = 0, huidRate = 0;
+		const cert = {};
+		R.forEach((x) => {
+			if (x.huid_count) { huidN += x.huid_count; huidVA += flt(x.huid_va); huidRate = flt(x.huid_va) / x.huid_count; }
+			const co = flt(x.cert_va) - flt(x.huid_va);
+			if (co <= 0) return;
+			const seg = ((x.notes || {}).cert || "").split(" + ").find((t) => !t.includes("HUID")) || __("certification");
+			const rule = seg.replace(/ x [\d.]+ ct.*$/, "").replace(/ = ₹[\d,.]+.*$/, "").trim();
+			const e = cert[rule] || (cert[rule] = { rows: 0, va: 0 });
+			e.rows++; e.va += co;
+		});
+		if (huidN) groups.push({ sec: __("Hallmark"), rule: __("₹{0} per HUID", [money(huidRate)]),
+			rows: 0, qty: huidN + " HUID", total: huidVA });
+		Object.entries(cert).forEach(([rule, e]) => groups.push({ sec: __("Certification"),
+			rule, rows: e.rows, qty: "", total: e.va }));
+		const d = new frappe.ui.Dialog({ title: __("Pricing rules in use — view only"), size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "b" }] });
+		const th = (t, r) => `<th style="text-align:${r ? "right" : "left"};padding:4px 8px;border-bottom:1px solid var(--gray-400);color:var(--text-muted);font-size:11px;text-transform:uppercase;">${t}</th>`;
+		d.get_field("b").$wrapper.html(`
+			<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+				${__("Chart {0} · quality {1} — every slab the lot hit. Rates live on the chart; nothing here edits anything.", [esc(fChart.get_value() || ""), esc(fCq.get_value() || "")])}</div>
+			<table style="width:100%;border-collapse:collapse;font-size:13px;">
+			<thead><tr>${th(__("Component"))}${th(__("Rule / bracket in use"))}${th(__("Rows"), 1)}${th(__("Qty"), 1)}${th(__("₹ total"), 1)}</tr></thead><tbody>
+			${groups.map((g) => `<tr>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);font-weight:700;">${esc(g.sec)}</td>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);">${esc(g.rule)}</td>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);text-align:right;">${g.rows || ""}</td>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);text-align:right;">${g.qty}</td>
+				<td style="padding:5px 8px;border-bottom:1px solid var(--border-color);text-align:right;font-weight:700;">₹ ${money(g.total)}</td>
+			</tr>`).join("")}</tbody></table>`);
+		d.show();
 	});
 
 	root.on("click", ".of-jos", () => {
