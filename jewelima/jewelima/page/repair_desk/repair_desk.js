@@ -46,6 +46,11 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 		.rd-status.ip{background:#fdf3d0;color:#8a6d00;}
 		.rd-status.bl{background:#e3e7f5;color:#333d8f;}
 		.rd-status.dv{background:#dcefe0;color:#1d7a33;}
+		.rd-recs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+		.rd-rec{border:1.5px dashed #2e7d32;border-radius:9px;padding:5px 12px;font-size:11.5px;cursor:pointer;background:var(--fg-color);}
+		.rd-rec:hover{background:var(--control-bg);}
+		.rd-rec b{color:#1d7a33;}
+		.rd-rec .s{color:var(--text-muted);}
 		</style>
 		<div class="rd-bar">
 			<span><label>${__("Party")}</label><input list="rd-parties" class="rd-party" style="width:200px;"><datalist id="rd-parties"></datalist></span>
@@ -60,6 +65,7 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 			<span class="rd-open" style="margin-left:auto;"></span>
 		</div>
 		<div class="rd-rates"></div>
+		<div class="rd-recs"></div>
 		<div class="rd-wrap"><div style="padding:26px;text-align:center;color:var(--text-muted);">${__("Pick a party and start — or open an In Progress bill on the right.")}</div></div>
 		<div class="rd-tot"></div>
 	`);
@@ -104,7 +110,56 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 					`<a href="#" class="rd-openb" data-n="${esc(b.name)}" style="margin-left:8px;font-weight:700;">${esc(b.name)} · ${esc(b.party)}</a>`).join("")
 				: "");
 		});
+		paintWaiting();
 	}
+
+	// every intake lot still waiting, right on the desk — click one and it
+	// becomes the bill (party set, dia rate filled, pieces on lines)
+	function paintWaiting() {
+		frappe.call({ method: API + ".list_repair_receipts", args: { status: "Received" } }).then((r) => {
+			const rows = (r.message || []).filter((x) => !LINES.some((l) => l.receipt === x.name));
+			root.find(".rd-recs").html(rows.length
+				? `<span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;align-self:center;">${__("waiting")}:</span> `
+					+ rows.map((x) => `<span class="rd-rec" data-n="${esc(x.name)}" data-p="${esc(x.party)}"
+						title="${__("click to add onto the bill")}">➕ <b>${esc(x.party)}</b>
+						<span class="s">· ${esc(x.name)} · ${x.piece_count} ${__("pc")} · ${esc(x.jd_ref || x.receipt_date || "")}</span></span>`).join("")
+				: "");
+		});
+	}
+
+	root.on("click", ".rd-rec", function () {
+		const name = this.getAttribute("data-n");
+		const party = this.getAttribute("data-p");
+		const cur = (root.find(".rd-party").val() || "").trim().toUpperCase();
+		if (cur && cur !== party) {
+			return frappe.show_alert({ message: __("This bill is for {0} — save it first, then + New bill for {1}.", [cur, party]), indicator: "orange" }, 5);
+		}
+		if (!cur) {
+			root.find(".rd-party").val(party);
+			const p = (BOOT.parties || []).find((x) => x.name === party);
+			if (p && !flt(root.find(".rd-dia").val())) root.find(".rd-dia").val(p.dia_rate || "");
+		}
+		frappe.call({ method: API + ".get_repair_receipt", args: { name } }).then((res) => {
+			const m = res.message;
+			m.items.forEach((it) => {
+				const l = blankLine();
+				l.item_type = it.item_type || "";
+				l.narration = it.narration || "";
+				l.qty = it.qty || 1;
+				l.jd_ref = m.jd_ref || "";
+				l.receipt = m.name;
+				l.remarks = it.remarks || "";
+				const t = (BOOT.item_types || []).find((x) => x.name === l.item_type);
+				if (t) l.polish_rate = flt(t.polish_rate);
+				LINES.push(l);
+			});
+			LINES = LINES.filter((l) => l.receipt || l.item_type || l.narration || l.total_amt);
+			if (!LINES.length) LINES = [blankLine()];
+			paint();
+			paintWaiting();
+			frappe.show_alert({ message: __("{0} on the bill — {1} line(s). Fill the work, then Save.", [m.name, m.items.length]), indicator: "green" }, 4);
+		});
+	});
 
 	const typeOpts = (sel) => `<option value=""></option>` + (BOOT.item_types || [])
 		.map((t) => `<option data-mc="${t.polish_rate}" ${t.name === sel ? "selected" : ""}>${esc(t.name)}</option>`).join("");
