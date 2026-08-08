@@ -166,7 +166,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			const $td = $("<td></td>").appendTo($tr);
 			if (col.type === "link") {
 				const ctrl = frappe.ui.form.make_control({
-					df: { fieldtype: "Link", options: col.options, fieldname: col.key, placeholder: col.label, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }) },
+					df: { fieldtype: "Link", options: col.options, fieldname: col.key, placeholder: col.label, get_query: () => ({ query: "jewelima.jewelima.api.purchase_item_query" }) },
 					parent: $td.get(0),
 					render_input: true,
 				});

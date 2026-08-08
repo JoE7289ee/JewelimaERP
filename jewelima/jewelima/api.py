@@ -3711,6 +3711,23 @@ def save_sieve_chart(rows):
 
 
 @frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def purchase_item_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Purchase page item picker: EXACT name first, then prefix, then shortest —
+	typing CZ offers the bulk CZ item before its sixty sieves (default link
+	search buried it past the 10-row cutoff)."""
+	return frappe.db.sql("""
+		SELECT name, item_group FROM `tabItem`
+		WHERE is_sales_item = 0 AND is_stock_item = 1 AND disabled = 0
+			AND (name LIKE %(pat)s OR item_group LIKE %(pat)s)
+		ORDER BY name = %(txt)s DESC, name LIKE %(pref)s DESC,
+			LOCATE(%(txt)s, name), LENGTH(name), name
+		LIMIT %(start)s, %(pl)s""",
+		{"pat": "%" + txt + "%", "pref": txt + "%", "txt": txt,
+		 "start": cint(start), "pl": cint(page_len)})
+
+
+@frappe.whitelist()
 def get_sieve_map():
 	"""size label -> avg cts/stone, for the pages that auto-fill qty<->carat
 	(purchase entry, BOM entry). The size label matches the tail of the diamond
