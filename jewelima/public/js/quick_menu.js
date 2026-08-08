@@ -14,22 +14,20 @@ const QUICK_ITEMS = [
 	{ label: __("Item Stock"), route: "item-stock" },
 ];
 
-// STABLE numbers: every item keeps its slot (n = its QUICK_ITEMS position) for
-// every user, so "Ctrl+Space, 4" means the same page on every machine. Pages the
-// user has no role for are hidden — their number is simply skipped.
+// SLOT numbers are stable per layout: the server resolves the session user's
+// menu (their own layout -> a role layout -> the house default) with each
+// item's fixed slot number; pages the user can't open are already dropped.
+// QUICK_ITEMS above remains only as the offline fallback.
 let items = null; // resolved list, each with its fixed .n
 function loadItems() {
 	if (items) return Promise.resolve(items);
-	const numbered = QUICK_ITEMS.map((it, i) => ({ ...it, n: i + 1 }));
 	return frappe
-		.call({ method: "jewelima.jewelima.api.get_allowed_quick_pages", args: { routes: QUICK_ITEMS.map((i) => i.route) } })
-		.then((r) => {
-			const ok = new Set(r.message || []);
-			items = numbered.filter((i) => ok.has(i.route));
-			return items;
-		})
-		.catch(() => (items = numbered));
+		.call({ method: "jewelima.jewelima.api.get_quick_menu" })
+		.then((r) => (items = r.message || []))
+		.catch(() => (items = QUICK_ITEMS.map((it, i) => ({ ...it, n: i + 1 }))));
 }
+// the setup page pokes this after a save so the next Ctrl+Space is fresh
+window.jwQuickReload = () => { items = null; };
 
 let $menu = null;
 let selected = 0;

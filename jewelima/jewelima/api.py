@@ -843,6 +843,102 @@ def get_cad_jobs():
 
 
 @frappe.whitelist()
+def _qp(route):
+	return frappe.db.exists("Page", route) and frappe.get_cached_doc("Page", route).is_permitted()
+
+
+# the ONLY pages a Quick Menu slot may hold (route, label) — curated, not open
+QUICK_PAGE_CATALOG = [
+	("transfer-order-bag", "Transfer Order Bag"), ("assign-collect", "Assign / Collect"),
+	("job-work", "Job Work"), ("place-order", "Place Order"), ("card-info", "Card Info"),
+	("design-info", "Design Info"), ("job-order-status", "Job Order Status"),
+	("sell", "Sell"), ("sell-old", "Sell Old"), ("old-format", "OLD FORMAT"),
+	("party-gold", "Party Gold"), ("bag-status", "Bag Status"), ("view-pc", "View PC"),
+	("transfer-holder", "Transfer Holder"), ("item-stock", "Item Stock"),
+	("design-gallery", "Design Gallery"), ("ws-ordering", "Ordering Desk"),
+	("repack-stock", "Repack Stock"), ("stone-issue", "Stone Issue"),
+	("purchase-raw-material", "Purchase Raw Material"), ("print-barcode", "Print Barcode"),
+	("order-requests", "Order Requests"), ("melt-gold", "Melt Gold"),
+	("finished-stock", "Finished Stock"), ("stock-analysis", "Stock Analysis"),
+	("make-products", "Make Products"),
+]
+QUICK_DEFAULT_SLOTS = ["transfer-order-bag", "assign-collect", "job-work", "place-order",
+	"card-info", "sell", "transfer-holder", "item-stock", None]
+
+
+@frappe.whitelist()
+def get_quick_menu():
+	"""The session user's resolved Ctrl+Space menu: their own layout, else the
+	first (by role name) layout of a role they hold, else the house default.
+	Pages the user can't open are dropped; the slot number stays put."""
+	user = frappe.session.user
+	slots = None
+	own = frappe.get_all("Quick Menu", filters={"for_user": user}, fields=["routes"], limit=1)
+	if own:
+		slots = json.loads(own[0].routes or "[]")
+	if slots is None:
+		roles = frappe.get_roles(user)
+		pref = frappe.get_all("Quick Menu", filters={"for_role": ["in", roles]},
+			fields=["routes"], order_by="for_role asc", limit=1)
+		if pref:
+			slots = json.loads(pref[0].routes or "[]")
+	if slots is None:
+		slots = list(QUICK_DEFAULT_SLOTS)
+	labels = dict(QUICK_PAGE_CATALOG)
+	out = []
+	for i, r in enumerate(slots[:9]):
+		if r and r in labels and _qp(r):
+			out.append({"n": i + 1, "route": r, "label": labels[r]})
+	return out
+
+
+def _qm_target(target_type, target):
+	"""Resolve + authorise the layout being edited. Anyone edits their OWN;
+	editing another user or a role is System Manager business."""
+	target_type = (target_type or "user").lower()
+	if target_type == "role":
+		frappe.only_for(("System Manager",))
+		if not frappe.db.exists("Role", target):
+			frappe.throw(frappe._("Role {0} not found.").format(target))
+		return {"for_role": target}
+	target = target or frappe.session.user
+	if target != frappe.session.user:
+		frappe.only_for(("System Manager",))
+	return {"for_user": target}
+
+
+@frappe.whitelist()
+def get_quick_menu_setup(target_type=None, target=None):
+	key = _qm_target(target_type, target)
+	got = frappe.get_all("Quick Menu", filters=key, fields=["routes"], limit=1)
+	if got:
+		slots = json.loads(got[0].routes or "[]")
+	else:
+		# a fresh personal layout starts from the house default; a role's from blank
+		slots = list(QUICK_DEFAULT_SLOTS) if "for_user" in key else [None] * 9
+	slots = (slots + [None] * 9)[:9]
+	return {"catalog": [{"route": r, "label": l} for r, l in QUICK_PAGE_CATALOG],
+		"slots": slots, "can_target": "System Manager" in frappe.get_roles()}
+
+
+@frappe.whitelist()
+def save_quick_menu(target_type=None, target=None, routes=None):
+	key = _qm_target(target_type, target)
+	slots = json.loads(routes) if isinstance(routes, str) else (routes or [])
+	valid = {r for r, _ in QUICK_PAGE_CATALOG}
+	clean = []
+	for r in (slots + [None] * 9)[:9]:
+		clean.append(r if (r and r in valid) else None)
+	got = frappe.get_all("Quick Menu", filters=key, pluck="name", limit=1)
+	if got:
+		frappe.db.set_value("Quick Menu", got[0], "routes", json.dumps(clean))
+	else:
+		frappe.get_doc(dict({"doctype": "Quick Menu", "routes": json.dumps(clean)}, **key)).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"slots": clean}
+
+
+@frappe.whitelist()
 def get_allowed_quick_pages(routes):
 	"""Which of these desk-page routes may the current user open? (Ctrl+Space quick
 	menu — items the user has no role for are dropped, not shown dead.)"""

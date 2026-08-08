@@ -1,0 +1,60 @@
+{
+ "actions": [],
+ "creation": "2026-08-05 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "for_user",
+  "for_role",
+  "routes"
+ ],
+ "fields": [
+  {
+   "fieldname": "for_user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "For User",
+   "options": "User"
+  },
+  {
+   "fieldname": "for_role",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "For Role",
+   "options": "Role"
+  },
+  {
+   "description": "9 slots, route or null \u2014 slot position is the shortcut number.",
+   "fieldname": "routes",
+   "fieldtype": "Long Text",
+   "label": "Slots (JSON)",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-05 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Quick Menu",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

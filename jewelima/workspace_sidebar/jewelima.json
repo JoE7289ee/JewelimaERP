@@ -2154,6 +2154,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "zap",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Quick Menu",
+   "link_to": "quick-menu-setup",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
@@ -2282,7 +2295,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-04 21:33:18.159300",
+ "modified": "2026-08-08 12:41:12.402386",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
