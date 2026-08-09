@@ -98,10 +98,11 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const $body = $(page.main).find(".jw-body");
 	const $thead = $(page.main).find(".jw-thead");
 	const $msg = $(page.main).find(".jw-msg");
-	// ---- Transfer Plus: onward transfer right after receipt ------------------
+	// ---- Transfer Plus: onward transfer right after RECEIPT ONLY -------------
+	// (never on issue — cards leave through the receipt, not into it; the strip
+	// exists solely on the Receipt tab and resets when the tab changes)
 	const TPX = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
 		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager") };
-	if (TPX.allowed) $(page.main).find(".jw-tpx").css("display", "flex");
 	$(page.main).find(".jw-tpx-on").on("change", function () {
 		const $to = $(page.main).find(".jw-tpx-to");
 		$to.toggle(this.checked);
@@ -353,6 +354,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	function setMode(mode) {
 		state.mode = mode;
 		$(page.main).find(".jw-tab").removeClass("active").filter(`[data-mode="${mode}"]`).addClass("active");
+		$(page.main).find(".jw-tpx").css("display", TPX.allowed && mode === "receipt" ? "flex" : "none");
+		$(page.main).find(".jw-tpx-on").prop("checked", false);
+		$(page.main).find(".jw-tpx-to").hide().val("");
 		state.emp.df.reqd = mode === "receipt" ? 1 : 0;
 		state.emp.df.label = mode === "receipt" ? __("Employee (did the work)") : __("Employee (optional)");
 		state.emp.refresh();
