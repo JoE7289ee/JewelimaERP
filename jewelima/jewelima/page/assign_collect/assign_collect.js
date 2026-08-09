@@ -95,7 +95,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	// ---- Transfer Plus: onward transfer right after collect ------------------
 	const TPX = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
 		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager") };
-	if (TPX.allowed) $(page.main).find(".ac-tpx").css("display", "flex");
+	// the onward transfer only fires at COLLECT — the strip never shows on Assign
 	$(page.main).find(".ac-tpx-on").on("change", function () {
 		const $to = $(page.main).find(".ac-tpx-to");
 		$to.toggle(this.checked);
@@ -292,6 +292,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	function setMode(mode) {
 		state.mode = mode;
 		$(page.main).find(".ac-tab").removeClass("active").filter(`[data-mode="${mode}"]`).addClass("active");
+		$(page.main).find(".ac-tpx").css("display", TPX.allowed && mode === "collect" ? "flex" : "none");
+		$(page.main).find(".ac-tpx-on").prop("checked", false);
+		$(page.main).find(".ac-tpx-to").hide().val("");
 		$(page.main).find(".ac-emp").toggle(mode === "assign"); // employee only relevant when assigning
 		toggleWorkPickers();
 		renderHead();
