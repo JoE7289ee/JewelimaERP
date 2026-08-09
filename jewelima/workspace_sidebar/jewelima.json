@@ -880,6 +880,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "history",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Issue History",
+   "link_to": "stone-history",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "grid-2x2",
    "indent": 1,
    "keep_closed": 0,
@@ -2373,7 +2386,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-08 22:26:19.495719",
+ "modified": "2026-08-09 13:10:29.503311",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-20 16:13:45.517938",
+ "modified": "2026-08-08 22:26:24.342070",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "purchase-raw-material",
@@ -22,6 +22,9 @@
   },
   {
    "role": "Jewelima Purchase"
+  },
+  {
+   "role": "Jewelima Stock"
   }
  ],
  "script": null,

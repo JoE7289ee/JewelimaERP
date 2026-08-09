@@ -1,20 +1,32 @@
 {
  "content": null,
- "creation": "2026-06-27 12:00:00.000000",
+ "creation": "2026-06-27 12:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-06-27 12:00:00.000000",
+ "modified": "2026-08-08 22:26:24.385783",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "melt-gold",
  "owner": "Administrator",
  "page_name": "melt-gold",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "Stock User"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "Jewelima Stock"
+  }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "Melting"
 }

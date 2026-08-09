@@ -3381,6 +3381,141 @@ def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, ite
 	}).insert(ignore_permissions=True)
 
 
+STONE_HISTORY_ROLES = {"System Manager", "Stock Manager"}
+
+# stone_type -> bucket code, the same families the whole app speaks
+_SH_BUCKET = {"Diamond": "DMD", "Precious Stone": "PS", "Color Stone": "CS",
+	"Cubic Zirconia": "CZ", "CVD": "CVD", "Swarovski": "SW",
+	"Party Diamond": "PDMD", "Party Other": "POTH"}
+_SH_ORDER = ["DMD", "PS", "CS", "CZ", "CVD", "SW", "PDMD", "POTH"]
+
+
+def _sh_bounds():
+	"""today / business-week (MONDAY -> today) / month (1st -> today)."""
+	import datetime
+	t = frappe.utils.getdate()
+	monday = t - datetime.timedelta(days=t.weekday())
+	first = t.replace(day=1)
+	return t, monday, first
+
+
+def _sh_rows(frm, to):
+	"""Issued stone lines between two dates: bucket/issuer/day aggregates."""
+	return frappe.db.sql("""
+		SELECT DATE(m.posting) d, m.issued_by, IFNULL(e.employee_name, m.issued_by) who,
+			i.item, it.stone_type, SUM(i.qty) ct, SUM(i.pcs) pcs,
+			COUNT(DISTINCT m.order_bag) cards
+		FROM `tabMaterial Issue Item` i
+		JOIN `tabMaterial Issue` m ON m.name = i.parent
+		JOIN `tabItem` it ON it.name = i.item
+		LEFT JOIN `tabEmployee` e ON e.name = m.issued_by
+		WHERE m.issue_type = 'Stone' AND DATE(m.posting) BETWEEN %s AND %s
+		GROUP BY DATE(m.posting), m.issued_by, i.item
+	""", (frm, to), as_dict=True)
+
+
+@frappe.whitelist()
+def get_stone_issue_history():
+	"""Stone Issue History page: per-bucket and per-issuer carats/pieces for
+	TODAY, THIS WEEK (Monday -> today) and THIS MONTH, plus the month's
+	day-by-day series. One call, the page slices."""
+	if not STONE_HISTORY_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	today, monday, first = _sh_bounds()
+	frm = min(monday, first)
+	rows = _sh_rows(frm, today)
+	def blank():
+		return {"ct": 0.0, "pcs": 0, "cards": 0,
+			"buckets": {b: {"ct": 0.0, "pcs": 0} for b in _SH_ORDER},
+			"items": {b: {} for b in _SH_ORDER}}
+	periods = {"today": blank(), "week": blank(), "month": blank()}
+	issuers = {}
+	daily = {}
+	for r in rows:
+		b = _SH_BUCKET.get(r.stone_type, "POTH")
+		keys = []
+		if r.d == today:
+			keys.append("today")
+		if r.d >= monday:
+			keys.append("week")
+		if r.d >= first:
+			keys.append("month")
+		for k in keys:
+			P = periods[k]
+			P["ct"] += flt(r.ct)
+			P["pcs"] += cint(r.pcs)
+			P["cards"] += cint(r.cards)
+			P["buckets"][b]["ct"] += flt(r.ct)
+			P["buckets"][b]["pcs"] += cint(r.pcs)
+			# ITEM level — "how much of WHAT got issued", per sieve/quality
+			it = P["items"][b].setdefault(r.item, {"ct": 0.0, "pcs": 0})
+			it["ct"] += flt(r.ct)
+			it["pcs"] += cint(r.pcs)
+		I = issuers.setdefault(r.issued_by or "?", {"who": r.who or r.issued_by or "?",
+			**{k: {"ct": 0.0, "pcs": 0} for k in ("today", "week", "month")},
+			"buckets": {bb: {"ct": 0.0, "pcs": 0} for bb in _SH_ORDER}})
+		for k in keys:
+			I[k]["ct"] += flt(r.ct)
+			I[k]["pcs"] += cint(r.pcs)
+		if r.d >= first:
+			I["buckets"][b]["ct"] += flt(r.ct)
+			I["buckets"][b]["pcs"] += cint(r.pcs)
+		D = daily.setdefault(str(r.d), {"ct": 0.0, "pcs": 0})
+		D["ct"] += flt(r.ct)
+		D["pcs"] += cint(r.pcs)
+	for P in periods.values():
+		P["items"] = {b: sorted(
+			[{"item": i, **v} for i, v in P["items"][b].items()],
+			key=lambda x: -x["ct"]) for b in _SH_ORDER}
+	return {"periods": periods, "order": _SH_ORDER,
+		"issuers": sorted(issuers.values(), key=lambda x: -x["month"]["ct"]),
+		"issuer_ids": {v["who"]: k for k, v in issuers.items()},
+		"daily": [{"date": d, **v} for d, v in sorted(daily.items())],
+		"bounds": {"today": str(today), "monday": str(monday), "first": str(first)}}
+
+
+@frappe.whitelist()
+def get_stone_issuer_history(employee):
+	"""Drill-in for ONE issuer: same period tiles + month bucket split + the
+	line-by-line trail (newest first, this month)."""
+	if not STONE_HISTORY_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	today, monday, first = _sh_bounds()
+	lines = frappe.db.sql("""
+		SELECT m.posting, i.item, it.stone_type, i.qty ct, i.pcs, m.order_bag
+		FROM `tabMaterial Issue Item` i
+		JOIN `tabMaterial Issue` m ON m.name = i.parent
+		JOIN `tabItem` it ON it.name = i.item
+		WHERE m.issue_type = 'Stone' AND m.issued_by = %s AND DATE(m.posting) >= %s
+		ORDER BY m.posting DESC LIMIT 500
+	""", (employee, first), as_dict=True)
+	out = {"who": frappe.db.get_value("Employee", employee, "employee_name") or employee,
+		"periods": {k: {"ct": 0.0, "pcs": 0} for k in ("today", "week", "month")},
+		"buckets": {b: {"ct": 0.0, "pcs": 0} for b in _SH_ORDER},
+		"daily": {}, "lines": []}
+	for l in lines:
+		b = _SH_BUCKET.get(l.stone_type, "POTH")
+		d = l.posting.date() if l.posting else today
+		out["periods"]["month"]["ct"] += flt(l.ct)
+		out["periods"]["month"]["pcs"] += cint(l.pcs)
+		if d >= monday:
+			out["periods"]["week"]["ct"] += flt(l.ct)
+			out["periods"]["week"]["pcs"] += cint(l.pcs)
+		if d == today:
+			out["periods"]["today"]["ct"] += flt(l.ct)
+			out["periods"]["today"]["pcs"] += cint(l.pcs)
+		out["buckets"][b]["ct"] += flt(l.ct)
+		out["buckets"][b]["pcs"] += cint(l.pcs)
+		D = out["daily"].setdefault(str(d), {"ct": 0.0, "pcs": 0})
+		D["ct"] += flt(l.ct)
+		D["pcs"] += cint(l.pcs)
+		out["lines"].append({"when": str(l.posting), "item": l.item, "bucket": b,
+			"ct": flt(l.ct), "pcs": cint(l.pcs), "card": l.order_bag})
+	out["daily"] = [{"date": d, **v} for d, v in sorted(out["daily"].items())]
+	out["order"] = _SH_ORDER
+	return out
+
+
 @frappe.whitelist()
 def get_stone_issuer_today(employee):
 	"""What the picked issuer has handed out TODAY (Stone Issue station side panel):
