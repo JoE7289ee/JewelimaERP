@@ -6726,8 +6726,15 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 	done, errors, total_loss = [], [], 0.0
 	for ln in lines or []:
 		nm = ln.get("order_bag")
-		win = flt(ln.get("weight_in"))
+		raw_win = ln.get("weight_in")
+		win = flt(raw_win)
 		try:
+			# a card can't come back weighing nothing — refuse a blank/zero
+			# weight-in so we never book the whole piece as loss (the UI guards
+			# this too, but the API is the real gate)
+			if raw_win in (None, "") or win <= 0:
+				errors.append({"name": nm, "error": frappe._("Enter the weight-in (received weight).")})
+				continue
 			rec = _current_bench_record(dt, nm)
 			if not rec:
 				errors.append({"name": nm, "error": frappe._("No bench record")})

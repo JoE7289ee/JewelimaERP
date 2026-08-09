@@ -67,6 +67,8 @@
   "col_break_cvd",
   "cvd_no",
   "cvd_weight",
+  "sw_no",
+  "sw_weight",
   "col_break_pdmd",
   "pdmd_no",
   "pdmd_weight",
@@ -515,6 +517,19 @@
    "fieldname": "cvd_weight",
    "fieldtype": "Float",
    "label": "CVD Weight (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sw_no",
+   "fieldtype": "Int",
+   "label": "SW No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sw_weight",
+   "fieldtype": "Float",
+   "label": "SW Weight (ct)",
    "precision": "3",
    "read_only": 1
   },
