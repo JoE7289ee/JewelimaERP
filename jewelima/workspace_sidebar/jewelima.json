@@ -176,6 +176,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "eye",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Due View",
+   "link_to": "due-view",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
@@ -352,19 +365,6 @@
    "keep_closed": 0,
    "label": "Due Soon",
    "link_to": "due-soon",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "eye",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Due View",
-   "link_to": "due-view",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -2399,7 +2399,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-09 13:46:54.443500",
+ "modified": "2026-08-09 13:54:56.578849",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
