@@ -1,0 +1,32 @@
+{
+ "content": null,
+ "creation": "2026-08-09 14:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-09 14:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "due-view",
+ "owner": "Administrator",
+ "page_name": "due-view",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Jewelima Ordering"
+  },
+  {
+   "role": "Jewelima Info"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Due View"
+}
