@@ -8608,19 +8608,63 @@ def get_design_info(design):
 		mats.append({"item": m.item, "qty": cint(m.qty), "weight": flt(m.weight),
 			"purity": pur, "uom": (mi.weight_unit or "") if mi else "", "stone_type": st, "pure": pure})
 	counts = {k: cint(d.get(k)) for k in ("dmd_no", "ps_no", "cs_no", "cz_no", "cvd_no", "sw_no", "pdmd_no", "poth_no") if cint(d.get(k))}
-	bank = frappe.db.get_value("Design Bank", d.design_bank,
-		["name", "design_no", "gross_weight", "diamond_weight"], as_dict=True) if d.design_bank else None
-	siblings = frappe.get_all("Design", filters={"design_bank": d.design_bank},
-		fields=["name", "status"], order_by="name") if d.design_bank else []
+
+	# ---- the bank card behind this design: identity + ALL image slots -------
+	bank = None
+	if d.design_bank:
+		c = frappe.db.get_value("Design Bank", d.design_bank,
+			["name", "design_no", "status", "gross_weight", "diamond_weight", "note",
+			 "design_type", "provider", "provider_piece_code",
+			 "image", "photo", "customer_image", "raw_image"], as_dict=True)
+		if c:
+			c["images"] = [im for im in (
+				{"label": frappe._("Photo"), "src": c.pop("photo", None)},
+				{"label": frappe._("Info card"), "src": c.pop("image", None)},
+				{"label": frappe._("Customer"), "src": c.pop("customer_image", None)},
+				{"label": frappe._("Raw"), "src": c.pop("raw_image", None)},
+			) if im["src"]]
+			c["stones"] = frappe.get_all("Design Bank Stone", filters={"parent": d.design_bank},
+				fields=["stone", "sieve", "pcs", "ct"], order_by="idx")
+			bank = c
+
+	# ---- sibling variants off the same card, each with its own facts --------
+	def _variant_facts(dn):
+		vd = frappe.get_doc("Design", dn)
+		vmeta = {}
+		vcodes = [m.item for m in vd.materials if m.item]
+		if vcodes:
+			vmeta = {i.name: i.stone_type for i in frappe.get_all("Item",
+				filters={"name": ["in", vcodes]}, fields=["name", "stone_type"])}
+		mg = sum(flt(m.weight) for m in vd.materials if not vmeta.get(m.item))
+		sc = sum(flt(m.weight) for m in vd.materials if vmeta.get(m.item))
+		return round(mg, 3), round(sc, 3)
+
+	siblings = []
+	if d.design_bank:
+		for sv in frappe.get_all("Design", filters={"design_bank": d.design_bank},
+				fields=["name", "status", "design_type"], order_by="name"):
+			mg, sc = _variant_facts(sv.name)
+			siblings.append({"name": sv.name, "status": sv.status, "design_type": sv.design_type or "",
+				"metal_g": mg, "stone_ct": sc,
+				"bags": frappe.db.count("Order Bag", {"design": sv.name})})
+
+	# ---- production footprint of THIS design: bags by lifecycle -------------
+	by_status = {}
+	for b in frappe.get_all("Order Bag", filters={"design": d.name},
+			fields=["stock_status"], limit_page_length=0):
+		st = b.stock_status or "In Production"
+		by_status[st] = by_status.get(st, 0) + 1
+
 	return {"name": d.name, "status": d.status, "design_type": d.design_type or "",
 		"design_style": d.design_style or "", "image": d.image or "",
 		"bank": bank, "materials": mats, "counts": counts,
 		"metal_g": round(metal_g, 3), "stone_ct": round(stone_ct, 3),
 		"purity_pct": round(pure_g / metal_g * 100, 2) if metal_g else 0,
-		"siblings": siblings,
+		"siblings": siblings, "variant_count": len(siblings),
+		"by_status": by_status,
 		"bags_total": frappe.db.count("Order Bag", {"design": d.name}),
 		"bags": frappe.get_all("Order Bag", filters={"design": d.name},
-			fields=["name", "location"], order_by="creation desc", limit_page_length=8)}
+			fields=["name", "location", "stock_status"], order_by="creation desc", limit_page_length=12)}
 
 
 @frappe.whitelist()

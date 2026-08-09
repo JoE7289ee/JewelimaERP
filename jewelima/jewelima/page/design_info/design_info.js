@@ -1,9 +1,10 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Design Info — the Design's passport, floor language only: photo, identity,
-// the frozen BOM, derived totals, sibling variants of the same bank card,
-// and which bags run it (card numbers jump to Card Info). Read-only.
+// Design Info — the Design's full passport, read only: the bank card's photo /
+// info-card / customer / raw images, identity, the frozen BOM, derived totals,
+// every sibling variant with its own facts (click to switch), and the design's
+// production footprint (bags by lifecycle). Card numbers jump to Card Info.
 // Route: /app/design-info  (route_options: {design})
 
 frappe.pages["design-info"].on_page_load = function (wrapper) {
@@ -34,6 +35,17 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		.di-chip.me{background:#1f618d;border-color:#1f618d;color:#fff;cursor:default;}
 		.di-chip.retired{opacity:.5;text-decoration:line-through;}
 		.di-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;max-width:760px;}
+		.di-gal{display:flex;gap:8px;flex-wrap:wrap;}
+		.di-shot{flex:0 0 152px;}
+		.di-shot img{width:152px;height:152px;object-fit:cover;border:1px solid var(--border-color);border-radius:9px;background:#fff;cursor:zoom-in;}
+		.di-shot .cap{font-size:10px;color:var(--text-muted);text-align:center;margin-top:3px;text-transform:uppercase;letter-spacing:.05em;}
+		.di-bstat{display:inline-block;border-radius:9px;padding:1px 9px;font-size:11px;font-weight:800;margin:0 6px 6px 0;}
+		.di-bstat.ip{background:#fdf3d0;color:#8a6d00;}
+		.di-bstat.is{background:#dcefe0;color:#1d7a33;}
+		.di-bstat.so{background:#e3e7f5;color:#333d8f;}
+		.di-bstat.cn{background:#f5dddd;color:#b02a2a;}
+		.di-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;}
+		.di-lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;background:#fff;}
 		</style>
 		<div class="di-top"></div>
 		<div class="di-body"><div class="di-none">${__("Pick a design.")}</div></div>
@@ -45,50 +57,79 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 	fPick.refresh();
 
 	function paint(D) {
+		const SCLASS = { "In Production": "ip", "In Stock": "is", "Sold": "so", "Cancelled": "cn", "At Certification": "is" };
 		const bagChips = (D.bags || []).map((b) =>
 			`<a class="jw-card-link di-chip" data-card="${esc(b.name)}">${esc(b.name)}${b.location ? `<span style="font-family:var(--font-family);font-weight:600;color:var(--text-muted);"> · ${esc(b.location)}</span>` : ""}</a>`).join(" ");
-		const sib = (D.siblings || []).map((s) => s.name === D.name
-			? `<span class="di-chip me">${esc(s.name)}</span>`
-			: `<span class="di-chip di-sib ${s.status === "Retired" ? "retired" : ""}" data-design="${esc(s.name)}">${esc(s.name)}</span>`).join(" ");
+		const sibRows = (D.siblings || []).map((s) => `<tr class="${s.name === D.name ? "" : "di-sib"}" ${s.name === D.name ? "" : `data-design="${esc(s.name)}" style="cursor:pointer;"`}>
+				<td><b style="font-family:var(--font-family-monospace,monospace);">${esc(s.name)}</b>${s.name === D.name ? ` <span style="color:#1f618d;font-weight:700;">${__("(this)")}</span>` : ""}</td>
+				<td>${esc(s.design_type || "")}</td>
+				<td><span class="di-bstat ${s.status === "Retired" ? "cn" : "is"}">${esc((s.status || "").toUpperCase())}</span></td>
+				<td>${s.metal_g} g</td><td>${s.stone_ct ? s.stone_ct + " ct" : ""}</td><td>${s.bags || 0}</td>
+			</tr>`).join("");
 		const counts = Object.entries(D.counts || {}).map(([k, v]) =>
 			`<div class="di-tile"><div class="k">${esc(k.replace("_no", "").toUpperCase())}</div><div class="v">${v}</div></div>`).join("");
+		const statusChips = Object.entries(D.by_status || {}).map(([k, v]) =>
+			`<span class="di-bstat ${SCLASS[k] || "ip"}">${esc(k)}: ${v}</span>`).join("");
+		// gallery: bank card images first (photo/info/customer/raw); fall back to the design's own image
+		const imgs = (D.bank && D.bank.images && D.bank.images.length) ? D.bank.images
+			: (D.image ? [{ label: __("Design"), src: D.image }] : []);
+		const gallery = imgs.length
+			? `<div class="di-gal">${imgs.map((im) => `<div class="di-shot"><img src="${esc(im.src)}" data-full="${esc(im.src)}"><div class="cap">${esc(im.label)}</div></div>`).join("")}</div>`
+			: `<div class="di-img"><div class="none">${__("no photo")}</div></div>`;
+		const bk = D.bank;
 		root.find(".di-body").html(`
-			<div class="di-cols">
-				<div class="di-img">${D.image ? `<img src="${esc(D.image)}">` : `<div class="none">${__("no photo")}</div>`}</div>
-				<div class="di-main">
-					<div class="di-name">${esc(D.name)}
-						<span class="di-st ${D.status === "Retired" ? "retired" : ""}">${esc((D.status || "").toUpperCase())}</span></div>
-					<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">
-						${esc(D.design_type)}${D.design_style ? " · " + esc(D.design_style) : ""}
-						${D.bank ? " · " + __("bank card") + " <b>" + esc(D.bank.design_no) + "</b>" : ""}</div>
+			<div class="di-name">${esc(D.name)}
+				<span class="di-st ${D.status === "Retired" ? "retired" : ""}">${esc((D.status || "").toUpperCase())}</span>
+				${D.variant_count > 1 ? `<span style="font-size:12px;font-weight:600;color:var(--text-muted);">${__("1 of {0} variants", [D.variant_count])}</span>` : ""}</div>
+			<div style="font-size:13px;color:var(--text-muted);margin:4px 0 14px;">
+				${esc(D.design_type)}${D.design_style ? " · " + esc(D.design_style) : ""}
+				${bk ? " · " + __("bank card") + " <b>" + esc(bk.design_no) + "</b>" : ""}</div>
 
-					<div class="di-sec">${__("Totals")}</div>
-					<div class="di-facts">
-						<div class="di-tile"><div class="k">${__("Metal")}</div><div class="v">${D.metal_g} g</div></div>
-						<div class="di-tile"><div class="k">${__("Purity")}</div><div class="v">${D.purity_pct}%</div></div>
-						${D.stone_ct ? `<div class="di-tile"><div class="k">${__("Stones")}</div><div class="v">${D.stone_ct} ct</div></div>` : ""}
-						${counts}
-					</div>
+			${gallery}
 
-					<div class="di-sec">${__("Bill of Materials — frozen at creation")}</div>
-					<table class="di-t"><thead><tr>
-						<th>${__("Material")}</th><th>${__("Purity %")}</th><th>${__("UOM")}</th>
-						<th>${__("Qty")}</th><th>${__("Weight")}</th><th>${__("Pure (g)")}</th>
-					</tr></thead><tbody>
-					${(D.materials || []).map((m) => `<tr>
-						<td><b>${esc(m.item)}</b></td>
-						<td>${m.purity || ""}</td><td>${esc(m.uom)}</td>
-						<td>${m.stone_type ? m.qty : ""}</td><td>${m.weight}</td>
-						<td>${m.stone_type ? "" : m.pure}</td>
-					</tr>`).join("")}</tbody></table>
+			<div class="di-sec">${__("Totals")}</div>
+			<div class="di-facts">
+				<div class="di-tile"><div class="k">${__("Metal")}</div><div class="v">${D.metal_g} g</div></div>
+				<div class="di-tile"><div class="k">${__("Purity")}</div><div class="v">${D.purity_pct}%</div></div>
+				${D.stone_ct ? `<div class="di-tile"><div class="k">${__("Stones")}</div><div class="v">${D.stone_ct} ct</div></div>` : ""}
+				${counts}
+			</div>
 
-					${sib ? `<div class="di-sec">${__("Variants of this card")}</div><div>${sib}</div>` : ""}
+			${bk ? `<div class="di-sec">${__("Bank card")}</div>
+			<div class="di-facts" style="margin-bottom:6px;">
+				<div class="di-tile"><div class="k">${__("Card no")}</div><div class="v" style="font-size:14px;">${esc(bk.design_no)}</div></div>
+				<div class="di-tile"><div class="k">${__("Status")}</div><div class="v" style="font-size:14px;">${esc(bk.status || "")}</div></div>
+				${bk.gross_weight ? `<div class="di-tile"><div class="k">${__("Card gross")}</div><div class="v" style="font-size:14px;">${bk.gross_weight} g</div></div>` : ""}
+				${bk.diamond_weight ? `<div class="di-tile"><div class="k">${__("Card DMD")}</div><div class="v" style="font-size:14px;">${bk.diamond_weight} ct</div></div>` : ""}
+				${bk.provider ? `<div class="di-tile"><div class="k">${__("Provider")}</div><div class="v" style="font-size:13px;">${esc(bk.provider)}${bk.provider_piece_code ? " · " + esc(bk.provider_piece_code) : ""}</div></div>` : ""}
+			</div>
+			${bk.note ? `<div style="font-size:12.5px;color:var(--text-muted);max-width:760px;">${esc(bk.note)}</div>` : ""}
+			${(bk.stones || []).length ? `<table class="di-t" style="max-width:520px;margin-top:8px;"><thead><tr>
+				<th>${__("Card stone")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th></tr></thead><tbody>
+				${bk.stones.map((st) => `<tr><td><b>${esc(st.stone || "")}</b></td><td>${esc(st.sieve || "")}</td><td>${st.pcs || ""}</td><td>${st.ct || ""}</td></tr>`).join("")}
+			</tbody></table>` : ""}` : ""}
 
-					<div class="di-sec">${__("In manufacturing")}</div>
-					<div style="font-size:13px;">
-						${D.bags_total ? __("{0} bag(s) run this design", [D.bags_total]) + (bagChips ? " — " + bagChips : "") : __("No bags yet.")}
-					</div>
-				</div>
+			<div class="di-sec">${__("Bill of Materials — frozen at creation")}</div>
+			<table class="di-t"><thead><tr>
+				<th>${__("Material")}</th><th>${__("Purity %")}</th><th>${__("UOM")}</th>
+				<th>${__("Qty")}</th><th>${__("Weight")}</th><th>${__("Pure (g)")}</th>
+			</tr></thead><tbody>
+			${(D.materials || []).map((m) => `<tr>
+				<td><b>${esc(m.item)}</b></td>
+				<td>${m.purity || ""}</td><td>${esc(m.uom)}</td>
+				<td>${m.stone_type ? m.qty : ""}</td><td>${m.weight}</td>
+				<td>${m.stone_type ? "" : m.pure}</td>
+			</tr>`).join("")}</tbody></table>
+
+			${sibRows ? `<div class="di-sec">${__("Variants of this card")} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">· ${__("click a row to open it")}</span></div>
+			<table class="di-t"><thead><tr>
+				<th>${__("Variant")}</th><th>${__("Type")}</th><th>${__("Status")}</th><th>${__("Metal")}</th><th>${__("Stones")}</th><th>${__("Bags")}</th>
+			</tr></thead><tbody>${sibRows}</tbody></table>` : ""}
+
+			<div class="di-sec">${__("In manufacturing")}</div>
+			${statusChips ? `<div style="margin-bottom:8px;">${statusChips}</div>` : ""}
+			<div style="font-size:13px;">
+				${D.bags_total ? __("{0} bag(s) run this design", [D.bags_total]) + (bagChips ? " — " + bagChips : "") : __("No bags yet.")}
 			</div>`);
 	}
 
@@ -106,6 +147,13 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		const nm = $(this).data("design");
 		fPick.set_value(nm);
 		load(nm);
+	});
+	// click any card image -> full-screen lightbox
+	root.on("click", ".di-shot img", function () {
+		const full = this.getAttribute("data-full");
+		const lb = $(`<div class="di-lightbox"><img src="${esc(full)}"></div>`);
+		lb.on("click", () => lb.remove());
+		$(document.body).append(lb);
 	});
 
 	if (frappe.route_options && frappe.route_options.design) {
