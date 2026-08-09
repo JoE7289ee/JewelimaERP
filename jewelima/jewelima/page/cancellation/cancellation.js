@@ -161,6 +161,7 @@ frappe.pages["cancellation"].on_page_load = function (wrapper) {
 			<div class="cx-card" style="max-width:1100px;">
 				<div class="cx-head">
 					<span class="nm">${esc(j.job_order)}</span>
+					${(j.info || {}).cancelled ? `<span class="cx-chip cn">${__("CANCELLED")}</span>` : ""}
 					<span class="kv">${__("customer")} <b>${esc((j.info || {}).customer || "—")}</b></span>
 					<span class="kv">${__("ordered")} <b>${esc((j.info || {}).order_date || "—")}</b></span>
 					<span class="kv">${__("salesman")} <b>${esc((j.info || {}).salesman || "—")}</b></span>

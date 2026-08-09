@@ -332,6 +332,56 @@ def list_purchase_records(voucher_type=None, supplier=None, from_date=None, to_d
 
 
 @frappe.whitelist()
+def export_purchase_history_xlsx(voucher_type=None, supplier=None, from_date=None, to_date=None, filename=None):
+	"""Purchase History -> one xlsx: a row per LINE with its record header,
+	then the grand totals. Follows the page filters."""
+	_require_stock(extra=("Jewelima Purchase",))
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+	from openpyxl.utils import get_column_letter
+
+	data = list_purchase_records(voucher_type, supplier, from_date, to_date)
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Purchase History"
+	head = ["RECORD", "DATE", "VOUCHER", "SUPPLIER", "WAREHOUSE", "RECEIPT",
+		"ITEM", "WEIGHT", "UNIT", "PCS", "PURITY %", "RATE", "RECORD TOTAL"]
+	ws.append(head)
+	for c in range(1, len(head) + 1):
+		ws.cell(row=1, column=c).font = Font(bold=True, size=12)
+	for r in data["rows"]:
+		first = True
+		for i in r["items"]:
+			ws.append([
+				r["name"] if first else "", str(r.get("purchase_date") or "") if first else "",
+				r.get("voucher_title") if first else "", r.get("supplier") if first else "",
+				r.get("warehouse") if first else "", r.get("purchase_receipt") if first else "",
+				i["item"], round(flt(i["weight"]), 3), "ct" if i["is_stone"] else "g",
+				cint(i["count"]) or None, flt(i["purity"]) or None, flt(i["rate"]) or None,
+				round(flt(r.get("total_amount")), 2) if first else None,
+			])
+			first = False
+	t = data["totals"]
+	ws.append([])
+	ws.append(["TOTAL", None, None, None, None, None,
+		frappe._("{0} purchase(s)").format(t["n"]),
+		frappe._("gold {0} g · stones {1} ct · {2} pc").format(round(t["gold"], 3), round(t["ct"], 3), t["pcs"]),
+		None, None, None, None, round(t["amount"], 2)])
+	last = ws.max_row
+	for c in range(1, len(head) + 1):
+		ws.cell(row=last, column=c).font = Font(bold=True, size=12)
+	for col in ws.columns:
+		width = max((len(str(c.value)) for c in col if c.value is not None), default=8)
+		ws.column_dimensions[get_column_letter(col[0].column)].width = min(width + 3, 44)
+	import io
+	buf = io.BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "{0}.xlsx".format((filename or "PURCHASE HISTORY").strip())
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "binary"
+
+
+@frappe.whitelist()
 def get_order_defaults():
 	"""Global Place Order defaults from the Jewelima Order Settings single."""
 	s = frappe.get_cached_doc("Jewelima Order Settings")
@@ -3187,6 +3237,20 @@ def _cancel_materials(order_bag):
 	return mats, {gold_wh, stone_wh} - {None}
 
 
+def _stamp_jo_if_dead(job_order):
+	"""A Job Order whose bags are ALL Cancelled (and at least one exists)
+	carries the visible Cancelled stamp — lists and reports see it."""
+	if not job_order or not frappe.db.exists("Job Order", job_order):
+		return
+	bags = frappe.get_all("Order Bag", filters={"job_order": job_order}, pluck="stock_status")
+	dead = bool(bags) and all(st == "Cancelled" for st in bags)
+	if dead and not cint(frappe.db.get_value("Job Order", job_order, "cancelled")):
+		frappe.db.set_value("Job Order", job_order, {"cancelled": 1,
+			"cancelled_on": frappe.utils.now_datetime()})
+	elif not dead and cint(frappe.db.get_value("Job Order", job_order, "cancelled")):
+		frappe.db.set_value("Job Order", job_order, {"cancelled": 0, "cancelled_on": None})
+
+
 def _cancel_one_bag(bag, returns=None):
 	"""Return materials (when any) and flip the bag to Cancelled. `returns` maps
 	item -> chosen issue warehouse; every material line must be covered."""
@@ -3244,6 +3308,7 @@ def cancel_order_bag(order_bag, returns=None):
 		frappe.throw(why)
 	returns = frappe.parse_json(returns) if isinstance(returns, str) else (returns or {})
 	moved = _cancel_one_bag(bag, returns)
+	_stamp_jo_if_dead(bag.job_order)
 	frappe.db.commit()
 	return {"name": bag.name, "moved": moved}
 
@@ -3257,7 +3322,7 @@ def get_cancel_job_order(job_order):
 	if not frappe.db.exists("Job Order", job_order):
 		frappe.throw(frappe._("Job Order {0} not found.").format(job_order))
 	jo = frappe.db.get_value("Job Order", job_order,
-		["customer", "order_date", "due_date", "salesman", "order_type"], as_dict=True)
+		["customer", "order_date", "due_date", "salesman", "order_type", "cancelled"], as_dict=True)
 	bags = []
 	for b in frappe.get_all("Order Bag", filters={"job_order": job_order},
 			fields=["name", "design", "qty", "location", "stock_status", "is_finished"],
@@ -3301,6 +3366,7 @@ def cancel_job_order(job_order):
 			continue
 		_cancel_one_bag(frappe.get_doc("Order Bag", b["name"]))
 		done.append(b["name"])
+	_stamp_jo_if_dead(job_order)
 	frappe.db.commit()
 	return {"job_order": job_order, "cancelled": done}
 

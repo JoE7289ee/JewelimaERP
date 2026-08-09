@@ -46,6 +46,8 @@ frappe.pages["purchase-history"].on_page_load = function (wrapper) {
 			<div class="ph-f-supplier"></div>
 			<div class="ph-f-from"></div>
 			<div class="ph-f-to"></div>
+			<button class="ph-btn ph-print" style="border:none;color:#fff;font-weight:800;padding:9px 20px;border-radius:8px;cursor:pointer;background:#5b3a8e;">${__("Print 🖨")}</button>
+			<button class="ph-btn ph-dl" style="border:none;color:#fff;font-weight:800;padding:9px 20px;border-radius:8px;cursor:pointer;background:#2e7d32;">${__("Report ⤓")}</button>
 		</div>
 		<div class="ph-tiles"></div>
 		<div class="ph-body"><div class="ph-none">${__("loading…")}</div></div>
@@ -117,6 +119,58 @@ frappe.pages["purchase-history"].on_page_load = function (wrapper) {
 			</tbody></table>`
 			: `<div class="ph-none">${__("No purchases match — post one on Purchase Raw Material and it lands here.")}</div>`);
 	}
+
+	root.on("click", ".ph-dl", () => {
+		open_url_post("/api/method/jewelima.jewelima.api.export_purchase_history_xlsx", {
+			voucher_type: fV.get_value() || "", supplier: fS.get_value() || "",
+			from_date: fF.get_value() || "", to_date: fT.get_value() || "",
+			filename: "PURCHASE HISTORY " + frappe.datetime.get_today(),
+		});
+	});
+
+	// print = the register as filtered, every record's lines opened
+	root.on("click", ".ph-print", () => {
+		if (!(DATA && DATA.rows && DATA.rows.length)) return;
+		const t = DATA.totals || {};
+		const body = DATA.rows.map((r) => `
+			<tr class="grp"><td class="l">${esc(r.name)}</td><td class="l">${esc(r.purchase_date || "")}</td>
+				<td class="l">${esc(r.voucher_title || "")}</td><td class="l">${esc(r.supplier || "")}</td>
+				<td class="l">${esc(r.warehouse || "")}</td><td>${r.gold ? g3(r.gold) : ""}</td>
+				<td>${r.ct ? g3(r.ct) : ""}</td><td>${r.pcs || ""}</td><td>${r.total_amount ? m2(r.total_amount) : ""}</td></tr>
+			${r.items.map((i) => `<tr><td class="l" style="padding-left:22px;">${esc(i.item)}</td><td></td><td></td><td></td><td></td>
+				<td>${i.is_stone ? "" : g3(i.weight)}</td><td>${i.is_stone ? g3(i.weight) : ""}</td>
+				<td>${i.is_stone ? i.count || "" : ""}</td><td>${i.rate ? m2(i.rate) : ""}</td></tr>`).join("")}`).join("")
+			+ `<tr class="tot"><td class="l">${__("TOTAL")} (${t.n})</td><td></td><td></td><td></td><td></td>
+				<td>${g3(t.gold)}</td><td>${g3(t.ct)}</td><td>${t.pcs || ""}</td><td>${m2(t.amount)}</td></tr>`;
+		const html = `<!doctype html><html><head><meta charset="utf-8"><title>${__("PURCHASE HISTORY")}</title><style>
+			@page{size:A4 landscape;margin:10mm;}
+			body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;}
+			h1{font-size:17px;margin:0 0 2px;}
+			.sub{font-size:11px;color:#555;margin-bottom:10px;}
+			table{width:100%;border-collapse:collapse;font-size:10.5px;}
+			th,td{border:1px solid #999;padding:3px 6px;text-align:right;white-space:nowrap;}
+			th.l,td.l{text-align:left;}
+			th{background:#eee;text-transform:uppercase;font-size:9px;}
+			tr.grp td{background:#f2f2f2;font-weight:bold;}
+			tr.tot td{font-weight:bold;border-top:2px solid #333;}
+			tr{page-break-inside:avoid;}
+		</style></head><body>
+			<h1>${__("PURCHASE HISTORY")}</h1>
+			<div class="sub">${__("generated")} ${frappe.datetime.now_datetime()}
+				${fV.get_value() ? " · " + esc(fV.get_value()) : ""}${fS.get_value() ? " · " + esc(fS.get_value()) : ""}
+				${fF.get_value() ? " · " + __("from") + " " + esc(fF.get_value()) : ""}${fT.get_value() ? " · " + __("to") + " " + esc(fT.get_value()) : ""}</div>
+			<table><thead><tr><th class="l">${__("Record / Item")}</th><th class="l">${__("Date")}</th><th class="l">${__("Voucher")}</th>
+				<th class="l">${__("Supplier")}</th><th class="l">${__("Warehouse")}</th><th>${__("Gold g")}</th><th>${__("Stone ct")}</th>
+				<th>${__("Pcs")}</th><th>${__("Amount / Rate")}</th></tr></thead><tbody>${body}</tbody></table>
+		</body></html>`;
+		document.getElementById("ph-print-frame")?.remove();
+		const fr = document.createElement("iframe");
+		fr.id = "ph-print-frame";
+		fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+		document.body.appendChild(fr);
+		fr.srcdoc = html;
+		fr.onload = () => setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 150);
+	});
 
 	root.on("click", "tr.ph-r", function () {
 		const n = $(this).data("n");
