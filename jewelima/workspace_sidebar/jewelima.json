@@ -21,6 +21,19 @@
   },
   {
    "child": 0,
+   "collapsible": 0,
+   "icon": "award",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Migration Goals",
+   "link_to": "migration-goals",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 0,
    "collapsible": 1,
    "icon": "diamond",
    "indent": 0,
@@ -2451,7 +2464,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-10 21:31:03.081082",
+ "modified": "2026-08-10 22:05:00.576755",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

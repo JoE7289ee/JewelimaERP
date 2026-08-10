@@ -12816,3 +12816,51 @@ def set_feature_request_status(name, status, admin_note=None):
 	frappe.db.set_value("Feature Request", name, vals)
 	frappe.db.commit()
 	return {"name": name, "status": status}
+
+
+# ---------------------------------------------------------------------------
+# Migration Goals — a gamified tracker for the data-migration push. Live counts
+# vs targets + the leading contributor per goal (owner where exact: variants,
+# price charts; modified_by as the proxy for approve/retire/customer photos).
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_migration_goals():
+	"""Live progress for every migration goal + who's leading each + an overall
+	leaderboard (total records contributed across all goals)."""
+	SYS = ("Administrator", "Guest", "")
+
+	def total(doctype, where):
+		return frappe.db.sql("select count(*) from `tab{0}` where {1}".format(doctype, where))[0][0]
+
+	def by_user(doctype, where, field):
+		return frappe.db.sql(
+			"select `{0}` u, count(*) c from `tab{1}` where {2} and `{0}` is not null "
+			"and `{0}` not in ('Administrator','Guest','') group by `{0}` order by c desc".format(field, doctype, where),
+			as_dict=True)
+
+	specs = [
+		("approved_designs", "Approved Designs", 2000, "Design Bank", "status='Approved'", "modified_by"),
+		("variants",         "Variants",         4000, "Design",      "1=1",              "owner"),
+		("rejected_designs", "Rejected Designs",  6000, "Design Bank", "status='Retired'", "modified_by"),
+		("price_chart",      "Price Chart",         15, "Price Chart", "1=1",              "owner"),
+		("customer_photos",  "Customer Photos",    400, "Design Bank", "coalesce(customer_image,'')!=''", "modified_by"),
+	]
+
+	def name_of(u):
+		return frappe.db.get_value("User", u, "full_name") or (u or "").split("@")[0]
+
+	goals, agg = [], {}
+	for key, label, target, dt, where, field in specs:
+		cur = int(total(dt, where))
+		rows = by_user(dt, where, field)
+		for r in rows:
+			agg[r.u] = agg.get(r.u, 0) + int(r.c)
+		leader = None
+		if rows:
+			leader = {"user": rows[0].u, "name": name_of(rows[0].u), "count": int(rows[0].c)}
+		goals.append({"key": key, "label": label, "target": target, "current": cur, "leader": leader})
+
+	board = sorted(
+		({"user": u, "name": name_of(u), "total": c} for u, c in agg.items()),
+		key=lambda x: -x["total"])[:5]
+	return {"goals": goals, "leaderboard": board}
