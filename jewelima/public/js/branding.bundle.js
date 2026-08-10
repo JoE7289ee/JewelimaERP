@@ -133,6 +133,16 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	document.head.appendChild(st);
 })();
 
+// Full-width: our desk pages should use the whole monitor, not Frappe's narrow
+// centred container. Scoped to Jewelima page routes so core forms/lists stay as
+// Frappe intends. (Redundant for pages that already set it — harmless.)
+(() => {
+	const JW_PAGES = ["add-design", "add-employee", "add-user", "all-requests", "assign-collect", "at-certification", "bag-split", "bag-status", "bench-bag-extraction", "bench-cad", "bench-cam", "bench-casting", "bench-filing", "bench-final-polish", "bench-grinding", "bench-pre-polish", "bench-setting", "bench-tree-making", "bench-wax-cleaning", "bench-wax-injecting", "bench-wax-setting", "bench-work-setup", "cad-jobs", "cad-sheet", "cad-workstation", "cancellation", "card-builder", "card-info", "casting-queue", "casting-weigh", "certification-out", "certify", "confirm-certifications", "customer-photos", "customer-update", "day-sheet", "delivery-masters", "design-bank-report", "design-duplicates", "design-gallery", "design-info", "design-report", "design-review", "design-tags", "design-types", "due-risk", "due-soon", "due-view", "edit-order", "finished-stock", "gold-casting", "import-stock", "in-bags", "issue-access", "item-stock", "job-order-status", "job-work", "loss-collection", "loss-report", "loss-writeoff", "make-products", "make-tree", "melt-gold", "migration-goals", "new-design-bank", "old-categories", "old-format", "order-bag-photos", "order-masters", "order-requests", "parties", "party-gold", "party-groups", "party-masters", "party-metal", "party-stock", "photo-approvals", "photo-kpi", "photo-queue", "photo-update", "photo-urgent", "place-order", "prepare-sale", "price-charts", "print-barcode", "print-order-bags", "prioritization", "purchase-history", "purchase-masters", "purchase-raw-material", "quick-menu-setup", "raw-materials", "rejection", "repack-requests", "repack-stock", "repair-bills", "repair-desk", "repair-intake", "repair-setup", "request-feature", "reset-password", "retire-design", "retired-designs", "sales-records", "saved-imports", "search-design", "select-photos", "selected-pieces", "selection-providers", "selection-review", "selection-tags", "selection-transfer", "sell", "sell-old", "send-certifications", "sieve-chart", "stock-analysis", "stock-transfer", "stone-audit", "stone-buckets", "stone-history", "stone-info", "stone-issue", "stone-issues", "stone-request", "stone-stock", "system-information", "transfer-holder", "transfer-matrix", "transfer-order-bag", "usage", "user-roles", "view-pc", "warehouse-management", "weight-add", "weight-checker", "weight-reduce", "ws-bag-extraction", "ws-cad-ws", "ws-cam", "ws-filing", "ws-final-polish", "ws-grinding", "ws-ordering", "ws-pre-polish", "ws-setting", "ws-wax-cleaning", "ws-wax-injecting", "ws-wax-setting"];
+	const st = document.createElement("style");
+	st.textContent = JW_PAGES.map((r) => `#page-${r} .container{max-width:100% !important;}`).join("");
+	document.head.appendChild(st);
+})();
+
 (() => {
 	const RESET_PAGES = new Set([
 		"place-order", "ws-ordering", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",
