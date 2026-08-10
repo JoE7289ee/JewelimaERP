@@ -7,6 +7,19 @@
  "idx": 0,
  "items": [
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "lightbulb",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Request Feature",
+   "link_to": "request-feature",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "diamond",

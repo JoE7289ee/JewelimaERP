@@ -12743,3 +12743,74 @@ def get_orders_taken(days=30):
 		"trend": trend,
 		"top_customers": [{"customer": c, "pure": round(w, 1)} for c, w in top],
 	}
+
+
+# =========================== Feature Requests ================================
+# Any desk user can raise + track; only the admin (System Manager, which the
+# Administrator account holds) moves a request off Open.
+
+def _is_feature_admin():
+	return "System Manager" in frappe.get_roles() or frappe.session.user == "Administrator"
+
+
+@frappe.whitelist()
+def submit_feature_request(title, description=None, category=None):
+	"""Raise a feature request — born Open, stamped with who + when."""
+	title = (title or "").strip()
+	if not title:
+		frappe.throw(frappe._("Give the request a title."))
+	d = frappe.get_doc({
+		"doctype": "Feature Request", "title": title,
+		"description": (description or "").strip(),
+		"category": category if category in ("Feature", "Improvement", "Bug", "Other") else "Feature",
+		"status": "Open", "requested_by": frappe.session.user,
+		"requested_on": frappe.utils.now_datetime(),
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name}
+
+
+@frappe.whitelist()
+def list_feature_requests(status=None, mine=0):
+	"""Every request (all users can track). Filter by status or just mine."""
+	f = {}
+	if status:
+		f["status"] = status
+	if cint(mine):
+		f["requested_by"] = frappe.session.user
+	rows = frappe.get_all("Feature Request", filters=f,
+		fields=["name", "title", "category", "status", "requested_by", "requested_on",
+			"description", "admin_note", "closed_by", "closed_on"],
+		order_by="requested_on desc", limit_page_length=500)
+	# friendly requester names
+	users = list({r.requested_by for r in rows if r.requested_by})
+	names = {u.name: (u.full_name or u.name) for u in
+		frappe.get_all("User", filters={"name": ["in", users or [""]]}, fields=["name", "full_name"])}
+	for r in rows:
+		r["requested_by_name"] = names.get(r.requested_by, r.requested_by)
+	counts = {}
+	for st in ("Open", "In Progress", "Closed", "Declined"):
+		counts[st] = frappe.db.count("Feature Request", {"status": st})
+	return {"rows": rows, "counts": counts, "is_admin": 1 if _is_feature_admin() else 0,
+		"me": frappe.session.user}
+
+
+@frappe.whitelist()
+def set_feature_request_status(name, status, admin_note=None):
+	"""Admin-only: move a request to In Progress / Closed / Declined / Open."""
+	if not _is_feature_admin():
+		frappe.throw(frappe._("Only the administrator can change a request's status."), frappe.PermissionError)
+	if status not in ("Open", "In Progress", "Closed", "Declined"):
+		frappe.throw(frappe._("Bad status."))
+	vals = {"status": status}
+	if admin_note is not None:
+		vals["admin_note"] = (admin_note or "").strip()
+	if status in ("Closed", "Declined"):
+		vals["closed_by"] = frappe.session.user
+		vals["closed_on"] = frappe.utils.now_datetime()
+	else:
+		vals["closed_by"] = None
+		vals["closed_on"] = None
+	frappe.db.set_value("Feature Request", name, vals)
+	frappe.db.commit()
+	return {"name": name, "status": status}
