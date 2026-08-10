@@ -7103,7 +7103,10 @@ def import_finished_stock(payload):
 			"purity": flt(frappe.db.get_value("Item", it, "purity_percentage")) if not t["is_stone"] else 0,
 			"rate": 0,
 		} for it, t in totals.items()]
-		stock_doc = post_raw_material_purchase(supplier, fg, items=items)["name"]
+		# SIN (Stock Import) is the app-seeded voucher for vault/opening intake
+		vt = "SIN" if frappe.db.exists("Voucher Type", "SIN") else \
+			(frappe.db.get_value("Voucher Type", {}, "name") or None)
+		stock_doc = post_raw_material_purchase(supplier, fg, items=items, voucher_type=vt)["name"]
 
 	# ---- Job Order (type Import) + one finished bag per piece -----------------
 	if not frappe.db.exists("Order Type", "IMPORT"):
