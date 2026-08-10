@@ -1045,6 +1045,7 @@ const PO_COLUMNS = [
 	// expose for the New Design dialog + the Requests/repeat fill
 	state.onDesignPicked = onDesignPicked;
 	state.addRow = addRow;
+	state.openVariantCreate = openVariantCreate;
 	state.applyCadLine = applyCadLine;
 	state.applyProfile = applyProfile;
 	state.planProfile = planProfile;
@@ -1074,7 +1075,7 @@ const PO_COLUMNS = [
 	// file the whole form as a REQUEST instead of placing: no E-number is
 	// consumed (Job Order only exists on Place), the request takes its own
 	// code, and the due-days are stripped — requests carry no dates
-	if (OPTS.mode !== "order") page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
+	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
 	page.add_inner_button(__("Add Row"), () => addRow());
 	page.add_inner_button(__("Reset"), resetPage);
 
@@ -1441,120 +1442,72 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 }
 
 function openNewDesignDialog(state, prefill) {
-	// prefill (optional) = a purity-variant seed: {design_name, design_type, design_style,
-	// image, materials, row} — everything copied from the source design, gold already swapped.
-	// fetch_from doesn't fire in a Dialog grid, so fill Purity / UOM / Pure ourselves.
-	function bomItemChanged() {
-		const row = this.doc || (this.grid_row && this.grid_row.doc);
-		if (!row) return;
-		if (!row.item) { row.purity = 0; row.uom = ""; row.pure = 0; d.fields_dict.materials.grid.refresh(); return; }
-		frappe.db.get_value("Item", row.item, ["purity_percentage", "weight_unit", "stone_type"]).then((r) => {
-			const v = r.message || {};
-			row.purity = flt(v.purity_percentage);
-			row.uom = v.weight_unit || "";
-			row.stone_type = v.stone_type || "";
-			// a changed material starts clean — old qty/weight belonged to the old item
-			row.qty = 0;
-			row.weight = 0;
-			row.pure = 0;
-			d.fields_dict.materials.grid.refresh();
-		});
-	}
-	function bomWeightChanged() {
-		const row = this.doc || (this.grid_row && this.grid_row.doc);
-		if (!row) return;
-		row.pure = row.stone_type ? 0 : (flt(row.weight) * flt(row.purity)) / 100;
-		d.fields_dict.materials.grid.refresh();
-	}
+	// New Design (Place Order): create a type-coded Design Bank card from a
+	// product photo + weights + sieves + notes (info page rendered server-side),
+	// born APPROVED, then immediately mint a Karat+Quality+Colour variant onto a
+	// line. No photo? the card still creates and waits in the Photo Queue.
 	const d = new frappe.ui.Dialog({
 		title: __("New Design"),
 		size: "large",
 		fields: [
-			{ fieldname: "design_name", fieldtype: "Data", label: __("Design Name"), reqd: 1 },
+			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1,
+				description: __("names the card by the type's bank code (e.g. JC-5)") },
 			{ fieldname: "cb1", fieldtype: "Column Break" },
-			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1 },
-			{ fieldname: "design_style", fieldtype: "Link", label: __("Design Style"), options: "Design Style" },
+			{ fieldname: "gross_weight", fieldtype: "Float", label: __("Gross Weight (g)"), reqd: 1 },
+			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)") },
 			{ fieldname: "sb_img", fieldtype: "Section Break" },
 			{
-				fieldname: "image", fieldtype: "Attach Image", label: __("Design Image"),
+				fieldname: "photo", fieldtype: "Attach Image", label: __("Product Photo (optional)"),
+				description: __("skip it and the card waits in the Photo Queue"),
 				onchange() {
-					// show the attached image itself, not just the file link
-					const url = d.get_value("image");
-					d.fields_dict.image_preview.$wrapper.html(
-						url
-							? `<div style="text-align:center;margin:4px 0 8px;"><img src="${encodeURI(url)}" style="max-height:220px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`
-							: ""
-					);
+					const url = d.get_value("photo");
+					d.fields_dict.photo_preview.$wrapper.html(url
+						? `<div style="text-align:center;margin:4px 0 8px;"><img src="${encodeURI(url)}" style="max-height:200px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`
+						: "");
 				},
 			},
-			{ fieldname: "image_preview", fieldtype: "HTML" },
-			{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
+			{ fieldname: "photo_preview", fieldtype: "HTML" },
+			{ fieldname: "note", fieldtype: "Small Text", label: __("Notes") },
+			{ fieldname: "sb_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
 			{
-				fieldname: "materials", fieldtype: "Table", label: __("Materials"), reqd: 1, options: "Design BOM Item", data: [],
-				description: __("Stones need both a Qty (count) and a Weight (carats). Metals need a Weight (grams)."),
+				fieldname: "stones", fieldtype: "Table", label: __("Stones"), options: "Design Bank Stone", data: [],
+				description: __("the card's stone rows — stone, sieve, pcs, carats"),
 				fields: [
-					{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
-					{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
-					{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type", onchange: jwSieveQty },
-					{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: bomWeightChanged },
-					{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
+					{ fieldname: "stone", fieldtype: "Data", label: __("Stone"), in_list_view: 1, columns: 3 },
+					{ fieldname: "sieve", fieldtype: "Data", label: __("Sieve"), in_list_view: 1, columns: 3 },
+					{ fieldname: "pcs", fieldtype: "Int", label: __("Pcs"), in_list_view: 1, columns: 2 },
+					{ fieldname: "ct", fieldtype: "Float", label: __("Ct"), in_list_view: 1, columns: 2 },
 				],
 			},
 		],
-		primary_action_label: __("Create Design"),
-		primary_action(values) {
-			const raw = (values.materials || []).filter((m) => m.item);
-			if (!raw.length) {
-				frappe.msgprint(__("Add at least one material to the design's BOM."));
-				return;
-			}
-			const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
-			if (bad) {
-				frappe.msgprint(bad.stone_type
-					? __("{0} is a stone — enter both a Qty and a Weight.", [bad.item])
-					: __("{0} needs a Weight (grams).", [bad.item]));
-				return;
-			}
-			// metals carry no piece qty
-			const materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0 }));
-			frappe.call({
-				method: "jewelima.jewelima.api.create_design",
-				args: {
-					design_name: values.design_name,
-					design_type: values.design_type,
-					design_style: values.design_style,
-					image: values.image,
-					materials: JSON.stringify(materials),
-				},
-			}).then((r) => {
+		primary_action_label: __("Create → Add Variant"),
+		primary_action(v) {
+			if (!v.design_type) return frappe.msgprint(__("Pick the Design Type."));
+			if (flt(v.gross_weight) <= 0) return frappe.msgprint(__("Enter the gross weight."));
+			const stones = (v.stones || []).filter((r) => r.stone || r.sieve)
+				.map((r) => ({ stone: r.stone || "", sieve: r.sieve || "", pcs: cint(r.pcs), ct: flt(r.ct) }));
+			frappe.dom.freeze(__("Creating design…"));
+			frappe.call({ method: "jewelima.jewelima.api.create_new_design_full", args: {
+				design_type: v.design_type, gross_weight: flt(v.gross_weight),
+				diamond_weight: flt(v.diamond_weight), note: v.note || "",
+				stones: JSON.stringify(stones), photo: v.photo || "",
+			} }).then((r) => {
+				frappe.dom.unfreeze();
 				const res = r.message || {};
 				if (!res.name) return;
 				d.hide();
-				frappe.show_alert({ message: __("Design {0} created.", [res.name]), indicator: "green" }, 5);
-				// drop the new design onto its line: the variant's source row, else the first
-				// empty one. selectDesign chains the async set_value so the materials pull too.
+				frappe.show_alert({ message: res.needs_photo
+					? __("{0} created (Approved) — add its photo later in the Photo Queue.", [res.design_no])
+					: __("{0} created (Approved).", [res.design_no]), indicator: "green" }, 6);
+				// straight into the variant dialog on a fresh/empty line
 				let row = (prefill && prefill.row) || state.rows.find((rr) => !rr.f.design.get());
 				if (!row) row = state.addRow();
-				state.selectDesign(row, res.name);
-			});
+				state.openVariantCreate(row, res.name);
+			}).catch(() => frappe.dom.unfreeze());
 		},
 	});
 	d.show();
-	if (prefill) {
-		d.set_value("design_name", prefill.design_name);
-		d.set_value("design_type", prefill.design_type || "");
-		d.set_value("design_style", prefill.design_style || "");
-		Promise.resolve(d.set_value("image", prefill.image || "")).then(() => {
-			if (d.fields_dict.image.df.onchange) d.fields_dict.image.df.onchange();
-		});
-		const grid = d.fields_dict.materials.grid;
-		grid.df.data = (prefill.materials || []).map((m, i) => ({
-			idx: i + 1, name: "new-var-" + (i + 1), item: m.item, purity: m.purity, uom: m.uom,
-			stone_type: m.stone_type, qty: m.qty, weight: m.weight, pure: m.pure,
-		}));
-		grid.refresh();
-	}
+	if (prefill && prefill.design_type) d.set_value("design_type", prefill.design_type);
 }
 
 };

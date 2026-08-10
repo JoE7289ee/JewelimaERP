@@ -8384,6 +8384,66 @@ def new_bank_code(design_type, provider=None):
 
 
 @frappe.whitelist()
+def create_new_design_full(design_type, gross_weight=None, diamond_weight=None,
+		note=None, stones=None, photo=None):
+	"""Place Order 'New Design': mint the type-coded bank card, render its info
+	page from the (optional) product photo + weights + sieves, and mark it
+	Approved on the spot — a manager placing the order IS the approval, so it's
+	instantly orderable. No photo -> the card waits in the Photo Queue."""
+	if not ({"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
+			"Jewelima Design Approver"} & set(frappe.get_roles())):
+		frappe.throw(frappe._("Not permitted to create designs"), frappe.PermissionError)
+	if not design_type or not frappe.db.exists("Design Type", design_type):
+		frappe.throw(frappe._("Pick a valid Design Type."))
+	stones = frappe.parse_json(stones) if isinstance(stones, str) else (stones or [])
+	code = new_bank_code(design_type)["code"]  # throws if the type has no bank_code
+	has_photo = bool((photo or "").startswith("data:"))
+	save_design_card(json.dumps({
+		"design_no": code, "design_type": design_type,
+		"gross_weight": flt(gross_weight), "diamond_weight": flt(diamond_weight),
+		"note": note or "", "stones": stones,
+		"photo": photo if has_photo else "",
+	}))
+	name = frappe.db.get_value("Design Bank", {"design_no": code}, "name")
+	frappe.db.set_value("Design Bank", name, {
+		"status": "Approved", "priority": 0, "rebuilt": 1, "ocr_done": 1,
+		"product_photo_pending": 0 if has_photo else 1,
+	}, update_modified=False)
+	frappe.db.commit()
+	return {"name": name, "design_no": code, "needs_photo": 0 if has_photo else 1}
+
+
+@frappe.whitelist()
+def get_product_photo_queue():
+	"""Photo Queue page: approved new designs still missing their product photo."""
+	rows = frappe.get_all("Design Bank", filters={"product_photo_pending": 1},
+		fields=["name", "design_no", "design_type", "gross_weight", "diamond_weight", "note", "image"],
+		order_by="modified desc", limit_page_length=200)
+	return {"rows": rows, "count": len(rows)}
+
+
+@frappe.whitelist()
+def add_product_photo(name, photo):
+	"""Photo Queue: drop the product photo onto a waiting card, re-render its
+	info page, and clear it from the queue."""
+	if not ({"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
+			"Jewelima Design Approver"} & set(frappe.get_roles())):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
+	if not (photo or "").startswith("data:"):
+		frappe.throw(frappe._("Attach the product photo first."))
+	d = frappe.get_doc("Design Bank", name)
+	save_design_card(json.dumps({
+		"name": d.name, "design_no": d.design_no, "design_type": d.design_type,
+		"gross_weight": flt(d.gross_weight), "diamond_weight": flt(d.diamond_weight),
+		"note": d.note or "", "photo": photo,
+		"stones": [{"stone": r.stone, "sieve": r.sieve, "pcs": r.pcs, "ct": r.ct} for r in d.stones],
+	}))
+	frappe.db.set_value("Design Bank", d.name, "product_photo_pending", 0, update_modified=False)
+	frappe.db.commit()
+	return {"name": d.name, "ok": 1}
+
+
+@frappe.whitelist()
 def create_new_design(design_type, provider=None, provider_piece_code=None):
 	"""New Design CREATE: mint AND LOCK the next series code by inserting the
 	Design Bank record on the spot — Pending at priority 10, so it rides the

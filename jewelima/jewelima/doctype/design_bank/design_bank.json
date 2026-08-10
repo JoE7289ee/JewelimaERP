@@ -36,6 +36,7 @@
   "stones",
   "raw_image",
   "customer_image_needed",
+  "product_photo_pending",
   "rebuilt",
   "pending_photo",
   "pending_photo_by",
@@ -227,6 +228,14 @@
    "fieldtype": "Check",
    "in_standard_filter": 1,
    "label": "Customer Image Needed"
+  },
+  {
+   "default": "0",
+   "description": "New design created without a product photo \u2014 sits in the Photo Queue until one is added.",
+   "fieldname": "product_photo_pending",
+   "fieldtype": "Check",
+   "label": "Product Photo Pending",
+   "read_only": 1
   },
   {
    "description": "Crop + new-format card render done by the batch job.",

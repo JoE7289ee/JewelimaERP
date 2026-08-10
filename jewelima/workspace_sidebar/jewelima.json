@@ -1426,6 +1426,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "image",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Photo Queue",
+   "link_to": "photo-queue",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "camera",
    "indent": 0,
    "keep_closed": 0,
