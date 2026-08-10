@@ -16,7 +16,8 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		.gc-melt{display:flex;gap:12px;flex-wrap:wrap;margin:2px 0 14px;}
-		.gc-card{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);padding:10px 16px;min-width:190px;}
+		.gc-card{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);padding:11px 16px;min-width:190px;transition:transform .12s,box-shadow .12s;}
+		.gc-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.09);}
 		.gc-card .lb{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.gc-card .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;}
 		.gc-card .sub{font-size:11.5px;color:var(--text-muted);}
