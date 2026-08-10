@@ -46,6 +46,10 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		.di-bstat.cn{background:#f5dddd;color:#b02a2a;}
 		.di-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;}
 		.di-lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;background:#fff;}
+		table.di-t tr.di-sib{transition:background .1s;}
+		table.di-t tr.di-sib:hover td{background:var(--control-bg);}
+		.di-shot img{transition:transform .12s;}
+		.di-shot img:hover{transform:scale(1.03);}
 		</style>
 		<div class="di-top"></div>
 		<div class="di-body"><div class="di-none">${__("Pick a design.")}</div></div>
