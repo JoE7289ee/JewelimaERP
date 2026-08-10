@@ -43,7 +43,8 @@ frappe.pages["sales-records"].on_page_load = function (wrapper) {
 		.sr-ovnote{font-size:11.5px;color:#8a6d00;background:#fff3cd;border-radius:6px;padding:2px 8px;display:inline-block;margin-top:2px;}
 		.sr-none{padding:44px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		.sr-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:0 0 6px;}
-		</style>
+			table.sr-items tbody tr:hover td{background:var(--control-bg);}
+</style>
 		<div class="sr-cols">
 			<div class="sr-left">
 				<input type="text" class="form-control input-sm sr-search" placeholder="${__("search sale no / party…")}">

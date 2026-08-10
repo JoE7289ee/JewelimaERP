@@ -20,7 +20,8 @@ frappe.pages["item-stock"].on_page_load = function (wrapper) {
 		table.is-tbl th.is-sort:hover{background:var(--bg-light-gray,#f4f5f6);}
 		.is-arrow{font-size:9px;color:var(--text-muted);margin-left:2px;}
 		table.is-tbl tfoot td{position:sticky;bottom:0;background:var(--control-bg);border-top:2px solid var(--gray-400,#aeb6bf);font-weight:700;}
-		</style>
+			table.is-tbl tbody tr:hover td{background:var(--control-bg);}
+</style>
 		<div class="is-bar"><div class="is-wh"></div><div class="is-zero"></div></div>
 		<div class="is-box"><table class="is-tbl"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
 	`);
