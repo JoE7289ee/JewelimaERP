@@ -17,7 +17,7 @@ frappe.pages["casting-queue"].on_page_load = function (wrapper) {
 		.cq-left{flex:1 1 auto;min-width:0;}
 		.cq-right{flex:0 0 340px;}
 		.cq-h{font-weight:700;margin:0 2px 6px;}
-		.cq-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;background:var(--fg-color);}
+		.cq-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;background:var(--fg-color);}
 		table.cq-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.cq-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 10px;text-align:right;white-space:nowrap;font-weight:700;}
 		table.cq-tbl td{border-bottom:1px solid var(--border-color);padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}

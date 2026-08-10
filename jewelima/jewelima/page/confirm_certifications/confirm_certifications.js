@@ -39,7 +39,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		.cc-chip.flash{animation:ccflash .5s;}
 		@keyframes ccflash{0%{transform:scale(1.15);}100%{transform:scale(1);}}
 		.cc-empty{color:var(--text-muted);padding:24px;}
-		.cc-panel{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
+		.cc-panel{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:hidden;}
 		.cc-panel .h{background:var(--control-bg);padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;justify-content:space-between;}
 		.cc-panel .b{max-height:480px;overflow:auto;}
 		.cc-panel td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}

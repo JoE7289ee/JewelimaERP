@@ -17,7 +17,7 @@ frappe.pages["warehouse-management"].on_page_load = function (wrapper) {
 		.wm-top{display:flex;align-items:center;gap:12px;margin:2px 0 12px;}
 		.wm-search{width:280px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
 		.wm-count{color:var(--text-muted);font-size:12px;}
-		.wm-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 220px);}
+		.wm-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 220px);}
 		table.wm-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.wm-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:8px 10px;text-align:left;font-weight:700;white-space:nowrap;}
 		table.wm-tbl th.flag,table.wm-tbl td.flag{text-align:center;width:130px;}

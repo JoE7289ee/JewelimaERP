@@ -38,7 +38,8 @@ frappe.pages["repair-desk"].on_page_load = function (wrapper) {
 		tr.rd-svc td{opacity:.55;}
 		.rd-x{color:#b02a2a;font-weight:800;cursor:pointer;padding:0 5px;}
 		.rd-tot{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0;}
-		.rd-tile{border:1px solid var(--border-color);border-radius:9px;padding:6px 14px;background:var(--control-bg);}
+		.rd-tile{border:1px solid var(--border-color);border-radius:11px;padding:7px 14px;background:var(--control-bg);transition:transform .12s,box-shadow .12s;}
+		.rd-tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.09);}
 		.rd-tile .k{font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.rd-tile .v{font-size:15px;font-weight:800;}
 		.rd-tile.g .v{color:#1d7a33;}

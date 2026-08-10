@@ -20,7 +20,7 @@ frappe.pages["usage"].on_page_load = function (wrapper) {
 		.us-tile .v{font-size:22px;font-weight:800;}
 		.us-tile .s{font-size:11px;color:var(--text-muted);}
 		.us-cols{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
-		.us-panel{flex:1;min-width:300px;border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
+		.us-panel{flex:1;min-width:300px;border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:hidden;}
 		.us-panel .p-head{background:var(--control-bg);padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
 		.us-panel table{width:100%;border-collapse:collapse;font-size:12.5px;}
 		.us-panel td{padding:4px 14px;border-top:1px solid var(--border-color);}

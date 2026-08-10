@@ -168,7 +168,7 @@ frappe.pages["prioritization"].on_page_load = function (wrapper) {
 			.pc-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
 			.pc-top select,.pc-top input{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:13px;}
 			.pc-count{margin-left:auto;color:var(--text-muted);font-size:12px;}
-			.pc-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;height:calc(100vh - 330px);min-height:280px;}
+			.pc-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;height:calc(100vh - 330px);min-height:280px;}
 			table.pc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 			table.pc-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 			table.pc-tbl td{border-bottom:1px solid var(--border-color);padding:5px 8px;}

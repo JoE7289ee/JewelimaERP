@@ -11,7 +11,7 @@ frappe.pages["item-stock"].on_page_load = function (wrapper) {
 		<style>
 		.is-bar{display:grid;grid-template-columns:1.6fr auto;gap:6px 18px;max-width:660px;margin:2px 0 12px;align-items:end;}
 		.is-bar .help-box{display:none !important;}
-		.is-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 230px);}
+		.is-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 230px);}
 		table.is-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.is-tbl th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:7px 10px;text-align:left;font-weight:700;}
 		table.is-tbl td{border-bottom:1px solid var(--border-color);padding:6px 10px;}

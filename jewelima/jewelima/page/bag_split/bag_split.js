@@ -19,7 +19,7 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		.bs-bar .help-box{display:none !important;}
 		.bs-msg{display:none;margin:0 0 10px;padding:8px 12px;border-radius:6px;font-size:13px;}
 		.bs-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
-		.bs-card{display:none;border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;margin-bottom:10px;background:var(--fg-color);}
+		.bs-card{display:none;border:1px solid var(--border-color);border-radius:11px;padding:10px 14px;margin-bottom:10px;background:var(--fg-color);}
 		.bs-card.show{display:block;}
 		.bs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 18px;font-size:12px;}
 		.bs-grid .k{color:var(--text-muted);}.bs-grid .v{font-weight:600;}

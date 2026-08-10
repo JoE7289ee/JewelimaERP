@@ -25,7 +25,7 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 		.oc-right{flex:1;min-width:0;}
 		.oc-title{font-size:15px;font-weight:700;margin-bottom:10px;}
 		.oc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
-		.oc-tile{border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:#fff;text-align:center;}
+		.oc-tile{border:1px solid var(--border-color);border-radius:11px;overflow:hidden;background:#fff;text-align:center;}
 		.oc-tile img{width:100%;height:240px;object-fit:contain;display:block;}
 		.oc-tile .n{font-size:12px;font-weight:700;padding:4px;}
 		.oc-tile{cursor:pointer;position:relative;}

@@ -18,7 +18,7 @@ frappe.pages["stock-transfer"].on_page_load = function (wrapper) {
 		.st-col{flex:1 1 0;display:flex;flex-direction:column;min-height:0;}
 		.st-head{font-weight:700;font-size:15px;margin:0 0 8px;}
 		.st-head span{color:var(--text-muted);font-weight:400;font-size:13px;}
-		.st-box{flex:1;border:1px solid var(--border-color);border-radius:8px;overflow:auto;min-height:0;}
+		.st-box{flex:1;border:1px solid var(--border-color);border-radius:11px;overflow:auto;min-height:0;}
 		table.st-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.st-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;white-space:nowrap;}
 		table.st-tbl th.num,table.st-tbl td.num{text-align:right;}

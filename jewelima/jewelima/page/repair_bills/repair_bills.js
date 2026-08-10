@@ -20,7 +20,8 @@ frappe.pages["repair-bills"].on_page_load = function (wrapper) {
 		.rb-bar label{display:block;font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;}
 		.rb-bar input,.rb-bar select{border:1px solid var(--border-color);border-radius:8px;padding:7px 10px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		.rb-tiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
-		.rb-tile{border:1px solid var(--border-color);border-radius:9px;padding:6px 14px;background:var(--control-bg);}
+		.rb-tile{border:1px solid var(--border-color);border-radius:11px;padding:7px 14px;background:var(--control-bg);transition:transform .12s,box-shadow .12s;}
+		.rb-tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.09);}
 		.rb-tile .k{font-size:9.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.rb-tile .v{font-size:15px;font-weight:800;}
 		table.rb-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}

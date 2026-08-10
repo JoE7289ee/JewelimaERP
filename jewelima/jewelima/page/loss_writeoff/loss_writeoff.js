@@ -22,7 +22,7 @@ frappe.pages["loss-writeoff"].on_page_load = function (wrapper) {
 		.lw-reason{flex:1 1 300px;}
 		.lw-sum{margin:0 0 10px;padding:7px 12px;border-radius:7px;font-size:12.5px;background:#fdecec;color:#b00020;border:1px solid #e6b3b3;display:flex;gap:16px;flex-wrap:wrap;}
 		.lw-sum b{font-variant-numeric:tabular-nums;}
-		.lw-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 290px);}
+		.lw-box{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 290px);}
 		table.lw-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;}
 		table.lw-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:4px 8px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.lw-tbl td{border-bottom:1px solid var(--border-color);padding:4px 8px;white-space:nowrap;font-variant-numeric:tabular-nums;}

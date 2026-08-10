@@ -38,7 +38,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		table.cf-t .del{cursor:pointer;color:#b02a2a;font-weight:700;text-align:center;width:26px;}
 		.cf-tot{display:none;margin-top:8px;font-weight:700;}
 		.cf-actions{display:none;margin-top:14px;gap:8px;}
-		.cf-panel{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;display:none;}
+		.cf-panel{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:hidden;display:none;}
 		.cf-panel .h{background:var(--control-bg);padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;justify-content:space-between;}
 		.cf-panel .b{max-height:420px;overflow:auto;}
 		.cf-panel td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}

@@ -23,7 +23,7 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 		<style>
 		.pm-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;}
 		@media (max-width: 1100px){.pm-grid{grid-template-columns:1fr;}}
-		.pm-card{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
+		.pm-card{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:hidden;}
 		.pm-card .h{background:var(--control-bg);padding:9px 14px;display:flex;justify-content:space-between;align-items:baseline;}
 		.pm-card .h .t{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;}
 		.pm-card .h .s{font-size:11px;color:var(--text-muted);}

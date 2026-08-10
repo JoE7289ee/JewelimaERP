@@ -33,7 +33,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.sl2-card .sub{padding:0 7px 5px;font-size:10.5px;color:var(--text-muted);}
 		.sl2-card .stk{margin-left:auto;font-size:9.5px;font-weight:800;padding:1px 7px;border-radius:9px;background:#e8f5e9;color:#2e7d32;}
 		.sl2-card .tgs{padding:0 7px 6px;display:flex;gap:4px;flex-wrap:wrap;}
-		.sl2-card .tg{font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:var(--subtle-accent);color:var(--text-muted);letter-spacing:.03em;}
+		.sl2-card .tg{font-size:9px;font-weight:700;padding:1px 6px;border-radius:11px;background:var(--subtle-accent);color:var(--text-muted);letter-spacing:.03em;}
 		.sl2-vedit{cursor:pointer;font-size:13px;color:#8fd0ff;border:1px solid #35566e;border-radius:6px;padding:3px 14px;}
 		.sl2-vedit:hover{background:rgba(143,208,255,.12);}
 		.sl2-vtags{display:flex;gap:5px;}

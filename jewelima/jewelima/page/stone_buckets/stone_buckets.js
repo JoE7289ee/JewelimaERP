@@ -20,7 +20,7 @@ frappe.pages["stone-buckets"].on_page_load = function (wrapper) {
 		.sbk-search{width:300px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
 		.sbk-count{color:var(--text-muted);font-size:12px;}
 		.sbk-top .btn{height:30px;}
-		.sbk-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 200px);background:var(--fg-color);font-size:13px;}
+		.sbk-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 200px);background:var(--fg-color);font-size:13px;}
 		.sbk-row{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border-color);}
 		.sbk-row:last-child{border-bottom:none;}
 		.sbk-grp{cursor:pointer;user-select:none;}

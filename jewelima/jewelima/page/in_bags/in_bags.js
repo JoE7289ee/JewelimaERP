@@ -34,7 +34,7 @@ frappe.pages["in-bags"].on_page_load = function (wrapper) {
 		.ib-subrow{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 10px;}
 		.ib-sub{border:1px solid var(--border-color);background:var(--control-bg,var(--fg-color));border-radius:12px;padding:1px 11px;font-size:11.5px;cursor:pointer;color:var(--text-muted);}
 		.ib-sub.on{background:var(--text-color);color:var(--fg-color);border-color:var(--text-color);font-weight:600;}
-		.ib-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 250px);background:var(--fg-color);}
+		.ib-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 250px);background:var(--fg-color);}
 		table.ib-tbl{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%;}
 		table.ib-tbl th{position:sticky;top:0;z-index:2;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 10px;text-align:right;white-space:nowrap;font-weight:700;vertical-align:bottom;}
 		table.ib-tbl th:first-child{left:0;z-index:3;text-align:left;}

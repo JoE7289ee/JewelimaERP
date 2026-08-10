@@ -19,7 +19,7 @@ frappe.pages["design-types"].on_page_load = function (wrapper) {
 		.dt-top{display:flex;gap:8px;align-items:center;margin:2px 0 12px;}
 		.dt-new{width:260px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;text-transform:uppercase;}
 		.dt-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
-		.dt-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 220px);}
+		.dt-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 220px);}
 		table.dt-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.dt-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:8px 10px;text-align:left;font-weight:700;}
 		table.dt-tbl td{border-bottom:1px solid var(--border-color);padding:8px 10px;vertical-align:middle;}

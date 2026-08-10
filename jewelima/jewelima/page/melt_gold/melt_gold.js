@@ -52,7 +52,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		.ml-hint{margin:8px 2px 0;color:var(--text-muted);font-size:12px;}
 		.ml-stock-head{font-weight:700;font-size:15px;margin:0 0 8px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
 		.ml-stock-head span{color:var(--text-muted);font-weight:400;font-size:12px;white-space:nowrap;}
-		.ml-stock-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:62vh;}
+		.ml-stock-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:62vh;}
 		table.ml-stock-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.ml-stock-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:5px 8px;text-align:left;font-weight:700;white-space:nowrap;}
 		table.ml-stock-tbl th.num,table.ml-stock-tbl td.num{text-align:right;}

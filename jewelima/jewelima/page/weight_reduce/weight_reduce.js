@@ -15,12 +15,12 @@ frappe.pages["weight-reduce"].on_page_load = function (wrapper) {
 		.wt-bar .help-box{display:none !important;}
 		.wt-msg{display:none;margin:0 0 8px;padding:7px 11px;border-radius:6px;font-size:13px;}
 		.wt-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
-		.wt-card{display:none;border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;margin-bottom:12px;background:var(--fg-color);}
+		.wt-card{display:none;border:1px solid var(--border-color);border-radius:11px;padding:10px 14px;margin-bottom:12px;background:var(--fg-color);}
 		.wt-card.show{display:block;}
 		.wt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 18px;font-size:12px;}
 		.wt-grid .k{color:var(--text-muted);}
 		.wt-grid .v{font-weight:600;}
-		.wt-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;}
+		.wt-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;}
 		table.wt-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.wt-tbl th{background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;white-space:nowrap;}
 		table.wt-tbl td{border-bottom:1px solid var(--border-color);padding:4px 8px;}

@@ -12,7 +12,7 @@ frappe.pages["cad-jobs"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.cj-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 180px);}
+		.cj-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 180px);}
 		table.cj-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:var(--fg-color);}
 		table.cj-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:7px 10px;text-align:left;font-weight:700;white-space:nowrap;}
 		table.cj-tbl td{border-bottom:1px solid var(--border-color);padding:6px 10px;vertical-align:middle;}

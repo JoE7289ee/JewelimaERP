@@ -27,7 +27,7 @@ frappe.pages["loss-collection"].on_page_load = function (wrapper) {
 		.lc-bal.ok{background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		.lc-bal.off{background:#fdf3e3;color:#9a6700;border:1px solid #f0d9a8;}
 		.lc-bal b{font-variant-numeric:tabular-nums;}
-		.lc-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 300px);}
+		.lc-box{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 300px);}
 		table.lc-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
 		table.lc-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:5px 10px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.lc-tbl td{border-bottom:1px solid var(--border-color);padding:6px 10px;white-space:nowrap;font-variant-numeric:tabular-nums;}

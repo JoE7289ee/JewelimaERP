@@ -17,7 +17,7 @@ frappe.pages["user-roles"].on_page_load = function (wrapper) {
 		.ur-top{display:flex;align-items:center;gap:10px;margin:2px 0 10px;flex-wrap:wrap;}
 		.ur-search{width:260px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
 		.ur-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
-		.ur-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 200px);background:var(--fg-color);}
+		.ur-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 200px);background:var(--fg-color);}
 		table.ur-tbl{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%;}
 		table.ur-tbl th{position:sticky;top:0;z-index:2;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 10px;text-align:center;white-space:nowrap;font-weight:700;}
 		table.ur-tbl th:first-child{left:0;z-index:3;text-align:left;}

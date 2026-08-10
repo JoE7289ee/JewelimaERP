@@ -30,7 +30,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.sl-buyer{width:230px;}.sl-chart{width:200px;}.sl-rate{width:130px;}.sl-scan{width:200px;}.sl-remarks{width:200px;}
 		.sl-tax{align-self:center;margin-top:14px;}
 		.sl-tax .checkbox{margin:0;} .sl-tax .label-area{font-weight:700;}
-		.sl-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;flex:1 1 auto;min-height:120px;}
+		.sl-box{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:auto;flex:1 1 auto;min-height:120px;}
 		table.sl-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;}
 		table.sl-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:4px 8px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.sl-tbl td{border-bottom:1px solid var(--border-color);padding:3px 8px;white-space:nowrap;font-variant-numeric:tabular-nums;}

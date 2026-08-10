@@ -36,7 +36,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		table.si-grid input{width:76px;border:1px solid var(--border-color);border-radius:4px;padding:2px 6px;text-align:right;background:var(--control-bg);}
 		.si-foot{display:none;margin-top:14px;gap:12px;align-items:center;}
 		.si-note{color:var(--text-muted);font-size:12px;margin-top:12px;}
-		.si-panel{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
+		.si-panel{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:hidden;}
 		.si-panel .p-head{background:var(--control-bg);padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);display:flex;justify-content:space-between;}
 		.si-panel .p-body{max-height:340px;overflow-y:auto;}
 		.si-panel table{width:100%;border-collapse:collapse;font-size:12px;}

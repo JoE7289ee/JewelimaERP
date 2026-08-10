@@ -14,7 +14,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
-		.sc-card{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);padding:14px 18px;}
+		.sc-card{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);padding:14px 18px;}
 		.sc-card .nm{font-size:17px;font-weight:800;}
 		.sc-card .meta{font-size:12px;color:var(--text-muted);margin:4px 0 10px;}
 		.sc-lock{font-size:10.5px;font-weight:700;border-radius:10px;padding:1px 8px;background:#1f618d;color:#fff;}

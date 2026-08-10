@@ -28,7 +28,7 @@ frappe.pages["stock-analysis"].on_page_load = function (wrapper) {
 		.sa-search{width:280px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
 		.sa-top label{display:flex;align-items:center;gap:6px;font-size:13px;margin:0;cursor:pointer;}
 		.sa-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
-		.sa-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 260px);background:var(--fg-color);}
+		.sa-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 260px);background:var(--fg-color);}
 		table.sa-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.sa-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 10px;text-align:right;white-space:nowrap;font-weight:700;}
 		table.sa-tbl td{border-bottom:1px solid var(--border-color);padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}

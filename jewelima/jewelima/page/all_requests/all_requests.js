@@ -24,7 +24,7 @@ frappe.pages["all-requests"].on_page_load = function (wrapper) {
 		.arq-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 13px;font-size:12px;cursor:pointer;}
 		.arq-pill.on{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600;}
 		.arq-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
-		.arq-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 210px);background:var(--fg-color);}
+		.arq-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 210px);background:var(--fg-color);}
 		table.arq-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.arq-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:7px 10px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.arq-tbl td{border-bottom:1px solid var(--border-color);padding:6px 10px;vertical-align:middle;}

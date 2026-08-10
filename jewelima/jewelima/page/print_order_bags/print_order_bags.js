@@ -20,7 +20,7 @@ frappe.pages["print-order-bags"].on_page_load = function (wrapper) {
 		.pob-head .frappe-control{margin:0;}
 		.pob-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.pob-head .help-box{display:none !important;}
-		.pob-box{border:1px solid var(--border-color);border-radius:8px;overflow:auto;max-height:calc(100vh - 220px);}
+		.pob-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 220px);}
 		table.pob-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.pob-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:5px 8px;text-align:left;white-space:nowrap;font-weight:700;}
 		table.pob-grid td{border-bottom:1px solid var(--border-color);padding:4px 8px;white-space:nowrap;}

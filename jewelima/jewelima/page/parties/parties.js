@@ -28,7 +28,7 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 		.pt-filters .pt-q{flex:1;min-width:140px;}
 		.pt-unc{font-size:12px;color:#b35a00;font-weight:600;margin:0 0 8px;cursor:pointer;display:inline-block;}
 		.pt-unc.on{color:#fff;background:#b35a00;border-radius:10px;padding:2px 10px;}
-		.pt-box{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 260px);}
+		.pt-box{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);overflow:auto;max-height:calc(100vh - 260px);}
 		table.pt-grid{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.pt-grid th{position:sticky;top:0;background:var(--control-bg);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:6px 10px;text-align:left;border-bottom:1px solid var(--border-color);}
 		table.pt-grid td{padding:5px 10px;border-bottom:1px solid var(--border-color);cursor:pointer;}
