@@ -124,15 +124,11 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 	root.on("click", ".rf-set", function () {
 		const name = this.getAttribute("data-n");
 		const status = this.getAttribute("data-s");
-		const go = (note) => frappe.call({ method: API + ".set_feature_request_status",
-			args: { name, status, admin_note: note || "" } }).then(() => {
+		// one click = direct transaction, no note prompt (house style)
+		frappe.call({ method: API + ".set_feature_request_status", args: { name, status, admin_note: "" } }).then(() => {
 			frappe.show_alert({ message: __("{0} → {1}", [name, status]), indicator: "green" }, 4);
 			load();
 		});
-		if (status === "Closed" || status === "Declined") {
-			frappe.prompt({ fieldname: "note", fieldtype: "Small Text", label: __("Note (optional — shown to everyone)") },
-				(v) => go(v.note), __("{0} — {1}", [status, name]), __("Confirm"));
-		} else go("");
 	});
 
 	load();
