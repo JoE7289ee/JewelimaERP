@@ -457,7 +457,15 @@ def design_bank_report():
 		("Retired", c({"status": "Retired"})),
 		("Dye Available", c({"dye_available": 1})),
 		("Linked to ERP Designs", frappe.db.count("Design Bank Design Link")),
-	], "series": _series_breakdown()}
+	], "series": _series_breakdown(), "coverage": {
+		"total": c(),
+		"approved": c({"status": "Approved"}),
+		"pending": c({"status": "Pending"}),
+		"retired": c({"status": "Retired"}),
+		"with_photo": c({"photo": ["is", "set"]}),
+		"customer_done": c({"customer_image": ["is", "set"]}),
+		"variants": frappe.db.count("Design"),
+	}}
 
 
 def _series_breakdown():
