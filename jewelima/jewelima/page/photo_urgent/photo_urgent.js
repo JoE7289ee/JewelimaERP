@@ -1,13 +1,13 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Photo Update (Design Bank) — the worker's queue: every card ticked Upgrade
-// Photo that has no candidate yet. Click a tile, pick the better image — it
-// parks as PENDING (nothing replaced) and moves to Photo Approvals.
-// Route: /app/photo-update
+// Photo Urgent (Design Bank) — the URGENT half of the photo-update queue: cards
+// ticked Upgrade Photo that are ALREADY APPROVED (live to sell) and so need a
+// better photo fast. Same flow as Photo Update — upload parks a candidate for
+// approval. Route: /app/photo-urgent
 
-frappe.pages["photo-update"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Photo Update", single_column: true });
+frappe.pages["photo-urgent"].on_page_load = function (wrapper) {
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Photo Urgent", single_column: true });
 	const API = "jewelima.jewelima.design_bank_api";
 	const esc = frappe.utils.escape_html;
 	let start = 0, picking = null;
@@ -15,12 +15,12 @@ frappe.pages["photo-update"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		.pu-top{font-size:13px;color:var(--text-muted);margin-bottom:14px;}
+		.pu-top b{color:#b02a2a;}
 		.pu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
-		.pu-tile{border:2px solid var(--border-color);border-radius:9px;overflow:hidden;background:#fff;cursor:pointer;text-align:center;}
-		.pu-tile:hover{border-color:#1f618d;}
+		.pu-tile{border:2px solid #f0c8c8;border-radius:9px;overflow:hidden;background:#fff;cursor:pointer;text-align:center;}
+		.pu-tile:hover{border-color:#b02a2a;}
 		.pu-tile img{width:100%;height:210px;object-fit:contain;display:block;}
 		.pu-tile .n{font-weight:700;font-size:13px;padding:5px;}
-		.pu-tile .h{font-size:10.5px;color:var(--text-muted);padding-bottom:6px;}
 		.pu-acts{display:flex;gap:6px;justify-content:center;padding:0 8px 10px;}
 		.pu-acts .btn{font-size:11px;padding:2px 10px;}
 		.pu-done{padding:36px;text-align:center;color:var(--text-muted);}
@@ -35,11 +35,11 @@ frappe.pages["photo-update"].on_page_load = function (wrapper) {
 	const bust = (u, m) => (u ? u + (u.includes("?") ? "&" : "?") + "m=" + encodeURIComponent(m || Date.now()) : u);
 	function load(reset) {
 		if (reset) { start = 0; root.find(".pu-grid").empty(); }
-		frappe.call({ method: API + ".get_photo_update_queue", args: { start, limit: 30 } }).then((r) => {
+		frappe.call({ method: API + ".get_photo_update_queue", args: { start, limit: 30, scope: "urgent" } }).then((r) => {
 			const m = r.message || { rows: [], total: 0 };
-			root.find(".pu-top").text(m.total
-				? __("{0} not-yet-approved card(s) waiting for a better photo — click a tile and pick the image", [m.total]) : "");
-			if (!m.total && !start) root.find(".pu-grid").html(`<div class="pu-done">${__("Nothing on the photo-update queue. (Live designs needing a photo are in Photo Urgent.)")}</div>`);
+			root.find(".pu-top").html(m.total
+				? __("<b>{0} LIVE design(s)</b> need a better photo urgently — click a tile and upload", [m.total]) : "");
+			if (!m.total && !start) root.find(".pu-grid").html(`<div class="pu-done">${__("Nothing urgent — no approved design is waiting on a photo. 🎉")}</div>`);
 			root.find(".pu-grid").append(m.rows.map((d) => {
 				const src = d.raw_image || d.photo || d.image || "";
 				return `

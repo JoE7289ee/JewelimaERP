@@ -52,11 +52,12 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 				<div class="f-no"></div><div class="f-dt"></div>
 				<div class="f-gw"></div><div class="f-dw"></div><div class="f-note"></div>
 				<div class="rv-sec">${__("Stones / Sieves")}<span class="add rv-addstone">+ ${__("row")}</span></div>
-				<table class="rv-t"><thead><tr><th>${__("Stone / Colour")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th><th></th></tr></thead>
+				<table class="rv-t"><thead><tr><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th></th></tr></thead>
 					<tbody class="rv-stones"></tbody></table>
 				<div class="rv-checks">
 					<label><input type="checkbox" class="ck-up"> ${__("Upgrade photo (crop off / background)")}</label>
 					<label><input type="checkbox" class="ck-cn"> ${__("Customer image needed (best seller)")}</label>
+					<label><input type="checkbox" class="ck-cu"> ${__("Customer photo update (replace existing → needs approval)")}</label>
 					<label><input type="checkbox" class="ck-dr" style="accent-color:#b02a2a;"> ${__("Delete RAW forever on save")}</label>
 				</div>
 				<button class="btn btn-default btn-sm rv-up">${__("Upload product photo")}</button>
@@ -88,21 +89,19 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	// save goes into the record AND onto the re-rendered info card
 	function paintStones(rows) {
 		root.find(".rv-stones").html((rows && rows.length ? rows : [{}]).map((r) => `
-			<tr><td><input class="s" value="${esc(r.stone || "")}" placeholder="DMD / RUBY..."></td>
-			<td><select class="v">
+			<tr><td><select class="v">
 				<option value=""></option>
 				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
 				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
 			</select></td>
-			<td><input class="p" type="number" value="${r.pcs || ""}"></td>
-			<td><input class="c" type="number" step="0.001" value="${r.ct || ""}"></td>
+			<td><input class="p" type="number" min="0" value="${r.pcs || ""}"></td>
 			<td class="del">&times;</td></tr>`).join(""));
 	}
 	function collectStones() {
 		return root.find(".rv-stones tr").map(function () {
-			return { stone: $(this).find(".s").val(), sieve: $(this).find(".v").val(),
-				pcs: cint($(this).find(".p").val()), ct: flt($(this).find(".c").val()) };
-		}).get().filter((r) => r.stone || r.sieve);
+			return { stone: "", sieve: $(this).find(".v").val(),
+				pcs: Math.max(0, cint($(this).find(".p").val())), ct: 0 };
+		}).get().filter((r) => r.sieve || r.pcs);
 	}
 	root.find(".rv-addstone").on("click", () => { const rows = collectStones(); rows.push({}); paintStones(rows); });
 	root.on("click", ".rv-t .del", function () { $(this).closest("tr").remove(); });
@@ -119,6 +118,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		paintStones(cur.stones || []);
 		root.find(".ck-up").prop("checked", !!cur.photoupdate);
 		root.find(".ck-cn").prop("checked", !!cur.customer_image_needed);
+		root.find(".ck-cu").prop("checked", !!cur.customer_image_update);
 		root.find(".ck-dr").prop("checked", false);
 	}
 
@@ -184,6 +184,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 			extra_lines: cur.extra_lines, stones: collectStones(), photo: photoB64 || cur.photo,
 			photoupdate: root.find(".ck-up").is(":checked") ? 1 : 0,
 			customer_image_needed: root.find(".ck-cn").is(":checked") ? 1 : 0,
+			customer_image_update: root.find(".ck-cu").is(":checked") ? 1 : 0,
 			delete_raw: root.find(".ck-dr").is(":checked") ? 1 : 0, approve: approve ? 1 : 0,
 			retire: retire ? 1 : 0 };
 		frappe.dom.freeze(__("Saving..."));

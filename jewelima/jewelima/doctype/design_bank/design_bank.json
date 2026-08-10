@@ -40,6 +40,11 @@
   "rebuilt",
   "pending_photo",
   "pending_photo_by",
+  "photo_rejected",
+  "customer_image_update",
+  "pending_customer_image",
+  "pending_customer_image_by",
+  "customer_photo_rejected",
   "source_folder"
  ],
  "fields": [
@@ -256,6 +261,41 @@
    "fieldtype": "Data",
    "label": "Pending Photo By",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Set when an approver rejects the product-photo candidate; shows in the Rejection bucket to retry. Cleared on the next upload.",
+   "fieldname": "photo_rejected",
+   "fieldtype": "Check",
+   "label": "Product Photo Rejected"
+  },
+  {
+   "default": "0",
+   "description": "Existing customer photo flagged to be replaced (goes to Customer Update, needs approval).",
+   "fieldname": "customer_image_update",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Customer Photo Update Flagged"
+  },
+  {
+   "description": "Uploaded on Customer Update; replaces the customer image only when APPROVED.",
+   "fieldname": "pending_customer_image",
+   "fieldtype": "Attach Image",
+   "label": "Pending Customer Image (awaiting approval)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pending_customer_image_by",
+   "fieldtype": "Data",
+   "label": "Pending Customer Image By",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Set when an approver rejects the customer-photo candidate; shows in the Rejection bucket to retry.",
+   "fieldname": "customer_photo_rejected",
+   "fieldtype": "Check",
+   "label": "Customer Photo Rejected"
   },
   {
    "description": "The folder this image lived in before the import \u2014 REFERENCE ONLY, not part of the tag system.",

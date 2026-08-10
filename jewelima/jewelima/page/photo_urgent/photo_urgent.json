@@ -1,24 +1,18 @@
 {
  "content": null,
- "creation": "2026-07-24 12:10:00",
+ "creation": "2026-08-10 00:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-10 21:02:04.510078",
+ "modified": "2026-08-10 21:02:04.057492",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "photo-update",
+ "name": "photo-urgent",
  "owner": "Administrator",
- "page_name": "photo-update",
+ "page_name": "photo-urgent",
  "roles": [
   {
    "role": "System Manager"
-  },
-  {
-   "role": "Jewelima Design Bank"
-  },
-  {
-   "role": "Jewelima Design Approver"
   },
   {
    "role": "Jewelima Graphics"
@@ -28,5 +22,5 @@
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Photo Update"
+ "title": "Photo Urgent"
 }

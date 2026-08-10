@@ -12,8 +12,8 @@ from frappe import _
 # roles (Jewelima Info), but whitelisted methods are callable by ANY logged-in
 # user — so every mutator checks roles itself. Editors work the catalog;
 # only approvers touch the review / approve / purge lane.
-DESIGN_EDITOR_ROLES = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver"}
-DESIGN_APPROVER_ROLES = {"System Manager", "Jewelima Design Approver"}
+DESIGN_EDITOR_ROLES = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver", "Jewelima Graphics"}
+DESIGN_APPROVER_ROLES = {"System Manager", "Jewelima Design Approver", "Jewelima Graphics"}
 
 
 def _require(roles):
@@ -359,9 +359,9 @@ def get_review_queue(start=0):
 	from jewelima.jewelima.api import get_design_card
 	card = get_design_card(rows[0].name)
 	d = frappe.db.get_value("Design Bank", rows[0].name,
-		["raw_image", "customer_image", "customer_image_needed"], as_dict=True)
+		["raw_image", "customer_image", "customer_image_needed", "customer_image_update"], as_dict=True)
 	card.update({"raw_image": d.raw_image or "", "customer_image": d.customer_image or "",
-		"customer_image_needed": d.customer_image_needed,
+		"customer_image_needed": d.customer_image_needed, "customer_image_update": d.customer_image_update,
 		"priority": frappe.utils.cint(frappe.db.get_value("Design Bank", rows[0].name, "priority"))})
 	return {"total": total, "card": card}
 
@@ -385,9 +385,9 @@ def get_review_card(q):
 	from jewelima.jewelima.api import get_design_card
 	card = get_design_card(nm)
 	d = frappe.db.get_value("Design Bank", nm,
-		["raw_image", "customer_image", "customer_image_needed", "priority"], as_dict=True)
+		["raw_image", "customer_image", "customer_image_needed", "customer_image_update", "priority"], as_dict=True)
 	card.update({"raw_image": d.raw_image or "", "customer_image": d.customer_image or "",
-		"customer_image_needed": d.customer_image_needed,
+		"customer_image_needed": d.customer_image_needed, "customer_image_update": d.customer_image_update,
 		"priority": frappe.utils.cint(d.priority)})
 	return {"card": card}
 
@@ -405,6 +405,7 @@ def review_save(payload):
 	d = frappe.get_doc("Design Bank", res["name"])
 	d.photoupdate = 1 if p.get("photoupdate") else 0
 	d.customer_image_needed = 1 if p.get("customer_image_needed") else 0
+	d.customer_image_update = 1 if p.get("customer_image_update") else 0
 	if p.get("approve"):
 		d.status = "Approved"  # validate() enforces design_type
 		d.priority = 0         # the P-flag is a QUEUE marker — done once approved
@@ -477,11 +478,13 @@ def _series_breakdown():
 # card; REJECT bins the candidate and the card stays on the queue.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
-def get_photo_update_queue(start=0, limit=30):
-	"""Cards flagged Upgrade Photo that have NO candidate yet."""
+def get_photo_update_queue(start=0, limit=30, scope="update"):
+	"""Cards flagged Upgrade Photo that have NO candidate yet. Clean split:
+	scope='update' = NOT yet approved; scope='urgent' = already Approved (live)."""
 	filters = {"photoupdate": 1, "pending_photo": ["is", "not set"]}
+	filters["status"] = "Approved" if scope == "urgent" else ["!=", "Approved"]
 	rows = frappe.get_all("Design Bank", filters=filters,
-		fields=["name", "design_no", "photo", "image", "raw_image", "modified"],
+		fields=["name", "design_no", "photo", "image", "raw_image", "status", "modified"],
 		order_by="design_no", start=int(start), limit=int(limit))
 	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
 
@@ -502,6 +505,7 @@ def submit_photo_update(name, image_b64):
 	d.pending_photo = _write_slot_file(d.name, _db_img_name(d.design_no, "pending"),
 		base64.b64decode(b64))
 	d.pending_photo_by = frappe.session.user
+	d.photo_rejected = 0  # a fresh candidate clears the rejection flag
 	d.flags.ignore_version = True
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -614,16 +618,152 @@ def approve_photo_update(name):
 
 @frappe.whitelist()
 def reject_photo_update(name):
-	"""REJECT: the candidate is binned; the card stays on the update queue."""
+	"""REJECT: the candidate is binned; the card stays on the update queue AND is
+	flagged into the Rejection bucket so the uploader can retry."""
 	_require(DESIGN_APPROVER_ROLES)
 	d = frappe.get_doc("Design Bank", name)
 	_delete_bank_file(d.name, d.pending_photo)
 	d.pending_photo = ""
 	d.pending_photo_by = ""
+	d.photo_rejected = 1
 	d.flags.ignore_version = True
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"ok": 1, "left": frappe.db.count("Design Bank", {"pending_photo": ["is", "set"]})}
+
+
+# ---------------------------------------------------------------------------
+# Customer Update workflow: an existing customer photo flagged for replacement
+# -> worker uploads a candidate (PENDING) -> approver approves (old customer
+# image deleted forever, candidate promoted) or rejects (retry bucket).
+# Mirrors the product Photo Update flow; the customer image is NOT on the info
+# card, so nothing is re-rendered.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_customer_update_queue(start=0, limit=30):
+	"""Cards flagged Customer-photo-update with NO candidate yet."""
+	filters = {"customer_image_update": 1, "pending_customer_image": ["is", "not set"]}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "photo", "image", "customer_image", "modified"],
+		order_by="design_no", start=int(start), limit=int(limit))
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def submit_customer_update(name, image_b64):
+	"""Worker's replacement customer shot — parked as the PENDING candidate."""
+	_require(DESIGN_EDITOR_ROLES)
+	import base64
+	from jewelima.jewelima.api import _db_img_name, _write_slot_file
+	d = frappe.get_doc("Design Bank", name)
+	if not image_b64 or not image_b64.startswith("data:"):
+		frappe.throw(frappe._("Upload the new customer photo."))
+	_delete_bank_file(d.name, d.pending_customer_image)
+	head, b64 = image_b64.split(",", 1)
+	d.pending_customer_image = _write_slot_file(d.name, _db_img_name(d.design_no, "pendingcust"),
+		base64.b64decode(b64))
+	d.pending_customer_image_by = frappe.session.user
+	d.customer_photo_rejected = 0  # fresh candidate clears the rejection flag
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1}
+
+
+@frappe.whitelist()
+def get_customer_approval_queue(start=0, limit=30):
+	"""Customer-photo candidates waiting for the approver: old vs new."""
+	filters = {"pending_customer_image": ["is", "set"]}
+	rows = frappe.get_all("Design Bank", filters=filters,
+		fields=["name", "design_no", "customer_image", "pending_customer_image",
+			"pending_customer_image_by", "image", "modified"],
+		order_by="modified", start=int(start), limit=int(limit))
+	return {"rows": rows, "total": frappe.db.count("Design Bank", filters)}
+
+
+@frappe.whitelist()
+def approve_customer_update(name):
+	"""APPROVE: old customer image deleted FOREVER, candidate promoted to
+	<code>.customer.png; both flags clear."""
+	_require(DESIGN_APPROVER_ROLES)
+	from io import BytesIO
+	from jewelima.jewelima.api import _db_img_name, _cad_image_any, _write_slot_file
+	d = frappe.get_doc("Design Bank", name)
+	if not d.pending_customer_image:
+		frappe.throw(frappe._("{0} has no pending customer photo.").format(d.design_no))
+	new_img = _cad_image_any(d.pending_customer_image)
+	if not new_img:
+		frappe.throw(frappe._("Couldn't read the pending customer photo."))
+	_delete_bank_file(d.name, d.customer_image)
+	buf = BytesIO()
+	new_img.save(buf, "PNG")
+	d.customer_image = _write_slot_file(d.name, _db_img_name(d.design_no, "customer"), buf.getvalue())
+	_delete_bank_file(d.name, d.pending_customer_image)
+	d.pending_customer_image = ""
+	d.pending_customer_image_by = ""
+	d.customer_image_update = 0
+	d.customer_photo_rejected = 0
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "left": frappe.db.count("Design Bank", {"pending_customer_image": ["is", "set"]})}
+
+
+@frappe.whitelist()
+def reject_customer_update(name):
+	"""REJECT: candidate binned; card stays on the customer-update queue AND is
+	flagged into the Rejection bucket."""
+	_require(DESIGN_APPROVER_ROLES)
+	d = frappe.get_doc("Design Bank", name)
+	_delete_bank_file(d.name, d.pending_customer_image)
+	d.pending_customer_image = ""
+	d.pending_customer_image_by = ""
+	d.customer_photo_rejected = 1
+	d.flags.ignore_version = True
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "left": frappe.db.count("Design Bank", {"pending_customer_image": ["is", "set"]})}
+
+
+@frappe.whitelist()
+def get_rejection_queue(start=0, limit=60):
+	"""Every design whose product or customer photo candidate was rejected — the
+	uploader retries here (they also remain in their normal update queue)."""
+	rows = frappe.db.sql("""
+		select name, design_no, photo, image, customer_image, modified,
+			photo_rejected, customer_photo_rejected
+		from `tabDesign Bank`
+		where photo_rejected = 1 or customer_photo_rejected = 1
+		order by modified desc limit %s offset %s""", (int(limit), int(start)), as_dict=True)
+	total = frappe.db.sql("""select count(*) from `tabDesign Bank`
+		where photo_rejected = 1 or customer_photo_rejected = 1""")[0][0]
+	return {"rows": rows, "total": total}
+
+
+@frappe.whitelist()
+def get_photo_kpi():
+	"""Live counts for every Graphics bucket + a few 'done' totals for the
+	Photo KPI dashboard."""
+	c = frappe.db.count
+	pu = {"photoupdate": 1, "pending_photo": ["is", "not set"]}
+	buckets = {
+		"photo_update": c("Design Bank", dict(pu, status=["!=", "Approved"])),
+		"photo_urgent": c("Design Bank", dict(pu, status="Approved")),
+		"photo_queue": c("Design Bank", {"product_photo_pending": 1}),
+		"customer_add": c("Design Bank", {"customer_image_needed": 1, "customer_image": ["is", "not set"]}),
+		"customer_update": c("Design Bank", {"customer_image_update": 1, "pending_customer_image": ["is", "not set"]}),
+		"product_approvals": c("Design Bank", {"pending_photo": ["is", "set"]}),
+		"customer_approvals": c("Design Bank", {"pending_customer_image": ["is", "set"]}),
+		"rejections": frappe.db.sql("""select count(*) from `tabDesign Bank`
+			where photo_rejected = 1 or customer_photo_rejected = 1""")[0][0],
+	}
+	done = {
+		"approved_total": c("Design Bank", {"status": "Approved"}),
+		"customer_done": c("Design Bank", {"customer_image": ["is", "set"]}),
+		"with_photo": c("Design Bank", {"photo": ["is", "set"]}),
+		"total": c("Design Bank", {}),
+	}
+	return {"buckets": buckets, "done": done}
 
 
 @frappe.whitelist()

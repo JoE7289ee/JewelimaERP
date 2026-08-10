@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-24 10:16:37.253268",
+ "modified": "2026-08-10 21:02:04.563091",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "photo-approvals",
@@ -16,6 +16,9 @@
   },
   {
    "role": "Jewelima Design Approver"
+  },
+  {
+   "role": "Jewelima Graphics"
   }
  ],
  "script": null,

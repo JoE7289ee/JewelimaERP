@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-10 10:14:56.989279",
+ "modified": "2026-08-10 21:02:04.539626",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "photo-queue",
@@ -19,6 +19,9 @@
   },
   {
    "role": "Jewelima Design Bank"
+  },
+  {
+   "role": "Jewelima Graphics"
   },
   {
    "role": "Jewelima Design Approver"

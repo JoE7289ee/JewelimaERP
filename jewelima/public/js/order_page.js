@@ -586,7 +586,7 @@ const PO_COLUMNS = [
 	function openVariantCreate(row, bank) {
 		const API2 = "jewelima.jewelima.api"; // variant naming lives with the core APIs
 		const esc = frappe.utils.escape_html;
-		const go = (N, bankNo) => {
+		const go = (N, bankNo, img) => {
 			let cur = null;
 			function bomItemChanged() {
 				const r0 = this.doc || (this.grid_row && this.grid_row.doc);
@@ -611,6 +611,8 @@ const PO_COLUMNS = [
 				title: __("Create Variant — {0}", [bankNo]),
 				size: "large",
 				fields: [
+					{ fieldname: "img", fieldtype: "HTML" },
+					{ fieldname: "sb_top", fieldtype: "Section Break" },
 					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"), reqd: 1,
 						options: N.karats.join("\n"), default: "22K" },
 					{ fieldname: "cb1", fieldtype: "Column Break" },
@@ -666,6 +668,7 @@ const PO_COLUMNS = [
 				},
 			});
 			vd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}.jw-mat-dlg .data-row > .col:last-child{display:none !important;}</style>").addClass("jw-mat-dlg");
+			if (img) vd.get_field("img").$wrapper.html(`<div style="text-align:center;margin:0 0 6px;"><img src="${encodeURI(img)}" style="max-height:180px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`);
 			let judgeSeq = 0;
 			const judge = () => {
 				const v = vd.get_values(true) || {};
@@ -695,10 +698,12 @@ const PO_COLUMNS = [
 			vd.$wrapper.on("change", ".frappe-control[data-fieldname=karat] select, .frappe-control[data-fieldname=quality] select, .frappe-control[data-fieldname=color] select", judge);
 			setTimeout(judge, 150);
 		};
-		frappe.db.get_value("Design Bank", bank, "design_no").then((r) => {
-			const bankNo = (r.message || {}).design_no || bank;
-			if (NAMING) go(NAMING, bankNo);
-			else frappe.call({ method: API2 + ".get_variant_naming" }).then((rr) => { NAMING = rr.message; go(NAMING, bankNo); });
+		frappe.db.get_value("Design Bank", bank, ["design_no", "image", "photo"]).then((r) => {
+			const m = r.message || {};
+			const bankNo = m.design_no || bank;
+			const img = m.image || m.photo || "";
+			if (NAMING) go(NAMING, bankNo, img);
+			else frappe.call({ method: API2 + ".get_variant_naming" }).then((rr) => { NAMING = rr.message; go(NAMING, bankNo, img); });
 		});
 	}
 
@@ -1076,6 +1081,7 @@ const PO_COLUMNS = [
 	// consumed (Job Order only exists on Place), the request takes its own
 	// code, and the due-days are stripped — requests carry no dates
 	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
+	page.add_inner_button(__("OLD Design"), () => openOldDesignDialog(state));
 	page.add_inner_button(__("Add Row"), () => addRow());
 	page.add_inner_button(__("Reset"), resetPage);
 
@@ -1453,7 +1459,7 @@ function openNewDesignDialog(state, prefill) {
 		title: __("New Design"),
 		size: "large",
 		fields: [
-			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1,
+			{ fieldname: "design_type", fieldtype: "Select", label: __("Design Type"), reqd: 1,
 				description: __("names the card by the type's bank code (e.g. JC-5)"),
 				default: prefill && prefill.design_type },
 			{ fieldname: "cb1", fieldtype: "Column Break" },
@@ -1495,20 +1501,18 @@ function openNewDesignDialog(state, prefill) {
 	// ---- stones/sieves editor (same rows as Design Review) ------------------
 	function paintStones(rows) {
 		d.get_field("stones_html").$wrapper.find(".nd-stones").html((rows && rows.length ? rows : [{}]).map((r) => `
-			<tr><td><input class="s" value="${esc(r.stone || "")}" placeholder="DMD / RUBY..."></td>
-			<td><select class="v"><option value=""></option>
+			<tr><td><select class="v"><option value=""></option>
 				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
 				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
 			</select></td>
-			<td><input class="p" type="number" value="${r.pcs || ""}"></td>
-			<td><input class="c" type="number" step="0.001" value="${r.ct || ""}"></td>
+			<td><input class="p" type="number" min="0" value="${r.pcs || ""}"></td>
 			<td class="del" style="cursor:pointer;color:#b02a2a;font-weight:800;">&times;</td></tr>`).join(""));
 	}
 	function collectStones() {
 		return d.get_field("stones_html").$wrapper.find(".nd-stones tr").map(function () {
-			return { stone: $(this).find(".s").val(), sieve: $(this).find(".v").val(),
-				pcs: cint($(this).find(".p").val()), ct: flt($(this).find(".c").val()) };
-		}).get().filter((r) => r.stone || r.sieve);
+			return { stone: "", sieve: $(this).find(".v").val(),
+				pcs: Math.max(0, cint($(this).find(".p").val())), ct: 0 };
+		}).get().filter((r) => r.sieve || r.pcs);
 	}
 
 	d.get_field("stones_html").$wrapper.html(`
@@ -1519,7 +1523,7 @@ function openNewDesignDialog(state, prefill) {
 		.nd-stbl input,.nd-stbl select{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:5px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);}
 		.nd-addst{color:#1f618d;font-weight:700;cursor:pointer;font-size:12px;display:inline-block;margin-top:6px;}
 		</style>
-		<table class="nd-stbl"><thead><tr><th>${__("Stone / Colour")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th><th></th></tr></thead>
+		<table class="nd-stbl"><thead><tr><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th></th></tr></thead>
 		<tbody class="nd-stones"></tbody></table>
 		<span class="nd-addst">+ ${__("row")}</span>`);
 	d.get_field("stones_html").$wrapper.on("click", ".nd-addst", () => { const r = collectStones(); r.push({}); paintStones(r); });
@@ -1548,6 +1552,175 @@ function openNewDesignDialog(state, prefill) {
 
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
 		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); paintStones(collectStones()); });
+
+	// load every Design Type up front so the dropdown lists them all (no searching)
+	frappe.db.get_list("Design Type", { fields: ["name"], order_by: "name", limit: 0 }).then((rows) => {
+		d.set_df_property("design_type", "options", [""].concat((rows || []).map((x) => x.name)).join("\n"));
+		const pre = prefill && prefill.design_type;
+		if (pre) d.set_value("design_type", pre);
+	});
+
+	d.show();
+}
+
+// OLD Design (Place Order): search a PENDING bank design, see all its photos,
+// review the values (type / weights / stones), then Approve → straight into the
+// Create Variant dialog and onto the order line. Mirrors the Design Review page.
+function openOldDesignDialog(state) {
+	const API = "jewelima.jewelima.design_bank_api";
+	const esc = frappe.utils.escape_html;
+	let cur = null;    // loaded review card
+	let photoB64 = ""; // optional replacement product photo
+	let SIEVES = [];
+
+	const d = new frappe.ui.Dialog({
+		title: __("OLD Design — review & approve"),
+		size: "extra-large",
+		fields: [
+			{ fieldname: "pick", fieldtype: "Link", label: __("Pending Design"), options: "Design Bank", reqd: 1,
+				only_select: 1, get_query: () => ({ filters: { status: "Pending" } }),
+				description: __("search a pending design by its number"),
+				onchange: () => loadCard(d.get_value("pick")) },
+			{ fieldname: "cb0", fieldtype: "Column Break" },
+			{ fieldname: "status_html", fieldtype: "HTML" },
+			{ fieldname: "sec_ph", fieldtype: "Section Break", label: __("Photos") },
+			{ fieldname: "photos_html", fieldtype: "HTML" },
+			{ fieldname: "sec_dt", fieldtype: "Section Break", label: __("Details") },
+			{ fieldname: "design_type", fieldtype: "Select", label: __("Design Type"), reqd: 1,
+				description: __("needed to approve") },
+			{ fieldname: "cb1", fieldtype: "Column Break" },
+			{ fieldname: "gross_weight", fieldtype: "Float", label: __("Gross Weight (g)") },
+			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)") },
+			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
+			{ fieldname: "tag_photo_update", fieldtype: "Check", label: __("Tag for photo update → Photo Urgent (needs a better photo)") },
+			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
+			{ fieldname: "stones_html", fieldtype: "HTML" },
+			{ fieldname: "sec_up", fieldtype: "Section Break", label: __("Replace product photo (optional)") },
+			{ fieldname: "photo_html", fieldtype: "HTML" },
+		],
+		primary_action_label: __("Approve → Add Variant"),
+		primary_action() {
+			if (!cur) return frappe.msgprint(__("Pick a pending design first."));
+			const v = d.get_values(true) || {};
+			if (!v.design_type) return frappe.msgprint(__("Pick the Design Type to approve."));
+			const payload = {
+				name: cur.name, design_no: cur.design_no, design_type: v.design_type,
+				gross_weight: flt(v.gross_weight), diamond_weight: flt(v.diamond_weight),
+				note: v.note || "", extra_lines: cur.extra_lines,
+				stones: collectStones(), photo: photoB64 || cur.photo,
+				photoupdate: (v.tag_photo_update || cur.photoupdate) ? 1 : 0,
+				customer_image_needed: cur.customer_image_needed ? 1 : 0,
+				delete_raw: 0, approve: 1, retire: 0,
+			};
+			frappe.dom.freeze(__("Approving…"));
+			frappe.call({ method: API + ".review_save", args: { payload: JSON.stringify(payload) } })
+				.then(() => {
+					frappe.dom.unfreeze();
+					d.hide();
+					frappe.show_alert({ message: __("{0} approved — pick the variant.", [cur.design_no]), indicator: "green" }, 5);
+					let row = state.rows.find((rr) => !rr.f.design.get());
+					if (!row) row = state.addRow();
+					state.openVariantCreate(row, cur.name);
+				})
+				.catch(() => frappe.dom.unfreeze());
+		},
+	});
+
+	// ---- photos (raw · card · product · customer) ---------------------------
+	const bust = (u) => (u && !u.startsWith("data:") ? u + (u.includes("?") ? "&" : "?") + "m=" + Date.now() : u);
+	function paintPhotos() {
+		const cell = (t, u) => `<div class="od-im"><div class="t">${t}</div>${u
+			? `<img src="${esc(bust(u))}">` : `<div class="none">—</div>`}</div>`;
+		d.get_field("photos_html").$wrapper.html(`
+			<style>
+			.od-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;}
+			.od-im{border:1px solid var(--border-color);border-radius:8px;background:#fff;overflow:hidden;}
+			.od-im .t{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:4px 8px;background:var(--control-bg);}
+			.od-im img{width:100%;height:240px;object-fit:contain;display:block;}
+			.od-im .none{height:240px;display:flex;align-items:center;justify-content:center;color:#bbb;}
+			</style>
+			<div class="od-grid">
+				${cell(__("Raw (scan)"), cur && cur.raw_image)}
+				${cell(__("Card — info"), cur && cur.image)}
+				${cell(__("Product — print"), photoB64 || (cur && cur.photo))}
+				${cell(__("Customer"), cur && cur.customer_image)}
+			</div>`);
+	}
+
+	// ---- stones/sieves (sieve + pcs) ---------------------------------------
+	function paintStones(rows) {
+		d.get_field("stones_html").$wrapper.find(".od-stones").html((rows && rows.length ? rows : [{}]).map((r) => `
+			<tr><td><select class="v"><option value=""></option>
+				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
+				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
+			</select></td>
+			<td><input class="p" type="number" min="0" value="${r.pcs || ""}"></td>
+			<td class="del" style="cursor:pointer;color:#b02a2a;font-weight:800;">&times;</td></tr>`).join(""));
+	}
+	function collectStones() {
+		return d.get_field("stones_html").$wrapper.find(".od-stones tr").map(function () {
+			return { stone: "", sieve: $(this).find(".v").val(),
+				pcs: Math.max(0, cint($(this).find(".p").val())), ct: 0 };
+		}).get().filter((r) => r.sieve || r.pcs);
+	}
+	d.get_field("stones_html").$wrapper.html(`
+		<style>
+		.od-stbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+		.od-stbl th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);padding:2px 6px;border-bottom:1px solid var(--border-color);}
+		.od-stbl td{padding:2px 4px;}
+		.od-stbl input,.od-stbl select{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:5px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);}
+		.od-addst{color:#1f618d;font-weight:700;cursor:pointer;font-size:12px;display:inline-block;margin-top:6px;}
+		</style>
+		<table class="od-stbl"><thead><tr><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th></th></tr></thead>
+		<tbody class="od-stones"></tbody></table>
+		<span class="od-addst">+ ${__("row")}</span>`);
+	d.get_field("stones_html").$wrapper.on("click", ".od-addst", () => { const r = collectStones(); r.push({}); paintStones(r); });
+	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); });
+
+	// ---- optional product-photo replace ------------------------------------
+	d.get_field("photo_html").$wrapper.html(`
+		<button class="btn btn-default btn-sm od-up">${__("Upload replacement photo")}</button>
+		<input type="file" class="od-file" accept="image/*" style="display:none;">
+		<span class="od-name" style="font-size:11.5px;color:var(--text-muted);margin-left:8px;">${__("keeps the existing photo if left blank")}</span>`);
+	const $ph = d.get_field("photo_html").$wrapper;
+	$ph.on("click", ".od-up", () => $ph.find(".od-file").get(0).click());
+	$ph.on("change", ".od-file", function () {
+		const file = this.files[0];
+		if (!file) return;
+		const rd = new FileReader();
+		rd.onload = () => { photoB64 = rd.result; $ph.find(".od-name").text(file.name); paintPhotos(); };
+		rd.readAsDataURL(file);
+	});
+
+	// ---- load a picked pending design --------------------------------------
+	function loadCard(name) {
+		if (!name) return;
+		frappe.db.get_value("Design Bank", name, "design_no").then((r) => {
+			const dno = (r.message || {}).design_no || name;
+			frappe.call({ method: API + ".get_review_card", args: { q: dno } }).then((rr) => {
+				cur = (rr.message || {}).card || null;
+				if (!cur) return frappe.msgprint(__("Could not load that design."));
+				photoB64 = "";
+				d.get_field("status_html").$wrapper.html(
+					`<div style="font-size:12.5px;color:var(--text-muted);">${esc(cur.design_no)} · ${esc(cur.status || "")}${cur.priority ? " · P" + cur.priority : ""}</div>`);
+				d.set_value("design_type", cur.design_type || "");
+				d.set_value("gross_weight", cur.gross_weight || 0);
+				d.set_value("diamond_weight", cur.diamond_weight || 0);
+				d.set_value("note", cur.note || "");
+				paintPhotos();
+				paintStones(cur.stones || []);
+			});
+		});
+	}
+
+	paintPhotos();
+	paintStones([{}]);
+	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
+		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); paintStones(cur ? cur.stones : collectStones()); });
+	frappe.db.get_list("Design Type", { fields: ["name"], order_by: "name", limit: 0 }).then((rows) => {
+		d.set_df_property("design_type", "options", [""].concat((rows || []).map((x) => x.name)).join("\n"));
+		if (cur) d.set_value("design_type", cur.design_type || "");
+	});
 
 	d.show();
 }

@@ -182,6 +182,12 @@ JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]
 
+# GRAPHICS — the photo desk: every photo bucket + KPI + approvals + rejection.
+# Reads the bank; all photo mutations go through design_bank_api (role-gated).
+JEWELIMA_GRAPHICS_ROLE = "Jewelima Graphics"
+JEWELIMA_GRAPHICS_PAGES = ["photo-update", "photo-urgent", "photo-queue", "customer-photos",
+	"customer-update", "photo-kpi", "photo-approvals", "rejection"]
+
 
 # REPAIR — the isolated repair module (intake -> billing -> register).
 # One role runs it; everyone else sees nothing. Writes go through
@@ -297,7 +303,7 @@ def setup_roles():
 	from frappe.permissions import add_permission, update_permission_property
 
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
-			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE,
+			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
@@ -491,6 +497,20 @@ def setup_roles():
 				pg = frappe.get_doc("Page", page)
 				pg.set("roles", [r for r in pg.roles if r.role != role])
 				pg.save(ignore_permissions=True)
+
+	# ---- Jewelima Graphics: the photo desk ---------------------------------------
+	# All 8 photo buckets + KPI + approvals + rejection. Reads the bank; every
+	# photo mutation runs through design_bank_api (role-gated). Stripped from any
+	# page outside its own set so it can't wander.
+	for dt in JEWELIMA_DESIGN_BANK_READ:
+		grant(dt, JEWELIMA_GRAPHICS_ROLE, {"read": 1})
+	for page in JEWELIMA_GRAPHICS_PAGES:
+		set_page_roles(page, (JEWELIMA_GRAPHICS_ROLE,))
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_GRAPHICS_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_GRAPHICS_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_GRAPHICS_ROLE])
+			pg.save(ignore_permissions=True)
 
 	# every CAD user can browse the bank: sync the Info role onto them
 	for user in frappe.get_all("Has Role", filters={"parenttype": "User", "role": "Jewelima CAD"}, pluck="parent"):
