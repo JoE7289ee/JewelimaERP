@@ -19,6 +19,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
+		#page-certify .container{max-width:100%;}
 		.cf-setup{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px;}
 		.cf-setup .frappe-control{margin:0;min-width:200px;}
 		.cf-req{font-size:12px;color:var(--text-muted);max-width:900px;margin-bottom:12px;white-space:pre-wrap;}
