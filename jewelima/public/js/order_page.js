@@ -1442,72 +1442,114 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 }
 
 function openNewDesignDialog(state, prefill) {
-	// New Design (Place Order): create a type-coded Design Bank card from a
-	// product photo + weights + sieves + notes (info page rendered server-side),
-	// born APPROVED, then immediately mint a Karat+Quality+Colour variant onto a
-	// line. No photo? the card still creates and waits in the Photo Queue.
+	// New Design (Place Order): create a type-coded Design Bank card — photo
+	// uploads DIRECT (no attach dialog), stones/sieves + notes edited like the
+	// Design Review page, born APPROVED, then straight into the variant dialog.
+	// "Upgrade photo" (or no photo) sends the card to the Photo Queue.
+	const esc = frappe.utils.escape_html;
+	let photoB64 = "";
+	let SIEVES = [];
 	const d = new frappe.ui.Dialog({
 		title: __("New Design"),
 		size: "large",
 		fields: [
 			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type", reqd: 1,
-				description: __("names the card by the type's bank code (e.g. JC-5)") },
+				description: __("names the card by the type's bank code (e.g. JC-5)"),
+				default: prefill && prefill.design_type },
 			{ fieldname: "cb1", fieldtype: "Column Break" },
 			{ fieldname: "gross_weight", fieldtype: "Float", label: __("Gross Weight (g)"), reqd: 1 },
 			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)") },
-			{ fieldname: "sb_img", fieldtype: "Section Break" },
-			{
-				fieldname: "photo", fieldtype: "Attach Image", label: __("Product Photo (optional)"),
-				description: __("skip it and the card waits in the Photo Queue"),
-				onchange() {
-					const url = d.get_value("photo");
-					d.fields_dict.photo_preview.$wrapper.html(url
-						? `<div style="text-align:center;margin:4px 0 8px;"><img src="${encodeURI(url)}" style="max-height:200px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`
-						: "");
-				},
-			},
-			{ fieldname: "photo_preview", fieldtype: "HTML" },
-			{ fieldname: "note", fieldtype: "Small Text", label: __("Notes") },
-			{ fieldname: "sb_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
-			{
-				fieldname: "stones", fieldtype: "Table", label: __("Stones"), options: "Design Bank Stone", data: [],
-				description: __("the card's stone rows — stone, sieve, pcs, carats"),
-				fields: [
-					{ fieldname: "stone", fieldtype: "Data", label: __("Stone"), in_list_view: 1, columns: 3 },
-					{ fieldname: "sieve", fieldtype: "Data", label: __("Sieve"), in_list_view: 1, columns: 3 },
-					{ fieldname: "pcs", fieldtype: "Int", label: __("Pcs"), in_list_view: 1, columns: 2 },
-					{ fieldname: "ct", fieldtype: "Float", label: __("Ct"), in_list_view: 1, columns: 2 },
-				],
-			},
+			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
+			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
+			{ fieldname: "stones_html", fieldtype: "HTML" },
+			{ fieldname: "sec_ph", fieldtype: "Section Break", label: __("Product photo") },
+			{ fieldname: "photo_html", fieldtype: "HTML" },
+			{ fieldname: "upgrade", fieldtype: "Check", label: __("Upgrade photo later — send to Photo Queue") },
 		],
 		primary_action_label: __("Create → Add Variant"),
 		primary_action(v) {
 			if (!v.design_type) return frappe.msgprint(__("Pick the Design Type."));
 			if (flt(v.gross_weight) <= 0) return frappe.msgprint(__("Enter the gross weight."));
-			const stones = (v.stones || []).filter((r) => r.stone || r.sieve)
-				.map((r) => ({ stone: r.stone || "", sieve: r.sieve || "", pcs: cint(r.pcs), ct: flt(r.ct) }));
+			const stones = collectStones();
 			frappe.dom.freeze(__("Creating design…"));
 			frappe.call({ method: "jewelima.jewelima.api.create_new_design_full", args: {
 				design_type: v.design_type, gross_weight: flt(v.gross_weight),
 				diamond_weight: flt(v.diamond_weight), note: v.note || "",
-				stones: JSON.stringify(stones), photo: v.photo || "",
+				stones: JSON.stringify(stones), photo: photoB64 || "",
+				upgrade_photo: v.upgrade ? 1 : 0,
 			} }).then((r) => {
 				frappe.dom.unfreeze();
 				const res = r.message || {};
 				if (!res.name) return;
 				d.hide();
 				frappe.show_alert({ message: res.needs_photo
-					? __("{0} created (Approved) — add its photo later in the Photo Queue.", [res.design_no])
+					? __("{0} created (Approved) — its photo waits in the Photo Queue.", [res.design_no])
 					: __("{0} created (Approved).", [res.design_no]), indicator: "green" }, 6);
-				// straight into the variant dialog on a fresh/empty line
 				let row = (prefill && prefill.row) || state.rows.find((rr) => !rr.f.design.get());
 				if (!row) row = state.addRow();
 				state.openVariantCreate(row, res.name);
 			}).catch(() => frappe.dom.unfreeze());
 		},
 	});
+
+	// ---- stones/sieves editor (same rows as Design Review) ------------------
+	function paintStones(rows) {
+		d.get_field("stones_html").$wrapper.find(".nd-stones").html((rows && rows.length ? rows : [{}]).map((r) => `
+			<tr><td><input class="s" value="${esc(r.stone || "")}" placeholder="DMD / RUBY..."></td>
+			<td><select class="v"><option value=""></option>
+				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
+				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
+			</select></td>
+			<td><input class="p" type="number" value="${r.pcs || ""}"></td>
+			<td><input class="c" type="number" step="0.001" value="${r.ct || ""}"></td>
+			<td class="del" style="cursor:pointer;color:#b02a2a;font-weight:800;">&times;</td></tr>`).join(""));
+	}
+	function collectStones() {
+		return d.get_field("stones_html").$wrapper.find(".nd-stones tr").map(function () {
+			return { stone: $(this).find(".s").val(), sieve: $(this).find(".v").val(),
+				pcs: cint($(this).find(".p").val()), ct: flt($(this).find(".c").val()) };
+		}).get().filter((r) => r.stone || r.sieve);
+	}
+
+	d.get_field("stones_html").$wrapper.html(`
+		<style>
+		.nd-stbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+		.nd-stbl th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);padding:2px 6px;border-bottom:1px solid var(--border-color);}
+		.nd-stbl td{padding:2px 4px;}
+		.nd-stbl input,.nd-stbl select{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:5px;padding:3px 6px;font-size:12px;background:var(--fg-color);color:var(--text-color);}
+		.nd-addst{color:#1f618d;font-weight:700;cursor:pointer;font-size:12px;display:inline-block;margin-top:6px;}
+		</style>
+		<table class="nd-stbl"><thead><tr><th>${__("Stone / Colour")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th><th></th></tr></thead>
+		<tbody class="nd-stones"></tbody></table>
+		<span class="nd-addst">+ ${__("row")}</span>`);
+	d.get_field("stones_html").$wrapper.on("click", ".nd-addst", () => { const r = collectStones(); r.push({}); paintStones(r); });
+	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); });
+	paintStones([{}]);
+
+	// ---- direct photo upload (no attach dialog) -----------------------------
+	d.get_field("photo_html").$wrapper.html(`
+		<button class="btn btn-default btn-sm nd-up">${__("Upload product photo")}</button>
+		<input type="file" class="nd-file" accept="image/*" style="display:none;">
+		<span class="nd-name" style="font-size:11.5px;color:var(--text-muted);margin-left:8px;">${__("optional")}</span>
+		<div class="nd-prev" style="margin-top:8px;"></div>`);
+	const $ph = d.get_field("photo_html").$wrapper;
+	$ph.on("click", ".nd-up", () => $ph.find(".nd-file").get(0).click());
+	$ph.on("change", ".nd-file", function () {
+		const file = this.files[0];
+		if (!file) return;
+		const rd = new FileReader();
+		rd.onload = () => {
+			photoB64 = rd.result;
+			$ph.find(".nd-name").text(file.name);
+			$ph.find(".nd-prev").html(`<img src="${photoB64}" style="max-height:180px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);">`);
+		};
+		rd.readAsDataURL(file);
+	});
+
+	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
+		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); paintStones(collectStones()); });
+
 	d.show();
-	if (prefill && prefill.design_type) d.set_value("design_type", prefill.design_type);
 }
 
 };

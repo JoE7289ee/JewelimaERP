@@ -8385,7 +8385,7 @@ def new_bank_code(design_type, provider=None):
 
 @frappe.whitelist()
 def create_new_design_full(design_type, gross_weight=None, diamond_weight=None,
-		note=None, stones=None, photo=None):
+		note=None, stones=None, photo=None, upgrade_photo=0):
 	"""Place Order 'New Design': mint the type-coded bank card, render its info
 	page from the (optional) product photo + weights + sieves, and mark it
 	Approved on the spot — a manager placing the order IS the approval, so it's
@@ -8405,12 +8405,14 @@ def create_new_design_full(design_type, gross_weight=None, diamond_weight=None,
 		"photo": photo if has_photo else "",
 	}))
 	name = frappe.db.get_value("Design Bank", {"design_no": code}, "name")
+	# no photo, OR the desk ticked "upgrade photo later" -> it waits in the queue
+	pending = 0 if (has_photo and not cint(upgrade_photo)) else 1
 	frappe.db.set_value("Design Bank", name, {
 		"status": "Approved", "priority": 0, "rebuilt": 1, "ocr_done": 1,
-		"product_photo_pending": 0 if has_photo else 1,
+		"product_photo_pending": pending,
 	}, update_modified=False)
 	frappe.db.commit()
-	return {"name": name, "design_no": code, "needs_photo": 0 if has_photo else 1}
+	return {"name": name, "design_no": code, "needs_photo": pending}
 
 
 @frappe.whitelist()
