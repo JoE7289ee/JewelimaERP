@@ -68,6 +68,14 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		.pg-ktiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
 		.pg-tile .ks{font-size:10.5px;color:var(--text-muted);margin-top:1px;}
 		.pg-kbars{max-width:600px;margin-top:6px;}
+		.pg-charts{display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 16px;}
+		.pg-chart{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:12px 14px;flex:1;min-width:320px;}
+		.pg-chart .ct{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;}
+		.pg-hb{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11.5px;}
+		.pg-hb .lb{width:130px;text-align:right;color:var(--text-muted);flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+		.pg-hb .track{flex:1;background:var(--control-bg);border-radius:4px;height:14px;overflow:hidden;}
+		.pg-hb .fill{display:block;height:100%;border-radius:4px;}
+		.pg-hb .vv{width:120px;flex:none;font-variant-numeric:tabular-nums;}
 		.pg-kbrow{display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:11.5px;}
 		.pg-kbrow .lbl{width:64px;color:var(--text-muted);text-align:right;flex:none;}
 		.pg-kbrow .tr{flex:1;background:var(--control-bg);border-radius:4px;height:12px;overflow:hidden;}
@@ -335,6 +343,33 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		const BCOL = ["#2e7d32", "#1f618d", "#b45309", "#b02a2a"];
 		const bmax = Math.max(...tot.b, 0.001);
 		let cum = 0;
+		// --- charts (self-contained SVG donut + horizontal bars) ------------
+		const donut = (segs, centerTxt, centerSub) => {
+			const total = segs.reduce((n, x) => n + x.value, 0) || 1;
+			const R = 52, CIRC = 2 * Math.PI * R; let off = 0;
+			const rings = segs.map((x) => {
+				const len = (x.value / total) * CIRC;
+				const el = `<circle r="${R}" cx="70" cy="70" fill="none" stroke="${x.color}" stroke-width="22"
+					stroke-dasharray="${len} ${CIRC - len}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"></circle>`;
+				off += len; return el;
+			}).join("");
+			return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+				<svg width="140" height="140" viewBox="0 0 140 140">${rings}
+					<text x="70" y="66" text-anchor="middle" font-size="17" font-weight="800" fill="var(--text-color)">${centerTxt}</text>
+					<text x="70" y="84" text-anchor="middle" font-size="9" fill="var(--text-muted)">${centerSub}</text></svg>
+				<div style="font-size:12px;min-width:150px;">${segs.map((x) => `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+					<span style="width:11px;height:11px;border-radius:3px;background:${x.color};display:inline-block;"></span>
+					${x.label}<b style="margin-left:auto;padding-left:8px;">${g3(x.value)}</b>
+					<span style="color:var(--text-muted);">${total ? Math.round(x.value / total * 100) : 0}%</span></div>`).join("")}</div></div>`;
+		};
+		const hbars = (items, color) => {
+			const mx = Math.max(...items.map((i) => i.v), 0.001);
+			return items.map((i) => `<div class="pg-hb"><span class="lb" title="${esc(i.k)}">${esc(i.k)}</span>
+				<span class="track"><span class="fill" style="width:${(i.v / mx) * 100}%;background:${color};"></span></span>
+				<span class="vv">${g3(i.v)}g${i.s != null ? " · " + i.s + "d" : ""}</span></div>`).join("");
+		};
+		const partyBars = pk.slice(0, 8).map((p) => ({ k: p, v: parties[p].nt, s: Math.round(wavg(parties[p])) }));
+		const groupBars = gk.slice(0, 8).map((gg) => ({ k: gg, v: groups[gg].nt, s: Math.round(wavg(groups[gg])) }));
 		root.find(".pg-body").html(`
 			<div class="pg-ksec"><div class="pg-kh">${__("Exposure — ready to ship, awaiting payment / confirmation")}</div><div class="pg-ktiles">
 				${tile(__("Pieces"), tot.pcs)}
@@ -363,6 +398,22 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 				${tile(__("Top 5 parties"), pct(top5) + "%", __("of all NT"))}
 				${tile(__("Top group"), esc(gk[0]), g3(groups[gk[0]].nt) + " g · " + pct(groups[gk[0]].nt) + "%")}
 			</div></div>
+			<div class="pg-charts">
+				<div class="pg-chart"><div class="ct">${__("Aging mix — net gold by age")}</div>
+					${donut([
+						{ label: "0–30 d", value: tot.b[0], color: BCOL[0] },
+						{ label: "31–90 d", value: tot.b[1], color: BCOL[1] },
+						{ label: "91–180 d", value: tot.b[2], color: BCOL[2] },
+						{ label: "180+ d", value: tot.b[3], color: BCOL[3] },
+					], g3(tot.nt), __("g NT"))}
+				</div>
+				<div class="pg-chart"><div class="ct">${__("Top parties by net gold")} <span style="font-weight:400;color:var(--text-muted);">· ${__("avg age on the right")}</span></div>
+					${partyBars.length ? hbars(partyBars, "#1f618d") : `<div class="pg-none">${__("no data")}</div>`}
+				</div>
+				<div class="pg-chart"><div class="ct">${__("Groups by net gold")}</div>
+					${groupBars.length ? hbars(groupBars, "#7d3c98") : `<div class="pg-none">${__("no data")}</div>`}
+				</div>
+			</div>
 			<div class="pg-kcols">
 				<div class="pg-klist">
 					<div class="pg-kh">${__("Top 10 parties by net gold")} <span class="pg-khs">· ${__("click for the statement")}</span></div>

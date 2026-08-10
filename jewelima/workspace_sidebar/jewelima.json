@@ -1247,7 +1247,7 @@
    "icon": "chart-column-big",
    "indent": 1,
    "keep_closed": 1,
-   "label": "Party Selection Report",
+   "label": "E - Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
@@ -1278,19 +1278,6 @@
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 0,
-   "collapsible": 1,
-   "icon": "briefcase",
-   "indent": 1,
-   "keep_closed": 1,
-   "label": "Bag Status Report",
-   "link_to": "",
-   "link_type": "",
-   "show_arrow": 0,
-   "type": "Section Break",
    "url": ""
   },
   {
