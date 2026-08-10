@@ -8953,6 +8953,172 @@ def parse_old_format_excel(filedata):
 	return {"rows": rows, "cover": cover, "count": len(rows)}
 
 
+# --- OLD FORMAT session round-trip (template / export / import) --------------
+# One column spec drives all three so a file exported here re-imports cleanly.
+# (header, row-key, kind) — kind: s=text, i=int, f=float
+OLD_FORMAT_COLS = [
+	("SL#", "sl", "i"), ("UNIQUE ID", "unique_id", "s"), ("HUID", "huid", "s"),
+	("ITEM", "item", "s"), ("DESIGN", "design", "s"),
+	("GS WT (GM)", "gs", "f"), ("NT WT (GM)", "nt", "f"),
+	("PS PCS", "ps_pcs", "i"), ("PS (CT)", "ps_ct", "f"),
+	("DMD PCS", "dmd_pcs", "i"), ("DMD CLARITY", "clarity", "s"), ("DMD (CT)", "dmd_ct", "f"),
+	("STN PCS", "stn_pcs", "i"), ("STN (CT)", "stn_ct", "f"),
+	("COLOUR", "colour", "s"), ("STYLE", "style", "s"), ("SIZE", "size", "s"),
+	("SHAPE", "shape", "s"), ("CERT", "cert", "s"), ("CERT NO", "cert_no", "s"),
+	("BACK CHAIN BARCODE", "back_chain_barcode", "s"), ("BACK CHAIN WT", "back_chain_wt", "f"),
+]
+
+
+def _of_row_to_xlsx(p):
+	out = []
+	for _, key, kind in OLD_FORMAT_COLS:
+		v = p.get(key)
+		if kind == "i":
+			out.append(cint(v))
+		elif kind == "f":
+			out.append(flt(v) or "")
+		else:
+			out.append("" if v is None else str(v))
+	return out
+
+
+def _of_xlsx_to_row(cells, colmap):
+	"""One sheet row -> a session row dict via the HEADER->index map."""
+	def g(header):
+		j = colmap.get(header)
+		return cells[j] if (j is not None and j < len(cells)) else None
+	row = {}
+	for header, key, kind in OLD_FORMAT_COLS:
+		v = g(header)
+		if kind == "i":
+			row[key] = cint(v)
+		elif kind == "f":
+			row[key] = flt(v)
+		else:
+			row[key] = ("" if v is None else str(v)).strip()
+	# clarity/item/colour/style/shape/cert stay upper as the page keeps them
+	for k in ("item", "colour", "style", "shape", "cert"):
+		row[k] = (row.get(k) or "").upper()
+	return row
+
+
+@frappe.whitelist()
+def download_old_format_template():
+	"""OLD FORMAT: a blank .xlsx with exactly the round-trip columns, so a
+	session can be built by hand and imported."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+	from openpyxl.utils import get_column_letter
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "OLD FORMAT"
+	ws.append([h for h, _, _ in OLD_FORMAT_COLS])
+	for c in ws[1]:
+		c.font = Font(bold=True)
+	for i, (h, _, _) in enumerate(OLD_FORMAT_COLS, start=1):
+		ws.column_dimensions[get_column_letter(i)].width = max(len(h) + 2, 10)
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "OLD FORMAT TEMPLATE.xlsx"
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def export_old_format_session_xlsx(rows, chains=None, filename=None):
+	"""Dump the WHOLE working session: every piece row (assigned back-chains
+	ride in that row's BACK CHAIN columns) + any still-unassigned chains as
+	their own BACK CHAIN rows, so it re-imports to the same state."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+	from openpyxl.utils import get_column_letter
+
+	rows = json.loads(rows) if isinstance(rows, str) else (rows or [])
+	chains = json.loads(chains) if isinstance(chains, str) else (chains or [])
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "OLD FORMAT"
+	ws.append([h for h, _, _ in OLD_FORMAT_COLS])
+	for c in ws[1]:
+		c.font = Font(bold=True)
+	for p in rows:
+		ws.append(_of_row_to_xlsx(p))
+	for ch in chains:  # unassigned chains kept as raw BACK CHAIN rows
+		ws.append(_of_row_to_xlsx(ch))
+	for i, (h, _, _) in enumerate(OLD_FORMAT_COLS, start=1):
+		ws.column_dimensions[get_column_letter(i)].width = max(len(h) + 2, 10)
+	buf = BytesIO()
+	wb.save(buf)
+	fname = (filename or "").strip() or "OLD FORMAT SESSION"
+	if not fname.lower().endswith(".xlsx"):
+		fname += ".xlsx"
+	frappe.local.response.filename = fname
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def import_old_format_session_xlsx(filedata):
+	"""Read a round-trip file back into rows, and check it against every saved
+	Old Format Import: if a saved session shares >= 50% of these UNIQUE IDs,
+	offer to UPDATE it; otherwise it's a fresh load. Assigned back-chains stay
+	linked (their columns are on the piece row); raw BACK CHAIN rows re-enter
+	the unassigned pile on the page (via its isChain split)."""
+	import base64
+	from io import BytesIO
+	from openpyxl import load_workbook
+
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	wb = load_workbook(BytesIO(raw), data_only=True)
+	ws = wb.active
+	colmap = {}
+	for j, c in enumerate(ws[1]):
+		key = " ".join(str(c.value or "").split()).upper()
+		if key:
+			colmap.setdefault(key, j)
+	# tolerate a couple of header aliases from the billing template
+	alias = {"GS WT (GM)": ["GS WT (GM)", "GS WT (GM)", "GS WT(GM)", "GS WT"],
+		"NT WT (GM)": ["NT WT (GM)", "NT WT(GM)", "NT WT"], "STYLE": ["STYLE", "GENTS/LADIES"]}
+	head_idx = {}
+	for h, key, _ in OLD_FORMAT_COLS:
+		j = colmap.get(h)
+		if j is None:
+			for a in alias.get(h, []):
+				if a in colmap:
+					j = colmap[a]
+					break
+		head_idx[h] = j
+	if head_idx.get("UNIQUE ID") is None:
+		frappe.throw(frappe._("No UNIQUE ID column — is this an OLD FORMAT template?"))
+	rows = []
+	for r in ws.iter_rows(min_row=2, values_only=True):
+		cells = list(r)
+		uid = cells[head_idx["UNIQUE ID"]] if head_idx["UNIQUE ID"] < len(cells) else None
+		if not uid:
+			continue
+		rows.append(_of_xlsx_to_row(cells, head_idx))
+	ids = {r["unique_id"] for r in rows if r.get("unique_id")}
+	# best-overlap saved session
+	match = None
+	if ids:
+		for sess in frappe.get_all("Old Format Import", fields=["name", "title", "data"]):
+			try:
+				blob = json.loads(sess.data or "{}")
+			except Exception:
+				continue
+			sid = {str(x.get("unique_id")) for x in (blob.get("rows") or []) if x.get("unique_id")}
+			sid |= {str(x.get("unique_id")) for x in (blob.get("chains") or []) if x.get("unique_id")}
+			if not sid:
+				continue
+			overlap = len(ids & sid) / len(ids)
+			if overlap >= 0.5 and (not match or overlap > match["overlap"]):
+				match = {"session": sess.name, "title": sess.title, "overlap": round(overlap, 3)}
+	return {"rows": rows, "count": len(rows), "match": match}
+
+
 @frappe.whitelist()
 def export_old_format_billing(rows, quality_token="EF", party="", filename=None):
 	"""OLD FORMAT page: write the enriched rows as the NEW billing-format

@@ -100,6 +100,11 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
 			<button class="of-btn of-find" style="display:none;background:#0e7490;">${__("Find #")}</button>
 			<button class="of-btn of-goexport" style="display:none;">${__("Continue to Export →")}</button>
+			<span style="flex:1;"></span>
+			<button class="of-btn of-tmpl" style="background:#6b7280;" title="${__("blank Excel with the OLD FORMAT columns")}">${__("Template ⤓")}</button>
+			<button class="of-btn of-xlimport" style="background:#0e7490;">${__("Import Excel")}</button>
+			<input type="file" class="of-ximp-input" accept=".xlsx" style="display:none;">
+			<button class="of-btn of-xlexport" style="display:none;background:#2e7d32;">${__("Export Excel")}</button>
 		</div>
 		<div class="of-bulk" style="display:none;">
 			<span class="of-selcount">0 ${__("selected")}</span>
@@ -264,7 +269,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			root.find(".of-file").addClass("has").text("💾 " + m.title);
 			root.find(".of-cover").html(__("Saved import <b>{0}</b> ({1}) · party <b>{2}</b> · <b>{3}</b> piece(s)",
 				[esc(m.title), esc(m.status), esc(m.party || "—"), ROWS.length]));
-			root.find(".of-save, .of-sortnum, .of-find, .of-goexport").show();
+			root.find(".of-save, .of-sortnum, .of-find, .of-goexport, .of-xlexport").show();
 			root.find(".of-jos").hide();
 			refreshSaveBtn();
 			setState("prep");
@@ -323,9 +328,58 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				if (COVER.party && !fParty.get_value()) fParty.set_value(COVER.party);
 				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s)",
 					[esc(COVER.invoice_no || "—"), esc(COVER.party || "—"), m.count || 0]));
-				root.find(".of-save, .of-sortnum, .of-find, .of-goexport").show();
+				root.find(".of-save, .of-sortnum, .of-find, .of-goexport, .of-xlexport").show();
 				setState("prep");
 			});
+		};
+		rd.readAsDataURL(file);
+	});
+
+	// ---- Excel round-trip: Template / Export / Import -----------------------
+	root.on("click", ".of-tmpl", () => {
+		open_url_post("/api/method/jewelima.jewelima.api.download_old_format_template", {});
+	});
+	root.on("click", ".of-xlexport", () => {
+		if (!ROWS.length && !CHAINS.length) return frappe.show_alert({ message: __("Nothing to export yet."), indicator: "orange" }, 3);
+		open_url_post("/api/method/jewelima.jewelima.api.export_old_format_session_xlsx", {
+			rows: JSON.stringify(ROWS), chains: JSON.stringify(CHAINS),
+			filename: (TITLE || (FILE && FILE.name) || "OLD FORMAT SESSION").replace(/\.xlsx$/i, ""),
+		});
+	});
+	root.on("click", ".of-xlimport", () => root.find(".of-ximp-input").get(0).click());
+	root.find(".of-ximp-input").on("change", function () {
+		const file = this.files[0];
+		if (!file) return;
+		const rd = new FileReader();
+		rd.onload = () => {
+			frappe.call({ method: API + ".import_old_format_session_xlsx", args: { filedata: rd.result } }).then((r) => {
+				const m = r.message || {};
+				const apply = (session, title) => {
+					splitChains(m.rows || []);          // pieces vs raw BACK CHAIN rows
+					COVER = {};
+					SESSION = session || null;
+					TITLE = title || "";
+					LOADING = true; fSess.set_value(session || ""); LOADING = false;
+					refreshSaveBtn();
+					SEL.clear(); LASTSEL = null;
+					invalidate();
+					FILE = { name: file.name };
+					root.find(".of-file").addClass("has").text("📄 " + file.name);
+					root.find(".of-cover").html(__("Imported <b>{0}</b> row(s) from Excel", [m.count || 0]));
+					root.find(".of-save, .of-sortnum, .of-find, .of-goexport, .of-xlexport").show();
+					setState("prep");
+				};
+				if (m.match) {
+					frappe.confirm(
+						__("This shares {0}% of its pieces with saved session <b>{1}</b>. Update that session?", [Math.round(m.match.overlap * 100), esc(m.match.title || m.match.session)]),
+						() => apply(m.match.session, m.match.title),   // yes -> load onto that session (Save updates it)
+						() => apply(null, ""));                        // no  -> load as a brand-new unsaved set
+				} else {
+					apply(null, "");
+					frappe.show_alert({ message: __("Loaded {0} row(s) — new session (not saved).", [m.count || 0]), indicator: "blue" }, 4);
+				}
+			});
+			root.find(".of-ximp-input").val("");
 		};
 		rd.readAsDataURL(file);
 	});
