@@ -316,18 +316,6 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		return rows;
 	}
 
-	// grouped-by-location sections (used by the PRINT — keeps the per-loc totals)
-	function flatSections(mode) {
-		const bags = modeRows(mode).filter((r) => !CUSTOFF.has(r.loc) && duePass(r));
-		const locs = {};
-		bags.forEach((r) => { (locs[r.loc] = locs[r.loc] || []).push(r); });
-		return Object.keys(locs).sort((a, b) => locs[b].length - locs[a].length).map((loc) => {
-			const list = locs[loc].sort((a, b) => (b.overdue || 0) - (a.overdue || 0));
-			const t = blankAgg(); t.maxover = 0;
-			list.forEach((r) => { addTo(t, r); t.maxover = Math.max(t.maxover, r.overdue || 0); });
-			return { loc, list, t };
-		});
-	}
 
 	function flatBodyHtml(rows) {
 		return rows.map((r) => `<tr>${FCOLS.map((c) => {
@@ -624,26 +612,32 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		const sub = `${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
 			· ${tot.bags} ${__("bags")} · ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`;
 		if (isFlat(VIEW)) {
-			const secs = flatSections(VIEW);
-			if (!secs.length) return frappe.show_alert({ message: __("Nothing matches the location ticks / due filter."), indicator: "orange" }, 4);
-			const ctot = blankAgg();
-			secs.forEach((se) => se.list.forEach((r) => addTo(ctot, r)));
+			// PRINT MIRRORS THE SCREEN: same flat rows, same filters, same sort order
+			const rows = flatFiltered(VIEW);
+			if (!rows.length) return frappe.show_alert({ message: __("Nothing matches the filters on screen."), indicator: "orange" }, 4);
 			const w = PRINT_ODATE;
-			const HEAD = `<th class="l">${__("Bag")}</th><th class="l">${__("Item")}</th><th class="l">${__("Mark")}</th>
-				<th class="l">${__("Purity")}</th><th class="l">${__("User")}</th><th>${__("Qty")}</th><th>${__("DMD ct")}</th>
-				<th class="l">${__("Party")}</th>${w ? `<th class="l">${__("Order date")}</th>` : ""}<th class="l">${__("Due date")}</th><th>${__("Overdue d")}</th>`;
-			const prow = (r) => `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.mark)}</td>
-				<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td><td>${r.qty}</td><td>${g3(r.dmd)}</td>
-				<td class="l">${esc(r.party)}</td>${w ? `<td class="l">${esc(r.odate)}</td>` : ""}<td class="l">${esc(r.ddate)}</td>
-				<td class="${(r.overdue || 0) > 0 ? "old" : ""}">${r.overdue || 0}</td>`;
-			const body = secs.map((se) => `${se.list.map((r) => `<tr class="kid">${prow(r)}</tr>`).join("")}
-				<tr class="grp"><td class="l" colspan="5">${esc(se.loc)} ${__("TOTAL")} (${se.t.bags} ${__("bags")})</td>
-					<td>${se.t.pcs}</td><td>${g3(se.t.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td>
-					<td class="${se.t.maxover > 0 ? "old" : ""}">${se.t.maxover}</td></tr>`).join("")
-				+ `<tr class="tot"><td class="l" colspan="5">${__("TOTAL")} (${ctot.bags} ${__("bags")})</td>
-				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td><td></td></tr>`;
+			const ctot = blankAgg(); rows.forEach((r) => addTo(ctot, r));
+			// print the visible columns in the visible order (Location included, since it's a flat list)
+			const PCOLS = FCOLS.filter((c) => w || c.k !== "odate");
+			const HEAD = PCOLS.map((c) => `<th class="${c.num ? "" : "l"}">${c.h}</th>`).join("");
+			const prow = (r) => PCOLS.map((c) => {
+				const v = c.g(r);
+				const hot = (c.k === "overdue" && (r.overdue || 0) > 0) || (c.k === "days" && (r.days || 0) > 180);
+				return `<td class="${c.num ? "" : "l"} ${hot ? "old" : ""}">${c.k === "dmd" ? g3(v) : esc(v == null ? "" : v)}</td>`;
+			}).join("");
+			const body = rows.map((r) => `<tr class="kid">${prow(r)}</tr>`).join("")
+				+ `<tr class="tot">${PCOLS.map((c, i) => {
+					if (i === 0) return `<td class="l">${__("TOTAL")} (${ctot.bags} ${__("bags")})</td>`;
+					if (c.k === "qty") return `<td>${ctot.pcs}</td>`;
+					if (c.k === "dmd") return `<td>${g3(ctot.dmd)}</td>`;
+					if (c.k === "overdue" || c.k === "days") return `<td>${ctot.oldest}</td>`;
+					return "<td></td>";
+				}).join("")}</tr>`;
+			const sortCol = FCOLS.find((c) => c.k === SORT.key);
 			return printDoc(__("BAG STATUS — {0} PRINT", [VIEW.toUpperCase()]), sub
 				+ (dueLabel() ? ` · <b>${dueLabel()}</b>` : "")
+				+ (sortCol ? ` · ${__("sorted by")} ${sortCol.h} ${SORT.dir < 0 ? "↓" : "↑"}` : "")
+				+ (Object.values(FILT).some((v) => (v || "").trim()) ? ` · ${__("filtered")}` : "")
 				+ (CUSTOFF.size ? ` · ${__("{0} location(s) ticked out", [CUSTOFF.size])}` : ""), HEAD, body, true);
 		}
 		const R = rollup();
