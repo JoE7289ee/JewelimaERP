@@ -33,12 +33,15 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
 	let CUSTDUE = "all"; // due filter: all | past | within (N days to due, past excluded)
 	let PRINT_ODATE = false; // CUST print carries the order date only when ticked
+	let FILT = {};          // per-column text filters on the flat (CUST/BULK) view
+	let SORT = { key: "overdue", dir: -1 }; // flat view sort (col + direction)
 
 	const VIEWS = {
 		loc: { label: __("Location"), l2: __("Location / Design type") },
 		user: { label: __("User"), l2: __("User / Location") },
 		party: { label: __("Party"), l2: __("Party group / Location") },
 		cust: { label: __("CUST"), l2: "" },
+		bulk: { label: __("BULK"), l2: "" },
 		kpi: { label: __("KPI 📊"), l2: "" },
 	};
 
@@ -81,6 +84,25 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		.bs-kcols{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;}
 		.bs-klist{flex:1;min-width:330px;}
 		tr.bs-kj{cursor:pointer;}
+		/* flat (CUST/BULK) view: scroll box + sticky header/filter, sortable cols */
+		.bs-scroll{max-height:calc(100vh - 250px);overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
+		table.bs-flat{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
+		table.bs-flat th{position:sticky;top:0;z-index:3;background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-muted);padding:5px 8px;border-bottom:2px solid var(--gray-400,#aeb6bf);border-right:1px solid var(--border-color);text-align:left;white-space:nowrap;cursor:pointer;user-select:none;}
+		table.bs-flat th .ar{color:#1f618d;font-weight:800;}
+		table.bs-flat tr.bs-frow th{position:sticky;top:26px;z-index:2;background:var(--fg-color);padding:2px 4px;border-bottom:1px solid var(--border-color);}
+		table.bs-flat tr.bs-frow input{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:4px;padding:2px 5px;font-size:11px;background:var(--fg-color);color:var(--text-color);font-weight:400;text-transform:none;}
+		table.bs-flat td{padding:4px 8px;border-bottom:1px solid var(--border-color);border-right:1px solid var(--border-color);font-variant-numeric:tabular-nums;white-space:nowrap;}
+		table.bs-flat tr:hover td{background:var(--control-bg);}
+		table.bs-flat tfoot td{position:sticky;bottom:0;background:var(--control-bg);font-weight:800;border-top:2px solid var(--gray-400,#aeb6bf);}
+		td.bs-fnum,th.bs-fnum{text-align:right;}
+		.bs-charts{display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 18px;}
+		.bs-chart{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);padding:12px 14px;flex:1;min-width:320px;}
+		.bs-chart .ct{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;}
+		.bs-hb{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11.5px;}
+		.bs-hb .lb{width:120px;text-align:right;color:var(--text-muted);flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+		.bs-hb .track{flex:1;background:var(--control-bg);border-radius:4px;height:14px;overflow:hidden;}
+		.bs-hb .fill{display:block;height:100%;border-radius:4px;}
+		.bs-hb .vv{width:96px;flex:none;font-variant-numeric:tabular-nums;}
 		</style>
 		<div class="bs-bar">
 			<label class="bs-file">${__("📄 Pick the BAG STATUS .xlsx")}</label>
@@ -121,7 +143,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				OPEN.clear();
 				// CUST starts with every location unticked — the user opts in
 				CUSTOFF.clear();
-				RAW.filter((r) => r.cust).forEach((r) => CUSTOFF.add(r.loc));
+				RAW.forEach((r) => CUSTOFF.add(r.loc)); // all locations opt-in (CUST + BULK)
 				root.find(".bs-views").css("display", "inline-flex");
 				root.find(".bs-print").show();
 				// first-time spellings persist straight into OTHER (same rule
@@ -144,6 +166,23 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	const bucketOf = (d) => (d <= 30 ? 0 : d <= 90 ? 1 : d <= 180 ? 2 : 3);
 	const partyOf = (r) => r.party || __("(NO PARTY)");
 	const groupOf = (r) => MAP[partyOf(r)] || "OTHER";
+	const isFlat = (v) => v === "cust" || v === "bulk";
+	const modeRows = (mode) => RAW.filter((r) => (mode === "cust" ? r.cust : !r.cust));
+	const FCOLS = [
+		{ k: "bag", h: __("Bag"), g: (r) => r.bag },
+		{ k: "item", h: __("Item"), g: (r) => r.item },
+		{ k: "loc", h: __("Location"), g: (r) => r.loc },
+		{ k: "mark", h: __("Mark"), g: (r) => r.mark },
+		{ k: "purity", h: __("Purity"), g: (r) => r.purity },
+		{ k: "user", h: __("User"), g: (r) => r.user },
+		{ k: "party", h: __("Party"), g: (r) => r.party },
+		{ k: "qty", h: __("Qty"), g: (r) => r.qty, num: 1 },
+		{ k: "dmd", h: __("DMD ct"), g: (r) => r.dmd, num: 1 },
+		{ k: "odate", h: __("Order date"), g: (r) => r.odate },
+		{ k: "days", h: __("Age d"), g: (r) => r.days, num: 1 },
+		{ k: "ddate", h: __("Due date"), g: (r) => r.ddate },
+		{ k: "overdue", h: __("Overdue d"), g: (r) => r.overdue, num: 1 },
+	];
 
 	function blankAgg() {
 		return { bags: 0, pcs: 0, gw: 0, nt: 0, dmd: 0, ps: 0, cs: 0, b: [0, 0, 0, 0], oldest: 0 };
@@ -200,26 +239,24 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		}
 		const tot = blankAgg();
 		let custN;
-		if (VIEW === "cust") {
-			// tiles follow the location ticks + due filter — what you see is
-			// what the numbers count
-			custSections().forEach((sec) => sec.list.forEach((r) => addTo(tot, r)));
+		if (isFlat(VIEW)) {
+			flatFiltered(VIEW).forEach((r) => addTo(tot, r));
 			custN = tot.bags;
 		} else {
 			RAW.forEach((r) => addTo(tot, r));
 			custN = RAW.filter((r) => r.cust).length;
 		}
-		root.find(".bs-due, .bs-podate").css("display", VIEW === "cust" ? "inline-flex" : "none");
-		root.find(".bs-duein").toggle(VIEW === "cust" && CUSTDUE === "within");
+		root.find(".bs-due, .bs-podate").css("display", isFlat(VIEW) ? "inline-flex" : "none");
+		root.find(".bs-duein").toggle(isFlat(VIEW) && CUSTDUE === "within");
 		root.find(".bs-tiles").html(`
 			<div class="bs-tile"><div class="k">${__("Bags")}</div><div class="v">${tot.bags}</div></div>
 			<div class="bs-tile"><div class="k">${__("Pieces")}</div><div class="v">${tot.pcs}</div></div>
 			<div class="bs-tile"><div class="k">${__("Gross")}</div><div class="v">${g3(tot.gw)} g</div></div>
 			<div class="bs-tile"><div class="k">${__("Net gold")}</div><div class="v">${g3(tot.nt)} g</div></div>
 			<div class="bs-tile"><div class="k">${__("DMD")}</div><div class="v">${g3(tot.dmd)} ct</div></div>
-			<div class="bs-tile"><div class="k">${__("CUST bags")}</div><div class="v">${custN}</div></div>
+			<div class="bs-tile"><div class="k">${isFlat(VIEW) ? (VIEW === "cust" ? __("CUST bags") : __("BULK bags")) : __("CUST bags")}</div><div class="v">${custN}</div></div>
 			<div class="bs-tile"><div class="k">${__("Oldest order")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
-		if (VIEW === "cust") return paintCust();
+		if (isFlat(VIEW)) return paintFlat(VIEW);
 		const R = rollup();
 		root.find(".bs-body").html(`
 			<table class="bs-t"><thead><tr>
@@ -238,20 +275,17 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			}).join("")}</tbody></table>`);
 	}
 
-	// CUST bags: each location a title, its pieces beneath, MOST-OVERDUE first
-	// (sorted on the due date; positive Overdue = past due)
+	// due filter (shared by CUST + BULK flat views)
 	function duePass(r) {
 		if (CUSTDUE === "past") return (r.overdue || 0) > 0;
 		if (CUSTDUE === "within") {
 			const n = cint(root.find(".bs-duein").val());
 			if (!n && n !== 0) return true;
-			// due today..today+N — the already-late ones are the PAST filter's job
 			const o = r.overdue || 0;
 			return o <= 0 && o >= -n;
 		}
 		return true;
 	}
-
 	function dueLabel() {
 		if (CUSTDUE === "past") return __("already past due");
 		if (CUSTDUE === "within" && root.find(".bs-duein").val())
@@ -259,79 +293,103 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		return "";
 	}
 
-	// every CUST location, before the tick-out filter (the top strip lists them)
-	function custLocs() {
+	// every location in this mode, before the tick-out (the top strip lists them)
+	function flatLocs(mode) {
 		const locs = {};
-		RAW.filter((r) => r.cust).forEach((r) => { locs[r.loc] = (locs[r.loc] || 0) + 1; });
+		modeRows(mode).forEach((r) => { locs[r.loc] = (locs[r.loc] || 0) + 1; });
 		return Object.keys(locs).sort((a, b) => locs[b] - locs[a]).map((l) => [l, locs[l]]);
 	}
 
-	function custSections() {
-		const bags = RAW.filter((r) => r.cust && !CUSTOFF.has(r.loc) && duePass(r));
+	// rows after location ticks + due filter + per-column text filters, then sorted
+	function flatFiltered(mode) {
+		let rows = modeRows(mode).filter((r) => !CUSTOFF.has(r.loc) && duePass(r));
+		for (const c of FCOLS) {
+			const q = (FILT[c.k] || "").trim().toLowerCase();
+			if (q) rows = rows.filter((r) => String(c.g(r) == null ? "" : c.g(r)).toLowerCase().includes(q));
+		}
+		const col = FCOLS.find((c) => c.k === SORT.key) || FCOLS[0];
+		rows = rows.slice().sort((a, b) => {
+			let va = col.g(a), vb = col.g(b);
+			if (col.num) { va = flt(va); vb = flt(vb); return (va - vb) * SORT.dir; }
+			return String(va || "").localeCompare(String(vb || "")) * SORT.dir;
+		});
+		return rows;
+	}
+
+	// grouped-by-location sections (used by the PRINT — keeps the per-loc totals)
+	function flatSections(mode) {
+		const bags = modeRows(mode).filter((r) => !CUSTOFF.has(r.loc) && duePass(r));
 		const locs = {};
 		bags.forEach((r) => { (locs[r.loc] = locs[r.loc] || []).push(r); });
-		return Object.keys(locs)
-			.sort((a, b) => locs[b].length - locs[a].length)
-			.map((loc) => {
-				const list = locs[loc].sort((a, b) => (b.overdue || 0) - (a.overdue || 0));
-				const t = blankAgg();
-				t.maxover = 0;
-				list.forEach((r) => { addTo(t, r); t.maxover = Math.max(t.maxover, r.overdue || 0); });
-				return { loc, list, t };
-			});
+		return Object.keys(locs).sort((a, b) => locs[b].length - locs[a].length).map((loc) => {
+			const list = locs[loc].sort((a, b) => (b.overdue || 0) - (a.overdue || 0));
+			const t = blankAgg(); t.maxover = 0;
+			list.forEach((r) => { addTo(t, r); t.maxover = Math.max(t.maxover, r.overdue || 0); });
+			return { loc, list, t };
+		});
 	}
 
-	// withOdate: the screen always carries Order date; the print only when ticked
-	const CUST_HEAD = (l, withOdate) => `<th class="${l || ""}">${__("Bag")}</th><th class="${l || ""}">${__("Item")}</th>
-		<th class="${l || ""}" title="${__("the order-lane marker from the file: CUST, CO-HP (WED)…")}">${__("Mark")}</th>
-		<th class="${l || ""}">${__("Purity")}</th><th class="${l || ""}">${__("User")}</th>
-		<th>${__("Qty")}</th><th>${__("DMD ct")}</th>
-		<th class="${l || ""}">${__("Party")}</th>${withOdate ? `<th class="${l || ""}">${__("Order date")}</th>` : ""}<th class="${l || ""}">${__("Due date")}</th><th title="${__("days past the due date — negative means not due yet")}">${__("Overdue d")}</th>`;
-
-	function custRow(r, old, withOdate) {
-		return `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td>
-			<td class="l">${esc(r.mark)}</td>
-			<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td>
-			<td>${r.qty}</td><td>${g3(r.dmd)}</td>
-			<td class="l">${esc(r.party)}</td>${withOdate ? `<td class="l">${esc(r.odate)}</td>` : ""}<td class="l">${esc(r.ddate)}</td>
-			<td class="${(r.overdue || 0) > 0 ? old : ""}">${r.overdue || 0}</td>`;
+	function flatBodyHtml(rows) {
+		return rows.map((r) => `<tr>${FCOLS.map((c) => {
+			const v = c.g(r);
+			const hot = (c.k === "overdue" && (r.overdue || 0) > 0) || (c.k === "days" && (r.days || 0) > 180);
+			return `<td class="${c.num ? "bs-fnum" : ""} ${hot ? "bs-old" : ""}">${c.k === "dmd" ? g3(v) : esc(v == null ? "" : v)}</td>`;
+		}).join("")}</tr>`).join("");
+	}
+	function flatFootHtml(rows) {
+		const tot = blankAgg(); rows.forEach((r) => addTo(tot, r));
+		return `<tr><td colspan="7">${__("TOTAL")} — ${rows.length} ${__("bag(s)")}</td>
+			<td class="bs-fnum">${tot.pcs}</td><td class="bs-fnum">${g3(tot.dmd)}</td>
+			<td></td><td class="bs-fnum">${tot.oldest}</td><td></td><td></td></tr>`;
 	}
 
-	function custTitleRow(s, withOdate) {
-		return `<td class="l" colspan="5">${esc(s.loc)} ${__("TOTAL")}
-				<span style="font-weight:400;color:var(--text-muted);">(${s.t.bags} ${__("bags")})</span></td>
-			<td>${s.t.pcs}</td><td>${g3(s.t.dmd)}</td><td></td>${withOdate ? "<td></td>" : ""}<td></td>
-			<td class="${s.t.maxover > 0 ? "bs-old" : ""}">${s.t.maxover}</td>`;
-	}
-
-	function paintCust() {
-		const secs = custSections();
-		const strip = custLocs().map(([l, n]) => `
+	// ---- the on-screen flat table: sticky header, per-column filters, sort ----
+	function paintFlat(mode) {
+		const rows = flatFiltered(mode);
+		const strip = flatLocs(mode).map(([l, n]) => `
 			<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-color);border-radius:14px;
 				padding:2px 10px;margin:2px 6px 2px 0;font-size:11.5px;cursor:pointer;background:${CUSTOFF.has(l) ? "var(--control-bg)" : "var(--fg-color)"};
 				${CUSTOFF.has(l) ? "opacity:.55;" : ""}">
 				<input type="checkbox" class="bs-custloc" data-loc="${esc(l)}" ${CUSTOFF.has(l) ? "" : "checked"}
 					style="width:13px;height:13px;accent-color:#1f618d;">${esc(l)} <span style="color:var(--text-muted);">(${n})</span></label>`).join("");
+		const arrow = (k) => SORT.key === k ? `<span class="ar">${SORT.dir < 0 ? "▼" : "▲"}</span>` : "";
+		const head = FCOLS.map((c) => `<th class="${c.num ? "bs-fnum" : ""}" data-sort="${c.k}">${c.h} ${arrow(c.k)}</th>`).join("");
+		const frow = FCOLS.map((c) => `<th><input class="bs-filt" data-k="${c.k}" value="${esc(FILT[c.k] || "")}" placeholder="${__("filter")}"></th>`).join("");
+		const body = flatBodyHtml(rows);
 		root.find(".bs-body").html(`
 			<div style="margin-bottom:8px;">
 				<button class="bs-locall" style="border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;margin-right:4px;">${__("Select all")}</button>
 				<button class="bs-locnone" style="border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;color:#fff;background:#8a2f2f;cursor:pointer;margin-right:8px;">${__("Unselect all")}</button>
 				${strip}</div>
-			${secs.length ? `
-			<table class="bs-t"><thead><tr>${CUST_HEAD("l", true)}</tr></thead><tbody>
-			${secs.map((s) => `${s.list.map((r) => `<tr class="bs-kid">${custRow(r, "bs-old", true)}</tr>`).join("")}
-			<tr class="bs-grp flat">${custTitleRow(s, true)}</tr>`).join("")}
-			</tbody></table>`
-			: `<div class="bs-none">${__("No CUST bags match the location ticks / due filter.")}</div>`}`);
+			${rows.length ? `<div class="bs-scroll"><table class="bs-flat">
+				<thead><tr>${head}</tr><tr class="bs-frow">${frow}</tr></thead>
+				<tbody>${body}</tbody>
+				<tfoot>${flatFootHtml(rows)}</tfoot>
+			</table></div>`
+			: `<div class="bs-none">${__("Nothing matches the location ticks / due / column filters.")}</div>`}`);
 	}
 
 	root.on("click", ".bs-locall", () => {
-		CUSTOFF.clear();
+		modeRows(VIEW).forEach((r) => CUSTOFF.delete(r.loc)); // show all of this mode
 		paint();
 	});
 	root.on("click", ".bs-locnone", () => {
-		RAW.filter((r) => r.cust).forEach((r) => CUSTOFF.add(r.loc));
+		modeRows(VIEW).forEach((r) => CUSTOFF.add(r.loc));
 		paint();
+	});
+	// per-column filter — repaint ONLY tbody/tfoot so the focused input survives
+	root.on("input", ".bs-filt", function () {
+		FILT[this.getAttribute("data-k")] = this.value;
+		const rows = flatFiltered(VIEW);
+		root.find(".bs-flat tbody").html(flatBodyHtml(rows));
+		root.find(".bs-flat tfoot").html(flatFootHtml(rows));
+	});
+	// click a column header to sort (toggle direction)
+	root.on("click", ".bs-flat th[data-sort]", function () {
+		const k = this.getAttribute("data-sort");
+		if (SORT.key === k) SORT.dir = -SORT.dir;
+		else SORT = { key: k, dir: 1 };
+		paintFlat(VIEW);
 	});
 	root.on("change", ".bs-custloc", function () {
 		const loc = $(this).data("loc");
@@ -351,6 +409,8 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	root.on("click", ".bs-views button", function () {
 		VIEW = $(this).data("v");
 		OPEN.clear();
+		FILT = {};
+		SORT = { key: "overdue", dir: -1 };
 		paint();
 	});
 	root.on("click", "tr.bs-grp:not(.flat)", function () {
@@ -412,6 +472,34 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 					<td>${x.bags}</td><td><b>${x.pcs}</b></td><td>${pctP(x.pcs)}</td>
 					<td><b>${Math.round(wavg(x))}</b></td><td class="${x.oldest > 180 ? "bs-old" : ""}">${x.oldest}</td></tr>`;
 			}).join("")}</tbody></table></div>`;
+		// --- little SVG charts (self-contained, theme-safe) -------------------
+		const donut = (segs, center) => {
+			const total = segs.reduce((n, x) => n + x.value, 0) || 1;
+			const R = 52, C = 2 * Math.PI * R;
+			let off = 0;
+			const rings = segs.map((x) => {
+				const len = (x.value / total) * C;
+				const el = `<circle r="${R}" cx="70" cy="70" fill="none" stroke="${x.color}" stroke-width="22"
+					stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"></circle>`;
+				off += len; return el;
+			}).join("");
+			return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+				<svg width="140" height="140" viewBox="0 0 140 140">${rings}
+					<text x="70" y="66" text-anchor="middle" font-size="20" font-weight="800" fill="var(--text-color)">${center}</text>
+					<text x="70" y="84" text-anchor="middle" font-size="9" fill="var(--text-muted)">${__("pieces")}</text></svg>
+				<div style="font-size:12px;">${segs.map((x) => `<div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+					<span style="width:11px;height:11px;border-radius:3px;background:${x.color};display:inline-block;"></span>
+					${x.label} <b style="margin-left:auto;padding-left:10px;">${x.value}</b>
+					<span style="color:var(--text-muted);">${total ? Math.round(x.value / total * 100) : 0}%</span></div>`).join("")}</div>
+			</div>`;
+		};
+		const hbars = (items, color) => {
+			const mx = Math.max(...items.map((i) => i.v), 1);
+			return items.map((i) => `<div class="bs-hb"><span class="lb" title="${esc(i.k)}">${esc(i.k)}</span>
+				<span class="track"><span class="fill" style="width:${(i.v / mx) * 100}%;background:${color};"></span></span>
+				<span class="vv">${i.v}${i.s ? " · " + i.s + "d" : ""}</span></div>`).join("");
+		};
+		const stageBars = lk.slice(0, 8).map((l) => ({ k: l, v: locs[l].pcs, s: Math.round(wavg(locs[l])) }));
 		root.find(".bs-body").html(`
 			<div class="bs-ksec"><div class="bs-kh">${__("WIP on the floor")}</div><div class="bs-ktiles">
 				${tile(__("Bags"), tot.bags)}
@@ -441,6 +529,26 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				${tile(__("Worst overdue"), worstOver + " " + __("d"))}
 				${tile(__("Due in 7 d"), cdue7.length, __("bags — this week's fires"))}
 			</div></div>
+			<div class="bs-charts">
+				<div class="bs-chart"><div class="ct">${__("Aging mix — pieces by order age")}</div>
+					${donut([
+						{ label: "0–30 d", value: tot.b[0], color: BCOL[0] },
+						{ label: "31–90 d", value: tot.b[1], color: BCOL[1] },
+						{ label: "91–180 d", value: tot.b[2], color: BCOL[2] },
+						{ label: "180+ d", value: tot.b[3], color: BCOL[3] },
+					], tot.pcs)}
+				</div>
+				<div class="bs-chart"><div class="ct">${__("Where the work sits — top stages by pieces")} <span style="font-weight:400;color:var(--text-muted);">· ${__("avg age on the right")}</span></div>
+					${stageBars.length ? hbars(stageBars, "#1f618d") : `<div class="bs-none">${__("no data")}</div>`}
+				</div>
+				<div class="bs-chart"><div class="ct">${__("CUST delivery clock")}</div>
+					${cust.length ? hbars([
+						{ k: __("Past due"), v: cpast.length },
+						{ k: __("Due in 7 d"), v: cdue7.length },
+						{ k: __("Later / open"), v: cust.length - cpast.length - cdue7.length },
+					], "#b45309") : `<div class="bs-none">${__("no CUST bags")}</div>`}
+				</div>
+			</div>
 			<div class="bs-kcols">
 				${locTable(lk.slice().sort((a, b) => wavg(locs[b]) - wavg(locs[a])), __("Bottlenecks — stalest stages"), __("piece-weighted avg days, click to open"))}
 				${locTable(lk, __("Heaviest stages"), __("most pieces sitting, click to open"))}
@@ -515,19 +623,28 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		RAW.forEach((r) => addTo(tot, r));
 		const sub = `${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
 			· ${tot.bags} ${__("bags")} · ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`;
-		if (VIEW === "cust") {
-			const secs = custSections();
+		if (isFlat(VIEW)) {
+			const secs = flatSections(VIEW);
 			if (!secs.length) return frappe.show_alert({ message: __("Nothing matches the location ticks / due filter."), indicator: "orange" }, 4);
 			const ctot = blankAgg();
-			secs.forEach((s) => s.list.forEach((r) => addTo(ctot, r)));
+			secs.forEach((se) => se.list.forEach((r) => addTo(ctot, r)));
 			const w = PRINT_ODATE;
-			const body = secs.map((s) => `${s.list.map((r) => `<tr class="kid">${custRow(r, "old", w)}</tr>`).join("")}
-				<tr class="grp">${custTitleRow(s, w)}</tr>`).join("")
-				+ `<tr class="tot"><td class="l" colspan="5">${__("TOTAL CUST")} (${ctot.bags} ${__("bags")})</td>
+			const HEAD = `<th class="l">${__("Bag")}</th><th class="l">${__("Item")}</th><th class="l">${__("Mark")}</th>
+				<th class="l">${__("Purity")}</th><th class="l">${__("User")}</th><th>${__("Qty")}</th><th>${__("DMD ct")}</th>
+				<th class="l">${__("Party")}</th>${w ? `<th class="l">${__("Order date")}</th>` : ""}<th class="l">${__("Due date")}</th><th>${__("Overdue d")}</th>`;
+			const prow = (r) => `<td class="l">${esc(r.bag)}</td><td class="l">${esc(r.item)}</td><td class="l">${esc(r.mark)}</td>
+				<td class="l">${esc(r.purity)}</td><td class="l">${esc(r.user)}</td><td>${r.qty}</td><td>${g3(r.dmd)}</td>
+				<td class="l">${esc(r.party)}</td>${w ? `<td class="l">${esc(r.odate)}</td>` : ""}<td class="l">${esc(r.ddate)}</td>
+				<td class="${(r.overdue || 0) > 0 ? "old" : ""}">${r.overdue || 0}</td>`;
+			const body = secs.map((se) => `${se.list.map((r) => `<tr class="kid">${prow(r)}</tr>`).join("")}
+				<tr class="grp"><td class="l" colspan="5">${esc(se.loc)} ${__("TOTAL")} (${se.t.bags} ${__("bags")})</td>
+					<td>${se.t.pcs}</td><td>${g3(se.t.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td>
+					<td class="${se.t.maxover > 0 ? "old" : ""}">${se.t.maxover}</td></tr>`).join("")
+				+ `<tr class="tot"><td class="l" colspan="5">${__("TOTAL")} (${ctot.bags} ${__("bags")})</td>
 				<td>${ctot.pcs}</td><td>${g3(ctot.dmd)}</td><td></td>${w ? "<td></td>" : ""}<td></td><td></td></tr>`;
-			return printDoc(__("BAG STATUS — CUST PRINT"), sub
+			return printDoc(__("BAG STATUS — {0} PRINT", [VIEW.toUpperCase()]), sub
 				+ (dueLabel() ? ` · <b>${dueLabel()}</b>` : "")
-				+ (CUSTOFF.size ? ` · ${__("{0} location(s) ticked out", [CUSTOFF.size])}` : ""), CUST_HEAD("l", w), body, true);
+				+ (CUSTOFF.size ? ` · ${__("{0} location(s) ticked out", [CUSTOFF.size])}` : ""), HEAD, body, true);
 		}
 		const R = rollup();
 		const body = sortedKeys(R).map((name) => {
