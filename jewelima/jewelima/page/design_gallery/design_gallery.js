@@ -46,6 +46,12 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	.dg-check{position:absolute;top:6px;left:6px;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.85);
 		border:1.5px solid var(--gray-500,#8d99a6);display:none;align-items:center;justify-content:center;color:transparent;font-size:13px;z-index:2;}
 	.dg-tile:hover .dg-check{display:flex;}
+	.dg-tile{transition:transform .12s,box-shadow .12s;}
+	.dg-tile:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,.14);}
+	.dg-stats{display:flex;gap:10px;flex-wrap:wrap;padding:12px 2px 6px;}
+	.dg-stat{flex:1;min-width:118px;border:1px solid var(--border-color);border-left-width:4px;border-radius:12px;background:var(--fg-color);padding:11px 15px;}
+	.dg-stat .v{font-size:25px;font-weight:800;line-height:1;}
+	.dg-stat .t{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-top:4px;}
 	.dg-tile.sel{border-color:var(--primary);}
 	.dg-tile.sel .dg-check{display:flex;background:var(--primary);border-color:var(--primary);color:#fff;}
 	.dg-status{text-align:center;color:var(--text-muted);font-size:12px;padding:14px;}
@@ -57,6 +63,7 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	.dg-var{font-family:var(--font-family-monospace,monospace);font-weight:700;font-size:12px;border:1px solid var(--border-color);border-radius:6px;padding:2px 8px;cursor:pointer;background:var(--control-bg);}
 	</style>
 	<div class="dg-wrap">
+		<div class="dg-stats"></div>
 		<div class="dg-bar">
 			<div class="dg-row1">
 				<input type="text" class="form-control input-sm dg-search" placeholder="Search design no…">
@@ -95,6 +102,23 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	const $status = root.find(".dg-status");
 	const $count = root.find(".dg-count");
 	const $actions = root.find(".dg-actions");
+
+	// live bank stats strip across the top (informative at a glance)
+	function loadStats() {
+		frappe.call({ method: "jewelima.jewelima.design_bank_api.design_bank_report", freeze: false }).then((r) => {
+			const cov = (r.message || {}).coverage || {};
+			const nf = (n) => (n || 0).toLocaleString("en-IN");
+			root.find(".dg-stats").html([
+				["Total", cov.total, "#3a2e78"],
+				["Approved", cov.approved, "#2e9e4f"],
+				["Pending", cov.pending, "#e0872a"],
+				["With photo", cov.with_photo, "#2b7cd3"],
+				["Customer", cov.customer_done, "#12a594"],
+				["Retired", cov.retired, "#d1495b"],
+			].map(([t, v, c]) => `<div class="dg-stat" style="border-left-color:${c};"><div class="v" style="color:${c};">${nf(v)}</div><div class="t">${t}</div></div>`).join(""));
+		});
+	}
+	loadStats();
 
 	const state = {
 		search: "", tags: new Set(), match: "any",

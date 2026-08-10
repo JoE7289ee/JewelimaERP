@@ -15,7 +15,8 @@ jewelima.buildFinishedMatrix = function (wrapper, OPTS) {
 	$(page.main).append(`
 		<style>
 		.fm-cards{display:flex;gap:12px;flex-wrap:wrap;margin:2px 0 12px;}
-		.fm-card{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);padding:10px 16px;min-width:150px;}
+		.fm-card{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);padding:11px 16px;min-width:150px;transition:transform .12s,box-shadow .12s;}
+		.fm-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.09);}
 		.fm-card .lb{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.fm-card .v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;}
 		.fm-card.gold{box-shadow:inset 3px 0 0 #b8860b;}
