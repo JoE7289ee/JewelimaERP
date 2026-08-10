@@ -726,6 +726,39 @@ def reject_customer_update(name):
 
 
 @frappe.whitelist()
+def approve_photo_updates_bulk(names):
+	"""Glance-and-go: approve many product-photo candidates in one shot. Bad ones
+	are rejected individually first; this approves everything left selected."""
+	_require(DESIGN_APPROVER_ROLES)
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	done, failed = 0, []
+	for n in names:
+		try:
+			approve_photo_update(n)
+			done += 1
+		except Exception:
+			failed.append(n)
+	return {"done": done, "failed": failed,
+		"left": frappe.db.count("Design Bank", {"pending_photo": ["is", "set"]})}
+
+
+@frappe.whitelist()
+def approve_customer_updates_bulk(names):
+	"""Bulk-approve customer-photo candidates (same glance-and-go flow)."""
+	_require(DESIGN_APPROVER_ROLES)
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	done, failed = 0, []
+	for n in names:
+		try:
+			approve_customer_update(n)
+			done += 1
+		except Exception:
+			failed.append(n)
+	return {"done": done, "failed": failed,
+		"left": frappe.db.count("Design Bank", {"pending_customer_image": ["is", "set"]})}
+
+
+@frappe.whitelist()
 def get_rejection_queue(start=0, limit=60):
 	"""Every design whose product or customer photo candidate was rejected — the
 	uploader retries here (they also remain in their normal update queue)."""
