@@ -414,6 +414,10 @@ const PO_COLUMNS = [
 		row._remark = "";
 		row.$remark = $('<button class="btn btn-xs btn-default" title="Add a remark">Remark</button>').appendTo($act);
 		row.$remark.on("click", () => editRemark(row));
+		row.$remark.on("mouseenter", function () {
+			const t = (row._remark || "").trim();
+			if (t) po_showTip(this, t);
+		}).on("mouseleave", po_hideTip);
 		row.$reset = $('<button class="btn btn-xs btn-default" title="Reset this line to the design\'s BOM">Reset</button>').appendTo($act);
 		row.$reset.on("click", () => resetLine(row)).hide(); // appears once the BOM is edited (Materials yellow)
 		row._photos = [];
@@ -885,8 +889,21 @@ const PO_COLUMNS = [
 	function updateRemarkBtn(row) {
 		const has = !!(row._remark || "").trim();
 		row.$remark.toggleClass("btn-success", has).toggleClass("btn-default", !has);
-		row.$remark.attr("title", has ? row._remark : __("Add a remark"));
+		row.$remark.attr("title", has ? __("Edit remark (hover shows it)") : __("Add a remark"));
 	}
+	// immediate hover tooltip showing the full remark (native title lags ~1s)
+	let po_tip = null;
+	function po_showTip(el, text) {
+		po_hideTip();
+		po_tip = document.createElement("div");
+		po_tip.textContent = text;
+		po_tip.style.cssText = "position:fixed;z-index:9999;background:#2b2b2b;color:#fff;padding:5px 9px;border-radius:6px;font-size:11.5px;max-width:300px;white-space:pre-wrap;box-shadow:0 3px 12px rgba(0,0,0,.35);pointer-events:none;";
+		document.body.appendChild(po_tip);
+		const r = el.getBoundingClientRect();
+		po_tip.style.left = Math.max(6, r.left) + "px";
+		po_tip.style.top = Math.max(6, r.top - po_tip.offsetHeight - 6) + "px";
+	}
+	function po_hideTip() { if (po_tip) { po_tip.remove(); po_tip = null; } }
 
 	// remark lives in a dialog (not an inline field) to save space; button turns green when set
 	function updatePhotosBtn(row) {

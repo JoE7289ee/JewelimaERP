@@ -328,7 +328,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	// add them to the batch without scanning. Every pick still goes through
 	// processScan, so all the mode/location guards apply unchanged.
 	function showCards() {
-		const S = { location: state.location || "", status: state.mode === "receipt" ? "Issued" : "In Queue", rows: [], sel: new Set() };
+		const S = { location: state.location || "", status: state.mode === "collect" ? "Issued" : "In Queue", rows: [], sel: new Set() };
+		// dynamic per mode: Assign shows only to-be-assigned (In Queue); Collect only Issued
+		const STATUSES = state.mode === "collect" ? ["Issued"] : ["In Queue"];
 		const dlg = new frappe.ui.Dialog({
 			title: __("Cards by bench"),
 			size: "extra-large",
@@ -359,7 +361,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			</style>
 			<div class="tc-top">
 				<select class="tc-loc"><option value="">${__("— bench —")}</option>${ALLOWED.map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}</select>
-				${["All", "In Queue", "Issued", "Completed"].map((p) => `<span class="tc-pill ${p === S.status ? "on" : ""}" data-s="${p}">${p}</span>`).join("")}
+				${STATUSES.map((p) => `<span class="tc-pill ${p === S.status ? "on" : ""}" data-s="${p}">${p}</span>`).join("")}
 				<button class="btn btn-xs btn-default tc-all">${__("Select all")}</button>
 				<button class="btn btn-xs btn-default tc-none">${__("Clear")}</button>
 				<span class="tc-count"></span>

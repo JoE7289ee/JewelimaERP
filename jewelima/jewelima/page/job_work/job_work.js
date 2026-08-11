@@ -254,14 +254,17 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			const row = { name: code, design: v.design, qty: v.qty, status, gold: v.gold };
+			const row = { name: code, design: v.design, qty: v.qty, status, gold: v.gold, employee: (v.record && v.record.employee) || "" };
 			if (state.mode === "receipt") {
 				row.weight_out = (v.record && v.record.weight_out) || v.gold || 0;
 				row.weight_in = null;
 			}
 			state.rows.push(row);
+			// the card may already carry an employee assigned at the workbench — pull it
+			// so you don't re-enter it (the first assigned card seeds the batch employee)
+			if (row.employee && !state.emp.get_value()) state.emp.set_value(row.employee);
 			renderRows();
-			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
+			setMsg(__("Added <b>{0}</b>{1}  ·  {2} in batch.", [safe, row.employee ? " · " + frappe.utils.escape_html(row.employee) : "", state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
 		});
 	}
@@ -397,6 +400,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// processScan, so all the mode/location guards apply unchanged.
 	function showCards() {
 		const S = { location: state.location || "", status: state.mode === "receipt" ? "Issued" : "In Queue", rows: [], sel: new Set() };
+		// dynamic per mode: Issue shows only to-be-issued (In Queue); Receipt only Issued
+		const STATUSES = state.mode === "receipt" ? ["Issued"] : ["In Queue"];
 		const dlg = new frappe.ui.Dialog({
 			title: __("Cards by bench"),
 			size: "extra-large",
@@ -427,7 +432,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			</style>
 			<div class="tc-top">
 				<select class="tc-loc"><option value="">${__("— bench —")}</option>${ALLOWED.map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}</select>
-				${["All", "In Queue", "Issued", "Completed"].map((p) => `<span class="tc-pill ${p === S.status ? "on" : ""}" data-s="${p}">${p}</span>`).join("")}
+				${STATUSES.map((p) => `<span class="tc-pill ${p === S.status ? "on" : ""}" data-s="${p}">${p}</span>`).join("")}
 				<button class="btn btn-xs btn-default tc-all">${__("Select all")}</button>
 				<button class="btn btn-xs btn-default tc-none">${__("Clear")}</button>
 				<span class="tc-count"></span>

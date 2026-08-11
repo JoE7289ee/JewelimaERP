@@ -112,6 +112,8 @@ JEWELIMA_READ_ERPNEXT = [
 JEWELIMA_ORDERING_READ = [
 	"Customer", "Sales Person", "Order Type",
 	"Design Type", "Design Style", "Item", "Item Group", "UOM",
+	# New/Old Design workflow from Place Order needs to read the catalog
+	"Design Bank",
 ]
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]

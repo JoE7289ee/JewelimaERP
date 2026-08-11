@@ -396,7 +396,8 @@ def get_review_card(q):
 def review_save(payload):
 	"""Review corrections: values re-render the card; checkboxes stick; optional
 	approve (needs design type); optional PERMANENT raw delete (file off disk)."""
-	_require(DESIGN_APPROVER_ROLES)
+	# Ordering can approve here too — the Old Design flow on Place Order uses this
+	_require(DESIGN_APPROVER_ROLES | {"Jewelima Ordering"})
 	from jewelima.jewelima.api import save_design_card
 	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	res = save_design_card(json.dumps({k: p.get(k) for k in

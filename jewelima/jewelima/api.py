@@ -241,6 +241,20 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
 			stype[it.name] = it.stone_type or ""
 
+	# a stone "has a sieve" when its trailing token is a known sieve size; parent/
+	# bulk stone items (e.g. CZ) have no sieve, so they need no piece count.
+	sieve_sizes = set(frappe.get_all("Diamond Sieve", pluck="sieve_size"))
+	def _has_sieve(it):
+		return (it or "").rsplit(" ", 1)[-1] in sieve_sizes
+
+	# warehouse rule: stones only into Stone Issue, metal only into Gold Issue
+	if warehouse:
+		wh_name = frappe.db.get_value("Warehouse", warehouse, "warehouse_name") or ""
+		if wh_name == "Gold Issue" and any(stype.get(i.get("item")) for i in items):
+			frappe.throw(frappe._("Stones can't go into Gold Issue — receive them into Stone Issue."))
+		if wh_name == "Stone Issue" and any(i.get("item") and not stype.get(i.get("item")) for i in items):
+			frappe.throw(frappe._("Metal can't go into Stone Issue — receive it into Gold Issue."))
+
 	rows = []
 	for i in items:
 		item = i.get("item")
@@ -248,8 +262,8 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 		if not item or weight <= 0:
 			continue
 		count = cint(i.get("count"))
-		if stype.get(item) and count <= 0:
-			frappe.throw(frappe._("{0} is a stone — enter the piece count (Qty).").format(item))
+		if stype.get(item) and _has_sieve(item) and count <= 0:
+			frappe.throw(frappe._("{0} is a sized stone — enter the piece count (Qty).").format(item))
 		row = {"item_code": item, "qty": weight, "rate": flt(i.get("rate")), "warehouse": warehouse}
 		if stype.get(item):
 			row["custom_stone_count"] = count
@@ -273,8 +287,13 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 			"items": rows,
 		}
 	)
-	pr.insert(ignore_permissions=True)
-	pr.submit()
+	# mute ERPNext's zero-rate / valuation warnings — raw material has no cost here
+	frappe.flags.mute_messages = True
+	try:
+		pr.insert(ignore_permissions=True)
+		pr.submit()
+	finally:
+		frappe.flags.mute_messages = False
 
 	rec = frappe.get_doc({
 		"doctype": "Purchase Record", "voucher_type": voucher_type, "supplier": supplier,

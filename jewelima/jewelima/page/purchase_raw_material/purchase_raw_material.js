@@ -221,12 +221,13 @@ function postPurchase(page, state, $body) {
 	const warehouse = state.header.warehouse.get_value();
 	const posting_date = state.header.posting_date.get_value();
 	const items = state.rows
-		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.isStone ? r.f.carat.get() : r.f.gram.get()) || 0, count: cint(r.f.count.get()) || 0, purity: flt(r.f.purity.get()) || 0, isStone: !!r.isStone }))
+		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.isStone ? r.f.carat.get() : r.f.gram.get()) || 0, count: cint(r.f.count.get()) || 0, purity: flt(r.f.purity.get()) || 0, isStone: !!r.isStone, hasSieve: !!r._avg }))
 		.filter((l) => l.item && l.weight > 0);
 
 	if (!items.length) return frappe.msgprint(__("Add at least one item with a weight."));
-	const badStone = items.find((l) => l.isStone && l.count <= 0);
-	if (badStone) return frappe.msgprint(__("{0} is a stone — enter the piece count (Qty).", [badStone.item]));
+	// only SIZED stones need a count — bulk parents (e.g. CZ, no sieve) go in without one
+	const badStone = items.find((l) => l.isStone && l.hasSieve && l.count <= 0);
+	if (badStone) return frappe.msgprint(__("{0} is a sized stone — enter the piece count (Qty).", [badStone.item]));
 	if (!supplier) return frappe.msgprint(__("Select a supplier."));
 	const voucher_type = state.header.voucher.get_value();
 	if (!voucher_type) return frappe.msgprint(__("Pick the voucher type."));

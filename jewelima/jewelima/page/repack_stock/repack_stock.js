@@ -168,7 +168,13 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		const t = TARGETS[Number(this.dataset.i)];
 		t.pcs = Number(this.value) || 0;
 		t.manual = true; // hand count beats the average -> yellow
+		// count entered -> weight (ct) filled by the group average (pcs × avg)
+		if (t.avg && t.pcs > 0) {
+			t.qty = Number((t.pcs * t.avg).toFixed(3));
+			$(this).closest("tr").find("input.qty").val(t.qty || "");
+		}
 		$(this).closest("td").attr("class", t.qty > 0 ? "qc-man" : "");
+		balance();
 	});
 
 	function balance() {
