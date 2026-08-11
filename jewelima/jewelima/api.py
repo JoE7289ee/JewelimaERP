@@ -9057,6 +9057,7 @@ OLD_FORMAT_COLS = [
 	("COLOUR", "colour", "s"), ("STYLE", "style", "s"), ("SIZE", "size", "s"),
 	("SHAPE", "shape", "s"), ("CERT", "cert", "s"), ("CERT NO", "cert_no", "s"),
 	("BACK CHAIN BARCODE", "back_chain_barcode", "s"), ("BACK CHAIN WT", "back_chain_wt", "f"),
+	("SHOP NAME", "shop", "s"),
 ]
 
 

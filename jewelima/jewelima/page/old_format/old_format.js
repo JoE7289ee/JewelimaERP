@@ -117,6 +117,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<option value="cert">${__("Cert lab")}</option>
 				<option value="size">${__("Size")}</option>
 				<option value="shape">${__("Shape")}</option>
+				<option value="shop">${__("Shop Name")}</option>
 				<option value="pending">${__("HUID PENDING")}</option>
 			</select>
 			<span class="of-bslot" style="display:inline-flex;gap:8px;align-items:center;"></span>
@@ -400,7 +401,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
-				<th>${__("Cert")}</th>
+				<th>${__("Cert")}</th><th>${__("Shop Name")}</th>
 			</tr></thead><tbody>
 			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}" style="background:${tintOf(r.colour)}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
@@ -418,6 +419,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					<option ${r.style === "GENTS / LADIES" ? "selected" : ""}>GENTS / LADIES</option></select></td>
 				<td><input data-f="shape" list="of-shapes" value="${esc(r.shape)}" style="width:64px;"></td>
 				<td><input data-f="cert" list="of-labs" value="${esc(r.cert)}" style="width:56px;"></td>
+				<td><input data-f="shop" value="${esc(r.shop || "")}" style="width:110px;"></td>
 			</tr>`).join("")}</tbody></table>`);
 	}
 
@@ -505,6 +507,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		cert: { input: "text", list: "of-labs", upper: true },
 		size: { input: "text", upper: false },
 		shape: { input: "select", options: ["OVAL", "CHAIN"] },
+		shop: { input: "text", upper: true, allEmpty: true },
 		pending: { input: "none" },
 	};
 
@@ -524,6 +527,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		}
 		html += `<button class="bapply of-bapply">${__("→ selected")}</button>`;
 		if (cfg.allEmpty) html += `<button class="bapply alt of-bapply-empty">${__("→ all empty")}</button>`;
+		html += `<button class="bapply of-bclear" style="background:#8a2f2f;">${__("→ clear selected")}</button>`;
 		root.find(".of-bslot").html(html);
 	}
 	root.on("change", ".of-bfield", renderBulkSlot);
@@ -567,6 +571,23 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	}
 	root.on("click", ".of-bapply", () => bulkApply(false));
 	root.on("click", ".of-bapply-empty", () => bulkApply(true));
+
+	// clear the chosen field on the ticked rows (HUID PENDING included — clears the HUID)
+	function bulkClear() {
+		const field = root.find(".of-bfield").val();
+		if (!SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
+		const target = field === "pending" ? "huid" : field;
+		let n = 0;
+		ROWS.forEach((r) => {
+			if (!SEL.has(r.unique_id)) return;
+			if (r[target]) { r[target] = ""; n++; }
+		});
+		if (n) invalidate();
+		SEL.clear(); LASTSEL = null;
+		paint();
+		frappe.show_alert({ message: __("Cleared {0} on {1} row(s).", [String(target).toUpperCase(), n]), indicator: "blue" }, 3);
+	}
+	root.on("click", ".of-bclear", bulkClear);
 
 	// the agreed physical order: the item ladder -> YELLOW/ROSE/WHITE ->
 	// below-1g band first -> GW ascending inside the band
