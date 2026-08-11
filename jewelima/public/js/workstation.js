@@ -57,6 +57,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		.wk-since{color:var(--text-muted);font-size:11px;margin-left:auto;}
 		.wk-none{padding:22px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.wk-dt{border:1px solid var(--border-color);border-radius:9px;padding:4px 12px;background:var(--control-bg);text-align:center;}
+		.wk-flow{cursor:pointer;transition:border-color .1s,box-shadow .1s;}
+		.wk-flow:hover{border-color:#1f618d;box-shadow:0 1px 5px rgba(31,97,141,.18);}
 		.wk-dt .k{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.wk-dt .v{font-size:14px;font-weight:800;display:block;}
 		.wk-dt .s{font-size:9.5px;color:var(--text-muted);display:block;white-space:nowrap;}
@@ -68,7 +70,6 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		</style>
 		<div class="wk-loc"><span class="tag">${__("Workstation")}</span>${esc(bench)}
 			<span style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-				<input type="date" class="wk-date" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;background:var(--control-bg);color:var(--text-color);font-size:12px;">
 				<span class="wk-day-tiles" style="display:flex;gap:8px;"></span>
 			</span></div>
 		<div class="wk-kpis"></div>
@@ -156,7 +157,9 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 
 	// ---- the DAY panel: transfers in/out + finished work by worker -------------
 	function dayDate() {
-		return root.find(".wk-date").val() || frappe.datetime.get_today();
+		// the DAY panel always reflects today; the IN/OUT tiles open their own
+		// date-filtered dialog that leaves this untouched.
+		return frappe.datetime.get_today();
 	}
 	function loadDay() {
 		frappe.call({ method: API + ".get_bench_day", args: { bench, date: dayDate() }, freeze: false }).then((r) => {
@@ -164,10 +167,11 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			if (!d) return;
 			const chips = (st) => Object.entries(st || {})
 				.map(([k, v]) => `${k} ${v.pcs}/${v.ct.toFixed(3)}ct`).join(" · ");
-			const tile = (label, x) => `<span class="wk-dt"><span class="k">${label}</span>
+			const tile = (label, dir, x) => `<span class="wk-dt wk-flow" data-dir="${dir}" title="${__("Click to see the cards — with a date filter")}">
+				<span class="k">${label}</span>
 				<span class="v">${x.count} · ${x.gold_g.toFixed(3)} g</span>
 				${Object.keys(x.stones || {}).length ? `<span class="s">${chips(x.stones)}</span>` : ""}</span>`;
-			root.find(".wk-day-tiles").html(tile(__("In today"), d.in) + tile(__("Out today"), d.out));
+			root.find(".wk-day-tiles").html(tile(__("In today"), "in", d.in) + tile(__("Out today"), "out", d.out));
 			root.find(".wk-day-title").text(__("Work done on {0} — {1} card(s)", [frappe.datetime.str_to_user(d.date), d.done_count]));
 			// summary per worker — the card-by-card detail lives in the bench records
 			const sum = (arr, k) => arr.reduce((t, x) => t + (x[k] || 0), 0);
@@ -231,6 +235,122 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 			</tr>`).join("")}</tbody></table>`
 			: `<div style="padding:24px;text-align:center;color:var(--text-muted);">${__("Nothing completed is waiting to transfer.")}</div>`);
+		dlg.show();
+	});
+
+	// IN / OUT tiles -> the actual cards that moved, with a from/to date filter.
+	// The dialog owns its own dates; the page's DAY panel stays on today.
+	root.on("click", ".wk-flow", function () {
+		const dir = $(this).data("dir");
+		const isIn = dir === "in";
+		const today = frappe.datetime.get_today();
+		const dlg = new frappe.ui.Dialog({
+			title: isIn ? __("Cards in — {0}", [bench]) : __("Cards out — {0}", [bench]),
+			size: "large",
+		});
+		$(dlg.body).html(`
+			<div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+				<label style="font-size:11px;color:var(--text-muted);">${__("From")}<br>
+					<input type="date" class="wf-from form-control" style="width:150px;" value="${today}"></label>
+				<label style="font-size:11px;color:var(--text-muted);">${__("To")}<br>
+					<input type="date" class="wf-to form-control" style="width:150px;" value="${today}"></label>
+				<button class="btn btn-xs btn-default wf-today" style="margin-bottom:1px;">${__("Today")}</button>
+				<button class="btn btn-xs btn-default wf-clearf" style="margin-bottom:1px;">${__("Clear filters")}</button>
+				<span class="wf-count" style="margin-left:auto;font-size:12px;color:var(--text-muted);"></span>
+			</div>
+			<div class="wf-body"></div>`);
+
+		// every column sorts (click header) and filters (type in the row below it)
+		const cols = [
+			{ key: "order_bag", label: __("Card"), link: true },
+			{ key: "design", label: __("Design") },
+			{ key: "qty", label: __("Qty"), num: true },
+			{ key: "other", label: isIn ? __("From") : __("To") },
+			{ key: "time", label: __("When"), disp: (r) => (r.time ? frappe.datetime.str_to_user(r.time) : "") },
+			{ key: "by", label: __("By") },
+		];
+		const F = { raw: [], filters: {}, sortKey: null, sortDir: 1 };
+		const dispVal = (c, r) => (c.disp ? c.disp(r) : (r[c.key] != null ? String(r[c.key]) : ""));
+
+		function computeRows() {
+			let rows = F.raw.slice();
+			cols.forEach((c) => {
+				const q = (F.filters[c.key] || "").trim().toLowerCase();
+				if (q) rows = rows.filter((r) => dispVal(c, r).toLowerCase().indexOf(q) !== -1);
+			});
+			if (F.sortKey) {
+				const c = cols.find((x) => x.key === F.sortKey);
+				rows.sort((a, b) => {
+					let va, vb;
+					if (c && c.num) { va = flt(a[c.key]); vb = flt(b[c.key]); }
+					else { va = dispVal(c, a).toLowerCase(); vb = dispVal(c, b).toLowerCase(); }
+					return (va < vb ? -1 : va > vb ? 1 : 0) * F.sortDir;
+				});
+			}
+			return rows;
+		}
+		function rowHtml(r) {
+			return `<tr>
+				<td><a class="jw-card-link" style="font-weight:800;color:#1f618d;cursor:pointer;" data-card="${esc(r.order_bag)}">${esc(r.order_bag)}</a></td>
+				<td>${esc(r.design || "")}</td><td>${r.qty != null ? r.qty : ""}</td>
+				<td>${esc(r.other || "")}</td>
+				<td>${r.time ? frappe.datetime.str_to_user(r.time) : ""}</td>
+				<td>${esc(r.by || "")}</td>
+			</tr>`;
+		}
+		function repaint() {
+			const rows = computeRows();
+			$(dlg.body).find(".wf-count").text(__("{0} of {1} card(s)", [rows.length, F.raw.length]));
+			$(dlg.body).find(".wf-tbody").html(rows.length ? rows.map(rowHtml).join("")
+				: `<tr><td colspan="${cols.length}" style="padding:18px;text-align:center;color:var(--text-muted);">${__("Nothing matches the filters.")}</td></tr>`);
+			$(dlg.body).find(".wf-sort .wf-ar").text("");
+			if (F.sortKey) $(dlg.body).find('.wf-sort[data-k="' + F.sortKey + '"] .wf-ar').text(F.sortDir > 0 ? " ▲" : " ▼");
+		}
+		function build() {
+			if (!F.raw.length) {
+				$(dlg.body).find(".wf-body").html(`<div style="padding:24px;text-align:center;color:var(--text-muted);">${__("No cards in this date range.")}</div>`);
+				return;
+			}
+			$(dlg.body).find(".wf-body").html(`
+				<table class="wk-t wf-tbl">
+				<thead>
+					<tr>${cols.map((c) => `<th class="wf-sort" data-k="${c.key}" title="${__("Sort")}" style="cursor:pointer;white-space:nowrap;user-select:none;">${esc(c.label)}<span class="wf-ar"></span></th>`).join("")}</tr>
+					<tr>${cols.map((c) => `<th style="padding:3px 5px;"><input class="wf-f" data-k="${c.key}" placeholder="${__("filter")}" value="${esc(F.filters[c.key] || "")}" style="width:100%;box-sizing:border-box;height:24px;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;border:1px solid var(--border-color);border-radius:4px;padding:1px 6px;background:var(--fg-color);color:var(--text-color);"></th>`).join("")}</tr>
+				</thead>
+				<tbody class="wf-tbody"></tbody>
+				</table>`);
+			repaint();
+		}
+
+		function reload() {
+			const from_date = $(dlg.body).find(".wf-from").val() || today;
+			const to_date = $(dlg.body).find(".wf-to").val() || from_date;
+			frappe.call({ method: API + ".get_bench_flow",
+				args: { bench, direction: dir, from_date, to_date } })
+				.then((r) => { F.raw = (r.message && r.message.rows) || []; build(); });
+		}
+
+		$(dlg.body).on("change", ".wf-from,.wf-to", reload);
+		$(dlg.body).on("click", ".wf-today", function () {
+			$(dlg.body).find(".wf-from,.wf-to").val(today);
+			reload();
+		});
+		$(dlg.body).on("input", ".wf-f", function () {
+			F.filters[this.dataset.k] = this.value || "";
+			repaint();
+		});
+		$(dlg.body).on("click", ".wf-sort", function () {
+			const k = this.getAttribute("data-k");
+			if (F.sortKey === k) F.sortDir = -F.sortDir;
+			else { F.sortKey = k; F.sortDir = 1; }
+			repaint();
+		});
+		$(dlg.body).on("click", ".wf-clearf", function () {
+			F.filters = {};
+			$(dlg.body).find(".wf-f").val("");
+			repaint();
+		});
+		reload();
 		dlg.show();
 	});
 
@@ -480,8 +600,6 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				load();
 			}).catch(() => frappe.dom.unfreeze());
 	});
-
-	root.find(".wk-date").val(frappe.datetime.get_today()).on("change", loadDay);
 
 	load();
 	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 30000);

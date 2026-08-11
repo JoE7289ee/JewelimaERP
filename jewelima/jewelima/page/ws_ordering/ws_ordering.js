@@ -160,7 +160,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			title: __("Transfer from ORDERING"),
 			fields: [
 				{ fieldname: "to", fieldtype: "Select", label: __("To"), reqd: 1,
-					options: "CAD\nWAX INJECTING", default: "CAD" },
+					options: "CAD\nWAXING", default: "CAD" },
 				{ fieldname: "scan", fieldtype: "Data", label: __("Scan card"),
 					description: __("Enter adds the card — it must be sitting in ORDERING") },
 				{ fieldname: "list", fieldtype: "HTML" },

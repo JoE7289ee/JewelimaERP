@@ -898,6 +898,139 @@ def make_tree(karat, names, employee=None, wax_weight=None):
 	return {"tree": tree.name, "karat": karat_val, "count": len(cards) - len(errors), "errors": errors}
 
 
+# --- Edit Tree: add / remove a piece from a wax tree BEFORE it's cast ---------------
+# For the "made the tree, then one piece is no longer wanted (pluck it off) / add one
+# that was waiting" case. Recomputes the casting numbers on the new (optionally
+# re-weighed) wax weight — blank wax weight keeps the tree's existing one.
+@frappe.whitelist()
+def get_trees(only_open=0):
+	"""Edit Tree page list: every wax tree, newest first (only_open=1 hides cast)."""
+	filters = {"cast": 0} if cint(only_open) else {}
+	rows = frappe.get_all("Wax Tree", filters=filters,
+		fields=["name", "tree_no", "karat", "employee", "made_on", "wax_weight",
+			"gold_required", "cast", "casting_date"],
+		order_by="made_on desc")
+	emp = {}
+	for r in rows:
+		r["made_on"] = str(r.made_on or "")
+		r["pieces"] = frappe.db.count("Wax Tree Card", {"parent": r.name})
+		if r.employee and r.employee not in emp:
+			emp[r.employee] = frappe.db.get_value("Employee", r.employee, "employee_name") or r.employee
+		r["employee_name"] = emp.get(r.employee, "")
+	return {"trees": rows}
+
+
+@frappe.whitelist()
+def get_tree_edit(tree):
+	"""One tree's editable detail: its pieces + casting numbers + cast state."""
+	if not frappe.db.exists("Wax Tree", tree):
+		frappe.throw(frappe._("No tree {0}.").format(tree))
+	doc = frappe.get_doc("Wax Tree", tree)
+	cards = []
+	for c in doc.cards:
+		bagv = frappe.db.get_value("Order Bag", c.order_bag, ["location", "design"], as_dict=True) or {}
+		gold = _bag_gold_and_stone(c.order_bag)[0]
+		cards.append({"order_bag": c.order_bag, "design": c.design or bagv.get("design") or "",
+			"qty": c.qty or 1, "location": bagv.get("location") or "—", "cast_gold": round(gold, 3)})
+	return {"tree": doc.name, "tree_no": doc.tree_no, "karat": doc.karat or "",
+		"wax_weight": flt(doc.wax_weight), "stone_weight": flt(doc.stone_weight),
+		"gold_required": flt(doc.gold_required), "pure_gold_needed": flt(doc.pure_gold_needed),
+		"cast": cint(doc.cast), "casting_date": doc.casting_date,
+		"employee": doc.employee, "made_on": str(doc.made_on or ""), "cards": cards}
+
+
+@frappe.whitelist()
+def get_tree_add_candidates(tree):
+	"""Cards addable to this tree: at TREE MAKING, not on any tree, same karat."""
+	if not frappe.db.exists("Wax Tree", tree):
+		frappe.throw(frappe._("No tree {0}.").format(tree))
+	doc = frappe.get_doc("Wax Tree", tree)
+	karat_names = set(frappe.get_all("Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
+	karat_val = doc.karat or None
+	out = []
+	for r in frappe.get_all("Order Bag",
+			filters={"location": "TREE MAKING", "tree": ["in", ["", None]], "is_finished": 0,
+				"stock_status": ["not in", ["Cancelled", "Sold"]]},
+			fields=["name", "design", "qty"], order_by="name"):
+		if (_bag_karat(r.name, karat_names) or None) == karat_val:
+			out.append(r)
+	return {"cards": out, "karat": karat_val or "OTHER"}
+
+
+def _tree_not_cast(doc):
+	if cint(doc.cast):
+		frappe.throw(frappe._("{0} is already cast — its pieces are locked.").format(doc.name))
+
+
+def _apply_tree_recompute(doc, wax_weight=None):
+	"""Recompute stone/gold numbers; a non-blank wax_weight re-weighs the tree first."""
+	if wax_weight not in (None, ""):
+		doc.wax_weight = flt(wax_weight)
+	nums = _tree_casting_numbers(doc.karat, doc.wax_weight, [c.order_bag for c in doc.cards]) if doc.karat else {}
+	doc.stone_weight = nums.get("stone_weight") or 0
+	doc.gold_required = nums.get("gold_required") or 0
+	doc.pure_gold_needed = nums.get("pure_gold_needed") or 0
+
+
+@frappe.whitelist()
+def tree_remove_piece(tree, order_bag, wax_weight=None):
+	"""Pluck a piece off a wax tree (pre-cast): send it back to TREE MAKING, clear
+	its tree link, drop it, and recompute on the (optionally re-weighed) wax weight."""
+	doc = frappe.get_doc("Wax Tree", tree)
+	_tree_not_cast(doc)
+	if not any(c.order_bag == order_bag for c in doc.cards):
+		frappe.throw(frappe._("{0} is not on tree {1}.").format(order_bag, tree))
+	if len(doc.cards) <= 1:
+		frappe.throw(frappe._("A tree needs at least one piece — add another before removing the last."))
+	if _bag_gold_and_stone(order_bag)[0] > 0.0005:
+		frappe.throw(frappe._("{0} already holds cast gold — it can't be removed.").format(order_bag))
+	frappe.db.set_value("Order Bag", order_bag, "tree", None)
+	tmrec = _current_bench_record("Tree Making", order_bag)
+	if tmrec:
+		frappe.db.set_value("Tree Making", tmrec, "tree", None)
+	if frappe.db.get_value("Order Bag", order_bag, "location") == "CASTING":
+		transfer_order_bag(order_bag, "TREE MAKING", remarks="removed from {0}".format(tree))
+	doc.cards = [c for c in doc.cards if c.order_bag != order_bag]
+	_apply_tree_recompute(doc, wax_weight)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_tree_edit(tree)
+
+
+@frappe.whitelist()
+def tree_add_piece(tree, order_bag, wax_weight=None):
+	"""Mount another TREE MAKING card onto a waiting tree, move it to CASTING, and
+	recompute on the (optionally re-weighed) wax weight."""
+	doc = frappe.get_doc("Wax Tree", tree)
+	_tree_not_cast(doc)
+	if any(c.order_bag == order_bag for c in doc.cards):
+		frappe.throw(frappe._("{0} is already on this tree.").format(order_bag))
+	bag = frappe.db.get_value("Order Bag", order_bag, ["name", "design", "qty", "location", "tree"], as_dict=True)
+	if not bag:
+		frappe.throw(frappe._("No card {0}.").format(order_bag))
+	if bag.tree:
+		frappe.throw(frappe._("{0} is already on tree {1}.").format(order_bag, bag.tree))
+	if bag.location != "TREE MAKING":
+		frappe.throw(frappe._("{0} is at {1}, not TREE MAKING — only waiting cards can be added.").format(order_bag, bag.location or "—"))
+	karat_names = set(frappe.get_all("Item", filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="name"))
+	bk = _bag_karat(order_bag, karat_names)
+	if (bk or None) != (doc.karat or None):
+		frappe.throw(frappe._("{0} is {1} — this tree is {2}. One purity per tree.").format(order_bag, bk or "OTHER", doc.karat or "OTHER"))
+	doc.append("cards", {"order_bag": bag.name, "design": bag.design, "qty": bag.qty})
+	frappe.db.set_value("Order Bag", order_bag, "tree", tree)
+	tmrec = _current_bench_record("Tree Making", order_bag)
+	if tmrec:
+		vals = {"tree": tree}
+		if doc.employee:
+			vals["employee"] = doc.employee
+		frappe.db.set_value("Tree Making", tmrec, vals)
+	transfer_order_bag(order_bag, "CASTING", remarks="added to {0}".format(tree))
+	_apply_tree_recompute(doc, wax_weight)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_tree_edit(tree)
+
+
 # --- CAD jobs: targets live on the bag until the real design is finalized ----------
 
 def _cad_siblings(bag):
@@ -2224,14 +2357,28 @@ def get_order_bag_cards(names):
 			continue
 		b = frappe.get_doc("Order Bag", nm)
 		dtype = dstyle = dimg = bank_no = ""
-		materials = []
 		if b.design and frappe.db.exists("Design", b.design):
 			d = frappe.get_doc("Design", b.design)
 			dtype, dstyle, dimg = d.design_type, d.design_style, d.image
 			if d.design_bank:
 				bank_no = frappe.db.get_value("Design Bank", d.design_bank, "design_no") or ""
-			for m in d.materials:
-				materials.append({"item": m.item, "purity": m.purity, "qty": m.qty, "weight": m.weight, "uom": m.uom})
+		# Materials come from the BAG's own BOM (the per-bag plan), NOT the design BOM:
+		# demo / import bags — and any per-bag BOM edit — carry everything on bag_bom,
+		# and the design BOM can be empty. Reading the design was why those cards printed
+		# an empty items table and no gold badge (falling back to the purity %). Enrich
+		# purity/uom from the item master so the karat gold is always detectable.
+		mat_rows = list(b.bag_bom or [])
+		_codes = list({m.item for m in mat_rows if m.item})
+		_imeta = {}
+		if _codes:
+			for it in frappe.get_all("Item", filters={"name": ["in", _codes]},
+					fields=["name", "purity_percentage", "weight_unit"]):
+				_imeta[it.name] = it
+		materials = []
+		for m in mat_rows:
+			im = _imeta.get(m.item) or {}
+			materials.append({"item": m.item, "purity": flt(m.purity) or flt(im.get("purity_percentage")),
+				"qty": m.qty, "weight": m.weight, "uom": m.uom or im.get("weight_unit") or ""})
 		cards.append({
 			"name": b.name, "job_order": b.job_order, "design": b.design,
 			"bank_no": bank_no,
@@ -2242,7 +2389,10 @@ def get_order_bag_cards(names):
 			"due_date": frappe.utils.formatdate(b.due_date, "dd-mm-yyyy") if b.due_date else "",
 			"gross_weight": b.gross_weight, "nett_weight": b.nett_weight, "purity": b.purity,
 			"dmd_no": b.dmd_no, "dmd_weight": b.dmd_weight, "ps_no": b.ps_no, "ps_weight": b.ps_weight,
-			"cs_no": b.cs_no, "cs_weight": b.cs_weight, "narration": b.narration,
+			"cs_no": b.cs_no, "cs_weight": b.cs_weight,
+			"cz_no": b.cz_no, "cz_weight": b.cz_weight, "cvd_no": b.cvd_no, "cvd_weight": b.cvd_weight,
+			"pdmd_no": b.pdmd_no, "pdmd_weight": b.pdmd_weight, "poth_no": b.poth_no, "poth_weight": b.poth_weight,
+			"narration": b.narration,
 			"materials": materials,
 			"is_cad": int(b.is_cad or 0), "cad_design_type": b.cad_design_type, "cad_karat": b.cad_karat,
 			"cad_gold_weight": b.cad_gold_weight, "cad_diamond_weight": b.cad_diamond_weight,
@@ -2337,20 +2487,39 @@ def save_transfer_matrix(role, pairs):
 
 @frappe.whitelist()
 def get_bag_stage_history(order_bag):
-	"""Every bench this bag passed through, chronologically: who worked it, status,
-	times, weight in/out and loss. Aggregated across the per-bench doctypes."""
+	"""Every bench this bag passed through, chronologically. Two kinds of row:
+	PRESENCE (is_issue=0) — a bench visit, no worker (the pass-through timeline);
+	WORK SESSION (is_issue=1) — one Bench Issue, who worked it + weights/loss.
+	A single visit can carry several work sessions (issued twice / reassigned)."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
+	loc_of = {label: loc for loc, label in BENCH_DOCTYPE.items()}
 	rows = []
+	# presence rows — one per bench visit (no employee, so they never show under
+	# 'who worked'); this is the card's bench-to-bench timeline.
 	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):
 		if not frappe.db.exists("DocType", dt):
 			continue
 		for r in frappe.get_all(
 			dt, filters={"order_bag": order_bag},
-			fields=["name", "status", "work_type", "collection_state", "employee", "time_in", "time_out", "transferred_at", "issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
+			fields=["name", "status", "time_in", "time_out", "transferred_at", "queue_reason", "creation"],
 		):
-			r["bench"] = dt
-			rows.append(r)
+			rows.append({"name": r.name, "bench": loc_of.get(dt, dt), "is_issue": 0,
+				"status": r.status, "work_type": None, "collection_state": r.queue_reason,
+				"employee": None, "employee_name": "", "time_in": r.time_in, "time_out": r.time_out,
+				"transferred_at": r.transferred_at, "issued_at": None, "receipted_at": None,
+				"weight_out": 0, "weight_in": 0, "loss": 0, "creation": r.creation})
+	# work sessions — one per Bench Issue, carrying the worker + weights/loss
+	for i in frappe.get_all(
+		"Bench Issue", filters={"order_bag": order_bag},
+		fields=["name", "bench", "status", "work_type", "collection_state", "employee",
+			"issued_at", "receipted_at", "weight_out", "weight_in", "loss", "creation"],
+	):
+		rows.append({"name": i.name, "bench": i.bench, "is_issue": 1,
+			"status": i.status, "work_type": i.work_type, "collection_state": i.collection_state,
+			"employee": i.employee, "employee_name": "", "time_in": i.issued_at, "time_out": i.receipted_at,
+			"transferred_at": None, "issued_at": i.issued_at, "receipted_at": i.receipted_at,
+			"weight_out": i.weight_out, "weight_in": i.weight_in, "loss": i.loss, "creation": i.creation})
 	rows.sort(key=lambda x: (x.get("time_in") or x.get("creation")))
 	emps = list({r["employee"] for r in rows if r.get("employee")})
 	names = {}
@@ -2378,16 +2547,11 @@ def get_bag_transfer_info(order_bag):
 	for bk in ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"):
 		out[bk + "_weight"] = p[bk + "_weight"]
 		out[bk + "_no"] = p[bk + "_no"]
-	# current bench status — ISSUED cards (out with a worker) can't be transferred
-	from jewelima.jewelima.benches import BENCH_DOCTYPE
-	dt = BENCH_DOCTYPE.get((bag.location or "").upper())
-	status = None
-	if dt and frappe.db.exists("DocType", dt):
-		rec = frappe.get_all(dt, filters={"order_bag": order_bag}, fields=["status"],
-			order_by="creation desc", limit=1)
-		status = rec[0].status if rec else None
-	out["status"] = status
-	out["issued"] = 1 if status == "Issued" else 0
+	# a card with an OPEN work session (out with a worker) can't be transferred —
+	# it must be receipted / collected first
+	open_issue = _open_bench_issue(order_bag, bag.location)
+	out["status"] = "Issued" if open_issue else None
+	out["issued"] = 1 if open_issue else 0
 	return out
 
 
@@ -2410,6 +2574,10 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 			frappe.throw(frappe._("{0} is a CAD job — it must go to CAD first.").format(order_bag))
 	if not _transfer_allowed(set(frappe.get_roles()), from_location, to_location):
 		frappe.throw(frappe._("You don't have permission to move {0} from {1} to {2}.").format(order_bag, from_location or "—", to_location))
+	# a card still out with a worker (open Bench Issue) can't leave — the work
+	# session must be receipted / collected first.
+	if _open_bench_issue(order_bag, from_location):
+		frappe.throw(frappe._("{0} is still issued at {1} — receipt / collect it before transferring.").format(order_bag, from_location or "—"))
 	t = frappe.get_doc({
 		"doctype": "Order Bag Transfer",
 		"order_bag": order_bag,
@@ -2431,13 +2599,18 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 		fdt = bench_doctype(from_location)
 		if fdt and frappe.db.exists("DocType", fdt):
 			now = frappe.utils.now_datetime()
+			# a record is FINISHED when its work properly closed out — Completed
+			# (assign/collect benches) or Receipted (issue/receipt benches). Those
+			# keep their status and get transferred_at stamped; anything still open
+			# (In Queue / Issued / Ongoing / …) becomes Expired — it left unfinished.
+			finished = ["Completed", "Receipted"]
 			open_rec = frappe.get_all(fdt, filters={"order_bag": order_bag,
-				"status": ["not in", ["Completed", "Expired"]]},
+				"status": ["not in", finished + ["Expired"]]},
 				order_by="creation desc", limit=1, pluck="name")
 			if open_rec:
 				frappe.db.set_value(fdt, open_rec[0], {"status": "Expired", "transferred_at": now})
 			else:
-				done = frappe.get_all(fdt, filters={"order_bag": order_bag, "status": "Completed",
+				done = frappe.get_all(fdt, filters={"order_bag": order_bag, "status": ["in", finished],
 					"transferred_at": ["is", "not set"]}, order_by="creation desc", limit=1, pluck="name")
 				if done:
 					frappe.db.set_value(fdt, done[0], "transferred_at", now)
@@ -4091,6 +4264,86 @@ def get_stone_stock(search=None, family=None):
 	return {"rows": out, "families": sorted(fams), "warehouse": wh}
 
 
+@frappe.whitelist()
+def get_stone_stock_overview():
+	"""Everything sitting in the Stone Issue warehouse, for the Stone Stock Info
+	page: per-item carats in stock, what open cards have COMMITTED (planned demand
+	less what's already been issued to them, capped at stock) and what's still
+	FREE — rolled up per stone family (stone_type) with grand totals. Diamonds add
+	an estimated piece count from the sieve chart."""
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+	bins = frappe.db.sql("""
+		SELECT b.item_code, i.item_group, i.stone_type, b.actual_qty
+		FROM `tabBin` b JOIN `tabItem` i ON i.name = b.item_code
+		WHERE b.warehouse = %s AND IFNULL(i.stone_type, '') != '' AND b.actual_qty > 0.0005
+		ORDER BY i.stone_type, i.item_group, b.item_code""", wh, as_dict=True)
+
+	# committed = open cards' stone plan demand minus what they've already received
+	plan = frappe.db.sql("""
+		SELECT bi.item, ob.name AS bag, SUM(bi.weight) AS w
+		FROM `tabOrder Bag BOM Item` bi
+		JOIN `tabOrder Bag` ob ON ob.name = bi.parent
+		JOIN `tabItem` i ON i.name = bi.item
+		WHERE ob.is_finished = 0 AND ob.stock_status = 'In Production'
+			AND IFNULL(i.stone_type, '') != ''
+		GROUP BY bi.item, ob.name""", as_dict=True)
+	got = {}
+	if plan:
+		for r in frappe.db.sql("""
+			SELECT item, order_bag, SUM(CASE WHEN direction='In' THEN qty ELSE -qty END) AS q
+			FROM `tabBag Material Ledger`
+			WHERE order_bag IN %(bags)s
+			GROUP BY item, order_bag""", {"bags": tuple({r.bag for r in plan})}, as_dict=True):
+			got[(r.item, r.order_bag)] = flt(r.q)
+	pending = {}
+	for r in plan:
+		short = flt(r.w) - max(got.get((r.item, r.bag), 0.0), 0.0)
+		if short > 0.0005:
+			pending[r.item] = pending.get(r.item, 0.0) + short
+
+	sieve = {r.sieve_size: flt(r.avg_cts) for r in frappe.get_all(
+		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
+
+	rows, fams = [], {}
+	tot = {"stock": 0.0, "committed": 0.0, "free": 0.0, "est_pcs": 0}
+	for b in bins:
+		fam = b.stone_type or "Other"
+		stock = flt(b.actual_qty)
+		committed = min(round(pending.get(b.item_code, 0.0), 3), stock)
+		free = round(stock - committed, 3)
+		size = b.item_code.split(" ", 1)[1] if " " in b.item_code else ""
+		avg = sieve.get(size) if (b.stone_type == "Diamond" and size) else None
+		est = int(stock / avg) if avg and avg > 0 else None
+		rows.append({"item": b.item_code, "family": fam, "group": b.item_group or "",
+			"size": size, "stock": round(stock, 3), "committed": round(committed, 3),
+			"free": free, "est_pcs": est})
+		f = fams.setdefault(fam, {"family": fam, "items": 0, "stock": 0.0,
+			"committed": 0.0, "free": 0.0, "est_pcs": 0})
+		f["items"] += 1
+		f["stock"] += stock
+		f["committed"] += committed
+		f["free"] += free
+		if est:
+			f["est_pcs"] += est
+		tot["stock"] += stock
+		tot["committed"] += committed
+		tot["free"] += free
+		if est:
+			tot["est_pcs"] += est
+	for f in fams.values():
+		for k in ("stock", "committed", "free"):
+			f[k] = round(f[k], 3)
+	for k in ("stock", "committed", "free"):
+		tot[k] = round(tot[k], 3)
+	tot["items"] = len(rows)
+	tot["families"] = len(fams)
+	return {"warehouse": wh, "totals": tot,
+		"families": sorted(fams.values(), key=lambda x: -x["stock"]),
+		"rows": rows}
+
+
 # --- Repack Stock (Stones) — split bulk stone stock into sieves, with approval
 # The requester proposes the split; someone with the bigger role (System Manager /
 # Stock Manager) approves, and only THEN does a Repack Stock Entry move the stock.
@@ -5493,25 +5746,24 @@ def get_bench_day(bench, date=None):
 		filters={"from_location": bench, "transfer_time": ["between", [date + " 00:00:00", date + " 23:59:59"]]},
 		pluck="order_bag")
 
-	dt = BENCH_DOCTYPE[bench]
+	# the day's finished work = Bench Issues closed (Receipted / Completed) here
+	# today — one row per work SESSION, so re-issues and reassignments each count.
 	work = []
-	if frappe.db.exists("DocType", dt):
-		emp_names = {}
-		for r in frappe.db.sql("""
-			SELECT t.order_bag, t.employee, t.work_type, t.collection_state,
-				t.weight_out, t.weight_in, t.loss,
-				COALESCE(t.receipted_at, t.time_out) done_at
-			FROM `tab{0}` t
-			WHERE t.status IN ('Receipted', 'Completed')
-			  AND DATE(COALESCE(t.receipted_at, t.time_out, t.modified)) = %s
-			ORDER BY done_at
-		""".format(dt), date, as_dict=True):
-			emp = r.employee or ""
-			if emp and emp not in emp_names:
-				emp_names[emp] = frappe.db.get_value("Employee", emp, "employee_name") or emp
-			r["employee_name"] = emp_names.get(emp, "(unassigned)")
-			r["done_at"] = str(r.done_at or "")
-			work.append(r)
+	emp_names = {}
+	for r in frappe.db.sql("""
+		SELECT bi.order_bag, bi.employee, bi.work_type, bi.collection_state,
+			bi.weight_out, bi.weight_in, bi.loss, bi.receipted_at done_at
+		FROM `tabBench Issue` bi
+		WHERE bi.bench = %(bench)s AND bi.status IN ('Receipted', 'Completed')
+		  AND DATE(bi.receipted_at) = %(date)s
+		ORDER BY bi.receipted_at
+	""", {"bench": bench, "date": date}, as_dict=True):
+		emp = r.employee or ""
+		if emp and emp not in emp_names:
+			emp_names[emp] = frappe.db.get_value("Employee", emp, "employee_name") or emp
+		r["employee_name"] = emp_names.get(emp, "(unassigned)")
+		r["done_at"] = str(r.done_at or "")
+		work.append(r)
 
 	by_emp = {}
 	for r in work:
@@ -5527,6 +5779,50 @@ def get_bench_day(bench, date=None):
 		"out": {"count": len(set(tout)), **cout},
 		"done": sorted(by_emp.values(), key=lambda g: g["employee_name"]),
 		"done_count": len(work)}
+
+
+@frappe.whitelist()
+def get_bench_flow(bench, direction, from_date=None, to_date=None):
+	"""Card-by-card list of what moved IN or OUT of a bench over a date range —
+	powers the workstation's clickable IN/OUT tiles. Independent of the page date.
+	direction: 'in' (to_location=bench) or 'out' (from_location=bench)."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	bench = (bench or "").upper()
+	if bench not in BENCH_DOCTYPE:
+		frappe.throw(frappe._("Unknown bench: {0}").format(bench or "?"))
+	direction = (direction or "in").lower()
+	from_date = from_date or frappe.utils.today()
+	to_date = to_date or from_date
+	field = "to_location" if direction == "in" else "from_location"
+	other = "from_location" if direction == "in" else "to_location"
+
+	tr = frappe.get_all("Order Bag Transfer",
+		filters={field: bench, "transfer_time": ["between", [from_date + " 00:00:00", to_date + " 23:59:59"]]},
+		fields=["order_bag", other + " as other", "transferred_by", "transfer_time"],
+		order_by="transfer_time desc")
+
+	bags = list({r.order_bag for r in tr if r.order_bag})
+	meta = {}
+	if bags:
+		for b in frappe.get_all("Order Bag", filters={"name": ["in", bags]},
+			fields=["name", "design", "qty", "job_order"]):
+			meta[b.name] = b
+
+	rows = []
+	for r in tr:
+		m = meta.get(r.order_bag) or {}
+		rows.append({
+			"order_bag": r.order_bag,
+			"design": m.get("design") or "",
+			"qty": m.get("qty"),
+			"job_order": m.get("job_order") or "",
+			"other": r.other or "",
+			"by": r.transferred_by or "",
+			"time": str(r.transfer_time or ""),
+		})
+	return {"bench": bench, "direction": direction,
+		"from_date": from_date, "to_date": to_date,
+		"count": len(rows), "rows": rows}
 
 
 @frappe.whitelist()
@@ -6485,7 +6781,7 @@ def _bench_option_usage(bench, kind, value):
 
 @frappe.whitelist()
 def set_bench_queue_reason(order_bag, location, reason=None):
-	"""Stamp WHY a card is waiting at its bench (e.g. WAX INJECTING ->
+	"""Stamp WHY a card is waiting at its bench (e.g. WAXING ->
 	'Awaiting Dye'). Reason must be one of the bench's configured Queue
 	Reasons (blank clears). Only cards currently In Queue / On Hold take a
 	reason; no bench record yet means the card is In Queue -> one is made."""
@@ -6542,13 +6838,34 @@ def get_bench_work_setup(location):
 	_require_stone_issue_admin()
 	loc = (location or "").upper()
 	rows = frappe.get_all("Bench Work Option", filters={"bench": loc},
-		fields=["name", "kind", "value"], order_by="creation")
+		fields=["name", "kind", "value", "disposition"], order_by="creation")
 	return {"options": [{"name": r.name, "kind": r.kind, "value": r.value,
+		"disposition": r.disposition or "Ready to Transfer",
 		"in_use": _bench_option_usage(loc, r.kind, r.value)} for r in rows]}
 
 
 @frappe.whitelist()
-def bench_work_option_add(location, kind, value):
+def get_bench_work_counts():
+	"""Bench Setup tiles: every bench with how many Work Types / Collection States
+	/ Queue Reasons it has configured."""
+	_require_stone_issue_admin()
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	counts = {}
+	for r in frappe.get_all("Bench Work Option", fields=["bench", "kind"]):
+		c = counts.setdefault((r.bench or "").upper(),
+			{"Work Type": 0, "Collection State": 0, "Queue Reason": 0})
+		if r.kind in c:
+			c[r.kind] += 1
+	out = []
+	for loc in BENCH_DOCTYPE:
+		c = counts.get(loc, {"Work Type": 0, "Collection State": 0, "Queue Reason": 0})
+		out.append({"bench": loc, "work_types": c["Work Type"],
+			"collection_states": c["Collection State"], "queue_reasons": c["Queue Reason"]})
+	return {"benches": out}
+
+
+@frappe.whitelist()
+def bench_work_option_add(location, kind, value, disposition=None):
 	_require_stone_issue_admin()
 	loc, value = (location or "").upper(), (value or "").strip()
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
@@ -6560,9 +6877,28 @@ def bench_work_option_add(location, kind, value):
 		frappe.throw(frappe._("Enter a value."))
 	if frappe.db.exists("Bench Work Option", {"bench": loc, "kind": kind, "value": value}):
 		frappe.throw(frappe._("{0} already has {1} '{2}'.").format(loc, kind, value))
-	d = frappe.get_doc({"doctype": "Bench Work Option", "bench": loc, "kind": kind, "value": value}).insert(ignore_permissions=True)
+	data = {"doctype": "Bench Work Option", "bench": loc, "kind": kind, "value": value}
+	if kind == "Collection State":
+		data["disposition"] = disposition if disposition in ("Ready to Transfer", "Back to In Queue") else "Ready to Transfer"
+	d = frappe.get_doc(data).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": d.name}
+
+
+@frappe.whitelist()
+def bench_work_option_set_disposition(name, disposition):
+	"""Change what happens to a card after a Collection State is picked:
+	'Ready to Transfer' (done here) or 'Back to In Queue' (rework at this bench)."""
+	_require_stone_issue_admin()
+	if disposition not in ("Ready to Transfer", "Back to In Queue"):
+		frappe.throw(frappe._("Outcome must be 'Ready to Transfer' or 'Back to In Queue'."))
+	d = frappe.get_doc("Bench Work Option", name)
+	if d.kind != "Collection State":
+		frappe.throw(frappe._("Only Collection States have an outcome."))
+	d.disposition = disposition
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "disposition": disposition}
 
 
 @frappe.whitelist()
@@ -6613,6 +6949,95 @@ def _valid_bench_option(location, kind, value):
 	return value
 
 
+# ---------------------------------------------------------------------------
+# Bench work model — VISIT (presence) + BENCH ISSUE (work sessions).
+# The per-bench doctype record is the VISIT: the card's presence at that bench
+# (created on transfer-in, closed on transfer-out). Every issue / assignment is
+# a separate Bench Issue row linked by order_bag + bench + the visit name. Only
+# ONE issue is open (Issued/Ongoing) at a time; the visit MIRRORS the open/last
+# issue's headline fields so single-record readers keep working during rollout.
+# ---------------------------------------------------------------------------
+def _open_bench_issue(order_bag, bench):
+	"""The single OPEN Bench Issue (Issued/Ongoing) for a card at a bench, else None."""
+	recs = frappe.get_all("Bench Issue",
+		filters={"order_bag": order_bag, "bench": (bench or "").upper(),
+			"status": ["in", ["Issued", "Ongoing"]]},
+		order_by="creation desc", limit=1, pluck="name")
+	return recs[0] if recs else None
+
+
+def _new_bench_issue(order_bag, bench, dt, visit, employee=None, work_type=None, weight_out=0.0):
+	"""Open a new work session (Bench Issue = Issued) and mirror it onto the Visit."""
+	loc = (bench or "").upper()
+	now = frappe.utils.now_datetime()
+	issue = frappe.get_doc({
+		"doctype": "Bench Issue", "order_bag": order_bag, "bench": loc,
+		"visit": visit, "visit_doctype": dt, "employee": employee or None,
+		"work_type": work_type or None, "status": "Issued", "issued_at": now,
+		"weight_out": flt(weight_out),
+	}).insert(ignore_permissions=True)
+	if dt and visit and frappe.db.exists(dt, visit):
+		vals = {"status": "Issued", "issued_at": now, "employee": employee or None,
+			"work_type": work_type or None, "weight_out": flt(weight_out),
+			"weight_in": 0, "loss": 0, "receipted_at": None}
+		if not frappe.db.get_value(dt, visit, "time_in"):
+			vals["time_in"] = now
+		frappe.db.set_value(dt, visit, vals, update_modified=False)
+	return issue
+
+
+def _close_bench_issue(issue_name, status, weight_in=None, loss=None, collection_state=None, employee=None):
+	"""Close a work session (Receipted / Completed / Cancelled) and mirror onto the Visit."""
+	now = frappe.utils.now_datetime()
+	issue = frappe.get_doc("Bench Issue", issue_name)
+	issue.status = status
+	issue.receipted_at = now
+	if weight_in is not None:
+		issue.weight_in = flt(weight_in)
+	if loss is not None:
+		issue.loss = flt(loss)
+	if collection_state:
+		issue.collection_state = collection_state
+	if employee:
+		issue.employee = employee
+	issue.save(ignore_permissions=True)
+	dt, visit = issue.visit_doctype, issue.visit
+	if dt and visit and frappe.db.exists(dt, visit):
+		vals = {"status": status, "receipted_at": now, "time_out": now}
+		if weight_in is not None:
+			vals["weight_in"] = flt(weight_in)
+		if loss is not None:
+			vals["loss"] = flt(loss)
+		if collection_state:
+			vals["collection_state"] = collection_state
+		if employee:
+			vals["employee"] = employee
+		frappe.db.set_value(dt, visit, vals, update_modified=False)
+	return issue
+
+
+def _collection_disposition(bench, state):
+	"""What a Collection State does to the card after it's picked: 'Ready to
+	Transfer' (default) or 'Back to In Queue' (rework at this bench)."""
+	if not state:
+		return "Ready to Transfer"
+	d = frappe.db.get_value("Bench Work Option",
+		{"bench": (bench or "").upper(), "kind": "Collection State", "value": state}, "disposition")
+	return d or "Ready to Transfer"
+
+
+def _apply_collection_disposition(issue_name, bench, collection_state):
+	"""After a work session closes, a 'Back to In Queue' collection state re-queues
+	the VISIT for rework (re-issuable); the work session + its loss stay recorded on
+	the closed issue. 'Ready to Transfer' leaves the card done / ready to move."""
+	if _collection_disposition(bench, collection_state) != "Back to In Queue":
+		return
+	issue = frappe.get_doc("Bench Issue", issue_name)
+	if issue.visit_doctype and issue.visit and frappe.db.exists(issue.visit_doctype, issue.visit):
+		frappe.db.set_value(issue.visit_doctype, issue.visit,
+			{"status": "In Queue", "time_out": None, "receipted_at": None}, update_modified=False)
+
+
 @frappe.whitelist()
 def issue_bench_cards(names, location, employee=None, work_type=None):
 	"""Issue a batch of bags at one bench: status -> Issued, snapshot weight_out
@@ -6624,31 +7049,22 @@ def issue_bench_cards(names, location, employee=None, work_type=None):
 		names = json.loads(names or "[]")
 	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
+	loc = (location or "").upper()
 	work_type = _valid_bench_option(location, "Work Type", work_type)
 	dt = bench_doctype(location)
-	now = frappe.utils.now_datetime()
 	done, errors = [], []
 	for nm in names or []:
 		try:
-			rec = _current_bench_record(dt, nm)
-			if not rec:
+			visit = _current_bench_record(dt, nm)
+			if not visit:
 				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
 				continue
-			doc = frappe.get_doc(dt, rec)
-			if doc.status == "Issued":
-				errors.append({"name": nm, "error": frappe._("Already issued")})
+			# one open issue at a time — receipt the current one before re-issuing
+			if _open_bench_issue(nm, loc):
+				errors.append({"name": nm, "error": frappe._("Already issued — receipt it before issuing again")})
 				continue
 			gold = flt(get_bag_contents(nm)["gold_grams"])
-			doc.status = "Issued"
-			doc.weight_out = gold
-			doc.issued_at = now
-			if work_type:
-				doc.work_type = work_type
-			if not doc.time_in:
-				doc.time_in = now
-			if employee:
-				doc.employee = employee
-			doc.save(ignore_permissions=True)
+			_new_bench_issue(nm, loc, dt, visit, employee=employee, work_type=work_type, weight_out=gold)
 			if employee:
 				_adjust_employee_balance(employee, gold)
 			done.append(nm)
@@ -6660,7 +7076,7 @@ def issue_bench_cards(names, location, employee=None, work_type=None):
 
 @frappe.whitelist()
 def assign_bench_cards(names, location, employee=None, work_type=None):
-	"""Assign a batch of bags at a transfer bench (CAD / Wax Injecting / Wax Cleaning):
+	"""Assign a batch of bags at a transfer bench (CAD / Waxing / Wax Cleaning):
 	status -> Issued, stamp issued_at (+ employee / work type if given). Times only —
 	no weight/loss."""
 	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, bench_doctype
@@ -6675,27 +7091,18 @@ def assign_bench_cards(names, location, employee=None, work_type=None):
 		frappe.throw(frappe._("CAD cards must be assigned TO an employee — pick who takes the work."))
 	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	dt = bench_doctype(loc)
-	now = frappe.utils.now_datetime()
 	done, errors = [], []
 	for nm in names or []:
 		try:
-			rec = _current_bench_record(dt, nm)
-			if not rec:
+			visit = _current_bench_record(dt, nm)
+			if not visit:
 				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
 				continue
-			doc = frappe.get_doc(dt, rec)
-			if doc.status == "Issued":
-				errors.append({"name": nm, "error": frappe._("Already assigned")})
+			if _open_bench_issue(nm, loc):
+				errors.append({"name": nm, "error": frappe._("Already assigned — collect it before assigning again")})
 				continue
-			doc.status = "Issued"
-			doc.issued_at = now
-			if work_type:
-				doc.work_type = work_type
-			if not doc.time_in:
-				doc.time_in = now
-			if employee:
-				doc.employee = employee
-			doc.save(ignore_permissions=True)
+			# light benches carry no weight — assign is just a timed work session
+			_new_bench_issue(nm, loc, dt, visit, employee=employee, work_type=work_type, weight_out=0.0)
 			done.append(nm)
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
@@ -6717,7 +7124,6 @@ def collect_bench_cards(names, location, collection_state=None):
 		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
 	collection_state = _valid_bench_option(loc, "Collection State", collection_state)
 	dt = bench_doctype(loc)
-	now = frappe.utils.now_datetime()
 	done, errors = [], []
 	for nm in names or []:
 		try:
@@ -6726,20 +7132,13 @@ def collect_bench_cards(names, location, collection_state=None):
 			if frappe.db.get_value("Order Bag", nm, "is_cad"):
 				errors.append({"name": nm, "error": frappe._("CAD design not finalized — create the design first")})
 				continue
-			rec = _current_bench_record(dt, nm)
-			if not rec:
-				errors.append({"name": nm, "error": frappe._("No bench record at {0}").format(location)})
+			issue = _open_bench_issue(nm, loc)
+			if not issue:
+				errors.append({"name": nm, "error": frappe._("Not assigned — nothing to collect")})
 				continue
-			doc = frappe.get_doc(dt, rec)
-			if doc.status not in ("Issued", "Ongoing"):
-				errors.append({"name": nm, "error": frappe._("Not assigned (is {0})").format(doc.status)})
-				continue
-			doc.status = "Completed"
-			doc.receipted_at = now
-			doc.time_out = now
-			if collection_state:
-				doc.collection_state = collection_state
-			doc.save(ignore_permissions=True)
+			_close_bench_issue(issue, "Completed", collection_state=collection_state)
+			# a 'Back to In Queue' state sends the card back for rework
+			_apply_collection_disposition(issue, loc, collection_state)
 			done.append(nm)
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
@@ -6760,8 +7159,7 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	collection_state = _valid_bench_option(location, "Collection State", collection_state)
-	dt = bench_doctype(location)
-	now = frappe.utils.now_datetime()
+	loc = (location or "").upper()
 	done, errors, total_loss = [], [], 0.0
 	for ln in lines or []:
 		nm = ln.get("order_bag")
@@ -6774,36 +7172,69 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 			if raw_win in (None, "") or win <= 0:
 				errors.append({"name": nm, "error": frappe._("Enter the weight-in (received weight).")})
 				continue
-			rec = _current_bench_record(dt, nm)
-			if not rec:
-				errors.append({"name": nm, "error": frappe._("No bench record")})
+			issue_name = _open_bench_issue(nm, loc)
+			if not issue_name:
+				errors.append({"name": nm, "error": frappe._("Not issued — nothing to receipt")})
 				continue
-			doc = frappe.get_doc(dt, rec)
-			if doc.status != "Issued":
-				errors.append({"name": nm, "error": frappe._("Not in Issued state")})
-				continue
-			wout = flt(doc.weight_out)
+			issue = frappe.get_doc("Bench Issue", issue_name)
+			wout = flt(issue.weight_out)
 			loss = max(wout - win, 0.0)
-			issue_emp = doc.employee
+			issue_emp = issue.employee
 			if issue_emp:
 				_adjust_employee_balance(issue_emp, -wout)  # held weight returns
-			doc.employee = employee or issue_emp
-			doc.weight_in = win
-			doc.loss = loss
-			doc.status = "Receipted"
-			doc.receipted_at = now
-			doc.time_out = now
-			if collection_state:
-				doc.collection_state = collection_state
-			doc.save(ignore_permissions=True)
+			final_emp = employee or issue_emp
+			_close_bench_issue(issue_name, "Receipted", weight_in=win, loss=loss,
+				collection_state=collection_state, employee=final_emp)
 			if loss > 0:
-				book_loss(nm, _bag_gold_item(nm), loss, bench=location, employee=doc.employee)
+				book_loss(nm, _bag_gold_item(nm), loss, bench=location, employee=final_emp)
+			# a 'Back to In Queue' state sends the card back for rework
+			_apply_collection_disposition(issue_name, location, collection_state)
 			total_loss += loss
 			done.append({"name": nm, "loss": round(loss, 3)})
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
 	frappe.db.commit()
 	return {"count": len(done), "done": done, "errors": errors, "total_loss": round(total_loss, 3), "employee": employee}
+
+
+@frappe.whitelist()
+def reassign_bench_card(order_bag, location, new_employee, weight_in=None, work_type=None, collection_state=None):
+	"""Hand the OPEN work session to a different employee. Weight benches square
+	the metal first (receipt the current issue — loss booked, held weight returned)
+	then open a fresh issue to the new employee; light benches cancel the current
+	assignment and assign anew. Leaves a two-row audit trail on the visit."""
+	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, ISSUE_RECEIPT_LOCATIONS, bench_doctype
+
+	loc = (location or "").upper()
+	if not new_employee or not frappe.db.exists("Employee", new_employee):
+		frappe.throw(frappe._("Pick who the card is being reassigned to."))
+	issue_name = _open_bench_issue(order_bag, loc)
+	if not issue_name:
+		frappe.throw(frappe._("{0} has no open work session at {1} to reassign.").format(order_bag, loc))
+	dt = bench_doctype(loc)
+	visit = _current_bench_record(dt, order_bag)
+	if loc in ISSUE_RECEIPT_LOCATIONS:
+		win = flt(weight_in)
+		if win <= 0:
+			frappe.throw(frappe._("Enter the weight-in from the current holder before reassigning."))
+		issue = frappe.get_doc("Bench Issue", issue_name)
+		wout = flt(issue.weight_out)
+		loss = max(wout - win, 0.0)
+		if issue.employee:
+			_adjust_employee_balance(issue.employee, -wout)
+		_close_bench_issue(issue_name, "Receipted", weight_in=win, loss=loss, collection_state=collection_state)
+		if loss > 0:
+			book_loss(order_bag, _bag_gold_item(order_bag), loss, bench=location, employee=issue.employee)
+		gold = flt(get_bag_contents(order_bag)["gold_grams"])
+		_new_bench_issue(order_bag, loc, dt, visit, employee=new_employee, work_type=work_type, weight_out=gold)
+		_adjust_employee_balance(new_employee, gold)
+	elif loc in ASSIGN_COLLECT_LOCATIONS:
+		_close_bench_issue(issue_name, "Cancelled", collection_state=collection_state)
+		_new_bench_issue(order_bag, loc, dt, visit, employee=new_employee, work_type=work_type, weight_out=0.0)
+	else:
+		frappe.throw(frappe._("{0} is not an issue/assign bench.").format(loc))
+	frappe.db.commit()
+	return {"order_bag": order_bag, "reassigned_to": new_employee}
 
 
 def _bag_gold_item(order_bag):
@@ -7028,8 +7459,17 @@ def make_products(bags):
 			done.append(nm)
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
+	# a finished product is no longer a production card — drop it from the manual
+	# priority list so the Prioritisation table clears itself automatically.
+	removed_priority = []
+	if done:
+		for pc in frappe.get_all("Priority Card", filters={"order_bag": ["in", done]},
+				fields=["name", "order_bag"]):
+			frappe.delete_doc("Priority Card", pc.name, ignore_permissions=True, force=True)
+			removed_priority.append(pc.order_bag)
 	frappe.db.commit()
-	return {"count": len(done), "done": done, "errors": errors}
+	return {"count": len(done), "done": done, "errors": errors,
+		"removed_from_priority": removed_priority}
 
 
 # ---------------------------------------------------------------------------
@@ -7240,20 +7680,48 @@ def _stock_move_many(item_qty, source, target):
 # (qty x the item's purity%). Mostly karat golds; anything else shows honestly.
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
-def get_loss_report():
+def get_loss_report(from_date=None, to_date=None):
 	whs = frappe.get_all("Warehouse", filters={"custom_is_loss": 1, "is_group": 0},
 	                     fields=["name", "warehouse_name"], order_by="warehouse_name")
 	if not whs:
-		return {"items": [], "warehouses": [], "totals": {}}
+		return {"items": [], "warehouses": [], "totals": {}, "range": None}
 	label_of = {w.name: (w.warehouse_name or w.name).replace(" -LOSS", "") for w in whs}
+	wh_names = [w.name for w in whs]
+
+	from_date = (from_date or "").strip() or None
+	to_date = (to_date or "").strip() or None
+	ranged = bool(from_date or to_date)
 
 	cells, meta = {}, {}
-	for b in frappe.get_all("Bin", filters={"warehouse": ["in", [w.name for w in whs]]},
-	                        fields=["item_code", "warehouse", "actual_qty"]):
-		qty = flt(b.actual_qty)
-		if qty <= 0.0005:
-			continue
-		cells.setdefault(b.item_code, {})[b.warehouse] = round(cells.get(b.item_code, {}).get(b.warehouse, 0) + qty, 3)
+	if ranged:
+		# "Loss booked during the range" — sum the INFLOWS (loss booked into the
+		# -LOSS warehouses) from the Stock Ledger between the dates, ignoring any
+		# later collection / write-off. Empty From/To -> open-ended on that side.
+		conds = ["sle.warehouse IN %(whs)s", "sle.is_cancelled = 0", "sle.actual_qty > 0"]
+		params = {"whs": tuple(wh_names)}
+		if from_date:
+			conds.append("sle.posting_date >= %(fd)s")
+			params["fd"] = from_date
+		if to_date:
+			conds.append("sle.posting_date <= %(td)s")
+			params["td"] = to_date
+		for r in frappe.db.sql("""
+			SELECT sle.item_code, sle.warehouse, SUM(sle.actual_qty) qty
+			FROM `tabStock Ledger Entry` sle
+			WHERE {0}
+			GROUP BY sle.item_code, sle.warehouse
+		""".format(" AND ".join(conds)), params, as_dict=True):
+			qty = flt(r.qty)
+			if qty <= 0.0005:
+				continue
+			cells.setdefault(r.item_code, {})[r.warehouse] = round(qty, 3)
+	else:
+		for b in frappe.get_all("Bin", filters={"warehouse": ["in", wh_names]},
+		                        fields=["item_code", "warehouse", "actual_qty"]):
+			qty = flt(b.actual_qty)
+			if qty <= 0.0005:
+				continue
+			cells.setdefault(b.item_code, {})[b.warehouse] = round(cells.get(b.item_code, {}).get(b.warehouse, 0) + qty, 3)
 	for it in frappe.get_all("Item", filters={"name": ["in", list(cells) or [""]]},
 	                         fields=["name", "item_group", "purity_percentage", "stone_type"]):
 		meta[it.name] = it
@@ -7282,6 +7750,7 @@ def get_loss_report():
 	return {
 		"items": items,
 		"warehouses": warehouses,
+		"range": {"from": from_date, "to": to_date} if ranged else None,
 		"totals": {
 			"gross": round(sum(x["gross"] for x in warehouses), 3),
 			"pure": round(sum(x["pure"] for x in warehouses), 3),
@@ -8581,13 +9050,19 @@ def get_variant_naming():
 DESIGN_TOKEN_STONE_FAMILY = {"EF": "VVS-EF", "GH": "VVS/VS-GH", "SI": "SI-IJ", "CZ": "CZ", "CVD": "CVD"}
 
 
+# Design Bank cards (GW + photos) are held at 18K. A variant's GOLD nett scales
+# off that 18K base by karat — shop factors, not raw density (18K = the base 1.0).
+KARAT_WEIGHT_FACTOR = {"14K": 0.952, "18K": 1.0, "22K": 1.2}
+
+
 def _variant_seed(card, karat, quality, color):
 	"""Starter BOM for the Create Design dialog: the karat+colour gold as the
 	metal line, and the card's stone rows translated into the token's item
 	family ("family sieve", qty = pcs). Sieve rows take weight = pcs x the
 	sieve chart average; named stones (RUBY...) match their own item (else the
 	CS catch-all) and keep the card's carats. Plain gold (no token) seeds no
-	stones. Gold grams = card GW minus the seeded stones (1 ct = 0.2 g)."""
+	stones. The card GW is an 18K figure: gold grams = (card GW - stones, 1 ct =
+	0.2 g) scaled to the picked karat (22K x1.2, 14K x0.952, 18K x1)."""
 	from jewelima.setup import KARAT_COLOR_LIMIT
 
 	locked = KARAT_COLOR_LIMIT.get(karat)
@@ -8615,7 +9090,10 @@ def _variant_seed(card, karat, quality, color):
 				weight = round(pcs * avg[sieve], 3) if (sieve in avg and pcs) else flt(r.ct)
 			total_ct += weight
 			rows.append({"item": item, "qty": pcs, "weight": weight})
-	gold_weight = max(round(flt(card.gross_weight) - total_ct * 0.2, 3), 0)
+	# card GW is 18K; the gold portion scales to the picked karat
+	gold_18k = max(flt(card.gross_weight) - total_ct * 0.2, 0)
+	factor = KARAT_WEIGHT_FACTOR.get((karat or "").strip().upper(), 1.0)
+	gold_weight = round(gold_18k * factor, 3)
 	rows.insert(0, {"item": gold_item, "qty": 0, "weight": gold_weight})
 	# dress the rows with what the grid displays (purity/uom/stone_type/pure)
 	meta = {i.name: i for i in frappe.get_all("Item",
@@ -12436,7 +12914,9 @@ def receipt_and_transfer(lines, location, to_location, employee=None, collection
 	move the received cards onward in the same breath."""
 	_require_transfer_plus()
 	res = receipt_bench_cards(lines, location, employee=employee, collection_state=collection_state)
-	done = res.get("done") or []
+	# receipt_bench_cards' `done` holds {name, loss} dicts (collect's holds plain
+	# names) — pull the names out so the onward transfer actually gets order bags.
+	done = [d.get("name") if isinstance(d, dict) else d for d in (res.get("done") or [])]
 	if done:
 		tr = transfer_order_bags(json.dumps(done), to_location)
 		res["transferred"] = tr.get("count") or 0
@@ -12499,7 +12979,7 @@ def get_cards_at_location(location):
 	bags = frappe.get_all(
 		"Order Bag",
 		filters={"location": loc, "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
-		fields=["name", "design", "qty", "due_date"], order_by="name",
+		fields=["name", "design", "qty", "due_date", "job_order"], order_by="name",
 	)
 	dt = BENCH_DOCTYPE.get(loc)
 	smap, emap = {}, {}

@@ -156,7 +156,7 @@ JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue"]
 # Workstation personas — ONE role per bench: see + act on THAT workstation only
 # (the global Assign/Collect and Job Work pages keep their own wider roles).
 JEWELIMA_WS_PAGES = {
-	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAX INJECTING": "ws-wax-injecting",
+	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
 	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
 	"GRINDING": "ws-grinding", "FILING": "ws-filing", "SETTING": "ws-setting",
 	"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
@@ -181,7 +181,7 @@ JEWELIMA_INFO_ROLE = "Jewelima Info"
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
-JEWELIMA_INFO_BENCH_PAGES = ["bench-cad", "bench-cam", "bench-wax-injecting", "bench-tree-making",
+JEWELIMA_INFO_BENCH_PAGES = ["bench-cad", "bench-cam", "bench-waxing", "bench-tree-making",
 	"bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish",
 	"bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction"]
 JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES + JEWELIMA_INFO_BENCH_PAGES

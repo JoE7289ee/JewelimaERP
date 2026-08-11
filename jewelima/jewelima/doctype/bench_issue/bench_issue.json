@@ -1,0 +1,182 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "BISS-.#####",
+ "creation": "2026-08-11 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_bag",
+  "bench",
+  "visit",
+  "visit_doctype",
+  "employee",
+  "work_type",
+  "status",
+  "cb_times",
+  "issued_at",
+  "receipted_at",
+  "sec_weights",
+  "weight_out",
+  "weight_in",
+  "cb_weights",
+  "loss",
+  "sec_more",
+  "collection_state",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Order Bag",
+   "options": "Order Bag",
+   "reqd": 1
+  },
+  {
+   "fieldname": "bench",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Bench (Location)",
+   "reqd": 1
+  },
+  {
+   "description": "The Bench Visit (presence) record this work session belongs to.",
+   "fieldname": "visit",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Visit"
+  },
+  {
+   "fieldname": "visit_doctype",
+   "fieldtype": "Data",
+   "label": "Visit Doctype",
+   "read_only": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "work_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Work Type"
+  },
+  {
+   "default": "Issued",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Issued\nOngoing\nReceipted\nCompleted\nCancelled"
+  },
+  {
+   "fieldname": "cb_times",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "issued_at",
+   "fieldtype": "Datetime",
+   "label": "Issued At"
+  },
+  {
+   "fieldname": "receipted_at",
+   "fieldtype": "Datetime",
+   "label": "Receipted At"
+  },
+  {
+   "fieldname": "sec_weights",
+   "fieldtype": "Section Break",
+   "label": "Weight"
+  },
+  {
+   "fieldname": "weight_out",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight Out (Issued)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "weight_in",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight In (Received)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "cb_weights",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "loss",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Loss",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_more",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "collection_state",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Collection State"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-11 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Bench Issue",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

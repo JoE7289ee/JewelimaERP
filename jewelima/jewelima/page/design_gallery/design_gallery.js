@@ -404,6 +404,9 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 				title: __("Create Design — {0}", [d.design_no]),
 				size: "large",
 				fields: [
+					{ fieldname: "photo", fieldtype: "HTML",
+						options: d.image ? `<div style="text-align:center;margin:-4px 0 10px;"><img src="${esc(d.image)}" style="max-width:100%;max-height:240px;border:1px solid var(--border-color);border-radius:12px;background:#fff;object-fit:contain;"></div>` : "" },
+					{ fieldname: "sb_photo", fieldtype: "Section Break" },
 					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"), reqd: 1,
 						options: N.karats.join("\n"), default: "22K" },
 					{ fieldname: "cb1", fieldtype: "Column Break" },

@@ -9,7 +9,7 @@
 
 frappe.pages["loss-report"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Loss Report", single_column: true });
-	const S = { d: null, term: "" };
+	const S = { d: null, term: "", from: "", to: "" };
 	const esc = frappe.utils.escape_html;
 	const fmt = (v) => flt(v).toFixed(3);
 
@@ -24,7 +24,10 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 		.lr-card.pure{box-shadow:inset 3px 0 0 #b8860b;}
 		.lr-card.pure .v{color:#8a6d1a;}
 		.lr-top{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap;}
-		.lr-search{width:260px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
+		.lr-search{width:220px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
+		.lr-df{display:flex;align-items:center;gap:5px;margin:0;font-size:11px;color:var(--text-muted);}
+		.lr-df input{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:12.5px;}
+		.lr-mode{font-size:11px;font-weight:700;color:#8a6d1a;background:#fbf3df;border:1px solid #e8d9a8;border-radius:12px;padding:2px 10px;display:none;}
 		.lr-count{color:var(--text-muted);font-size:12px;margin-left:auto;}
 		.lr-box{border:1px solid var(--border-color);border-radius:11px;overflow:auto;max-height:calc(100vh - 250px);background:var(--fg-color);}
 		table.lr-tbl{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%;}
@@ -42,12 +45,17 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 		td.lr-cell{background:rgba(176,42,42,var(--a,0));}
 		.lr-unit{color:var(--text-muted);font-size:10px;margin-left:2px;}
 		.lr-pure{display:block;font-size:10px;color:#8a6d1a;font-weight:700;}
+		table.lr-tbl td.lr-pcol,table.lr-tbl th.lr-pcol{color:#8a6d1a;background:rgba(184,134,11,.06);}
 		.lr-empty{padding:18px;text-align:center;color:var(--text-muted);}
 		.lr-hint{margin:10px 2px 0;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="lr-cards"></div>
 		<div class="lr-top">
 			<input class="lr-search" type="text" placeholder="${__("Search materials…")}">
+			<label class="lr-df">${__("From")}<input type="date" class="lr-from"></label>
+			<label class="lr-df">${__("To")}<input type="date" class="lr-to"></label>
+			<button class="btn btn-xs btn-default lr-clear">${__("Clear")}</button>
+			<span class="lr-mode"></span>
 			<span class="lr-count"></span>
 		</div>
 		<div class="lr-box"><table class="lr-tbl"><thead class="lr-head"></thead><tbody class="lr-body"></tbody></table></div>
@@ -64,6 +72,17 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 			<div class="lr-card"><div class="lb">${__("Loss Warehouses")}</div><div class="v">${t.warehouses || 0}</div></div>
 			<div class="lr-card"><div class="lb">${__("Materials")}</div><div class="v">${t.materials || 0}</div></div>`;
 
+		const rng = d.range;
+		const modeEl = root.querySelector(".lr-mode");
+		if (rng) {
+			const f = rng.from ? frappe.datetime.str_to_user(rng.from) : "…";
+			const t2 = rng.to ? frappe.datetime.str_to_user(rng.to) : "…";
+			modeEl.textContent = __("Loss booked {0} → {1}", [f, t2]);
+			modeEl.style.display = "inline-block";
+		} else {
+			modeEl.style.display = "none";
+		}
+
 		const term = S.term.toLowerCase().trim();
 		const items = (d.items || []).filter((r) =>
 			!term || r.item.toLowerCase().includes(term) || r.group.toLowerCase().includes(term));
@@ -75,6 +94,7 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 			${whs.map((w) => `<th><span class="lr-wh">${esc(w.label)}</span><br>
 				<span class="lr-wh-sub">${fmt(w.gross)} g · ${__("pure")} <b>${fmt(w.pure)} g</b></span></th>`).join("")}
 			<th class="tot">${__("Total")}</th>
+			<th class="tot lr-pcol">${__("Pure (g)")}</th>
 		</tr>`;
 
 		const body = root.querySelector(".lr-body");
@@ -90,15 +110,16 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 						const a = v ? (0.08 + 0.32 * (v / max)).toFixed(2) : 0;
 						return `<td class="${v ? "lr-cell" : ""}" style="--a:${a}">${v ? fmt(v) + `<span class="lr-unit">${unit}</span>` : "·"}</td>`;
 					}).join("")}
-					<td class="tot">${fmt(r.total)}<span class="lr-unit">${unit}</span>
-						${r.purity ? `<span class="lr-pure">${__("pure")} ${fmt(r.pure)} g</span>` : ""}</td>
+					<td class="tot">${fmt(r.total)}<span class="lr-unit">${unit}</span></td>
+					<td class="tot lr-pcol">${r.purity ? fmt(r.pure) + `<span class="lr-unit">g</span>` : "·"}</td>
 				</tr>`;
 			}).join("")
-			: `<tr><td colspan="${whs.length + 2}" class="lr-empty">${(d.items || []).length ? __("Nothing matches.") : __("The loss warehouses are empty — no recoverable loss collected yet.")}</td></tr>`;
+			: `<tr><td colspan="${whs.length + 3}" class="lr-empty">${(d.items || []).length ? __("Nothing matches.") : __("The loss warehouses are empty — no recoverable loss collected yet.")}</td></tr>`;
 	}
 
 	function load() {
-		frappe.call({ method: "jewelima.jewelima.api.get_loss_report" }).then((r) => {
+		frappe.call({ method: "jewelima.jewelima.api.get_loss_report",
+			args: { from_date: S.from || null, to_date: S.to || null } }).then((r) => {
 			S.d = r.message || {};
 			render();
 		});
@@ -107,6 +128,14 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 		S.term = this.value || "";
 		render();
 	}, 200));
+	root.querySelector(".lr-from").addEventListener("change", function () { S.from = this.value || ""; load(); });
+	root.querySelector(".lr-to").addEventListener("change", function () { S.to = this.value || ""; load(); });
+	root.querySelector(".lr-clear").addEventListener("click", function () {
+		S.from = ""; S.to = "";
+		root.querySelector(".lr-from").value = "";
+		root.querySelector(".lr-to").value = "";
+		load();
+	});
 
 	// ---- print (B&W friendly: borders + weights only, no colour shading) -----
 	frappe.call({ method: "jewelima.jewelima.api.get_print_branding" }).then((r) => (S.branding = r.message || {}));
@@ -132,17 +161,22 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 		const items = d.items || [];
 		const head = `<tr><th>${__("Material")}</th>
 			${whs.map((w) => `<th>${esc(w.label)}<span class="sub">${fmt(w.gross)} g · ${__("pure")} ${fmt(w.pure)} g</span></th>`).join("")}
-			<th>${__("Total")}</th></tr>`;
+			<th>${__("Total")}</th><th>${__("Pure (g)")}</th></tr>`;
 		const body = items.map((r) => `<tr>
 			<td>${esc(r.item)}<span class="sub">${esc(r.group)}${r.purity ? ` · ${r.purity}%` : ""}</span></td>
 			${whs.map((w) => `<td>${r.cells[w.warehouse] ? fmt(r.cells[w.warehouse]) : "—"}</td>`).join("")}
-			<td><b>${fmt(r.total)}</b>${r.purity ? `<span class="pure">${__("pure")} ${fmt(r.pure)} g</span>` : ""}</td>
+			<td><b>${fmt(r.total)}</b></td>
+			<td><b>${r.purity ? fmt(r.pure) : "—"}</b></td>
 		</tr>`).join("");
 		const foot = `<tr><td>${__("TOTAL")}</td>
 			${whs.map((w) => `<td>${fmt(w.gross)}<span class="pure">${__("pure")} ${fmt(w.pure)} g</span></td>`).join("")}
-			<td>${fmt(t.gross || 0)}<span class="pure">${__("pure")} ${fmt(t.pure || 0)} g</span></td></tr>`;
+			<td>${fmt(t.gross || 0)}</td><td>${fmt(t.pure || 0)}</td></tr>`;
+		const rng = d.range;
+		const rangeLine = rng
+			? `${__("Loss booked")}: ${rng.from ? frappe.datetime.str_to_user(rng.from) : "…"} → ${rng.to ? frappe.datetime.str_to_user(rng.to) : "…"}`
+			: __("Current position");
 		return `
-			<div class="lrp-date">${__("Exported")}: ${frappe.datetime.str_to_user(frappe.datetime.now_datetime())}</div>
+			<div class="lrp-date">${rangeLine} &nbsp;·&nbsp; ${__("Exported")}: ${frappe.datetime.str_to_user(frappe.datetime.now_datetime())}</div>
 			<table class="lrp"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>
 			<div class="lrp-sum">${__("Loss gold (gross)")} <b>${fmt(t.gross || 0)} g</b> &nbsp;·&nbsp;
 				${__("Pure gold in loss")} <b>${fmt(t.pure || 0)} g</b> &nbsp;·&nbsp;

@@ -43,6 +43,7 @@ body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
 .card .hd { display: grid; grid-template-columns: 1.2fr 1fr 0.9fr; gap: 4px; border-bottom: 1px solid #000; padding-bottom: 1.5mm; font-size: 10.5px; line-height: 1.35; }
 .card .hd b { font-weight: 700; }
 .card .hd .pur { float: right; font-size: 13px; font-weight: 800; margin-left: 4px; }
+.card .hd .pur2 { float: right; clear: right; font-size: 11px; font-weight: 800; margin-left: 4px; margin-top: 1px; }
 .card .md { display: grid; grid-template-columns: 34mm 1fr; gap: 3px; flex: 1 1 auto; min-height: 0; padding: 1.5mm 0; }
 .card .img { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #000; }
 .card .img img { max-width: 100%; max-height: 30mm; object-fit: contain; }
@@ -74,13 +75,17 @@ function pob_cardHTML(c) {
 	const mats = (c.materials || [])
 		.map((m) => {
 			const qtyCell = (m.uom || "") === "Carat" && flt(m.qty) ? flt(m.qty) : "";
-			return `<tr><td>${pob_esc(m.item)}${m.purity ? " - " + flt(m.purity) : ""}</td><td>${qtyCell}</td><td></td></tr>`;
+			return `<tr><td>${pob_esc(m.item)}</td><td>${qtyCell}</td><td></td></tr>`;
 		})
 		.join("");
 	// top-right badge: the karat gold CODE (22KPG …) — the BOM's metal row, or the
 	// CAD karat target; falls back to the purity % if neither is there
 	const gold = (c.materials || []).find((m) => (m.uom || "") !== "Carat" && flt(m.purity) > 0);
-	const purBadge = gold ? gold.item : (c.cad_karat || (c.purity ? flt(c.purity) + "%" : ""));
+	const purBadge = gold ? gold.item : (c.cad_karat || "");  // karat+colour code, never a %
+	// extra badges under the karat code — CZ / CVD only, when the card carries them
+	const purExtra = [];
+	if (c.cz_no || c.cz_weight) purExtra.push("CZ");
+	if (c.cvd_no || c.cvd_weight) purExtra.push("CVD");
 	const stones = [];
 	[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CZ", "cz"], ["CVD", "cvd"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
 		if (c[b + "_no"] || c[b + "_weight"]) stones.push(`${lb} ${c[b + "_no"] || 0}/${flt(c[b + "_weight"])}ct`);
@@ -90,13 +95,13 @@ function pob_cardHTML(c) {
 		<div class="hd">
 			<div><b>D TYPE:</b> ${pob_esc(c.design_type)}<br><b>D NAME:</b> ${pob_esc(c.bank_no || c.design)}<br><b>D V:</b> ${pob_esc(c.design)}<br><b>D SIZE:</b> ${pob_esc(c.size || "NA")}</div>
 			<div>${pob_esc(c.customer)}<br><b>ORD:</b> ${pob_esc(c.order_date)}<br><b>DUE:</b> ${pob_esc(c.due_date)}</div>
-			<div>${purBadge ? `<span class="pur">${pob_esc(purBadge)}</span>` : ""}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
+			<div>${purBadge ? `<span class="pur">${pob_esc(purBadge)}</span>` : ""}${purExtra.map((x) => `<span class="pur2">${x}</span>`).join("")}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
 		</div>
 		<div class="md">
 			<div class="img">${c.image ? `<img src="${pob_esc(c.image)}">` : ""}<div class="cap">${pob_esc(c.design)}</div></div>
 			<div class="it">
 				<table><tr><th>Items</th><th>Qty</th><th>Weight</th></tr>${mats}</table>
-				<div class="sum"><b>G</b> ${flt(c.gross_weight)} · <b>N</b> ${flt(c.nett_weight)} · ${flt(c.purity)}%${stones.length ? " · " + stones.join(" · ") : ""}</div>
+				<div class="sum"><b>G</b> ${flt(c.gross_weight)} · <b>N</b> ${flt(c.nett_weight)}${stones.length ? " · " + stones.join(" · ") : ""}</div>
 			</div>
 		</div>
 		<div class="ft">

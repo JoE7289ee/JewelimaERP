@@ -49,7 +49,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 				<div class="cb-code"><div class="cb-no"></div><span class="cb-codechk"></span></div>
 				<div class="cb-row"><div class="cb-dtype"></div><div class="cb-gw"></div><div class="cb-dw"></div></div>
 				<div class="cb-sec">${__("Stones / Sieves")}<span class="add cb-addstone">+ ${__("row")}</span></div>
-				<table class="cb-t"><thead><tr><th>${__("Stone / Colour")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th><th></th></tr></thead>
+				<table class="cb-t"><thead><tr><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th></th></tr></thead>
 					<tbody class="cb-stones"></tbody></table>
 				<div class="cb-sec">${__("Note & Extra Lines")}</div>
 				<div class="cb-row"><div class="cb-note" style="flex:1;"></div></div>
@@ -89,9 +89,8 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 		cur.note = fNote.get_value() || "";
 		cur.extra_lines = root.find(".cb-extra textarea").val() || "";
 		cur.stones = root.find(".cb-stones tr").map(function () {
-			return { stone: $(this).find(".s").val(), sieve: $(this).find(".v").val(),
-				pcs: cint($(this).find(".p").val()), ct: flt($(this).find(".c").val()) };
-		}).get().filter((r) => r.stone || r.sieve);
+			return { sieve: $(this).find(".v").val(), pcs: cint($(this).find(".p").val()) };
+		}).get().filter((r) => r.sieve);
 		return cur;
 	}
 
@@ -107,14 +106,12 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 
 	function paintStones() {
 		root.find(".cb-stones").html((cur.stones.length ? cur.stones : [{}]).map((r) => `
-			<tr><td><input class="s" value="${esc(r.stone || "")}" placeholder="DMD / RUBY..."></td>
-			<td><select class="v">
+			<tr><td><select class="v">
 				<option value=""></option>
 				${SIEVES.map((sv) => `<option ${r.sieve === sv ? "selected" : ""}>${esc(sv)}</option>`).join("")}
 				${r.sieve && !SIEVES.includes(r.sieve) ? `<option selected>${esc(r.sieve)}</option>` : ""}
 			</select></td>
 			<td><input class="p" type="number" value="${r.pcs || ""}"></td>
-			<td><input class="c" type="number" step="0.001" value="${r.ct || ""}"></td>
 			<td class="del">&times;</td></tr>`).join(""));
 	}
 	root.find(".cb-addstone").on("click", () => { collect(); cur.stones.push({}); paintStones(); });

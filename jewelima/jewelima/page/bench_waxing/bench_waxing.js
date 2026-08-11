@@ -2,6 +2,6 @@
 // For license information, please see license.txt
 // Thin wrapper — the whole board lives in jewelima.buildBenchBoard (public/js/bench_board.js).
 
-frappe.pages["bench-wax-injecting"].on_page_load = function (wrapper) {
-	jewelima.buildBenchBoard(wrapper, "WAX INJECTING");
+frappe.pages["bench-waxing"].on_page_load = function (wrapper) {
+	jewelima.buildBenchBoard(wrapper, "WAXING");
 };

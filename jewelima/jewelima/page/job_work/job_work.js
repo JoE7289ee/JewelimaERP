@@ -420,7 +420,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// add them to the batch without scanning. Every pick still goes through
 	// processScan, so all the mode/location guards apply unchanged.
 	function showCards() {
-		const S = { location: state.location || "", status: state.mode === "receipt" ? "Issued" : "In Queue", rows: [], sel: new Set() };
+		const S = { location: state.location || "", status: state.mode === "receipt" ? "Issued" : "In Queue", rows: [], sel: new Set(), jo: "" };
 		// dynamic per mode: Issue shows only to-be-issued (In Queue); Receipt only Issued
 		const STATUSES = state.mode === "receipt" ? ["Issued"] : ["In Queue"];
 		const dlg = new frappe.ui.Dialog({
@@ -454,6 +454,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			</style>
 			<div class="tc-top">
 				<select class="tc-loc"><option value="">${__("— bench —")}</option>${ALLOWED.map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}</select>
+				<select class="tc-jo"><option value="">${__("— job order —")}</option></select>
 				${STATUSES.map((p) => `<span class="tc-pill ${p === S.status ? "on" : ""}" data-s="${p}">${p}</span>`).join("")}
 				<button class="btn btn-xs btn-default tc-all">${__("Select all")}</button>
 				<button class="btn btn-xs btn-default tc-none">${__("Clear")}</button>
@@ -464,7 +465,12 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				<tbody class="tc-body"><tr><td colspan="7" class="tc-empty">${__("Pick a bench.")}</td></tr></tbody>
 			</table></div>`);
 		const escC = frappe.utils.escape_html;
-		const visible = () => S.rows.filter((r) => S.status === "All" || r.status === S.status);
+		const visible = () => S.rows.filter((r) => (S.status === "All" || r.status === S.status) && (!S.jo || r.job_order === S.jo));
+		function fillJO() {
+			const jos = [...new Set(S.rows.map((r) => r.job_order).filter(Boolean))].sort();
+			$b.find(".tc-jo").html(`<option value="">${__("— job order —")}</option>` +
+				jos.map((j) => `<option ${j === S.jo ? "selected" : ""}>${escC(j)}</option>`).join(""));
+		}
 		function paint() {
 			const rows = visible();
 			// single-employee selection: the employee of the first ticked card locks the batch
@@ -492,15 +498,17 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to batch", [S.sel.size]) : __("Add to batch"));
 		}
 		function loadLoc() {
-			if (!S.location) { S.rows = []; paint(); return; }
+			if (!S.location) { S.rows = []; fillJO(); paint(); return; }
 			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
-				.then((r) => { S.rows = r.message || []; paint(); });
+				.then((r) => { S.rows = r.message || []; fillJO(); paint(); });
 		}
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;
 			S.sel.clear();
+			S.jo = "";
 			loadLoc();
 		});
+		$b.find(".tc-jo").on("change", function () { S.jo = this.value; paint(); });
 		$b.find(".tc-pill").on("click", function () {
 			$b.find(".tc-pill").removeClass("on");
 			this.classList.add("on");

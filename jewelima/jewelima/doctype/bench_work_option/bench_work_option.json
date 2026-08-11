@@ -9,7 +9,8 @@
  "field_order": [
   "bench",
   "kind",
-  "value"
+  "value",
+  "disposition"
  ],
  "fields": [
   {
@@ -35,6 +36,16 @@
    "in_list_view": 1,
    "label": "Value",
    "reqd": 1
+  },
+  {
+   "default": "Ready to Transfer",
+   "depends_on": "eval:doc.kind=='Collection State'",
+   "description": "For a Collection State: where the card goes after this state is picked.",
+   "fieldname": "disposition",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "After this state",
+   "options": "Ready to Transfer\nBack to In Queue"
   }
  ],
  "index_web_pages_for_search": 1,

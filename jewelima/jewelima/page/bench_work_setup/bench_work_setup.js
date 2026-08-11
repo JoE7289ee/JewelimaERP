@@ -11,15 +11,23 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Work Types & States", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
-	const BENCHES = ["ORDERING", "CAD", "CAM", "WAX INJECTING", "TREE MAKING", "CASTING", "GRINDING",
+	const BENCHES = ["ORDERING", "CAD", "CAM", "WAXING", "TREE MAKING", "CASTING", "GRINDING",
 		"FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH", "WAX CLEANING", "BAG EXTRACTION"];
 	let bench = null;
 	let options = [];   // [{name, kind, value, in_use}]
 
 	$(page.main).append(`
 		<style>
-		.bw-note{color:var(--text-muted);font-size:12.5px;margin-bottom:14px;max-width:900px;}
-		.bw-pick{max-width:320px;margin-bottom:16px;}
+		.bw-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:18px;}
+		.bw-tile{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);padding:11px 14px;cursor:pointer;transition:transform .1s,box-shadow .1s,border-color .1s;}
+		.bw-tile:hover{transform:translateY(-2px);box-shadow:0 6px 14px rgba(0,0,0,.08);}
+		.bw-tile.on{border-color:#1f618d;box-shadow:0 0 0 2px rgba(31,97,141,.25);}
+		.bw-tile .nm{font-weight:800;font-size:13.5px;margin-bottom:7px;}
+		.bw-tile .cts{display:flex;gap:6px;flex-wrap:wrap;}
+		.bw-tile .ct{font-size:11px;font-weight:700;border-radius:9px;padding:1px 8px;}
+		.bw-tile .ct.w{background:#e3e7f5;color:#333d8f;}
+		.bw-tile .ct.s{background:#dcefe0;color:#1d7a33;}
+		.bw-tile .ct.q{background:#fdf3d0;color:#8a6d00;}
 		.bw-cols{display:none;gap:20px;align-items:flex-start;}
 		.bw-col{flex:1;border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);overflow:hidden;}
 		.bw-col .h{background:var(--control-bg);padding:10px 14px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
@@ -32,12 +40,14 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 		.bw-row .ren{color:var(--text-muted);}
 		.bw-row .del{color:#b02a2a;font-weight:700;}
 		.bw-row .del.off{opacity:.3;cursor:not-allowed;}
+		.bw-row .disp{cursor:pointer;font-size:11px;font-weight:700;border-radius:9px;padding:1px 9px;white-space:nowrap;}
+		.bw-row .disp.tr{background:#dcefe0;color:#1d7a33;}
+		.bw-row .disp.q{background:#fdf3d0;color:#8a6d00;}
 		.bw-addrow{display:flex;gap:8px;margin-top:10px;}
 		.bw-addrow input{flex:1;border:1px solid var(--border-color);border-radius:6px;padding:5px 10px;background:var(--control-bg);}
 		.bw-empty{color:var(--text-muted);font-size:12px;padding:8px 0;}
 		</style>
-		<div class="bw-note">${__("Pick a bench, then manage its Work Types (chosen when work is issued or assigned — e.g. WAX INJECTING: wax inject, dye cutting, dye making), Collection States (chosen when work comes back — e.g. complete, partial complete, failed, QC failed) and In Queue Reasons (why a waiting card is stuck — e.g. WAX INJECTING: Awaiting Dye). Rename is always allowed and follows through to every record; delete only works while no record uses the option.")}</div>
-		<div class="bw-pick"></div>
+		<div class="bw-tiles"></div>
 		<div class="bw-cols">
 			<div class="bw-col"><div class="h">${__("Types of Work")}</div><div class="b">
 				<div class="bw-list" data-kind="Work Type"></div>
@@ -55,20 +65,39 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 	`);
 	const root = $(page.main);
 
-	const picker = frappe.ui.form.make_control({
-		df: { fieldtype: "Select", label: __("Bench"), fieldname: "bench", options: [""].concat(BENCHES).join("\n") },
-		parent: root.find(".bw-pick").get(0), render_input: true,
+	let tiles = [];
+	function renderTiles() {
+		root.find(".bw-tiles").html(tiles.map((b) => `
+			<div class="bw-tile ${bench === b.bench ? "on" : ""}" data-bench="${esc(b.bench)}">
+				<div class="nm">${esc(b.bench)}</div>
+				<div class="cts">
+					<span class="ct w">${b.work_types} ${__("work")}</span>
+					<span class="ct s">${b.collection_states} ${__("collection")}</span>
+					<span class="ct q">${b.queue_reasons} ${__("reasons")}</span>
+				</div>
+			</div>`).join(""));
+	}
+	function loadTiles() {
+		frappe.call({ method: API + ".get_bench_work_counts" }).then((r) => {
+			tiles = (r.message || {}).benches || [];
+			renderTiles();
+		});
+	}
+	root.on("click", ".bw-tile", function () {
+		bench = $(this).data("bench");
+		renderTiles();
+		load();
 	});
-	picker.refresh();
-	picker.$input.on("change", () => { bench = picker.get_value() || null; bench ? load() : root.find(".bw-cols").hide(); });
 
 	function load() {
 		frappe.call({ method: API + ".get_bench_work_setup", args: { location: bench } }).then((r) => {
 			options = (r.message || {}).options || [];
 			paint();
 			root.find(".bw-cols").css("display", "flex");
+			loadTiles();  // keep the tile counts fresh after add / delete
 		});
 	}
+	loadTiles();
 
 	function paint() {
 		["Work Type", "Collection State", "Queue Reason"].forEach((kind) => {
@@ -78,6 +107,7 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 			box.html(list.map((o) => `
 				<div class="bw-row" data-name="${esc(o.name)}">
 					<span class="v">${esc(o.value)}</span>
+					${kind === "Collection State" ? `<span class="disp ${o.disposition === "Back to In Queue" ? "q" : "tr"}" title="${__("Click to change what happens to the card after this state")}">${o.disposition === "Back to In Queue" ? "↺ " + __("back to queue") : "→ " + __("ready to transfer")}</span>` : ""}
 					<span class="u">${o.in_use ? __("{0} record(s)", [o.in_use]) : __("unused")}</span>
 					<span class="act ren" title="${__("Rename — follows through to every record")}">${__("rename")}</span>
 					<span class="act del ${o.in_use ? "off" : ""}" title="${o.in_use ? __("In use — rename instead") : __("Delete")}">&times;</span>
@@ -107,6 +137,14 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 						load();
 					});
 			}, __("Rename '{0}'", [o.value]), __("Rename"));
+	});
+
+	root.on("click", ".bw-row .disp", function () {
+		const name = $(this).closest(".bw-row").data("name");
+		const o = options.find((x) => x.name === name);
+		const next = o.disposition === "Back to In Queue" ? "Ready to Transfer" : "Back to In Queue";
+		frappe.call({ method: API + ".bench_work_option_set_disposition", args: { name, disposition: next } })
+			.then(() => { frappe.show_alert({ message: __("Outcome updated."), indicator: "blue" }, 3); load(); });
 	});
 
 	root.on("click", ".bw-row .del", function () {

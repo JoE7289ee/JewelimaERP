@@ -9,7 +9,7 @@
 // Route: /app/transfer-order-bag
 
 const TOB_LOCATIONS =
-	"\nORDERING\nCAD\nCAM\nWAX INJECTING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION";
+	"\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION";
 
 frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Transfer Order Bag", single_column: true });
@@ -309,7 +309,10 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 
 	// ---- Cards picker: browse a location's cards and add them to the batch without scanning
 	function showCards() {
-		const S = { location: state.location || "", status: "All", rows: [], sel: new Set() };
+		// once a batch is collecting from a location, the picker is LOCKED to it —
+		// every other location is filtered out (one location per transfer).
+		const batchLock = (state.rows.length && state.location) ? state.location : null;
+		const S = { location: batchLock || state.location || "", status: "All", rows: [], sel: new Set(), jo: "" };
 		const dlg = new frappe.ui.Dialog({
 			title: __("Cards by location"),
 			size: "extra-large",
@@ -339,7 +342,10 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			.tc-empty{padding:18px;text-align:center;color:var(--text-muted);}
 			</style>
 			<div class="tc-top">
-				<select class="tc-loc"><option value="">— location —</option>${TOB_LOCATIONS.trim().split("\n").map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}</select>
+				<select class="tc-loc" ${batchLock ? "disabled title='Batch is active — locked to this location'" : ""}>${batchLock
+					? `<option>${esc(batchLock)}</option>`
+					: `<option value="">— location —</option>${TOB_LOCATIONS.trim().split("\n").map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}`}</select>
+				<select class="tc-jo"><option value="">${__("— job order —")}</option></select>
 				<span class="tc-pill on" data-s="All">All</span>
 				<span class="tc-pill" data-s="In Queue">In Queue</span>
 				<span class="tc-pill" data-s="Completed">Completed</span>
@@ -353,7 +359,12 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			</table></div>`);
 
 		const esc = frappe.utils.escape_html;
-		const visible = () => S.rows.filter((r) => S.status === "All" || r.status === S.status);
+		const visible = () => S.rows.filter((r) => (S.status === "All" || r.status === S.status) && (!S.jo || r.job_order === S.jo));
+		function fillJO() {
+			const jos = [...new Set(S.rows.map((r) => r.job_order).filter(Boolean))].sort();
+			$b.find(".tc-jo").html(`<option value="">${__("— job order —")}</option>` +
+				jos.map((j) => `<option ${j === S.jo ? "selected" : ""}>${esc(j)}</option>`).join(""));
+		}
 		function paint() {
 			const rows = visible();
 			const body = $b.find(".tc-body")[0];
@@ -371,15 +382,17 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to batch", [S.sel.size]) : __("Add to batch"));
 		}
 		function loadLoc() {
-			if (!S.location) { S.rows = []; paint(); return; }
+			if (!S.location) { S.rows = []; fillJO(); paint(); return; }
 			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
-				.then((r) => { S.rows = (r.message || []).filter((x) => x.status !== "Issued"); paint(); });
+				.then((r) => { S.rows = (r.message || []).filter((x) => x.status !== "Issued"); fillJO(); paint(); });
 		}
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;
 			S.sel.clear(); // one location -> one transfer: changing location deselects everything
+			S.jo = "";
 			loadLoc();
 		});
+		$b.find(".tc-jo").on("change", function () { S.jo = this.value; paint(); });
 		$b.find(".tc-pill").on("click", function () {
 			$b.find(".tc-pill").removeClass("on");
 			this.classList.add("on");

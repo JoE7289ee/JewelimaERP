@@ -39,7 +39,7 @@
    "reqd": 1
   },
   {
-   "default": "Wax Injecting",
+   "default": "Waxing",
    "fieldname": "bench",
    "fieldtype": "Data",
    "in_standard_filter": 1,
@@ -164,7 +164,7 @@
  "modified": "2026-07-21 21:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "Wax Injecting",
+ "name": "Waxing",
  "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [

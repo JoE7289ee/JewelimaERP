@@ -121,7 +121,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		// screen = every stage with in/out times and weights
 		let stageTbl = '<span class="ci-empty">No bench work yet.</span>';
 		if (forPrint) {
-			const stages = (d.stages || []).filter((s) => s.employee_name || flt(s.loss) || (s.status && s.status !== "In Queue"));
+			const stages = (d.stages || []).filter((s) => s.is_issue && (s.employee_name || flt(s.loss)));
 			const rows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
 			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
 		} else {

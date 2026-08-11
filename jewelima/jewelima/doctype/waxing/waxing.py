@@ -4,5 +4,5 @@
 from frappe.model.document import Document
 
 
-class WaxInjecting(Document):
+class Waxing(Document):
 	pass

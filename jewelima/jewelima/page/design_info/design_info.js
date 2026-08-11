@@ -51,14 +51,42 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		.di-shot img{transition:transform .12s;}
 		.di-shot img:hover{transform:scale(1.03);}
 		</style>
-		<div class="di-top"></div>
-		<div class="di-body"><div class="di-none">${__("Pick a design.")}</div></div>
+		<div class="di-top"><div class="di-scan" style="margin-bottom:8px;"></div></div>
+		<div class="di-body"><div class="di-none">${__("Scan a card or pick a design.")}</div></div>
 	`);
 	const root = $(page.main);
+	// scan a card -> jump straight to its linked design
+	const fScan = frappe.ui.form.make_control({
+		df: { fieldtype: "Data", label: __("Scan a card"), fieldname: "scan",
+			description: __("Scan / type an Order Bag — its design opens below.") },
+		parent: root.find(".di-scan").get(0), render_input: true });
+	fScan.refresh();
 	const fPick = frappe.ui.form.make_control({
 		df: { fieldtype: "Link", label: __("Design"), fieldname: "design", options: "Design", only_select: 1 },
 		parent: root.find(".di-top").get(0), render_input: true });
 	fPick.refresh();
+
+	function openFromCard(code) {
+		code = (code || "").trim();
+		if (!code) return;
+		frappe.db.get_value("Order Bag", code, "design").then((r) => {
+			const design = r && r.message && r.message.design;
+			if (!design) {
+				frappe.show_alert({ message: __("No card <b>{0}</b>, or it has no design yet.", [frappe.utils.escape_html(code)]), indicator: "orange" }, 5);
+				return;
+			}
+			fPick.set_value(design);
+			load(design);
+		});
+	}
+	fScan.$input.on("keydown", (e) => {
+		if (e.which === 13 || e.key === "Enter") {
+			e.preventDefault();
+			const code = fScan.get_value();
+			fScan.set_value("");
+			openFromCard(code);
+		}
+	});
 
 	function paint(D) {
 		const SCLASS = { "In Production": "ip", "In Stock": "is", "Sold": "so", "Cancelled": "cn", "At Certification": "is" };
@@ -160,10 +188,13 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		$(document.body).append(lb);
 	});
 
-	if (frappe.route_options && frappe.route_options.design) {
+	if (frappe.route_options && (frappe.route_options.design || frappe.route_options.order_bag)) {
 		const pre = frappe.route_options.design;
+		const card = frappe.route_options.order_bag;
 		frappe.route_options = null;
-		fPick.set_value(pre);
-		load(pre);
+		if (pre) { fPick.set_value(pre); load(pre); }
+		else if (card) { openFromCard(card); }
+	} else {
+		setTimeout(() => fScan.$input.focus(), 250);
 	}
 };
