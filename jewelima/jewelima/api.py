@@ -12820,7 +12820,7 @@ def list_feature_requests(status=None, mine=0):
 	for r in rows:
 		r["requested_by_name"] = names.get(r.requested_by, r.requested_by)
 	counts = {}
-	for st in ("Open", "In Progress", "Closed", "Declined"):
+	for st in ("Open", "In Progress", "In Test", "On Hold", "Closed", "Declined"):
 		counts[st] = frappe.db.count("Feature Request", {"status": st})
 	return {"rows": rows, "counts": counts, "is_admin": 1 if _is_feature_admin() else 0,
 		"me": frappe.session.user}
@@ -12831,7 +12831,7 @@ def set_feature_request_status(name, status, admin_note=None):
 	"""Admin-only: move a request to In Progress / Closed / Declined / Open."""
 	if not _is_feature_admin():
 		frappe.throw(frappe._("Only the administrator can change a request's status."), frappe.PermissionError)
-	if status not in ("Open", "In Progress", "Closed", "Declined"):
+	if status not in ("Open", "In Progress", "In Test", "On Hold", "Closed", "Declined"):
 		frappe.throw(frappe._("Bad status."))
 	vals = {"status": status}
 	if admin_note is not None:

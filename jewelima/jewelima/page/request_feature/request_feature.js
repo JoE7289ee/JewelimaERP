@@ -37,7 +37,9 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 		.rf-card .meta{font-size:11px;color:var(--text-muted);}
 		.rf-badge{border-radius:9px;padding:1px 10px;font-size:10.5px;font-weight:800;}
 		.rf-badge.Open{background:#fdf3d0;color:#8a6d00;}
-		.rf-badge.In{background:#e3e7f5;color:#333d8f;}
+		.rf-badge.InProgress{background:#e3e7f5;color:#333d8f;}
+		.rf-badge.InTest{background:#d9f0ef;color:#0f6e66;}
+		.rf-badge.OnHold{background:#e6e6e6;color:#555;}
 		.rf-badge.Closed{background:#dcefe0;color:#1d7a33;}
 		.rf-badge.Declined{background:#f5dddd;color:#b02a2a;}
 		.rf-cat{border:1px solid var(--border-color);border-radius:9px;padding:1px 9px;font-size:10.5px;font-weight:700;color:var(--text-muted);}
@@ -74,13 +76,13 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 
 	function paint() {
 		const c = DATA.counts || {};
-		const tiles = [["", __("All")], ["Open", "Open"], ["In Progress", "In Progress"], ["Closed", "Closed"], ["Declined", "Declined"]];
+		const tiles = [["", __("All")], ["Open", "Open"], ["In Progress", "In Progress"], ["In Test", "In Test"], ["On Hold", "On Hold"], ["Closed", "Closed"], ["Declined", "Declined"]];
 		root.find(".rf-tiles").html(tiles.map(([k, lbl]) => {
-			const v = k === "" ? (c.Open || 0) + (c["In Progress"] || 0) + (c.Closed || 0) + (c.Declined || 0) : (c[k] || 0);
+			const v = k === "" ? Object.values(c).reduce((a, b) => a + (b || 0), 0) : (c[k] || 0);
 			return `<div class="rf-tile ${FST === k ? "on" : ""}" data-s="${esc(k)}"><div class="k">${lbl}</div><div class="v">${v}</div></div>`;
 		}).join(""));
 		root.find(".rf-hint").text(DATA.is_admin ? __("You're admin — you can change any status.") : __("Only the admin can change status."));
-		const badge = (st) => `<span class="rf-badge ${st === "In Progress" ? "In" : st}">${esc(st)}</span>`;
+		const badge = (st) => `<span class="rf-badge ${(st || "").replace(/\s+/g, "")}">${esc(st)}</span>`;
 		root.find(".rf-list").html((DATA.rows || []).length ? DATA.rows.map((r) => `
 			<div class="rf-card" data-n="${esc(r.name)}">
 				<div class="rh">
@@ -94,8 +96,8 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 					${r.closed_by ? " · " + __("closed by {0}", [esc((r.closed_by || "").split("@")[0])]) + " " + esc((r.closed_on || "").slice(0, 16)) : ""}</div>
 				${r.admin_note ? `<div class="rf-note">📌 ${esc(r.admin_note)}</div>` : ""}
 				${DATA.is_admin ? `<div class="rf-admin">
-					${["Open", "In Progress", "Closed", "Declined"].filter((s) => s !== r.status).map((s) =>
-						`<button class="rf-set" data-n="${esc(r.name)}" data-s="${s}" style="background:${s === "Closed" ? "#1d7a33" : s === "Declined" ? "#b02a2a" : s === "In Progress" ? "#333d8f" : "#8a6d00"};">${__("→ {0}", [s])}</button>`).join("")}
+					${["Open", "In Progress", "In Test", "On Hold", "Closed", "Declined"].filter((s) => s !== r.status).map((s) =>
+						`<button class="rf-set" data-n="${esc(r.name)}" data-s="${s}" style="background:${s === "Closed" ? "#1d7a33" : s === "Declined" ? "#b02a2a" : s === "In Progress" ? "#333d8f" : s === "In Test" ? "#0f6e66" : s === "On Hold" ? "#777" : "#8a6d00"};">${__("→ {0}", [s])}</button>`).join("")}
 				</div>` : ""}
 			</div>`).join("")
 			: `<div class="rf-none">${FST || MINE ? __("Nothing matches.") : __("No requests yet — raise the first one.")}</div>`);
