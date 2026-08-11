@@ -567,7 +567,11 @@ const PO_COLUMNS = [
 	// ---- Design Bank first: the card picks the line, variants follow --------
 	function onBankPicked(row) {
 		const bank = row.f.bank.get();
-		if (!bank) return;
+		if (!bank) { row._lastBank = ""; return; }
+		// the bank field fires BOTH change + awesomplete-selectcomplete on one pick —
+		// dedupe so the "create variant?" flow (and its dialog) doesn't run twice
+		if (row._lastBank === bank) return;
+		row._lastBank = bank;
 		const cur = row.f.design.get();
 		const pickFirst = () => frappe.db.get_list("Design",
 			{ filters: { design_bank: bank, status: "Active" }, fields: ["name"], order_by: "creation asc", limit: 0 })
