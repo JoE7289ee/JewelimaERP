@@ -406,7 +406,9 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	});
 
 
+	let siBusy = false; // guard: don't issue twice on a double Enter / double click
 	root.find(".si-go").on("click", () => {
+		if (siBusy) return;
 		const lines = readLines();
 		if (!lines.length) return frappe.msgprint(__("Enter a Qty + Carat weight on at least one stone line."));
 		const bad = lines.find((l) => !(l.pcs > 0) || !(l.ct > 0));
@@ -414,10 +416,12 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		const by = issuedBy.get_value();
 		if (!by) return frappe.msgprint(__("Pick who is issuing these stones."));
 		const ct = lines.reduce((a, l) => a + l.ct, 0);
+		siBusy = true;
 		frappe.dom.freeze(__("Issuing..."));
 		frappe.call({ method: API + ".stone_issue_apply", args: { order_bag: S.card.order_bag, lines, issued_by: by } })
 			.then((r) => {
 				frappe.dom.unfreeze();
+				siBusy = false;
 				frappe.show_alert({ message: (r.message || {}).fully_issued
 					? __("Stones issued into {0} — fully served.", [S.card.order_bag])
 					: __("PARTIAL issue into {0} — the card stays pending for the rest.", [S.card.order_bag]),
@@ -428,7 +432,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 				refreshToday();
 				refreshStock();
 			})
-			.catch(() => frappe.dom.unfreeze());
+			.catch(() => { frappe.dom.unfreeze(); siBusy = false; });
 	});
 
 	clearAll();

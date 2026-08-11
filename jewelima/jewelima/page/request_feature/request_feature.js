@@ -103,16 +103,28 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 			: `<div class="rf-none">${FST || MINE ? __("Nothing matches.") : __("No requests yet — raise the first one.")}</div>`);
 	}
 
+	let rfBusy = false; // guard: a double Enter / double click must not file twice
 	root.on("click", ".rf-submit", () => {
+		if (rfBusy) return;
 		const title = (root.find(".rf-title").val() || "").trim();
 		if (!title) return frappe.show_alert({ message: __("Give the request a title."), indicator: "orange" }, 3);
+		rfBusy = true;
+		root.find(".rf-submit").prop("disabled", true);
+		frappe.dom.freeze(__("Submitting…"));
 		frappe.call({ method: API + ".submit_feature_request", args: {
 			title, description: root.find(".rf-desc").val() || "", category: root.find(".rf-cat-in").val(),
 		} }).then((r) => {
+			frappe.dom.unfreeze();
+			rfBusy = false;
+			root.find(".rf-submit").prop("disabled", false);
 			frappe.show_alert({ message: __("Request {0} raised — status Open.", [r.message.name]), indicator: "green" }, 5);
 			root.find(".rf-title").val("");
 			root.find(".rf-desc").val("");
 			load();
+		}).catch(() => {
+			frappe.dom.unfreeze();
+			rfBusy = false;
+			root.find(".rf-submit").prop("disabled", false);
 		});
 	});
 	root.on("click", ".rf-tile", function () {
