@@ -2378,6 +2378,16 @@ def get_bag_transfer_info(order_bag):
 	for bk in ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"):
 		out[bk + "_weight"] = p[bk + "_weight"]
 		out[bk + "_no"] = p[bk + "_no"]
+	# current bench status — ISSUED cards (out with a worker) can't be transferred
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	dt = BENCH_DOCTYPE.get((bag.location or "").upper())
+	status = None
+	if dt and frappe.db.exists("DocType", dt):
+		rec = frappe.get_all(dt, filters={"order_bag": order_bag}, fields=["status"],
+			order_by="creation desc", limit=1)
+		status = rec[0].status if rec else None
+	out["status"] = status
+	out["issued"] = 1 if status == "Issued" else 0
 	return out
 
 

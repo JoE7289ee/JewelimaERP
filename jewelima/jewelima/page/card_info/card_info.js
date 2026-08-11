@@ -124,15 +124,17 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			const stages = (d.stages || []).filter((s) => s.employee_name || flt(s.loss) || (s.status && s.status !== "In Queue"));
 			const rows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
 			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
-		} else if ((d.stages || []).length) {
-			const rows = d.stages.map((s) => `<tr${s.from_parent ? ' style="opacity:.62;"' : ""}>
+		} else {
+			// "who worked on it" — only stages with a tagged employee; the placeholder
+			// records created on transfer-in (no employee) that expire on move-out drop out
+			const rows = (d.stages || []).filter((s) => s.employee_name).map((s) => `<tr${s.from_parent ? ' style="opacity:.62;"' : ""}>
 				<td><b>${esc(s.bench || "")}</b>${s.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td>
 				<td>${esc(s.work_type || "")}</td><td>${esc(s.collection_state || "")}</td>
 				<td>${dtt(s.issued_at || s.time_in)}</td><td>${dtt(s.receipted_at || s.time_out)}</td>
 				<td class="num">${flt(s.weight_out) ? g(s.weight_out) : ""}</td>
 				<td class="num">${flt(s.weight_in) ? g(s.weight_in) : ""}</td>
 				<td class="num">${flt(s.loss) ? "<b>" + g(s.loss) + "</b>" : ""}</td></tr>`).join("");
-			stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th>Work</th><th>State</th><th>In</th><th>Out</th><th class="num">Wt Out</th><th class="num">Wt In</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
+			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th>Work</th><th>State</th><th>In</th><th>Out</th><th class="num">Wt Out</th><th class="num">Wt In</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
 		}
 
 		// issue details — who issued what stones/gold into this card and when

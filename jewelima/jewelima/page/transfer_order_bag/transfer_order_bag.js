@@ -207,6 +207,11 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				logHistory(code, "Not found", "err");
 				return;
 			}
+			if (v.issued) {
+				setMsg(__("<b>{0}</b> is currently ISSUED (out with a worker) — collect it first.", [safe]), "err");
+				logHistory(code, __("Issued — can't transfer"), "err");
+				return;
+			}
 			if (!state.location) {
 				state.location = v.location; // first scan locks the location
 				updateLoc();
@@ -368,7 +373,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		function loadLoc() {
 			if (!S.location) { S.rows = []; paint(); return; }
 			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
-				.then((r) => { S.rows = r.message || []; paint(); });
+				.then((r) => { S.rows = (r.message || []).filter((x) => x.status !== "Issued"); paint(); });
 		}
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;
