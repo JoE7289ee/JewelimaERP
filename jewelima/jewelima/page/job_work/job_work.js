@@ -33,7 +33,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		table.jw-grid th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.jw-grid td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
 		table.jw-grid td.num,table.jw-grid th.num{text-align:right;}
-		.jw-win{width:90px;text-align:right;-moz-appearance:textfield;}
+		table.jw-grid td.num input.jw-win{display:inline-block;width:90px;text-align:right;-moz-appearance:textfield;}
 		.jw-win::-webkit-inner-spin-button,.jw-win::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 		.jw-loss-pos{color:#b00020;font-weight:600;}
 		.jw-foot{margin-top:6px;color:var(--text-muted);font-size:12px;display:flex;justify-content:space-between;}
@@ -448,6 +448,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			table.tc-tbl th{position:sticky;top:0;z-index:1;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 			table.tc-tbl td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
 			table.tc-tbl tr.on td{background:var(--bg-light-gray,#eef3ee);}
+			table.tc-tbl tr.tc-dim td{opacity:.45;}
 			table.tc-tbl input{width:15px;height:15px;cursor:pointer;}
 			.tc-empty{padding:18px;text-align:center;color:var(--text-muted);}
 			</style>
@@ -459,20 +460,30 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				<span class="tc-count"></span>
 			</div>
 			<div class="tc-box"><table class="tc-tbl">
-				<thead><tr><th style="width:34px"></th><th>${__("Order Bag")}</th><th>${__("Design")}</th><th>${__("Qty")}</th><th>${__("Due")}</th><th>${__("Status")}</th></tr></thead>
-				<tbody class="tc-body"><tr><td colspan="6" class="tc-empty">${__("Pick a bench.")}</td></tr></tbody>
+				<thead><tr><th style="width:34px"></th><th>${__("Order Bag")}</th><th>${__("Design")}</th><th>${__("Qty")}</th><th>${__("Due")}</th><th>${__("Status")}</th><th>${__("Employee")}</th></tr></thead>
+				<tbody class="tc-body"><tr><td colspan="7" class="tc-empty">${__("Pick a bench.")}</td></tr></tbody>
 			</table></div>`);
 		const escC = frappe.utils.escape_html;
 		const visible = () => S.rows.filter((r) => S.status === "All" || r.status === S.status);
 		function paint() {
 			const rows = visible();
+			// single-employee selection: the employee of the first ticked card locks the batch
+			let activeEmp = null;
+			for (const r of S.rows) if (S.sel.has(r.name)) { activeEmp = r.employee || ""; break; }
 			const body = $b.find(".tc-body")[0];
 			body.innerHTML = rows.length
-				? rows.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
-					<td><input type="checkbox" data-nm="${escC(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${state.rows.find((x) => x.name === r.name) ? "disabled title='Already in the batch'" : ""}></td>
-					<td><b>${escC(r.name)}</b></td><td>${escC(r.design || "")}</td><td>${r.qty || ""}</td>
-					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${escC(r.status || "")}</td></tr>`).join("")
-				: `<tr><td colspan="6" class="tc-empty">${S.location ? __("No cards match.") : __("Pick a bench.")}</td></tr>`;
+				? rows.map((r) => {
+					const inBatch = state.rows.find((x) => x.name === r.name);
+					const mism = activeEmp !== null && (r.employee || "") !== activeEmp;
+					const dis = inBatch ? "disabled title='Already in the batch'"
+						: (mism && !S.sel.has(r.name)) ? "disabled title='Different employee — clear the selection first'" : "";
+					return `<tr class="${S.sel.has(r.name) ? "on" : ""}${mism ? " tc-dim" : ""}">
+						<td><input type="checkbox" data-nm="${escC(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${dis}></td>
+						<td><b>${escC(r.name)}</b></td><td>${escC(r.design || "")}</td><td>${r.qty || ""}</td>
+						<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${escC(r.status || "")}</td>
+						<td>${escC(r.employee_name || "—")}</td></tr>`;
+				}).join("")
+				: `<tr><td colspan="7" class="tc-empty">${S.location ? __("No cards match.") : __("Pick a bench.")}</td></tr>`;
 			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.rows.length} at bench`);
 			$b.find(".tc-body input").on("change", function () {
 				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
@@ -496,7 +507,15 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			S.status = this.dataset.s;
 			paint();
 		});
-		$b.find(".tc-all").on("click", () => { visible().forEach((r) => { if (!state.rows.find((x) => x.name === r.name)) S.sel.add(r.name); }); paint(); });
+		$b.find(".tc-all").on("click", () => {
+			// select all VISIBLE cards of a single employee (the active one, else the first)
+			const vis = visible().filter((r) => !state.rows.find((x) => x.name === r.name));
+			let emp = null;
+			for (const r of S.rows) if (S.sel.has(r.name)) { emp = r.employee || ""; break; }
+			if (emp === null && vis.length) emp = vis[0].employee || "";
+			vis.forEach((r) => { if ((r.employee || "") === emp) S.sel.add(r.name); });
+			paint();
+		});
 		$b.find(".tc-none").on("click", () => { S.sel.clear(); paint(); });
 		dlg.show();
 		if (S.location) loadLoc(); else paint();

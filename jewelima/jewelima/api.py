@@ -12502,15 +12502,21 @@ def get_cards_at_location(location):
 		fields=["name", "design", "qty", "due_date"], order_by="name",
 	)
 	dt = BENCH_DOCTYPE.get(loc)
-	smap = {}
+	smap, emap = {}, {}
 	if bags and dt and frappe.db.exists("DocType", dt):
 		for r in frappe.get_all(
 			dt, filters={"order_bag": ["in", [b.name for b in bags]], "bench": loc},
-			fields=["order_bag", "status"], order_by="creation asc",
+			fields=["order_bag", "status", "employee"], order_by="creation asc",
 		):
 			smap[r.order_bag] = r.status  # last record per bag wins
+			emap[r.order_bag] = r.employee
+	codes = list({e for e in emap.values() if e})
+	names = {r.name: (r.employee_name or r.name) for r in frappe.get_all(
+		"Employee", filters={"name": ["in", codes]}, fields=["name", "employee_name"])} if codes else {}
 	for b in bags:
 		b["status"] = smap.get(b.name) or "In Queue"
+		b["employee"] = emap.get(b.name) or ""
+		b["employee_name"] = names.get(b["employee"], b["employee"])
 	return bags
 
 
