@@ -9347,6 +9347,84 @@ def save_design_card(payload):
 	return {"name": d.name, "design_no": d.design_no, "image": d.image}
 
 
+# --- Diamond Weight check: reconcile an approved card's DW against the sieve
+# average (sum of pcs x each sieve's EF-diamond avg ct). Approved designs only.
+def _sieve_avg_map():
+	return {x.sieve_size: flt(x.avg_cts) for x in frappe.get_all(
+		"Diamond Sieve", fields=["sieve_size", "avg_cts"]) if x.sieve_size}
+
+
+def _dw_computed(pairs, avg):
+	"""pairs: iterable of (sieve, pcs) — total ct = sum(pcs x sieve avg)."""
+	return round(sum(cint(pcs) * avg.get(sieve, 0) for sieve, pcs in pairs if sieve), 2)
+
+
+def _rerender_design_card(doc):
+	"""Regenerate a Design Bank card PNG from its current fields/stones."""
+	from io import BytesIO
+
+	p = {"design_no": doc.design_no, "design_type": doc.design_type or "",
+		"gross_weight": doc.gross_weight, "diamond_weight": doc.diamond_weight,
+		"note": doc.note or "", "extra_lines": doc.extra_lines or "", "photo": doc.photo or "",
+		"stones": [{"stone": s.stone, "sieve": s.sieve, "pcs": s.pcs, "ct": s.ct} for s in doc.stones]}
+	buf = BytesIO()
+	_card_compose(p).save(buf, "PNG")
+	for old in frappe.get_all("File", filters={"attached_to_doctype": "Design Bank",
+			"attached_to_name": doc.name, "file_name": "CARD-{0}.png".format(doc.name)}, pluck="name"):
+		frappe.delete_doc("File", old, force=True, ignore_permissions=True)
+	return _write_slot_file(doc.name, _db_img_name(doc.design_no, "info"), buf.getvalue())
+
+
+@frappe.whitelist()
+def get_dw_reconcile():
+	"""Approved designs whose stated DW differs from the sieve-average total."""
+	avg = _sieve_avg_map()
+	out = []
+	for d in frappe.get_all("Design Bank", filters={"status": "Approved"},
+			fields=["name", "design_no", "diamond_weight", "image"], order_by="design_no"):
+		sieved = [s for s in frappe.get_all("Design Bank Stone", filters={"parent": d.name},
+			fields=["sieve", "pcs"]) if (s.sieve or "")]
+		if not sieved:
+			continue
+		computed = _dw_computed([(s.sieve, s.pcs) for s in sieved], avg)
+		current = round(flt(d.diamond_weight), 2)
+		if abs(computed - current) < 0.005:
+			continue
+		out.append({"name": d.name, "design_no": d.design_no, "image": d.image or "",
+			"current_dw": current, "computed_dw": computed, "delta": round(computed - current, 2),
+			"sieves": [{"sieve": s.sieve, "pcs": cint(s.pcs)} for s in sieved]})
+	out.sort(key=lambda r: -abs(r["delta"]))
+	return {"rows": out, "count": len(out)}
+
+
+@frappe.whitelist()
+def update_design_dw(name):
+	"""Set an approved design's DW to the sieve-average total + re-render its card."""
+	doc = frappe.get_doc("Design Bank", name)
+	if doc.status != "Approved":
+		frappe.throw(frappe._("Only approved designs are reconciled here."))
+	computed = _dw_computed([(s.sieve, s.pcs) for s in doc.stones], _sieve_avg_map())
+	doc.diamond_weight = computed
+	doc.image = _rerender_design_card(doc)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "diamond_weight": computed, "image": doc.image}
+
+
+@frappe.whitelist()
+def update_all_dw():
+	"""Reconcile DW on every mismatched approved design in one pass."""
+	names = [r["name"] for r in get_dw_reconcile()["rows"]]
+	done = 0
+	for nm in names:
+		try:
+			update_design_dw(nm)
+			done += 1
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "update_all_dw")
+	return {"updated": done, "total": len(names)}
+
+
 def _cad_store_image_generic(ref, doctype, name, fname=None):
 	"""data-URL -> stored File on any doc; an existing /files/ url passes through."""
 	if not ref:
