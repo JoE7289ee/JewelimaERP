@@ -1436,7 +1436,14 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 		frappe.show_alert({ message: __("Placed {0} with {1} card(s).", [order.name, made]), indicator: "green" }, 7);
 		frappe.msgprint({
 			title: __("Order placed"), indicator: "green",
-			message: __("{0} created with {1} Order Bag(s). <a href='/app/job-order/{0}'>Open order</a>", [order.name, made]),
+			message: __("{0} created with {1} Order Bag(s).", [order.name, made]),
+			primary_action: {
+				label: __("Open job order"),
+				action() {
+					frappe.route_options = { job_order: order.name };
+					frappe.set_route("job-order-status");
+				},
+			},
 		});
 		$body.empty();
 		state.rows = [];
