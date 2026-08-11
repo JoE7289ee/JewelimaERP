@@ -12953,3 +12953,48 @@ def get_my_login():
 	user = frappe.session.user
 	d = frappe.db.get_value("User", user, ["username", "full_name"], as_dict=True) or {}
 	return {"user": user, "username": d.get("username") or "", "full_name": d.get("full_name") or ""}
+
+
+# ---------------------------------------------------------------------------
+# Assign Benches — a clean page to manage each bench's employee ROSTER (the
+# Bench.employees allotment that the bench pickers read), replacing raw Bench
+# doctype editing. System Manager only. Benches are seeded (one per location).
+# ---------------------------------------------------------------------------
+def _require_bench_admin():
+	if "System Manager" not in frappe.get_roles():
+		frappe.throw(frappe._("Only a System Manager can assign benches."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def get_bench_rosters():
+	"""Every bench with its allotted employees (name + code)."""
+	_require_bench_admin()
+	out = []
+	for b in frappe.get_all("Bench", fields=["name"], order_by="name"):
+		emps = frappe.get_all("Bench Employee", filters={"parent": b.name},
+			fields=["employee"], order_by="idx")
+		rows = [{"employee": e.employee,
+			"employee_name": frappe.db.get_value("Employee", e.employee, "employee_name") or e.employee}
+			for e in emps]
+		out.append({"bench": b.name, "employees": rows})
+	return out
+
+
+@frappe.whitelist()
+def set_bench_employee(bench, employee, add=1):
+	"""Add or remove one employee on a bench's roster."""
+	_require_bench_admin()
+	if not frappe.db.exists("Bench", bench):
+		frappe.throw(frappe._("Unknown bench {0}.").format(bench))
+	if not frappe.db.exists("Employee", employee):
+		frappe.throw(frappe._("Unknown employee {0}.").format(employee))
+	doc = frappe.get_doc("Bench", bench)
+	if cint(add):
+		if not any(r.employee == employee for r in doc.employees):
+			doc.append("employees", {"employee": employee})
+	else:
+		doc.employees = [r for r in doc.employees if r.employee != employee]
+	doc.flags.ignore_permissions = True
+	doc.save()
+	frappe.db.commit()
+	return {"ok": 1, "count": len(doc.employees)}
