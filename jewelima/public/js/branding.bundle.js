@@ -143,6 +143,16 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	document.head.appendChild(st);
 })();
 
+// The desk avatar / "My Settings" should open OUR self-service My Account page
+// (change login username + password), NOT the raw ERPNext User record.
+frappe.provide("frappe.ui.toolbar");
+(() => {
+	const toMyAccount = () => frappe.set_route("my-account");
+	frappe.ui.toolbar.route_to_user = toMyAccount;
+	// re-assert once the desk toolbar bundle has finished defining its own
+	$(document).ready(() => { frappe.ui.toolbar.route_to_user = toMyAccount; });
+})();
+
 (() => {
 	const RESET_PAGES = new Set([
 		"place-order", "ws-ordering", "purchase-raw-material", "melt-gold", "job-work", "assign-collect",
@@ -153,7 +163,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 		"cad-jobs", "make-tree", "raw-materials", "stone-buckets", "party-stock", "party-metal", "order-requests", "all-requests", "gold-casting", "stock-analysis", "casting-queue", "casting-weigh", "in-bags", "import-stock", "finished-stock", "at-certification", "certify", "certification-out", "transfer-holder", "sell", "sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc", "sales-records", "parties", "loss-report", "loss-collection", "loss-writeoff", "user-roles", "add-user", "reset-password", "quick-menu-setup", "repair-intake", "repair-desk", "repair-bills", "repair-setup", "cancellation", "purchase-history", "add-employee", "stone-issue", "stone-issues", "stone-history", "due-view", "photo-queue", "request-feature", "stone-audit", "repack-stock", "repack-requests", "usage", "day-sheet", "select-photos", "selected-pieces", "bench-cad", "bench-cam", "bench-wax-injecting", "bench-tree-making", "bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish", "bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction",
 		"item-stock",
 		"photo-update", "photo-urgent", "customer-photos", "customer-update", "photo-kpi", "photo-approvals", "rejection",
-		"migration-goals",
+		"migration-goals", "my-account",
 	]);
 	let last = null;
 

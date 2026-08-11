@@ -12864,3 +12864,52 @@ def get_migration_goals():
 		({"user": u, "name": name_of(u), "total": c} for u, c in agg.items()),
 		key=lambda x: -x["total"])[:5]
 	return {"goals": goals, "leaderboard": board}
+
+
+# ---------------------------------------------------------------------------
+# My Account — self-service: the logged-in user changes their OWN login
+# username and/or password (current password required to confirm). Login is by
+# username in this app. Reached from the desk avatar (see route_to_user override).
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def change_my_login(current_password, new_username=None, new_password=None):
+	user = frappe.session.user
+	if user in ("Guest", "Administrator"):
+		frappe.throw(frappe._("This account can't be changed here."))
+	from frappe.utils.password import check_password, update_password
+	try:
+		check_password(user, current_password or "")
+	except frappe.AuthenticationError:
+		frappe.throw(frappe._("Current password is incorrect."))
+
+	changed = []
+	nu = (new_username or "").strip()
+	if nu:
+		if not all(c.isalnum() or c in "._-" for c in nu):
+			frappe.throw(frappe._("Username can only use letters, numbers, dot, dash, underscore."))
+		cur = frappe.db.get_value("User", user, "username")
+		if nu != cur:
+			if frappe.db.exists("User", {"username": nu}):
+				frappe.throw(frappe._("Username '{0}' is already taken.").format(nu))
+			frappe.db.set_value("User", user, "username", nu)
+			changed.append("username")
+
+	np = (new_password or "").strip()
+	if np:
+		if len(np) < 6:
+			frappe.throw(frappe._("Password must be at least 6 characters."))
+		update_password(user=user, pwd=np)
+		changed.append("password")
+
+	if not changed:
+		frappe.throw(frappe._("Nothing to change — enter a new username or password."))
+	frappe.db.commit()
+	return {"changed": changed, "username": frappe.db.get_value("User", user, "username")}
+
+
+@frappe.whitelist()
+def get_my_login():
+	"""Current username + full name for the My Account page."""
+	user = frappe.session.user
+	d = frappe.db.get_value("User", user, ["username", "full_name"], as_dict=True) or {}
+	return {"user": user, "username": d.get("username") or "", "full_name": d.get("full_name") or ""}
