@@ -180,7 +180,11 @@ JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-du
 JEWELIMA_INFO_ROLE = "Jewelima Info"
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
-JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES
+# every bench BOARD (read-only status boards) — Info sees them all, view-only
+JEWELIMA_INFO_BENCH_PAGES = ["bench-cad", "bench-cam", "bench-wax-injecting", "bench-tree-making",
+	"bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish",
+	"bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction"]
+JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES + JEWELIMA_INFO_BENCH_PAGES
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]
 
@@ -395,6 +399,10 @@ def setup_roles():
 	for page in JEWELIMA_ORDER_PAGES:
 		roles = ("Jewelima Ordering", JEWELIMA_INFO_ROLE) if page in JEWELIMA_INFO_LOOKUP_PAGES else ("Jewelima Ordering",)
 		set_page_roles(page, roles)
+	# Info can open every bench BOARD (view-only; the one mutation, queue reason,
+	# is blocked server-side + hidden for view-only users)
+	for page in JEWELIMA_INFO_BENCH_PAGES:
+		set_page_roles(page, (JEWELIMA_INFO_ROLE,))
 	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_INFO_ROLE}, pluck="parent"):
 		if pg not in set(JEWELIMA_INFO_PAGES):
 			pgd = frappe.get_doc("Page", pg)

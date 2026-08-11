@@ -116,6 +116,10 @@ jewelima.buildBenchBoard = function (wrapper, bench) {
 		<div class="bb-body"></div>
 	`);
 	const root = $(page.main);
+	// view-only personas (e.g. Jewelima Info) can't set queue reasons — hide the button
+	const bbCanAct = (frappe.user_roles || []).some((r) =>
+		["System Manager", "Stock Manager", "Jewelima CAD"].includes(r) || r.startsWith("Jewelima Bench "));
+	if (!bbCanAct) root.append("<style>.bb-qr{display:none !important;}</style>");
 
 	const filterBar = jewelima.buildFilterBar(root.find(".bb-filter").get(0), {
 		fields: BB_FILTER_FIELDS,

@@ -45,6 +45,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		tr.wk-stneed > td:first-child{box-shadow:inset 3px 0 0 #e0a800;}
 		.wk-tile.wk-await{cursor:pointer;border-color:#e0a800;background:#fff8e6;}
 		.wk-tile.wk-await .v{color:#8a6d00;}
+		.wk-tile.wk-done{cursor:pointer;border-color:#2e7d32;background:#eaf6ec;}
+		.wk-tile.wk-done .v{color:#1d7a33;}
 		.wk-req-done{font-size:10px;font-weight:800;color:#8a6d00;background:#fff3cd;border-radius:9px;padding:2px 8px;white-space:nowrap;}
 		.wk-emp{border:1px solid var(--border-color);border-radius:9px;background:var(--fg-color);margin-bottom:10px;overflow:hidden;}
 		.wk-emp .h{background:var(--control-bg);padding:7px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;}
@@ -96,6 +98,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			<div class="wk-tile"><div class="k">${__("Working")}</div><div class="v">${c.working}</div></div>
 			${D.awaiting_stones ? `<div class="wk-tile wk-await" title="${__("click for the list")}">
 				<div class="k">${__("Awaiting stones")}</div><div class="v">${D.awaiting_stones.length}</div></div>` : ""}
+			${c.completed ? `<div class="wk-tile wk-done" title="${__("click for the list")}">
+				<div class="k">${__("Completed · not transferred")}</div><div class="v">${c.completed}</div></div>` : ""}
 			<div class="wk-tile"><div class="k">${__("Total at bench")}</div><div class="v">${c.total}</div></div>`);
 
 		const next = D.queue[0];
@@ -210,6 +214,23 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				<td style="font-size:11.5px;color:#8a6d00;">${esc(r.stones_pending || "")}</td>
 			</tr>`).join("")}</tbody></table>`
 			: `<div style="padding:24px;text-align:center;color:var(--text-muted);">${__("Nothing awaiting stones.")}</div>`);
+		dlg.show();
+	});
+
+	root.on("click", ".wk-done", function () {
+		const rows = (D && D.completed_untransferred) || [];
+		const dlg = new frappe.ui.Dialog({ title: __("Completed — not transferred — {0}", [bench]), size: "large" });
+		$(dlg.body).html(rows.length ? `
+			<div style="font-size:12.5px;color:var(--text-muted);margin-bottom:8px;">${__("Done at this bench but still sitting here — transfer them onward.")}</div>
+			<table class="wk-t"><thead><tr>
+				<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Type")}</th><th>${__("Party")}</th><th>${__("Due")}</th>
+			</tr></thead><tbody>
+			${rows.map((r) => `<tr>
+				<td><a class="jw-card-link" style="font-weight:800;color:#1f618d;cursor:pointer;" data-card="${esc(r.name)}">${esc(r.name)}</a></td>
+				<td>${esc(r.design || "")}</td><td>${esc(r.design_type || "")}</td><td>${esc(r.party || "")}</td>
+				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
+			</tr>`).join("")}</tbody></table>`
+			: `<div style="padding:24px;text-align:center;color:var(--text-muted);">${__("Nothing completed is waiting to transfer.")}</div>`);
 		dlg.show();
 	});
 

@@ -5619,6 +5619,8 @@ def get_bench_workstation(bench):
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
 	can_act = bool({"System Manager", "Stock Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
+	# completed AT this bench but NOT yet transferred onward (still sitting here)
+	completed = [r for r in rows if r.get("status") == "Completed"]
 	return {"bench": bench, "ranked": ranked,
 		"flow": "weights" if bench in _irl else "light",
 		"can_act": can_act,
@@ -5630,8 +5632,11 @@ def get_bench_workstation(bench):
 		"queue_reasons": opts["queue_reasons"],
 		"awaiting_stones": [{k: r.get(k) for k in ("name", "design", "party", "due",
 			"since", "stones_pending", "prio_rank")} for r in awaiting] if bench in ("WAX SETTING", "SETTING") else None,
+		"completed_untransferred": [{k: r.get(k) for k in ("name", "design", "design_type",
+			"party", "due", "status")} for r in completed],
 		"counts": {"waiting": len(waiting),
 			"working": sum(len(g["cards"]) for g in working.values()),
+			"completed": len(completed),
 			"total": len(rows)}}
 
 
@@ -6476,6 +6481,11 @@ def set_bench_queue_reason(order_bag, location, reason=None):
 	reason; no bench record yet means the card is In Queue -> one is made."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 	loc = (location or "").upper()
+	# operators/managers only — view-only roles (e.g. Jewelima Info) can't annotate
+	roles = set(frappe.get_roles())
+	if not ({"System Manager", "Stock Manager", "Jewelima CAD"} & roles
+			or any(r.startswith("Jewelima Bench ") for r in roles)):
+		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	dt = BENCH_DOCTYPE.get(loc)
 	if not dt or not frappe.db.exists("DocType", dt):
 		frappe.throw(frappe._("Unknown bench: {0}").format(loc or "?"))
