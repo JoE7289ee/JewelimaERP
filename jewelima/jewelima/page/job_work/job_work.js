@@ -33,7 +33,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		table.jw-grid th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.jw-grid td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
 		table.jw-grid td.num,table.jw-grid th.num{text-align:right;}
-		.jw-win{width:90px;text-align:right;}
+		.jw-win{width:90px;text-align:right;-moz-appearance:textfield;}
+		.jw-win::-webkit-inner-spin-button,.jw-win::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
 		.jw-loss-pos{color:#b00020;font-weight:600;}
 		.jw-foot{margin-top:6px;color:var(--text-muted);font-size:12px;display:flex;justify-content:space-between;}
 		.jw-foot b{color:var(--text-color);}
@@ -123,6 +124,10 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const $actions = $(page.main).find(".jw-actions");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
 	const empVal = () => state.emp.get_value();
+	// once a card brings its own employee, lock the field so it can't be changed mid-issue
+	function lockEmp(on) {
+		if (state.emp.$input) state.emp.$input.prop("disabled", !!on).toggleClass("jw-emp-locked", !!on);
+	}
 
 	function setMsg(html, kind) {
 		$msg.removeClass("err warn ok").html(html || "");
@@ -209,6 +214,13 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		$(this).closest("tr").find(".jw-losscell").html(loss == null ? "—" : `<span class="${loss > 0 ? "jw-loss-pos" : ""}">${loss.toFixed(3)}</span>`);
 		updateTotal();
 	});
+	// Enter in a weight-in box hands control back to the scanner for the next card
+	$body.on("keydown", ".jw-win", function (e) {
+		if (e.which === 13 || e.key === "Enter") {
+			e.preventDefault();
+			focusScan();
+		}
+	});
 
 	// ---- scanning --------------------------------------------------------
 	function processScan(code) {
@@ -262,10 +274,17 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			state.rows.push(row);
 			// the card may already carry an employee assigned at the workbench — pull it
 			// so you don't re-enter it (the first assigned card seeds the batch employee)
-			if (row.employee && !state.emp.get_value()) state.emp.set_value(row.employee);
+			if (row.employee && !state.emp.get_value()) { state.emp.set_value(row.employee); lockEmp(true); }
 			renderRows();
 			setMsg(__("Added <b>{0}</b>{1}  ·  {2} in batch.", [safe, row.employee ? " · " + frappe.utils.escape_html(row.employee) : "", state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
+			if (state.mode === "receipt") {
+				// hand control to this card's weight-in box so you can type the weight straight away
+				setTimeout(() => {
+					const el = $body.find(".jw-win").filter(function () { return $(this).data("name") === code; }).get(0);
+					if (el) { el.focus(); el.select(); }
+				}, 50);
+			}
 		});
 	}
 
@@ -350,6 +369,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		state.location = null;
 		state.scan.set_value("");
 		setMsg("");
+		lockEmp(false);          // fresh batch — employee re-pulls from its cards
+		state.emp.set_value("");
 		updateLoc();
 		renderRows();
 		focusScan();
