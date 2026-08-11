@@ -66,7 +66,6 @@ frappe.pages["dw-reconcile"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_dw_reconcile" }).then((r) => {
 			rows = (r.message || {}).rows || [];
 			render();
-			allBtn.prop("disabled", !rows.length);
 		});
 	}
 
@@ -77,21 +76,9 @@ frappe.pages["dw-reconcile"].on_page_load = function (wrapper) {
 				frappe.show_alert({ message: __("{0} → DW {1} ct", [name, flt((r.message || {}).diamond_weight).toFixed(2)]), indicator: "green" }, 4);
 				rows = rows.filter((x) => x.name !== name);
 				render();
-				allBtn.prop("disabled", !rows.length);
 			});
 	});
 
-	const allBtn = page.set_primary_action(__("Update all"), () => {
-		if (!rows.length) return;
-		frappe.confirm(__("Update DW on all <b>{0}</b> mismatched design(s)?", [rows.length]), () => {
-			frappe.call({ method: API + ".update_all_dw", freeze: true, freeze_message: __("Updating all…") })
-				.then((r) => {
-					const m = r.message || {};
-					frappe.show_alert({ message: __("Updated {0} of {1}.", [m.updated, m.total]), indicator: "green" }, 5);
-					load();
-				});
-		});
-	});
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };

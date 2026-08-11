@@ -9411,20 +9411,6 @@ def update_design_dw(name):
 	return {"name": name, "diamond_weight": computed, "image": doc.image}
 
 
-@frappe.whitelist()
-def update_all_dw():
-	"""Reconcile DW on every mismatched approved design in one pass."""
-	names = [r["name"] for r in get_dw_reconcile()["rows"]]
-	done = 0
-	for nm in names:
-		try:
-			update_design_dw(nm)
-			done += 1
-		except Exception:
-			frappe.log_error(frappe.get_traceback(), "update_all_dw")
-	return {"updated": done, "total": len(names)}
-
-
 def _cad_store_image_generic(ref, doctype, name, fname=None):
 	"""data-URL -> stored File on any doc; an existing /files/ url passes through."""
 	if not ref:
