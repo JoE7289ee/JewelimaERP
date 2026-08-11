@@ -69,8 +69,13 @@ function pob_esc(s) {
 function pob_cardHTML(c) {
 	// Qty/Weight print as EMPTY boxes — the card collects the ACTUAL weights by hand;
 	// the planned targets stay on the summary line below the table.
+	// Stones get their PLANNED qty pre-printed; metals stay blank (weighed by hand).
+	// Weight column stays blank for everyone — the floor writes the actual weights.
 	const mats = (c.materials || [])
-		.map((m) => `<tr><td>${pob_esc(m.item)}${m.purity ? " - " + flt(m.purity) : ""}</td><td></td><td></td></tr>`)
+		.map((m) => {
+			const qtyCell = (m.uom || "") === "Carat" && flt(m.qty) ? flt(m.qty) : "";
+			return `<tr><td>${pob_esc(m.item)}${m.purity ? " - " + flt(m.purity) : ""}</td><td>${qtyCell}</td><td></td></tr>`;
+		})
 		.join("");
 	// top-right badge: the karat gold CODE (22KPG …) — the BOM's metal row, or the
 	// CAD karat target; falls back to the purity % if neither is there
