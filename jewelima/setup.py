@@ -35,6 +35,7 @@ def after_install():
 	seed_standard_golds()
 	retag_swarovski()
 	sync_workspace_sidebar()
+	ensure_home_block()
 	drop_retired_pages()
 	setup_roles()
 	seed_benches()
@@ -83,6 +84,7 @@ def after_migrate():
 	seed_standard_golds()
 	retag_swarovski()
 	sync_workspace_sidebar()
+	ensure_home_block()
 	drop_retired_pages()
 	setup_roles()
 	seed_benches()
@@ -181,7 +183,7 @@ JEWELIMA_INFO_ROLE = "Jewelima Info"
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
-JEWELIMA_INFO_BENCH_PAGES = ["bench-cad", "bench-cam", "bench-waxing", "bench-tree-making",
+JEWELIMA_INFO_BENCH_PAGES = ["bench-ordering", "bench-cad", "bench-cam", "bench-waxing", "bench-tree-making",
 	"bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish",
 	"bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction"]
 JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES + JEWELIMA_INFO_BENCH_PAGES
@@ -656,6 +658,80 @@ def sync_workspace_sidebar():
 		sb.save(ignore_permissions=True)
 	else:
 		frappe.get_doc(data).insert(ignore_permissions=True)
+
+
+# The Jewelima home (workspace) renders a single Custom HTML Block: a launcher of
+# the workstations the CURRENT user may open. All the per-user logic lives in the
+# block's script (api.get_my_workstations); this just keeps the block in sync.
+HOME_BLOCK_NAME = "jewelima-home"
+HOME_BLOCK_HTML = """<div class="jwh"><div class="jwh-grid" id="jwh-grid"><div class="jwh-note">Loading…</div></div></div>"""
+HOME_BLOCK_STYLE = """.jwh { padding: 6px 2px 26px; }
+.jwh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.jwh-card { display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 94px; padding: 18px 16px; border: 1px solid var(--border-color, #e2e2e2);
+  border-radius: 14px; background: var(--card-bg, #fff); color: var(--text-color, #1a1a1a);
+  font-size: 16px; font-weight: 700; letter-spacing: .2px; cursor: pointer; text-decoration: none;
+  transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease; }
+.jwh-card:hover { transform: translateY(-2px); border-color: #c9a227; box-shadow: 0 6px 18px rgba(0,0,0,.09); }
+.jwh-note { color: var(--text-muted, #8d8d8d); font-size: 14px; padding: 26px 6px; }
+.jwh-empty { color: var(--text-muted, #8d8d8d); font-size: 15px; padding: 30px 6px; text-align: center; }"""
+HOME_BLOCK_SCRIPT = """frappe.call({ method: "jewelima.jewelima.api.get_my_workstations" }).then(function (r) {
+  var grid = root_element.getElementById("jwh-grid");
+  if (!grid) return;
+  var ws = (r && r.message) || [];
+  var esc = frappe.utils.escape_html;
+  if (!ws.length) {
+    grid.innerHTML = '<div class="jwh-empty">' + __("You have no access to any workstation.") + '</div>';
+    return;
+  }
+  grid.innerHTML = ws.map(function (w) {
+    return '<a class="jwh-card" data-route="' + esc(w.route) + '">' + esc(w.title) + '</a>';
+  }).join("");
+  grid.querySelectorAll(".jwh-card").forEach(function (el) {
+    el.addEventListener("click", function () { frappe.set_route(el.getAttribute("data-route")); });
+  });
+});"""
+
+
+def ensure_home_block():
+	"""Upsert the home launcher's Custom HTML Block, then force the home workspace
+	to match the shipped fixture. Idempotent."""
+	if frappe.db.exists("Custom HTML Block", HOME_BLOCK_NAME):
+		doc = frappe.get_doc("Custom HTML Block", HOME_BLOCK_NAME)
+	else:
+		doc = frappe.new_doc("Custom HTML Block")
+		doc.name = HOME_BLOCK_NAME
+	doc.html = HOME_BLOCK_HTML
+	doc.style = HOME_BLOCK_STYLE
+	doc.script = HOME_BLOCK_SCRIPT
+	doc.private = 0
+	doc.save(ignore_permissions=True)
+	_sync_home_workspace()
+	frappe.db.commit()
+
+
+def _sync_home_workspace():
+	"""A plain migrate does NOT overwrite an existing public workspace, so its
+	content goes stale. Re-push the shipped Jewelima workspace (content + no
+	links/shortcuts) here on every migrate. Idempotent."""
+	import json
+	import os
+
+	path = frappe.get_app_path("jewelima", "jewelima", "workspace", "jewelima", "jewelima.json")
+	if not os.path.exists(path) or not frappe.db.exists("Workspace", "Jewelima"):
+		return
+	with open(path) as f:
+		data = json.load(f)
+	ws = frappe.get_doc("Workspace", "Jewelima")
+	ws.content = data.get("content")
+	for tbl in ("links", "shortcuts", "charts", "number_cards", "quick_lists"):
+		ws.set(tbl, [])
+	# the content's custom_block item is matched to a child row BY LABEL (block.js
+	# make() compares content.custom_block_name to the row's `label`), so the label
+	# MUST equal what the content references — keep both = HOME_BLOCK_NAME.
+	ws.set("custom_blocks", [{"custom_block_name": HOME_BLOCK_NAME, "label": HOME_BLOCK_NAME}])
+	ws.flags.ignore_links = True
+	ws.save(ignore_permissions=True)
 
 
 KARAT_GOLDS = {"14K": 58.3, "18K": 75.1, "22K": 91.7}

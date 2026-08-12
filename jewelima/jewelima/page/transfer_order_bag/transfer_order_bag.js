@@ -312,7 +312,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		// once a batch is collecting from a location, the picker is LOCKED to it —
 		// every other location is filtered out (one location per transfer).
 		const batchLock = (state.rows.length && state.location) ? state.location : null;
-		const S = { location: batchLock || state.location || "", status: "All", rows: [], sel: new Set(), jo: "" };
+		const S = { location: batchLock || state.location || "", status: "All", rows: [], sel: new Set(), jo: "", q: "", selOnly: false };
 		const dlg = new frappe.ui.Dialog({
 			title: __("Cards by location"),
 			size: "extra-large",
@@ -326,10 +326,12 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			},
 		});
 		const $b = $(dlg.body);
+		const esc = frappe.utils.escape_html;
 		$b.html(`
 			<style>
 			.tc-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
-			.tc-top select{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 8px;font-size:13px;}
+			.tc-top select,.tc-top input[type=text]{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);color:var(--text-color);height:30px;border-radius:5px;padding:2px 10px;font-size:13px;}
+			.tc-top input[type=text]{min-width:190px;}
 			.tc-pill{border:1px solid var(--border-color);background:var(--fg-color);border-radius:14px;padding:3px 14px;font-size:12.5px;cursor:pointer;color:var(--text-muted);}
 			.tc-pill.on{background:var(--btn-primary,#171717);border-color:var(--btn-primary,#171717);color:#fff;font-weight:600;}
 			.tc-count{margin-left:auto;color:var(--text-muted);font-size:12px;}
@@ -345,21 +347,28 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				<select class="tc-loc" ${batchLock ? "disabled title='Batch is active — locked to this location'" : ""}>${batchLock
 					? `<option>${esc(batchLock)}</option>`
 					: `<option value="">— location —</option>${TOB_LOCATIONS.trim().split("\n").map((l) => `<option ${l === S.location ? "selected" : ""}>${l}</option>`).join("")}`}</select>
+				<input type="text" class="tc-q" placeholder="${__("Search bag / design / JO")}">
 				<select class="tc-jo"><option value="">${__("— job order —")}</option></select>
 				<span class="tc-pill on" data-s="All">All</span>
 				<span class="tc-pill" data-s="In Queue">In Queue</span>
 				<span class="tc-pill" data-s="Completed">Completed</span>
-				<button class="btn btn-xs btn-default tc-all">Select all</button>
-				<button class="btn btn-xs btn-default tc-none">Clear</button>
+				<button class="btn btn-xs btn-default tc-none">${__("Reset")}</button>
 				<span class="tc-count"></span>
 			</div>
 			<div class="tc-box"><table class="tc-tbl">
-				<thead><tr><th style="width:34px"></th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Due</th><th>Status</th></tr></thead>
-				<tbody class="tc-body"><tr><td colspan="6" class="tc-empty">Pick a location.</td></tr></tbody>
+				<thead><tr><th style="width:34px"><input type="checkbox" class="tc-head-cb" title="${__("Select / clear all shown")}"></th>
+					<th>${__("Order Bag")}</th><th>${__("Design")}</th><th>${__("Job Order")}</th><th>${__("Qty")}</th><th>${__("Due")}</th><th>${__("Status")}</th><th>${__("Who")}</th></tr></thead>
+				<tbody class="tc-body"><tr><td colspan="8" class="tc-empty">${__("Pick a location.")}</td></tr></tbody>
 			</table></div>`);
 
-		const esc = frappe.utils.escape_html;
-		const visible = () => S.rows.filter((r) => (S.status === "All" || r.status === S.status) && (!S.jo || r.job_order === S.jo));
+		const visible = () => {
+			if (S.selOnly) return S.rows.filter((r) => S.sel.has(r.name));
+			const q = (S.q || "").trim().toLowerCase();
+			return S.rows.filter((r) =>
+				(S.status === "All" || r.status === S.status) &&
+				(!S.jo || r.job_order === S.jo) &&
+				(!q || (r.name + " " + (r.design || "") + " " + (r.job_order || "")).toLowerCase().indexOf(q) !== -1));
+		};
 		function fillJO() {
 			const jos = [...new Set(S.rows.map((r) => r.job_order).filter(Boolean))].sort();
 			$b.find(".tc-jo").html(`<option value="">${__("— job order —")}</option>` +
@@ -371,14 +380,19 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			body.innerHTML = rows.length
 				? rows.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
 					<td><input type="checkbox" data-nm="${esc(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${state.rows.find((x) => x.name === r.name) ? "disabled title='Already in the batch'" : ""}></td>
-					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${r.qty || ""}</td>
-					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td></tr>`).join("")
-				: `<tr><td colspan="6" class="tc-empty">${S.location ? "No cards here." : "Pick a location."}</td></tr>`;
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${esc(r.job_order || "")}</td><td>${r.qty || ""}</td>
+					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td><td>${esc(r.employee_name || "")}</td></tr>`).join("")
+				: `<tr><td colspan="8" class="tc-empty">${S.location ? (S.selOnly ? __("Nothing selected yet.") : __("No cards here.")) : __("Pick a location.")}</td></tr>`;
 			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.rows.length} at location`);
 			$b.find(".tc-body input").on("change", function () {
 				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
 				paint();
 			});
+			// header checkbox reflects the selectable (not-yet-in-batch) rows currently shown
+			const selectable = rows.filter((r) => !state.rows.find((x) => x.name === r.name));
+			const selHit = selectable.filter((r) => S.sel.has(r.name)).length;
+			const hcb = $b.find(".tc-head-cb")[0];
+			if (hcb) { hcb.checked = selectable.length > 0 && selHit === selectable.length; hcb.indeterminate = selHit > 0 && selHit < selectable.length; }
 			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to batch", [S.sel.size]) : __("Add to batch"));
 		}
 		function loadLoc() {
@@ -389,18 +403,34 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;
 			S.sel.clear(); // one location -> one transfer: changing location deselects everything
-			S.jo = "";
+			S.jo = ""; S.q = ""; S.selOnly = false;
+			$b.find(".tc-q").val(""); dlg.set_secondary_action_label(__("Show selected"));
 			loadLoc();
 		});
 		$b.find(".tc-jo").on("change", function () { S.jo = this.value; paint(); });
+		$b.find(".tc-q").on("input", function () { S.q = this.value; paint(); });
 		$b.find(".tc-pill").on("click", function () {
 			$b.find(".tc-pill").removeClass("on");
 			this.classList.add("on");
 			S.status = this.dataset.s;
 			paint();
 		});
-		$b.find(".tc-all").on("click", () => { visible().forEach((r) => { if (!state.rows.find((x) => x.name === r.name)) S.sel.add(r.name); }); paint(); });
-		$b.find(".tc-none").on("click", () => { S.sel.clear(); paint(); });
+		// header checkbox: add/remove every shown selectable card — selections accumulate
+		// across filter changes, so you can filter → tick-all → filter again → tick-all.
+		$b.find(".tc-head-cb").on("change", function () {
+			const vis = visible().filter((r) => !state.rows.find((x) => x.name === r.name));
+			vis.forEach((r) => (this.checked ? S.sel.add(r.name) : S.sel.delete(r.name)));
+			paint();
+		});
+		$b.find(".tc-none").on("click", () => { S.sel.clear(); S.selOnly = false; dlg.set_secondary_action_label(__("Show selected")); paint(); });
+
+		// "Show selected" (left of Add to batch): flip the list to only what's ticked
+		dlg.set_secondary_action_label(__("Show selected"));
+		dlg.set_secondary_action(() => {
+			S.selOnly = !S.selOnly;
+			dlg.set_secondary_action_label(S.selOnly ? __("Show all") : __("Show selected"));
+			paint();
+		});
 
 		dlg.show();
 		if (S.location) loadLoc(); else paint();

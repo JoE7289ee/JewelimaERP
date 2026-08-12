@@ -241,11 +241,7 @@ function postPurchase(page, state, $body) {
 		frappe.dom.unfreeze();
 		const res = r.message || {};
 		if (!res.name) return;
-		frappe.show_alert({ message: __("Posted {0}", [res.name]), indicator: "green" }, 7);
-		frappe.msgprint({
-			title: __("Purchase posted"), indicator: "green",
-			message: __("Purchase Receipt {0} created & submitted — recorded as <b>{1}</b> (₹ {2}). <a href='/app/purchase-receipt/{0}'>Open</a>", [res.name, res.record, res.total]),
-		});
+		frappe.show_alert({ message: __("Posted {0} · {1} (₹ {2})", [res.name, res.record, res.total]), indicator: "green" }, 6);
 		$body.empty();
 		state.rows = [];
 		state.addRow();

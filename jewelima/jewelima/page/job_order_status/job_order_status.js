@@ -47,6 +47,8 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	.jo-sum .t.pre .v{color:#9a6b1f;}
 	.jo-sum .t.wip .v{color:#b4690e;}
 	.jo-sum .t.prod .v{color:#1d7a33;}
+	.jo-sum .t.canc .v{color:#b02a2a;}
+	.jo-design-link,.jo-loc-link{font-weight:700;color:#1f618d;cursor:pointer;}
 	.jo-flag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:800;margin:2px 4px 0 0;}
 	.jo-flag.stn{background:#fff3cd;color:#8a6d00;}
 	.jo-flag.oos{background:#fdecea;color:#b02a2a;}
@@ -108,10 +110,10 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 					return `<tr>
 						<td>${i + 1}</td>
 						<td class="jo-card"><a class="jw-card-link" data-card="${esc(b.name)}">${esc(b.name)}</a>${b.narration ? ` <span class="jo-rem" title="${esc(b.narration)}">&#9998;</span>` : ""}</td>
-						<td>${esc(b.design || "")}</td>
+						<td>${b.design ? `<a class="jo-design-link" data-design="${esc(b.design)}">${esc(b.design)}</a>` : ""}</td>
 						<td class="num">${b.qty || ""}</td>
 						<td>${esc(b.size || "")}</td>
-						<td>${esc(b.location)}</td>
+						<td>${b.location && b.location !== "—" ? `<a class="jo-loc-link" data-loc="${esc(b.location)}">${esc(b.location)}</a>` : esc(b.location)}</td>
 						<td>${statusBadge(b)}${flags ? "<div>" + flags + "</div>" : ""}</td>
 						<td>${when}</td>
 						<td class="num">${b.gross ? flt(b.gross).toFixed(3) : ""}</td>
@@ -127,11 +129,20 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 			</div>
 			<div class="jo-tot">Pieces<b>${d.total}</b></div>
 		</div>
-		${(() => { const S = d.summary || {}; return `<div class="jo-sum">
-			<div class="t pre"><div class="k">${__("Not started")}</div><div class="v">${S.pre || 0}</div></div>
-			<div class="t wip"><div class="k">${__("In production")}</div><div class="v">${S.inprod || 0}</div></div>
-			<div class="t prod"><div class="k">${__("Products")}</div><div class="v">${S.product || 0}${S.sold ? ` <span style="font-size:12px;font-weight:700;">(${S.sold} sold)</span>` : ""}</div></div>
-		</div>`; })()}
+		${(() => {
+			const S = d.summary || {};
+			const defs = [
+				["pre", __("In Pre-Production"), "pre"],
+				["inprod", __("In Production"), "wip"],
+				["cert", __("At Certification"), "pre"],
+				["instock", __("In Stock"), "prod"],
+				["sold", __("Sold"), "prod"],
+				["cancelled", __("Cancelled"), "canc"],
+			];
+			const tiles = defs.filter(([k]) => S[k]).map(([k, label, cls]) =>
+				`<div class="t ${cls}"><div class="k">${label}</div><div class="v">${S[k]}</div></div>`).join("");
+			return tiles ? `<div class="jo-sum">${tiles}</div>` : "";
+		})()}
 		<div class="jo-chips">${chips}</div>
 		<table class="jo-tbl"><thead><tr>
 			<th>#</th><th>Card</th><th>Design</th><th class="num">Qty</th><th>Size</th><th>Location</th><th>Status / Who</th><th>Entered</th><th class="num">GW (g)</th>
@@ -141,6 +152,7 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	function load(code) {
 		code = (code || "").trim();
 		if (!code) return;
+		if (/^\d+$/.test(code)) code = "E" + code;   // bare digits -> E-prefixed order (0008 -> E0008)
 		frappe.call({ method: "jewelima.jewelima.api.get_job_order_status", args: { job_order: code } }).then((r) => {
 			const d = r.message || {};
 			if (d.error) {
@@ -173,6 +185,15 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 			e.preventDefault();
 			load(scan.$input.val());
 		}
+	});
+	// design -> Design Info (that variant selected); location -> its bench board
+	$(page.main).on("click", ".jo-design-link", function () {
+		frappe.route_options = { design: $(this).data("design") };
+		frappe.set_route("design-info");
+	});
+	$(page.main).on("click", ".jo-loc-link", function () {
+		const loc = String($(this).data("loc") || "");
+		frappe.set_route("bench-" + loc.toLowerCase().replace(/\s+/g, "-"));
 	});
 	page.set_primary_action(__("Print"), printIt, "printer");
 	// arriving from Card Info (or anywhere) with the order pre-picked

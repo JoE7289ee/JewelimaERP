@@ -14,7 +14,17 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.di-top{max-width:360px;margin-bottom:14px;}
+		#page-design-info .container{max-width:100%;}
+		.di-top{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:16px;}
+		.di-scan,.di-pick{width:280px;}
+		.di-top .frappe-control{margin:0;}
+		/* full-width layout */
+		.di-hero{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;margin-bottom:6px;}
+		.di-gallery{flex:0 0 360px;}
+		.di-heroinfo{flex:1;min-width:340px;}
+		.di-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:18px;align-items:start;margin-top:6px;}
+		.di-block{border:1px solid var(--border-color);border-radius:13px;background:var(--fg-color);padding:12px 16px 16px;margin-top:14px;}
+		.di-block .di-sec{margin-top:0;}
 		.di-cols{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;}
 		.di-img{flex:0 0 320px;}
 		.di-img img{width:100%;border:1px solid var(--border-color);border-radius:10px;background:#fff;}
@@ -25,19 +35,19 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		.di-st.retired{background:#b02a2a;}
 		.di-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:16px 0 6px;}
 		.di-facts{display:flex;gap:12px;flex-wrap:wrap;}
-		.di-tile{border:1px solid var(--border-color);border-radius:9px;padding:7px 16px;background:var(--control-bg);}
+		.di-tile{flex:1 1 140px;border:1px solid var(--border-color);border-radius:9px;padding:8px 16px;background:var(--control-bg);}
 		.di-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
 		.di-tile .v{font-size:16px;font-weight:800;}
-		table.di-t{width:100%;max-width:760px;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);}
+		table.di-t{width:100%;border-collapse:collapse;font-size:13px;background:var(--fg-color);}
 		table.di-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 10px;border:1px solid var(--border-color);text-align:left;}
 		table.di-t td{border:1px solid var(--border-color);padding:5px 10px;}
 		.di-chip{font-family:var(--font-family-monospace,monospace);font-weight:700;font-size:12px;border:1px solid var(--border-color);border-radius:6px;padding:2px 9px;cursor:pointer;background:var(--control-bg);display:inline-block;}
 		.di-chip.me{background:#1f618d;border-color:#1f618d;color:#fff;cursor:default;}
 		.di-chip.retired{opacity:.5;text-decoration:line-through;}
-		.di-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;max-width:760px;}
+		.di-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		.di-gal{display:flex;gap:8px;flex-wrap:wrap;}
-		.di-shot{flex:0 0 152px;}
-		.di-shot img{width:152px;height:152px;object-fit:cover;border:1px solid var(--border-color);border-radius:9px;background:#fff;cursor:zoom-in;}
+		.di-shot{flex:0 0 168px;}
+		.di-shot img{width:168px;height:168px;object-fit:cover;border:1px solid var(--border-color);border-radius:9px;background:#fff;cursor:zoom-in;}
 		.di-shot .cap{font-size:10px;color:var(--text-muted);text-align:center;margin-top:3px;text-transform:uppercase;letter-spacing:.05em;}
 		.di-bstat{display:inline-block;border-radius:9px;padding:1px 9px;font-size:11px;font-weight:800;margin:0 6px 6px 0;}
 		.di-bstat.ip{background:#fdf3d0;color:#8a6d00;}
@@ -51,7 +61,7 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		.di-shot img{transition:transform .12s;}
 		.di-shot img:hover{transform:scale(1.03);}
 		</style>
-		<div class="di-top"><div class="di-scan" style="margin-bottom:8px;"></div></div>
+		<div class="di-top"><div class="di-scan"></div><div class="di-pick"></div></div>
 		<div class="di-body"><div class="di-none">${__("Scan a card or pick a design.")}</div></div>
 	`);
 	const root = $(page.main);
@@ -63,7 +73,7 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 	fScan.refresh();
 	const fPick = frappe.ui.form.make_control({
 		df: { fieldtype: "Link", label: __("Design"), fieldname: "design", options: "Design", only_select: 1 },
-		parent: root.find(".di-top").get(0), render_input: true });
+		parent: root.find(".di-pick").get(0), render_input: true });
 	fPick.refresh();
 
 	function openFromCard(code) {
@@ -117,51 +127,59 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 				${esc(D.design_type)}${D.design_style ? " · " + esc(D.design_style) : ""}
 				${bk ? " · " + __("bank card") + " <b>" + esc(bk.design_no) + "</b>" : ""}</div>
 
-			${gallery}
-
-			<div class="di-sec">${__("Totals")}</div>
-			<div class="di-facts">
-				<div class="di-tile"><div class="k">${__("Metal")}</div><div class="v">${D.metal_g} g</div></div>
-				<div class="di-tile"><div class="k">${__("Purity")}</div><div class="v">${D.purity_pct}%</div></div>
-				${D.stone_ct ? `<div class="di-tile"><div class="k">${__("Stones")}</div><div class="v">${D.stone_ct} ct</div></div>` : ""}
-				${counts}
+			<div class="di-hero">
+				<div class="di-gallery">${gallery}</div>
+				<div class="di-heroinfo">
+					<div class="di-sec" style="margin-top:0;">${__("Totals")}</div>
+					<div class="di-facts">
+						<div class="di-tile"><div class="k">${__("Metal")}</div><div class="v">${D.metal_g} g</div></div>
+						<div class="di-tile"><div class="k">${__("Purity")}</div><div class="v">${D.purity_pct}%</div></div>
+						${D.stone_ct ? `<div class="di-tile"><div class="k">${__("Stones")}</div><div class="v">${D.stone_ct} ct</div></div>` : ""}
+						${counts}
+					</div>
+					${bk ? `<div class="di-sec">${__("Bank card")}</div>
+					<div class="di-facts">
+						<div class="di-tile"><div class="k">${__("Card no")}</div><div class="v" style="font-size:14px;">${esc(bk.design_no)}</div></div>
+						<div class="di-tile"><div class="k">${__("Status")}</div><div class="v" style="font-size:14px;">${esc(bk.status || "")}</div></div>
+						${bk.gross_weight ? `<div class="di-tile"><div class="k">${__("Card gross")}</div><div class="v" style="font-size:14px;">${bk.gross_weight} g</div></div>` : ""}
+						${bk.diamond_weight ? `<div class="di-tile"><div class="k">${__("Card DMD")}</div><div class="v" style="font-size:14px;">${bk.diamond_weight} ct</div></div>` : ""}
+						${bk.provider ? `<div class="di-tile"><div class="k">${__("Provider")}</div><div class="v" style="font-size:13px;">${esc(bk.provider)}${bk.provider_piece_code ? " · " + esc(bk.provider_piece_code) : ""}</div></div>` : ""}
+					</div>
+					${bk.note ? `<div style="font-size:12.5px;color:var(--text-muted);margin-top:8px;">${esc(bk.note)}</div>` : ""}` : ""}
+				</div>
 			</div>
 
-			${bk ? `<div class="di-sec">${__("Bank card")}</div>
-			<div class="di-facts" style="margin-bottom:6px;">
-				<div class="di-tile"><div class="k">${__("Card no")}</div><div class="v" style="font-size:14px;">${esc(bk.design_no)}</div></div>
-				<div class="di-tile"><div class="k">${__("Status")}</div><div class="v" style="font-size:14px;">${esc(bk.status || "")}</div></div>
-				${bk.gross_weight ? `<div class="di-tile"><div class="k">${__("Card gross")}</div><div class="v" style="font-size:14px;">${bk.gross_weight} g</div></div>` : ""}
-				${bk.diamond_weight ? `<div class="di-tile"><div class="k">${__("Card DMD")}</div><div class="v" style="font-size:14px;">${bk.diamond_weight} ct</div></div>` : ""}
-				${bk.provider ? `<div class="di-tile"><div class="k">${__("Provider")}</div><div class="v" style="font-size:13px;">${esc(bk.provider)}${bk.provider_piece_code ? " · " + esc(bk.provider_piece_code) : ""}</div></div>` : ""}
-			</div>
-			${bk.note ? `<div style="font-size:12.5px;color:var(--text-muted);max-width:760px;">${esc(bk.note)}</div>` : ""}
-			${(bk.stones || []).length ? `<table class="di-t" style="max-width:520px;margin-top:8px;"><thead><tr>
-				<th>${__("Card stone")}</th><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th>${__("Ct")}</th></tr></thead><tbody>
-				${bk.stones.map((st) => `<tr><td><b>${esc(st.stone || "")}</b></td><td>${esc(st.sieve || "")}</td><td>${st.pcs || ""}</td><td>${st.ct || ""}</td></tr>`).join("")}
-			</tbody></table>` : ""}` : ""}
-
-			<div class="di-sec">${__("Bill of Materials — frozen at creation")}</div>
-			<table class="di-t"><thead><tr>
-				<th>${__("Material")}</th><th>${__("Purity %")}</th><th>${__("UOM")}</th>
-				<th>${__("Qty")}</th><th>${__("Weight")}</th><th>${__("Pure (g)")}</th>
-			</tr></thead><tbody>
-			${(D.materials || []).map((m) => `<tr>
-				<td><b>${esc(m.item)}</b></td>
-				<td>${m.purity || ""}</td><td>${esc(m.uom)}</td>
-				<td>${m.stone_type ? m.qty : ""}</td><td>${m.weight}</td>
-				<td>${m.stone_type ? "" : m.pure}</td>
-			</tr>`).join("")}</tbody></table>
-
-			${sibRows ? `<div class="di-sec">${__("Variants of this card")} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">· ${__("click a row to open it")}</span></div>
-			<table class="di-t"><thead><tr>
-				<th>${__("Variant")}</th><th>${__("Type")}</th><th>${__("Status")}</th><th>${__("Metal")}</th><th>${__("Stones")}</th><th>${__("Bags")}</th>
-			</tr></thead><tbody>${sibRows}</tbody></table>` : ""}
-
-			<div class="di-sec">${__("In manufacturing")}</div>
-			${statusChips ? `<div style="margin-bottom:8px;">${statusChips}</div>` : ""}
-			<div style="font-size:13px;">
-				${D.bags_total ? __("{0} bag(s) run this design", [D.bags_total]) + (bagChips ? " — " + bagChips : "") : __("No bags yet.")}
+			<div class="di-grid">
+				<div class="di-block">
+					<div class="di-sec">${__("Bill of Materials — frozen at creation")}</div>
+					<table class="di-t"><thead><tr>
+						<th>${__("Material")}</th><th>${__("Purity %")}</th><th>${__("UOM")}</th>
+						<th>${__("Qty")}</th><th>${__("Weight")}</th><th>${__("Pure (g)")}</th>
+					</tr></thead><tbody>
+					${(D.materials || []).map((m) => `<tr>
+						<td><b>${esc(m.item)}</b></td>
+						<td>${m.purity || ""}</td><td>${esc(m.uom)}</td>
+						<td>${m.stone_type ? m.qty : ""}</td><td>${m.weight}</td>
+						<td>${m.stone_type ? "" : m.pure}</td>
+					</tr>`).join("")}</tbody></table>
+					${(bk && (bk.stones || []).length) ? `<div class="di-sec" style="margin-top:14px;">${__("Bank card stones")}</div>
+					<table class="di-t"><thead><tr><th>${__("Sieve")}</th><th>${__("Pcs")}</th></tr></thead><tbody>
+					${bk.stones.map((st) => `<tr><td><b>${esc(st.sieve || "")}</b></td><td>${st.pcs || ""}</td></tr>`).join("")}
+					</tbody></table>` : ""}
+				</div>
+				<div class="di-block">
+					<div class="di-sec">${__("Variants of this card")} <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);">· ${__("click a row to open it")}</span></div>
+					${sibRows ? `<table class="di-t"><thead><tr>
+						<th>${__("Variant")}</th><th>${__("Type")}</th><th>${__("Status")}</th><th>${__("Metal")}</th><th>${__("Stones")}</th><th>${__("Bags")}</th>
+					</tr></thead><tbody>${sibRows}</tbody></table>` : `<div class="di-none">${__("No other variants of this card yet.")}</div>`}
+				</div>
+				<div class="di-block" style="margin-top:0;">
+					<div class="di-sec">${__("In manufacturing")}</div>
+					${statusChips ? `<div style="margin-bottom:8px;">${statusChips}</div>` : ""}
+					<div style="font-size:13px;">
+						${D.bags_total ? __("{0} bag(s) run this design", [D.bags_total]) + (bagChips ? " — " + bagChips : "") : __("No bags yet.")}
+					</div>
+				</div>
 			</div>`);
 	}
 
@@ -187,6 +205,20 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 		lb.on("click", () => lb.remove());
 		$(document.body).append(lb);
 	});
+
+	// helpful: print the design as a spec sheet
+	page.set_primary_action(__("Print"), () => {
+		if (!root.find(".di-name").length) return frappe.msgprint(__("Open a design first."));
+		const css = root.find("style").first().html() || "";
+		const w = window.open("", "_blank", "width=1000,height=1100");
+		w.document.write(`<html><head><title>${esc(root.find(".di-name").text().trim())}</title>
+			<style>${css} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:16px;color:#222;background:#fff;}
+			.di-lightbox{display:none !important;} .di-shot img{cursor:default;}</style></head>
+			<body>${root.find(".di-body").html()}</body></html>`);
+		w.document.close();
+		w.focus();
+		setTimeout(() => w.print(), 400);
+	}, "printer");
 
 	if (frappe.route_options && (frappe.route_options.design || frappe.route_options.order_bag)) {
 		const pre = frappe.route_options.design;

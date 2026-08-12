@@ -11,7 +11,16 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 
 	const CSS = `
 	.ci-wrap{max-width:none;width:100%;}
-	.ci-img{height:84px;width:84px;object-fit:cover;border-radius:8px;border:1px solid #e2e6ea;margin:0 12px;}
+	.ci-img{height:84px;width:84px;object-fit:cover;border-radius:8px;border:1px solid #e2e6ea;margin:0 12px;cursor:zoom-in;}
+	.ci-photo{display:flex;flex-direction:column;align-items:center;gap:5px;}
+	.ci-due{font-size:11px;font-weight:800;border-radius:10px;padding:2px 9px;white-space:nowrap;}
+	.ci-due.ok{background:#eaf6ec;color:#1d7a33;}
+	.ci-due.warn{background:#fff3cd;color:#8a6d00;}
+	.ci-due.late{background:#fdecea;color:#b02a2a;}
+	.ci-locstat{font-size:11px;font-weight:800;color:#8a6d00;margin-top:3px;}
+	.ci-loc-link{color:#1f618d;cursor:pointer;}
+	.ci-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;}
+	.ci-lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;background:#fff;}
 	.ci-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:8px;}
 	.ci-code{font-size:20px;font-weight:800;letter-spacing:.4px;}
 	.ci-sub{color:#6b7785;font-size:12px;margin-top:2px;}
@@ -23,6 +32,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	.ci-loc b{font-size:16px;color:#222;display:block;margin-top:2px;}
 	.ci-sec{border:1px solid #e2e6ea;border-radius:9px;padding:9px 14px;background:#fff;margin-bottom:8px;}
 	.ci-sec h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a96a3;}
+	.ci-2col{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;}
+	.ci-2col > .ci-sec{flex:1 1 300px;}
 	.ci-kvs{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;}
 	.ci-kvs .k{color:#8a96a3;}
 	.ci-line{font-size:13px;margin:2px 0;}
@@ -92,6 +103,14 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		const kv = (k, v) => (v == null || v === "" ? "" : `<span><span class="k">${k}</span> ${esc("" + v)}</span>`);
 		const dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
 		const dtt = (v) => (v ? frappe.datetime.str_to_user(v) + " " + (("" + v).split(" ")[1] || "").slice(0, 5) : "—");
+		// humanised gap between two timestamps (to=null → until now) — "how long it stayed"
+		const fmtDur = (from, to) => {
+			if (!from) return "";
+			const ms = moment(to || undefined).diff(moment(from));
+			if (!(ms > 0)) return "";
+			const mins = Math.floor(ms / 60000), dd = Math.floor(mins / 1440), hh = Math.floor((mins % 1440) / 60), mm = mins % 60;
+			return dd ? `${dd}d ${hh}h` : hh ? `${hh}h ${mm}m` : `${mm}m`;
+		};
 		const finished = b.is_finished;
 
 		const bkt = (src, pre) => {
@@ -111,8 +130,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 				const locs = [d.transfers[0].from_location || "—"].concat(d.transfers.map((t) => t.to_location || ""));
 				travel = locs.map((l) => `<b>${esc(l)}</b>`).join('<span class="ar">&rarr;</span>');
 			} else {
-				travel = `<table class="ci-tbl"><thead><tr><th>From</th><th>To</th><th>When</th><th>By</th></tr></thead><tbody>${d.transfers
-					.map((t) => `<tr${t.from_parent ? ' style="opacity:.62;"' : ""}><td>${esc(t.from_location || "—")}${t.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td><b>${esc(t.to_location || "")}</b></td><td>${dtt(t.transfer_time)}</td><td>${esc(t.transferred_by || "")}</td></tr>`)
+				travel = `<table class="ci-tbl"><thead><tr><th>From</th><th>To</th><th>When</th><th>Stayed</th><th>By</th></tr></thead><tbody>${d.transfers
+					.map((t, i) => {
+						const nextT = d.transfers[i + 1];
+						const stayed = fmtDur(t.transfer_time, nextT ? nextT.transfer_time : null);
+						return `<tr${t.from_parent ? ' style="opacity:.62;"' : ""}><td>${esc(t.from_location || "—")}${t.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td><b>${esc(t.to_location || "")}</b></td><td>${dtt(t.transfer_time)}</td><td>${stayed}${!nextT && stayed ? ' <span class="ci-empty" style="font-size:10px;">so far</span>' : ""}</td><td>${esc(t.transferred_by || "")}</td></tr>`;
+					})
 					.join("")}</tbody></table>`;
 			}
 		}
@@ -206,30 +229,51 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 					<span class="ci-cost-out" style="font-size:12.5px;"></span>
 				</div></div>` : "";
 
+		// due countdown (right under the photo) + the current bench status under the location
+		const dueChip = (due, today) => {
+			if (!due || !today) return "";
+			const dd = frappe.datetime.get_day_diff(due, today);
+			if (dd < 0) return `<span class="ci-due late">Overdue ${-dd}d</span>`;
+			if (dd === 0) return `<span class="ci-due warn">Due today</span>`;
+			return `<span class="ci-due ${dd <= 3 ? "warn" : "ok"}">Due in ${dd} day${dd === 1 ? "" : "s"}</span>`;
+		};
+		const bn = ex.bench_now || {};
+		const locStat = (() => {
+			const s = bn.status || "";
+			if (s === "Issued" || s === "Ongoing") return "Issued";
+			if (s === "Receipted" || s === "Completed") return "In Transfer Queue";
+			if (s === "In Queue" || s === "On Hold") return "In Queue";
+			return s;
+		})();
+		const hasLoc = b.location && b.location !== "—";
 		return `
 		<div class="ci-head">
 			<div>
 				<div class="ci-code">${esc(b.name)}</div>
-				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item ? " &middot; " + esc(b.item) : ""}</div>
+				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item && b.item !== b.design ? " &middot; " + esc(b.item) : ""}</div>
 				<span class="ci-badge ${finished ? "prod" : flt(b.act_gross_weight) ? "wip" : "pre"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : flt(b.act_gross_weight) ? "IN PRODUCTION" : "IN PREPRODUCTION"}</span>
 			</div>
-			${img}
-			<div class="ci-loc">Location<b>${esc(b.location || "—")}</b></div>
+			<div class="ci-photo">${img}${!forPrint && b.due_date ? dueChip(b.due_date, d.today) : ""}</div>
+			<div class="ci-loc">Location${hasLoc ? `<b><a class="ci-loc-link" data-loc="${esc(b.location)}">${esc(b.location)}</a></b>` : `<b>${esc(b.location || "—")}</b>`}${locStat ? `<div class="ci-locstat">${esc(locStat)}</div>` : ""}</div>
 		</div>
 		<div class="ci-sec"><div class="ci-kvs">
 			${kv("Party", b.customer || b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
 			${kv("Qty", b.qty)}${kv("Size", b.size)}${kv("Ordered", dt(b.order_date))}${kv("Due", dt(b.due_date))}
 			${extraKvs}
 		</div></div>
-		<div class="ci-sec acc-gold"><h4>Weights</h4>
-			${act ? `<div class="ci-line"><span class="tag">Actual</span> ${act}</div>` : ""}
-			${plan ? `<div class="ci-line muted"><span class="tag">Plan</span> ${plan}</div>` : ""}
-			${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
+		<div class="ci-2col">
+			<div class="ci-sec acc-gold"><h4>Weights</h4>
+				${act ? `<div class="ci-line"><span class="tag">Actual</span> ${act}</div>` : ""}
+				${plan ? `<div class="ci-line muted"><span class="tag">Plan</span> ${plan}</div>` : ""}
+				${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
+			</div>
+			<div class="ci-sec acc-gold"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
 		</div>
-		<div class="ci-sec acc-gold"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
-		<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
+		<div class="ci-2col">
+			<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
+			${standing}
+		</div>
 		${identity}
-		${standing}
 		${cadSec}
 		${narration}
 		<div class="ci-sec acc-green"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
@@ -243,6 +287,17 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	$out.on("click", ".ci-jo", function () {
 		frappe.route_options = { job_order: $(this).data("jo") };
 		frappe.set_route("job-order-status");
+	});
+	// photo -> full-screen lightbox
+	$out.on("click", ".ci-img", function () {
+		const lb = $(`<div class="ci-lightbox"><img src="${this.getAttribute("src")}"></div>`);
+		lb.on("click", () => lb.remove());
+		$(document.body).append(lb);
+	});
+	// location -> its bench board (not the workstation)
+	$out.on("click", ".ci-loc-link", function () {
+		const loc = String($(this).data("loc") || "");
+		frappe.set_route("bench-" + loc.toLowerCase().replace(/\s+/g, "-"));
 	});
 
 	function load(code) {

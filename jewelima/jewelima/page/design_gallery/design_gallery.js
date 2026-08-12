@@ -454,12 +454,36 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 							: __("{0} needs a Weight (grams).", [bad.item]));
 						return;
 					}
+					// ---- variant lock: the BOM must match the chosen karat/colour/token ----
+					const req = cur.requirements || {};
+					const metals = raw.filter((m) => !m.stone_type).map((m) => m.item);
+					const stones = raw.filter((m) => m.stone_type).map((m) => m.item);
+					if (req.gold_item) {
+						if (metals.indexOf(req.gold_item) === -1) {
+							frappe.msgprint(__("This is a <b>{0}</b> variant — its gold <b>{1}</b> must be in the BOM. Don't remove it.", [req.token || cur.name, req.gold_item]));
+							return;
+						}
+						const wrong = metals.filter((m) => m !== req.gold_item);
+						if (wrong.length) {
+							frappe.msgprint(__("Only <b>{0}</b> gold belongs on this variant — remove: {1}. Change the Karat/Colour above for a different metal.", [req.gold_item, wrong.join(", ")]));
+							return;
+						}
+					}
+					if (req.token_family) {
+						const fam = req.token_family;
+						const ok = stones.some((s) => s === fam || s.indexOf(fam + " ") === 0);
+						if (!ok) {
+							frappe.msgprint(__("This is an <b>{0}</b> variant — add at least one {0} stone, or change the Stones selection above.", [req.token]));
+							return;
+						}
+					}
 					// metals carry no piece qty
 					const materials = raw.map((m) => ({ item: m.item, qty: m.stone_type ? (flt(m.qty) || 0) : 0, weight: flt(m.weight) || 0 }));
 					frappe.call({ method: API2 + ".create_design", args: {
 						design_name: cur.name, design_type: cur.design_type,
 						image: cur.image, design_bank: cur.design_bank,
 						materials: JSON.stringify(materials),
+						karat: values.karat, quality: values.quality || "", color: values.color || "",
 					} }).then((r) => {
 						const res = r.message || {};
 						if (!res.name) return;

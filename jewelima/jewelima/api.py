@@ -712,6 +712,27 @@ def get_casting_queue():
 
 
 @frappe.whitelist()
+def get_my_workstations():
+	"""The home launcher: every workstation (ws-* desk page) the CURRENT user is
+	allowed to open, as {title, route}, ordered by title. A bench worker holds one
+	bench role and so sees just their own station; Stock/System Managers see all."""
+	user = frappe.session.user
+	roles = set(frappe.get_roles(user))
+	is_admin = user == "Administrator" or "System Manager" in roles
+	out = []
+	for p in frappe.get_all("Page", filters={"name": ["like", "ws-%"]},
+			fields=["name", "title"], order_by="title"):
+		page_roles = set(frappe.get_all("Has Role",
+			filters={"parenttype": "Page", "parent": p.name}, pluck="role"))
+		if is_admin or not page_roles or (roles & page_roles):
+			title = p.title or p.name
+			label = title.replace("Workstation — ", "").replace(" Workstation", "").strip() or title
+			out.append({"route": p.name, "title": label})
+	out.sort(key=lambda w: w["title"].lower())
+	return out
+
+
+@frappe.whitelist()
 def set_tree_casting_date(tree, date=None):
 	"""Plan (or clear) a tree's casting date from the queue."""
 	frappe.db.set_value("Wax Tree", tree, "casting_date", date or None)
@@ -1322,11 +1343,57 @@ def set_design_type_sizes(design_type, sizes):
 	return {"design_type": design_type, "sizes": clean}
 
 
+def _variant_bom_requirements(karat, quality, color):
+	"""The materials a variant MUST carry, from its karat / colour / stone token:
+	the exact karat+colour gold, and (if a token) the stone family that token means."""
+	from jewelima.setup import KARAT_COLOR_LIMIT
+
+	karat = (karat or "").strip().upper()
+	quality = (quality or "").strip().upper()
+	locked = KARAT_COLOR_LIMIT.get(karat)
+	gcol = (locked[0] if locked and len(locked) == 1 else (color or "").strip().upper()) or ""
+	return {
+		"gold_item": (karat + gcol) if karat else "",
+		"token": quality,
+		"token_family": DESIGN_TOKEN_STONE_FAMILY.get(quality, "") if quality else "",
+	}
+
+
+def _check_variant_bom(materials, req):
+	"""Lock a variant's BOM: its karat+colour gold must be present and be the ONLY
+	gold; if the variant carries a stone token (EF / GH / SI / CZ / CVD) a stone of
+	that family must be present. Extra stones (colour, Swarovski, …) are allowed."""
+	gold_item = req.get("gold_item") or ""
+	fam = req.get("token_family") or ""
+	token = req.get("token") or ""
+	items = [m.get("item") for m in materials if m.get("item")]
+	if not items:
+		frappe.throw(frappe._("Add at least one material to the design's BOM."))
+	meta = {i.name: i for i in frappe.get_all("Item", filters={"name": ["in", items]},
+		fields=["name", "stone_type", "material_group"])}
+	golds = [it for it in items if (meta.get(it) or {}).get("material_group") == "GOLD"]
+	stones = [it for it in items if (meta.get(it) or {}).get("stone_type")]
+	if gold_item:
+		if gold_item not in golds:
+			frappe.throw(frappe._("This is a {0} variant — its gold <b>{1}</b> must stay in the BOM (don't remove it).").format(
+				token or "gold", gold_item))
+		wrong = sorted(set(g for g in golds if g != gold_item))
+		if wrong:
+			frappe.throw(frappe._("Only <b>{0}</b> gold belongs on this variant — remove: {1}. Change the Karat/Colour above for a different metal.").format(
+				gold_item, ", ".join(wrong)))
+	if fam:
+		if not any(s == fam or s.startswith(fam + " ") for s in stones):
+			frappe.throw(frappe._("This is an <b>{0}</b> variant — at least one {0} stone must be in the BOM. Add one, or change the Stones selection above.").format(token))
+
+
 @frappe.whitelist()
-def create_design(design_name, design_type, design_style=None, image=None, materials=None, design_bank=None):
+def create_design(design_name, design_type, design_style=None, image=None, materials=None, design_bank=None,
+		karat=None, quality=None, color=None):
 	"""Quick-create a Design from the Place Order dialog. The Design controller
 	provisions the sellable Item + BOM and derives the stone counts. Returns the
-	new design + its derived stone profile so the caller can fill a line."""
+	new design + its derived stone profile so the caller can fill a line. When
+	karat is given (variant creation) the BOM is LOCKED to the variant's identity —
+	its gold must be present + sole, and any stone token must have a matching stone."""
 	if not {"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
 			"Jewelima Design Approver"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Not permitted to create designs"), frappe.PermissionError)
@@ -1335,6 +1402,9 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 	materials = materials or []
 	if frappe.db.exists("Design", design_name):
 		frappe.throw(frappe._("A design named {0} already exists.").format(design_name))
+
+	if karat:
+		_check_variant_bom(materials, _variant_bom_requirements(karat, quality, color))
 
 	rows = [
 		{
@@ -9272,6 +9342,7 @@ def resolve_design_variant(design_bank, karat, quality=None, color=None):
 	return {"name": name, "exists": bool(frappe.db.exists("Design", name)),
 		"design_type": card.design_type, "image": card.photo or card.image or "",
 		"design_bank": card.name,
+		"requirements": _variant_bom_requirements(karat, quality, color),
 		"seed": _variant_seed(card, (karat or "").strip().upper(),
 			(quality or "").strip().upper(), color)}
 
@@ -12964,6 +13035,7 @@ def get_card_passport(order_bag):
 		"transfers": transfers,
 		"stages": stages,
 		"issues": issue_rows,
+		"today": frappe.utils.nowdate(),
 	}
 
 
@@ -13136,6 +13208,8 @@ def get_job_order_status(job_order):
 		jo2 = frappe.db.get_value("Order Bag", job_order, "job_order")
 		if jo2:
 			job_order = jo2
+		elif str(job_order).isdigit() and frappe.db.exists("Job Order", "E" + str(job_order)):
+			job_order = "E" + str(job_order)   # bare digits -> the E-prefixed order (0008 -> E0008)
 		else:
 			return {"error": "No Job Order (or card) '{0}'.".format(job_order)}
 
@@ -13184,13 +13258,23 @@ def get_job_order_status(job_order):
 		"Job Order", job_order,
 		["customer", "salesman", "order_type", "order_date", "due_date", "customer_date"], as_dict=True
 	) or {}
-	# the order's life-stage summary: paper -> metal -> product (sold split out)
-	summary = {
-		"pre": sum(1 for x in out if not x["is_finished"] and not x["gross"]),
-		"inprod": sum(1 for x in out if not x["is_finished"] and x["gross"]),
-		"product": sum(1 for x in out if x["is_finished"]),
-		"sold": sum(1 for x in out if x["is_finished"] and x["stock_status"] == "Sold"),
-	}
+	# the order's life-stage summary — one bucket per card; the page shows only
+	# the buckets that actually have pieces
+	def _stage(x):
+		ss = x["stock_status"]
+		if ss == "Cancelled":
+			return "cancelled"
+		if ss == "Sold":
+			return "sold"
+		if ss == "At Certification":
+			return "cert"
+		if x["is_finished"] or ss == "In Stock":
+			return "instock"
+		if x["gross"]:
+			return "inprod"
+		return "pre"
+
+	summary = dict(Counter(_stage(x) for x in out))
 	return {
 		"job_order": job_order, "header": header, "bags": out, "total": len(out),
 		"by_location": dict(Counter(x["location"] for x in out)),
