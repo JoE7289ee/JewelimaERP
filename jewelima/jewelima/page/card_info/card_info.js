@@ -221,7 +221,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 					<td>${dtt(h.when)}</td><td>${esc(h.by || "")}</td><td>${esc(h.reason || "")}</td></tr>`).join("")}
 				</tbody></table></div>`;
 		}
-		const costingSec = !forPrint && finished && frappe.user.has_role("System Manager")
+		const costingSec = !forPrint && finished && (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"))
 			? `<div class="ci-sec acc-red"><h4>Costing <span class="muted" style="font-weight:400;font-size:11px;">(restricted)</span></h4>
 				<div class="ci-line" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
 					<input type="number" class="ci-rate" placeholder="gold rate /g" style="width:110px;border:1px solid var(--border-color);border-radius:6px;height:26px;padding:2px 8px;background:var(--fg-color);color:var(--text-color);">

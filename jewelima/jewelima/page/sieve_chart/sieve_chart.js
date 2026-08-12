@@ -16,7 +16,7 @@ frappe.pages["sieve-chart"].on_page_load = function (wrapper) {
 	// the chart is the ONE source of truth for all four groups — everyone
 	// reads, only the System Manager writes, and even the admin must ARM
 	// editing explicitly (no accidental cell changes on a source-of-truth page)
-	const canEdit = frappe.user.has_role("System Manager");
+	const canEdit = (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"));
 	let editing = false;
 
 	$(page.main).append(`

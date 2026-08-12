@@ -89,7 +89,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 
 	// ---- Transfer Plus: transfer AND put straight to work at the target ------
 	const TP = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
-		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager"), emp: null };
+		|| frappe.user.has_role("Stock Manager") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")), emp: null };
 	if (TP.allowed) {
 		$(page.main).find(".tob-plus").css("display", "flex");
 		TP.emp = frappe.ui.form.make_control({

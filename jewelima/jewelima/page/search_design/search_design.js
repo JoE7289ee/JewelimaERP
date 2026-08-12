@@ -54,7 +54,7 @@ frappe.pages["search-design"].on_page_load = function (wrapper) {
 	let lastRows = [];
 	const canManage = frappe.user.has_role("Jewelima Design Bank")
 		|| frappe.user.has_role("Jewelima Design Approver")
-		|| frappe.user.has_role("System Manager");
+		|| (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"));
 
 	function download(raw, name) {
 		if (!raw) return frappe.show_alert({ message: __("No raw image on this card."), indicator: "orange" }, 3);

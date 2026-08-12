@@ -18,7 +18,7 @@ frappe.ui.form.on("Employee", {
 function render(frm) {
 	const fld = frm.get_field("jw_login_html");
 	if (!fld) return;
-	const sm = frappe.user.has_role("System Manager");
+	const sm = (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"));
 
 	// no account / not an admin -> the section is noise; hide it
 	if (frm.is_new() || !sm || !frm.doc.user_id) {

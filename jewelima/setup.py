@@ -601,6 +601,27 @@ def setup_roles():
 			"doctype": "Module Profile", "module_profile_name": "Jewelima Only", "block_modules": rows,
 		}).insert(ignore_permissions=True)
 
+	# ---- JW Manager: the Jewelima-wide power role -----------------------------
+	# Opens EVERY Jewelima page and is recognised as an admin inside our feature
+	# APIs (added to the role gates in api.py / design_bank_api.py), so it runs the
+	# whole app. It is NOT System Manager and carries NO other-ERP module role —
+	# pair a JW Manager user with the "Jewelima Only" module profile so ERPNext's
+	# own modules stay hidden. Actions run through page APIs (ignore_permissions),
+	# so READ on our doctypes + the masters our pages paint is all the desk needs.
+	if not frappe.db.exists("Role", "JW Manager"):
+		frappe.get_doc({"doctype": "Role", "role_name": "JW Manager", "desk_access": 1}).insert(ignore_permissions=True)
+	jw_reads = set(our_doctypes) | set(
+		JEWELIMA_READ_ERPNEXT + JEWELIMA_ORDERING_READ + JEWELIMA_CAD_READ
+		+ JEWELIMA_STONE_ISSUE_READ + JEWELIMA_STOCK_READ + JEWELIMA_DESIGN_BANK_READ
+		+ JEWELIMA_PURCHASE_READ + JEWELIMA_TRANSFER_READ + JEWELIMA_WS_READ
+		+ ["Company", "BOM", "Sales Person", "Order Type", "Stone Type", "File",
+		   "Diamond Sieve", "Material Issue", "Bag Material Ledger", "Voucher Type"])
+	for dt in jw_reads:
+		grant(dt, "JW Manager", {"read": 1, "report": 1, "print": 1, "export": 1})
+	# grant to EVERY Jewelima page (auto-covers current + future pages)
+	for pg in frappe.get_all("Page", filters={"module": "Jewelima"}, pluck="name"):
+		set_page_roles(pg, ("JW Manager",))
+
 	frappe.db.commit()
 
 

@@ -22,7 +22,7 @@ def _abbr():
 
 # Stock-desk gate: buying, moving and melting stock is the JW Stock desk
 # (the tight buyer role keeps purchase-only access).
-STOCK_ROLES = {"System Manager", "Stock Manager", "Jewelima Stock"}
+STOCK_ROLES = {"System Manager", "Stock Manager", "Jewelima Stock", "JW Manager"}
 
 
 def _require_stock(extra=()):
@@ -166,7 +166,7 @@ def get_warehouse_flags():
 @frappe.whitelist()
 def set_warehouse_flag(warehouse, flag, value):
 	"""Toggle ONE flag (a custom Check field) on a warehouse. Flags only — nothing else."""
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	if not frappe.get_all("Custom Field", filters={"dt": "Warehouse", "fieldtype": "Check", "fieldname": flag}, limit=1):
 		frappe.throw(frappe._("Unknown warehouse flag: {0}").format(flag))
 	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
@@ -454,7 +454,7 @@ def get_order_masters():
 
 @frappe.whitelist()
 def add_order_master(kind, name):
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	c = _order_master_conf(kind)
 	name = (name or "").strip().upper()
 	if not name:
@@ -477,7 +477,7 @@ def add_order_master(kind, name):
 def retire_order_master(kind, name, restore=0):
 	"""Retire (hide from dropdowns) or restore a Type / Salesman. Retiring is blocked while
 	ACTIVE Order Bags use it (Cancelled/Sold don't count); a never-used value is deleted."""
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	c = _order_master_conf(kind)
 	if not frappe.db.exists(c["doctype"], name):
 		frappe.throw(frappe._("Not found"))
@@ -718,7 +718,7 @@ def get_my_workstations():
 	bench role and so sees just their own station; Stock/System Managers see all."""
 	user = frappe.session.user
 	roles = set(frappe.get_roles(user))
-	is_admin = user == "Administrator" or "System Manager" in roles
+	is_admin = user == "Administrator" or bool({"System Manager", "JW Manager"} & roles)
 	out = []
 	for p in frappe.get_all("Page", filters={"name": ["like", "ws-%"]},
 			fields=["name", "title"], order_by="title"):
@@ -1167,13 +1167,13 @@ def _qm_target(target_type, target):
 	editing another user or a role is System Manager business."""
 	target_type = (target_type or "user").lower()
 	if target_type == "role":
-		frappe.only_for(("System Manager",))
+		frappe.only_for(("System Manager", "JW Manager"))
 		if not frappe.db.exists("Role", target):
 			frappe.throw(frappe._("Role {0} not found.").format(target))
 		return {"for_role": target}
 	target = target or frappe.session.user
 	if target != frappe.session.user:
-		frappe.only_for(("System Manager",))
+		frappe.only_for(("System Manager", "JW Manager"))
 	return {"for_user": target}
 
 
@@ -1208,7 +1208,7 @@ def get_quick_menu_setup(target_type=None, target=None):
 	valid = {r for r, _ in allowed}
 	slots = [(r if r in valid else None) for r in (slots + [None] * 9)[:9]]
 	return {"catalog": [{"route": r, "label": l} for r, l in allowed],
-		"slots": slots, "can_target": "System Manager" in frappe.get_roles()}
+		"slots": slots, "can_target": bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))}
 
 
 @frappe.whitelist()
@@ -1270,7 +1270,7 @@ def get_design_types_with_sizes():
 def set_design_type_default(design_type, size=None):
 	"""Mark one size as the type's default (pre-selected on Place Order). Pass no size
 	(or the current default) to clear it."""
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	doc = frappe.get_doc("Design Type", design_type)
 	size = (size or "").strip()
 	if size and size not in [r.size for r in doc.sizes]:
@@ -1284,7 +1284,7 @@ def set_design_type_default(design_type, size=None):
 
 @frappe.whitelist()
 def add_design_type(name):
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	name = (name or "").strip().upper()
 	if not name:
 		frappe.throw(frappe._("Type name is required"))
@@ -1297,7 +1297,7 @@ def add_design_type(name):
 
 @frappe.whitelist()
 def delete_design_type(name):
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	used = frappe.db.count("Design", {"design_type": name})
 	if used:
 		frappe.throw(frappe._("Cannot delete — {0} Design(s) use this type.").format(used))
@@ -1309,7 +1309,7 @@ def delete_design_type(name):
 @frappe.whitelist()
 def set_design_type_sizes(design_type, sizes):
 	"""Replace a Design Type's size list (the Setup page's add/remove)."""
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	sizes = frappe.parse_json(sizes) if isinstance(sizes, str) else (sizes or [])
 	seen, clean = set(), []
 	for s in sizes:
@@ -1395,7 +1395,7 @@ def create_design(design_name, design_type, design_style=None, image=None, mater
 	karat is given (variant creation) the BOM is LOCKED to the variant's identity —
 	its gold must be present + sole, and any stone token must have a matching stone."""
 	if not {"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
-			"Jewelima Design Approver"} & set(frappe.get_roles()):
+			"Jewelima Design Approver", "JW Manager"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Not permitted to create designs"), frappe.PermissionError)
 	if isinstance(materials, str):
 		materials = json.loads(materials or "[]")
@@ -2330,7 +2330,7 @@ def get_order_bag_images(order_bag):
 	# owner map: only File-backed attachments on THIS bag can be deleted, by the
 	# user who added them (File.owner) or a System Manager
 	me = frappe.session.user
-	is_admin = "System Manager" in set(frappe.get_roles())
+	is_admin = bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))
 	owner_by_url = {f.file_url: f.owner for f in frappe.get_all("File",
 		filters={"attached_to_doctype": "Order Bag", "attached_to_name": order_bag},
 		fields=["file_url", "owner"])}
@@ -2368,7 +2368,7 @@ def delete_order_bag_image(order_bag, file_url):
 	(or any, for a System Manager). The design image and files added by others are
 	refused."""
 	me = frappe.session.user
-	is_admin = "System Manager" in set(frappe.get_roles())
+	is_admin = bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))
 	rec = frappe.get_all("File", filters={"attached_to_doctype": "Order Bag",
 		"attached_to_name": order_bag, "file_url": file_url}, fields=["name", "owner"], limit=1)
 	if not rec:
@@ -2484,7 +2484,7 @@ def _transfer_allowed(roles, from_location, to_location):
 	roles never locks out Stock Managers etc. If any of the user's roles IS in the
 	matrix, the union of those roles' rules decides. System Manager always allowed;
 	a rule with a blank from/to = wildcard."""
-	if "System Manager" in roles:
+	if {"System Manager", "JW Manager"} & roles:
 		return True
 	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
 	ruled = {r.role for r in rules}
@@ -2503,7 +2503,7 @@ def allowed_to_locations(from_location):
 	page's dropdown). Same per-role dormancy as _transfer_allowed."""
 	roles = set(frappe.get_roles())
 	all_locs = _all_locations()
-	if "System Manager" in roles:
+	if {"System Manager", "JW Manager"} & roles:
 		return all_locs
 	rules = frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"])
 	mine = roles & {r.role for r in rules}
@@ -2524,7 +2524,7 @@ TRANSFER_MATRIX_ROLES = ("Jewelima Transfer", "Jewelima Transfer Plus")
 def get_transfer_matrix():
 	"""The whole board: locations, the governed roles, and each role's allowed
 	from->to pairs (straight from Transfer Rule)."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	matrix = {role: [] for role in TRANSFER_MATRIX_ROLES}
 	for r in frappe.get_all("Transfer Rule", fields=["role", "from_location", "to_location"]):
 		if r.role in matrix:
@@ -2536,7 +2536,7 @@ def get_transfer_matrix():
 def save_transfer_matrix(role, pairs):
 	"""Replace ONE role's rules with the checked cells. `pairs` = [[from,to],...].
 	Empty = the role has no rules = it goes dormant (unrestricted) again."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	if role not in TRANSFER_MATRIX_ROLES:
 		frappe.throw(frappe._("Only the transfer roles live on this matrix."))
 	if isinstance(pairs, str):
@@ -2819,7 +2819,7 @@ def get_stone_issue_tolerance():
 
 @frappe.whitelist()
 def save_stone_issue_tolerance(payload):
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	d = frappe.get_single("Stone Issue Settings")
 	for c in STONE_BUCKET_CODES:
@@ -3292,7 +3292,7 @@ STONE_ISSUE_ROLE = "Jewelima Stone Issue"
 def _stone_issue_admin():
 	"""Only an admin (System Manager) may hand-pick who is issuing; everyone else
 	is locked to their own linked Employee."""
-	return "System Manager" in frappe.get_roles()
+	return bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))
 
 
 def _employee_from_user(user=None):
@@ -3478,7 +3478,7 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 # when every open bag is material-free — otherwise the desk says which
 # bags to clear manually first.
 
-CANCEL_ROLES = {"System Manager", "Stock Manager", "Jewelima Ordering"}
+CANCEL_ROLES = {"System Manager", "Stock Manager", "Jewelima Ordering", "JW Manager"}
 
 
 def _require_cancel():
@@ -3659,7 +3659,7 @@ def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, ite
 	}).insert(ignore_permissions=True)
 
 
-STONE_HISTORY_ROLES = {"System Manager", "Stock Manager"}
+STONE_HISTORY_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
 
 # stone_type -> bucket code, the same families the whole app speaks
 _SH_BUCKET = {"Diamond": "DMD", "Precious Stone": "PS", "Color Stone": "CS",
@@ -3842,7 +3842,7 @@ def get_day_sheet_html(date):
 def get_usage_report():
 	"""Reports > Usage (SM only): DB size + top tables, core document counts,
 	bags-per-day trend, users/sessions, and server disk — the capacity dashboard."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	import shutil
 
 	db_rows = frappe.db.sql("""
@@ -3922,7 +3922,7 @@ def _prune_candidates(months):
 @frappe.whitelist()
 def get_prune_preview(months=3):
 	"""DRY RUN: what a prune would delete. Nothing is touched."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	cutoff, kinds, unsealed = _prune_candidates(months)
 	return {"cutoff": str(cutoff), "kinds": kinds, "total": sum(kinds.values()),
 		"unsealed_days": unsealed}
@@ -3932,7 +3932,7 @@ def get_prune_preview(months=3):
 def prune_execute(months=3, confirm_text=None):
 	"""Actually delete the preview's rows. Demands the literal confirmation text —
 	this is the one destructive button in the app, used only when space runs out."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	if (confirm_text or "").strip().upper() != "PRUNE":
 		frappe.throw(frappe._('Type PRUNE to confirm — this permanently deletes old monitoring rows.'))
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
@@ -4006,7 +4006,7 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 	"""Resolve one audit line. 'zero_pcs': corrective Adjustment row so the count
 	matches the (zero) weight. 'sweep': residual carats go to a stage's -LOSS
 	bucket (Option B — residue is collected, never vanishes)."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	net = frappe.db.sql("""
 		SELECT SUM(IF(direction='Out', -qty, qty)) ct, SUM(IF(direction='Out', -pcs, pcs)) pcs
 		FROM `tabBag Material Ledger` WHERE order_bag = %s AND item = %s
@@ -4130,7 +4130,7 @@ def update_selection_photo(name, design_type=None, provider=None, stock_pcs=None
 @frappe.whitelist()
 def get_selection_review(status="pending", search=None, limit=100):
 	"""The review queue. status: pending | done | all."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	filters = {"active": 1}
 	if status == "pending":
 		filters["reviewed"] = 0
@@ -4151,7 +4151,7 @@ def get_selection_review(status="pending", search=None, limit=100):
 def review_save(name, gold_gms=None, cts=None, stock_pcs=None, reviewed=None,
 		design_type=None, provider=None):
 	"""One review row: save values and/or the Reviewed tick."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	if not frappe.db.exists("Selection Photo", name):
 		frappe.throw(frappe._("Photo {0} not found.").format(name))
 	doc = frappe.get_doc("Selection Photo", name)
@@ -4177,7 +4177,7 @@ def review_rename_code(name, new_code):
 	"""Change a photo's code. If the target code exists, DON'T rename — return
 	both photos so the page can show them side by side; the reviewer then keeps
 	one via review_delete_photo and retries."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	new_code = (new_code or "").strip().upper()
 	if not new_code:
 		frappe.throw(frappe._("Code is required."))
@@ -4201,7 +4201,7 @@ def review_rename_code(name, new_code):
 def review_delete_photo(name):
 	"""Remove a duplicate photo. Any Selection lines pointing at it are dropped
 	and their Selections re-totalled first, so nothing dangles."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	if not frappe.db.exists("Selection Photo", name):
 		frappe.throw(frappe._("Photo {0} not found.").format(name))
 	parents = frappe.get_all("Selection Item", filters={"photo": name}, pluck="parent")
@@ -4229,7 +4229,7 @@ def get_sieve_chart():
 @frappe.whitelist()
 def save_sieve_chart(rows):
 	"""Save edited cells from the Sieve Chart page. rows = [{name, mm_size, avg_cts}]."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	if isinstance(rows, str):
 		rows = json.loads(rows or "[]")
 	n = 0
@@ -4492,7 +4492,7 @@ def get_repack_context(source_item=None):
 	"""What the Repack page needs: the locked warehouse, and (given a source)
 	its available stock there + the items it may legally split into."""
 	wh = _wh("Stone Issue")
-	out = {"warehouse": wh, "can_approve": bool({"System Manager", "Stock Manager"} & set(frappe.get_roles()))}
+	out = {"warehouse": wh, "can_approve": bool({"System Manager", "Stock Manager", "JW Manager"} & set(frappe.get_roles()))}
 	if source_item:
 		fam = _stone_family(source_item)
 		out["family"] = fam
@@ -4571,7 +4571,7 @@ def list_repack_requests(status=None, limit=50):
 def approve_repack(name):
 	"""The bigger role signs off: checks live stock, writes ONE Repack Stock Entry
 	(source out, sieves in — same warehouse), stamps the request Approved."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	doc = frappe.get_doc("Repack Request", name)
 	if doc.status != "Pending":
 		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
@@ -4609,7 +4609,7 @@ def approve_repack(name):
 
 @frappe.whitelist()
 def reject_repack(name, reason=None):
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	doc = frappe.get_doc("Repack Request", name)
 	if doc.status != "Pending":
 		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
@@ -5451,7 +5451,7 @@ def get_cad_workstation():
 	per-user summary, and (for a lead) the unassigned queue to hand out."""
 	me = _my_employee()
 	roster = _cad_roster()
-	is_lead = "System Manager" in set(frappe.get_roles())
+	is_lead = bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))
 	bags = frappe.get_all("Order Bag", filters={"is_cad": 1},
 		fields=["name", "customer", "order_date", "due_date", "job_order", "cad_design_type", "qty",
 			"cad_karat", "design", "cad_gold_weight", "cad_diamond_weight"],
@@ -5493,7 +5493,7 @@ def get_cad_workstation():
 @frappe.whitelist()
 def assign_cad_card(order_bag, employee=None):
 	"""Lead assigns (or reassigns / clears) a CAD queue card to a CAD user."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	if employee and employee not in _cad_roster():
 		frappe.throw(frappe._("{0} isn't on the CAD bench.").format(employee))
 	rec = frappe.get_all("CAD", filters={"order_bag": order_bag, "status": ["not in", ["Completed", "Expired"]]},
@@ -5736,7 +5736,7 @@ def _require_ws_access(bench):
 	global Stock Manager / System Manager) — a GRINDING user cannot issue at
 	FILING. The global Assign/Collect and Job Work pages keep their own roles."""
 	roles = set(frappe.get_roles())
-	if {"System Manager", "Stock Manager"} & roles:
+	if {"System Manager", "Stock Manager", "JW Manager"} & roles:
 		return
 	if _ws_bench_role(bench) in roles:
 		return
@@ -6000,7 +6000,7 @@ def get_bench_workstation(bench):
 
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
-	can_act = bool({"System Manager", "Stock Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
+	can_act = bool({"System Manager", "Stock Manager", "JW Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
 	# completed AT this bench but NOT yet transferred onward (still sitting here)
 	completed = [r for r in rows if r.get("status") == "Completed"]
 	return {"bench": bench, "ranked": ranked,
@@ -7843,7 +7843,7 @@ def get_loss_report(from_date=None, to_date=None):
 def get_user_role_editor(user):
 	"""User Roles page: everything needed to (re)assign one user's roles —
 	the assignable role list (Jewelima's first) and what they hold now."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	hidden = {"All", "Guest", "Administrator"}
 	roles = [r.name for r in frappe.get_all("Role", filters={"disabled": 0}, fields=["name"], order_by="name")
 		if r.name not in hidden]
@@ -7858,7 +7858,7 @@ def get_user_role_editor(user):
 def set_user_roles(user, roles):
 	"""Replace the user's role set (Administrator untouchable; you cannot
 	strip System Manager from YOURSELF — no self-lockout)."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	if user == "Administrator":
 		frappe.throw(frappe._("Administrator's roles are not managed here."))
 	roles = set(json.loads(roles) if isinstance(roles, str) else (roles or []))
@@ -7879,7 +7879,7 @@ def set_user_roles(user, roles):
 def get_user_roles():
 	"""Every enabled system user with their roles. Jewelima roles (+ the two
 	ERPNext roles that gate our pages) come as matrix columns; the rest as chips."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	users = frappe.get_all(
 		"User",
 		filters={"enabled": 1, "user_type": "System User", "name": ["not in", ["Guest"]]},
@@ -7921,7 +7921,7 @@ def get_user_roles():
 @frappe.whitelist()
 def get_employees_without_user():
 	"""Active employees who don't have a working desk login yet."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	from jewelima.jewelima.imports.import_users import _username
 
 	rows = frappe.get_all("Employee", filters={"status": "Active"},
@@ -7945,7 +7945,7 @@ def get_employees_without_user():
 def create_employee_users(payload):
 	"""Create desk users for the picked employees (no passwords — set those with
 	your own set_passwords step). rows = [{employee, username}], roles = [...]"""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	from jewelima.jewelima.imports.import_users import _free_username, _username
 
 	p = frappe.parse_json(payload)
@@ -8003,7 +8003,7 @@ def create_employee_users(payload):
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
 def get_employee_form_data():
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	return {
 		"departments": sorted({d.department_name for d in frappe.get_all(
 			"Department", filters={"is_group": 0}, fields=["department_name"])
@@ -8016,7 +8016,7 @@ def get_employee_form_data():
 
 @frappe.whitelist()
 def create_employee(payload):
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	from jewelima.jewelima.imports.import_employees import _company, _ensure_department, _ensure_designation
 
 	p = frappe.parse_json(payload)
@@ -8061,7 +8061,7 @@ def create_employee(payload):
 def get_login_accounts(user=None):
 	"""Every desk account with its login handle, last login and live session count.
 	`user` narrows it to one account (the Employee form's Login Details section)."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	filters = {"user_type": "System User", "name": ["!=", "Guest"]}
 	if user:
 		filters["name"] = user
@@ -8110,7 +8110,7 @@ def get_login_accounts(user=None):
 @frappe.whitelist()
 def end_user_sessions(user):
 	"""Log a user out of every device. Doesn't touch their password."""
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	if not user or not frappe.db.exists("User", user) or user == "Guest":
 		frappe.throw(frappe._("Pick a real user."))
 	from frappe.sessions import clear_sessions
@@ -8122,7 +8122,7 @@ def end_user_sessions(user):
 
 @frappe.whitelist()
 def admin_reset_password(user, new_password):
-	frappe.only_for(("System Manager",))
+	frappe.only_for(("System Manager", "JW Manager"))
 	if not user or not frappe.db.exists("User", user) or user == "Guest":
 		frappe.throw(frappe._("Pick a real user."))
 	pwd = (new_password or "").strip()
@@ -8217,7 +8217,7 @@ def collect_loss(payload):
 def writeoff_loss(payload):
 	"""MANAGEMENT ONLY: write unrecoverable dust out of the loss warehouses —
 	one Material Issue, reason required."""
-	frappe.only_for("System Manager")
+	frappe.only_for(["System Manager", "JW Manager"])
 	p = frappe.parse_json(payload)
 	reason = (p.get("reason") or "").strip()
 	if not reason:
@@ -8975,7 +8975,7 @@ def create_new_design_full(design_type, gross_weight=None, diamond_weight=None,
 	Approved on the spot — a manager placing the order IS the approval, so it's
 	instantly orderable. No photo -> the card waits in the Photo Queue."""
 	if not ({"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
-			"Jewelima Design Approver"} & set(frappe.get_roles())):
+			"Jewelima Design Approver", "JW Manager"} & set(frappe.get_roles())):
 		frappe.throw(frappe._("Not permitted to create designs"), frappe.PermissionError)
 	if not design_type or not frappe.db.exists("Design Type", design_type):
 		frappe.throw(frappe._("Pick a valid Design Type."))
@@ -9013,7 +9013,7 @@ def add_product_photo(name, photo):
 	"""Photo Queue: drop the product photo onto a waiting card, re-render its
 	info page, and clear it from the queue."""
 	if not ({"System Manager", "Jewelima Ordering", "Jewelima Design Bank",
-			"Jewelima Design Approver"} & set(frappe.get_roles())):
+			"Jewelima Design Approver", "JW Manager"} & set(frappe.get_roles())):
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	if not (photo or "").startswith("data:"):
 		frappe.throw(frappe._("Attach the product photo first."))
@@ -12902,7 +12902,7 @@ def get_print_branding():
 def get_card_costing(order_bag, price_chart=None, gold_rate=0):
 	"""Card Info's COSTING section — the exact sale engine, admin-eyes only
 	for now (the section is role-gated in the UI and enforced here)."""
-	if "System Manager" not in frappe.get_roles():
+	if not {"System Manager", "JW Manager"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Costing is restricted."))
 	if not price_chart:
 		price_chart = frappe.db.get_value("Price Chart", {"status": "Active"}, "name")
@@ -13047,7 +13047,7 @@ def get_card_passport(order_bag):
 
 
 def _require_transfer_plus():
-	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus"} & set(frappe.get_roles()):
+	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus", "JW Manager"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("This needs the Jewelima Transfer Plus role."))
 
 
@@ -13094,7 +13094,7 @@ def transfer_and_issue(names, to_location, employee=None, work_type=None, remark
 	neither flow just transfer."""
 	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, ISSUE_RECEIPT_LOCATIONS
 	roles = set(frappe.get_roles())
-	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus"} & roles:
+	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus", "JW Manager"} & roles:
 		frappe.throw(frappe._("Transfer-and-issue needs the Jewelima Transfer Plus role."))
 	res = transfer_order_bags(names, to_location, remarks=remarks)
 	to = (to_location or "").upper()
@@ -13433,7 +13433,7 @@ def get_orders_taken(days=30):
 # Administrator account holds) moves a request off Open.
 
 def _is_feature_admin():
-	return "System Manager" in frappe.get_roles() or frappe.session.user == "Administrator"
+	return bool({"System Manager", "JW Manager"} & set(frappe.get_roles())) or frappe.session.user == "Administrator"
 
 
 @frappe.whitelist()
@@ -13609,7 +13609,7 @@ def get_my_login():
 # doctype editing. System Manager only. Benches are seeded (one per location).
 # ---------------------------------------------------------------------------
 def _require_bench_admin():
-	if "System Manager" not in frappe.get_roles():
+	if not {"System Manager", "JW Manager"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Only a System Manager can assign benches."), frappe.PermissionError)
 
 

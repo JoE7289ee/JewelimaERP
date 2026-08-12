@@ -135,7 +135,7 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 	});
 
 	// selection -> bulk prioritise
-	const canPrio = frappe.user.has_role("Jewelima Design Bank") || frappe.user.has_role("Jewelima Design Approver") || frappe.user.has_role("System Manager");
+	const canPrio = frappe.user.has_role("Jewelima Design Bank") || frappe.user.has_role("Jewelima Design Approver") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"));
 	const selected = new Set();
 	const canRetire = canPrio; // Design Bank, Approver and System Manager may retire
 	function paintPrio() {

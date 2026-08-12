@@ -94,7 +94,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	const $msg = $(page.main).find(".ac-msg");
 	// ---- Transfer Plus: onward transfer right after collect ------------------
 	const TPX = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
-		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager") };
+		|| frappe.user.has_role("Stock Manager") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")) };
 	// the onward transfer only fires at COLLECT — the strip never shows on Assign
 	$(page.main).find(".ac-tpx-on").on("change", function () {
 		const $to = $(page.main).find(".ac-tpx-to");

@@ -12,8 +12,8 @@ from frappe import _
 # roles (Jewelima Info), but whitelisted methods are callable by ANY logged-in
 # user — so every mutator checks roles itself. Editors work the catalog;
 # only approvers touch the review / approve / purge lane.
-DESIGN_EDITOR_ROLES = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver", "Jewelima Graphics"}
-DESIGN_APPROVER_ROLES = {"System Manager", "Jewelima Design Approver", "Jewelima Graphics"}
+DESIGN_EDITOR_ROLES = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver", "Jewelima Graphics", "JW Manager"}
+DESIGN_APPROVER_ROLES = {"System Manager", "Jewelima Design Approver", "Jewelima Graphics", "JW Manager"}
 
 
 def _require(roles):
@@ -294,7 +294,7 @@ def get_design_bank_detail(name):
 @frappe.whitelist()
 def delete_design_bank(name):
 	"""Permanently remove a catalog entry — ONLY if no Design was created from it."""
-	frappe.only_for(["System Manager", "Stock Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
 	if not name or not frappe.db.exists("Design Bank", name):
 		frappe.throw(_("Not found"))
 	used = frappe.get_all("Design", filters={"design_bank": name}, pluck="name")
@@ -851,7 +851,7 @@ def get_old_category_designs(folder, start=0, limit=60, subtree=0):
 
 @frappe.whitelist()
 def set_design_priority(names, priority):
-	allowed = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver"}
+	allowed = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver", "JW Manager"}
 	if not allowed & set(frappe.get_roles()):
 		frappe.throw("Not permitted to set priorities")
 	"""Bulk-stamp review priority on picked cards (Old Categories selection)."""
@@ -867,7 +867,7 @@ def set_design_priority(names, priority):
 def set_design_retired(names):
 	"""Bulk-retire picked cards (Old Categories selection). Approver only —
 	codes stay reserved forever, same as a Review-page retire."""
-	allowed = {"System Manager", "Jewelima Design Approver", "Jewelima Design Bank"}
+	allowed = {"System Manager", "Jewelima Design Approver", "Jewelima Design Bank", "JW Manager"}
 	if not allowed & set(frappe.get_roles()):
 		frappe.throw("Not permitted to retire designs")
 	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
@@ -898,7 +898,7 @@ def get_retired_designs(start=0, limit=60, q=None):
 @frappe.whitelist()
 def design_bring_back(name):
 	"""Un-retire: back to Pending — it rejoins the Review queue."""
-	allowed = {"System Manager", "Jewelima Design Approver"}
+	allowed = {"System Manager", "Jewelima Design Approver", "JW Manager"}
 	if not allowed & set(frappe.get_roles()):
 		frappe.throw("Not permitted")
 	d = frappe.get_doc("Design Bank", name)

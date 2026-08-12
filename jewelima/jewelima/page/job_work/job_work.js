@@ -103,7 +103,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// (never on issue — cards leave through the receipt, not into it; the strip
 	// exists solely on the Receipt tab and resets when the tab changes)
 	const TPX = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
-		|| frappe.user.has_role("Stock Manager") || frappe.user.has_role("System Manager") };
+		|| frappe.user.has_role("Stock Manager") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")) };
 	$(page.main).find(".jw-tpx-on").on("change", function () {
 		const $to = $(page.main).find(".jw-tpx-to");
 		$to.toggle(this.checked);

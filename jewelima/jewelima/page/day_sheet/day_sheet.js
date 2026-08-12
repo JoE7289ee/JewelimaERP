@@ -52,14 +52,14 @@ frappe.pages["day-sheet"].on_page_load = function (wrapper) {
 				S.html = "";
 				root.find(".dsp-body").html(`<div class="dsp-empty">${__("No Day Record for {0} yet — the nightly job seals days at 23:45.", [frappe.datetime.str_to_user(d)])}</div>`);
 				root.find(".dsp-print,.dsp-pdf").hide();
-				const canBuild = frappe.user.has_role("System Manager") || frappe.user.has_role("Stock Manager");
+				const canBuild = (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")) || frappe.user.has_role("Stock Manager");
 				root.find(".dsp-rebuild").toggle(canBuild).text(__("Build this day now"));
 				return;
 			}
 			S.html = m.html;
 			root.find(".dsp-body").html(`<div class="dsp-view">${m.html}</div>`);
 			root.find(".dsp-print,.dsp-pdf").show();
-			root.find(".dsp-rebuild").toggle(frappe.user.has_role("System Manager") || frappe.user.has_role("Stock Manager")).text(__("Rebuild this day"));
+			root.find(".dsp-rebuild").toggle((frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")) || frappe.user.has_role("Stock Manager")).text(__("Rebuild this day"));
 		});
 	}
 
