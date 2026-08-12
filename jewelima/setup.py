@@ -154,7 +154,7 @@ JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item
 # (that page + the access doctype stay System-Manager-only). Writes go through the
 # page APIs (ignore_permissions); read on the masters the page paints is all it needs.
 JEWELIMA_STONE_ISSUE_ROLE = "Jewelima Stone Issue"
-JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue"]
+JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue", "pre-bag"]
 # Workstation personas — ONE role per bench: see + act on THAT workstation only
 # (the global Assign/Collect and Job Work pages keep their own wider roles).
 JEWELIMA_WS_PAGES = {

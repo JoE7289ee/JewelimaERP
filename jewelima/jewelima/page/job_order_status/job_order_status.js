@@ -36,6 +36,7 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	.jo-empty{color:#8a96a3;}
 	.jo-badge.pre{background:#fdf3e7;color:#9a6b1f;}
 	.jo-badge.sold{background:#eaf6ec;color:#1d7a33;}
+	.jo-badge.canc{background:#f5dddd;color:#b02a2a;}
 	.jo-due{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11px;font-weight:800;margin-left:6px;}
 	.jo-due.ok{background:#eaf6ec;color:#1d7a33;}
 	.jo-due.warn{background:#fff3cd;color:#8a6d00;}
@@ -72,6 +73,8 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
 
 	function statusBadge(b) {
+		if (b.stock_status === "Cancelled") return `<span class="jo-badge canc">CANCELLED</span>`;
+		if (b.stock_status === "At Certification") return `<span class="jo-badge pre">AT CERTIFICATION</span>`;
 		if (b.is_finished) return `<span class="jo-badge ${b.stock_status === "Sold" ? "sold" : "prod"}">PRODUCT${b.stock_status ? " — " + esc(b.stock_status) : ""}</span>`;
 		const s = b.status || "";
 		if (!s && !flt(b.gross)) return `<span class="jo-badge pre">NOT STARTED</span>`;

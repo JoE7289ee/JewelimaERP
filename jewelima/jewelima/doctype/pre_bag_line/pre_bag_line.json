@@ -1,0 +1,116 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-12 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "stone_type",
+  "bucket",
+  "cb1",
+  "needed_pcs",
+  "needed_ct",
+  "prebagged_pcs",
+  "prebagged_ct",
+  "cb2",
+  "bag",
+  "issued_pcs",
+  "issued_ct",
+  "prebagged_on",
+  "prebagged_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Stone Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stone_type",
+   "fieldtype": "Data",
+   "label": "Stone Type"
+  },
+  {
+   "fieldname": "bucket",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Bucket"
+  },
+  {
+   "fieldname": "cb1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "needed_pcs",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Needed Pcs"
+  },
+  {
+   "fieldname": "needed_ct",
+   "fieldtype": "Float",
+   "label": "Needed Ct",
+   "precision": "3"
+  },
+  {
+   "fieldname": "prebagged_pcs",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Pre-bagged Pcs"
+  },
+  {
+   "fieldname": "prebagged_ct",
+   "fieldtype": "Float",
+   "label": "Pre-bagged Ct",
+   "precision": "3"
+  },
+  {
+   "fieldname": "cb2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bag",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Bag (Storage)"
+  },
+  {
+   "fieldname": "issued_pcs",
+   "fieldtype": "Int",
+   "label": "Issued Pcs"
+  },
+  {
+   "fieldname": "issued_ct",
+   "fieldtype": "Float",
+   "label": "Issued Ct",
+   "precision": "3"
+  },
+  {
+   "fieldname": "prebagged_on",
+   "fieldtype": "Datetime",
+   "label": "Pre-bagged On"
+  },
+  {
+   "fieldname": "prebagged_by",
+   "fieldtype": "Data",
+   "label": "Pre-bagged By"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-12 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Pre Bag Line",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

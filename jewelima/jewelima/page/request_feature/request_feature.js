@@ -21,7 +21,7 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 		.rf-form .h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;}
 		.rf-form label{display:block;font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:8px 0 3px;}
 		.rf-form input,.rf-form select,.rf-form textarea{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:7px;padding:7px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
-		.rf-form textarea{min-height:90px;resize:vertical;}
+		.rf-form textarea{min-height:120px;resize:vertical;}
 		.rf-btn{border:none;color:#fff;font-weight:800;padding:9px 18px;border-radius:8px;cursor:pointer;background:#2e7d32;margin-top:12px;width:100%;}
 		.rf-side{flex:1;min-width:420px;}
 		.rf-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
@@ -51,10 +51,9 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 		<div class="rf-top">
 			<div class="rf-form">
 				<div class="h">${__("Raise a request")}</div>
-				<label>${__("Title")}</label><input class="rf-title" maxlength="140" placeholder="${__("what do you want?")}">
+				<label>${__("Your request")}</label><textarea class="rf-desc" placeholder="${__("Describe what you want — write as much as you like.")}"></textarea>
 				<label>${__("Category")}</label>
 				<select class="rf-cat-in"><option>Feature</option><option>Improvement</option><option>Bug</option><option>Other</option></select>
-				<label>${__("Description")}</label><textarea class="rf-desc" placeholder="${__("the more detail, the better")}"></textarea>
 				<button class="rf-btn rf-submit">${__("Submit request")}</button>
 			</div>
 			<div class="rf-side">
@@ -90,7 +89,7 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 					${badge(r.status)}<span class="rf-cat">${esc(r.category || "")}</span>
 					<span class="meta" style="margin-left:auto;">${esc(r.name)}</span>
 				</div>
-				${r.description ? `<div class="desc">${esc(r.description)}</div>` : ""}
+				${r.description && r.description.trim() !== (r.title || "").trim() ? `<div class="desc">${esc(r.description)}</div>` : ""}
 				<div class="meta">${__("by")} <b>${esc(r.requested_by_name || r.requested_by)}</b>${r.requested_by === DATA.me ? " · " + __("you") : ""}
 					· ${esc((r.requested_on || "").slice(0, 16))}
 					${r.closed_by ? " · " + __("closed by {0}", [esc((r.closed_by || "").split("@")[0])]) + " " + esc((r.closed_on || "").slice(0, 16)) : ""}</div>
@@ -106,19 +105,18 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 	let rfBusy = false; // guard: a double Enter / double click must not file twice
 	root.on("click", ".rf-submit", () => {
 		if (rfBusy) return;
-		const title = (root.find(".rf-title").val() || "").trim();
-		if (!title) return frappe.show_alert({ message: __("Give the request a title."), indicator: "orange" }, 3);
+		const text = (root.find(".rf-desc").val() || "").trim();
+		if (!text) return frappe.show_alert({ message: __("Write your request."), indicator: "orange" }, 3);
 		rfBusy = true;
 		root.find(".rf-submit").prop("disabled", true);
 		frappe.dom.freeze(__("Submitting…"));
 		frappe.call({ method: API + ".submit_feature_request", args: {
-			title, description: root.find(".rf-desc").val() || "", category: root.find(".rf-cat-in").val(),
+			description: text, category: root.find(".rf-cat-in").val(),
 		} }).then((r) => {
 			frappe.dom.unfreeze();
 			rfBusy = false;
 			root.find(".rf-submit").prop("disabled", false);
 			frappe.show_alert({ message: __("Request {0} raised — status Open.", [r.message.name]), indicator: "green" }, 5);
-			root.find(".rf-title").val("");
 			root.find(".rf-desc").val("");
 			load();
 		}).catch(() => {

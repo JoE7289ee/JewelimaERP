@@ -3229,7 +3229,10 @@ def get_stone_issue_card(barcode):
 		return {"error": "not_found", "card": nm or "?",
 			"message": frappe._("Card {0} does not exist — check the number and scan again.").format(nm or "?")}
 	bag = frappe.get_doc("Order Bag", nm)
-	if not cint(bag.get("stone_issue")):
+	# a PRE-BAGGED card can be issued directly even though it was never formally
+	# requested into the queue (pre-bag is the parallel, ahead-of-queue track).
+	is_prebagged = frappe.db.exists("Pre Bag Record", nm)
+	if not cint(bag.get("stone_issue")) and not is_prebagged:
 		return {"error": "not_requested", "card": nm,
 			"message": frappe._("{0} is not marked for stone issue — request it first (Stone Request or the bench's Request Stones).").format(nm)}
 	if bag.is_finished or bag.stock_status != "In Production":
@@ -3277,6 +3280,8 @@ def get_stone_issue_card(barcode):
 		"location": bag.location or "", "warehouse": wh,
 		"design_type": (frappe.db.get_value("Design", bag.design, "design_type") if bag.design else "") or "",
 		"lines": lines,
+		"pre_bag": get_prebag_for_card(nm),
+		"in_queue": cint(bag.get("stone_issue")),
 	}
 
 
@@ -3459,6 +3464,7 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 		_clear_stone_issue(order_bag)
 		if frappe.db.get_value("Order Bag", order_bag, "stone_oos"):
 			clear_stone_oos(order_bag)
+	_prebag_after_issue(order_bag)  # keep any Pre Bag record's issued/fully-issued in sync
 	frappe.db.commit()
 	out["material_issue"] = mi.name
 	out["fully_issued"] = 1 if full else 0
@@ -13035,6 +13041,7 @@ def get_card_passport(order_bag):
 		"transfers": transfers,
 		"stages": stages,
 		"issues": issue_rows,
+		"pre_bag": get_prebag_for_card(order_bag),
 		"today": frappe.utils.nowdate(),
 	}
 
@@ -13430,14 +13437,21 @@ def _is_feature_admin():
 
 
 @frappe.whitelist()
-def submit_feature_request(title, description=None, category=None):
-	"""Raise a feature request — born Open, stamped with who + when."""
+def submit_feature_request(title=None, description=None, category=None):
+	"""Raise a feature request — born Open, stamped with who + when. The form is now
+	a single free-text box (stored as `description`, no length limit); the `title`
+	is just a short heading derived from that text for the list."""
+	description = (description or "").strip()
 	title = (title or "").strip()
+	if not description and not title:
+		frappe.throw(frappe._("Write your request."))
 	if not title:
-		frappe.throw(frappe._("Give the request a title."))
+		first = next((ln.strip() for ln in description.splitlines() if ln.strip()), "")
+		src = first or description
+		title = (src[:117] + "…") if len(src) > 118 else src
 	d = frappe.get_doc({
-		"doctype": "Feature Request", "title": title,
-		"description": (description or "").strip(),
+		"doctype": "Feature Request", "title": title or "Request",
+		"description": description,
 		"category": category if category in ("Feature", "Improvement", "Bug", "Other") else "Feature",
 		"status": "Open", "requested_by": frappe.session.user,
 		"requested_on": frappe.utils.now_datetime(),
@@ -13632,3 +13646,331 @@ def set_bench_employee(bench, employee, add=1):
 	doc.save()
 	frappe.db.commit()
 	return {"ok": 1, "count": len(doc.employees)}
+
+
+# ============================ Pre-Bag ========================================
+# Bagging stones for orders BEFORE they reach the Stone Issue queue. A Pre Bag
+# is one record per card (name == order bag). It NEVER moves stock — it's a
+# plan/label; real deduction still happens at Stone Issue. Pre-bagged cards
+# stay OUT of the queue (stone_issue untouched); Stone Issue surfaces them via
+# a separate button and recognises them on scan.
+
+def _prebag_card_image(order_bag=None, design=None):
+	"""Best product photo for a card: the bag's held image, else the design bank photo."""
+	if order_bag:
+		img = frappe.db.get_value("Order Bag", order_bag, "image")
+		if img:
+			return img
+	if design:
+		dbk = frappe.db.get_value("Design", design, "design_bank")
+		if dbk:
+			row = frappe.db.get_value("Design Bank", dbk, ["photo", "image"], as_dict=True) or {}
+			return row.get("photo") or row.get("image") or ""
+	return ""
+
+
+def _card_stone_bom(order_bag):
+	"""A card's STONE BOM lines (metals excluded): [{item, stone_type, bucket, plan_pcs, plan_ct}]."""
+	bag = frappe.get_doc("Order Bag", order_bag)
+	q = bag.qty or 1
+	out = []
+	for r in bag.bag_bom:
+		st = frappe.db.get_value("Item", r.item, "stone_type")
+		if not st:
+			continue
+		out.append({"item": r.item, "stone_type": st,
+			"bucket": (_BUCKET_OF_STONE_TYPE.get(st) or "poth").upper(),
+			"plan_pcs": int(flt(r.qty) * q), "plan_ct": round(flt(r.weight) * q, 3)})
+	return out
+
+
+def _card_issued_map(order_bag):
+	"""Stones already issued into a card through the Stone Issue station, per item."""
+	issued = {}
+	for r in frappe.get_all("Bag Material Ledger",
+			filters={"order_bag": order_bag, "entry_type": "Stone Issue"},
+			fields=["item", "qty", "pcs", "direction"]):
+		sign = 1 if (r.direction or "In") == "In" else -1
+		e = issued.setdefault(r.item, {"ct": 0.0, "pcs": 0})
+		e["ct"] += sign * flt(r.qty)
+		e["pcs"] += sign * int(r.pcs or 0)
+	return issued
+
+
+def _stone_avail_ct(item):
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+	return flt(frappe.db.get_value("Bin",
+		{"item_code": item, "warehouse": _wh(STONE_ISSUE_WAREHOUSE)}, "actual_qty"))
+
+
+def _prebag_set_status(doc):
+	"""Pending = set for pre-issue, nothing bagged yet. Complete = the WHOLE card
+	(every stone BOM line) is fully bagged. Otherwise Partial."""
+	bom = _card_stone_bom(doc.order_bag)
+	pb = {r.item: int(r.prebagged_pcs or 0) for r in doc.lines}
+	if sum(pb.values()) <= 0:
+		doc.status = "Pending"
+	elif bom and all(pb.get(b["item"], 0) >= b["plan_pcs"] for b in bom if b["plan_pcs"] > 0):
+		doc.status = "Complete"
+	else:
+		doc.status = "Partial"
+
+
+def _prebag_after_issue(order_bag):
+	"""After a Stone Issue, refresh a card's Pre Bag issued figures + fully-issued flag."""
+	if not frappe.db.exists("Pre Bag Record", order_bag):
+		return
+	doc = frappe.get_doc("Pre Bag Record", order_bag)
+	issued = _card_issued_map(order_bag)
+	for r in doc.lines:
+		g = issued.get(r.item, {"pcs": 0, "ct": 0.0})
+		r.issued_pcs = int(g["pcs"])
+		r.issued_ct = round(g["ct"], 3)
+	bom = {b["item"]: b for b in _card_stone_bom(order_bag)}
+	fully = bool(doc.lines) and all(
+		int(r.issued_pcs or 0) >= (bom.get(r.item, {}).get("plan_pcs") or 0) for r in doc.lines)
+	doc.fully_issued = 1 if fully else 0
+	doc.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def get_prebag_for_card(order_bag):
+	"""Pre-bag summary for a card (Card Info + Stone Issue). {exists:0} when none."""
+	if not order_bag or not frappe.db.exists("Pre Bag Record", order_bag):
+		return {"exists": 0}
+	doc = frappe.get_doc("Pre Bag Record", order_bag)
+	lines = [{"item": r.item, "stone_type": r.stone_type, "bucket": r.bucket,
+		"needed_pcs": r.needed_pcs, "needed_ct": r.needed_ct,
+		"prebagged_pcs": r.prebagged_pcs, "prebagged_ct": r.prebagged_ct,
+		"issued_pcs": r.issued_pcs, "bag": r.bag} for r in doc.lines]
+	bags = sorted({(r.bag or "").strip() for r in doc.lines if (r.bag or "").strip()})
+	return {"exists": 1, "status": doc.status, "fully_issued": cint(doc.fully_issued),
+		"design": doc.design, "bags": bags, "lines": lines}
+
+
+@frappe.whitelist()
+def get_prebag_buckets():
+	"""Bucket picker: each stone bucket + how many not-yet-queued cards still need it."""
+	bags = frappe.get_all("Order Bag",
+		filters={"stone_issue": 0, "is_finished": 0, "stock_status": "In Production"}, pluck="name")
+	counts = {}
+	if bags:
+		seen = {}
+		for r in frappe.db.sql("""
+			SELECT bbi.parent bag, it.stone_type
+			FROM `tabOrder Bag BOM Item` bbi JOIN `tabItem` it ON it.name = bbi.item
+			WHERE bbi.parent IN %(bags)s AND IFNULL(it.stone_type, '') != ''
+		""", {"bags": tuple(bags)}, as_dict=True):
+			bk = (_BUCKET_OF_STONE_TYPE.get(r.stone_type) or "poth").upper()
+			seen.setdefault(bk, set()).add(r.bag)
+		counts = {k: len(v) for k, v in seen.items()}
+	order = ["DMD", "PS", "CS", "CZ", "CVD", "SW", "PDMD", "POTH"]
+	return [{"bucket": b, "count": counts.get(b, 0)} for b in order if counts.get(b, 0)]
+
+
+@frappe.whitelist()
+def get_prebag_candidates(bucket):
+	"""Cards needing this bucket that are NOT yet in the Stone Issue queue, with their
+	bucket stone lines, existing pre-bag state, live stone stock and product photo."""
+	bk = (bucket or "").strip().upper()
+	stone_types = [k for k, v in _BUCKET_OF_STONE_TYPE.items() if v.upper() == bk]
+	if not stone_types:
+		return []
+	bags = frappe.get_all("Order Bag",
+		filters={"stone_issue": 0, "is_finished": 0, "stock_status": "In Production"},
+		fields=["name", "design", "qty", "image", "job_order"], order_by="name")
+	if not bags:
+		return []
+	names = [b.name for b in bags]
+	rows = frappe.db.sql("""
+		SELECT bbi.parent bag, bbi.item, bbi.qty, bbi.weight, it.stone_type
+		FROM `tabOrder Bag BOM Item` bbi JOIN `tabItem` it ON it.name = bbi.item
+		WHERE bbi.parent IN %(bags)s AND it.stone_type IN %(sts)s
+	""", {"bags": tuple(names), "sts": tuple(stone_types)}, as_dict=True)
+	if not rows:
+		return []
+	bybag = {}
+	for r in rows:
+		bybag.setdefault(r.bag, []).append(r)
+	qmap = {b.name: (b.qty or 1) for b in bags}
+	pre = {}
+	for pl in frappe.get_all("Pre Bag Line",
+			filters={"parent": ["in", list(bybag.keys())], "bucket": bk},
+			fields=["parent", "item", "prebagged_pcs", "prebagged_ct", "bag"]):
+		pre.setdefault(pl.parent, {})[pl.item] = pl
+	out = []
+	for b in bags:
+		rs = bybag.get(b.name)
+		if not rs:
+			continue
+		q = qmap[b.name]
+		issued = _card_issued_map(b.name)
+		items = []
+		need_pcs = 0
+		need_ct = pb_ct = 0.0
+		pb_pcs = 0
+		for r in rs:
+			plan_pcs = int(flt(r.qty) * q)
+			plan_ct = round(flt(r.weight) * q, 3)
+			got = issued.get(r.item, {"pcs": 0, "ct": 0.0})
+			pl = pre.get(b.name, {}).get(r.item)
+			items.append({"item": r.item, "stone_type": r.stone_type,
+				"plan_pcs": plan_pcs, "plan_ct": plan_ct,
+				"issued_pcs": int(got["pcs"]), "issued_ct": round(got["ct"], 3),
+				"prebagged_pcs": int(pl.prebagged_pcs) if pl else 0,
+				"prebagged_ct": round(flt(pl.prebagged_ct), 3) if pl else 0.0,
+				"bag": (pl.bag if pl else ""),
+				"available_ct": _stone_avail_ct(r.item)})
+			need_pcs += plan_pcs
+			need_ct += plan_ct
+			if pl:
+				pb_pcs += int(pl.prebagged_pcs or 0)
+				pb_ct += flt(pl.prebagged_ct or 0)
+		is_set = b.name in pre  # a Pre Bag Line for this bucket exists = set for pre-issue
+		state = ("full" if need_pcs and pb_pcs >= need_pcs else "partial") if pb_pcs > 0 else ("set" if is_set else "none")
+		out.append({"order_bag": b.name, "design": b.design or "", "job_order": b.job_order or "",
+			"qty": q, "image": _prebag_card_image(b.name, b.design),
+			"need_pcs": need_pcs, "need_ct": round(need_ct, 3),
+			"prebagged_pcs": pb_pcs, "prebagged_ct": round(pb_ct, 3),
+			"is_set": 1 if is_set else 0, "state": state, "items": items})
+	return out
+
+
+@frappe.whitelist()
+def set_prebag(order_bag, bucket):
+	"""Step 1 — SET a card for pre-issue for a bucket: create the Pre Bag Record and
+	that bucket's stone lines (nothing bagged yet, status Pending). Idempotent. No stock."""
+	bk = (bucket or "").strip().upper()
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("No card {0}.").format(order_bag))
+	ob = frappe.db.get_value("Order Bag", order_bag, ["is_finished", "stock_status", "design", "stone_issue"], as_dict=True)
+	if ob.is_finished or ob.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is not on the floor.").format(order_bag))
+	if cint(ob.stone_issue):
+		frappe.throw(frappe._("{0} is already in the Stone Issue queue.").format(order_bag))
+	bom = [r for r in _card_stone_bom(order_bag) if r["bucket"] == bk]
+	if not bom:
+		frappe.throw(frappe._("{0} has no {1} stones on its BOM.").format(order_bag, bk))
+	existed = frappe.db.exists("Pre Bag Record", order_bag)
+	doc = frappe.get_doc("Pre Bag Record", order_bag) if existed else frappe.new_doc("Pre Bag Record")
+	if not existed:
+		doc.order_bag = order_bag
+	doc.design = ob.design or ""
+	for b in bom:
+		row = next((x for x in doc.lines if x.item == b["item"]), None)
+		if not row:
+			row = doc.append("lines", {"item": b["item"], "prebagged_pcs": 0, "prebagged_ct": 0})
+		row.stone_type = b["stone_type"]
+		row.bucket = b["bucket"]
+		row.needed_pcs = b["plan_pcs"]
+		row.needed_ct = b["plan_ct"]
+	_prebag_set_status(doc)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"set": 1, "status": doc.status, "order_bag": order_bag}
+
+
+@frappe.whitelist()
+def unset_prebag(order_bag, bucket):
+	"""Un-set a bucket for a card: drop its lines that carry nothing bagged. Deletes
+	the whole record if nothing remains."""
+	bk = (bucket or "").strip().upper()
+	if not frappe.db.exists("Pre Bag Record", order_bag):
+		return {"set": 0}
+	doc = frappe.get_doc("Pre Bag Record", order_bag)
+	doc.set("lines", [r for r in doc.lines
+		if not (r.bucket == bk and int(r.prebagged_pcs or 0) <= 0 and flt(r.prebagged_ct or 0) <= 0)])
+	if not doc.lines:
+		frappe.delete_doc("Pre Bag Record", order_bag, ignore_permissions=True, force=True)
+		frappe.db.commit()
+		return {"set": 0}
+	_prebag_set_status(doc)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"set": 1, "status": doc.status}
+
+
+@frappe.whitelist()
+def get_prebag_scan(order_bag):
+	"""Step 2 — the scan-to-bag station: a SET card's pre-bag lines with needed/bagged
+	pcs+ct and live stone stock, so the issuer enters what they physically bagged."""
+	nm = (order_bag or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		return {"error": "not_found", "card": nm or "?", "message": frappe._("No card {0}.").format(nm or "?")}
+	if not frappe.db.exists("Pre Bag Record", nm):
+		return {"error": "not_set", "card": nm, "message": frappe._("{0} isn't set for pre-issue yet — set it first.").format(nm)}
+	ob = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status", "design", "location"], as_dict=True)
+	if ob.is_finished or ob.stock_status != "In Production":
+		return {"error": "status", "card": nm, "message": frappe._("{0} is not on the floor anymore.").format(nm)}
+	doc = frappe.get_doc("Pre Bag Record", nm)
+	lines = [{"item": r.item, "stone_type": r.stone_type, "bucket": r.bucket,
+		"needed_pcs": r.needed_pcs, "needed_ct": r.needed_ct,
+		"prebagged_pcs": r.prebagged_pcs, "prebagged_ct": r.prebagged_ct,
+		"bag": r.bag or "", "available_ct": _stone_avail_ct(r.item)} for r in doc.lines]
+	return {"order_bag": nm, "design": ob.design or "", "location": ob.location or "",
+		"status": doc.status, "lines": lines}
+
+
+@frappe.whitelist()
+def save_prebag(order_bag, lines, bag=None):
+	"""Step 2 — BAG: set how many pieces + carats of each stone are physically bagged
+	for a SET card, and into which storage bag. NEVER touches stock. Passed pcs/ct are
+	the new totals per item. The card must already be set for pre-issue."""
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("No card {0}.").format(order_bag))
+	if not frappe.db.exists("Pre Bag Record", order_bag):
+		frappe.throw(frappe._("{0} isn't set for pre-issue yet — set it first.").format(order_bag))
+	ob = frappe.db.get_value("Order Bag", order_bag, ["is_finished", "stock_status", "design"], as_dict=True)
+	if ob.is_finished or ob.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is not on the floor — can't pre-bag it.").format(order_bag))
+	bom = {r["item"]: r for r in _card_stone_bom(order_bag)}
+	doc = frappe.get_doc("Pre Bag Record", order_bag)
+	doc.design = ob.design or ""
+	now = frappe.utils.now()
+	who = frappe.session.user
+	for ln in lines:
+		item = ln.get("item")
+		if not item or item not in bom:
+			continue
+		pcs = max(int(ln.get("pcs") or 0), 0)
+		ct = max(flt(ln.get("ct") or 0), 0)
+		row = next((x for x in doc.lines if x.item == item), None)
+		if not row:
+			row = doc.append("lines", {"item": item})
+		b = bom[item]
+		row.stone_type = b["stone_type"]
+		row.bucket = b["bucket"]
+		row.needed_pcs = b["plan_pcs"]
+		row.needed_ct = b["plan_ct"]
+		row.prebagged_pcs = pcs
+		row.prebagged_ct = ct
+		if bag:
+			row.bag = bag
+		row.prebagged_on = now
+		row.prebagged_by = who
+	_prebag_set_status(doc)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"status": doc.status, "order_bag": order_bag}
+
+
+@frappe.whitelist()
+def get_prebagged_for_issue():
+	"""Pre-bagged cards still owing stones — the Stone Issue 'Pre-bagged' button list."""
+	out = []
+	for d in frappe.get_all("Pre Bag Record", filters={"fully_issued": 0},
+			fields=["order_bag", "design", "status"], order_by="modified desc"):
+		ob = frappe.db.get_value("Order Bag", d.order_bag, ["is_finished", "stock_status"], as_dict=True)
+		if not ob or ob.is_finished or ob.stock_status != "In Production":
+			continue
+		lines = frappe.get_all("Pre Bag Line", filters={"parent": d.order_bag},
+			fields=["bucket", "prebagged_pcs", "prebagged_ct", "bag"])
+		bags = sorted({(l.bag or "").strip() for l in lines if (l.bag or "").strip()})
+		buckets = sorted({l.bucket for l in lines if l.bucket})
+		out.append({"order_bag": d.order_bag, "design": d.design, "status": d.status,
+			"bags": bags, "buckets": buckets,
+			"pcs": sum(int(l.prebagged_pcs or 0) for l in lines),
+			"ct": round(sum(flt(l.prebagged_ct or 0) for l in lines), 3)})
+	return {"count": len(out), "cards": out}

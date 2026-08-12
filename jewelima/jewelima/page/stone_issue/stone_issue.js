@@ -59,6 +59,8 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-callout{display:none;border:2px solid;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:14px;font-weight:600;}
 		.si-callout.warn{border-color:#e67e22;background:rgba(230,126,34,.08);color:#b35a00;}
 		.si-callout.bad{border-color:#c0392b;background:rgba(192,57,43,.08);color:#a02618;}
+		.si-prebag{display:none;border:1px solid #1d7a33;background:rgba(29,122,51,.08);color:#14682b;border-radius:8px;padding:9px 14px;margin-bottom:12px;font-size:13.5px;font-weight:600;}
+		.si-prebag b{color:#0f5220;}
 		.si-hist td{padding:4px 12px;border-top:1px solid var(--border-color);font-size:12px;}
 		.si-hist .hb{display:inline-block;border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#fff;}
 		.si-hist .hb.ok{background:#2e7d32;}.si-hist .hb.sold{background:#c0392b;}
@@ -72,6 +74,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			<div class="si-main">
 				<div class="si-scan"><div class="si-scan-box"></div><div class="si-by-box"></div><button class="btn btn-default si-clear">${__("Clear")}</button></div>
 				<div class="si-callout"></div>
+				<div class="si-prebag"></div>
 				<div class="si-head">
 					<div><div class="k">${__("Card")}</div><div class="v si-bag"></div></div>
 					<div><div class="k">${__("Design")}</div><div class="v si-design"></div></div>
@@ -243,7 +246,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		S.card = null;
 		scan.set_value("");
 		paintStock();
-		root.find(".si-head, table.si-grid, .si-foot, .si-strip, .si-callout").hide();
+		root.find(".si-head, table.si-grid, .si-foot, .si-strip, .si-callout, .si-prebag").hide();
 		scan.$input.focus();
 	}
 	root.find(".si-clear").on("click", clearAll);
@@ -269,7 +272,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	}
 	function hideCard() {
 		S.card = null;
-		root.find(".si-head, table.si-grid, .si-foot, .si-strip").hide();
+		root.find(".si-head, table.si-grid, .si-foot, .si-strip, .si-prebag").hide();
 	}
 
 	function loadCard(nm) {
@@ -325,6 +328,13 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 				<td><input type="number" class="si-pcs" min="0" step="1" placeholder="0"></td>
 				<td><input type="number" class="si-ct" min="0" step="0.001" placeholder="0.000"></td>
 			</tr>`).join(""));
+		const pbi = c.pre_bag || {};
+		const $pb = root.find(".si-prebag");
+		if (pbi.exists) {
+			$pb.html(`💎 <b>${__("ALREADY PRE-BAGGED")}</b>${pbi.status === "Partial" ? " (" + __("partial") + ")" : ""}${(pbi.bags || []).length ? " &middot; " + __("stored in bag") + " <b>" + esc(pbi.bags.join(", ")) + "</b>" : ""}${!c.in_queue ? " &middot; " + __("not in the queue — issue it straight from here") : ""}`).show();
+		} else {
+			$pb.hide();
+		}
 		root.find(".si-head").css("display", "flex");
 		root.find("table.si-grid").show();
 		root.find(".si-foot").css("display", "flex");
@@ -431,6 +441,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 				paint();
 				refreshToday();
 				refreshStock();
+				refreshPrebagCount();
 			})
 			.catch(() => { frappe.dom.unfreeze(); siBusy = false; });
 	});
@@ -438,6 +449,44 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	clearAll();
 	refreshStock();
 	loadContext();
+
+	// pre-bagged cards: a parallel, ahead-of-queue track. Show the count and let the
+	// issuer open one straight into the form (they're not in the normal queue).
+	const prebagBtn = page.add_inner_button(__("Pre-bagged"), showPrebagged);
+	function refreshPrebagCount() {
+		frappe.call({ method: API + ".get_prebagged_for_issue" }).then((r) => {
+			const n = (r.message || {}).count || 0;
+			prebagBtn.text(n ? __("Pre-bagged ({0})", [n]) : __("Pre-bagged"));
+		});
+	}
+	function showPrebagged() {
+		frappe.call({ method: API + ".get_prebagged_for_issue" }).then((r) => {
+			const cards = ((r.message || {}).cards) || [];
+			const dlg = new frappe.ui.Dialog({ title: __("Pre-bagged — ready to issue"), size: "large" });
+			$(dlg.body).html(cards.length ? `
+				<div style="border:1px solid var(--border-color);border-radius:10px;overflow:auto;max-height:62vh;">
+				<table class="table" style="font-size:13px;margin:0;">
+					<thead><tr><th>${__("Order ID")}</th><th>${__("Design")}</th><th>${__("Buckets")}</th><th>${__("Bag")}</th><th>${__("Pre-bagged")}</th><th>${__("State")}</th></tr></thead>
+					<tbody>${cards.map((c) => `<tr class="pbq-row" data-nm="${frappe.utils.escape_html(c.order_bag)}" style="cursor:pointer;">
+						<td><b style="font-family:var(--font-family-monospace,monospace);color:#1f618d;">${frappe.utils.escape_html(c.order_bag)}</b></td>
+						<td>${frappe.utils.escape_html(c.design || "")}</td>
+						<td>${frappe.utils.escape_html((c.buckets || []).join(", "))}</td>
+						<td>${frappe.utils.escape_html((c.bags || []).join(", "))}</td>
+						<td>${c.pcs} pc · ${(c.ct || 0).toFixed ? c.ct.toFixed(3) : c.ct} ct</td>
+						<td>${frappe.utils.escape_html(c.status || "")}</td></tr>`).join("")}</tbody>
+				</table></div>
+				<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">${__("Click a card to open it here and issue.")}</div>`
+				: `<div style="padding:26px;text-align:center;color:var(--text-muted);">${__("Nothing pre-bagged right now.")}</div>`);
+			$(dlg.body).find(".pbq-row").on("click", function () {
+				const nm = this.getAttribute("data-nm");
+				dlg.hide();
+				scan.set_value(nm);
+				loadCard(nm);
+			});
+			dlg.show();
+		});
+	}
+	refreshPrebagCount();
 
 	page.add_inner_button(__("Out of Stock"), () => {
 		if (!S.card || !S.card.order_bag) {

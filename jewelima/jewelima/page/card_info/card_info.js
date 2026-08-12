@@ -252,6 +252,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 				<div class="ci-code">${esc(b.name)}</div>
 				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item && b.item !== b.design ? " &middot; " + esc(b.item) : ""}</div>
 				<span class="ci-badge ${finished ? "prod" : flt(b.act_gross_weight) ? "wip" : "pre"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : flt(b.act_gross_weight) ? "IN PRODUCTION" : "IN PREPRODUCTION"}</span>
+				${d.pre_bag && d.pre_bag.exists ? `<span class="ci-badge prod" title="${__("Stones pre-bagged")}" style="background:#e3f0e6;color:#1d7a33;">💎 ${d.pre_bag.fully_issued ? __("PRE-BAGGED &mdash; issued") : __("STONES PRE-BAGGED")}${d.pre_bag.status === "Partial" ? " (" + __("partial") + ")" : ""}${(d.pre_bag.bags || []).length ? " &middot; " + __("bag") + " " + esc(d.pre_bag.bags.join(", ")) : ""}</span>` : ""}
 			</div>
 			<div class="ci-photo">${img}${!forPrint && b.due_date ? dueChip(b.due_date, d.today) : ""}</div>
 			<div class="ci-loc">Location${hasLoc ? `<b><a class="ci-loc-link" data-loc="${esc(b.location)}">${esc(b.location)}</a></b>` : `<b>${esc(b.location || "—")}</b>`}${locStat ? `<div class="ci-locstat">${esc(locStat)}</div>` : ""}</div>
