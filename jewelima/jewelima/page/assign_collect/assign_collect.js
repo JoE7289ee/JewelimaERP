@@ -13,7 +13,7 @@
 
 frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Assign / Collect", single_column: true });
-	const ALLOWED = ["CAD", "WAXING", "WAX CLEANING"];
+	const ALLOWED = ["CAD", "WAXING", "WAX SETTING", "WAX CLEANING"];
 	const state = { mode: "assign", rows: [], location: null, history: [] };
 
 	$(page.main).append(`

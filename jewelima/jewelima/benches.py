@@ -48,7 +48,7 @@ ISSUE_RECEIPT_LOCATIONS = {"GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL
 
 
 # Transfer benches that use the lighter Assign / Collect flow (times only — no weight/loss).
-ASSIGN_COLLECT_LOCATIONS = {"CAD", "WAXING", "WAX CLEANING"}
+ASSIGN_COLLECT_LOCATIONS = {"CAD", "WAXING", "WAX SETTING", "WAX CLEANING"}
 
 
 def bench_doctype(location):
