@@ -395,7 +395,8 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 	// issue/assign a waiting card — same backend as the global pages, bench-pinned
 	root.on("click", ".wk-issue", function () {
 		const nm = $(this).data("name");
-		const flds = [{ fieldname: "emp", fieldtype: "Link", label: __("Employee"), options: "Employee", reqd: 1 }];
+		const flds = [{ fieldname: "emp", fieldtype: "Link", label: __("Employee"), options: "Employee", reqd: 1,
+			get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench } }) }];
 		if ((D.work_types || []).length) {
 			flds.push({ fieldname: "wt", fieldtype: "Select", label: __("Type of work"),
 				options: D.work_types.join("\n"), default: D.default_work_type || D.work_types[0], reqd: 1 });
