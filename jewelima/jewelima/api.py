@@ -6007,6 +6007,7 @@ def get_bench_workstation(bench):
 		"flow": "weights" if bench in _irl else "light",
 		"can_act": can_act,
 		"work_types": opts["work_types"], "collection_states": opts["collection_states"],
+		"default_work_type": opts.get("default_work_type"),
 		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
 			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual",
 			"stones_ok", "stones_pending", "stone_requested")} for r in waiting],
@@ -6899,11 +6900,13 @@ def get_bench_work_options(location):
 	the pages then skip the picker."""
 	loc = (location or "").upper()
 	rows = frappe.get_all("Bench Work Option", filters={"bench": loc},
-		fields=["name", "kind", "value"], order_by="creation")
+		fields=["name", "kind", "value", "is_default"], order_by="creation")
+	wts = [r for r in rows if r.kind == "Work Type"]
 	return {
-		"work_types": [r.value for r in rows if r.kind == "Work Type"],
+		"work_types": [r.value for r in wts],
 		"collection_states": [r.value for r in rows if r.kind == "Collection State"],
 		"queue_reasons": [r.value for r in rows if r.kind == "Queue Reason"],
+		"default_work_type": next((r.value for r in wts if r.is_default), wts[0].value if wts else None),
 	}
 
 
@@ -7016,10 +7019,23 @@ def bench_work_option_delete(name):
 	return {"deleted": d.value}
 
 
-def _valid_bench_option(location, kind, value):
-	"""A picked option must actually be configured for THIS bench (or blank)."""
-	if not value:
+def _bench_default_work_type(location):
+	"""The bench's default Work Type (is_default), else the first configured, else None."""
+	rows = frappe.get_all("Bench Work Option",
+		filters={"bench": (location or "").upper(), "kind": "Work Type"},
+		fields=["value", "is_default"], order_by="creation")
+	if not rows:
 		return None
+	return next((r.value for r in rows if r.is_default), rows[0].value)
+
+
+def _valid_bench_option(location, kind, value):
+	"""A picked option must actually be configured for THIS bench. A blank Work Type
+	falls back to the bench's DEFAULT — empty issues aren't allowed where work types
+	are set (CAM/ORDERING/TREE MAKING/CASTING have none, so they simply stay blank)."""
+	value = (value or "").strip()
+	if not value:
+		return _bench_default_work_type(location) if kind == "Work Type" else None
 	if not frappe.db.exists("Bench Work Option", {"bench": (location or "").upper(), "kind": kind, "value": value}):
 		frappe.throw(frappe._("'{0}' is not a configured {1} for {2}.").format(value, kind, location))
 	return value

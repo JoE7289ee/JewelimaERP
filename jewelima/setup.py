@@ -39,6 +39,7 @@ def after_install():
 	drop_retired_pages()
 	setup_roles()
 	seed_benches()
+	seed_bench_work_options()
 	seed_sieve_chart()
 	# bench rosters ship in data/bench_employees.csv — restore them so a refresh
 	# doesn't lose the team's allotments (never blocks install/migrate)
@@ -88,6 +89,7 @@ def after_migrate():
 	drop_retired_pages()
 	setup_roles()
 	seed_benches()
+	seed_bench_work_options()
 	seed_sieve_chart()
 	# bench rosters ship in data/bench_employees.csv — restore them so a refresh
 	# doesn't lose the team's allotments (never blocks install/migrate)
@@ -640,6 +642,70 @@ def seed_benches():
 		refresh_all_rosters()
 	except Exception:
 		pass
+	frappe.db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Bench Work Options — Work Types (first = default), Queue Reasons, Collection
+# States — seeded on install/migrate. CAM / ORDERING / TREE MAKING / CASTING are
+# deliberately left out (no work-type picker there). Any configured bench not in
+# BENCH_WORK_TYPES falls back to its own name as the sole default work type.
+# ---------------------------------------------------------------------------
+BENCH_WORK_TYPES = {   # first entry is the DEFAULT (used when none is picked)
+	"CAD": ["CAD", "Rework", "Sizing"],
+	"WAXING": ["Wax Injecting", "Dye Cutting"],
+	"WAX SETTING": ["Wax Setting"],
+	"WAX CLEANING": ["Wax Cleaning", "Sizing"],
+	"GRINDING": ["Grinding"],
+	"FILING": ["Filing"],
+	"SETTING": ["Setting", "Cupping", "Hand Setting"],
+	"PRE POLISH": ["Pre Polish"],
+	"FINAL POLISH": ["Final Polish", "Rhodium", "Coloring"],
+	"BAG EXTRACTION": ["Bag Extraction"],
+}
+BENCH_QUEUE_REASONS = {"WAXING": ["Dye Not Found", "Dye Damaged"]}
+# every configured bench gets these three collection states (value -> disposition)
+BENCH_COLLECTION_STATES = [
+	("Completed", "Ready to Transfer"),
+	("Re-Assign", "Back to In Queue"),
+	("Partial", "Back to In Queue"),
+]
+BENCH_WORK_EXCLUDE = {"CAM", "ORDERING", "TREE MAKING", "CASTING"}
+
+
+def seed_bench_work_options():
+	"""Install the standard Work Types / Queue Reasons / Collection States per bench.
+	Idempotent: upserts by (bench, kind, value); enforces exactly one default Work
+	Type per bench and the right disposition on each Collection State."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	def upsert(bench, kind, value, *, is_default=0, disposition=None):
+		nm = frappe.db.exists("Bench Work Option", {"bench": bench, "kind": kind, "value": value})
+		doc = frappe.get_doc("Bench Work Option", nm) if nm else frappe.new_doc("Bench Work Option")
+		doc.bench, doc.kind, doc.value = bench, kind, value
+		if kind == "Work Type":
+			doc.is_default = is_default
+		if kind == "Collection State" and disposition:
+			doc.disposition = disposition
+		doc.save(ignore_permissions=True)
+
+	for bench, name in BENCH_DOCTYPE.items():
+		if bench in BENCH_WORK_EXCLUDE:
+			continue
+		# work types (bench's own name as sole default when not explicitly listed)
+		wts = BENCH_WORK_TYPES.get(bench) or [name]
+		for i, wt in enumerate(wts):
+			upsert(bench, "Work Type", wt, is_default=1 if i == 0 else 0)
+		# exactly one default: clear it on any OTHER work type of this bench
+		for other in frappe.get_all("Bench Work Option",
+				filters={"bench": bench, "kind": "Work Type", "value": ["not in", wts]}, pluck="name"):
+			frappe.db.set_value("Bench Work Option", other, "is_default", 0)
+		# queue reasons
+		for qr in BENCH_QUEUE_REASONS.get(bench, []):
+			upsert(bench, "Queue Reason", qr)
+		# collection states (same three everywhere)
+		for value, disp in BENCH_COLLECTION_STATES:
+			upsert(bench, "Collection State", value, disposition=disp)
 	frappe.db.commit()
 
 

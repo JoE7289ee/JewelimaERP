@@ -86,7 +86,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		if (!state.location) { state.workOpts = { work_types: [], collection_states: [] }; toggleWorkPickers(); return; }
 		frappe.call({ method: "jewelima.jewelima.api.get_bench_work_options", args: { location: state.location } }).then((r) => {
 			state.workOpts = r.message || { work_types: [], collection_states: [] };
-			state.work.df.options = [""].concat(state.workOpts.work_types).join("\n"); state.work.refresh();
+			state.work.df.options = state.workOpts.work_types.join("\n"); state.work.refresh();
+			if (state.workOpts.default_work_type) state.work.set_value(state.workOpts.default_work_type);
 			state.cstate.df.options = [""].concat(state.workOpts.collection_states).join("\n"); state.cstate.refresh();
 			toggleWorkPickers();
 		});

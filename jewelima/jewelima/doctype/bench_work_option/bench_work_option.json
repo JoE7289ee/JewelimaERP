@@ -10,6 +10,7 @@
   "bench",
   "kind",
   "value",
+  "is_default",
   "disposition"
  ],
  "fields": [
@@ -36,6 +37,15 @@
    "in_list_view": 1,
    "label": "Value",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.kind=='Work Type'",
+   "description": "The default Work Type used when a card is issued without one picked.",
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default"
   },
   {
    "default": "Ready to Transfer",

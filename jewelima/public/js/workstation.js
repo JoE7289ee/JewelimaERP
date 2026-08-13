@@ -398,7 +398,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 		const flds = [{ fieldname: "emp", fieldtype: "Link", label: __("Employee"), options: "Employee", reqd: 1 }];
 		if ((D.work_types || []).length) {
 			flds.push({ fieldname: "wt", fieldtype: "Select", label: __("Type of work"),
-				options: [""].concat(D.work_types).join("\n") });
+				options: D.work_types.join("\n"), default: D.default_work_type || D.work_types[0], reqd: 1 });
 		}
 		frappe.prompt(flds, (v) => {
 			frappe.call({ method: API + ".ws_issue_cards", args: {
