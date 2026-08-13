@@ -679,15 +679,18 @@ def seed_bench_work_options():
 	Type per bench and the right disposition on each Collection State."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
-	def upsert(bench, kind, value, *, is_default=0, disposition=None):
-		nm = frappe.db.exists("Bench Work Option", {"bench": bench, "kind": kind, "value": value})
-		doc = frappe.get_doc("Bench Work Option", nm) if nm else frappe.new_doc("Bench Work Option")
+	# CREATE-IF-MISSING only, so an admin's later edits (a changed default, a renamed
+	# state, a tweaked disposition) are never clobbered on the next migrate.
+	def ensure(bench, kind, value, *, is_default=0, disposition=None):
+		if frappe.db.exists("Bench Work Option", {"bench": bench, "kind": kind, "value": value}):
+			return
+		doc = frappe.new_doc("Bench Work Option")
 		doc.bench, doc.kind, doc.value = bench, kind, value
 		if kind == "Work Type":
 			doc.is_default = is_default
 		if kind == "Collection State" and disposition:
 			doc.disposition = disposition
-		doc.save(ignore_permissions=True)
+		doc.insert(ignore_permissions=True)
 
 	for bench, name in BENCH_DOCTYPE.items():
 		if bench in BENCH_WORK_EXCLUDE:
@@ -695,17 +698,24 @@ def seed_bench_work_options():
 		# work types (bench's own name as sole default when not explicitly listed)
 		wts = BENCH_WORK_TYPES.get(bench) or [name]
 		for i, wt in enumerate(wts):
-			upsert(bench, "Work Type", wt, is_default=1 if i == 0 else 0)
-		# exactly one default: clear it on any OTHER work type of this bench
-		for other in frappe.get_all("Bench Work Option",
-				filters={"bench": bench, "kind": "Work Type", "value": ["not in", wts]}, pluck="name"):
-			frappe.db.set_value("Bench Work Option", other, "is_default", 0)
+			ensure(bench, "Work Type", wt, is_default=1 if i == 0 else 0)
+		# guarantee EXACTLY ONE default among this bench's work types (only steps in
+		# when there is none, or somehow more than one — never overrides a chosen one)
+		all_wt = frappe.get_all("Bench Work Option", filters={"bench": bench, "kind": "Work Type"},
+			fields=["name", "value", "is_default"], order_by="creation")
+		defaults = [w for w in all_wt if w.is_default]
+		if all_wt and not defaults:
+			target = next((w.name for w in all_wt if w.value == wts[0]), all_wt[0].name)
+			frappe.db.set_value("Bench Work Option", target, "is_default", 1)
+		elif len(defaults) > 1:
+			for w in defaults[1:]:
+				frappe.db.set_value("Bench Work Option", w.name, "is_default", 0)
 		# queue reasons
 		for qr in BENCH_QUEUE_REASONS.get(bench, []):
-			upsert(bench, "Queue Reason", qr)
+			ensure(bench, "Queue Reason", qr)
 		# collection states (same three everywhere)
 		for value, disp in BENCH_COLLECTION_STATES:
-			upsert(bench, "Collection State", value, disposition=disp)
+			ensure(bench, "Collection State", value, disposition=disp)
 	frappe.db.commit()
 
 

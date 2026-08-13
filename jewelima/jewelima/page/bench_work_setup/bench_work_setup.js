@@ -41,6 +41,8 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 		.bw-row .del{color:#b02a2a;font-weight:700;}
 		.bw-row .del.off{opacity:.3;cursor:not-allowed;}
 		.bw-row .disp{cursor:pointer;font-size:11px;font-weight:700;border-radius:9px;padding:1px 9px;white-space:nowrap;}
+		.bw-row .def{cursor:pointer;font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 9px;white-space:nowrap;border:1px solid var(--border-color);color:var(--text-muted);}
+		.bw-row .def.on{background:#e3f0e6;border-color:#a7d3b0;color:#1d7a33;cursor:default;}
 		.bw-row .disp.tr{background:#dcefe0;color:#1d7a33;}
 		.bw-row .disp.q{background:#fdf3d0;color:#8a6d00;}
 		.bw-addrow{display:flex;gap:8px;margin-top:10px;}
@@ -107,6 +109,9 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 			box.html(list.map((o) => `
 				<div class="bw-row" data-name="${esc(o.name)}">
 					<span class="v">${esc(o.value)}</span>
+					${kind === "Work Type" ? (o.is_default
+						? `<span class="def on" title="${__("Default — used when a card is issued without a work type picked")}">★ ${__("default")}</span>`
+						: `<span class="def" title="${__("Click to make this the default")}">${__("set default")}</span>`) : ""}
 					${kind === "Collection State" ? `<span class="disp ${o.disposition === "Back to In Queue" ? "q" : "tr"}" title="${__("Click to change what happens to the card after this state")}">${o.disposition === "Back to In Queue" ? "↺ " + __("back to queue") : "→ " + __("ready to transfer")}</span>` : ""}
 					<span class="u">${o.in_use ? __("{0} record(s)", [o.in_use]) : __("unused")}</span>
 					<span class="act ren" title="${__("Rename — follows through to every record")}">${__("rename")}</span>
@@ -137,6 +142,12 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 						load();
 					});
 			}, __("Rename '{0}'", [o.value]), __("Rename"));
+	});
+
+	root.on("click", ".bw-row .def:not(.on)", function () {
+		const name = $(this).closest(".bw-row").data("name");
+		frappe.call({ method: API + ".bench_work_option_set_default", args: { name } })
+			.then(() => { frappe.show_alert({ message: __("Default set."), indicator: "green" }, 3); load(); });
 	});
 
 	root.on("click", ".bw-row .disp", function () {

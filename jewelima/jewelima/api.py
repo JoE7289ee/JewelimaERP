@@ -6917,9 +6917,9 @@ def get_bench_work_setup(location):
 	_require_stone_issue_admin()
 	loc = (location or "").upper()
 	rows = frappe.get_all("Bench Work Option", filters={"bench": loc},
-		fields=["name", "kind", "value", "disposition"], order_by="creation")
+		fields=["name", "kind", "value", "disposition", "is_default"], order_by="creation")
 	return {"options": [{"name": r.name, "kind": r.kind, "value": r.value,
-		"disposition": r.disposition or "Ready to Transfer",
+		"disposition": r.disposition or "Ready to Transfer", "is_default": cint(r.is_default),
 		"in_use": _bench_option_usage(loc, r.kind, r.value)} for r in rows]}
 
 
@@ -6978,6 +6978,23 @@ def bench_work_option_set_disposition(name, disposition):
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": name, "disposition": disposition}
+
+
+@frappe.whitelist()
+def bench_work_option_set_default(name):
+	"""Make this Work Type the bench's default (used when a card is issued without
+	one picked). Exactly one default per bench — the rest are cleared."""
+	_require_stone_issue_admin()
+	d = frappe.get_doc("Bench Work Option", name)
+	if d.kind != "Work Type":
+		frappe.throw(frappe._("Only a Work Type can be the default."))
+	for other in frappe.get_all("Bench Work Option",
+			filters={"bench": d.bench, "kind": "Work Type", "name": ["!=", name]}, pluck="name"):
+		frappe.db.set_value("Bench Work Option", other, "is_default", 0)
+	d.is_default = 1
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name}
 
 
 @frappe.whitelist()
