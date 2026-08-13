@@ -881,6 +881,33 @@ def set_design_retired(names):
 
 
 @frappe.whitelist()
+def design_bulk_action(names, action, priority=None):
+	"""Old Categories bulk workflow. One action per single-type selection:
+	  retire            -> status Retired (from pending / approved)
+	  retire_clear_prio -> status Retired + priority 0 (deprioritise & retire)
+	  to_pending        -> status Pending + priority 0 (deprioritise, or un-retire)
+	  prioritise        -> status Pending + priority N (prioritise, or un-retire & prioritise)
+	"""
+	allowed = {"System Manager", "Jewelima Design Approver", "Jewelima Design Bank", "JW Manager"}
+	if not allowed & set(frappe.get_roles()):
+		frappe.throw(frappe._("Not permitted to change designs"), frappe.PermissionError)
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	p = max(int(priority or 0), 0)
+	updates = {
+		"retire": {"status": "Retired"},
+		"retire_clear_prio": {"status": "Retired", "priority": 0},
+		"to_pending": {"status": "Pending", "priority": 0},
+		"prioritise": {"status": "Pending", "priority": p},
+	}.get(action)
+	if updates is None:
+		frappe.throw(frappe._("Unknown action {0}.").format(action))
+	for nm in names:
+		frappe.db.set_value("Design Bank", nm, updates, update_modified=False)
+	frappe.db.commit()
+	return {"updated": len(names), "action": action}
+
+
+@frappe.whitelist()
 def get_retired_designs(start=0, limit=60, q=None):
 	"""The Retired shelf — codes stay reserved, but junk scans that were never
 	real designs can be purged from here."""

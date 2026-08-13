@@ -47,11 +47,11 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 			<div class="oc-right">
 				<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
 				<div class="oc-title" style="margin:0;"></div>
-				<div style="display:flex;gap:8px;">
+				<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+					<span class="oc-seltype" style="font-size:12px;color:var(--text-muted);"></span>
 					<button class="btn btn-sm btn-default oc-selall" style="display:none;">${__("Select all")}</button>
 					<button class="btn btn-sm btn-default oc-selnone" style="display:none;">${__("Deselect all")}</button>
-					<button class="btn btn-sm oc-prio" style="background:#1f618d;border-color:#1f618d;color:#fff;display:none;"></button>
-					<button class="btn btn-sm oc-ret" style="background:#b02a2a;border-color:#b02a2a;color:#fff;display:none;"></button>
+					<span class="oc-actions" style="display:flex;gap:8px;"></span>
 				</div>
 			</div>
 				<div class="oc-grid"></div>
@@ -101,6 +101,7 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_old_category_designs", args: { folder: curFolder, start, limit: 60, subtree: curSubtree } })
 			.then((r) => {
 				const m = r.message || { rows: [], total: 0 };
+				m.rows.forEach((d) => { meta[d.name] = { status: d.status, priority: d.priority || 0 }; });
 				root.find(".oc-title").text(`${curFolder} — ${m.total} ${__("design(s)")}`);
 				root.find(".oc-grid").append(m.rows.map((d) => `
 					<div class="oc-tile ${selected.has(d.name) ? "sel" : ""} ${d.status === "Retired" ? "ret" : ""}" data-name="${esc(d.name)}">
@@ -134,55 +135,84 @@ frappe.pages["old-categories"].on_page_load = function (wrapper) {
 		paintFolders();
 	});
 
-	// selection -> bulk prioritise
+	// single-type selection -> the action buttons change with the type
 	const canPrio = frappe.user.has_role("Jewelima Design Bank") || frappe.user.has_role("Jewelima Design Approver") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"));
 	const selected = new Set();
-	const canRetire = canPrio; // Design Bank, Approver and System Manager may retire
-	function paintPrio() {
-		// jQuery .toggle() with a NON-boolean argument animates a show/hide flip
-		// (the odd/even-selection bug) — always hand it a real boolean
-		root.find(".oc-prio").toggle(!!(canPrio && selected.size > 0))
-			.text(__("Prioritise {0} selected", [selected.size]));
-		root.find(".oc-ret").toggle(!!(canRetire && selected.size > 0))
-			.text(__("Retire {0} selected", [selected.size]));
-		root.find(".oc-selall").toggle(!!(canPrio && root.find(".oc-tile").length));
-		root.find(".oc-selnone").toggle(!!(canPrio && selected.size > 0));
+	const meta = {};        // name -> {status, priority}, filled as tiles load
+	let selType = null;     // the ONE type the current selection is of
+
+	function typeOf(name) {
+		const o = meta[name] || {};
+		if (o.status === "Retired") return "retired";
+		if (o.status === "Approved") return "approved";
+		return (o.priority || 0) > 0 ? "prioritised" : "pending";
 	}
-	// select all LOADED tiles (Load more first to widen the net); deselect
-	// clears the WHOLE selection, picks from earlier folders included
+	const TYPE_LABEL = { pending: __("pending"), prioritised: __("prioritised"), retired: __("retired"), approved: __("approved") };
+	const B = "#1f618d", R = "#b02a2a", G = "#1d7a33";
+	// the buttons offered per selection type (op -> design_bulk_action)
+	const ACTIONS = {
+		pending: [{ l: "Prioritise", op: "prioritise", ask: 1, c: B }, { l: "Retire", op: "retire", c: R }],
+		prioritised: [{ l: "Deprioritise", op: "to_pending", c: B }, { l: "Deprioritise & Retire", op: "retire_clear_prio", c: R }],
+		retired: [{ l: "Bring back to pending", op: "to_pending", c: B }, { l: "Bring back & prioritise", op: "prioritise", ask: 1, c: G }],
+		approved: [{ l: "Retire", op: "retire", c: R }],
+	};
+
+	function paintPrio() {
+		const n = selected.size;
+		root.find(".oc-seltype").text(n ? __("{0} selected \u00b7 {1}", [n, TYPE_LABEL[selType] || selType]) : "");
+		root.find(".oc-selnone").toggle(!!n);
+		root.find(".oc-selall").toggle(!!(canPrio && selType && root.find(".oc-tile").length));
+		const box = root.find(".oc-actions");
+		if (!n || !canPrio) { box.empty(); return; }
+		box.html((ACTIONS[selType] || []).map((a) =>
+			`<button class="btn btn-sm oc-act" data-op="${a.op}" data-ask="${a.ask ? 1 : 0}" style="background:${a.c};border-color:${a.c};color:#fff;">${__(a.l)} (${n})</button>`).join(""));
+	}
+
+	// Select all LOADED tiles OF THE CURRENT TYPE (keeps the selection single-type)
 	root.find(".oc-selall").on("click", () => {
+		if (!selType) return;
 		root.find(".oc-tile").each(function () {
-			selected.add($(this).data("name"));
-			$(this).addClass("sel");
+			const nm = $(this).data("name");
+			if (typeOf(nm) === selType) { selected.add(nm); $(this).addClass("sel"); }
 		});
 		paintPrio();
 	});
 	root.find(".oc-selnone").on("click", () => {
-		selected.clear();
+		selected.clear(); selType = null;
 		root.find(".oc-tile").removeClass("sel");
 		paintPrio();
 	});
 	root.on("click", ".oc-tile", function () {
 		if (!canPrio) return;
 		const nm = $(this).data("name");
-		if (selected.has(nm)) { selected.delete(nm); $(this).removeClass("sel"); }
-		else { selected.add(nm); $(this).addClass("sel"); }
+		if (selected.has(nm)) {
+			selected.delete(nm); $(this).removeClass("sel");
+			if (!selected.size) selType = null;
+		} else {
+			const t = typeOf(nm);
+			if (selected.size && t !== selType) {   // different type -> start a fresh selection
+				selected.clear(); root.find(".oc-tile").removeClass("sel");
+			}
+			selType = t; selected.add(nm); $(this).addClass("sel");
+		}
 		paintPrio();
 	});
-	root.find(".oc-prio").on("click", () => {
-		frappe.prompt([{ fieldname: "p", fieldtype: "Int", label: __("Priority (higher = sooner in Review)"), default: 10, reqd: 1 }],
-			(v) => frappe.call({ method: API + ".set_design_priority",
-				args: { names: JSON.stringify([...selected]), priority: v.p } }).then((r) => {
-				frappe.show_alert({ message: __("{0} card(s) set to priority {1}.", [(r.message || {}).updated, v.p]), indicator: "green" }, 4);
-				selected.clear(); paintPrio(); load(true);
-			}), __("Prioritise for review"), __("Set"));
-	});
-	// bulk retire — one click, no confirm (house style); codes stay reserved
-	root.find(".oc-ret").on("click", () => {
-		frappe.call({ method: API + ".set_design_retired", args: { names: JSON.stringify([...selected]) } })
+
+	// run the picked workflow action on the whole (single-type) selection
+	root.on("click", ".oc-act", function () {
+		const op = this.dataset.op, ask = this.dataset.ask === "1";
+		const names = [...selected];
+		if (!names.length) return;
+		const run = (priority) => frappe.call({ method: API + ".design_bulk_action",
+			args: { names: JSON.stringify(names), action: op, priority: priority == null ? null : priority } })
 			.then((r) => {
-				frappe.show_alert({ message: __("{0} card(s) retired.", [(r.message || {}).retired]), indicator: "red" }, 4);
-				selected.clear(); paintPrio(); load(true);
+				frappe.show_alert({ message: __("{0} card(s) updated.", [(r.message || {}).updated]), indicator: "green" }, 4);
+				selected.clear(); selType = null; paintPrio(); load(true);
 			});
+		if (ask) {
+			frappe.prompt([{ fieldname: "p", fieldtype: "Int", label: __("Priority (higher = sooner in Review)"), default: 10, reqd: 1 }],
+				(v) => run(v.p), __("Set priority"), __("Set"));
+		} else { run(null); }
 	});
+
 };
