@@ -5452,9 +5452,13 @@ def get_cad_workstation():
 	me = _my_employee()
 	roster = _cad_roster()
 	is_lead = bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))
-	bags = frappe.get_all("Order Bag", filters={"is_cad": 1},
+	# the CAD desk = CAD-design orders (is_cad) PLUS anything physically routed to the
+	# CAD bench, so nothing sent to CAD goes missing here.
+	bags = frappe.get_all("Order Bag",
+		or_filters=[{"is_cad": 1}, {"location": "CAD"}],
+		filters={"is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
 		fields=["name", "customer", "order_date", "due_date", "job_order", "cad_design_type", "qty",
-			"cad_karat", "design", "cad_gold_weight", "cad_diamond_weight"],
+			"cad_karat", "design", "cad_gold_weight", "cad_diamond_weight", "location", "is_cad"],
 		order_by="due_date asc, creation asc", limit_page_length=0)
 	jd = _jd_stock_customer()
 	names = [b.name for b in bags] or [""]
