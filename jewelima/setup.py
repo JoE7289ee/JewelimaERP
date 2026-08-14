@@ -122,7 +122,7 @@ JEWELIMA_ORDERING_READ = [
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
-JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-view", "order-requests", "ws-ordering", "cancellation"]
+JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-view", "order-requests", "ws-ordering", "cancellation", "order-tracker", "following"]
 
 # every page in the E-SMITH menu — the ESMITH role gets exactly these
 ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]

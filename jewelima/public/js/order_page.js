@@ -110,7 +110,7 @@ const PO_COLUMNS = [
 		<div class="po-wrap">
 			<div class="po-head">
 				${OPTS.mode === "order" ? '<div class="po-h-orderdate"></div>' : '<div class="po-h-orderno"></div>'}<div class="po-h-customer"></div><div class="po-h-salesman"></div><div class="po-h-ordertype"></div>
-				${OPTS.mode === "order" ? '<div class="po-h-days"></div><div class="po-h-custdays"></div>' : ""}
+				${OPTS.mode === "order" ? '<div class="po-h-days"></div><div class="po-h-custdays"></div><div class="po-h-follow"></div>' : ""}
 			</div>
 			<div class="po-gridbox">
 				<table class="po-grid"><thead><tr class="po-headrow"></tr></thead><tbody class="po-body"></tbody><tfoot><tr class="po-footrow"></tr></tfoot></table>
@@ -178,6 +178,11 @@ const PO_COLUMNS = [
 	state.header.order_date.set_value(frappe.datetime.get_today());
 	$(page.main).find(".po-h-days").append('<div class="po-due"></div>');
 	$(page.main).find(".po-h-custdays").append('<div class="po-due po-custdue"></div>');
+	// Follow — tick to watch this order on the Following page after it's placed
+	state.header.follow = mk(".po-h-follow", {
+		fieldtype: "Check", label: __("Follow"), fieldname: "follow",
+		description: __("Track this order on the Following page."),
+	});
 
 	// Order Date is fixed to today (read-only). Days is the lead time; the Due Date
 	// (today + Days) is derived — shown live under Days and computed when placing the order.
@@ -1425,6 +1430,7 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 				order_no: state.reservedNo || "",
 				order_date: order_date || frappe.datetime.get_today(),
 				due_date, customer_date, customer, salesman, order_type,
+				followed: state.header.follow && state.header.follow.get_value() ? 1 : 0,
 			} },
 		});
 		const order = { name: jr.message };

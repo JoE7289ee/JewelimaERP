@@ -74,6 +74,32 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "activity",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Track",
+   "link_to": "order-tracker",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "bookmark",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Following",
+   "link_to": "following",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "square-pen",
    "indent": 1,
    "keep_closed": 0,
@@ -2438,7 +2464,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-13 12:49:01.118572",
+ "modified": "2026-08-13 20:29:16.439352",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

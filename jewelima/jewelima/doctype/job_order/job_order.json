@@ -14,6 +14,7 @@
   "order_type",
   "column_break_main",
   "customer",
+  "followed",
   "cancelled",
   "cancelled_on"
  ],
@@ -64,6 +65,14 @@
    "in_list_view": 1,
    "label": "Party",
    "options": "Customer"
+  },
+  {
+   "default": "0",
+   "description": "Ticked at order entry (Place Order \u2014 Follow) \u2014 shows this order on the Following page for its placer to watch.",
+   "fieldname": "followed",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Followed"
   },
   {
    "default": "0",

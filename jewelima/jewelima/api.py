@@ -1935,6 +1935,7 @@ def create_job_order(payload):
 		"customer": p.get("customer") or None,
 		"salesman": p.get("salesman") or None,
 		"order_type": p.get("order_type") or None,
+		"followed": 1 if cint(p.get("followed")) else 0,
 	})
 	doc.insert(ignore_permissions=True, set_name=no)
 	frappe.db.commit()
@@ -14011,3 +14012,204 @@ def get_prebagged_for_issue():
 			"pcs": sum(int(l.prebagged_pcs or 0) for l in lines),
 			"ct": round(sum(flt(l.prebagged_ct or 0) for l in lines), 3)})
 	return {"count": len(out), "cards": out}
+
+
+# ============================ Ordering > Track ================================
+@frappe.whitelist()
+def get_order_tracker():
+	"""Ordering > Track: every ACTIVE order card (NOT Sold, NOT Cancelled) with the
+	info an order-taker needs so nothing slips — grouped by the user who placed it,
+	plus KPIs. Read-only; anyone with ordering access can view all users' orders."""
+	_following_access()
+	me = frappe.session.user
+	is_admin = "System Manager" in frappe.get_roles()
+	rows = frappe.db.sql("""
+		SELECT b.name, b.owner, b.job_order, b.design, b.qty, b.size, b.location,
+			b.is_finished, b.stock_status, b.act_gross_weight, b.gross_weight,
+			b.due_date, b.creation, b.stone_issue, b.stone_oos, b.held_by,
+			jo.customer, jo.salesman, jo.order_type, jo.order_date,
+			jo.owner AS placer, IFNULL(jo.followed, 0) AS followed
+		FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE IFNULL(b.stock_status, '') NOT IN ('Sold', 'Cancelled')
+		ORDER BY b.due_date ASC, b.creation ASC
+	""", as_dict=True)
+	owners = list({r.owner for r in rows if r.owner})
+	unames = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", owners or [""]]}, fields=["name", "full_name"])}
+	today = frappe.utils.getdate()
+	now = frappe.utils.now_datetime()
+	users, out = {}, []
+	kpi = {"total": 0, "overdue": 0, "due_soon": 0, "in_production": 0,
+		"in_stock": 0, "at_cert": 0, "awaiting_stone": 0, "oos": 0}
+	for r in rows:
+		ss = r.stock_status or ""
+		if cint(r.is_finished) or ss == "In Stock":
+			stage = "In Stock"
+		elif ss == "At Certification":
+			stage = "At Certification"
+		else:
+			stage = r.location or "—"
+		due = frappe.utils.getdate(r.due_date) if r.due_date else None
+		days_left = (due - today).days if due else None
+		health = ("overdue" if (days_left is not None and days_left < 0)
+			else "due_soon" if (days_left is not None and days_left <= 3)
+			else "ontrack")
+		gross = flt(r.act_gross_weight) or flt(r.gross_weight)
+		owner_name = unames.get(r.owner, r.owner or "—")
+		out.append({
+			"card": r.name, "job_order": r.job_order or "", "design": r.design or "",
+			"customer": r.customer or "", "salesman": r.salesman or "",
+			"order_type": r.order_type or "", "size": r.size or "",
+			"order_date": str(r.order_date or ""), "due_date": str(r.due_date or ""),
+			"days_left": days_left, "stage": stage, "status": ss, "qty": r.qty or 1,
+			"gross": round(gross, 3), "owner": r.owner or "?", "owner_name": owner_name,
+			"age_days": (now.date() - r.creation.date()).days if r.creation else 0,
+			"health": health, "awaiting_stone": cint(r.stone_issue),
+			"oos": cint(r.stone_oos), "held_by": r.held_by or "",
+			"followed": cint(r.followed),
+			"can_follow": 1 if (is_admin or (r.placer and r.placer == me)) else 0,
+		})
+		u = users.setdefault(r.owner or "?", {"user": r.owner or "?", "name": owner_name, "count": 0, "overdue": 0})
+		u["count"] += 1
+		u["overdue"] += 1 if health == "overdue" else 0
+		kpi["total"] += 1
+		if health == "overdue":
+			kpi["overdue"] += 1
+		elif health == "due_soon":
+			kpi["due_soon"] += 1
+		if stage == "In Stock":
+			kpi["in_stock"] += 1
+		elif stage == "At Certification":
+			kpi["at_cert"] += 1
+		else:
+			kpi["in_production"] += 1
+		kpi["awaiting_stone"] += cint(r.stone_issue)
+		kpi["oos"] += cint(r.stone_oos)
+	tiles = sorted(users.values(), key=lambda x: (-x["overdue"], -x["count"]))
+	return {"rows": out, "users": tiles, "kpi": kpi, "today": str(today),
+		"me": me, "is_admin": 1 if is_admin else 0}
+
+
+def _following_access():
+	if not {"System Manager", "Stock Manager", "JW Manager", "Jewelima Ordering",
+			"Jewelima Info"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Needs ordering access."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def get_following():
+	"""Ordering > Following: the FOLLOWED job orders (Place Order → Follow) that
+	still have an unsold, uncancelled card — grouped by the person who placed them,
+	with KPIs. Read-only for everyone; only the placer (or a System Manager) can
+	unfollow, which drops the order off this page."""
+	_following_access()
+	me = frappe.session.user
+	is_admin = "System Manager" in frappe.get_roles()
+	rows = frappe.db.sql("""
+		SELECT jo.name AS job_order, jo.owner, jo.customer, jo.salesman, jo.order_type,
+			jo.order_date, jo.due_date, jo.creation,
+			b.stock_status, b.is_finished, b.location,
+			b.act_gross_weight, b.gross_weight, b.qty, b.stone_issue, b.stone_oos
+		FROM `tabJob Order` jo
+		JOIN `tabOrder Bag` b ON b.job_order = jo.name
+		WHERE IFNULL(jo.followed, 0) = 1 AND IFNULL(jo.cancelled, 0) = 0
+			AND IFNULL(b.stock_status, '') NOT IN ('Sold', 'Cancelled')
+		ORDER BY jo.due_date ASC, jo.creation ASC
+	""", as_dict=True)
+	owners = list({r.owner for r in rows if r.owner})
+	unames = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", owners or [""]]}, fields=["name", "full_name"])}
+	today = frappe.utils.getdate()
+	now = frappe.utils.now_datetime()
+	jos = {}
+	for r in rows:
+		ss = r.stock_status or ""
+		if cint(r.is_finished) or ss == "In Stock":
+			stage = "In Stock"
+		elif ss == "At Certification":
+			stage = "At Certification"
+		else:
+			stage = r.location or "—"
+		j = jos.get(r.job_order)
+		if not j:
+			due = frappe.utils.getdate(r.due_date) if r.due_date else None
+			days_left = (due - today).days if due else None
+			health = ("overdue" if (days_left is not None and days_left < 0)
+				else "due_soon" if (days_left is not None and days_left <= 3)
+				else "ontrack")
+			j = jos[r.job_order] = {
+				"job_order": r.job_order, "owner": r.owner or "?",
+				"owner_name": unames.get(r.owner, r.owner or "—"),
+				"customer": r.customer or "", "salesman": r.salesman or "",
+				"order_type": r.order_type or "", "order_date": str(r.order_date or ""),
+				"due_date": str(r.due_date or ""), "days_left": days_left, "health": health,
+				"cards": 0, "gross": 0.0, "awaiting_stone": 0, "oos": 0,
+				"age_days": (now.date() - r.creation.date()).days if r.creation else 0,
+				"_stages": {}, "can_unfollow": 1 if (is_admin or r.owner == me) else 0,
+			}
+		j["cards"] += cint(r.qty) or 1
+		j["gross"] += flt(r.act_gross_weight) or flt(r.gross_weight)
+		j["awaiting_stone"] = j["awaiting_stone"] or cint(r.stone_issue)
+		j["oos"] = j["oos"] or cint(r.stone_oos)
+		j["_stages"][stage] = j["_stages"].get(stage, 0) + (cint(r.qty) or 1)
+
+	def _cls(stage):
+		return "stock" if stage == "In Stock" else "cert" if stage == "At Certification" else "prod"
+
+	users, out = {}, []
+	kpi = {"total": 0, "cards": 0, "overdue": 0, "due_soon": 0, "in_production": 0,
+		"in_stock": 0, "at_cert": 0, "awaiting_stone": 0, "oos": 0}
+	for j in jos.values():
+		stages = j.pop("_stages")
+		j["gross"] = round(j["gross"], 3)
+		j["where"] = [{"stage": s, "n": n, "cls": _cls(s)}
+			for s, n in sorted(stages.items(), key=lambda kv: (-kv[1], kv[0]))]
+		any_prod = any(_cls(s) == "prod" for s in stages)
+		any_cert = any(s == "At Certification" for s in stages)
+		all_stock = all(s == "In Stock" for s in stages)
+		out.append(j)
+		u = users.setdefault(j["owner"], {"user": j["owner"], "name": j["owner_name"], "count": 0, "overdue": 0})
+		u["count"] += 1
+		u["overdue"] += 1 if j["health"] == "overdue" else 0
+		kpi["total"] += 1
+		kpi["cards"] += j["cards"]
+		if j["health"] == "overdue":
+			kpi["overdue"] += 1
+		elif j["health"] == "due_soon":
+			kpi["due_soon"] += 1
+		if all_stock:
+			kpi["in_stock"] += 1
+		else:
+			if any_prod:
+				kpi["in_production"] += 1
+			if any_cert:
+				kpi["at_cert"] += 1
+		kpi["awaiting_stone"] += 1 if j["awaiting_stone"] else 0
+		kpi["oos"] += 1 if j["oos"] else 0
+	tiles = sorted(users.values(), key=lambda x: (-x["overdue"], -x["count"]))
+	return {"rows": out, "users": tiles, "kpi": kpi, "today": str(today), "me": me, "is_admin": 1 if is_admin else 0}
+
+
+@frappe.whitelist()
+def set_order_follow(job_order, followed):
+	"""Follow / unfollow a job order (used by Track's toggle and the Following
+	page). Only the placer (Job Order owner) or a System Manager may change it;
+	the pages are read-only for everyone else."""
+	_following_access()
+	owner = frappe.db.get_value("Job Order", job_order, "owner")
+	if not owner:
+		frappe.throw(frappe._("Job Order not found."))
+	if owner != frappe.session.user and "System Manager" not in frappe.get_roles():
+		frappe.throw(frappe._("Only the person who placed this order can follow or unfollow it."),
+			frappe.PermissionError)
+	val = 1 if cint(followed) else 0
+	frappe.db.set_value("Job Order", job_order, "followed", val)
+	frappe.db.commit()
+	return {"ok": 1, "job_order": job_order, "followed": val}
+
+
+@frappe.whitelist()
+def following_unfollow(job_order):
+	"""Drop a job order off the Following page — a thin wrapper on set_order_follow."""
+	return set_order_follow(job_order, 0)
