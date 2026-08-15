@@ -5854,10 +5854,19 @@ def get_bench_day(bench, date=None):
 		g["weight_in"] += flt(r["weight_in"])
 		g["loss"] += flt(r["loss"])
 
-	cin, cout = _contents(list(set(tin))), _contents(list(set(tout)))
+	def _qty(bags):
+		"""Total pieces across the transferred bags — used by no-gold benches that
+		show cards · qty instead of grams."""
+		if not bags:
+			return 0
+		return cint(frappe.db.sql("SELECT SUM(qty) FROM `tabOrder Bag` WHERE name IN %(b)s",
+			{"b": tuple(bags)})[0][0] or 0)
+
+	sin, sout = set(tin), set(tout)
+	cin, cout = _contents(list(sin)), _contents(list(sout))
 	return {"bench": bench, "date": date,
-		"in": {"count": len(set(tin)), **cin},
-		"out": {"count": len(set(tout)), **cout},
+		"in": {"count": len(sin), "qty": _qty(list(sin)), **cin},
+		"out": {"count": len(sout), "qty": _qty(list(sout)), **cout},
 		"done": sorted(by_emp.values(), key=lambda g: g["employee_name"]),
 		"done_count": len(work)}
 
@@ -6004,12 +6013,14 @@ def get_bench_workstation(bench):
 		waiting = [r for r in waiting if not r.get("stone_requested")]
 
 	opts = get_bench_work_options(bench)
-	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl, ASSIGN_COLLECT_LOCATIONS as _acl
 	can_act = bool({"System Manager", "Stock Manager", "JW Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
 	# completed AT this bench but NOT yet transferred onward (still sitting here)
 	completed = [r for r in rows if r.get("status") == "Completed"]
 	return {"bench": bench, "ranked": ranked,
 		"flow": "weights" if bench in _irl else "light",
+		# no-gold benches (CAD, Waxing, Wax Setting, Wax Cleaning) show cards · qty, not grams
+		"no_gold": bench in _acl,
 		"can_act": can_act,
 		"work_types": opts["work_types"], "collection_states": opts["collection_states"],
 		"default_work_type": opts.get("default_work_type"),
@@ -14023,17 +14034,24 @@ def get_order_tracker():
 	_following_access()
 	me = frappe.session.user
 	is_admin = "System Manager" in frappe.get_roles()
+	buckets = [("dmd", "DMD"), ("ps", "PS"), ("cs", "CS"), ("cz", "CZ"),
+		("cvd", "CVD"), ("sw", "SW"), ("pdmd", "PDMD"), ("poth", "POTH")]
+	stone_cols = ", ".join(
+		"b.{k}_no AS {k}_pn, b.{k}_weight AS {k}_pw, "
+		"b.act_{k}_no AS {k}_an, b.act_{k}_weight AS {k}_aw".format(k=k)
+		for k, _ in buckets)
 	rows = frappe.db.sql("""
 		SELECT b.name, b.owner, b.job_order, b.design, b.qty, b.size, b.location,
 			b.is_finished, b.stock_status, b.act_gross_weight, b.gross_weight,
 			b.due_date, b.creation, b.stone_issue, b.stone_oos, b.held_by,
 			jo.customer, jo.salesman, jo.order_type, jo.order_date,
-			jo.owner AS placer, IFNULL(jo.followed, 0) AS followed
+			jo.owner AS placer, IFNULL(jo.followed, 0) AS followed,
+			{stone_cols}
 		FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		WHERE IFNULL(b.stock_status, '') NOT IN ('Sold', 'Cancelled')
 		ORDER BY b.due_date ASC, b.creation ASC
-	""", as_dict=True)
+	""".format(stone_cols=stone_cols), as_dict=True)
 	owners = list({r.owner for r in rows if r.owner})
 	unames = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
 		filters={"name": ["in", owners or [""]]}, fields=["name", "full_name"])}
@@ -14057,6 +14075,13 @@ def get_order_tracker():
 			else "ontrack")
 		gross = flt(r.act_gross_weight) or flt(r.gross_weight)
 		owner_name = unames.get(r.owner, r.owner or "—")
+		stones = []
+		for k, label in buckets:
+			pn, pw = cint(r.get(k + "_pn")), flt(r.get(k + "_pw"))
+			an, aw = cint(r.get(k + "_an")), flt(r.get(k + "_aw"))
+			if pn or pw or an or aw:
+				stones.append({"k": label, "pn": pn, "pw": round(pw, 3),
+					"an": an, "aw": round(aw, 3), "added": 1 if aw > 0 else 0})
 		out.append({
 			"card": r.name, "job_order": r.job_order or "", "design": r.design or "",
 			"customer": r.customer or "", "salesman": r.salesman or "",
@@ -14069,6 +14094,7 @@ def get_order_tracker():
 			"oos": cint(r.stone_oos), "held_by": r.held_by or "",
 			"followed": cint(r.followed),
 			"can_follow": 1 if (is_admin or (r.placer and r.placer == me)) else 0,
+			"stones": stones,
 		})
 		u = users.setdefault(r.owner or "?", {"user": r.owner or "?", "name": owner_name, "count": 0, "overdue": 0})
 		u["count"] += 1

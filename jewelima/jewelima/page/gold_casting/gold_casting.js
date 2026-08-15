@@ -102,7 +102,7 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 		tb.innerHTML = (d.trees || []).length
 			? d.trees.map((t) => `
 				<tr>
-					<td><a href="/app/wax-tree/${encodeURIComponent(t.tree)}"><b>${esc(t.tree)}</b></a></td>
+					<td><a href="#" class="gc-tree-link" data-tree="${esc(t.tree)}" data-emp="${esc(t.employee || "")}"><b>${esc(t.tree)}</b></a></td>
 					<td>${esc(t.karat)}</td>
 					<td>${t.cards}</td>
 					<td>${esc(t.employee)}</td>
@@ -112,6 +112,46 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 					<td>${fmt(t.pure_gold_needed)}</td>
 				</tr>`).join("")
 			: `<tr><td colspan="8" class="gc-empty">${__("No trees waiting at CASTING.")}</td></tr>`;
+		tb.querySelectorAll(".gc-tree-link").forEach((el) =>
+			el.addEventListener("click", function (e) { e.preventDefault(); showTree(this.getAttribute("data-tree"), this.getAttribute("data-emp")); }));
+	}
+
+	function showTree(tree, empName) {
+		frappe.call({ method: API + ".get_tree_edit", args: { tree } }).then((r) => {
+			const d = r.message || {};
+			const cards = d.cards || [];
+			const totCards = cards.reduce((a, c) => a + (c.qty || 1), 0);
+			const totGold = cards.reduce((a, c) => a + flt(c.cast_gold), 0);
+			const dlg = new frappe.ui.Dialog({ title: __("Tree {0}", [d.tree_no || tree]), size: "large" });
+			$(dlg.body).html(`
+				<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px;font-size:12.5px;color:var(--text-muted);">
+					<div>${__("Gold")}: <b style="color:var(--text-color);">${esc(d.karat || "—")}</b></div>
+					<div>${__("Cards")}: <b style="color:var(--text-color);">${cards.length} (${totCards} ${__("pcs")})</b></div>
+					<div>${__("Wax")}: <b style="color:var(--text-color);">${fmt(d.wax_weight)} g</b></div>
+					<div>${__("Gold required")}: <b style="color:var(--text-color);">${fmt(d.gold_required)} g</b></div>
+					<div>${__("Made by")}: <b style="color:var(--text-color);">${esc(empName || d.employee || "—")}</b></div>
+				</div>
+				<div style="border:1px solid var(--border-color);border-radius:9px;overflow:auto;max-height:60vh;">
+					<table class="table" style="font-size:13px;margin:0;">
+						<thead><tr>
+							<th>${__("Order ID")}</th><th>${__("Design")}</th>
+							<th style="text-align:right">${__("Qty")}</th><th>${__("At")}</th>
+							<th style="text-align:right">${__("Cast Gold (g)")}</th>
+						</tr></thead>
+						<tbody>${cards.length ? cards.map((c) => `
+							<tr>
+								<td><b>${esc(c.order_bag)}</b></td><td>${esc(c.design)}</td>
+								<td style="text-align:right">${c.qty || 1}</td><td>${esc(c.location)}</td>
+								<td style="text-align:right">${fmt(c.cast_gold)}</td>
+							</tr>`).join("") : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:18px;">${__("No cards on this tree.")}</td></tr>`}
+						${cards.length ? `<tr style="font-weight:700;background:var(--control-bg);">
+							<td>${__("Total")}</td><td></td><td style="text-align:right">${totCards}</td><td></td>
+							<td style="text-align:right">${fmt(totGold)}</td></tr>` : ""}</tbody>
+					</table>
+				</div>
+			`);
+			dlg.show();
+		});
 	}
 
 	function load() {

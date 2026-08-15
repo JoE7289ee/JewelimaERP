@@ -52,8 +52,9 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-strip .b .bv{font-size:14px;font-weight:700;}
 		.si-strip .b.zero .bv{color:var(--text-muted);font-weight:400;}
 		.si-strip .b.tot{background:var(--fg-color);border-width:2px;}
-		.si-strip .si-go{margin-left:auto;font-size:15px;font-weight:700;padding:10px 34px;background:#2e7d32;border-color:#2e7d32;color:#fff;}
+		.si-strip .si-go{margin-left:auto;font-size:18px;font-weight:800;letter-spacing:.02em;padding:15px 54px;border-radius:10px;background:#2e7d32;border-color:#2e7d32;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18);}
 		.si-strip .si-go:hover{background:#256628;border-color:#256628;}
+		.si-strip .si-go:focus{outline:3px solid rgba(46,125,50,.5);outline-offset:2px;box-shadow:0 0 0 4px rgba(46,125,50,.18);}
 		table.si-grid tr.si-locked{opacity:.5;}
 		table.si-grid tr.si-locked input{background:var(--disabled-control-bg,#eee);cursor:not-allowed;}
 		.si-callout{display:none;border:2px solid;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:14px;font-weight:600;}
@@ -412,7 +413,13 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		e.preventDefault();
 		const inputs = root.find("table.si-grid tbody input").toArray();
 		const next = inputs[inputs.indexOf(this) + 1];
-		next ? $(next).focus().select() : root.find(".si-go").focus();
+		next ? $(next).focus().select() : root.find(".si-go:visible").focus();
+	});
+
+	// Enter (or Space) while the big Issue button is focused fires it — so the
+	// last field's Enter lands on the button, one more Enter issues.
+	root.on("keydown", ".si-go", function (e) {
+		if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $(this).click(); }
 	});
 
 
@@ -426,19 +433,20 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		const by = issuedBy.get_value();
 		if (!by) return frappe.msgprint(__("Pick who is issuing these stones."));
 		const ct = lines.reduce((a, l) => a + l.ct, 0);
+		const bag = S.card.order_bag; // capture before we reset the page
 		siBusy = true;
 		frappe.dom.freeze(__("Issuing..."));
-		frappe.call({ method: API + ".stone_issue_apply", args: { order_bag: S.card.order_bag, lines, issued_by: by } })
+		frappe.call({ method: API + ".stone_issue_apply", args: { order_bag: bag, lines, issued_by: by } })
 			.then((r) => {
 				frappe.dom.unfreeze();
 				siBusy = false;
 				frappe.show_alert({ message: (r.message || {}).fully_issued
-					? __("Stones issued into {0} — fully served.", [S.card.order_bag])
-					: __("PARTIAL issue into {0} — the card stays pending for the rest.", [S.card.order_bag]),
+					? __("Stones issued into {0} — fully served.", [bag])
+					: __("PARTIAL issue into {0} — the card stays pending for the rest.", [bag]),
 					indicator: (r.message || {}).fully_issued ? "green" : "orange" }, 6);
-				logScan(S.card.order_bag, "issued", __("{0} ct across {1} line(s)", [ct.toFixed(3), lines.length]));
-				S.card = r.message; // refreshed issued/available numbers
-				paint();
+				logScan(bag, "issued", __("{0} ct across {1} line(s)", [ct.toFixed(3), lines.length]));
+				// reset the station for the next card — clear the grid, cursor back to Scan
+				clearAll();
 				refreshToday();
 				refreshStock();
 				refreshPrebagCount();

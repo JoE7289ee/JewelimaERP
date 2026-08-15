@@ -25,6 +25,7 @@ frappe.pages["stone-request"].on_page_load = function (wrapper) {
 		.sq-x:hover{color:#b02a2a;}
 		.sq-empty{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.sq-go{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;margin-top:12px;}
+		.sq-now{background:#1c7d3a;border-color:#1c7d3a;color:#fff;font-weight:700;margin-top:12px;margin-left:10px;}
 		</style>
 		<div class="sq-top">
 			<div class="sq-scan"></div>
@@ -32,6 +33,7 @@ frappe.pages["stone-request"].on_page_load = function (wrapper) {
 		</div>
 		<div class="sq-body"></div>
 		<button class="btn sq-go" style="display:none;"></button>
+		<button class="btn sq-now" style="display:none;"></button>
 	`);
 	const root = $(page.main);
 	const scan = frappe.ui.form.make_control({
@@ -52,6 +54,8 @@ frappe.pages["stone-request"].on_page_load = function (wrapper) {
 			</tr>`).join("")}</tbody></table>`
 			: `<div class="sq-empty">${__("Scan the first card.")}</div>`);
 		root.find(".sq-go").toggle(!!rows.length).text(__("MARK {0} card(s) for Stone Issue", [rows.length]));
+		// Immediate issue is a single-card shortcut — mark it, then jump to the station.
+		root.find(".sq-now").toggle(rows.length === 1).text(__("Issue stones now →"));
 	}
 
 	scan.$input.on("keydown", (e) => {
@@ -99,6 +103,23 @@ frappe.pages["stone-request"].on_page_load = function (wrapper) {
 				rows = [];
 				paint();
 				focusScan();
+			});
+	});
+
+	root.find(".sq-now").on("click", () => {
+		if (rows.length !== 1) return; // single-card shortcut only
+		const nm = rows[0].name;
+		frappe.call({ method: API + ".mark_stone_issue", args: { bags: JSON.stringify([nm]) } })
+			.then((r) => {
+				const m = r.message || {};
+				if ((m.errors || []).length) {
+					frappe.msgprint({ title: __("Can't issue"), indicator: "red",
+						message: m.errors.map((e) => `${esc(e.name)}: ${esc(e.error)}`).join("<br>") });
+					return;
+				}
+				// hand straight over to the Stone Issue station with this card loaded
+				frappe.route_options = { card: nm };
+				frappe.set_route("stone-issue");
 			});
 	});
 

@@ -167,9 +167,13 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			if (!d) return;
 			const chips = (st) => Object.entries(st || {})
 				.map(([k, v]) => `${k} ${v.pcs}/${v.ct.toFixed(3)}ct`).join(" · ");
+			// weight columns only where the bench books metal; the no-gold benches
+			// (CAD, Waxing, Wax Setting, Wax Cleaning) show cards · qty, not grams.
+			const wcols = D && D.flow === "weights";
+			const noGold = D && D.no_gold;
 			const tile = (label, dir, x) => `<span class="wk-dt wk-flow" data-dir="${dir}" title="${__("Click to see the cards — with a date filter")}">
 				<span class="k">${label}</span>
-				<span class="v">${x.count} · ${x.gold_g.toFixed(3)} g</span>
+				<span class="v">${noGold ? `${x.count} · ${x.qty || 0} pcs` : `${x.count} · ${x.gold_g.toFixed(3)} g`}</span>
 				${Object.keys(x.stones || {}).length ? `<span class="s">${chips(x.stones)}</span>` : ""}</span>`;
 			root.find(".wk-day-tiles").html(tile(__("In today"), "in", d.in) + tile(__("Out today"), "out", d.out));
 			root.find(".wk-day-title").text(__("Work done on {0} — {1} card(s)", [frappe.datetime.str_to_user(d.date), d.done_count]));
@@ -180,8 +184,7 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 				cards.forEach((c) => { const k = c.work_type || "—"; m[k] = (m[k] || 0) + 1; });
 				return Object.entries(m).map(([k, n]) => `${esc(k)} ×${n}`).join(", ");
 			};
-			// weight columns only where the bench actually books metal
-			const wcols = D && D.flow === "weights";
+			// weight columns only where the bench actually books metal (wcols set above)
 			root.find(".wk-day-body").html(d.done.length ? `
 				<table class="wk-dw"><thead><tr><th>${__("Worker")}</th><th>${__("Cards done")}</th>
 					<th>${__("Work types")}</th>${wcols ? `<th>${__("In g")}</th><th>${__("Loss g")}</th>` : ""}</tr></thead><tbody>

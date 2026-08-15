@@ -11,7 +11,7 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
-	const S = { rows: [], users: [], kpi: {}, today: null, owner: "", stage: "", due: "", q: "", sortKey: "due_date", sortDir: 1 };
+	const S = { rows: [], users: [], kpi: {}, today: null, owner: "", stage: "", due: "", q: "", sortKey: "due_date", sortDir: 1, sel: new Set() };
 
 	$(page.main).append(`
 		<style>
@@ -47,19 +47,21 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 		.ot-due{font-weight:700;} .ot-due.red{color:#b02a2a;} .ot-due.amber{color:#b4690e;} .ot-due.green{color:#1d7a33;}
 		.ot-flag{display:inline-block;border-radius:8px;padding:0 7px;font-size:9.5px;font-weight:800;margin-left:4px;}
 		.ot-flag.stn{background:#fff3cd;color:#8a6d00;} .ot-flag.oos{background:#fdecea;color:#b02a2a;}
-		table.ot-tbl th.act,table.ot-tbl td.act{text-align:center;cursor:default;}
-		.ot-follow{border:1px solid var(--gray-500,#8d97a3);background:transparent;color:var(--text-muted);border-radius:7px;padding:2px 9px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;}
-		.ot-follow:hover{border-color:#1f618d;color:#1f618d;}
-		.ot-follow.on{border-color:#1c7d3a;background:#e6f4ea;color:#1c7d3a;}
-		.ot-follow.on:hover{background:#d3ebd9;}
-		.ot-ftag{display:inline-block;border-radius:7px;padding:1px 8px;font-size:10.5px;font-weight:800;background:#e6f4ea;color:#1c7d3a;white-space:nowrap;}
+		.ot-stones{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:230px;}
+		.ot-stone{border-radius:8px;padding:1px 7px;font-size:10px;font-weight:800;white-space:nowrap;letter-spacing:.02em;}
+		.ot-stone.on{background:#dcefe0;color:#1d7a33;}
+		.ot-stone.wait{background:var(--control-bg,#eef2f7);color:#8a94a0;border:1px dashed var(--gray-400,#c4ccd6);padding:0 6px;}
+		.ot-nostone{color:var(--text-muted);}
+		table.ot-tbl th.sel,table.ot-tbl td.sel{width:30px;text-align:center;padding-left:10px;padding-right:2px;cursor:default;}
+		table.ot-tbl input[type=checkbox]{cursor:pointer;margin:0;vertical-align:middle;width:15px;height:15px;}
+		.ot-star{color:#e0a800;font-size:12px;margin-left:5px;}
 		.ot-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		</style>
 		<div class="ot-kpis" id="ot-kpis"></div>
 		<div class="ot-lbl">${__("Placed by — pick a person to focus")}</div>
 		<div class="ot-users" id="ot-users"></div>
 		<div class="ot-filters">
-			<input class="ot-q" placeholder="${__("Search card / design / customer / salesman / JO")}">
+			<input class="ot-q" placeholder="${__("Search card / design / customer / JO")}">
 			<select class="ot-stage"><option value="">${__("All stages")}</option></select>
 			<select class="ot-duef">
 				<option value="">${__("Any due")}</option>
@@ -76,6 +78,7 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_order_tracker" }).then((r) => {
 			const m = r.message || {};
 			S.rows = m.rows || []; S.users = m.users || []; S.kpi = m.kpi || {}; S.today = m.today;
+			S.sel.clear();
 			paintKpis(); paintUsers(); paintStages(); paint();
 		});
 	}
@@ -114,7 +117,7 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 			(!S.owner || r.owner === S.owner) &&
 			(!S.stage || r.stage === S.stage) &&
 			(!S.due || r.health === S.due) &&
-			(!q || (r.card + " " + r.design + " " + r.customer + " " + r.salesman + " " + r.job_order).toLowerCase().indexOf(q) !== -1));
+			(!q || (r.card + " " + r.design + " " + r.customer + " " + r.job_order).toLowerCase().indexOf(q) !== -1));
 		const dir = S.sortDir, key = S.sortKey;
 		rs = rs.slice().sort((a, b) => {
 			let va = a[key], vb = b[key];
@@ -126,20 +129,25 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 	};
 
 	const COLS = [
+		{ k: "_sel", t: "", sel: 1 },
 		{ k: "card", t: __("Order ID") }, { k: "job_order", t: __("Job Order") },
 		{ k: "design", t: __("Design") }, { k: "customer", t: __("Customer") },
-		{ k: "salesman", t: __("Salesman") }, { k: "order_date", t: __("Ordered") },
+		{ k: "order_date", t: __("Ordered") },
 		{ k: "due_date", t: __("Due") }, { k: "stage", t: __("Where") },
 		{ k: "qty", t: __("Qty"), num: 1 }, { k: "gross", t: __("Gross g"), num: 1 },
-		{ k: "age_days", t: __("Age d"), num: 1 }, { k: "owner_name", t: __("Placed by") },
-		{ k: "_follow", t: __("Follow"), act: 1 },
+		{ k: "_stones", t: __("Stones"), nosort: 1 },
+		{ k: "age_days", t: __("Age d"), num: 1 },
 	];
 
-	function followCell(r) {
-		if (r.can_follow) {
-			return `<button class="ot-follow ${r.followed ? "on" : ""}" data-jo="${esc(r.job_order)}" data-on="${r.followed ? 1 : 0}">${r.followed ? "★ " + __("Following") : "☆ " + __("Follow")}</button>`;
-		}
-		return r.followed ? `<span class="ot-ftag" title="${__("Followed by the person who placed it")}">★ ${__("Followed")}</span>` : "";
+	function stonesCell(r) {
+		if (!r.stones || !r.stones.length) return `<span class="ot-nostone">—</span>`;
+		return `<span class="ot-stones">` + r.stones.map((s) => {
+			const wt = s.added ? s.aw : s.pw;
+			const shown = wt ? wt.toFixed(2) : (s.added ? s.an : s.pn) + "p";
+			const title = `${s.k} — ${__("plan")} ${s.pn || 0}pc / ${s.pw}ct` +
+				(s.added ? ` · ${__("added")} ${s.an || 0}pc / ${s.aw}ct` : ` · ${__("not weighed yet")}`);
+			return `<span class="ot-stone ${s.added ? "on" : "wait"}" title="${esc(title)}">${s.k} ${shown}</span>`;
+		}).join("") + `</span>`;
 	}
 
 	function dueCell(r) {
@@ -158,42 +166,79 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 
 	function paint() {
 		const rs = visible();
-		root.find(".ot-count").text(__("{0} of {1} shown", [rs.length, S.rows.length]));
+		const followable = [...new Set(rs.filter((r) => r.can_follow).map((r) => r.job_order))];
+		const allSel = followable.length > 0 && followable.every((jo) => S.sel.has(jo));
+		const selN = S.sel.size;
+		root.find(".ot-count").text((selN ? __("{0} selected · ", [selN]) : "") + __("{0} of {1} shown", [rs.length, S.rows.length]));
+		refreshFollowBtns();
 		const arrow = (k) => (S.sortKey === k ? (S.sortDir > 0 ? " ▲" : " ▼") : "");
-		const head = `<thead><tr>${COLS.map((c) => `<th class="${c.num ? "num" : ""}${c.act ? " act" : ""}" data-k="${c.k}">${c.t}${c.act ? "" : arrow(c.k)}</th>`).join("")}</tr></thead>`;
+		const head = `<thead><tr>${COLS.map((c) => {
+			if (c.sel) return `<th class="sel" data-k="_sel"><input type="checkbox" class="ot-selall" ${allSel ? "checked" : ""} ${followable.length ? "" : "disabled"} title="${__("Select all you can follow")}"></th>`;
+			return `<th class="${c.num ? "num" : ""}" data-k="${c.k}">${c.t}${arrow(c.k)}</th>`;
+		}).join("")}</tr></thead>`;
 		const body = rs.length ? rs.map((r) => `<tr class="${r.health === "overdue" ? "ovd" : ""}">
-			<td><span class="ot-oid jw-card-link" data-card="${esc(r.card)}">${esc(r.card)}</span></td>
+			<td class="sel">${r.can_follow ? `<input type="checkbox" class="ot-selrow" data-jo="${esc(r.job_order)}" ${S.sel.has(r.job_order) ? "checked" : ""}>` : ""}</td>
+			<td><span class="ot-oid jw-card-link" data-card="${esc(r.card)}">${esc(r.card)}</span>${r.followed ? `<span class="ot-star" title="${__("Followed")}">★</span>` : ""}</td>
 			<td>${esc(r.job_order)}</td><td>${esc(r.design)}</td>
-			<td>${esc(r.customer)}</td><td>${esc(r.salesman)}</td>
+			<td>${esc(r.customer)}</td>
 			<td>${r.order_date ? frappe.datetime.str_to_user(r.order_date) : ""}</td>
 			<td>${dueCell(r)}</td>
 			<td>${stageBadge(r)}</td>
 			<td class="num">${r.qty}</td><td class="num">${r.gross ? r.gross.toFixed(3) : ""}</td>
-			<td class="num">${r.age_days}</td><td>${esc(r.owner_name)}</td>
-			<td class="act">${followCell(r)}</td>
+			<td>${stonesCell(r)}</td>
+			<td class="num">${r.age_days}</td>
 		</tr>`).join("") : `<tr><td colspan="${COLS.length}" class="ot-none">${__("No active orders match.")}</td></tr>`;
 		root.find("#ot-box").html(`<table class="ot-tbl">${head}<tbody>${body}</tbody></table>`);
-		root.find("#ot-box th").on("click", function () {
+		root.find("#ot-box th").on("click", function (e) {
+			if ($(e.target).is("input")) return; // the select-all checkbox handles itself
 			const k = this.getAttribute("data-k");
-			if (k.charAt(0) === "_") return; // action columns don't sort
+			if (k.charAt(0) === "_") return; // select / stones columns don't sort
 			if (S.sortKey === k) S.sortDir = -S.sortDir; else { S.sortKey = k; S.sortDir = 1; }
 			paint();
 		});
-		root.find(".ot-follow").on("click", function () {
+		root.find(".ot-selrow").on("change", function () {
 			const jo = this.getAttribute("data-jo");
-			const on = this.getAttribute("data-on") === "1";
-			frappe.call({ method: API + ".set_order_follow", args: { job_order: jo, followed: on ? 0 : 1 },
-				freeze: true, freeze_message: on ? __("Unfollowing…") : __("Following…") }).then(() => {
-				frappe.show_alert({ message: on ? __("Unfollowed {0}.", [jo]) : __("Following {0}.", [jo]),
-					indicator: on ? "orange" : "green" }, 4);
-				load();
-			});
+			if (this.checked) S.sel.add(jo); else S.sel.delete(jo);
+			paint();
+		});
+		root.find(".ot-selall").on("change", function () {
+			const on = this.checked;
+			followable.forEach((jo) => { if (on) S.sel.add(jo); else S.sel.delete(jo); });
+			paint();
 		});
 	}
 
 	root.find(".ot-q").on("input", function () { S.q = this.value; paint(); });
 	root.find(".ot-stage").on("change", function () { S.stage = this.value; paint(); });
 	root.find(".ot-duef").on("change", function () { S.due = this.value; paint(); });
+
+	// One adaptive action on the ticked orders (placer-only rows carry a checkbox):
+	// "Follow" normally, but "Unfollow" once every ticked order is already followed.
+	let btnFollow;
+	function selMeta() {
+		const jos = [...S.sel];
+		const followed = new Set(S.rows.filter((r) => r.followed).map((r) => r.job_order));
+		return { n: jos.length, allFollowed: jos.length > 0 && jos.every((jo) => followed.has(jo)) };
+	}
+	function refreshFollowBtns() {
+		if (!btnFollow) return;
+		const { n, allFollowed } = selMeta();
+		btnFollow.prop("disabled", !n)
+			.text(!n ? __("★ Follow") : allFollowed ? __("Unfollow ({0})", [n]) : __("★ Follow ({0})", [n]));
+	}
+	function doFollow() {
+		const jos = [...S.sel];
+		if (!jos.length) return;
+		const v = selMeta().allFollowed ? 0 : 1;
+		frappe.dom.freeze(v ? __("Following…") : __("Unfollowing…"));
+		Promise.all(jos.map((jo) => frappe.call({ method: API + ".set_order_follow", args: { job_order: jo, followed: v }, freeze: false })))
+			.then(() => {
+				frappe.dom.unfreeze();
+				frappe.show_alert({ message: v ? __("Now following {0} order(s).", [jos.length]) : __("Unfollowed {0} order(s).", [jos.length]), indicator: v ? "green" : "orange" }, 5);
+				load();
+			}).catch(() => { frappe.dom.unfreeze(); load(); });
+	}
+	btnFollow = page.add_inner_button(__("★ Follow"), doFollow);
 	page.add_inner_button(__("Refresh"), load);
 	load();
 };
