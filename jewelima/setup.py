@@ -314,7 +314,8 @@ def setup_roles():
 
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
-			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus") + JEWELIMA_TRANSFER_ROLES:
+			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
+			"JW Party Admin") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -638,6 +639,22 @@ def setup_roles():
 
 	# Ordering also manages design-type sizes (the Place Order Size list) — page + API.
 	set_page_roles("design-types", ("Jewelima Ordering",))
+
+	# ---- JW Party Admin: owns the Party menu (directory, create/migrate, look-up,
+	# masters, party stock/metal). Actions run through page APIs, but grant write
+	# on Customer so classify/rename works, and create/write on the party masters
+	# and the old-name store.
+	if not frappe.db.exists("Role", "JW Party Admin"):
+		frappe.get_doc({"doctype": "Role", "role_name": "JW Party Admin", "desk_access": 1}).insert(ignore_permissions=True)
+	grant("Customer", "JW Party Admin", {"read": 1, "write": 1, "create": 1, "report": 1, "print": 1, "export": 1})
+	for dt in ("Party Group", "Party Zone", "Party District", "Party State", "Party Special", "Party Old Name"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "JW Party Admin", {"read": 1, "write": 1, "create": 1, "delete": 1})
+	grant("Sales Person", "JW Party Admin", {"read": 1})
+	if frappe.db.exists("DocType", "Price Chart"):
+		grant("Price Chart", "JW Party Admin", {"read": 1})
+	for _pg in ("parties", "create-party", "look-up-party", "party-masters", "party-stock", "party-metal"):
+		set_page_roles(_pg, ("JW Party Admin",))
 
 	frappe.db.commit()
 

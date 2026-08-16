@@ -11,9 +11,10 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	const KINDS = [
-		{ kind: "group", title: __("Groups (Stores)"), hint: __("code up to 6 — leads the party name") },
-		{ kind: "zone", title: __("Zones"), hint: __("3-letter city/area code") },
-		{ kind: "state", title: __("States"), hint: __("2-letter driving-licence code") },
+		{ kind: "group", title: __("Groups (Companies)"), hint: __("code up to 6 — UNIQUE, one per company") },
+		{ kind: "zone", title: __("Zones (Localities)"), hint: __("up to 3 — may repeat across areas") },
+		{ kind: "district", title: __("Districts"), hint: __("up to 6 — may repeat") },
+		{ kind: "state", title: __("States"), hint: __("up to 3 — may repeat") },
 		{ kind: "special", title: __("Specials"), hint: __("optional tag at the end (PTY)") },
 	];
 	let DATA = {};
@@ -66,7 +67,7 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 				<div class="h"><span class="t">${k.title}</span><span class="s">${k.hint}</span></div>
 				<table class="pm-tbl"><tbody>
 					${rows.map((r) => `
-						<tr data-code="${esc(r.code)}" class="${open && open.kind === k.kind && open.code === r.code ? "on" : ""}">
+						<tr data-name="${esc(r.name)}" data-code="${esc(r.code)}" class="${open && open.kind === k.kind && open.name === r.name ? "on" : ""}">
 							<td class="c">${esc(r.code)}</td>
 							<td class="n">${esc(r.label || "")}</td>
 							<td class="u">${r.customers ? __("{0} customer(s)", [r.customers]) : __("unused")}</td>
@@ -94,25 +95,25 @@ frappe.pages["party-masters"].on_page_load = function (wrapper) {
 	root.on("click", ".pm-add", function () { add($(this).closest(".pm-card")); });
 	root.on("keydown", ".pm-addrow input", function (e) { if (e.key === "Enter") add($(this).closest(".pm-card")); });
 
-	function drill(kind, code) {
-		open = { kind, code };
+	function drill(kind, name) {
+		open = { kind, name };
 		const card = root.find(`.pm-card[data-kind="${kind}"]`);
 		root.find(".pm-cust").hide();
 		root.find("table.pm-tbl tr").removeClass("on");
-		card.find(`tr[data-code="${code}"]`).addClass("on");
-		frappe.call({ method: API + ".get_master_customers", args: { kind, code } }).then((r) => {
+		card.find(`tr[data-name="${name}"]`).addClass("on");
+		frappe.call({ method: API + ".get_master_customers", args: { kind, code: name } }).then((r) => {
 			const rows = (r.message || {}).customers || [];
-			card.find(".pm-cust-t").text(__("{0} — {1} customer(s)", [code, rows.length]));
+			card.find(".pm-cust-t").text(__("{0} — {1} customer(s)", [name, rows.length]));
 			card.find(".cb").html(rows.length ? `<table><tbody>${rows.map((c) => `
 				<tr><td><a href="/app/customer/${encodeURIComponent(c.name)}">${esc(c.name)}</a>${c.disabled ? ' <span style="color:var(--text-muted);">(off)</span>' : ""}</td>
-				<td>${esc([c.party_group, c.party_zone, c.party_state, c.party_special].filter(Boolean).join("-"))}</td>
+				<td>${esc(c.name)}</td>
 				<td>${esc(c.default_salesman || "")}</td></tr>`).join("")}</tbody></table>`
 				: `<div class="empty">${__("No customers carry this yet.")}</div>`);
 			card.find(".pm-cust").show();
 		});
 	}
-	root.on("click", "table.pm-tbl tr[data-code]", function () {
-		drill($(this).closest(".pm-card").data("kind"), $(this).data("code"));
+	root.on("click", "table.pm-tbl tr[data-name]", function () {
+		drill($(this).closest(".pm-card").data("kind"), $(this).data("name"));
 	});
 	root.on("click", ".pm-cust .x", function () {
 		open = null;

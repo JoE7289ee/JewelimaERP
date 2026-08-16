@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-08-17 00:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-17 05:13:39.076999",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "create-party",
+ "owner": "Administrator",
+ "page_name": "create-party",
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Create Party"
+}
