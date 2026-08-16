@@ -632,7 +632,7 @@ def setup_roles():
 	_everyone_roles = tuple(sorted(set(frappe.get_all("Has Role",
 		filters={"parenttype": "Page", "parent": ["in", _jwl_pages or [""]]},
 		distinct=True, pluck="role")) | {"JW Manager"}))
-	for _pg in ("training-videos", "my-account"):
+	for _pg in ("training-videos", "my-account", "request-feature"):
 		if frappe.db.exists("Page", _pg):
 			set_page_roles(_pg, _everyone_roles)
 
