@@ -50,7 +50,7 @@ frappe.pages["assign-bench"].on_page_load = function (wrapper) {
 		});
 	}
 
-	root.on("click", ".ab-rm", function () {
+	root.on("click", ".ab-chip .rm", function () {
 		const bench = $(this).closest(".ab-card").data("bench");
 		const employee = $(this).data("emp");
 		frappe.call({ method: API + ".set_bench_employee", args: { bench, employee, add: 0 } })
