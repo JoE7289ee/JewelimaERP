@@ -242,6 +242,15 @@ frappe.provide("frappe.ui.toolbar");
 		document.querySelectorAll('[data-title="Jewelima"]').forEach((sb) => {
 			if (sb.offsetParent === null) return;
 			let closed = false, emptySections = 0;
+			// Umbrella visibility: a "pure umbrella" (e.g. Setup) is a top section
+			// with NO direct links of its own — only sub-groups. Core keeps it in the
+			// DOM via an always-allowed URL anchor (blank row), so it renders for
+			// every role. But it should only SHOW when the role can see ≥1 sub-group
+			// beneath it — otherwise a bench worker gets an empty "Setup" header.
+			let umbrella = null, umbrellaPure = false, umbrellaSubs = 0;
+			const closeUmbrella = () => {
+				if (umbrella && umbrellaPure) umbrella.classList.toggle("hidden", umbrellaSubs === 0);
+			};
 			sb.querySelectorAll(".sidebar-item-container.section-item").forEach((el) => {
 				const isSub = el.querySelector(":scope > .standard-sidebar-item.indent");
 				const di = el.querySelector(".drop-icon");
@@ -251,12 +260,22 @@ frappe.provide("frappe.ui.toolbar");
 					nested.classList.toggle("hidden", di.getAttribute("data-state") === "closed");
 				}
 				if (!isSub) {
+					closeUmbrella(); // settle the previous umbrella before starting the next
 					closed = !!di && di.getAttribute("data-state") === "closed";
 					if (nested && nested.children.length === 0) emptySections++;
+					// own links = direct child rows with real text (the URL anchor is blank)
+					const ownLinks = nested
+						? [...nested.querySelectorAll(":scope > .sidebar-item-container")]
+							.filter((r) => (r.textContent || "").trim()).length
+						: 0;
+					umbrella = el; umbrellaPure = ownLinks === 0; umbrellaSubs = 0;
+					el.classList.remove("hidden"); // default visible; closeUmbrella may re-hide
 					return;
 				}
 				el.classList.toggle("hidden", closed);
+				umbrellaSubs++; // a rendered sub-group belongs to the current umbrella
 			});
+			closeUmbrella(); // settle the last umbrella
 			if (emptySections >= 2 && _rebuilds < 3 && Date.now() - _lastRebuild > 5000
 				&& frappe.app && frappe.app.sidebar && frappe.app.sidebar.make_sidebar) {
 				_rebuilds++;
@@ -269,8 +288,10 @@ frappe.provide("frappe.ui.toolbar");
 		});
 	}
 	// the Setup section holds only sub-groups; core refuses to render a section
-	// with no direct links, so the JSON gives it an invisible Spacer child — hide
-	// the blank row it produces. NOT via CSS [title=""]: Bootstrap tooltips (armed
+	// with no direct links, so the JSON gives it a blank URL-type anchor child
+	// (a Spacer only survives is_item_allowed for Administrator; a URL item is
+	// allowed for everyone, so Setup now renders for every role) — hide the blank
+	// row it produces. NOT via CSS [title=""]: Bootstrap tooltips (armed
 	// when the sidebar is collapsed to the icon rail) STEAL every item's title
 	// attribute, leaving title="" on all of them — that rule then hid the whole
 	// menu until refresh. Match the spacer by its empty text instead.
