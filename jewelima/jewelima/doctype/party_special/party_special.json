@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:code",
+ "autoname": "format:{code} - {special_name}",
  "creation": "2026-07-21 22:00:00.000000",
  "description": "Extensible special tag appended to the party name (PTY for now).",
  "doctype": "DocType",
@@ -17,9 +17,8 @@
    "fieldtype": "Data",
    "label": "Code",
    "reqd": 1,
-   "unique": 1,
    "in_list_view": 1,
-   "description": "UPPERCASE letters/digits, max 4 characters. Becomes part of every party name."
+   "description": "UPPERCASE letters/digits, max 4 characters. May repeat across values."
   },
   {
    "fieldname": "special_name",

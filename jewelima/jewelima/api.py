@@ -8329,18 +8329,33 @@ def _party_code(dt, name):
 	return code
 
 
-def _party_name_from(group, zone, state, special=None):
-	"""JOS + TCR + KL (+ PTY) -> 'JOS-TCR-KL-PTY'. All parts are master codes."""
+def _party_name_from(group, zone=None, district=None, state=None, special=None):
+	"""AJ + KUR + TCR + KL (+ PTY) -> 'AJ-KUR-TCR-KL-PTY'. All parts are master
+	codes. Group, district and state are required; zone and special are optional
+	(a group-level party can skip the locality zone)."""
 	g = _party_code("Party Group", group)
-	z = _party_code("Party Zone", zone)
+	z = _party_code("Party Zone", zone) if zone else None
+	d = _party_code("Party District", district) if district else None
 	s = _party_code("Party State", state)
-	if not (g and z and s):
-		frappe.throw(frappe._("Pick the group, zone and state — they build the party name."))
-	parts = [g, z, s]
+	if not (g and d and s):
+		frappe.throw(frappe._("Pick the group, district and state — they build the party name."))
+	parts = [p for p in (g, z, d, s) if p]
 	sp = _party_code("Party Special", special) if special else None
 	if sp:
 		parts.append(sp)
 	return "-".join(parts)
+
+
+def _old_names_by_party():
+	"""{customer -> [old name, ...]} from the Party Old Name store."""
+	out = {}
+	if not frappe.db.exists("DocType", "Party Old Name"):
+		return out
+	for r in frappe.get_all("Party Old Name Party",
+		fields=["party", "parent"], limit_page_length=0):
+		if r.party:
+			out.setdefault(r.party, []).append(r.parent)
+	return out
 
 
 # voucher types ride on the same Masters page (usage = purchase records)
@@ -8350,6 +8365,7 @@ PARTY_MASTERS = {
 	# kind -> (doctype, label field, customer link field)
 	"group": ("Party Group", "group_name", "party_group"),
 	"zone": ("Party Zone", "zone_name", "party_zone"),
+	"district": ("Party District", "district_name", "party_district"),
 	"state": ("Party State", "state_name", "party_state"),
 	"special": ("Party Special", "special_name", "party_special"),
 }
@@ -8360,16 +8376,20 @@ def get_party_masters():
 	"""Setup > Masters: every party master with its code, full name and how many
 	customers carry it — one call paints the whole page."""
 	custs = frappe.get_all("Customer",
-		fields=["party_group", "party_zone", "party_state", "party_special"], limit_page_length=0)
+		fields=["party_group", "party_zone", "party_district", "party_state", "party_special"],
+		limit_page_length=0)
 	out = {}
 	for kind, (dt, label_field, cust_field) in PARTY_MASTERS.items():
-		rows = frappe.get_all(dt, fields=["name", label_field], order_by="name")
+		rows = frappe.get_all(dt, fields=["name", "code", label_field], order_by="code")
 		counts = {}
 		for c in custs:
 			v = c.get(cust_field)
 			if v:
 				counts[v] = counts.get(v, 0) + 1
-		out[kind] = [{"code": r.name, "label": r.get(label_field), "customers": counts.get(r.name, 0)} for r in rows]
+		# name = the record id (what the party link stores; may be composite);
+		# code = the short code shown to the user (may repeat across values)
+		out[kind] = [{"name": r.name, "code": r.get("code"), "label": r.get(label_field),
+			"customers": counts.get(r.name, 0)} for r in rows]
 	if frappe.db.exists("DocType", "Certification Type"):
 		ct = frappe.get_all("Certification Type", fields=["name", "title"], order_by="name")
 		ccnt = {}
@@ -8414,8 +8434,13 @@ def add_party_master(kind, code, label):
 	code, label = (code or "").strip().upper(), (label or "").strip()
 	if not code or not label:
 		frappe.throw(frappe._("Enter both the code and the full name."))
-	if frappe.db.exists(dt, code):
-		frappe.throw(frappe._("{0} {1} already exists.").format(dt, code))
+	# Group codes are unique (one code = one company). Zone/District/State/Special
+	# codes may repeat, so only the exact code+name pair must be unique there.
+	if kind == "group" or kind in ("cert", "voucher"):
+		if frappe.db.exists(dt, code):
+			frappe.throw(frappe._("{0} {1} already exists.").format(dt, code))
+	elif frappe.db.exists(dt, {"code": code, label_field: label}):
+		frappe.throw(frappe._("{0} {1} ({2}) already exists.").format(dt, code, label))
 	d = frappe.get_doc({"doctype": dt, "code": code, label_field: label}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": d.name}
@@ -8426,17 +8451,20 @@ def get_party_directory():
 	"""Every party with its identity parts + defaults, plus the master lists —
 	one call paints the whole Parties page."""
 	rows = frappe.get_all("Customer",
-		fields=["name", "customer_name", "party_group", "party_zone", "party_state",
+		fields=["name", "customer_name", "party_group", "party_zone", "party_district", "party_state",
 			"party_special", "default_salesman", "default_price_chart", "disabled"],
 		order_by="name", limit_page_length=0)
+	oldnames = _old_names_by_party()
 	for r in rows:
 		r["exempt"] = 1 if r.name in PARTY_EXEMPT else 0
-		r["classified"] = 1 if (r.party_group and r.party_zone and r.party_state) else 0
+		r["classified"] = 1 if (r.party_group and r.party_district and r.party_state) else 0
+		r["old_names"] = oldnames.get(r.name, [])
 	masters = {
-		"groups": frappe.get_all("Party Group", fields=["name", "group_name"], order_by="name"),
-		"zones": frappe.get_all("Party Zone", fields=["name", "zone_name"], order_by="name"),
-		"states": frappe.get_all("Party State", fields=["name", "state_name"], order_by="name"),
-		"specials": frappe.get_all("Party Special", fields=["name", "special_name"], order_by="name"),
+		"groups": frappe.get_all("Party Group", fields=["name", "code", "group_name"], order_by="code"),
+		"zones": frappe.get_all("Party Zone", fields=["name", "code", "zone_name"], order_by="code"),
+		"districts": frappe.get_all("Party District", fields=["name", "code", "district_name"], order_by="code"),
+		"states": frappe.get_all("Party State", fields=["name", "code", "state_name"], order_by="code"),
+		"specials": frappe.get_all("Party Special", fields=["name", "code", "special_name"], order_by="code"),
 		"salesmen": frappe.get_all("Sales Person", filters={"is_group": 0}, pluck="name", order_by="name"),
 		"price_charts": frappe.get_all("Price Chart", filters={"status": "Active"}, pluck="name", order_by="name")
 			if frappe.db.exists("DocType", "Price Chart") else [],
@@ -8446,18 +8474,19 @@ def get_party_directory():
 
 
 @frappe.whitelist()
-def make_party(group, zone, state, special=None, salesman=None, price_chart=None):
-	"""Create a NEW party — the name IS the code combo (JOS-TCR-KL[-PTY]).
-	One party per exact combo; use a different zone (e.g. Chennai 2) for a
-	second store in the same city."""
-	nm = _party_name_from(group, zone, state, special)
+def make_party(group, zone=None, district=None, state=None, special=None, salesman=None, price_chart=None):
+	"""Create a NEW party — the name IS the code combo (AJ-KUR-TCR-KL[-PTY]).
+	One party per exact combo; use a different zone (locality) for a second
+	store in the same district."""
+	nm = _party_name_from(group, zone, district, state, special)
 	if frappe.db.exists("Customer", nm):
-		frappe.throw(frappe._("{0} already exists — one party per combo (add a zone like 'Chennai 2' for a second store).").format(nm))
+		frappe.throw(frappe._("{0} already exists — one party per combo (add a zone/locality for a second store).").format(nm))
 	cg = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
 	terr = frappe.db.get_value("Territory", {"is_group": 0}, "name")
 	doc = frappe.get_doc({
 		"doctype": "Customer", "customer_name": nm, "customer_group": cg, "territory": terr,
-		"party_group": group, "party_zone": zone, "party_state": state, "party_special": special or None,
+		"party_group": group, "party_zone": zone or None, "party_district": district or None,
+		"party_state": state, "party_special": special or None,
 		"default_salesman": salesman or None, "default_price_chart": price_chart or None,
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
@@ -8465,20 +8494,20 @@ def make_party(group, zone, state, special=None, salesman=None, price_chart=None
 
 
 @frappe.whitelist()
-def classify_party(customer, group, zone, state, special=None):
-	"""Give an EXISTING party its structured identity: set the four links and
-	RENAME the record to the generated code name. Every Link field pointing at
-	the customer (orders, bags, sales) follows the rename automatically."""
+def classify_party(customer, group, zone=None, district=None, state=None, special=None):
+	"""Give an EXISTING party its structured identity: set the links and RENAME
+	the record to the generated code name. Every Link field pointing at the
+	customer (orders, bags, sales) follows the rename automatically."""
 	if not frappe.db.exists("Customer", customer):
 		frappe.throw(frappe._("{0} not found.").format(customer))
 	if customer in PARTY_EXEMPT:
 		frappe.throw(frappe._("{0} is an internal stock holder — it stays outside the naming scheme.").format(customer))
-	nm = _party_name_from(group, zone, state, special)
+	nm = _party_name_from(group, zone, district, state, special)
 	if nm != customer and frappe.db.exists("Customer", nm):
 		frappe.throw(frappe._("{0} already exists — one party per combo.").format(nm))
 	frappe.db.set_value("Customer", customer, {
-		"party_group": group, "party_zone": zone, "party_state": state,
-		"party_special": special or None,
+		"party_group": group, "party_zone": zone or None, "party_district": district or None,
+		"party_state": state, "party_special": special or None,
 	})
 	if nm != customer:
 		frappe.rename_doc("Customer", customer, nm, force=True)
@@ -8510,14 +8539,16 @@ def get_party_detail(customer):
 	if not frappe.db.exists("Customer", customer):
 		frappe.throw(frappe._("{0} not found.").format(customer))
 	d = frappe.db.get_value("Customer", customer,
-		["name", "customer_name", "party_group", "party_zone", "party_state", "party_special",
-		 "default_salesman", "default_price_chart", "disabled", "creation"], as_dict=True)
+		["name", "customer_name", "party_group", "party_zone", "party_district", "party_state",
+		 "party_special", "default_salesman", "default_price_chart", "disabled", "creation"], as_dict=True)
 	labels = {
 		"group_label": frappe.db.get_value("Party Group", d.party_group, "group_name") if d.party_group else "",
 		"zone_label": frappe.db.get_value("Party Zone", d.party_zone, "zone_name") if d.party_zone else "",
+		"district_label": frappe.db.get_value("Party District", d.party_district, "district_name") if d.party_district else "",
 		"state_label": frappe.db.get_value("Party State", d.party_state, "state_name") if d.party_state else "",
 		"special_label": frappe.db.get_value("Party Special", d.party_special, "special_name") if d.party_special else "",
 	}
+	labels["old_names"] = _old_names_by_party().get(customer, [])
 	stats = {
 		"job_orders": frappe.db.count("Job Order", {"customer": customer}),
 		"last_order": str((frappe.get_all("Job Order", filters={"customer": customer},

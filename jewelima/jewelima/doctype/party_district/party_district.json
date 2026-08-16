@@ -1,15 +1,15 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:{code} - {zone_name}",
- "creation": "2026-07-21 22:00:00.000000",
- "description": "City / area zone (Thrissur, Chennai, Chennai 2). 3-letter code.",
+ "autoname": "format:{code} - {district_name}",
+ "creation": "2026-08-17 00:00:00.000000",
+ "description": "District (Thrissur, Palakkad, Bangalore). Code can be shared across companies/localities.",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "code",
-  "zone_name"
+  "district_name"
  ],
  "fields": [
   {
@@ -18,22 +18,22 @@
    "label": "Code",
    "reqd": 1,
    "in_list_view": 1,
-   "description": "UPPERCASE letters/digits, max 3 characters. May repeat across values."
+   "description": "UPPERCASE letters/digits, max 6. Part of the party name. May repeat across districts."
   },
   {
-   "fieldname": "zone_name",
+   "fieldname": "district_name",
    "fieldtype": "Data",
-   "label": "Zone Name",
+   "label": "District Name",
    "reqd": 1,
    "in_list_view": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-21 22:00:00.000000",
+ "modified": "2026-08-17 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "Party Zone",
+ "name": "Party District",
  "owner": "Administrator",
  "permissions": [
   {
