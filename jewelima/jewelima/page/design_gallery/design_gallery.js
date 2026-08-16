@@ -381,19 +381,6 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 	function createVariant(d) {
 		const go = (N) => {
 			let cur = null; // last resolve result: {name, exists, design_type, image, design_bank}
-			function bomItemChanged() {
-				const row = this.doc || (this.grid_row && this.grid_row.doc);
-				if (!row) return;
-				if (!row.item) { row.purity = 0; row.uom = ""; row.pure = 0; vd.fields_dict.materials.grid.refresh(); return; }
-				frappe.db.get_value("Item", row.item, ["purity_percentage", "weight_unit", "stone_type"]).then((r) => {
-					const v = r.message || {};
-					row.purity = flt(v.purity_percentage);
-					row.uom = v.weight_unit || "";
-					row.stone_type = v.stone_type || "";
-					row.qty = 0; row.weight = 0; row.pure = 0;
-					vd.fields_dict.materials.grid.refresh();
-				});
-			}
 			function bomWeightChanged() {
 				const row = this.doc || (this.grid_row && this.grid_row.doc);
 				if (!row) return;
@@ -422,9 +409,13 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 					{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
 					{
 						fieldname: "materials", fieldtype: "Table", label: __("Materials"), options: "Design BOM Item", data: [],
-						description: __("Stones need both a Qty (count) and a Weight (carats). Metals need a Weight (grams)."),
+						// the variant's materials are FIXED by the system (from the karat/stones/colour
+						// above) — the user only fills weights/qty, never adds, removes, or swaps a
+						// material. Change the selectors above for a different composition.
+						cannot_add_rows: true, cannot_delete_rows: true,
+						description: __("Materials are set by the variant — fill the Weight (grams for metal) and, for stones, the Qty. Change Karat / Stones / Colour above for a different composition."),
 						fields: [
-							{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, only_select: 1, get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
+							{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, read_only: 1 },
 							{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 							{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
 							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
