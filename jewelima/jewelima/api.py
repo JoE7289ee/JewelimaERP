@@ -14239,3 +14239,83 @@ def set_order_follow(job_order, followed):
 def following_unfollow(job_order):
 	"""Drop a job order off the Following page — a thin wrapper on set_order_follow."""
 	return set_order_follow(job_order, 0)
+
+
+# --- Training Videos (learning page) ----------------------------------------------
+@frappe.whitelist()
+def get_training_videos():
+	"""Learning page: published training videos, each with the roles that can
+	actually perform what it shows, whether the current user is one of those
+	roles, and an admin flag for the mark-for-update control."""
+	me_roles = set(frappe.get_roles())
+	is_admin = bool({"System Manager", "JW Manager"} & me_roles)
+	out = []
+	for v in frappe.get_all("Training Video", filters={"published": 1},
+			fields=["name", "title", "category", "video", "description", "needs_update"],
+			order_by="sort_order asc, title asc"):
+		roles = frappe.get_all("Training Video Role", filters={"parent": v.name}, pluck="role")
+		v["roles"] = roles
+		v["can_do"] = 1 if (not roles or (set(roles) & me_roles)) else 0
+		v["needs_update"] = cint(v.needs_update)
+		out.append(v)
+	cats = []
+	for v in out:
+		c = v.get("category") or "General"
+		if c not in cats:
+			cats.append(c)
+	return {"videos": out, "categories": cats, "is_admin": 1 if is_admin else 0, "me": frappe.session.user}
+
+
+@frappe.whitelist()
+def training_video_set_update(name, needs_update):
+	"""Mark / clear a video's 'needs update' flag — System Manager or JW Manager only."""
+	frappe.only_for(("System Manager", "JW Manager"))
+	frappe.db.set_value("Training Video", name, "needs_update", 1 if cint(needs_update) else 0)
+	frappe.db.commit()
+	return {"ok": 1, "needs_update": 1 if cint(needs_update) else 0}
+
+
+# --- My Account (self-service login name + password) -------------------------------
+# The staff roles are tight read-only personas that can't open the User form, so
+# these give every logged-in user a safe way to change their OWN login handle and
+# password. Each acts strictly on frappe.session.user — never anyone else.
+def _me():
+	u = frappe.session.user
+	if not u or u == "Guest":
+		frappe.throw(frappe._("Please log in."), frappe.PermissionError)
+	return u
+
+
+@frappe.whitelist()
+def get_my_account():
+	u = _me()
+	d = frappe.db.get_value("User", u, ["username", "full_name"], as_dict=True) or {}
+	return {"user": u, "username": d.get("username") or "", "full_name": d.get("full_name") or ""}
+
+
+@frappe.whitelist()
+def set_my_username(username):
+	"""Change my own login name. Frappe validates it's unique on save."""
+	u = _me()
+	handle = (username or "").strip()
+	if not handle:
+		frappe.throw(frappe._("Enter a login name."))
+	doc = frappe.get_doc("User", u)
+	doc.username = handle
+	doc.save(ignore_permissions=True)  # raises if the handle is taken
+	frappe.db.commit()
+	return {"ok": 1, "username": handle}
+
+
+@frappe.whitelist()
+def set_my_password(new_password):
+	"""Set my own password (the active session is the authorisation)."""
+	u = _me()
+	pwd = (new_password or "").strip()
+	if len(pwd) < 6:
+		frappe.throw(frappe._("Password must be at least 6 characters."))
+	from frappe.utils.password import update_password
+
+	update_password(user=u, pwd=pwd)
+	frappe.db.commit()
+	return {"ok": 1}

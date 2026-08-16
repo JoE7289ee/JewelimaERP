@@ -31,6 +31,19 @@ $(document).on("click", "a.jw-card-link", function (e) {
 	frappe.set_route("card-info");
 });
 
+// the bottom-left user avatar opens self-service MY ACCOUNT (change own login
+// name + password). Our tight staff personas can't open the raw User form, so
+// its default navigation just errors "Not permitted" — intercept in the capture
+// phase so this beats the element's own handler.
+document.addEventListener("click", function (e) {
+	const btn = e.target.closest && e.target.closest(".sidebar-user-button");
+	if (btn) {
+		e.preventDefault();
+		e.stopPropagation();
+		frappe.set_route("my-account");
+	}
+}, true);
+
 frappe.provide("jewelima");
 
 // small inline icons (lucide-style) for the contact line

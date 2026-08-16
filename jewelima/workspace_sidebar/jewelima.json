@@ -20,6 +20,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "circle-play",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Training Videos",
+   "link_to": "training-videos",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 0,
    "icon": "award",
@@ -2464,7 +2477,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-13 20:29:16.439352",
+ "modified": "2026-08-16 08:50:22.091126",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

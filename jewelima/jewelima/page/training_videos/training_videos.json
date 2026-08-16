@@ -4,12 +4,12 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-16 08:50:30.822998",
+ "modified": "2026-08-16 08:50:30.807671",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "my-account",
+ "name": "training-videos",
  "owner": "Administrator",
- "page_name": "my-account",
+ "page_name": "training-videos",
  "roles": [
   {
    "role": "JW Manager"
@@ -42,6 +42,9 @@
    "role": "Jewelima Bench SETTING"
   },
   {
+   "role": "Jewelima CAD"
+  },
+  {
    "role": "Jewelima Bench WAX CLEANING"
   },
   {
@@ -49,9 +52,6 @@
   },
   {
    "role": "Jewelima Bench WAXING"
-  },
-  {
-   "role": "Jewelima CAD"
   },
   {
    "role": "Jewelima Design Approver"
@@ -81,16 +81,16 @@
    "role": "Jewelima Stone Issue"
   },
   {
-   "role": "Jewelima Transfer"
-  },
-  {
-   "role": "Jewelima Transfer Plus"
-  },
-  {
    "role": "Stock Manager"
   },
   {
+   "role": "Jewelima Transfer"
+  },
+  {
    "role": "Stock User"
+  },
+  {
+   "role": "Jewelima Transfer Plus"
   },
   {
    "role": "System Manager"
@@ -100,5 +100,5 @@
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "My Account"
+ "title": "Training Videos"
 }

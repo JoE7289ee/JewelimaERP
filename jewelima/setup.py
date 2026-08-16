@@ -624,6 +624,18 @@ def setup_roles():
 	for pg in frappe.get_all("Page", filters={"module": "Jewelima"}, pluck="name"):
 		set_page_roles(pg, ("JW Manager",))
 
+	# ---- Everyone-pages: the learning page + self-service My Account -----------
+	# The base role is retired, so "everyone" = every role that can open any other
+	# Jewelima page. Collect them (after all grants above) and open these pages to
+	# all, so anyone on the desk can watch tutorials and manage their own login.
+	_jwl_pages = frappe.get_all("Page", filters={"module": "Jewelima"}, pluck="name")
+	_everyone_roles = tuple(sorted(set(frappe.get_all("Has Role",
+		filters={"parenttype": "Page", "parent": ["in", _jwl_pages or [""]]},
+		distinct=True, pluck="role")) | {"JW Manager"}))
+	for _pg in ("training-videos", "my-account"):
+		if frappe.db.exists("Page", _pg):
+			set_page_roles(_pg, _everyone_roles)
+
 	frappe.db.commit()
 
 
