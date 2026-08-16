@@ -33,6 +33,11 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 		.dv-days.over{background:#b02a2a;}
 		.dv-days.soon{background:#e0a800;color:#3a2c00;}
 		.dv-none{padding:36px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
+		.dv-stones{display:inline-flex;gap:3px;flex-wrap:wrap;max-width:230px;}
+		.dv-stone{border-radius:8px;padding:1px 7px;font-size:10px;font-weight:800;white-space:nowrap;letter-spacing:.02em;}
+		.dv-stone.on{background:#dcefe0;color:#1d7a33;}
+		.dv-stone.wait{background:var(--control-bg,#eef2f7);color:#8a94a0;border:1px dashed var(--gray-400,#c4ccd6);padding:0 6px;}
+		.dv-nostone{color:var(--text-muted);}
 		</style>
 		<div class="dv-top">
 			<label style="margin:0;font-size:12.5px;">${__("Due within")}
@@ -50,6 +55,17 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 		return `<span class="dv-days soon">${d}${__("d left")}</span>`;
 	}
 
+	function stonesCell(r) {
+		if (!r.stones || !r.stones.length) return `<span class="dv-nostone">—</span>`;
+		return `<span class="dv-stones">` + r.stones.map((s) => {
+			const wt = s.added ? s.aw : s.pw;
+			const shown = wt ? wt.toFixed(2) : (s.added ? s.an : s.pn) + "p";
+			const title = `${s.k} — ${__("plan")} ${s.pn || 0}pc / ${s.pw}ct` +
+				(s.added ? ` · ${__("added")} ${s.an || 0}pc / ${s.aw}ct` : ` · ${__("not weighed yet")}`);
+			return `<span class="dv-stone ${s.added ? "on" : "wait"}" title="${esc(title)}">${s.k} ${shown}</span>`;
+		}).join("") + `</span>`;
+	}
+
 	function paint() {
 		root.find(".dv-total").text(__("{0} card(s) at risk", [D.total]));
 		root.find(".dv-body").html(D.total ? D.benches.map((b) => `
@@ -57,7 +73,7 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.rows.length} ${__("card(s)")}</span></div>
 				<table class="dv-t"><thead><tr>
 					<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Qty")}</th><th>${__("Party")}</th>
-					<th>${__("Order Type")}</th><th>${__("Gold g")}</th><th>${__("Due")}</th><th>${__("Days")}</th>
+					<th>${__("Order Type")}</th><th>${__("Gold g")}</th><th>${__("Stones")}</th><th>${__("Due")}</th><th>${__("Days")}</th>
 				</tr></thead><tbody>
 				${b.rows.map((r) => `<tr>
 					<td><span class="dv-link dv-card" data-card="${esc(r.name)}" title="${__("open Card Info")}">${esc(r.name)}</span></td>
@@ -65,6 +81,7 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 					<td>${r.qty || ""}</td>
 					<td>${esc(r.party || "")}</td><td>${esc(r.order_type || "")}</td>
 					<td style="${(r.gold_g || 0) <= 0.0005 ? "color:#b02a2a;font-weight:700;" : ""}">${(r.gold_g || 0).toFixed(3)}</td>
+					<td>${stonesCell(r)}</td>
 					<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 					<td>${chip(r.days_left)}</td>
 				</tr>`).join("")}</tbody></table>

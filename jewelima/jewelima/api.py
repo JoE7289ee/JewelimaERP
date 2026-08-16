@@ -5663,11 +5663,18 @@ def get_due_soon(days=5):
 	by bench — cast or not (gold grams shown so the uncast stand out)."""
 	days = cint(days) if cint(days) else 5
 	horizon = frappe.utils.add_days(frappe.utils.today(), days)
+	buckets = [("dmd", "DMD"), ("ps", "PS"), ("cs", "CS"), ("cz", "CZ"),
+		("cvd", "CVD"), ("sw", "SW"), ("pdmd", "PDMD"), ("poth", "POTH")]
+	stone_cols = ", ".join(
+		"b.{k}_no AS {k}_pn, b.{k}_weight AS {k}_pw, "
+		"b.act_{k}_no AS {k}_an, b.act_{k}_weight AS {k}_aw".format(k=k)
+		for k, _ in buckets)
 	rows = frappe.db.sql("""
 		SELECT b.name, b.design, b.qty, b.location,
 			jo.customer party, jo.order_type, jo.due_date due,
 			DATEDIFF(jo.due_date, CURDATE()) days_left,
-			COALESCE(g.gold_g, 0) gold_g
+			COALESCE(g.gold_g, 0) gold_g,
+			{stone_cols}
 		FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		LEFT JOIN (
@@ -5679,13 +5686,23 @@ def get_due_soon(days=5):
 		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
 		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
 		ORDER BY jo.due_date, b.name
-	""", horizon, as_dict=True)
+	""".format(stone_cols=stone_cols), horizon, as_dict=True)
 	listed = set(frappe.get_all("Priority Card", pluck="order_bag"))
 	benches = {}
 	for r in rows:
 		r["due"] = str(r.due or "")
 		r["gold_g"] = round(flt(r.gold_g), 3)
 		r["on_priority"] = 1 if r.name in listed else 0
+		stones = []
+		for k, label in buckets:
+			pn, pw = cint(r.get(k + "_pn")), flt(r.get(k + "_pw"))
+			an, aw = cint(r.get(k + "_an")), flt(r.get(k + "_aw"))
+			if pn or pw or an or aw:
+				stones.append({"k": label, "pn": pn, "pw": round(pw, 3),
+					"an": an, "aw": round(aw, 3), "added": 1 if aw > 0 else 0})
+			r.pop(k + "_pn", None); r.pop(k + "_pw", None)
+			r.pop(k + "_an", None); r.pop(k + "_aw", None)
+		r["stones"] = stones
 		benches.setdefault(r.location or "(no bench)", []).append(r)
 	return {"days": days, "total": len(rows),
 		"benches": [{"bench": k, "rows": v} for k, v in sorted(benches.items())]}
