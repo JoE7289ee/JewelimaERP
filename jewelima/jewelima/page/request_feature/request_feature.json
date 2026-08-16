@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-16 11:12:11.052064",
+ "modified": "2026-08-16 13:00:32.436329",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "request-feature",
@@ -21,10 +21,16 @@
    "role": "Jewelima Bench BAG EXTRACTION"
   },
   {
+   "role": "Jewelima CAD"
+  },
+  {
    "role": "Jewelima Bench CAD"
   },
   {
    "role": "Jewelima Bench CAM"
+  },
+  {
+   "role": "Stock Manager"
   },
   {
    "role": "Jewelima Bench FILING"
@@ -33,16 +39,19 @@
    "role": "Jewelima Bench FINAL POLISH"
   },
   {
+   "role": "Stock User"
+  },
+  {
    "role": "Jewelima Bench GRINDING"
   },
   {
    "role": "Jewelima Bench PRE POLISH"
   },
   {
-   "role": "Jewelima Bench SETTING"
+   "role": "System Manager"
   },
   {
-   "role": "Jewelima CAD"
+   "role": "Jewelima Bench SETTING"
   },
   {
    "role": "Jewelima Bench WAX CLEANING"
@@ -81,19 +90,10 @@
    "role": "Jewelima Stone Issue"
   },
   {
-   "role": "Stock Manager"
-  },
-  {
    "role": "Jewelima Transfer"
   },
   {
-   "role": "Stock User"
-  },
-  {
    "role": "Jewelima Transfer Plus"
-  },
-  {
-   "role": "System Manager"
   }
  ],
  "script": null,

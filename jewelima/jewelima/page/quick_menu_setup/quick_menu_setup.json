@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-16 11:12:11.080855",
+ "modified": "2026-08-16 13:00:32.464348",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "quick-menu-setup",
@@ -24,6 +24,9 @@
    "role": "Jewelima Bench CAD"
   },
   {
+   "role": "Jewelima CAD"
+  },
+  {
    "role": "Jewelima Bench CAM"
   },
   {
@@ -36,10 +39,19 @@
    "role": "Jewelima Bench GRINDING"
   },
   {
+   "role": "Stock Manager"
+  },
+  {
    "role": "Jewelima Bench PRE POLISH"
   },
   {
+   "role": "Stock User"
+  },
+  {
    "role": "Jewelima Bench SETTING"
+  },
+  {
+   "role": "System Manager"
   },
   {
    "role": "Jewelima Bench WAX CLEANING"
@@ -49,9 +61,6 @@
   },
   {
    "role": "Jewelima Bench WAXING"
-  },
-  {
-   "role": "Jewelima CAD"
   },
   {
    "role": "Jewelima Design Approver"
@@ -85,15 +94,6 @@
   },
   {
    "role": "Jewelima Transfer Plus"
-  },
-  {
-   "role": "Stock Manager"
-  },
-  {
-   "role": "Stock User"
-  },
-  {
-   "role": "System Manager"
   }
  ],
  "script": null,
