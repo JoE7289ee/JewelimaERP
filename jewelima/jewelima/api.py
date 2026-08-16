@@ -8517,6 +8517,44 @@ def classify_party(customer, group, zone=None, district=None, state=None, specia
 
 
 @frappe.whitelist()
+def lookup_old_name(old_name):
+	"""Look-Up Party: given a legacy name, return the new party name(s) it maps to.
+	found=0 -> no such old name recorded; found=1 with empty parties -> recorded
+	but not yet created."""
+	q = (old_name or "").strip()
+	if not q:
+		return {"found": 0, "query": q, "parties": []}
+	nm = frappe.db.get_value("Party Old Name", {"old_name": q}, "name")
+	if not nm:
+		hit = frappe.db.sql("select name from `tabParty Old Name` where lower(old_name)=lower(%s) limit 1", q)
+		nm = hit[0][0] if hit else None
+	if not nm:
+		return {"found": 0, "query": q, "parties": []}
+	doc = frappe.get_doc("Party Old Name", nm)
+	return {"found": 1, "old_name": doc.old_name, "note": doc.note or "",
+		"parties": [r.party for r in doc.parties if r.party]}
+
+
+@frappe.whitelist()
+def assign_old_name(old_name, party):
+	"""Migrate: link a legacy name to a (new) party. Creates the Party Old Name
+	record if needed; a name can carry several parties."""
+	q = (old_name or "").strip()
+	if not q:
+		frappe.throw(frappe._("Enter the old name."))
+	if not frappe.db.exists("Customer", party):
+		frappe.throw(frappe._("Party {0} not found.").format(party))
+	nm = frappe.db.get_value("Party Old Name", {"old_name": q}, "name")
+	doc = frappe.get_doc("Party Old Name", nm) if nm else frappe.get_doc(
+		{"doctype": "Party Old Name", "old_name": q})
+	if not any(r.party == party for r in (doc.parties or [])):
+		doc.append("parties", {"party": party})
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"old_name": doc.old_name, "parties": [r.party for r in doc.parties if r.party]}
+
+
+@frappe.whitelist()
 def update_party_defaults(customer, salesman=None, price_chart=None):
 	"""The per-party defaults the sale/order flow prefills from."""
 	if not frappe.db.exists("Customer", customer):

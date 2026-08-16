@@ -53,6 +53,8 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 		table.pt-ro td{padding:4px 8px;border-bottom:1px solid var(--border-color);}
 		.pt-hint{color:var(--text-muted);font-size:12px;margin-top:12px;}
 		.pt-exempt{background:rgba(127,140,141,.1);border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--text-muted);margin-top:8px;}
+		.pt-old{font-size:12.5px;margin:-8px 0 14px;color:var(--text-color);}
+		.pt-old b{font-size:10px;text-transform:uppercase;color:var(--text-muted);margin-right:6px;letter-spacing:.05em;}
 		</style>
 		<div class="pt-cols">
 			<div class="pt-left">
@@ -61,12 +63,12 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 				</div>
 				<div class="pt-unc" style="display:none;"></div>
 				<div class="pt-box"><table class="pt-grid">
-					<thead><tr><th>${__("Party")}</th><th>${__("Group")}</th><th>${__("Zone")}</th><th>${__("State")}</th><th>${__("Spl")}</th></tr></thead>
+					<thead><tr><th>${__("Party")}</th><th>${__("Group")}</th><th>${__("Zone")}</th><th>${__("District")}</th><th>${__("State")}</th><th>${__("Spl")}</th><th>${__("Old name")}</th></tr></thead>
 					<tbody class="pt-body"></tbody>
 				</table></div>
 			</div>
 			<div class="pt-right"><div class="pt-detail"></div>
-				<div class="pt-hint pt-pickhint">${__("Pick a party on the left — or create one with New Party above.")}</div>
+				<div class="pt-hint pt-pickhint">${__("Pick a party on the left to see its details.")}</div>
 			</div>
 		</div>
 	`);
@@ -81,8 +83,6 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 	fG.$input.on("change", () => { filter.group = fG.get_value() || ""; paintList(); });
 	fZ.$input.on("change", () => { filter.zone = fZ.get_value() || ""; paintList(); });
 	fS.$input.on("change", () => { filter.state = fS.get_value() || ""; paintList(); });
-
-	page.set_primary_action(__("New Party"), () => partyDialog(null), "add");
 
 	function load(keep) {
 		frappe.call({ method: API + ".get_party_directory" }).then((r) => {
@@ -114,12 +114,15 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 			if (filter.only_unclassified && (p.classified || p.exempt)) return false;
 			return true;
 		});
+		const codeOf = (v) => (v || "").split(" - ")[0]; // composite master name -> short code
 		root.find(".pt-body").html(rows.map((p) => `
 			<tr data-name="${esc(p.name)}" class="${p.name === picked ? "sel" : ""}">
 				<td class="${p.exempt ? "ex" : p.classified ? "code" : "unc"}">${esc(p.name)}${p.disabled ? ' <span class="ex">(off)</span>' : ""}</td>
-				<td>${esc(p.party_group || "")}</td><td>${esc(p.party_zone || "")}</td>
-				<td>${esc(p.party_state || "")}</td><td>${esc(p.party_special || "")}</td>
-			</tr>`).join("") || `<tr><td colspan="5" class="ex" style="padding:16px;">${__("No parties match.")}</td></tr>`);
+				<td>${esc(p.party_group || "")}</td><td>${esc(codeOf(p.party_zone))}</td>
+				<td>${esc(codeOf(p.party_district))}</td>
+				<td>${esc(codeOf(p.party_state))}</td><td>${esc(codeOf(p.party_special))}</td>
+				<td class="ex">${esc((p.old_names || []).join(", "))}</td>
+			</tr>`).join("") || `<tr><td colspan="7" class="ex" style="padding:16px;">${__("No parties match.")}</td></tr>`);
 	}
 	root.on("click", ".pt-body tr[data-name]", function () { openParty($(this).data("name")); });
 
@@ -130,14 +133,17 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 			const d = r.message || {};
 			root.find(".pt-pickhint").hide();
 			const $d = root.find(".pt-detail").show();
+			const cc = (v) => (v || "").split(" - ")[0]; // composite master name -> short code
 			const tag = (k, code, label) => code ? `<span class="pt-tag"><b>${k}</b>${esc(code)}${label ? " · " + esc(label) : ""}</span>` : "";
 			$d.html(`
 				<div class="pt-name">${esc(d.name)}</div>
 				<div class="pt-tags">
-					${tag(__("Group"), d.party_group, d.group_label)}${tag(__("Zone"), d.party_zone, d.zone_label)}
-					${tag(__("State"), d.party_state, d.state_label)}${tag(__("Special"), d.party_special, d.special_label)}
+					${tag(__("Group"), cc(d.party_group), d.group_label)}${tag(__("Zone"), cc(d.party_zone), d.zone_label)}
+					${tag(__("District"), cc(d.party_district), d.district_label)}
+					${tag(__("State"), cc(d.party_state), d.state_label)}${tag(__("Special"), cc(d.party_special), d.special_label)}
 					${!d.party_group && !d.exempt ? `<span class="pt-tag" style="color:#b35a00;">${__("UNCLASSIFIED")}</span>` : ""}
 				</div>
+				${(d.old_names || []).length ? `<div class="pt-old"><b>${__("Old name(s)")}</b> ${esc(d.old_names.join(", "))}</div>` : ""}
 				${d.exempt ? `<div class="pt-exempt">${__("Internal stock holder — exempt from the naming scheme.")}</div>` : ""}
 				<div class="pt-nums">
 					<div class="pt-num"><div class="k">${__("Job Orders")}</div><div class="v">${d.stats.job_orders}</div></div>
@@ -154,10 +160,6 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 					`<tr><td><a href="/app/job-order/${encodeURIComponent(o.name)}">${esc(o.name)}</a></td>
 					<td>${esc(o.creation)}</td><td>${esc(o.salesman || "")}</td><td>${esc(o.order_type || "")}</td></tr>`).join("")}</table>`
 					: `<span class="ex">${__("No orders yet.")}</span>`}
-				<div style="margin-top:16px;display:flex;gap:8px;">
-					${!d.exempt ? `<button class="btn btn-sm btn-default pt-classify">${d.party_group ? __("Edit Identity") : __("Classify — build the code name")}</button>` : ""}
-					<a class="btn btn-sm btn-default" href="/app/customer/${encodeURIComponent(d.name)}">${__("Open Customer record")}</a>
-				</div>
 			`);
 			const dsm = mk(".pt-dsm", { fieldtype: "Link", label: __("Default Salesman"), fieldname: "dsm", options: "Sales Person" });
 			const dpc = mk(".pt-dpc", { fieldtype: "Link", label: __("Default Price Chart"), fieldname: "dpc", options: "Price Chart" });
@@ -168,46 +170,7 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 					customer: d.name, salesman: dsm.get_value() || null, price_chart: dpc.get_value() || null,
 				} }).then(() => frappe.show_alert({ message: __("Defaults saved."), indicator: "green" }, 3));
 			});
-			$d.find(".pt-classify").on("click", () => partyDialog(d));
 		});
-	}
-
-	// New Party (d = null) or Classify/Edit an existing one (d = detail)
-	function partyDialog(d) {
-		const dlg = new frappe.ui.Dialog({
-			title: d ? __("Classify {0}", [d.name]) : __("New Party"),
-			fields: [
-				{ fieldname: "group", fieldtype: "Link", label: __("Group (store)"), options: "Party Group", reqd: 1, default: d && d.party_group },
-				{ fieldname: "zone", fieldtype: "Link", label: __("Zone"), options: "Party Zone", reqd: 1, default: d && d.party_zone,
-					description: __("Second store in the same city? Add a zone like 'Chennai 2' (CH2).") },
-				{ fieldname: "state", fieldtype: "Link", label: __("State"), options: "Party State", reqd: 1, default: d && d.party_state },
-				{ fieldname: "special", fieldtype: "Link", label: __("Special (optional)"), options: "Party Special", default: d && d.party_special },
-				{ fieldname: "preview", fieldtype: "HTML" },
-			],
-			primary_action_label: d ? __("Classify & Rename") : __("Create"),
-			primary_action(v) {
-				dlg.hide();
-				frappe.dom.freeze(d ? __("Renaming...") : __("Creating..."));
-				const call = d
-					? frappe.call({ method: API + ".classify_party", args: { customer: d.name, ...v } })
-					: frappe.call({ method: API + ".make_party", args: v });
-				call.then((r) => {
-					frappe.dom.unfreeze();
-					const m = r.message || {};
-					picked = m.name;
-					frappe.show_alert({ message: d ? __("Now {0}.", [m.name]) : __("{0} created.", [m.name]), indicator: "green" }, 4);
-					load(true);
-				}).catch(() => frappe.dom.unfreeze());
-			},
-		});
-		const paintPreview = () => {
-			const g = dlg.get_value("group"), z = dlg.get_value("zone"), s = dlg.get_value("state"), sp = dlg.get_value("special");
-			dlg.fields_dict.preview.$wrapper.html(g && z && s
-				? `<div style="font-size:18px;font-weight:800;padding:6px 0;">→ ${esc([g, z, s, sp].filter(Boolean).join("-"))}</div>` : "");
-		};
-		["group", "zone", "state", "special"].forEach((f) => dlg.fields_dict[f].$input.on("change", () => setTimeout(paintPreview, 100)));
-		dlg.show();
-		setTimeout(paintPreview, 200);
 	}
 
 	load();
