@@ -117,6 +117,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	const $actions = $(page.main).find(".ac-actions");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
 	const empVal = () => state.emp.get_value();
+	// the displayed name (Employee links show the name, not the HR code) — used in
+	// alerts / history so the code is never shown to the user.
+	const empName = () => (state.emp.$input && state.emp.$input.val()) || empVal();
 
 	function setMsg(html, kind) {
 		$msg.removeClass("err warn ok").html(html || "");
@@ -234,9 +237,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		}).then((r) => {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
-			frappe.show_alert({ message: __("Assigned {0} card(s) at {1}{2}", [res.count, state.location, withEmployee ? " → " + empVal() : ""]), indicator: "green" }, 6);
+			frappe.show_alert({ message: __("Assigned {0} card(s) at {1}{2}", [res.count, state.location, withEmployee ? " → " + empName() : ""]), indicator: "green" }, 6);
 			showErrors(res.errors);
-			logHistory("—", __("Assigned {0}{1}", [res.count, withEmployee ? " (" + empVal() + ")" : ""]), "ok");
+			logHistory("—", __("Assigned {0}{1}", [res.count, withEmployee ? " (" + empName() + ")" : ""]), "ok");
 			clearBatch();
 		}).catch(() => frappe.dom.unfreeze());
 	}
