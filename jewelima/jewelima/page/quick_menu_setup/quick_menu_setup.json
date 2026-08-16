@@ -4,13 +4,98 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-05 12:00:00",
+ "modified": "2026-08-16 11:12:11.080855",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "quick-menu-setup",
  "owner": "Administrator",
  "page_name": "quick-menu-setup",
- "roles": [],
+ "roles": [
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "ESMITH"
+  },
+  {
+   "role": "Jewelima Bench BAG EXTRACTION"
+  },
+  {
+   "role": "Jewelima Bench CAD"
+  },
+  {
+   "role": "Jewelima Bench CAM"
+  },
+  {
+   "role": "Jewelima Bench FILING"
+  },
+  {
+   "role": "Jewelima Bench FINAL POLISH"
+  },
+  {
+   "role": "Jewelima Bench GRINDING"
+  },
+  {
+   "role": "Jewelima Bench PRE POLISH"
+  },
+  {
+   "role": "Jewelima Bench SETTING"
+  },
+  {
+   "role": "Jewelima Bench WAX CLEANING"
+  },
+  {
+   "role": "Jewelima Bench WAX SETTING"
+  },
+  {
+   "role": "Jewelima Bench WAXING"
+  },
+  {
+   "role": "Jewelima CAD"
+  },
+  {
+   "role": "Jewelima Design Approver"
+  },
+  {
+   "role": "Jewelima Design Bank"
+  },
+  {
+   "role": "Jewelima Graphics"
+  },
+  {
+   "role": "Jewelima Info"
+  },
+  {
+   "role": "Jewelima Ordering"
+  },
+  {
+   "role": "Jewelima Purchase"
+  },
+  {
+   "role": "Jewelima Repair"
+  },
+  {
+   "role": "Jewelima Stock"
+  },
+  {
+   "role": "Jewelima Stone Issue"
+  },
+  {
+   "role": "Jewelima Transfer"
+  },
+  {
+   "role": "Jewelima Transfer Plus"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
  "script": null,
  "standard": "Yes",
  "style": null,

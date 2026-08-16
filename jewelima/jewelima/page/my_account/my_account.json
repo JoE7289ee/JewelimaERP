@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-16 10:50:45.328646",
+ "modified": "2026-08-16 11:12:11.039228",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "my-account",
@@ -39,10 +39,10 @@
    "role": "Jewelima Bench PRE POLISH"
   },
   {
-   "role": "Jewelima CAD"
+   "role": "Jewelima Bench SETTING"
   },
   {
-   "role": "Jewelima Bench SETTING"
+   "role": "Jewelima CAD"
   },
   {
    "role": "Jewelima Bench WAX CLEANING"
@@ -78,22 +78,22 @@
    "role": "Jewelima Stock"
   },
   {
-   "role": "Stock Manager"
-  },
-  {
    "role": "Jewelima Stone Issue"
   },
   {
-   "role": "Stock User"
+   "role": "Stock Manager"
   },
   {
    "role": "Jewelima Transfer"
   },
   {
-   "role": "System Manager"
+   "role": "Stock User"
   },
   {
    "role": "Jewelima Transfer Plus"
+  },
+  {
+   "role": "System Manager"
   }
  ],
  "script": null,

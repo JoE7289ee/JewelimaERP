@@ -1270,7 +1270,7 @@ def get_design_types_with_sizes():
 def set_design_type_default(design_type, size=None):
 	"""Mark one size as the type's default (pre-selected on Place Order). Pass no size
 	(or the current default) to clear it."""
-	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "Jewelima Ordering"])
 	doc = frappe.get_doc("Design Type", design_type)
 	size = (size or "").strip()
 	if size and size not in [r.size for r in doc.sizes]:
@@ -1284,7 +1284,7 @@ def set_design_type_default(design_type, size=None):
 
 @frappe.whitelist()
 def add_design_type(name):
-	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "Jewelima Ordering"])
 	name = (name or "").strip().upper()
 	if not name:
 		frappe.throw(frappe._("Type name is required"))
@@ -1297,7 +1297,7 @@ def add_design_type(name):
 
 @frappe.whitelist()
 def delete_design_type(name):
-	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "Jewelima Ordering"])
 	used = frappe.db.count("Design", {"design_type": name})
 	if used:
 		frappe.throw(frappe._("Cannot delete — {0} Design(s) use this type.").format(used))
@@ -1309,7 +1309,7 @@ def delete_design_type(name):
 @frappe.whitelist()
 def set_design_type_sizes(design_type, sizes):
 	"""Replace a Design Type's size list (the Setup page's add/remove)."""
-	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "Jewelima Ordering"])
 	sizes = frappe.parse_json(sizes) if isinstance(sizes, str) else (sizes or [])
 	seen, clean = set(), []
 	for s in sizes:
