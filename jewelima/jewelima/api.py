@@ -5627,7 +5627,9 @@ def get_due_risk(days=5):
 	"""Due Risk board: cards whose due date is within N days (or already past)
 	that are STILL NOT CAST — zero gold grams in the bag's ledger — grouped by
 	the bench they're sitting at. The factory's 'these will slip' list."""
-	days = cint(days) if cint(days) else 5
+	days = 5 if days in (None, "") else cint(days)
+	if days < 0:
+		days = 0
 	horizon = frappe.utils.add_days(frappe.utils.today(), days)
 	rows = frappe.db.sql("""
 		SELECT b.name, b.design, b.qty, b.location,
@@ -5661,7 +5663,9 @@ def get_due_risk(days=5):
 def get_due_soon(days=5):
 	"""Due Soon board: EVERY live card due within N days (or overdue), grouped
 	by bench — cast or not (gold grams shown so the uncast stand out)."""
-	days = cint(days) if cint(days) else 5
+	days = 5 if days in (None, "") else cint(days)
+	if days < 0:
+		days = 0
 	horizon = frappe.utils.add_days(frappe.utils.today(), days)
 	buckets = [("dmd", "DMD"), ("ps", "PS"), ("cs", "CS"), ("cz", "CZ"),
 		("cvd", "CVD"), ("sw", "SW"), ("pdmd", "PDMD"), ("poth", "POTH")]
