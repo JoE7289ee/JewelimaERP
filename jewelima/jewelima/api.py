@@ -8454,6 +8454,7 @@ def get_party_directory():
 			if frappe.db.exists("DocType", "Price Chart") else [],
 	}
 	return {"parties": rows, "masters": masters,
+		"unmapped_old_names": get_unmapped_old_names()["old_names"],
 		"unclassified": len([r for r in rows if not r["classified"] and not r["exempt"]])}
 
 

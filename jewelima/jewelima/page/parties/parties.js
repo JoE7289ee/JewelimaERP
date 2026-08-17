@@ -75,7 +75,7 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
-	const fQ = mk(".pt-q", { fieldtype: "Data", label: __("Search"), fieldname: "q", placeholder: __("name / code…") });
+	const fQ = mk(".pt-q", { fieldtype: "Data", label: __("Search"), fieldname: "q", placeholder: __("name / code / old name…") });
 	const fG = mk(".pt-fg", { fieldtype: "Select", label: __("Group"), fieldname: "g", options: "" });
 	const fZ = mk(".pt-fz", { fieldtype: "Select", label: __("Zone"), fieldname: "z", options: "" });
 	const fS = mk(".pt-fs", { fieldtype: "Select", label: __("State"), fieldname: "s", options: "" });
@@ -107,7 +107,11 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 
 	function paintList() {
 		const rows = DIR.parties.filter((p) => {
-			if (filter.q && !(p.name || "").toUpperCase().includes(filter.q)) return false;
+			// search matches the party name/code OR any of its old names (folds in Look-Up)
+			if (filter.q) {
+				const hay = ((p.name || "") + " " + (p.old_names || []).join(" ")).toUpperCase();
+				if (!hay.includes(filter.q)) return false;
+			}
 			if (filter.group && p.party_group !== filter.group) return false;
 			if (filter.zone && p.party_zone !== filter.zone) return false;
 			if (filter.state && p.party_state !== filter.state) return false;
@@ -115,6 +119,13 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 			return true;
 		});
 		const codeOf = (v) => (v || "").split(" - ")[0]; // composite master name -> short code
+		// Look-Up "not created": query matches an old name that has no party yet
+		let empty = `<tr><td colspan="7" class="ex" style="padding:16px;">${__("No parties match.")}</td></tr>`;
+		if (!rows.length && filter.q) {
+			const hit = (DIR.unmapped_old_names || []).filter((o) => o.toUpperCase().includes(filter.q));
+			if (hit.length) empty = `<tr><td colspan="7" style="padding:16px;color:#b4690e;">
+				<b>${__("Not created yet")}</b> — ${__("old name(s) on record with no new party:")} ${esc(hit.slice(0, 8).join(", "))}</td></tr>`;
+		}
 		root.find(".pt-body").html(rows.map((p) => `
 			<tr data-name="${esc(p.name)}" class="${p.name === picked ? "sel" : ""}">
 				<td class="${p.exempt ? "ex" : p.classified ? "code" : "unc"}">${esc(p.name)}${p.disabled ? ' <span class="ex">(off)</span>' : ""}</td>
@@ -122,7 +133,7 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 				<td>${esc(codeOf(p.party_district))}</td>
 				<td>${esc(codeOf(p.party_state))}</td><td>${esc(codeOf(p.party_special))}</td>
 				<td class="ex">${esc((p.old_names || []).join(", "))}</td>
-			</tr>`).join("") || `<tr><td colspan="7" class="ex" style="padding:16px;">${__("No parties match.")}</td></tr>`);
+			</tr>`).join("") || empty);
 	}
 	root.on("click", ".pt-body tr[data-name]", function () { openParty($(this).data("name")); });
 

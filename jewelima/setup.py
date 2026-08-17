@@ -659,7 +659,7 @@ def setup_roles():
 	grant("Sales Person", "JW Party Admin", {"read": 1})
 	if frappe.db.exists("DocType", "Price Chart"):
 		grant("Price Chart", "JW Party Admin", {"read": 1})
-	for _pg in ("parties", "create-party", "look-up-party", "party-masters", "party-stock", "party-metal"):
+	for _pg in ("parties", "create-party", "party-masters", "party-stock", "party-metal"):
 		set_page_roles(_pg, ("JW Party Admin",))
 
 	frappe.db.commit()

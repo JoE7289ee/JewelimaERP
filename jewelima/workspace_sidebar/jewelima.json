@@ -2102,19 +2102,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "search",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Look-Up Party",
-   "link_to": "look-up-party",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "database",
    "indent": 1,
    "keep_closed": 0,
@@ -2503,7 +2490,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-17 10:09:50.762832",
+ "modified": "2026-08-17 10:27:33.663224",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
