@@ -353,18 +353,30 @@ const PO_COLUMNS = [
 					df.only_select = 1;
 					df.get_query = () => ({ filters: { status: "Approved" } });
 				}
-				if (col.key === "design") df.get_query = () => {
-					const bank = row.f.bank && row.f.bank.get();
-					return { filters: Object.assign({ status: "Active" }, bank ? { design_bank: bank } : {}) };
-				};
+				if (col.key === "design") {
+					// the Variant list is ALWAYS scoped to the picked D Bank — a variant
+					// only ever belongs to its card, so with no bank there are no options
+					df.only_select = 1;
+					df.get_query = () => {
+						const bank = row.f.bank && row.f.bank.get();
+						return { filters: { status: "Active", design_bank: bank || "__no_bank__" } };
+					};
+				}
 				const ctrl = frappe.ui.form.make_control({ df, parent: $td.get(0), render_input: true });
 				ctrl.refresh();
 				row.f[col.key] = { get: () => ctrl.get_value(), set: (v) => ctrl.set_value(v || "") };
+				if (col.key === "design") { row._designCtrl = ctrl; syncDesignDep(row); }
 				if (col.key === "bank") {
 					// bank picked -> default to its FIRST variant (create if none)
 					ctrl.$input.on("change awesomplete-selectcomplete", () =>
 						setTimeout(() => onBankPicked(row), 50)
 					);
+					// clearing the bank text must actually clear it (frappe Link keeps the
+					// last validated pick) so the Variant re-locks and empties with it
+					ctrl.$input.on("input", frappe.utils.debounce(() => {
+						if ((ctrl.$input.val() || "").trim()) return;
+						Promise.resolve(ctrl.set_value("")).then(() => { row._lastBank = ""; syncDesignDep(row); });
+					}, 300));
 				}
 				if (col.key === "design") {
 					// AJAX: when the design changes, pull its stone profile and fill the line.
@@ -590,8 +602,26 @@ const PO_COLUMNS = [
 	}
 
 	// ---- Design Bank first: the card picks the line, variants follow --------
+	// The Variant column only makes sense under a D Bank card: keep it disabled
+	// until a bank is picked, and wipe it if the bank is cleared.
+	function syncDesignDep(row) {
+		const c = row._designCtrl;
+		if (!c || !c.$input) return;
+		const has = !!(row.f.bank && row.f.bank.get());
+		c.$input.prop("disabled", !has)
+			.attr("placeholder", has ? __("Variant") : __("pick a D Bank first"))
+			.css("background", has ? "" : "var(--control-bg)");
+		if (!has && row.f.design && row.f.design.get()) {
+			row.f.design.set("");
+			row._lastDesign = null;
+			onDesignPicked(row);
+			updateDesignBtn(row);
+		}
+	}
+
 	function onBankPicked(row) {
 		const bank = row.f.bank.get();
+		syncDesignDep(row);
 		if (!bank) { row._lastBank = ""; return; }
 		// the bank field fires BOTH change + awesomplete-selectcomplete on one pick —
 		// dedupe so the "create variant?" flow (and its dialog) doesn't run twice
