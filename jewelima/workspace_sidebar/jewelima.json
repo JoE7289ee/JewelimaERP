@@ -1,6 +1,6 @@
 {
  "app": "jewelima",
- "creation": "2026-08-17 10:01:23.039623",
+ "creation": "2026-08-17 10:27:48.661148",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "diamond",
@@ -1768,8 +1768,8 @@
    "indent": 1,
    "keep_closed": 0,
    "label": "Selection Records",
-   "link_to": "Selection",
-   "link_type": "DocType",
+   "link_to": "selection-records",
+   "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
    "url": ""
@@ -2490,7 +2490,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-17 10:27:33.663224",
+ "modified": "2026-08-17 14:56:00.880736",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

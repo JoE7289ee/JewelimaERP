@@ -1,0 +1,26 @@
+{
+ "content": null,
+ "creation": "2026-08-17 00:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-17 14:56:11.627760",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "selection-records",
+ "owner": "Administrator",
+ "page_name": "selection-records",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Selection Records"
+}

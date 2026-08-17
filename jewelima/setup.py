@@ -674,7 +674,7 @@ def setup_roles():
 	for dt in ("Design Bank", "Design Bank Stone", "Design Bank Tag", "Design", "Design Type", "Item", "File"):
 		if frappe.db.exists("DocType", dt):
 			grant(dt, "JW Selection", {"read": 1})
-	for _pg in ("select-photos", "selection-review", "selected-pieces",
+	for _pg in ("select-photos", "selection-review", "selected-pieces", "selection-records",
 			"selection-transfer", "selection-tags", "selection-providers"):
 		set_page_roles(_pg, ("JW Selection",))
 

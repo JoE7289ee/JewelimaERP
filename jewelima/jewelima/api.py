@@ -4113,6 +4113,36 @@ def update_selection_photo(name, design_type=None, provider=None, stock_pcs=None
 # one code — so a code change that collides brings up both photos side by side
 # and one of them has to go.
 @frappe.whitelist()
+def get_selection_records(party=None, from_date=None, to_date=None, limit=300):
+	"""Selection Records as tiles: every Selection with its headline numbers and a
+	preview image (its first piece). Each opens the 'Selection Sheet' PDF."""
+	filters = {}
+	if party:
+		filters["party"] = party
+	if from_date and to_date:
+		filters["selection_date"] = ["between", [from_date, to_date]]
+	elif from_date:
+		filters["selection_date"] = [">=", from_date]
+	elif to_date:
+		filters["selection_date"] = ["<=", to_date]
+	rows = frappe.get_all("Selection", filters=filters,
+		fields=["name", "party", "selection_date", "batch", "total_photos", "total_gold",
+			"total_cts", "creation"],
+		order_by="selection_date desc, creation desc", limit_page_length=cint(limit) or 300)
+	previews = {}
+	for r in frappe.db.sql("""SELECT parent, image FROM `tabSelection Item`
+		WHERE IFNULL(image, '') != '' ORDER BY parent, idx""", as_dict=True):
+		previews.setdefault(r.parent, r.image)
+	out = [{
+		"name": r.name, "party": r.party or "", "batch": r.batch or "",
+		"selection_date": str(r.selection_date or "") or str(r.creation or "")[:10],
+		"total_photos": r.total_photos or 0, "total_gold": flt(r.total_gold),
+		"total_cts": flt(r.total_cts), "preview": previews.get(r.name, ""),
+	} for r in rows]
+	return {"rows": out, "count": len(out)}
+
+
+@frappe.whitelist()
 def get_selection_review(status="pending", search=None, limit=100):
 	"""The review queue. status: pending | done | all."""
 	frappe.only_for(["System Manager", "JW Manager"])
