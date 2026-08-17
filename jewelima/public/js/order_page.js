@@ -21,6 +21,26 @@ function jwLoadSieve() {
 	JW_SIEVE_LOADED = true;
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { JW_SIEVE = r.message || {}; });
 }
+
+// ---- ONE standard for design-creation weights (shared by every create/approve
+// dialog so they behave identically) -------------------------------------------
+// The Design Bank always stores GROSS as an 18K figure. Users, though, weigh the
+// real piece — usually 22K, sometimes 14K — so let them enter the gross at that
+// karat and convert to the 18K figure here: only the GOLD portion scales; the
+// stone grams (carats x 0.2) stay put. Factors mirror api.KARAT_WEIGHT_FACTOR.
+const JW_KARAT_FACTOR = { "14K": 0.952, "18K": 1.0, "22K": 1.2 };
+function jwGrossTo18k(gross, karat, dwCt) {
+	const f = JW_KARAT_FACTOR[((karat || "18K") + "").toUpperCase()] || 1.0;
+	const stone = (flt(dwCt) || 0) * 0.2;
+	return Math.round(((flt(gross) - stone) / f + stone) * 1000) / 1000;
+}
+// Diamond weight is NEVER hand-typed on a design: it is the DMD sieve average —
+// sum(pcs x avg-cts-per-stone) across the sieve rows. avgMap = {sieve: avg_cts}.
+function jwDwFromSieves(rows, avgMap) {
+	let ct = 0;
+	(rows || []).forEach((r) => { const a = (avgMap || {})[r.sieve]; if (a && cint(r.pcs) > 0) ct += cint(r.pcs) * a; });
+	return Math.round(ct * 1000) / 1000;
+}
 function jwSieveQty() {
 	// plain handler — resolves its grid at call time (referencing the dialog
 	// variable inside its own constructor is a TDZ error that kills the dialog)
@@ -1614,6 +1634,8 @@ function openOldDesignDialog(state) {
 	let cur = null;    // loaded review card
 	let photoB64 = ""; // optional replacement product photo
 	let SIEVES = [];
+	let SIEVE_AVG = {}; // sieve size -> avg cts/stone (for the auto Diamond Weight)
+	const recomputeDW = () => { if (d) d.set_value("diamond_weight", jwDwFromSieves(collectStones(), SIEVE_AVG)); };
 
 	const d = new frappe.ui.Dialog({
 		title: __("OLD Design — review & approve"),
@@ -1631,8 +1653,11 @@ function openOldDesignDialog(state) {
 			{ fieldname: "design_type", fieldtype: "Select", label: __("Design Type"), reqd: 1,
 				description: __("needed to approve") },
 			{ fieldname: "cb1", fieldtype: "Column Break" },
+			{ fieldname: "karat", fieldtype: "Select", label: __("Weighed at (karat)"), options: "18K\n22K\n14K", default: "18K",
+				description: __("the gross is stored as an 18K figure — pick how you weighed it") },
 			{ fieldname: "gross_weight", fieldtype: "Float", label: __("Gross Weight (g)") },
-			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)") },
+			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)"), read_only: 1,
+				description: __("auto — average from the DMD sieves below") },
 			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
 			{ fieldname: "tag_photo_update", fieldtype: "Check", label: __("Tag for photo update → Photo Urgent (needs a better photo)") },
 			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
@@ -1645,9 +1670,11 @@ function openOldDesignDialog(state) {
 			if (!cur) return frappe.msgprint(__("Pick a pending design first."));
 			const v = d.get_values(true) || {};
 			if (!v.design_type) return frappe.msgprint(__("Pick the Design Type to approve."));
+			const dw = jwDwFromSieves(collectStones(), SIEVE_AVG);       // DW = DMD sieve average
+			const gw18 = jwGrossTo18k(v.gross_weight, v.karat, dw);      // store the 18K figure
 			const payload = {
 				name: cur.name, design_no: cur.design_no, design_type: v.design_type,
-				gross_weight: flt(v.gross_weight), diamond_weight: flt(v.diamond_weight),
+				gross_weight: gw18, diamond_weight: dw,
 				note: v.note || "", extra_lines: cur.extra_lines,
 				stones: collectStones(), photo: photoB64 || cur.photo,
 				photoupdate: (v.tag_photo_update || cur.photoupdate) ? 1 : 0,
@@ -1717,7 +1744,9 @@ function openOldDesignDialog(state) {
 		<tbody class="od-stones"></tbody></table>
 		<span class="od-addst">+ ${__("row")}</span>`);
 	d.get_field("stones_html").$wrapper.on("click", ".od-addst", () => { const r = collectStones(); r.push({}); paintStones(r); });
-	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); });
+	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); recomputeDW(); });
+	d.get_field("stones_html").$wrapper.on("change", ".v", recomputeDW);
+	d.get_field("stones_html").$wrapper.on("input", ".p", recomputeDW);
 
 	// ---- optional product-photo replace ------------------------------------
 	d.get_field("photo_html").$wrapper.html(`
@@ -1746,11 +1775,12 @@ function openOldDesignDialog(state) {
 				d.get_field("status_html").$wrapper.html(
 					`<div style="font-size:12.5px;color:var(--text-muted);">${esc(cur.design_no)} · ${esc(cur.status || "")}${cur.priority ? " · P" + cur.priority : ""}</div>`);
 				d.set_value("design_type", cur.design_type || "");
+				d.set_value("karat", "18K");                 // the stored gross IS 18K
 				d.set_value("gross_weight", cur.gross_weight || 0);
-				d.set_value("diamond_weight", cur.diamond_weight || 0);
 				d.set_value("note", cur.note || "");
 				paintPhotos();
 				paintStones(cur.stones || []);
+				recomputeDW();                                // DW = average from the sieves
 			});
 		});
 	}
@@ -1758,7 +1788,14 @@ function openOldDesignDialog(state) {
 	paintPhotos();
 	paintStones([{}]);
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
-		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); paintStones(cur ? cur.stones : collectStones()); });
+		.then((r) => {
+			const rows = r.message || [];
+			SIEVES = rows.map((x) => x.sieve_size).filter(Boolean);
+			SIEVE_AVG = {};
+			rows.forEach((x) => { if (x.sieve_size) SIEVE_AVG[x.sieve_size] = flt(x.avg_cts); });
+			paintStones(cur ? cur.stones : collectStones());
+			recomputeDW();
+		});
 	frappe.db.get_list("Design Type", { fields: ["name"], order_by: "name", limit: 0 }).then((rows) => {
 		d.set_df_property("design_type", "options", [""].concat((rows || []).map((x) => x.name)).join("\n"));
 		if (cur) d.set_value("design_type", cur.design_type || "");
