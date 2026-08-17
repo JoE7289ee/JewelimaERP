@@ -621,6 +621,21 @@ const PO_COLUMNS = [
 		const esc = frappe.utils.escape_html;
 		const go = (N, bankNo, img) => {
 			let cur = null;
+			// a row the USER added (locked rows are seeded by the system and fixed)
+			function bomItemChanged() {
+				const r0 = this.doc || (this.grid_row && this.grid_row.doc);
+				if (!r0 || r0.locked) return;
+				if (!r0.item) { r0.purity = 0; r0.uom = ""; r0.stone_type = ""; r0.pure = 0;
+					vd.fields_dict.materials.grid.refresh(); return; }
+				frappe.db.get_value("Item", r0.item, ["purity_percentage", "weight_unit", "stone_type"]).then((r) => {
+					const v = r.message || {};
+					r0.purity = flt(v.purity_percentage);
+					r0.uom = v.weight_unit || "";
+					r0.stone_type = v.stone_type || "";
+					r0.qty = 0; r0.weight = 0; r0.pure = 0;
+					vd.fields_dict.materials.grid.refresh();
+				});
+			}
 			function bomWeightChanged() {
 				const r0 = this.doc || (this.grid_row && this.grid_row.doc);
 				if (!r0) return;
@@ -648,13 +663,16 @@ const PO_COLUMNS = [
 					{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
 					{
 						fieldname: "materials", fieldtype: "Table", label: __("Materials"), options: "Design BOM Item", data: [],
-						// the variant's materials are FIXED by the system (from the karat/stones/colour
-						// above) — the user only fills weights/qty, never adds, removes, or swaps a
-						// material. Change the selectors above for a different composition.
-						cannot_add_rows: true, cannot_delete_rows: true,
-						description: __("Materials are set by the variant — fill the Weight (grams for metal) and, for stones, the Qty. Change Karat / Stones / Colour above for a different composition."),
+						// The SEEDED rows (the karat+colour gold and the token's stone) are what the
+						// variant means — they are locked: item read-only and not removable. Anything
+						// the user ADDS (a colour stone, Swarovski, …) stays fully editable. This
+						// mirrors the server rule in api._check_variant_bom.
+						description: __("The gold and the chosen stone are fixed by the variant — fill their Weight (and Qty for stones). You can ADD extra stones; change Karat / Stones / Colour above for a different composition."),
 						fields: [
-							{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1, read_only: 1 },
+							{ fieldname: "locked", fieldtype: "Check", label: __("Locked"), hidden: 1 },
+							{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1,
+								only_select: 1, read_only_depends_on: "eval:doc.locked",
+								get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
 							{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 							{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
 							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
@@ -708,7 +726,22 @@ const PO_COLUMNS = [
 					});
 				},
 			});
-			vd.$wrapper.append("<style>.jw-mat-dlg .link-btn{display:none !important;}.jw-mat-dlg .data-row > .col:last-child{display:none !important;}</style>").addClass("jw-mat-dlg");
+			vd.$wrapper.append(`<style>.jw-mat-dlg .link-btn{display:none !important;}
+				.jw-mat-dlg .data-row > .col:last-child{display:none !important;}
+				/* seeded (locked) rows can't be ticked, so they can't be deleted */
+				.jw-mat-dlg .grid-row.jw-locked .row-check{visibility:hidden;pointer-events:none;}
+				</style>`).addClass("jw-mat-dlg");
+			// keep the lock marks in sync with every grid render
+			(function lockMarks() {
+				const g = vd.fields_dict.materials && vd.fields_dict.materials.grid;
+				if (!g) return;
+				const mark = () => (g.grid_rows || []).forEach((gr) => {
+					if (gr && gr.wrapper) $(gr.wrapper).toggleClass("jw-locked", !!(gr.doc && gr.doc.locked));
+				});
+				const orig = g.refresh.bind(g);
+				g.refresh = function () { orig(); setTimeout(mark, 0); };
+				setTimeout(mark, 0);
+			})();
 			if (img) vd.get_field("img").$wrapper.html(`<div style="text-align:center;margin:0 0 6px;"><img src="${encodeURI(img)}" style="max-height:180px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`);
 			let judgeSeq = 0;
 			const judge = () => {
@@ -729,7 +762,8 @@ const PO_COLUMNS = [
 						vd.fields_dict.materials.$wrapper.toggle(!cur.exists);
 						if (!cur.exists) {
 							const g = vd.fields_dict.materials;
-							g.df.data = (cur.seed || []).map((x) => Object.assign({}, x));
+							// seeded rows carry the variant's meaning -> locked
+							g.df.data = (cur.seed || []).map((x) => Object.assign({}, x, { locked: 1 }));
 							g.grid.refresh();
 						}
 					})
