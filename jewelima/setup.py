@@ -315,7 +315,7 @@ def setup_roles():
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
-			"JW Party Admin") + JEWELIMA_TRANSFER_ROLES:
+			"JW Party Admin", "JW Selection") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -661,6 +661,22 @@ def setup_roles():
 		grant("Price Chart", "JW Party Admin", {"read": 1})
 	for _pg in ("parties", "create-party", "party-masters", "party-stock", "party-metal"):
 		set_page_roles(_pg, ("JW Party Admin",))
+
+	# ---- JW Selection: full run of the Selection module (photo selection, review,
+	# selected pieces, export/import, tags, providers). Full CRUD on the Selection
+	# doctypes + read on the design catalog the pages browse; page APIs still do the
+	# heavy lifting under ignore_permissions.
+	if not frappe.db.exists("Role", "JW Selection"):
+		frappe.get_doc({"doctype": "Role", "role_name": "JW Selection", "desk_access": 1}).insert(ignore_permissions=True)
+	for dt in ("Selection", "Selection Photo", "Selection Tag"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "JW Selection", {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1, "print": 1, "export": 1})
+	for dt in ("Design Bank", "Design Bank Stone", "Design Bank Tag", "Design", "Design Type", "Item", "File"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "JW Selection", {"read": 1})
+	for _pg in ("select-photos", "selection-review", "selected-pieces",
+			"selection-transfer", "selection-tags", "selection-providers"):
+		set_page_roles(_pg, ("JW Selection",))
 
 	frappe.db.commit()
 
