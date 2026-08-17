@@ -1,6 +1,6 @@
 {
  "app": "jewelima",
- "creation": "2026-08-17 10:27:48.661148",
+ "creation": "2026-08-17 14:56:16.622675",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "diamond",
@@ -1777,32 +1777,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "image",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Selection Photos",
-   "link_to": "Selection Photo",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "upload",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Export / Import",
-   "link_to": "selection-transfer",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -2490,7 +2464,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-17 14:56:00.880736",
+ "modified": "2026-08-17 15:02:46.887277",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

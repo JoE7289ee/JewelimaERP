@@ -675,7 +675,7 @@ def setup_roles():
 		if frappe.db.exists("DocType", dt):
 			grant(dt, "JW Selection", {"read": 1})
 	for _pg in ("select-photos", "selection-review", "selected-pieces", "selection-records",
-			"selection-transfer", "selection-tags", "selection-providers"):
+			"selection-tags", "selection-providers"):
 		set_page_roles(_pg, ("JW Selection",))
 
 	frappe.db.commit()
