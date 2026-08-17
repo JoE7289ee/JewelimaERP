@@ -1,6 +1,6 @@
 {
  "app": "jewelima",
- "creation": "2026-08-17 05:08:34.304157",
+ "creation": "2026-08-17 10:01:23.039623",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "diamond",
@@ -2131,7 +2131,7 @@
    "icon": "package",
    "indent": 1,
    "keep_closed": 0,
-   "label": "Party Stock",
+   "label": "Party Stone",
    "link_to": "party-stock",
    "link_type": "Page",
    "show_arrow": 0,
@@ -2503,7 +2503,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-17 05:13:30.597512",
+ "modified": "2026-08-17 10:09:50.762832",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

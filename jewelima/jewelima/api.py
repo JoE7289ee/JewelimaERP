@@ -1799,31 +1799,15 @@ def _party_code_candidates(party_name):
 
 
 @frappe.whitelist()
-def suggest_party_code(party_name):
-	"""First free 3-letter code for the name (EDIMINIKAL -> EDI; EDI taken -> EDM …)."""
-	for c in _party_code_candidates(party_name):
-		if not frappe.db.exists("Stone Party", c):
-			return c
-	return ""
-
-
-@frappe.whitelist()
-def create_stone_party(party_name, code):
-	"""Create a Stone Party — the doctype's validate enforces the 3-letter rule."""
-	doc = frappe.get_doc({"doctype": "Stone Party", "party_name": party_name, "code": code})
-	doc.insert(ignore_permissions=True)
-	frappe.db.commit()
-	return doc.name
-
-
-@frappe.whitelist()
 def get_stone_parties():
-	"""All parties with how many stone items each owns."""
-	parties = frappe.get_all("Stone Party", fields=["name", "party_name"], order_by="party_name")
+	"""Party groups (companies) with how many party-given items each owns. Party
+	stones/metals come in under a GROUP code (from the Parties system) — you can't
+	create a party here, only pick an existing company."""
+	groups = frappe.get_all("Party Group", fields=["name", "group_name"], order_by="name")
 	counts = dict(frappe.db.sql(
 		"select stone_party, count(*) from `tabItem` where ifnull(stone_party, '') != '' group by stone_party"
 	))
-	return [{"code": p.name, "party_name": p.party_name, "items": counts.get(p.name, 0)} for p in parties]
+	return [{"code": g.name, "party_name": g.group_name, "items": counts.get(g.name, 0)} for g in groups]
 
 
 @frappe.whitelist()
@@ -2187,8 +2171,8 @@ def get_party_metals(party):
 @frappe.whitelist()
 def check_party_metal(party, metal):
 	"""Preview + availability of the item code a party/metal pair would create."""
-	if not frappe.db.exists("Stone Party", party):
-		frappe.throw(_("Create the party first — metal can only come in under a party."))
+	if not frappe.db.exists("Party Group", party):
+		frappe.throw(_("Pick an existing party group — metal comes in under a company from the Parties system."))
 	if metal not in _party_metal_options():
 		frappe.throw(_("Metal must be one of the standard gold codes."))
 	code = f"{party}-{metal}"
@@ -2235,8 +2219,8 @@ def check_party_stone(party, stone):
 def _party_stone_code(party, stone):
 	import re
 
-	if not frappe.db.exists("Stone Party", party):
-		frappe.throw(_("Create the party first — stones can only be added under a party."))
+	if not frappe.db.exists("Party Group", party):
+		frappe.throw(_("Pick an existing party group — stones come in under a company from the Parties system."))
 	s = re.sub(r"\s+", " ", (stone or "").strip().upper())
 	if not re.fullmatch(r"[A-Z0-9][A-Z0-9 .\-/]*", s):
 		frappe.throw(_("Stone name: letters/numbers (and . - /) only, e.g. VS1 or RUBY."))
@@ -8533,6 +8517,16 @@ def lookup_old_name(old_name):
 	doc = frappe.get_doc("Party Old Name", nm)
 	return {"found": 1, "old_name": doc.old_name, "note": doc.note or "",
 		"parties": [r.party for r in doc.parties if r.party]}
+
+
+@frappe.whitelist()
+def get_unmapped_old_names():
+	"""Old names on record with no new party yet — the migrate worklist."""
+	mapped = set(frappe.get_all("Party Old Name Party", pluck="parent"))
+	rows = frappe.get_all("Party Old Name", fields=["name", "old_name"], order_by="old_name",
+		limit_page_length=0)
+	out = [r.old_name for r in rows if r.name not in mapped]
+	return {"old_names": out, "count": len(out)}
 
 
 @frappe.whitelist()

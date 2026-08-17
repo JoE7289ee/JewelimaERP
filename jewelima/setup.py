@@ -621,6 +621,12 @@ def setup_roles():
 		   "Diamond Sieve", "Material Issue", "Bag Material Ledger", "Voucher Type"])
 	for dt in jw_reads:
 		grant(dt, "JW Manager", {"read": 1, "report": 1, "print": 1, "export": 1})
+	# JW Manager also runs the Party desk: write/create on Customer + the party masters
+	# (inline group-create on Create Party) + the old-name store.
+	grant("Customer", "JW Manager", {"read": 1, "write": 1, "create": 1})
+	for dt in ("Party Group", "Party Zone", "Party District", "Party State", "Party Special", "Party Old Name"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "JW Manager", {"read": 1, "write": 1, "create": 1, "delete": 1})
 	# grant to EVERY Jewelima page (auto-covers current + future pages)
 	for pg in frappe.get_all("Page", filters={"module": "Jewelima"}, pluck="name"):
 		set_page_roles(pg, ("JW Manager",))
@@ -1151,21 +1157,11 @@ def seed_diversion_types():
 
 
 def seed_party_masters():
-	"""Starter codes for the structured party names — extend on the Parties page
-	or straight in the doctypes. Idempotent."""
-	seeds = [
-		("Party Group", "group_name", [("JOS", "JOS"), ("EDI", "EDDIMINIKAL")]),
-		("Party Zone", "zone_name", [("TCR", "Thrissur"), ("CHE", "Chennai"), ("CH2", "Chennai 2"), ("BLR", "Bangalore")]),
-		("Party State", "state_name", [("KL", "Kerala"), ("TN", "Tamil Nadu"), ("KA", "Karnataka")]),
-		("Party Special", "special_name", [("PTY", "Party")]),
-	]
-	for dt, label_field, rows in seeds:
-		if not frappe.db.exists("DocType", dt):
-			continue
-		for code, label in rows:
-			if not frappe.db.exists(dt, code):
-				frappe.get_doc({"doctype": dt, "code": code, label_field: label}).insert(ignore_permissions=True)
-	frappe.db.commit()
+	"""Retired: party masters now come from the party importer (party_import.run)
+	or are created inline on the Create Party page. Kept as a no-op so after_migrate
+	stays stable; the old starter seed clashed with the composite-named masters
+	(record name is 'KL - Kerala', not 'KL')."""
+	return
 
 
 SALESMEN = ["BINOY", "LISON", "JOJU", "JISHNU"]
@@ -1548,8 +1544,8 @@ def get_item_custom_fields():
 			{
 				"fieldname": "stone_party",
 				"fieldtype": "Link",
-				"label": "Stone Party",
-				"options": "Stone Party",
+				"label": "Party Group",
+				"options": "Party Group",
 				"insert_after": "stone_size",
 				"read_only": 1,
 				"in_standard_filter": 1,

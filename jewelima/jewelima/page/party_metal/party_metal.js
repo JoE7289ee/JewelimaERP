@@ -45,7 +45,7 @@ frappe.pages["party-metal"].on_page_load = function (wrapper) {
 		</style>
 		<div class="pmt-wrap">
 			<div class="pmt-col pmt-parties">
-				<div class="pmt-colhead">${__("Parties")}<button class="btn btn-primary btn-sm pmt-newparty">${__("New Party")}</button></div>
+				<div class="pmt-colhead">${__("Party groups")}</div>
 				<div class="pmt-list pmt-partylist"></div>
 			</div>
 			<div class="pmt-col pmt-main">
@@ -159,38 +159,6 @@ frappe.pages["party-metal"].on_page_load = function (wrapper) {
 				loadParties(S.party); // refresh counts + metal list
 			})
 			.catch(() => { $add.disabled = false; });
-	});
-
-	root.querySelector(".pmt-newparty").addEventListener("click", () => {
-		const d = new frappe.ui.Dialog({
-			title: __("New Party"),
-			fields: [
-				{ fieldtype: "Data", fieldname: "party_name", label: __("Full Name"), reqd: 1,
-				  description: __("Stored on the party master, e.g. EDIMINIKAL.") },
-				{ fieldtype: "Data", fieldname: "code", label: __("Code (3 letters)"), reqd: 1,
-				  description: __("Prefix of every item — EDIMINIKAL → EDI.") },
-				{ fieldtype: "Button", fieldname: "gen", label: __("Generate from name") },
-			],
-			primary_action_label: __("Create Party"),
-			primary_action(v) {
-				frappe.call({ method: API + ".create_stone_party", args: { party_name: v.party_name, code: v.code } })
-					.then((r) => {
-						d.hide();
-						frappe.show_alert({ message: __("Party {0} created", [r.message]), indicator: "green" }, 4);
-						loadParties(r.message);
-					});
-			},
-		});
-		d.fields_dict.gen.$input.on("click", () => {
-			const name = d.get_value("party_name");
-			if (!name) { frappe.show_alert({ message: __("Type the full name first."), indicator: "orange" }, 3); return; }
-			frappe.call({ method: API + ".suggest_party_code", args: { party_name: name } }).then((r) => {
-				if (r.message) d.set_value("code", r.message);
-				else frappe.show_alert({ message: __("No free code from that name — pick one manually."), indicator: "orange" }, 4);
-			});
-		});
-		d.fields_dict.code.$input.on("input", function () { this.value = this.value.toUpperCase(); });
-		d.show();
 	});
 
 	frappe.call({ method: API + ".get_party_metal_options" }).then((r) => {
