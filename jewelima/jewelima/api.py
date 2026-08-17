@@ -8036,7 +8036,9 @@ def create_employee_users(payload):
 	rows = p.get("rows") or []
 	roles = [r for r in (p.get("roles") or []) if frappe.db.exists("Role", r)]
 	if not roles:
-		roles = ["Jewelima"]  # a role-less user gets demoted to Website User and can't log in to the desk
+		# a role-less user gets demoted to Website User and can't open the desk; the
+		# old base "Jewelima" role is retired, so make the operator pick a real one.
+		frappe.throw(frappe._("Pick at least one role for the login."))
 	if not rows:
 		frappe.throw(frappe._("Pick at least one employee."))
 	frappe.db.set_single_value("System Settings", "allow_login_using_user_name", 1)
