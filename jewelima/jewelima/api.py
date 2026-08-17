@@ -8553,6 +8553,16 @@ def lookup_old_name(old_name):
 
 
 @frappe.whitelist()
+def get_party_old_names(party):
+	"""The legacy name(s) a party used to be known by — shown as a hint wherever a
+	party is picked (Place Order), so staff recognise the new coded name."""
+	if not party:
+		return {"old_names": []}
+	return {"old_names": frappe.get_all("Party Old Name Party",
+		filters={"party": party}, pluck="parent", limit_page_length=0)}
+
+
+@frappe.whitelist()
 def get_unmapped_old_names():
 	"""Old names on record with no new party yet — the migrate worklist."""
 	mapped = set(frappe.get_all("Party Old Name Party", pluck="parent"))

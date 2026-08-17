@@ -198,6 +198,20 @@ const PO_COLUMNS = [
 	state.header.order_date.set_value(frappe.datetime.get_today());
 	$(page.main).find(".po-h-days").append('<div class="po-due"></div>');
 	$(page.main).find(".po-h-custdays").append('<div class="po-due po-custdue"></div>');
+	// parties carry coded names now (AJ-KUR-TCR-KL) — show the OLD name underneath
+	// so staff recognise who they picked
+	$(page.main).find(".po-h-customer").append('<div class="po-due po-oldname"></div>');
+	function showPartyOldName() {
+		const p = state.header.customer.get_value();
+		const $t = $(page.main).find(".po-oldname");
+		if (!p) return $t.text("");
+		frappe.call({ method: "jewelima.jewelima.api.get_party_old_names", args: { party: p }, freeze: false })
+			.then((r) => {
+				const olds = ((r.message || {}).old_names) || [];
+				$t.text(olds.length ? __("was: {0}", [olds.join(", ")]) : "");
+			});
+	}
+	state.header.customer.$input.on("change awesomplete-selectcomplete", () => setTimeout(showPartyOldName, 60));
 	// Follow — tick to watch this order on the Following page after it's placed
 	state.header.follow = mk(".po-h-follow", {
 		fieldtype: "Check", label: __("Follow"), fieldname: "follow",
