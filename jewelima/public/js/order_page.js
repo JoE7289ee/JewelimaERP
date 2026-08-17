@@ -667,7 +667,7 @@ const PO_COLUMNS = [
 						// variant means — they are locked: item read-only and not removable. Anything
 						// the user ADDS (a colour stone, Swarovski, …) stays fully editable. This
 						// mirrors the server rule in api._check_variant_bom.
-						description: __("The gold and the chosen stone are fixed by the variant — fill their Weight (and Qty for stones). You can ADD extra stones; change Karat / Stones / Colour above for a different composition."),
+						description: __("The gold and the chosen stone are set by the system and locked (item, qty and weight). You can ADD extra stones; change Karat / Stones / Colour above for a different composition."),
 						fields: [
 							{ fieldname: "locked", fieldtype: "Check", label: __("Locked"), hidden: 1 },
 							{ fieldname: "item", fieldtype: "Link", options: "Item", label: __("Material"), in_list_view: 1, columns: 3, reqd: 1,
@@ -675,8 +675,8 @@ const PO_COLUMNS = [
 								get_query: () => ({ filters: { is_sales_item: 0, is_stock_item: 1 } }), onchange: bomItemChanged },
 							{ fieldname: "purity", fieldtype: "Float", label: __("Purity %"), read_only: 1, in_list_view: 1, columns: 1 },
 							{ fieldname: "uom", fieldtype: "Data", label: __("UOM"), read_only: 1, in_list_view: 1, columns: 1 },
-							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type", read_only_depends_on: "eval:!doc.stone_type" },
-							{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, onchange: bomWeightChanged },
+							{ fieldname: "qty", fieldtype: "Float", label: __("Qty"), in_list_view: 1, columns: 1, mandatory_depends_on: "eval:doc.stone_type && !doc.locked", read_only_depends_on: "eval:doc.locked || !doc.stone_type" },
+							{ fieldname: "weight", fieldtype: "Float", label: __("Weight"), in_list_view: 1, columns: 1, reqd: 1, read_only_depends_on: "eval:doc.locked", onchange: bomWeightChanged },
 							{ fieldname: "pure", fieldtype: "Float", label: __("Pure (g)"), read_only: 1, in_list_view: 1, columns: 1 },
 						],
 					},
@@ -689,7 +689,12 @@ const PO_COLUMNS = [
 						selectDesign(row, cur.name);
 						return;
 					}
-					const raw = (values.materials || []).filter((m) => m.item);
+					// the seeded gold/stone rows are the SYSTEM's numbers — rebuild them from
+					// cur.seed so an edited cell can never change what gets created; only the
+					// rows the user ADDED come from the grid.
+					const seeded = (cur.seed || []).map((x) => Object.assign({}, x));
+					const added = (values.materials || []).filter((m) => m.item && !m.locked);
+					const raw = seeded.concat(added);
 					if (!raw.length) return frappe.msgprint(__("Add at least one material to the design's BOM."));
 					const bad = raw.find((m) => (m.stone_type ? (flt(m.qty) <= 0 || flt(m.weight) <= 0) : flt(m.weight) <= 0));
 					if (bad) return frappe.msgprint(bad.stone_type
@@ -728,8 +733,12 @@ const PO_COLUMNS = [
 			});
 			vd.$wrapper.append(`<style>.jw-mat-dlg .link-btn{display:none !important;}
 				.jw-mat-dlg .data-row > .col:last-child{display:none !important;}
-				/* seeded (locked) rows can't be ticked, so they can't be deleted */
+				/* seeded (locked) rows: not tickable (so not deletable) and their
+				   item/qty/weight cells can't be opened for editing at all */
 				.jw-mat-dlg .grid-row.jw-locked .row-check{visibility:hidden;pointer-events:none;}
+				.jw-mat-dlg .grid-row.jw-locked .col[data-fieldname="item"],
+				.jw-mat-dlg .grid-row.jw-locked .col[data-fieldname="qty"],
+				.jw-mat-dlg .grid-row.jw-locked .col[data-fieldname="weight"]{pointer-events:none;background:var(--control-bg);}
 				</style>`).addClass("jw-mat-dlg");
 			// keep the lock marks in sync with every grid render
 			(function lockMarks() {
