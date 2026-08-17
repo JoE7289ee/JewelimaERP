@@ -96,6 +96,7 @@ const PO_COLUMNS = [
 		.po-head .control-input-wrapper .control-input,.po-head .control-input input,.po-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
 		.po-head .help-box,.po-head .description,.po-head p.help-box{display:none !important;}
 		.po-due{font-size:11px;color:var(--text-muted);margin:1px 0 0 2px;white-space:nowrap;}
+		.po-due.po-warn{color:#b02a2a;font-weight:700;}
 		.po-no-badge{font-weight:800;font-size:15px;letter-spacing:.6px;align-self:center;background:var(--control-bg);border:1px solid var(--border-color);border-radius:6px;padding:2px 13px;margin-right:8px;}
 		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
 		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
@@ -231,12 +232,24 @@ const PO_COLUMNS = [
 	};
 	state.dueFromDays = dueFromDays; // placeOrder() reads these
 	state.custFromDays = custFromDays;
+	// the party date is what we promise the customer — it can never fall BEFORE the
+	// factory's due date
+	const partyBeforeDue = () => {
+		const c = cint(state.header.cust_days.get_value());
+		return c > 0 && c < cint(state.header.days.get_value());
+	};
+	state.partyBeforeDue = partyBeforeDue;
 	const showDue = () => {
 		const dd = dueFromDays();
 		$(page.main).find(".po-due").not(".po-custdue").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
 		const cd = custFromDays();
 		const copied = !cint(state.header.cust_days.get_value());
-		$(page.main).find(".po-custdue").text(cd ? __("Party {0}{1}", [frappe.datetime.str_to_user(cd), copied ? " (= due date)" : ""]) : "");
+		const bad = partyBeforeDue();
+		$(page.main).find(".po-custdue")
+			.toggleClass("po-warn", bad)
+			.text(cd ? (bad
+				? __("Party {0} — before the due date!", [frappe.datetime.str_to_user(cd)])
+				: __("Party {0}{1}", [frappe.datetime.str_to_user(cd), copied ? " (= due date)" : ""])) : "");
 	};
 	state.showDue = showDue;
 	state.header.days.$input.on("input change", () => {
@@ -1500,6 +1513,11 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 	}
 	if (!(cint(state.header.days.get_value()) > 0)) {
 		frappe.msgprint(__("Days must be more than 0 — the order needs a due date."));
+		return;
+	}
+	if (state.partyBeforeDue && state.partyBeforeDue()) {
+		frappe.msgprint(__("The Party Date can't be before the Due Date — give the party at least {0} day(s), or leave it empty to copy the due date.",
+			[cint(state.header.days.get_value())]));
 		return;
 	}
 
