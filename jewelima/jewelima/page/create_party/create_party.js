@@ -82,7 +82,7 @@ frappe.pages["create-party"].on_page_load = function (wrapper) {
 		if (g && d && s) $p.html(`→ ${esc(parts.join("-"))}`);
 		else $p.html(`<span class="muted">${__("Pick group, district and state…")}</span>`);
 	}
-	[fG, fZ, fD, fS, fSp].forEach((f) => f.$input.on("change", () => setTimeout(preview, 80)));
+	[fG, fZ, fD, fS, fSp].forEach((f) => f.$input.on("change awesomplete-selectcomplete blur", () => setTimeout(preview, 80)));
 
 	// ---- unmapped old names panel ----
 	let UN = [];
