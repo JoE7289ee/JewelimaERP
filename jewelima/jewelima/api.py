@@ -13637,17 +13637,23 @@ def submit_feature_request(title=None, description=None, category=None):
 
 
 @frappe.whitelist()
-def list_feature_requests(status=None, mine=0):
-	"""Every request (all users can track). Filter by status or just mine."""
+def list_feature_requests(status=None, mine=0, category=None):
+	"""Every request (all users can track). Filter by status, category, or just mine."""
 	f = {}
 	if status:
 		f["status"] = status
+	if category:
+		f["category"] = category
 	if cint(mine):
 		f["requested_by"] = frappe.session.user
 	rows = frappe.get_all("Feature Request", filters=f,
 		fields=["name", "title", "category", "status", "requested_by", "requested_on",
 			"description", "admin_note", "closed_by", "closed_on"],
 		order_by="requested_on desc", limit_page_length=500)
+	cat_counts = {}
+	for r in frappe.get_all("Feature Request", fields=["category"], limit_page_length=0):
+		c = r.category or "Other"
+		cat_counts[c] = cat_counts.get(c, 0) + 1
 	# friendly requester names
 	users = list({r.requested_by for r in rows if r.requested_by})
 	names = {u.name: (u.full_name or u.name) for u in
@@ -13657,8 +13663,8 @@ def list_feature_requests(status=None, mine=0):
 	counts = {}
 	for st in ("Open", "In Progress", "In Test", "On Hold", "Closed", "Declined"):
 		counts[st] = frappe.db.count("Feature Request", {"status": st})
-	return {"rows": rows, "counts": counts, "is_admin": 1 if _is_feature_admin() else 0,
-		"me": frappe.session.user}
+	return {"rows": rows, "counts": counts, "cat_counts": cat_counts,
+		"is_admin": 1 if _is_feature_admin() else 0, "me": frappe.session.user}
 
 
 @frappe.whitelist()
@@ -14417,7 +14423,11 @@ def _me():
 def get_my_account():
 	u = _me()
 	d = frappe.db.get_value("User", u, ["username", "full_name"], as_dict=True) or {}
-	return {"user": u, "username": d.get("username") or "", "full_name": d.get("full_name") or ""}
+	# the roles are shown read-only, so staff can see what they're allowed to do
+	roles = sorted(r for r in frappe.get_roles(u)
+		if r not in ("All", "Guest", "Desk User") and not r.startswith("Website"))
+	return {"user": u, "username": d.get("username") or "", "full_name": d.get("full_name") or "",
+		"roles": roles}
 
 
 @frappe.whitelist()

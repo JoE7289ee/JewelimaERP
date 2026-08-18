@@ -11,6 +11,7 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	let DATA = null;
 	let FST = "";     // status filter
+	let FCAT = "";    // category filter
 	let MINE = false; // only my requests
 
 	$(page.main).append(`
@@ -25,6 +26,10 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 		.rf-btn{border:none;color:#fff;font-weight:800;padding:9px 18px;border-radius:8px;cursor:pointer;background:#2e7d32;margin-top:12px;width:100%;}
 		.rf-side{flex:1;min-width:420px;}
 		.rf-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+		.rf-cats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+		.rf-cats .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-right:2px;}
+		.rf-cat-f{border:1px solid var(--border-color);border-radius:12px;padding:2px 11px;font-size:12px;cursor:pointer;background:var(--fg-color);}
+		.rf-cat-f.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
 		.rf-tile{border:1px solid var(--border-color);border-radius:9px;padding:6px 14px;background:var(--control-bg);cursor:pointer;}
 		.rf-tile.on{border-color:#1f618d;box-shadow:0 0 0 1px #1f618d inset;}
 		.rf-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
@@ -53,11 +58,12 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 				<div class="h">${__("Raise a request")}</div>
 				<label>${__("Your request")}</label><textarea class="rf-desc" placeholder="${__("Describe what you want — write as much as you like.")}"></textarea>
 				<label>${__("Category")}</label>
-				<select class="rf-cat-in"><option>Feature</option><option>Improvement</option><option>Bug</option><option>Other</option></select>
+				<select class="rf-cat-in"><option>Feature</option><option>Improvement</option><option>Bug</option><option>Claude</option><option>Other</option></select>
 				<button class="rf-btn rf-submit">${__("Submit request")}</button>
 			</div>
 			<div class="rf-side">
 				<div class="rf-tiles"></div>
+				<div class="rf-cats"></div>
 				<div class="rf-controls">
 					<label style="cursor:pointer;"><input type="checkbox" class="rf-mine"> ${__("only mine")}</label>
 					<span style="margin-left:auto;color:var(--text-muted);" class="rf-hint"></span>
@@ -69,7 +75,7 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	function load() {
-		frappe.call({ method: API + ".list_feature_requests", args: { status: FST || undefined, mine: MINE ? 1 : 0 } })
+		frappe.call({ method: API + ".list_feature_requests", args: { status: FST || undefined, category: FCAT || undefined, mine: MINE ? 1 : 0 } })
 			.then((r) => { DATA = r.message || { rows: [], counts: {} }; paint(); });
 	}
 
@@ -79,6 +85,12 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 		root.find(".rf-tiles").html(tiles.map(([k, lbl]) => {
 			const v = k === "" ? Object.values(c).reduce((a, b) => a + (b || 0), 0) : (c[k] || 0);
 			return `<div class="rf-tile ${FST === k ? "on" : ""}" data-s="${esc(k)}"><div class="k">${lbl}</div><div class="v">${v}</div></div>`;
+		}).join(""));
+		const cc = DATA.cat_counts || {};
+		const cats = ["", "Feature", "Improvement", "Bug", "Claude", "Other"];
+		root.find(".rf-cats").html(`<span class="lbl">${__("Category")}</span>` + cats.map((k) => {
+			const n = k === "" ? Object.values(cc).reduce((a, b) => a + (b || 0), 0) : (cc[k] || 0);
+			return `<span class="rf-cat-f ${FCAT === k ? "on" : ""}" data-c="${esc(k)}">${k || __("All")} (${n})</span>`;
 		}).join(""));
 		root.find(".rf-hint").text(DATA.is_admin ? __("You're admin — you can change any status.") : __("Only the admin can change status."));
 		const badge = (st) => `<span class="rf-badge ${(st || "").replace(/\s+/g, "")}">${esc(st)}</span>`;
@@ -124,6 +136,10 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 			rfBusy = false;
 			root.find(".rf-submit").prop("disabled", false);
 		});
+	});
+	root.on("click", ".rf-cat-f", function () {
+		FCAT = $(this).data("c") || "";
+		load();
 	});
 	root.on("click", ".rf-tile", function () {
 		FST = $(this).data("s");

@@ -27,6 +27,9 @@ frappe.pages["my-account"].on_page_load = function (wrapper) {
 		.ma-btn{background:#1f618d;border:none;color:#fff;font-weight:700;border-radius:8px;padding:9px 20px;font-size:13.5px;cursor:pointer;}
 		.ma-btn:hover{background:#184e70;}
 		.ma-hint{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
+		.ma-roles{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}
+		.ma-role{background:var(--control-bg);border:1px solid var(--border-color);border-radius:12px;padding:3px 11px;font-size:12px;font-weight:600;}
+		.ma-role.none{color:var(--text-muted);font-weight:400;}
 		.ma-signout{margin-left:auto;background:transparent;border:1px solid var(--gray-400,#aeb6bf);color:var(--text-muted);border-radius:8px;padding:7px 16px;font-weight:700;font-size:13px;cursor:pointer;}
 		.ma-signout:hover{border-color:#b02a2a;color:#b02a2a;}
 		</style>
@@ -34,6 +37,12 @@ frappe.pages["my-account"].on_page_load = function (wrapper) {
 			<div class="ma-who"><div class="ma-av" id="ma-av"></div>
 				<div><div class="ma-name" id="ma-name"></div><div class="ma-email" id="ma-email"></div></div>
 				<button class="ma-signout">${__("Sign out")}</button></div>
+
+			<div class="ma-card">
+				<h3>${__("What you can access")}</h3>
+				<div class="ma-roles" id="ma-roles"></div>
+				<div class="ma-hint">${__("Read-only — ask an administrator to change your access.")}</div>
+			</div>
 
 			<div class="ma-card">
 				<h3>${__("Login name")}</h3>
@@ -67,6 +76,10 @@ frappe.pages["my-account"].on_page_load = function (wrapper) {
 		root.find("#ma-email").text(m.user);
 		root.find("#ma-av").text((m.full_name || m.user || "?").trim().charAt(0).toUpperCase());
 		root.find(".ma-username").val(m.username || "");
+		const roles = m.roles || [];
+		root.find("#ma-roles").html(roles.length
+			? roles.map((x) => `<span class="ma-role">${frappe.utils.escape_html(x)}</span>`).join("")
+			: `<span class="ma-role none">${__("No roles assigned yet.")}</span>`);
 	});
 
 	root.find(".ma-save-un").on("click", function () {
