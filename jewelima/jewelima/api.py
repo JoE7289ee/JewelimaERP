@@ -13303,10 +13303,18 @@ def get_card_passport(order_bag):
 			s.price_chart, s.tax_percent, s.grand_total
 		FROM `tabProduct Sale Item` i JOIN `tabProduct Sale` s ON s.name = i.parent
 		WHERE i.order_bag = %s ORDER BY s.creation DESC LIMIT 1""", order_bag, as_dict=True)
+	# what the piece actually sold for is restricted to the same eyes as Costing.
+	# everyone else is told it is sold, and nothing more — the money never leaves
+	# the server, so hiding it in the UI alone is not relied on.
+	may_see_money = bool({"System Manager", "JW Manager"} & set(frappe.get_roles()))
 	extras["sale"] = sale_row[0] if sale_row else None
 	if extras["sale"]:
-		extras["sale"]["sale_date"] = str(extras["sale"]["sale_date"] or "")
-		extras["sale"]["chart_name"] = _chart_label(extras["sale"]["price_chart"])
+		if not may_see_money:
+			extras["sale"] = {"sold": 1}
+		else:
+			extras["sale"]["sold"] = 1
+			extras["sale"]["sale_date"] = str(extras["sale"]["sale_date"] or "")
+			extras["sale"]["chart_name"] = _chart_label(extras["sale"]["price_chart"])
 	extras["holder_transfers"] = [{"from": h.from_holder, "to": h.to_holder,
 		"when": str(h.transfer_time or ""), "by": h.transferred_by, "reason": h.reason or ""}
 		for h in frappe.get_all("Holder Transfer", filters={"order_bag": order_bag},

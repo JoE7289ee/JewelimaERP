@@ -212,7 +212,10 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			${esc(b.cad_design_type || "")} &middot; ${esc(b.cad_karat || "")} &middot; gold ${esc(b.cad_gold_weight || "")} &middot; dmd ${esc(b.cad_diamond_weight || "")} ct &middot; ${b.cad_stone_no || 0} stones${b.cad_reference ? " &middot; ref " + esc(b.cad_reference) : ""}</div></div>` : "";
 
 		let saleSec = "";
-		if (!forPrint && ex.sale) {
+		if (!forPrint && ex.sale && !ex.sale.parent) {
+			// restricted eyes only get the fact of the sale — no customer, no money
+			saleSec = `<div class="ci-sec acc-green"><h4>Sold</h4><div class="ci-line"><b>Sold</b></div></div>`;
+		} else if (!forPrint && ex.sale) {
 			const sv = ex.sale;
 			const money = (v) => "&#8377;" + (flt(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
 			saleSec = `<div class="ci-sec acc-green"><h4>Sold</h4><div class="ci-line">
