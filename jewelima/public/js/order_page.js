@@ -1206,6 +1206,9 @@ const PO_COLUMNS = [
 					updateSplitBtn(nr);
 					nr._remark = row._remark; // split bags inherit the line's remark
 					updateRemarkBtn(nr);
+					// ...and any extra photos added beyond the design image
+					nr._photos = (row._photos || []).map((p) => ({ ...p }));
+					updatePhotosBtn(nr);
 					prev = nr;
 				}
 				recalcTotals();
