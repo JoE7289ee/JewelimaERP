@@ -2093,11 +2093,17 @@ function openOldDesignDialog(state) {
 	});
 
 	// ---- load a picked pending design --------------------------------------
+	let loadSeq = 0;
 	function loadCard(name) {
 		if (!name) return;
+		// a Link's onchange can fire more than once; reloading the card already on
+		// screen repaints the sieve table and throws away the edits in progress
+		if (cur && cur.name === name) return;
+		const q = ++loadSeq;
 		frappe.db.get_value("Design Bank", name, "design_no").then((r) => {
 			const dno = (r.message || {}).design_no || name;
 			frappe.call({ method: API + ".get_review_card", args: { q: dno } }).then((rr) => {
+				if (q !== loadSeq) return;      // a newer pick won — drop this response
 				cur = (rr.message || {}).card || null;
 				if (!cur) return frappe.msgprint(__("Could not load that design."));
 				photoB64 = "";
@@ -2130,7 +2136,11 @@ function openOldDesignDialog(state) {
 			SIEVES = rows.map((x) => x.sieve_size).filter(Boolean);
 			SIEVE_AVG = {};
 			rows.forEach((x) => { if (x.sieve_size) SIEVE_AVG[x.sieve_size] = flt(x.avg_cts); });
-			paintStones(cur ? cur.stones : collectStones());
+			// this lands whenever the chart returns — repainting from the STORED stones
+			// here wiped whatever had just been typed. Keep what is on screen if the
+			// desk has entered anything; only fall back to the card's own rows.
+			const entered = collectStones();
+			paintStones(entered.length ? entered : (cur ? cur.stones : [{}]));
 			recomputeDW();
 		});
 	frappe.db.get_list("Design Type", { fields: ["name"], order_by: "name", limit: 0 }).then((rows) => {
