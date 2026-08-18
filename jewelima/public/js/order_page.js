@@ -1993,15 +1993,19 @@ function openOldDesignDialog(state) {
 		primary_action_label: __("Approve → Add Variant"),
 		primary_action() {
 			if (!cur) return frappe.msgprint(__("Pick a pending design first."));
+			// read the sieve rows BEFORE get_values(): that re-renders the dialog from the
+			// committed model and repaints the HTML fields, which wiped the stone edits
+			// (the card then approved with no stones and DW 0)
+			const stoneRows = collectStones();
 			const v = d.get_values(true) || {};
 			if (!v.design_type) return frappe.msgprint(__("Pick the Design Type to approve."));
-			const dw = jwDwFromSieves(collectStones(), SIEVE_AVG);       // DW = DMD sieve average
+			const dw = jwDwFromSieves(stoneRows, SIEVE_AVG);             // DW = DMD sieve average
 			const gw18 = jwGrossTo18k(v.gross_weight, v.karat, dw);      // store the 18K figure
 			const payload = {
 				name: cur.name, design_no: cur.design_no, design_type: v.design_type,
 				gross_weight: gw18, diamond_weight: dw,
 				note: v.note || "", extra_lines: v.extra_lines || "",
-				stones: collectStones(), photo: photoB64 || cur.photo,
+				stones: stoneRows, photo: photoB64 || cur.photo,
 				photoupdate: (v.tag_photo_update || cur.photoupdate) ? 1 : 0,
 				customer_image_needed: cur.customer_image_needed ? 1 : 0,
 				delete_raw: 0, approve: 1, retire: 0,
