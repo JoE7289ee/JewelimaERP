@@ -149,7 +149,7 @@ JEWELIMA_STOCK_ROLE = "Jewelima Stock"
 JEWELIMA_STOCK_PAGES = ["purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
 JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type"]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
-JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "bench-cad", "order-bag-photos"]
+JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "order-bag-photos"]
 JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item", "Item Group", "Customer", "Supplier", "Diamond Sieve", "Bin", "Warehouse", "File"]
 # The stone issuer: ONE page (Stone Issue). A plain issuer is locked to issuing as
 # themselves and only the buckets an admin allows on Setup > Issue > Issue Access
@@ -185,9 +185,7 @@ JEWELIMA_INFO_ROLE = "Jewelima Info"
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
-JEWELIMA_INFO_BENCH_PAGES = ["bench-info", "bench-ordering", "bench-cad", "bench-cam", "bench-waxing", "bench-tree-making",
-	"bench-casting", "bench-grinding", "bench-filing", "bench-setting", "bench-pre-polish",
-	"bench-wax-setting", "bench-final-polish", "bench-wax-cleaning", "bench-bag-extraction"]
+JEWELIMA_INFO_BENCH_PAGES = ["bench-info"]  # one page for every bench (the per-bench pages are retired)
 JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES + JEWELIMA_INFO_BENCH_PAGES
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]

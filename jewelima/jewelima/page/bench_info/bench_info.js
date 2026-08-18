@@ -23,6 +23,12 @@ frappe.pages["bench-info"].on_page_load = function (wrapper) {
 			.bi-big{font-size:26px;font-weight:800;line-height:1;}
 			.bi-big .u{font-size:11px;font-weight:600;color:var(--text-muted);margin-left:4px;}
 			.bi-sub{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11.5px;color:var(--text-muted);}
+			.bi-wt{display:flex;gap:12px;flex-wrap:wrap;margin-top:4px;font-size:11.5px;color:var(--text-muted);}
+			.bi-wt b{color:var(--text-color);font-weight:800;}
+			.bi-st{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;}
+			.bi-b{background:var(--control-bg);border:1px solid var(--border-color);border-radius:9px;
+				padding:1px 8px;font-size:10.5px;color:var(--text-muted);}
+			.bi-b b{color:var(--text-color);font-weight:800;}
 			.bi-sub b{color:var(--text-color);font-weight:800;}
 			.bi-od{color:#b02a2a;font-weight:800;}
 			.bi-tot{margin-left:auto;font-size:12.5px;font-weight:700;}
@@ -45,10 +51,16 @@ frappe.pages["bench-info"].on_page_load = function (wrapper) {
 						<div class="bi-big">${b.cards}<span class="u">${__("cards")}</span></div>
 						<div class="bi-sub">
 							<span><b>${b.qty || 0}</b> ${__("pcs")}</span>
-							<span><b>${(b.gold_g || 0).toFixed(3)}</b> g</span>
 							${b.overdue ? `<span class="bi-od">${b.overdue} ${__("overdue")}</span>` : ""}
-							${b.oldest_days ? `<span>${__("oldest")} <b>${b.oldest_days}</b>d</span>` : ""}
 						</div>
+						<div class="bi-wt">
+							<span>${__("Nett")} <b>${(b.nett_g || 0).toFixed(3)}</b> g</span>
+							<span>${__("Gross")} <b>${(b.gross_g || 0).toFixed(3)}</b> g</span>
+						</div>
+						${Object.keys(b.stones || {}).length ? `<div class="bi-st">${
+							Object.keys(b.stones).sort().map((k) =>
+								`<span class="bi-b">${esc(k)} <b>${(b.stones[k] || 0).toFixed(3)}</b> ct</span>`).join("")
+						}</div>` : ""}
 					</div>`).join(""));
 			});
 		}

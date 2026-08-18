@@ -71,8 +71,8 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 		gold_g: (r) => (r.gold_g || 0).toFixed(3),
 		pure_g: (r) => (r.pure_g || 0).toFixed(3),
 		status: (r) => `<span class="bb-st">${esc(r.status)}</span>`
-			+ (r.queue_reason ? ` <span class="bb-qr" data-name="${esc(r.name)}" title="${__("click to change")}">${esc(r.queue_reason)}</span>`
-				: (["In Queue", "On Hold"].includes(r.status) ? ` <span class="bb-qr add" data-name="${esc(r.name)}" title="${__("why is it waiting?")}">+ ${__("reason")}</span>` : "")),
+			+ (r.queue_reason ? ` <span class="bb-qr" title="${__("why this card is waiting")}">${esc(r.queue_reason)}</span>`
+				: ""),   // read-only board: a missing reason is simply not shown
 		queue_reason: (r) => esc(r.queue_reason || ""),
 	};
 	BB_BUCKETS.forEach((b) => {
@@ -101,17 +101,12 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 		table.bb-t td{border:1px solid var(--border-color);padding:4px 10px;}
 		.bb-none{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:9px;}
 		.bb-st{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:var(--control-bg);}
-		.bb-qr{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:#fff6e0;color:#7a5b00;border:1px solid #e0a800;cursor:pointer;}
+		.bb-qr{border-radius:10px;padding:1px 9px;font-size:11px;font-weight:700;background:#fff6e0;color:#7a5b00;border:1px solid #e0a800;}
 		.bb-qr.add{background:transparent;color:var(--text-muted);border:1px dashed var(--border-color);}
 		.bb-pr{display:inline-block;min-width:26px;text-align:center;border-radius:9px;padding:1px 7px;font-size:11px;font-weight:800;background:var(--control-bg);}
 		.bb-pr.man{background:#d63031;color:#fff;}
-		.bb-next{border:2px solid #d63031;border-radius:10px;padding:10px 16px;margin:0 0 12px;display:none;align-items:center;gap:14px;background:var(--fg-color);}
-		.bb-next .k{font-size:10px;font-weight:800;letter-spacing:.08em;color:#d63031;text-transform:uppercase;}
-		.bb-next .v{font-size:18px;font-weight:800;}
-		.bb-next .sub{font-size:12px;color:var(--text-muted);}
 		</style>
 		<div class="bb-loc"><span class="tag">${__("Bench")}</span>${esc(bench)}</div>
-		<div class="bb-next"></div>
 		<div class="bb-filter"></div>
 		<div class="bb-tiles bb-kpi"></div>
 		<div class="bb-sec">${__("Stock at the filtered cards")}</div>
@@ -142,16 +137,6 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 
 	function recompute() {
 		const rows = filterBar.apply(S.all);
-
-		// the queue law's verdict: what should be picked up NEXT (waiting cards only)
-		if (BB_RANKED) {
-			const next = S.all.filter((r) => ["In Queue", "On Hold"].includes(r.status))
-				.sort((a, b) => (a.prio_rank || 9e9) - (b.prio_rank || 9e9))[0];
-			root.find(".bb-next").css("display", next ? "flex" : "none").html(next ? `
-				<span class="k">${__("Next up")}</span>
-				<span class="v">${esc(next.name)}</span>
-				<span class="sub">${esc(next.design || "")} · ${esc(next.party || "")}${next.due ? " · " + __("due") + " " + frappe.datetime.str_to_user(next.due) : ""}${next.prio_manual ? " · " + __("MANUAL PRIORITY") : ""}</span>` : "");
-		}
 
 		const st = {};
 		rows.forEach((r) => (st[r.status] = (st[r.status] || 0) + 1));
@@ -200,26 +185,6 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 				<tr><td>${i + 1}</td>${cols.map(([k]) => `<td>${BB_CELL[k](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
 			: `<div class="bb-none">${filterBar.count() ? __("No cards match the filters.") : __("Nothing at {0}.", [bench])}</div>`);
 	}
-	// why is this card waiting? — pick from the bench's configured reasons
-	root.on("click", ".bb-qr", function (e) {
-		e.stopPropagation();
-		const nm = $(this).data("name");
-		frappe.call({ method: API + ".get_bench_work_options", args: { location: bench } }).then((r) => {
-			const reasons = (r.message || {}).queue_reasons || [];
-			if (!reasons.length) {
-				frappe.show_alert({ message: __("No In-Queue reasons configured for {0} — add them on Bench Setup.", [bench]), indicator: "orange" }, 5);
-				return;
-			}
-			frappe.prompt([{ fieldname: "v", fieldtype: "Select", label: __("In Queue reason"),
-				options: [""].concat(reasons).join("\n") }],
-				(vals) => frappe.call({ method: API + ".set_bench_queue_reason",
-					args: { order_bag: nm, location: bench, reason: vals.v || "" } }).then(() => {
-					frappe.show_alert({ message: vals.v ? __("{0}: {1}", [nm, vals.v]) : __("{0}: reason cleared", [nm]), indicator: "blue" }, 4);
-					load();
-				}), __("Why is {0} waiting?", [nm]), __("Set"));
-		});
-	});
-
 	root.on("click", "th[data-sort]", function () {
 		const k = this.getAttribute("data-sort");
 		if (S.sort === k) S.dir = -S.dir;

@@ -6093,29 +6093,43 @@ def get_bench_overview():
 	""", as_dict=True)
 	by_loc = {r.location: r for r in rows}
 
-	# gold grams sitting at each location (same ledger the board uses)
-	gold = dict(frappe.db.sql("""
-		SELECT b.location, SUM(IF(l.direction='Out', -l.qty, l.qty))
+	# what is physically sitting at each location, from the same ledger the board uses:
+	# metal grams (= NETT) and the stone carats per bucket
+	gold, stones = {}, {}
+	for r in frappe.db.sql("""
+		SELECT b.location, IFNULL(i.stone_type, '') st,
+			SUM(IF(l.direction='Out', -l.qty, l.qty)) q
 		FROM `tabBag Material Ledger` l
 		JOIN `tabOrder Bag` b ON b.name = l.order_bag
 		JOIN `tabItem` i ON i.name = l.item
-		WHERE IFNULL(i.stone_type, '') = '' AND b.stock_status = 'In Production'
-		  AND b.is_finished = 0 AND IFNULL(b.location, '') != ''
-		GROUP BY b.location
-	""") or [])
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+		  AND IFNULL(b.location, '') != ''
+		GROUP BY b.location, IFNULL(i.stone_type, '')
+	""", as_dict=True):
+		if not r.st:
+			gold[r.location] = gold.get(r.location, 0.0) + flt(r.q)      # grams
+		else:
+			bucket = (_BUCKET_OF_STONE_TYPE.get(r.st) or "poth").upper()   # same buckets as the board
+			stones.setdefault(r.location, {})[bucket] = round(
+				stones.get(r.location, {}).get(bucket, 0.0) + flt(r.q), 3)   # carats
 
 	out = []
 	for bench in sorted(set(BENCH_DOCTYPE) | set(by_loc)):
 		r = by_loc.get(bench)
+		st = {k: v for k, v in (stones.get(bench) or {}).items() if abs(flt(v)) > 0.0005}
+		nett = round(flt(gold.get(bench)), 3)                 # metal grams only
+		stone_ct = round(sum(flt(v) for v in st.values()), 3)
 		out.append({
 			"bench": bench,
 			"known": 1 if bench in BENCH_DOCTYPE else 0,   # 0 = cards sit somewhere unexpected
 			"cards": cint(r.cards) if r else 0,
 			"qty": cint(r.qty) if r else 0,
 			"overdue": cint(r.overdue) if r else 0,
-			"gold_g": round(flt(gold.get(bench)), 3),
+			"nett_g": nett,                                   # gross - stones
+			"stone_ct": stone_ct,
+			"gross_g": round(nett + stone_ct * 0.2, 3),       # 1 ct = 0.2 g
+			"stones": st,                                     # {DMD: ct, PS: ct, ...}
 			"next_due": str(r.next_due) if (r and r.next_due) else "",
-			"oldest_days": cint(r.oldest_days) if r else 0,
 		})
 	return {"benches": out, "total_cards": sum(x["cards"] for x in out)}
 
