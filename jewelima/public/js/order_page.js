@@ -1283,6 +1283,51 @@ const PO_COLUMNS = [
 	};
 	state.resetPage = resetPage;
 
+	page.add_inner_button(__("Find Party by Old Name"), () => {
+		const esc = frappe.utils.escape_html;
+		const dlg = new frappe.ui.Dialog({
+			title: __("Find a party by its old name"),
+			fields: [
+				{ fieldname: "old", fieldtype: "Data", label: __("Old name"), reqd: 1,
+					placeholder: __("e.g. AKKARA K.CHIRA") },
+				{ fieldname: "out", fieldtype: "HTML" },
+			],
+			primary_action_label: __("Search"),
+			primary_action() { run(); },
+		});
+		const run = () => {
+			const q = (dlg.get_value("old") || "").trim();
+			if (!q) return;
+			frappe.call({ method: "jewelima.jewelima.api.lookup_old_name", args: { old_name: q } }).then((r) => {
+				const d = r.message || {};
+				const $o = dlg.get_field("out").$wrapper;
+				if (!d.found) {
+					return $o.html(`<div style="padding:8px 0;color:#b02a2a;font-weight:700;">${__("Not created")}</div>
+						<div style="font-size:12px;color:var(--text-muted);">${__("No party is recorded under that old name.")}</div>`);
+				}
+				if (!(d.parties || []).length) {
+					return $o.html(`<div style="padding:8px 0;color:#b4690e;font-weight:700;">${__("Not created yet")}</div>
+						<div style="font-size:12px;color:var(--text-muted);">${__("The old name is on record but has no new party assigned.")}</div>`);
+				}
+				$o.html(`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:6px 0 4px;">
+						${esc(d.old_name)} →</div>
+					<div style="display:flex;flex-wrap:wrap;gap:6px;">${d.parties.map((p) => `
+						<span class="jw-oldhit" data-p="${esc(p)}" title="${__("use this party on the order")}"
+							style="font-weight:800;border:1px solid var(--border-color);border-radius:6px;padding:3px 10px;
+							cursor:pointer;background:var(--control-bg);">${esc(p)}</span>`).join("")}</div>`);
+				$o.find(".jw-oldhit").on("click", function () {
+					const p = this.getAttribute("data-p");
+					dlg.hide();
+					Promise.resolve(state.header.customer.set_value(p)).then(() => {
+						state.header.customer.$input.trigger("change");
+						frappe.show_alert({ message: __("Party set to {0}.", [p]), indicator: "green" }, 4);
+					});
+				});
+			});
+		};
+		dlg.show();
+		setTimeout(() => dlg.get_field("old").$input.on("keydown", (e) => { if (e.key === "Enter") run(); }), 300);
+	});
 	if (OPTS.mode === "order") page.add_inner_button(__("Requests"), () => openRequestsDialog(state));
 	// file the whole form as a REQUEST instead of placing: no E-number is
 	// consumed (Job Order only exists on Place), the request takes its own
