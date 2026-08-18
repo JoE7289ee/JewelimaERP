@@ -4,7 +4,7 @@
 
 import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
 import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finished-stock + at-certification
-import "./quick_menu"; // Ctrl+Q — quick palette of everyday pages
+import "./quick_menu"; // Ctrl+Space — quick palette of everyday pages
 import "./filter_bar"; // jewelima.buildFilterBar — generic reusable filter engine
 import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
 import "./job_cards"; // jewelima.printJobCards — shared job-card printer (Print Order Bags + Ordering desk)
@@ -43,6 +43,22 @@ document.addEventListener("click", function (e) {
 		frappe.set_route("my-account");
 	}
 }, true);
+
+// Ctrl+Shift+A — a second way to toggle the sidebar (frappe's own Ctrl+/ still
+// works). Registered through frappe.ui.keys so it also shows in the shortcuts help.
+// NOTE: frappe builds the combo as "shift+ctrl+a" (shift is PREPENDED to ctrl+a) —
+// registering the intuitive "ctrl+shift+a" would never fire.
+$(document).on("app_ready", function () {
+	if (!frappe.ui || !frappe.ui.keys || !frappe.ui.keys.add_shortcut) return;
+	frappe.ui.keys.add_shortcut({
+		shortcut: "shift+ctrl+a",
+		action: () => {
+			const sb = frappe.app && frappe.app.sidebar;
+			if (sb && sb.toggle_width) sb.toggle_width();
+		},
+		description: __("Toggle sidebar"),
+	});
+});
 
 frappe.provide("jewelima");
 
