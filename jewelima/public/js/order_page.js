@@ -1630,7 +1630,7 @@ function openNewDesignDialog(state, prefill) {
 		if (!d) return;
 		const v = d.get_values(true) || {};
 		const q = ++prevSeq;
-		frappe.call({ method: "jewelima.jewelima.api.preview_design_card", freeze: false, args: { payload: JSON.stringify({
+		frappe.call({ method: "jewelima.jewelima.api.design_card_preview", freeze: false, args: { payload: JSON.stringify({
 			design_no: __("(new)"), design_type: v.design_type || "",
 			gross_weight: jwGrossTo18k(v.gross_weight, v.karat, flt(v.diamond_weight)),
 			diamond_weight: flt(v.diamond_weight), note: v.note || "",

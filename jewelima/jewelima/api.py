@@ -9607,32 +9607,6 @@ def _sieve_avg_map():
 		"Diamond Sieve", fields=["sieve_size", "avg_cts"]) if x.sieve_size}
 
 
-@frappe.whitelist()
-def preview_design_card(payload):
-	"""Render the INFO CARD from unsaved values so a create dialog can show exactly
-	what the card will look like. Same composer the saved card uses — nothing is
-	written. Returns a data: URI."""
-	import base64
-	from io import BytesIO
-
-	p = frappe.parse_json(payload) if isinstance(payload, str) else (payload or {})
-	stones = p.get("stones") or []
-	card = {
-		"design_no": p.get("design_no") or "—",
-		"design_type": p.get("design_type") or "",
-		"gross_weight": flt(p.get("gross_weight")),
-		"diamond_weight": flt(p.get("diamond_weight")),
-		"note": p.get("note") or "",
-		"extra_lines": p.get("extra_lines") or "",
-		"photo": p.get("photo") or "",
-		"stones": [{"stone": s.get("stone") or "", "sieve": s.get("sieve") or "",
-			"pcs": cint(s.get("pcs")), "ct": flt(s.get("ct"))} for s in stones],
-	}
-	buf = BytesIO()
-	_card_compose(card).save(buf, "PNG")
-	return {"image": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()}
-
-
 def _dw_computed(pairs, avg):
 	"""pairs: iterable of (sieve, pcs) — total ct = sum(pcs x sieve avg)."""
 	return round(sum(cint(pcs) * avg.get(sieve, 0) for sieve, pcs in pairs if sieve), 2)
