@@ -44,20 +44,19 @@ document.addEventListener("click", function (e) {
 	}
 }, true);
 
-// Ctrl+Shift+A — a second way to toggle the sidebar (frappe's own Ctrl+/ still
-// works). Registered through frappe.ui.keys so it also shows in the shortcuts help.
-// NOTE: frappe builds the combo as "shift+ctrl+a" (shift is PREPENDED to ctrl+a) —
-// registering the intuitive "ctrl+shift+a" would never fire.
-$(document).on("app_ready", function () {
-	if (!frappe.ui || !frappe.ui.keys || !frappe.ui.keys.add_shortcut) return;
-	frappe.ui.keys.add_shortcut({
-		shortcut: "shift+ctrl+a",
-		action: () => {
-			const sb = frappe.app && frappe.app.sidebar;
-			if (sb && sb.toggle_width) sb.toggle_width();
-		},
-		description: __("Toggle sidebar"),
-	});
+// Ctrl+` (backtick, the top-LEFT key) — a second way to toggle the sidebar;
+// frappe's own Ctrl+/ still works. Bound as a raw keydown rather than through
+// frappe.ui.keys because frappe derives its combo from String.fromCharCode, which
+// turns keycode 192 into "à" — "ctrl+`" would never match. Same approach the quick
+// menu uses for Ctrl+Space. Backtick is unbound in every major browser, unlike
+// Ctrl+Shift+A (Chrome: search tabs) and Ctrl+Q (Firefox/Linux: quit).
+$(document).on("keydown", (e) => {
+	if (!e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+	if (e.code !== "Backquote") return;
+	const sb = frappe.app && frappe.app.sidebar;
+	if (!sb || !sb.toggle_width) return;
+	e.preventDefault();
+	sb.toggle_width();
 });
 
 frappe.provide("jewelima");

@@ -1753,7 +1753,12 @@ function openNewDesignDialog(state, prefill) {
 	let prevSeq = 0;
 	const refreshCard = frappe.utils.debounce(() => {
 		if (!d) return;
-		const v = d.get_values(true) || {};
+		// NB: never d.get_values() here — it re-renders the dialog from the committed
+		// model and wipes whatever is being typed (a typed gross weight cleared itself).
+		const raw = (fn) => { const f = d.get_field(fn); return (f && f.$input && f.$input.val()) || ""; };
+		const v = { design_type: raw("design_type"), karat: raw("karat"),
+			gross_weight: raw("gross_weight"), note: raw("note"),
+			diamond_weight: jwDwFromSieves(collectStones(), SIEVE_AVG) };
 		const q = ++prevSeq;
 		frappe.call({ method: "jewelima.jewelima.api.design_card_preview", freeze: false, args: { payload: JSON.stringify({
 			design_no: __("(new)"), design_type: v.design_type || "",
@@ -1884,10 +1889,12 @@ function openNewDesignDialog(state, prefill) {
 			touched();
 		});
 
-	// header fields feed the live card preview (and the karat feeds the 18K figure)
+	// header fields only repaint the CARD PREVIEW — never touched(), because that
+	// calls set_value() and a dialog re-render wipes whatever is being typed
+	// (typing a gross weight used to clear itself). DW depends on the sieves only.
 	["design_type", "karat", "gross_weight", "note"].forEach((fn) => {
 		const f = d.get_field(fn);
-		if (f && f.$input) f.$input.on("change input", () => touched());
+		if (f && f.$input) f.$input.on("change input", () => refreshCard());
 	});
 	// load every Design Type up front so the dropdown lists them all (no searching)
 	frappe.db.get_list("Design Type", { fields: ["name"], order_by: "name", limit: 0 }).then((rows) => {
