@@ -13691,6 +13691,9 @@ def _is_feature_admin():
 	return bool({"System Manager", "JW Manager"} & set(frappe.get_roles())) or frappe.session.user == "Administrator"
 
 
+FEATURE_REQUEST_CATEGORIES = ("Feature", "Improvement", "Bug", "Claude", "Other")
+
+
 @frappe.whitelist()
 def submit_feature_request(title=None, description=None, category=None):
 	"""Raise a feature request — born Open, stamped with who + when. The form is now
@@ -13707,7 +13710,8 @@ def submit_feature_request(title=None, description=None, category=None):
 	d = frappe.get_doc({
 		"doctype": "Feature Request", "title": title or "Request",
 		"description": description,
-		"category": category if category in ("Feature", "Improvement", "Bug", "Other") else "Feature",
+		# keep this in step with the Feature Request doctype's own options
+		"category": category if category in FEATURE_REQUEST_CATEGORIES else "Feature",
 		"status": "Open", "requested_by": frappe.session.user,
 		"requested_on": frappe.utils.now_datetime(),
 	}).insert(ignore_permissions=True)
