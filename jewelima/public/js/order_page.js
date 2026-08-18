@@ -1768,12 +1768,14 @@ function openNewDesignDialog(state, prefill) {
 		const raw = (fn) => { const f = d.get_field(fn); return (f && f.$input && f.$input.val()) || ""; };
 		const v = { design_type: raw("design_type"), karat: raw("karat"),
 			gross_weight: raw("gross_weight"), note: raw("note"),
+			extra_lines: raw("extra_lines"),
 			diamond_weight: jwDwFromSieves(collectStones(), SIEVE_AVG) };
 		const q = ++prevSeq;
 		frappe.call({ method: "jewelima.jewelima.api.design_card_preview", freeze: false, args: { payload: JSON.stringify({
 			design_no: __("(new)"), design_type: v.design_type || "",
 			gross_weight: jwGrossTo18k(v.gross_weight, v.karat, flt(v.diamond_weight)),
 			diamond_weight: flt(v.diamond_weight), note: v.note || "",
+			extra_lines: v.extra_lines || "",
 			photo: photoB64 || "", stones: collectStones(),
 		}) } }).then((r) => {
 			if (q !== prevSeq) return;
@@ -1905,7 +1907,7 @@ function openNewDesignDialog(state, prefill) {
 	// header fields only repaint the CARD PREVIEW — never touched(), because that
 	// calls set_value() and a dialog re-render wipes whatever is being typed
 	// (typing a gross weight used to clear itself). DW depends on the sieves only.
-	["design_type", "karat", "gross_weight", "note"].forEach((fn) => {
+	["design_type", "karat", "gross_weight", "note", "extra_lines"].forEach((fn) => {
 		const f = d.get_field(fn);
 		if (f && f.$input) f.$input.on("change input", () => refreshCard());
 	});
