@@ -692,6 +692,7 @@ const PO_COLUMNS = [
 	function openVariantCreate(row, bank) {
 		const API2 = "jewelima.jewelima.api"; // variant naming lives with the core APIs
 		const esc = frappe.utils.escape_html;
+		let cardNote = "";   // whatever is written on the card (note + extra lines)
 		const go = (N, bankNo, img) => {
 			let cur = null;
 			// a row the USER added (locked rows are seeded by the system and fixed)
@@ -720,6 +721,7 @@ const PO_COLUMNS = [
 				size: "large",
 				fields: [
 					{ fieldname: "img", fieldtype: "HTML" },
+					{ fieldname: "cardnote", fieldtype: "HTML" },
 					{ fieldname: "sb_top", fieldtype: "Section Break" },
 					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"), reqd: 1,
 						options: N.karats.join("\n"), default: "22K" },
@@ -825,6 +827,11 @@ const PO_COLUMNS = [
 				g.refresh = function () { orig(); setTimeout(mark, 0); };
 				setTimeout(mark, 0);
 			})();
+			if (cardNote) vd.get_field("cardnote").$wrapper.html(
+				`<div style="border:1px solid #e0a800;background:#fff6e0;color:#7a5b00;border-radius:8px;
+					padding:8px 12px;margin:0 0 10px;font-size:12.5px;">
+					<b style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;">${__("Note on the card")}</b><br>
+					${esc(cardNote).replace(/\n/g, "<br>")}</div>`);
 			if (img) vd.get_field("img").$wrapper.html(`<div style="text-align:center;margin:0 0 6px;"><img src="${encodeURI(img)}" style="max-height:180px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);" onerror="this.closest('div').style.display='none'"></div>`);
 			let judgeSeq = 0;
 			const judge = () => {
@@ -878,10 +885,13 @@ const PO_COLUMNS = [
 			vd.$wrapper.on("change", ".frappe-control[data-fieldname=karat] select, .frappe-control[data-fieldname=quality] select, .frappe-control[data-fieldname=color] select", judge);
 			setTimeout(judge, 150);
 		};
-		frappe.db.get_value("Design Bank", bank, ["design_no", "image", "photo"]).then((r) => {
+		frappe.db.get_value("Design Bank", bank, ["design_no", "image", "photo", "note", "extra_lines"]).then((r) => {
 			const m = r.message || {};
 			const bankNo = m.design_no || bank;
 			const img = m.image || m.photo || "";
+			// the card's notes ride along: a note like "CS" is how the user knows to
+			// add a colour-stone row that the seed can't know about
+			cardNote = [m.note || "", m.extra_lines || ""].filter(Boolean).join("\n");
 			if (NAMING) go(NAMING, bankNo, img);
 			else frappe.call({ method: API2 + ".get_variant_naming" }).then((rr) => { NAMING = rr.message; go(NAMING, bankNo, img); });
 		});
@@ -1788,6 +1798,8 @@ function openNewDesignDialog(state, prefill) {
 			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)"), read_only: 1,
 				description: __("auto — average from the sieves below") },
 			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
+			{ fieldname: "extra_lines", fieldtype: "Small Text", label: __("More notes"),
+				description: __("one note per line — shown when a variant is created") },
 			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
 			{ fieldname: "stones_html", fieldtype: "HTML" },
 			{ fieldname: "sec_ph", fieldtype: "Section Break", label: __("Product photo") },
@@ -1806,7 +1818,7 @@ function openNewDesignDialog(state, prefill) {
 			frappe.dom.freeze(__("Creating design…"));
 			frappe.call({ method: "jewelima.jewelima.api.create_new_design_full", args: {
 				design_type: v.design_type, gross_weight: gw18,
-				diamond_weight: dw, note: v.note || "",
+				diamond_weight: dw, note: v.note || "", extra_lines: v.extra_lines || "",
 				stones: JSON.stringify(stones), photo: photoB64 || "",
 				upgrade_photo: v.upgrade ? 1 : 0,
 			} }).then((r) => {
@@ -1940,6 +1952,8 @@ function openOldDesignDialog(state) {
 			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)"), read_only: 1,
 				description: __("auto — average from the DMD sieves below") },
 			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
+			{ fieldname: "extra_lines", fieldtype: "Small Text", label: __("More notes"),
+				description: __("one note per line — shown when a variant is created") },
 			{ fieldname: "tag_photo_update", fieldtype: "Check", label: __("Tag for photo update → Photo Urgent (needs a better photo)") },
 			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
 			{ fieldname: "stones_html", fieldtype: "HTML" },
@@ -1956,7 +1970,7 @@ function openOldDesignDialog(state) {
 			const payload = {
 				name: cur.name, design_no: cur.design_no, design_type: v.design_type,
 				gross_weight: gw18, diamond_weight: dw,
-				note: v.note || "", extra_lines: cur.extra_lines,
+				note: v.note || "", extra_lines: v.extra_lines || "",
 				stones: collectStones(), photo: photoB64 || cur.photo,
 				photoupdate: (v.tag_photo_update || cur.photoupdate) ? 1 : 0,
 				customer_image_needed: cur.customer_image_needed ? 1 : 0,
@@ -2059,6 +2073,7 @@ function openOldDesignDialog(state) {
 				d.set_value("karat", "18K");                 // the stored gross IS 18K
 				d.set_value("gross_weight", cur.gross_weight || 0);
 				d.set_value("note", cur.note || "");
+				d.set_value("extra_lines", cur.extra_lines || "");
 				paintPhotos();
 				paintStones(cur.stones || []);
 				recomputeDW();                                // DW = average from the sieves

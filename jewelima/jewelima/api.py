@@ -9224,7 +9224,7 @@ def new_bank_code(design_type, provider=None):
 
 @frappe.whitelist()
 def create_new_design_full(design_type, gross_weight=None, diamond_weight=None,
-		note=None, stones=None, photo=None, upgrade_photo=0):
+		note=None, extra_lines=None, stones=None, photo=None, upgrade_photo=0):
 	"""Place Order 'New Design': mint the type-coded bank card, render its info
 	page from the (optional) product photo + weights + sieves, and mark it
 	Approved on the spot — a manager placing the order IS the approval, so it's
@@ -9240,7 +9240,7 @@ def create_new_design_full(design_type, gross_weight=None, diamond_weight=None,
 	save_design_card(json.dumps({
 		"design_no": code, "design_type": design_type,
 		"gross_weight": flt(gross_weight), "diamond_weight": flt(diamond_weight),
-		"note": note or "", "stones": stones,
+		"note": note or "", "extra_lines": extra_lines or "", "stones": stones,
 		"photo": photo if has_photo else "",
 	}))
 	name = frappe.db.get_value("Design Bank", {"design_no": code}, "name")

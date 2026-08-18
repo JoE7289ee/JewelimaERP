@@ -408,6 +408,15 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 				fields: [
 					{ fieldname: "photo", fieldtype: "HTML",
 						options: d.image ? `<div style="text-align:center;margin:-4px 0 10px;"><img src="${esc(d.image)}" style="max-width:100%;max-height:240px;border:1px solid var(--border-color);border-radius:12px;background:#fff;object-fit:contain;"></div>` : "" },
+					// whatever is written on the card — e.g. a "CS" note telling the user to
+					// add a colour-stone row the seed can't know about
+					{ fieldname: "cardnote", fieldtype: "HTML",
+						options: [d.note || "", d.extra_lines || ""].filter(Boolean).length
+							? `<div style="border:1px solid #e0a800;background:#fff6e0;color:#7a5b00;border-radius:8px;
+								padding:8px 12px;margin:0 0 10px;font-size:12.5px;">
+								<b style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;">${__("Note on the card")}</b><br>
+								${esc([d.note || "", d.extra_lines || ""].filter(Boolean).join("\n")).replace(/\n/g, "<br>")}</div>`
+							: "" },
 					{ fieldname: "sb_photo", fieldtype: "Section Break" },
 					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"), reqd: 1,
 						options: N.karats.join("\n"), default: "22K" },

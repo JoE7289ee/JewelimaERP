@@ -238,7 +238,7 @@ def get_design_bank_detail(name):
 		frappe.throw(_("Select a design first"))
 	d = frappe.db.get_value(
 		"Design Bank", name,
-		["name", "design_no", "image", "gross_weight", "diamond_weight", "note"],
+		["name", "design_no", "image", "gross_weight", "diamond_weight", "note", "extra_lines"],
 		as_dict=True,
 	)
 	d["tags"] = frappe.get_all("Design Bank Tag", filters={"parent": name}, pluck="tag")
