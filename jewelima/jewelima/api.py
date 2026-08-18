@@ -8553,6 +8553,25 @@ def lookup_old_name(old_name):
 
 
 @frappe.whitelist()
+def search_old_names(q=None, limit=20):
+	"""Type-ahead for the old-name search: the closest legacy names to what has been
+	typed, each with the party it maps to. Open to anyone who can place an order —
+	the Party Old Name doctype itself is admin-only, so this is the way in."""
+	q = (q or "").strip()
+	rows = frappe.db.sql("""
+		SELECT o.name AS old_name, GROUP_CONCAT(p.party ORDER BY p.idx SEPARATOR ', ') AS parties
+		FROM `tabParty Old Name` o
+		LEFT JOIN `tabParty Old Name Party` p ON p.parent = o.name
+		WHERE %(all)s = 1 OR o.name LIKE %(like)s
+		GROUP BY o.name
+		ORDER BY (o.name LIKE %(starts)s) DESC, LENGTH(o.name), o.name
+		LIMIT %(lim)s
+	""", {"all": 1 if not q else 0, "like": "%" + q + "%", "starts": q + "%",
+		"lim": cint(limit) or 20}, as_dict=True)
+	return {"rows": [{"old_name": r.old_name, "parties": r.parties or ""} for r in rows]}
+
+
+@frappe.whitelist()
 def get_party_old_names(party):
 	"""The legacy name(s) a party used to be known by — shown as a hint wherever a
 	party is picked (Place Order), so staff recognise the new coded name."""

@@ -1291,8 +1291,10 @@ const PO_COLUMNS = [
 		const dlg = new frappe.ui.Dialog({
 			title: __("Find a party by its old name"),
 			fields: [
-				{ fieldname: "old", fieldtype: "Data", label: __("Old name"), reqd: 1,
-					placeholder: __("e.g. AKKARA K.CHIRA") },
+				{ fieldname: "old", fieldtype: "Autocomplete", label: __("Old name"), reqd: 1,
+					placeholder: __("start typing — e.g. AKK"),
+					description: __("type a few letters and pick from the list"),
+					onchange: () => setTimeout(run, 60) },
 				{ fieldname: "out", fieldtype: "HTML" },
 			],
 			primary_action_label: __("Search"),
@@ -1328,8 +1330,26 @@ const PO_COLUMNS = [
 				});
 			});
 		};
+		// type-ahead: the closest old names, each showing the party it maps to
+		const feed = frappe.utils.debounce(() => {
+			const q = (dlg.get_field("old").$input.val() || "").trim();
+			frappe.call({ method: "jewelima.jewelima.api.search_old_names", args: { q }, freeze: false })
+				.then((r) => {
+					const rows = ((r.message || {}).rows) || [];
+					dlg.get_field("old").set_data(rows.map((x) => ({
+						value: x.old_name,
+						label: x.old_name,
+						description: x.parties || __("not created yet"),
+					})));
+				});
+		}, 250);
 		dlg.show();
-		setTimeout(() => dlg.get_field("old").$input.on("keydown", (e) => { if (e.key === "Enter") run(); }), 300);
+		setTimeout(() => {
+			const $i = dlg.get_field("old").$input;
+			$i.on("input", feed);
+			$i.on("keydown", (e) => { if (e.key === "Enter") setTimeout(run, 80); });
+			feed();   // show the first few straight away
+		}, 300);
 	});
 	if (OPTS.mode === "order") page.add_inner_button(__("Requests"), () => openRequestsDialog(state));
 	// file the whole form as a REQUEST instead of placing: no E-number is
