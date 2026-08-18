@@ -102,6 +102,7 @@ const PO_COLUMNS = [
 		.po-head .help-box,.po-head .description,.po-head p.help-box{display:none !important;}
 		.po-due{font-size:11px;color:var(--text-muted);margin:1px 0 0 2px;white-space:nowrap;}
 		.po-due.po-warn{color:#b02a2a;font-weight:700;}
+		.po-var-need{background:#b02a2a !important;border-color:#b02a2a !important;color:#fff !important;font-weight:700;}
 		.po-no-badge{font-weight:800;font-size:15px;letter-spacing:.6px;align-self:center;background:var(--control-bg);border:1px solid var(--border-color);border-radius:6px;padding:2px 13px;margin-right:8px;}
 		.po-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
 		table.po-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
@@ -176,7 +177,7 @@ const PO_COLUMNS = [
 	// only_select: our users pick, they never open the raw ERP record
 	state.header.customer = mk(".po-h-customer", { fieldtype: "Link", label: "Party", fieldname: "customer", options: "Customer", only_select: 1, reqd: OPTS.mode === "order" ? 1 : 0 });
 	state.header.salesman = mk(".po-h-salesman", { fieldtype: "Link", label: "Salesman", fieldname: "salesman", options: "Sales Person", only_select: 1, get_query: () => ({ filters: { is_group: 0, enabled: 1 } }) });
-	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", only_select: 1, get_query: () => ({ filters: { disabled: 0 } }) });
+	state.header.order_type = mk(".po-h-ordertype", { fieldtype: "Link", label: "Type", fieldname: "order_type", options: "Order Type", only_select: 1, reqd: OPTS.mode === "order" ? 1 : 0, get_query: () => ({ filters: { disabled: 0 } }) });
 
 	// ENTER walks the header: Party -> Salesman -> Type -> Days
 	(function () {
@@ -246,7 +247,7 @@ const PO_COLUMNS = [
 	state.partyBeforeDue = partyBeforeDue;
 	const showDue = () => {
 		const dd = dueFromDays();
-		$(page.main).find(".po-due").not(".po-custdue").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
+		$(page.main).find(".po-due").not(".po-custdue").not(".po-oldname").text(dd ? __("Due {0}", [frappe.datetime.str_to_user(dd)]) : "");
 		const cd = custFromDays();
 		const copied = !cint(state.header.cust_days.get_value());
 		const bad = partyBeforeDue();
@@ -532,7 +533,16 @@ const PO_COLUMNS = [
 
 	function updateDesignBtn(row) {
 		if (row.$design) row.$design.prop("disabled", !row.f.design.get());
-		if (row.$variant) row.$variant.prop("disabled", !(row.f.bank && row.f.bank.get()));
+		if (row.$variant) {
+			const hasBank = !!(row.f.bank && row.f.bank.get());
+			const hasVar = !!row.f.design.get();
+			row.$variant.prop("disabled", !hasBank);
+			// bank picked but nothing on the line -> the variant must be created: shout
+			row.$variant.toggleClass("po-var-need", hasBank && !hasVar)
+				.attr("title", hasBank && !hasVar
+					? __("This card has no variant on the line — click to create one")
+					: __("Create (or pick) another variant of this card"));
+		}
 		// a design landing first (requests / repeat fills) backfills its card
 		const dn = row.f.design.get();
 		if (dn && row.f.bank && !row.f.bank.get()) {
@@ -664,8 +674,9 @@ const PO_COLUMNS = [
 			{ filters: { design_bank: bank, status: "Active" }, fields: ["name"], order_by: "creation asc", limit: 0 })
 			.then((vs) => {
 				if (vs.length) return selectDesign(row, vs[0].name); // default = first variant
-				frappe.confirm(__("This card has no variant yet — create one now?"),
-					() => openVariantCreate(row, bank));
+				// no variant yet: no nagging dialog — the +Var button turns red and is the
+				// way to create one (see updateDesignBtn)
+				updateDesignBtn(row);
 			});
 		if (!cur) return pickFirst();
 		// a variant of THIS card is already on the line — leave it be
@@ -722,6 +733,7 @@ const PO_COLUMNS = [
 						depends_on: `eval:!${JSON.stringify(N.karat_color_limit)}[doc.karat] || ${JSON.stringify(N.karat_color_limit)}[doc.karat].length > 1` },
 					{ fieldname: "sb_prev", fieldtype: "Section Break" },
 					{ fieldname: "prev", fieldtype: "HTML" },
+					{ fieldname: "existing", fieldtype: "HTML" },
 					{ fieldname: "sb_bom", fieldtype: "Section Break", label: __("Bill of Materials") },
 					{
 						fieldname: "materials", fieldtype: "Table", label: __("Materials"), options: "Design BOM Item", data: [],
@@ -840,6 +852,28 @@ const PO_COLUMNS = [
 					})
 					.catch(() => { cur = null; vd.get_field("prev").$wrapper.html(""); });
 			};
+			// what this card ALREADY has — so nobody guesses (and can reuse in one click)
+			function paintExisting() {
+				frappe.db.get_list("Design", { filters: { design_bank: bank, status: "Active" },
+					fields: ["name"], order_by: "creation asc", limit: 0 }).then((vs) => {
+					const $w = vd.get_field("existing").$wrapper;
+					if (!vs || !vs.length) {
+						$w.html(`<div style="font-size:12px;color:var(--text-muted);padding:4px 0;">${__("This card has no variants yet — this will be the first.")}</div>`);
+						return;
+					}
+					$w.html(`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:2px 0 4px;">
+							${__("Variants already on this card ({0})", [vs.length])}</div>
+						<div style="display:flex;flex-wrap:wrap;gap:6px;">${vs.map((v) => `
+							<span class="jw-exvar" data-v="${esc(v.name)}" title="${__("use this one on the line")}"
+								style="font-family:var(--font-family-monospace,monospace);font-size:11.5px;font-weight:700;
+								border:1px solid var(--border-color);border-radius:6px;padding:2px 9px;cursor:pointer;background:var(--control-bg);">${esc(v.name)}</span>`).join("")}</div>`);
+					$w.find(".jw-exvar").on("click", function () {
+						vd.hide();
+						selectDesign(row, this.getAttribute("data-v"));
+					});
+				});
+			}
+			paintExisting();
 			vd.show();
 			vd.$wrapper.on("change", ".frappe-control[data-fieldname=karat] select, .frappe-control[data-fieldname=quality] select, .frappe-control[data-fieldname=color] select", judge);
 			setTimeout(judge, 150);
@@ -1124,6 +1158,7 @@ const PO_COLUMNS = [
 				for (let i = 0; i < n - 1; i++) qtys.push(base);
 				qtys.push(total - base * (n - 1)); // last line gets the remainder
 				const design = row.f.design.get(), size = row.f.size.get();
+				const bank = row.f.bank ? row.f.bank.get() : "";
 				row.f.qty.set(qtys[0]); // original line becomes the first bag
 				applyProfile(row);
 				updateSplitBtn(row);
@@ -1145,8 +1180,20 @@ const PO_COLUMNS = [
 						nr._edited = row._edited; // an edited BOM travels to every bag of the split
 						if (nr.markEdited) nr.markEdited();
 						nr._designType = row._designType;
+						// the bank must land FIRST, and Link.set_value is ASYNC — chain it,
+						// or syncDesignDep still sees an empty bank and wipes the variant
+						nr._lastBank = bank;
 						nr._lastDesign = design;
-						nr.f.design.set(design);
+						Promise.resolve(nr.f.bank && bank ? nr.f.bank.set(bank) : null)
+							.then(() => {
+								if (state.syncDesignDep) state.syncDesignDep(nr);
+								return nr.f.design.set(design);
+							})
+							.then(() => {
+								nr._lastDesign = design;
+								applyProfile(nr);
+								updateDesignBtn(nr);
+							});
 						applyTypeSizes(nr);
 						nr.f.size.set(size);
 						if (nr.f.design_type) nr.f.design_type.set(row._designType || "");
@@ -1214,6 +1261,7 @@ const PO_COLUMNS = [
 	state.applyProfile = applyProfile;
 	state.planProfile = planProfile;
 	state.updateSplitBtn = updateSplitBtn;
+	state.syncDesignDep = syncDesignDep;
 	state.updateRemarkBtn = updateRemarkBtn;
 	state.updateDesignBtn = updateDesignBtn;
 	state.updateNewBtn = updateNewBtn;
@@ -1514,6 +1562,10 @@ async function placeOrder(page, state, renumber, addRow, $body) {
 
 	if (!customer) {
 		frappe.msgprint(__("Pick the Party — every order needs one."));
+		return;
+	}
+	if (!order_type) {
+		frappe.msgprint(__("Pick the order Type."));
 		return;
 	}
 	if (!(cint(state.header.days.get_value()) > 0)) {
