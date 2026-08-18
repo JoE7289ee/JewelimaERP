@@ -1787,6 +1787,7 @@ function openNewDesignDialog(state, prefill) {
 	const d = new frappe.ui.Dialog({
 		title: __("New Design"),
 		size: "large",
+		no_submit_on_enter: 1,   // Enter in any text/select would otherwise create the design
 		fields: [
 			{ fieldname: "design_type", fieldtype: "Select", label: __("Design Type"), reqd: 1,
 				description: __("names the card by the type's bank code (e.g. JC-5)"),
@@ -1933,6 +1934,7 @@ function openOldDesignDialog(state) {
 	const d = new frappe.ui.Dialog({
 		title: __("OLD Design — review & approve"),
 		size: "extra-large",
+		no_submit_on_enter: 1,   // Enter must never approve the card by accident
 		fields: [
 			{ fieldname: "pick", fieldtype: "Link", label: __("Pending Design"), options: "Design Bank", reqd: 1,
 				only_select: 1, get_query: () => ({ filters: { status: "Pending" } }),
