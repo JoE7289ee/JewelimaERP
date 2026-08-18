@@ -63,6 +63,16 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	.ci-sec.acc-green h4{color:#1d7a33;}
 	.ci-sec.acc-red{border-left-color:#b02a2a;}
 	.ci-sec.acc-red h4{color:#b02a2a;}
+	.ci-mtbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
+	.ci-mtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;color:#8a8a8a;border-bottom:1px solid #e3e3e3;padding:2px 4px;}
+	.ci-mtbl td{padding:2px 4px;border-bottom:1px solid #f2f2f2;}
+	.ci-mtbl td.n{white-space:nowrap;}
+	.ci-mtbl td.b{font-weight:700;font-size:10px;text-transform:uppercase;}
+	.ci-mtbl tr.m-added td.b{color:#1d7a33;} .ci-mtbl tr.m-added td{background:#f3faf4;}
+	.ci-mtbl tr.m-removed td.b{color:#b02a2a;} .ci-mtbl tr.m-removed td{background:#fdf4f4;text-decoration:line-through;}
+	.ci-mtbl tr.m-changed td.b{color:#7a5b00;} .ci-mtbl tr.m-changed td{background:#fffaf0;}
+	.ci-mtbl.hist{margin-top:8px;}
+	.ci-mnote{font-size:10px;color:#8a8a8a;margin-top:3px;}
 	table.ci-tbl th{background:#f4f7fa;}
 	table.ci-tbl td.num b{color:#b02a2a;}
 	.ci-line b{color:#222;}
@@ -246,6 +256,44 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			return s;
 		})();
 		const hasLoc = b.location && b.location !== "—";
+		// ---- materials: design BOM vs the card's plan, plus the change trail ----
+		// only painted when something actually differs, so untouched cards stay slim
+		const M = d.materials || {};
+		const mnum = (v) => (flt(v) ? flt(v).toFixed(3) : "\u2014");
+		const mBadge = { added: "added", removed: "removed", changed: "changed", same: "" };
+		const matTbl = !M.show ? "" : `
+			<div class="ci-sec acc-red"><h4>Materials \u2014 changed from the design</h4>
+				<table class="ci-mtbl"><thead><tr>
+					<th>Material</th><th>Design</th><th>Now</th><th></th>
+				</tr></thead><tbody>
+				${(M.rows || []).map((r) => `
+					<tr class="m-${esc(r.status)}">
+						<td>${esc(r.item)}</td>
+						<td class="n">${M.has_design ? mnum(r.design_qty) + " / " + mnum(r.design_weight) : "\u2014"}</td>
+						<td class="n">${mnum(r.qty)} / ${mnum(r.weight)}</td>
+						<td class="b">${mBadge[r.status] || ""}</td>
+					</tr>`).join("")}
+				</tbody></table>
+				<div class="ci-mnote">qty / weight &middot; ${M.has_design
+					? "compared with the design's original BOM"
+					: "no design BOM on this card to compare with"}</div>
+				${(M.history || []).length ? `
+					<table class="ci-mtbl hist"><thead><tr>
+						<th>When</th><th>Who</th><th>Where</th><th>Material</th><th>Change</th>
+					</tr></thead><tbody>
+					${M.history.map((h) => `
+						<tr>
+							<td>${dtt(h.creation)}</td>
+							<td>${esc(h.by || "")}</td>
+							<td>${esc(h.source || "")}</td>
+							<td>${esc(h.item || "")}</td>
+							<td>${h.action === "Added" ? "+ " + mnum(h.new_qty) + " / " + mnum(h.new_weight)
+								: h.action === "Removed" ? "\u2212 " + mnum(h.old_qty) + " / " + mnum(h.old_weight)
+								: mnum(h.old_qty) + " / " + mnum(h.old_weight) + " \u2192 " + mnum(h.new_qty) + " / " + mnum(h.new_weight)}</td>
+						</tr>`).join("")}
+					</tbody></table>` : `<div class="ci-mnote">no change history recorded for this card</div>`}
+			</div>`;
+
 		return `
 		<div class="ci-head">
 			<div>
@@ -270,6 +318,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			</div>
 			<div class="ci-sec acc-gold"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
 		</div>
+		${matTbl}
 		<div class="ci-2col">
 			<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
 			${standing}

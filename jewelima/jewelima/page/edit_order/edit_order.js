@@ -137,7 +137,8 @@ frappe.pages["edit-order"].on_page_load = function (wrapper) {
 				d.hide();
 				frappe.dom.freeze(__("Saving..."));
 				frappe.call({ method: API + ".save_bag_bom", args: {
-					order_bag: bag.name, rows: JSON.stringify(rows.map((r) => ({ item: r.item, qty: r.qty || 0, weight: r.weight || 0 }))),
+					order_bag: bag.name, source: "Edit Order",
+					rows: JSON.stringify(rows.map((r) => ({ item: r.item, qty: r.qty || 0, weight: r.weight || 0 }))),
 				} }).then(() => {
 					frappe.dom.unfreeze();
 					frappe.show_alert({ message: __("{0} — plan updated and re-totalled.", [bag.name]), indicator: "green" }, 3);
@@ -149,7 +150,7 @@ frappe.pages["edit-order"].on_page_load = function (wrapper) {
 				frappe.confirm(__("Replace this card's plan with the design's original BOM?"), () => {
 					d.hide();
 					frappe.call({ method: API + ".save_bag_bom", args: {
-						order_bag: bag.name, rows: JSON.stringify(bag.design_bom),
+						order_bag: bag.name, source: "Edit Order", rows: JSON.stringify(bag.design_bom),
 					} }).then(() => {
 						frappe.show_alert({ message: __("Back to the design's BOM."), indicator: "green" }, 3);
 						load(bag.name);

@@ -1102,10 +1102,12 @@ def finalize_cad_design(order_bag, design_name, design_style=None, image=None, m
 		b.design = design.name
 		b.image = design.image or b.image  # keep the CAD reference photo if the design has none
 		b.is_cad = 0
+		before = _bom_snapshot(b)
 		b.set("bag_bom", [])
 		for m in design.materials:
 			b.append("bag_bom", {"item": m.item, "qty": m.qty, "weight": m.weight})
 		b.save(ignore_permissions=True)  # validate() recomputes the plan from the new BOM
+		_log_bom_diff(nm, before, _bom_snapshot(b), "CAD design", design.name)
 	frappe.db.commit()
 	return {"design": design.name, "bags": targets, **res}
 
@@ -1942,6 +1944,8 @@ def create_order_bag(payload):
 	doc = frappe.get_doc(dict({"doctype": "Order Bag"},
 		**{k: p.get(k) for k in fields if p.get(k) is not None}))
 	doc.insert(ignore_permissions=True)
+	# baseline: what the design/variant seeded, so later edits diff against it
+	_log_bom_diff(doc.name, [], _bom_snapshot(doc), "Order placed")
 	frappe.db.commit()  # bags land one by one from the page's loop
 	return doc.name
 
@@ -6448,8 +6452,66 @@ def update_order_dates(job_order, due_date=None, customer_date=None):
 	return {"ok": 1, **vals}
 
 
+# --- card BOM audit -----------------------------------------------------------
+# The card's plan (Weights -> Plan) is computed from bag_bom, so once a material
+# is edited the original is gone. Every writer snapshots before/after and logs
+# the DIFF here, which is what card-info shows as the change table.
+
+def _bom_snapshot(bag):
+	"""[{item, qty, weight}] as the bag stands right now."""
+	return [{"item": r.item, "qty": flt(r.qty), "weight": flt(r.weight)} for r in (bag.bag_bom or [])]
+
+
+def _log_bom_diff(order_bag, before, after, source="Other", remark=""):
+	"""Write one row per real change. Same rows in and out -> nothing logged."""
+	def by_item(rows):
+		out = {}
+		for r in rows or []:
+			it = (r.get("item") or "").strip()
+			if not it:
+				continue
+			cur = out.setdefault(it, {"qty": 0.0, "weight": 0.0})
+			cur["qty"] += flt(r.get("qty"))
+			cur["weight"] += flt(r.get("weight"))
+		return out
+
+	a, b = by_item(before), by_item(after)
+	rows = []
+	for it in sorted(set(a) | set(b)):
+		o, n = a.get(it), b.get(it)
+		if o and not n:
+			rows.append({"action": "Removed", "item": it, "old_qty": o["qty"], "old_weight": o["weight"]})
+		elif n and not o:
+			rows.append({"action": "Added", "item": it, "new_qty": n["qty"], "new_weight": n["weight"]})
+		elif o and n and (round(o["qty"], 3) != round(n["qty"], 3)
+				or round(o["weight"], 3) != round(n["weight"], 3)):
+			rows.append({"action": "Changed", "item": it,
+				"old_qty": o["qty"], "new_qty": n["qty"],
+				"old_weight": o["weight"], "new_weight": n["weight"]})
+	for r in rows:
+		frappe.get_doc(dict({"doctype": "Order Bag BOM Change", "order_bag": order_bag,
+			"source": source, "remark": remark}, **r)).insert(ignore_permissions=True)
+	return len(rows)
+
+
 @frappe.whitelist()
-def save_bag_bom(order_bag, rows):
+def get_bag_bom_history(order_bag):
+	"""Current BOM + every logged change, newest first. card-info hides the whole
+	section when there is nothing to show."""
+	rows = frappe.get_all("Order Bag BOM Change",
+		filters={"order_bag": order_bag},
+		fields=["source", "action", "item", "old_qty", "new_qty",
+			"old_weight", "new_weight", "remark", "owner", "creation"],
+		order_by="creation desc, name desc")
+	for r in rows:
+		r["by"] = frappe.db.get_value("User", r["owner"], "full_name") or r["owner"]
+	# the baseline is the "Order placed" entry; anything after it is a real edit
+	edits = [r for r in rows if r["source"] != "Order placed"]
+	return {"history": rows, "changed": bool(edits), "edit_count": len(edits)}
+
+
+@frappe.whitelist()
+def save_bag_bom(order_bag, rows, source=None):
 	"""Replace a card's BOM (editable plan) from the Weight Add screen. Blocked once
 	the ornament is made."""
 	if isinstance(rows, str):
@@ -6457,12 +6519,14 @@ def save_bag_bom(order_bag, rows):
 	bag = frappe.get_doc("Order Bag", order_bag)
 	if bag.is_finished:
 		frappe.throw(frappe._("The BOM is locked — the ornament for {0} has already been made.").format(order_bag))
+	before = _bom_snapshot(bag)
 	bag.set("bag_bom", [])
 	for r in rows or []:
 		if not r.get("item"):
 			continue
 		bag.append("bag_bom", {"item": r.get("item"), "qty": r.get("qty") or 0, "weight": r.get("weight") or 0})
 	bag.save(ignore_permissions=True)
+	_log_bom_diff(order_bag, before, _bom_snapshot(bag), source or "Weight Add")
 	frappe.db.commit()
 	return {"ok": 1, "rows": len(bag.bag_bom)}
 
@@ -13297,8 +13361,44 @@ def get_card_passport(order_bag):
 		"stages": stages,
 		"issues": issue_rows,
 		"pre_bag": get_prebag_for_card(order_bag),
+		"materials": _card_materials(order_bag),
 		"today": frappe.utils.nowdate(),
 	}
+
+
+def _card_materials(order_bag):
+	"""The card's BOM against the design's original, plus the logged change trail.
+	card-info only paints the section when something actually differs."""
+	doc = frappe.get_doc("Order Bag", order_bag)
+	bom = [{"item": r.item, "qty": flt(r.qty), "weight": flt(r.weight)} for r in doc.bag_bom]
+	design_mats = []
+	if doc.design and frappe.db.exists("Design", doc.design):
+		d = frappe.get_doc("Design", doc.design)
+		design_mats = [{"item": m.item, "qty": flt(m.qty), "weight": flt(m.weight)} for m in d.materials if m.item]
+	key = lambda rows: sorted((r["item"], round(flt(r["qty"]), 3), round(flt(r["weight"]), 3)) for r in rows)
+	diverged = key(bom) != key(design_mats) if design_mats else False
+	hist = get_bag_bom_history(order_bag)
+	# per-item verdict against the design, so the table can flag the odd row out
+	dmap = {r["item"]: r for r in design_mats}
+	bmap = {r["item"]: r for r in bom}
+	rows = []
+	for it in sorted(set(dmap) | set(bmap)):
+		o, n = dmap.get(it), bmap.get(it)
+		if o and not n:
+			st = "removed"
+		elif n and not o:
+			st = "added"
+		elif round(flt(o["qty"]), 3) != round(flt(n["qty"]), 3) or \
+				round(flt(o["weight"]), 3) != round(flt(n["weight"]), 3):
+			st = "changed"
+		else:
+			st = "same"
+		rows.append({"item": it, "status": st,
+			"design_qty": flt((o or {}).get("qty")), "design_weight": flt((o or {}).get("weight")),
+			"qty": flt((n or {}).get("qty")), "weight": flt((n or {}).get("weight"))})
+	return {"rows": rows, "diverged": diverged, "has_design": bool(design_mats),
+		"history": hist["history"], "edit_count": hist["edit_count"],
+		"show": bool(diverged or hist["edit_count"])}
 
 
 def _require_transfer_plus():
