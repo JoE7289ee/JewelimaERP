@@ -6075,6 +6075,52 @@ def get_bench_workstation(bench):
 
 
 @frappe.whitelist()
+def get_bench_overview():
+	"""Bench Info landing: every location as a tile with its headline numbers, so the
+	floor can be read at a glance before drilling into one bench."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	rows = frappe.db.sql("""
+		SELECT b.location, COUNT(*) cards, SUM(IFNULL(b.qty, 0)) qty,
+			SUM(CASE WHEN jo.due_date IS NOT NULL AND jo.due_date < CURDATE() THEN 1 ELSE 0 END) overdue,
+			MIN(jo.due_date) next_due,
+			MAX(DATEDIFF(CURDATE(), b.creation)) oldest_days
+		FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+		  AND IFNULL(b.location, '') != ''
+		GROUP BY b.location
+	""", as_dict=True)
+	by_loc = {r.location: r for r in rows}
+
+	# gold grams sitting at each location (same ledger the board uses)
+	gold = dict(frappe.db.sql("""
+		SELECT b.location, SUM(IF(l.direction='Out', -l.qty, l.qty))
+		FROM `tabBag Material Ledger` l
+		JOIN `tabOrder Bag` b ON b.name = l.order_bag
+		JOIN `tabItem` i ON i.name = l.item
+		WHERE IFNULL(i.stone_type, '') = '' AND b.stock_status = 'In Production'
+		  AND b.is_finished = 0 AND IFNULL(b.location, '') != ''
+		GROUP BY b.location
+	""") or [])
+
+	out = []
+	for bench in sorted(set(BENCH_DOCTYPE) | set(by_loc)):
+		r = by_loc.get(bench)
+		out.append({
+			"bench": bench,
+			"known": 1 if bench in BENCH_DOCTYPE else 0,   # 0 = cards sit somewhere unexpected
+			"cards": cint(r.cards) if r else 0,
+			"qty": cint(r.qty) if r else 0,
+			"overdue": cint(r.overdue) if r else 0,
+			"gold_g": round(flt(gold.get(bench)), 3),
+			"next_due": str(r.next_due) if (r and r.next_due) else "",
+			"oldest_days": cint(r.oldest_days) if r else 0,
+		})
+	return {"benches": out, "total_cards": sum(x["cards"] for x in out)}
+
+
+@frappe.whitelist()
 def get_bench_board(bench):
 	"""One bench's info board (no actions). Returns every card sitting there with
 	its OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —

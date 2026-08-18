@@ -1,6 +1,6 @@
 {
  "app": "jewelima",
- "creation": "2026-08-17 14:56:16.622675",
+ "creation": "2026-08-17 15:03:02.308300",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "diamond",
@@ -261,6 +261,19 @@
    "keep_closed": 0,
    "label": "Due View",
    "link_to": "due-view",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "layers",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Bench Info",
+   "link_to": "bench-info",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link",
@@ -2464,7 +2477,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-17 15:02:46.887277",
+ "modified": "2026-08-18 09:25:21.411017",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

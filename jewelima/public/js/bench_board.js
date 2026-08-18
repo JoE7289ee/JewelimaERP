@@ -35,8 +35,11 @@ const BB_FILTER_FIELDS = [
 	{ key: "pure_g", label: "Pure Gold (g)", type: "number" },
 ].concat(BB_BUCKETS.map((b) => ({ key: b.toLowerCase(), label: b + " (ct)", type: "number" })));
 
-jewelima.buildBenchBoard = function (wrapper, bench) {
+jewelima.buildBenchBoard = function (wrapper, bench, opts) {
+	opts = opts || {};
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Bench — {0}", [bench]), single_column: true });
+	// opened from the Bench Info tiles -> offer the way back to them
+	if (opts.onBack) page.add_inner_button(__("← All benches"), () => opts.onBack());
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 
