@@ -1932,6 +1932,30 @@ function openOldDesignDialog(state) {
 	let SIEVES = [];
 	let SIEVE_AVG = {}; // sieve size -> avg cts/stone (for the auto Diamond Weight)
 	const recomputeDW = () => { if (d) d.set_value("diamond_weight", jwDwFromSieves(collectStones(), SIEVE_AVG)); };
+	// the card the APPROVE will actually store — re-rendered as the stones, weights
+	// and notes are edited, so the sieve->DW effect is visible before committing
+	let prevSeq = 0;
+	const refreshCard = frappe.utils.debounce(() => {
+		if (!d || !cur) return;
+		// NB: never d.get_values() here — it re-renders the dialog from the committed
+		// model and wipes whatever is being typed.
+		const raw = (fn) => { const f = d.get_field(fn); return (f && f.$input && f.$input.val()) || ""; };
+		const dw = jwDwFromSieves(collectStones(), SIEVE_AVG);
+		const q = ++prevSeq;
+		frappe.call({ method: "jewelima.jewelima.api.design_card_preview", freeze: false, args: { payload: JSON.stringify({
+			design_no: cur.design_no, design_type: raw("design_type"),
+			gross_weight: jwGrossTo18k(raw("gross_weight"), raw("karat"), dw),
+			diamond_weight: dw, note: raw("note"), extra_lines: raw("extra_lines"),
+			photo: photoB64 || cur.photo || "", stones: collectStones(),
+		}) } }).then((r) => {
+			if (q !== prevSeq) return;
+			const img = (r.message || {}).image;
+			d.get_field("card_html").$wrapper.html(img
+				? `<img src="${img}" style="max-height:420px;max-width:100%;border:1px solid var(--border-color);border-radius:8px;background:#fff;">`
+				: "");
+		});
+	}, 600);
+	const touched = () => { recomputeDW(); refreshCard(); };
 
 	const d = new frappe.ui.Dialog({
 		title: __("OLD Design — review & approve"),
@@ -1963,6 +1987,8 @@ function openOldDesignDialog(state) {
 			{ fieldname: "stones_html", fieldtype: "HTML" },
 			{ fieldname: "sec_up", fieldtype: "Section Break", label: __("Replace product photo (optional)") },
 			{ fieldname: "photo_html", fieldtype: "HTML" },
+			{ fieldname: "sec_prev", fieldtype: "Section Break", label: __("New card preview") },
+			{ fieldname: "card_html", fieldtype: "HTML" },
 		],
 		primary_action_label: __("Approve → Add Variant"),
 		primary_action() {
@@ -2043,9 +2069,9 @@ function openOldDesignDialog(state) {
 		<tbody class="od-stones"></tbody></table>
 		<span class="od-addst">+ ${__("row")}</span>`);
 	d.get_field("stones_html").$wrapper.on("click", ".od-addst", () => { const r = collectStones(); r.push({}); paintStones(r); });
-	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); recomputeDW(); });
-	d.get_field("stones_html").$wrapper.on("change", ".v", recomputeDW);
-	d.get_field("stones_html").$wrapper.on("input", ".p", recomputeDW);
+	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); touched(); });
+	d.get_field("stones_html").$wrapper.on("change", ".v", touched);
+	d.get_field("stones_html").$wrapper.on("input", ".p", touched);
 
 	// ---- optional product-photo replace ------------------------------------
 	d.get_field("photo_html").$wrapper.html(`
@@ -2058,7 +2084,7 @@ function openOldDesignDialog(state) {
 		const file = this.files[0];
 		if (!file) return;
 		const rd = new FileReader();
-		rd.onload = () => { photoB64 = rd.result; $ph.find(".od-name").text(file.name); paintPhotos(); };
+		rd.onload = () => { photoB64 = rd.result; $ph.find(".od-name").text(file.name); paintPhotos(); refreshCard(); };
 		rd.readAsDataURL(file);
 	});
 
@@ -2081,12 +2107,19 @@ function openOldDesignDialog(state) {
 				paintPhotos();
 				paintStones(cur.stones || []);
 				recomputeDW();                                // DW = average from the sieves
+				refreshCard();                                // and show the card it would store
 			});
 		});
 	}
 
 	paintPhotos();
 	paintStones([{}]);
+	// header edits only repaint the CARD — never touched(), because set_value()
+	// re-renders the dialog and would wipe what is being typed
+	["design_type", "karat", "gross_weight", "note", "extra_lines"].forEach((fn) => {
+		const f = d.get_field(fn);
+		if (f && f.$input) f.$input.on("change input", () => refreshCard());
+	});
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
 		.then((r) => {
 			const rows = r.message || [];
