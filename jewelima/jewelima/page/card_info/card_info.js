@@ -291,7 +291,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 								: h.action === "Removed" ? "\u2212 " + mnum(h.old_qty) + " / " + mnum(h.old_weight)
 								: mnum(h.old_qty) + " / " + mnum(h.old_weight) + " \u2192 " + mnum(h.new_qty) + " / " + mnum(h.new_weight)}</td>
 						</tr>`).join("")}
-					</tbody></table>` : `<div class="ci-mnote">no change history recorded for this card</div>`}
+					</tbody></table>` : ""}
 			</div>`;
 
 		return `
