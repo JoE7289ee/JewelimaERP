@@ -16,8 +16,9 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.nd-cols{display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap;}
-		.nd-wrap{max-width:460px;flex:0 0 auto;}
+		#page-new-design-bank .container{max-width:100%;}
+		.nd-cols{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap;}
+		.nd-wrap{flex:1 1 520px;min-width:420px;max-width:760px;}
 		.nd-wrap .frappe-control{margin-bottom:10px;}
 		.nd-code{font-size:34px;font-weight:800;letter-spacing:.03em;margin:16px 0;min-height:46px;}
 		.nd-code .muted{font-size:14px;font-weight:400;color:var(--text-muted);}
@@ -29,10 +30,10 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 		.nd-st-rows{margin:4px 0 10px;}
 		.nd-st-row{display:flex;gap:6px;margin-bottom:6px;}
 		.nd-st-row input,.nd-st-row select{border:1px solid var(--border-color);border-radius:5px;height:28px;padding:2px 7px;font-size:12px;background:var(--fg-color);color:var(--text-color);}
-		.nd-st-row .st{flex:2;}.nd-st-row .sv{flex:2;}.nd-st-row .pc{flex:1;width:60px;}.nd-st-row .ct{flex:1;width:70px;}
+		.nd-st-row .sv{flex:3;}.nd-st-row .pc{flex:1;width:90px;}
 		.nd-st-x{border:none;background:none;color:var(--text-muted);cursor:pointer;}
 		.nd-save{background:#2e7d32;border-color:#2e7d32;}
-		.nd-prev{flex:1 1 340px;max-width:430px;display:none;}
+		.nd-prev{flex:1 1 420px;max-width:620px;display:none;position:sticky;top:12px;}
 		.nd-prev img{width:100%;border:1px solid var(--border-color);border-radius:8px;background:#fff;}
 		.nd-prev .cap{font-size:11px;color:var(--text-muted);margin-top:4px;}
 		</style>
@@ -48,7 +49,7 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 			<div class="nd-locked">
 				<div class="l">${__("Design number (locked)")}</div>
 				<div class="nd-code nd-code2"></div>
-				<div class="nd-vals"><div class="nd-gw"></div><div class="nd-dw"></div></div>
+				<div class="nd-vals"><div class="nd-karat"></div><div class="nd-gw"></div><div class="nd-dw"></div></div>
 				<div class="l" style="margin-top:4px;">${__("Stones")}</div>
 				<div class="nd-st-rows"></div>
 				<button class="btn btn-xs btn-default nd-st-add" style="margin-bottom:10px;">${__("+ stone line")}</button>
@@ -72,27 +73,41 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 	const fPCode = mk(".nd-pcode", { fieldtype: "Data", label: __("Provider's own piece code"), fieldname: "pc" });
 	let minted = "";
 	const S = { name: "", code: "", photo: "" };
+	const fKarat = mk(".nd-karat", { fieldtype: "Select", label: __("Weighed at (karat)"), fieldname: "kt",
+		options: "18K\n22K\n14K", default: "18K",
+		description: __("the bank stores an 18K gross — pick how you weighed it"),
+		onchange: () => S.name && previewSoon() });
 	const fGW = mk(".nd-gw", { fieldtype: "Float", label: __("Gold weight (gm)"), fieldname: "gw",
 		onchange: () => S.name && previewSoon() });
 	const fDW = mk(".nd-dw", { fieldtype: "Float", label: __("Diamond weight (ct)"), fieldname: "dw",
-		onchange: () => S.name && previewSoon() });
-	let sieves = [];
+		read_only: 1, description: __("auto — average from the sieves") });
+	let sieves = [], SIEVE_AVG = {};
 	frappe.call({ method: API + ".get_sieve_chart", freeze: false })
-		.then((r) => { sieves = (r.message || []).map((x) => x.sieve_size); });
+		.then((r) => {
+			const rows = r.message || [];
+			sieves = rows.map((x) => x.sieve_size);
+			SIEVE_AVG = {};
+			rows.forEach((x) => { if (x.sieve_size) SIEVE_AVG[x.sieve_size] = flt(x.avg_cts); });
+		});
+	// same shape as the Place Order dialogs: a sieve + how many pieces. The carats
+	// are never typed — the Diamond Weight is the sieve average (see recomputeDW).
 	function stoneRow(v) {
 		v = v || {};
 		return `<div class="nd-st-row">
-			<input class="st" placeholder="${__("stone")}" value="${esc(v.stone || "")}">
 			<select class="sv"><option value=""></option>${sieves.map((x) => `<option ${v.sieve === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select>
-			<input class="pc" type="number" placeholder="${__("pcs")}" value="${esc(v.pcs || "")}">
-			<input class="ct" type="number" step="0.001" placeholder="${__("ct")}" value="${esc(v.ct || "")}">
+			<input class="pc" type="number" min="0" placeholder="${__("pcs")}" value="${esc(v.pcs || "")}">
 			<button class="nd-st-x">✕</button></div>`;
 	}
 	function stones() {
 		return root.find(".nd-st-row").map(function () {
-			return { stone: $(this).find(".st").val(), sieve: $(this).find(".sv").val(),
-				pcs: $(this).find(".pc").val(), ct: $(this).find(".ct").val() };
-		}).get().filter((x) => x.stone || x.sieve);
+			return { stone: "", sieve: $(this).find(".sv").val(),
+				pcs: $(this).find(".pc").val(), ct: 0 };
+		}).get().filter((x) => x.sieve || x.pcs);
+	}
+	function recomputeDW() {
+		const dw = jewelima.dwFromSieves(stones(), SIEVE_AVG);
+		fDW.set_value(dw);
+		return dw;
 	}
 	let pvTimer = null;
 	function previewSoon() { clearTimeout(pvTimer); pvTimer = setTimeout(preview, 450); }
@@ -115,7 +130,8 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 	function preview() {
 		frappe.call({ method: API + ".design_card_preview", args: { payload: {
 			design_no: S.code, design_type: fType.get_value(), photo: S.photo,
-			gross_weight: fGW.get_value(), diamond_weight: fDW.get_value(), stones: stones(),
+			gross_weight: jewelima.grossTo18k(fGW.get_value(), fKarat.get_value(), fDW.get_value()),
+			diamond_weight: fDW.get_value(), stones: stones(),
 		} }, freeze: false }).then((r) => {
 			root.find(".nd-prev").show().find("img").attr("src", (r.message || {}).image || "");
 		});
@@ -165,7 +181,8 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 			name: S.name, design_no: S.code, design_type: fType.get_value(),
 			provider: fProv.get_value() || "", provider_piece_code: fPCode.get_value() || "",
 			photo: S.photo,
-			gross_weight: fGW.get_value(), diamond_weight: fDW.get_value(), stones: stones(),
+			gross_weight: jewelima.grossTo18k(fGW.get_value(), fKarat.get_value(), fDW.get_value()),
+			diamond_weight: fDW.get_value(), stones: stones(),
 		} } }).then(() => {
 			frappe.dom.unfreeze();
 			frappe.show_alert({ message: __("{0} saved — in Review at priority 10.", [S.code]), indicator: "green" }, 6);
@@ -184,6 +201,9 @@ frappe.pages["new-design-bank"].on_page_load = function (wrapper) {
 	}
 	root.find(".nd-again").on("click", reset);
 	root.find(".nd-st-add").on("click", () => root.find(".nd-st-rows").append(stoneRow()));
-	root.on("click", ".nd-st-x", function () { $(this).closest(".nd-st-row").remove(); previewSoon(); });
+	root.on("click", ".nd-st-x", function () { $(this).closest(".nd-st-row").remove(); recomputeDW(); previewSoon(); });
+	// the sieve rows ARE the diamond weight — keep it in step with every edit
+	root.on("change", ".nd-st-row .sv", () => { recomputeDW(); previewSoon(); });
+	root.on("input", ".nd-st-row .pc", () => { recomputeDW(); previewSoon(); });
 	root.on("input change", ".nd-st-row input, .nd-st-row select", () => S.name && previewSoon());
 };

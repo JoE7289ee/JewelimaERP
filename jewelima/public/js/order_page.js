@@ -10,18 +10,6 @@
 
 frappe.provide("jewelima");
 
-jewelima.buildOrderPage = function (wrapper, OPTS) {
-const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
-
-// sieve chart: size label -> avg cts/stone (lazy-loaded once per session).
-// Typing a stone QTY in a materials grid prefills weight = qty x avg (editable).
-let JW_SIEVE = {}, JW_SIEVE_LOADED = false;
-function jwLoadSieve() {
-	if (JW_SIEVE_LOADED) return;
-	JW_SIEVE_LOADED = true;
-	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { JW_SIEVE = r.message || {}; });
-}
-
 // ---- ONE standard for design-creation weights (shared by every create/approve
 // dialog so they behave identically) -------------------------------------------
 // The Design Bank always stores GROSS as an 18K figure. Users, though, weigh the
@@ -41,6 +29,23 @@ function jwDwFromSieves(rows, avgMap) {
 	(rows || []).forEach((r) => { const a = (avgMap || {})[r.sieve]; if (a && cint(r.pcs) > 0) ct += cint(r.pcs) * a; });
 	return Math.round(ct * 1000) / 1000;
 }
+
+// shared with the other design-creation pages (new-design-bank, add-design)
+jewelima.grossTo18k = jwGrossTo18k;
+jewelima.dwFromSieves = jwDwFromSieves;
+
+jewelima.buildOrderPage = function (wrapper, OPTS) {
+const PO_SIZES = ["-2.2/16", "2.0/16", "NA"];
+
+// sieve chart: size label -> avg cts/stone (lazy-loaded once per session).
+// Typing a stone QTY in a materials grid prefills weight = qty x avg (editable).
+let JW_SIEVE = {}, JW_SIEVE_LOADED = false;
+function jwLoadSieve() {
+	if (JW_SIEVE_LOADED) return;
+	JW_SIEVE_LOADED = true;
+	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { JW_SIEVE = r.message || {}; });
+}
+
 function jwSieveQty() {
 	// plain handler — resolves its grid at call time (referencing the dialog
 	// variable inside its own constructor is a TDZ error that kills the dialog)
