@@ -1622,6 +1622,28 @@ function openNewDesignDialog(state, prefill) {
 	const esc = frappe.utils.escape_html;
 	let photoB64 = "";
 	let SIEVES = [];
+	let SIEVE_AVG = {};   // sieve -> avg cts (drives the automatic Diamond Weight)
+	// DW follows the sieves; the card preview follows everything (debounced render)
+	const recomputeDW = () => { if (d) d.set_value("diamond_weight", jwDwFromSieves(collectStones(), SIEVE_AVG)); };
+	let prevSeq = 0;
+	const refreshCard = frappe.utils.debounce(() => {
+		if (!d) return;
+		const v = d.get_values(true) || {};
+		const q = ++prevSeq;
+		frappe.call({ method: "jewelima.jewelima.api.preview_design_card", freeze: false, args: { payload: JSON.stringify({
+			design_no: __("(new)"), design_type: v.design_type || "",
+			gross_weight: jwGrossTo18k(v.gross_weight, v.karat, flt(v.diamond_weight)),
+			diamond_weight: flt(v.diamond_weight), note: v.note || "",
+			photo: photoB64 || "", stones: collectStones(),
+		}) } }).then((r) => {
+			if (q !== prevSeq) return;
+			const img = (r.message || {}).image;
+			d.get_field("card_html").$wrapper.html(img
+				? `<img src="${img}" style="max-height:420px;max-width:100%;border:1px solid var(--border-color);border-radius:8px;background:#fff;">`
+				: "");
+		});
+	}, 600);
+	const touched = () => { recomputeDW(); refreshCard(); };
 	const d = new frappe.ui.Dialog({
 		title: __("New Design"),
 		size: "large",
@@ -1630,24 +1652,31 @@ function openNewDesignDialog(state, prefill) {
 				description: __("names the card by the type's bank code (e.g. JC-5)"),
 				default: prefill && prefill.design_type },
 			{ fieldname: "cb1", fieldtype: "Column Break" },
+			{ fieldname: "karat", fieldtype: "Select", label: __("Weighed at (karat)"), options: "18K\n22K\n14K", default: "18K",
+				description: __("the card stores an 18K gross — pick how you weighed it") },
 			{ fieldname: "gross_weight", fieldtype: "Float", label: __("Gross Weight (g)"), reqd: 1 },
-			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)") },
+			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)"), read_only: 1,
+				description: __("auto — average from the sieves below") },
 			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
 			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
 			{ fieldname: "stones_html", fieldtype: "HTML" },
 			{ fieldname: "sec_ph", fieldtype: "Section Break", label: __("Product photo") },
 			{ fieldname: "photo_html", fieldtype: "HTML" },
 			{ fieldname: "upgrade", fieldtype: "Check", label: __("Upgrade photo later — send to Photo Queue") },
+			{ fieldname: "sec_prev", fieldtype: "Section Break", label: __("Card preview") },
+			{ fieldname: "card_html", fieldtype: "HTML" },
 		],
 		primary_action_label: __("Create → Add Variant"),
 		primary_action(v) {
 			if (!v.design_type) return frappe.msgprint(__("Pick the Design Type."));
 			if (flt(v.gross_weight) <= 0) return frappe.msgprint(__("Enter the gross weight."));
 			const stones = collectStones();
+			const dw = jwDwFromSieves(stones, SIEVE_AVG);            // DW = sieve average
+			const gw18 = jwGrossTo18k(v.gross_weight, v.karat, dw);  // the card stores 18K
 			frappe.dom.freeze(__("Creating design…"));
 			frappe.call({ method: "jewelima.jewelima.api.create_new_design_full", args: {
-				design_type: v.design_type, gross_weight: flt(v.gross_weight),
-				diamond_weight: flt(v.diamond_weight), note: v.note || "",
+				design_type: v.design_type, gross_weight: gw18,
+				diamond_weight: dw, note: v.note || "",
 				stones: JSON.stringify(stones), photo: photoB64 || "",
 				upgrade_photo: v.upgrade ? 1 : 0,
 			} }).then((r) => {
@@ -1694,7 +1723,9 @@ function openNewDesignDialog(state, prefill) {
 		<tbody class="nd-stones"></tbody></table>
 		<span class="nd-addst">+ ${__("row")}</span>`);
 	d.get_field("stones_html").$wrapper.on("click", ".nd-addst", () => { const r = collectStones(); r.push({}); paintStones(r); });
-	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); });
+	d.get_field("stones_html").$wrapper.on("click", ".del", function () { $(this).closest("tr").remove(); touched(); });
+	d.get_field("stones_html").$wrapper.on("change", ".v", touched);
+	d.get_field("stones_html").$wrapper.on("input", ".p", touched);
 	paintStones([{}]);
 
 	// ---- direct photo upload (no attach dialog) -----------------------------
@@ -1713,13 +1744,26 @@ function openNewDesignDialog(state, prefill) {
 			photoB64 = rd.result;
 			$ph.find(".nd-name").text(file.name);
 			$ph.find(".nd-prev").html(`<img src="${photoB64}" style="max-height:180px;max-width:100%;border-radius:8px;border:1px solid var(--border-color);">`);
+			refreshCard();
 		};
 		rd.readAsDataURL(file);
 	});
 
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
-		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); paintStones(collectStones()); });
+		.then((r) => {
+			const rows = r.message || [];
+			SIEVES = rows.map((x) => x.sieve_size).filter(Boolean);
+			SIEVE_AVG = {};
+			rows.forEach((x) => { if (x.sieve_size) SIEVE_AVG[x.sieve_size] = flt(x.avg_cts); });
+			paintStones(collectStones());
+			touched();
+		});
 
+	// header fields feed the live card preview (and the karat feeds the 18K figure)
+	["design_type", "karat", "gross_weight", "note"].forEach((fn) => {
+		const f = d.get_field(fn);
+		if (f && f.$input) f.$input.on("change input", () => touched());
+	});
 	// load every Design Type up front so the dropdown lists them all (no searching)
 	frappe.db.get_list("Design Type", { fields: ["name"], order_by: "name", limit: 0 }).then((rows) => {
 		d.set_df_property("design_type", "options", [""].concat((rows || []).map((x) => x.name)).join("\n"));
