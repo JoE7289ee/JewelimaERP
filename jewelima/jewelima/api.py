@@ -6503,11 +6503,12 @@ def get_bag_bom_history(order_bag):
 		fields=["source", "action", "item", "old_qty", "new_qty",
 			"old_weight", "new_weight", "remark", "owner", "creation"],
 		order_by="creation desc, name desc")
-	for r in rows:
-		r["by"] = frappe.db.get_value("User", r["owner"], "full_name") or r["owner"]
-	# the baseline is the "Order placed" entry; anything after it is a real edit
+	# the "Order placed" rows are the card's STARTING bom, not a change — they are
+	# kept so later edits have something to diff against, but never listed as history
 	edits = [r for r in rows if r["source"] != "Order placed"]
-	return {"history": rows, "changed": bool(edits), "edit_count": len(edits)}
+	for r in edits:
+		r["by"] = frappe.db.get_value("User", r["owner"], "full_name") or r["owner"]
+	return {"history": edits, "changed": bool(edits), "edit_count": len(edits)}
 
 
 @frappe.whitelist()
@@ -13393,6 +13394,8 @@ def _card_materials(order_bag):
 			st = "changed"
 		else:
 			st = "same"
+		if st == "same":
+			continue          # only the lines that actually differ belong on the card
 		rows.append({"item": it, "status": st,
 			"design_qty": flt((o or {}).get("qty")), "design_weight": flt((o or {}).get("weight")),
 			"qty": flt((n or {}).get("qty")), "weight": flt((n or {}).get("weight"))})
