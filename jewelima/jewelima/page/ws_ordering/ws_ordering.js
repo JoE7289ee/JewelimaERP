@@ -169,20 +169,40 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			primary_action(v) {
 				const names = [...sel.keys()];
 				if (!names.length) return frappe.show_alert({ message: __("Select or scan at least one card."), indicator: "orange" }, 3);
-				frappe.call({ method: API + ".transfer_order_bags",
-					args: { names: JSON.stringify(names), to_location: v.to, remarks: "Ordering desk" } })
-					.then((r) => {
-						const m = r.message || {};
-						dlg.hide();
-						if ((m.errors || []).length) {
-							frappe.msgprint(m.errors.map((e) => `<b>${esc(e.name)}</b>: ${esc(e.error)}`).join("<br>"));
-						}
-						frappe.show_alert({ message: __("{0} card(s) → {1}", [m.count || 0, v.to]),
-							indicator: (m.errors || []).length ? "orange" : "green" }, 5);
-						names.forEach((n) => picked.delete(n)); // clear the table selection too
-						paintPrintBtn();
-						load();
-					});
+				// send in chunks: one huge request can hit the gateway timeout and leave
+				// the desk half-transferred (same guard as the Transfer page)
+				const CHUNK = 30;
+				const parts = [];
+				for (let i = 0; i < names.length; i += CHUNK) parts.push(names.slice(i, i + CHUNK));
+				const tot = { count: 0, errors: [] };
+				const run = (i) => {
+					if (i >= parts.length) return Promise.resolve();
+					frappe.dom.freeze(parts.length > 1
+						? __("Transferring {0} of {1}…", [i + 1, parts.length]) : __("Transferring…"));
+					return frappe.call({ method: API + ".transfer_order_bags",
+						args: { names: JSON.stringify(parts[i]), to_location: v.to, remarks: "Ordering desk" } })
+						.then((r) => {
+							const m = r.message || {};
+							tot.count += (m.count || 0);
+							tot.errors = tot.errors.concat(m.errors || []);
+							return run(i + 1);
+						}).catch(() => {
+							parts.slice(i).forEach((c) => c.forEach((nm) =>
+								tot.errors.push({ name: nm, error: __("not sent — the batch stopped here") })));
+						});
+				};
+				run(0).then(() => {
+					frappe.dom.unfreeze();
+					dlg.hide();
+					if (tot.errors.length) {
+						frappe.msgprint(tot.errors.map((e) => `<b>${esc(e.name)}</b>: ${esc(e.error)}`).join("<br>"));
+					}
+					frappe.show_alert({ message: __("{0} card(s) → {1}", [tot.count, v.to]),
+						indicator: tot.errors.length ? "orange" : "green" }, 5);
+					names.forEach((n) => picked.delete(n)); // clear the table selection too
+					paintPrintBtn();
+					load();
+				}).catch(() => frappe.dom.unfreeze());
 			},
 		});
 		const paintList = () => {
