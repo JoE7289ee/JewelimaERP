@@ -166,6 +166,16 @@ JEWELIMA_WS_PAGES = {
 	"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
 	"BAG EXTRACTION": "ws-bag-extraction",
 }
+# The floor's data desk: moves work through the benches and the casting line —
+# assign/collect, issue/receipt, build trees, run the casting queue. Everything on
+# those four pages, nothing else. The page APIs write under ignore_permissions, so
+# read on what the pages paint from is all the role needs.
+JEWELIMA_DATA_ADMIN_ROLE = "JW Data Admin"
+JEWELIMA_DATA_ADMIN_PAGES = ["assign-collect", "job-work", "casting-queue", "make-tree"]
+JEWELIMA_DATA_ADMIN_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee", "Bench",
+	"Bench Employee", "Bench Work Option", "Bench Issue", "Bench Visit", "Priority Card",
+	"Bag Material Ledger", "Wax Tree", "Wax Tree Card", "Tree Making", "Casting",
+	"Warehouse", "Item Group", "Design Bank", "Customer", "Employee Metal Balance"]
 JEWELIMA_WS_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee",
 	"Bench Work Option", "Priority Card", "Bag Material Ledger"]
 JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin", "Warehouse", "Material Issue", "Bag Material Ledger"]
@@ -313,7 +323,7 @@ def setup_roles():
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
-			"JW Party Admin", "JW Selection") + JEWELIMA_TRANSFER_ROLES:
+			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -675,6 +685,14 @@ def setup_roles():
 	for _pg in ("select-photos", "selection-review", "selected-pieces", "selection-records",
 			"selection-tags", "selection-providers"):
 		set_page_roles(_pg, ("JW Selection",))
+
+	# ---- JW Data Admin: the bench + casting data desk. Assign/collect, issue/
+	# receipt, tree making and the casting queue — everything on those pages.
+	for dt in JEWELIMA_DATA_ADMIN_READ:
+		if frappe.db.exists("DocType", dt):
+			grant(dt, JEWELIMA_DATA_ADMIN_ROLE, {"read": 1, "report": 1, "print": 1, "export": 1})
+	for _pg in JEWELIMA_DATA_ADMIN_PAGES:
+		set_page_roles(_pg, (JEWELIMA_DATA_ADMIN_ROLE,))
 
 	frappe.db.commit()
 
