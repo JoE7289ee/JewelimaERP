@@ -178,7 +178,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "retail",
+   "icon": "store",
    "indent": 1,
    "keep_closed": 0,
    "label": "Shop",
@@ -191,7 +191,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "small-file",
+   "icon": "shopping-basket",
    "indent": 1,
    "keep_closed": 0,
    "label": "Basket",
@@ -321,7 +321,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "tool",
+   "icon": "wrench",
    "indent": 1,
    "keep_closed": 0,
    "label": "Workstations",
@@ -685,7 +685,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
+   "icon": "send",
    "indent": 1,
    "keep_closed": 0,
    "label": "Stone Request",
@@ -698,7 +698,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "package",
+   "icon": "package-plus",
    "indent": 1,
    "keep_closed": 0,
    "label": "Pre-Bag",
@@ -711,7 +711,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
+   "icon": "package-open",
    "indent": 1,
    "keep_closed": 0,
    "label": "Stone Issue",
@@ -724,7 +724,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
+   "icon": "undo-2",
    "indent": 1,
    "keep_closed": 0,
    "label": "Stone Return",
@@ -750,7 +750,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
+   "icon": "package-search",
    "indent": 1,
    "keep_closed": 0,
    "label": "Stone Stock Info",
@@ -854,7 +854,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
+   "icon": "warehouse",
    "indent": 1,
    "keep_closed": 0,
    "label": "Stone Stock",
@@ -1673,7 +1673,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
+   "icon": "list-checks",
    "indent": 0,
    "keep_closed": 0,
    "label": "Stone Issues",
@@ -1686,7 +1686,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "scale",
+   "icon": "microscope",
    "indent": 0,
    "keep_closed": 0,
    "label": "Stone Audit",
@@ -2191,7 +2191,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-19 21:49:08.474554",
+ "modified": "2026-08-19 22:36:57.607529",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
