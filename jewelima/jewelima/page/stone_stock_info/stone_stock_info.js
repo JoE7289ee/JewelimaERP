@@ -21,7 +21,7 @@ frappe.pages["stone-stock-info"].on_page_load = function (wrapper) {
 	};
 	const famColor = (f) => FAM[f] || "#8a8f98";
 
-	const S = { d: null, term: "", fam: "", sortKey: "stock", sortDir: -1 };
+	const S = { d: null, term: "", fam: "", groups: new Set(), sizes: new Set(), sortKey: "stock", sortDir: -1 };
 
 	$(page.main).append(`
 		<style>
@@ -83,6 +83,12 @@ frappe.pages["stone-stock-info"].on_page_load = function (wrapper) {
 		.si-freecell span{position:relative;font-weight:700;color:#2e8a52;}
 		.si-est{color:var(--text-muted);font-size:11px;}
 		.si-none{padding:40px;text-align:center;color:var(--text-muted);}
+		.si-lbl{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);min-width:44px;}
+		.si-gpills,.si-spills{display:flex;gap:6px;flex-wrap:wrap;}
+		.si-gp{border:1px solid var(--border-color);background:var(--fg-color);border-radius:12px;padding:2px 11px;
+			font-size:11.5px;font-weight:600;cursor:pointer;color:var(--text-muted);}
+		.si-gp.on{background:#1f618d;border-color:#1f618d;color:#fff;}
+		.si-gp.clear{color:#b02a2a;border-style:dashed;}
 		</style>
 		<div class="si-wh"></div>
 		<div class="si-hero"></div>
@@ -93,6 +99,12 @@ frappe.pages["stone-stock-info"].on_page_load = function (wrapper) {
 			<input class="si-search" type="text" placeholder="${__("Search item or size…")}">
 			<span class="si-pills"></span>
 			<span class="si-count"></span>
+		</div>
+		<div class="si-tools si-row2" style="margin-top:-2px;">
+			<span class="si-lbl">${__("Group")}</span><span class="si-gpills"></span>
+		</div>
+		<div class="si-tools si-row3" style="margin-top:-2px;">
+			<span class="si-lbl">${__("Sieve")}</span><span class="si-spills"></span>
 		</div>
 		<div class="si-box"><table class="si-tbl"><thead class="si-head"></thead><tbody class="si-body"></tbody></table></div>
 	`);
@@ -157,6 +169,8 @@ frappe.pages["stone-stock-info"].on_page_load = function (wrapper) {
 	function visibleRows() {
 		let rows = ((S.d && S.d.rows) || []).slice();
 		if (S.fam) rows = rows.filter((r) => r.family === S.fam);
+		if (S.groups.size) rows = rows.filter((r) => S.groups.has(r.group || r.family));
+		if (S.sizes.size) rows = rows.filter((r) => S.sizes.has(r.size || ""));
 		const q = S.term.trim().toLowerCase();
 		if (q) rows = rows.filter((r) => (r.item + " " + r.group + " " + r.size).toLowerCase().indexOf(q) !== -1);
 		const c = COLS.find((x) => x.k === S.sortKey);
@@ -191,14 +205,53 @@ frappe.pages["stone-stock-info"].on_page_load = function (wrapper) {
 		}).join("") : `<tr><td colspan="${COLS.length}" class="si-none">${__("Nothing matches.")}</td></tr>`;
 	}
 
-	function renderAll() { renderHero(); renderFamilies(); renderPills(); renderTable(); }
+	function renderSubPills() {
+		let rows = ((S.d && S.d.rows) || []);
+		if (S.fam) rows = rows.filter((r) => r.family === S.fam);
+		const pill = (val, on, cls) =>
+			`<span class="si-gp ${cls} ${on ? "on" : ""}" data-v="${esc(val)}">${esc(val)}</span>`;
+
+		const groups = [...new Set(rows.map((r) => r.group || r.family))].sort();
+		root.querySelector(".si-gpills").innerHTML =
+			groups.map((g) => pill(g, S.groups.has(g), "g")).join("") +
+			(S.groups.size ? `<span class="si-gp clear g-clear">✕ ${__("clear")}</span>` : "");
+
+		// sieves narrow to the picked groups, so the row never lists dead sizes
+		let srows = rows;
+		if (S.groups.size) srows = srows.filter((r) => S.groups.has(r.group || r.family));
+		const sizes = [...new Set(srows.map((r) => r.size || ""))].filter(Boolean)
+			.sort((a, b) => flt(a) - flt(b) || a.localeCompare(b));
+		root.querySelector(".si-spills").innerHTML =
+			sizes.map((z) => pill(z, S.sizes.has(z), "z")).join("") +
+			(S.sizes.size ? `<span class="si-gp clear z-clear">✕ ${__("clear")}</span>` : "");
+	}
+
+	function renderAll() { renderHero(); renderFamilies(); renderPills(); renderSubPills(); renderTable(); }
 
 	function pickFamily(f) {
 		S.fam = S.fam === f ? "" : f; // toggle
-		renderFamilies(); renderPills(); renderTable();
+		S.groups.clear(); S.sizes.clear();   // the finer picks belong to a family
+		renderFamilies(); renderPills(); renderSubPills(); renderTable();
 	}
 	$(root).on("click", ".si-fam", function () { pickFamily($(this).data("fam")); });
-	$(root).on("click", ".si-pill", function () { S.fam = $(this).data("fam") || ""; renderFamilies(); renderPills(); renderTable(); });
+	$(root).on("click", ".si-pill", function () {
+		S.fam = $(this).data("fam") || "";
+		S.groups.clear(); S.sizes.clear();
+		renderFamilies(); renderPills(); renderSubPills(); renderTable();
+	});
+	$(root).on("click", ".si-gp.g", function () {
+		const v = $(this).data("v");
+		S.groups.has(v) ? S.groups.delete(v) : S.groups.add(v);
+		S.sizes.clear();                      // the sieve list just changed under it
+		renderSubPills(); renderTable();
+	});
+	$(root).on("click", ".si-gp.z", function () {
+		const v = $(this).data("v");
+		S.sizes.has(v) ? S.sizes.delete(v) : S.sizes.add(v);
+		renderSubPills(); renderTable();
+	});
+	$(root).on("click", ".g-clear", function () { S.groups.clear(); S.sizes.clear(); renderSubPills(); renderTable(); });
+	$(root).on("click", ".z-clear", function () { S.sizes.clear(); renderSubPills(); renderTable(); });
 	$(root).on("click", ".si-head th", function () {
 		const k = this.getAttribute("data-k");
 		if (S.sortKey === k) S.sortDir = -S.sortDir;
