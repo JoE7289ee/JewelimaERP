@@ -321,6 +321,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "tool",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Workstations",
+   "link_to": "workstations",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "user-check",
    "indent": 1,
    "keep_closed": 0,
@@ -2321,7 +2334,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-19 14:08:08.683366",
+ "modified": "2026-08-19 15:57:46.456754",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

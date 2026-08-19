@@ -554,9 +554,12 @@ def setup_roles():
 			if dt:
 				grant(dt, role, {"read": 1})
 		set_page_roles(page, ("Stock Manager", role))
+		# the Workstations launcher is open to every bench role; the page itself
+		# only paints the tiles that role may actually open
+		set_page_roles("workstations", (role,))
 		# tight: this role opens ONLY its own workstation
 		for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": role}, pluck="parent"):
-			if pg != page:
+			if pg not in (page, "workstations"):   # the launcher is shared; it filters its own tiles
 				pgd = frappe.get_doc("Page", pg)
 				pgd.set("roles", [r for r in pgd.roles if r.role != role])
 				pgd.save(ignore_permissions=True)

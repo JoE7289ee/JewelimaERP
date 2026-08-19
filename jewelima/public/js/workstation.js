@@ -10,8 +10,11 @@ const WK_NO_ISSUE = ["CAM"];              // info-only queues
 const WK_EXTRACT = ["BAG EXTRACTION"];    // no assign — straight to Bag Split
 const WK_STONE_REQ = ["WAX SETTING", "SETTING"];  // benches that request stones
 
-jewelima.buildWorkstation = function (wrapper, bench) {
+jewelima.buildWorkstation = function (wrapper, bench, opts) {
+	opts = opts || {};
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Workstation — {0}", [bench]), single_column: true });
+	// opened from the Workstations tiles: offer the way back
+	if (opts.onBack) page.set_secondary_action(__("← All workstations"), opts.onBack);
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	let D = null;
