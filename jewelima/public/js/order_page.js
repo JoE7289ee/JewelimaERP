@@ -382,7 +382,9 @@ const PO_COLUMNS = [
 				const df = { fieldtype: "Link", options: col.options, fieldname: col.key, placeholder: col.label };
 				if (col.key === "bank") {
 					// bank names are HASHES (the code lives in design_no) — typed
-					// text is never a valid value, so force a dropdown pick
+					// text is never a valid value, so force a dropdown pick.
+					// The search also matches VARIANT codes (A13076-22EF), because
+					// that is what is printed on a bag and what people type.
 					df.only_select = 1;
 					df.get_query = () => ({ filters: { status: "Approved" } });
 				}
@@ -397,6 +399,26 @@ const PO_COLUMNS = [
 				}
 				const ctrl = frappe.ui.form.make_control({ df, parent: $td.get(0), render_input: true });
 				ctrl.refresh();
+				if (col.key === "bank" && ctrl.$input) {
+					ctrl.$input.on("input", function () { row._bankTyped = this.value; });
+					// the code on a bag is the VARIANT (A13076-22EF), not the card. The
+					// Link can only hold a card, so resolve the variant to its card and
+					// fill both — onBankPicked then lands on the typed variant.
+					ctrl.$input.on("input", frappe.utils.debounce(function () {
+						const txt = (this.value || "").trim();
+						// NB: a Link's get_value() returns the TYPED text, so it cannot be
+						// used to tell "already picked" — compare against the last pick
+						if (txt.length < 5 || txt.indexOf("-") < 0 || row._lastBank) return;
+						frappe.call({ method: "jewelima.jewelima.api.variant_for_code",
+							args: { code: txt }, freeze: false }).then((r) => {
+							const v = r.message || {};
+							if (!v.name || row._lastBank) return;
+							if ((ctrl.$input.val() || "").trim() !== txt) return;   // moved on
+							ctrl.set_value(v.design_bank);
+							setTimeout(() => onBankPicked(row), 60);
+						});
+					}, 450));
+				}
 				row.f[col.key] = { get: () => ctrl.get_value(), set: (v) => ctrl.set_value(v || "") };
 				if (col.key === "design") { row._designCtrl = ctrl; syncDesignDep(row); }
 				if (col.key === "bank") {
@@ -670,6 +692,16 @@ const PO_COLUMNS = [
 		if (row._lastBank === bank) return;
 		row._lastBank = bank;
 		const cur = row.f.design.get();
+		// the code typed into the D Bank box may itself be a VARIANT (A13076-22EF —
+		// what is printed on the bag). Land on THAT variant, not the card's first.
+		const typed = (row._bankTyped || "").replace(/\s+/g, "");
+		const pickTyped = () => frappe.call({
+			method: "jewelima.jewelima.api.variant_for_code", args: { code: typed }, freeze: false,
+		}).then((r) => {
+			const v = r.message || {};
+			if (v.name && v.design_bank === bank) { selectDesign(row, v.name); return true; }
+			return false;
+		});
 		const pickFirst = () => frappe.db.get_list("Design",
 			{ filters: { design_bank: bank, status: "Active" }, fields: ["name"], order_by: "creation asc", limit: 0 })
 			.then((vs) => {
@@ -678,7 +710,7 @@ const PO_COLUMNS = [
 				// way to create one (see updateDesignBtn)
 				updateDesignBtn(row);
 			});
-		if (!cur) return pickFirst();
+		if (!cur) return typed ? pickTyped().then((hit) => hit || pickFirst()) : pickFirst();
 		// a variant of THIS card is already on the line — leave it be
 		frappe.db.get_value("Design", cur, "design_bank").then((r) => {
 			if (((r.message || {}).design_bank || "") !== bank) pickFirst();

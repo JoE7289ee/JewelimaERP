@@ -13248,6 +13248,18 @@ def get_print_branding():
 
 
 @frappe.whitelist()
+def variant_for_code(code):
+	"""The variant + its card for a typed variant code, so picking the card can
+	fill the Variant column in too."""
+	code = (code or "").replace(" ", "").strip()
+	if not code:
+		return {}
+	row = frappe.db.sql("""SELECT d.name, d.design_bank FROM `tabDesign` d
+		WHERE d.status = 'Active' AND REPLACE(d.name, ' ', '') = %s LIMIT 1""", code, as_dict=True)
+	return row[0] if row else {}
+
+
+@frappe.whitelist()
 def get_card_costing(order_bag, price_chart=None, gold_rate=0):
 	"""Card Info's COSTING section — the exact sale engine, admin-eyes only
 	for now (the section is role-gated in the UI and enforced here)."""
