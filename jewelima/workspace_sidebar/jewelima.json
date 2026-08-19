@@ -2167,19 +2167,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "gem",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Stone Buckets",
-   "link_to": "stone-buckets",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
@@ -2191,7 +2178,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-19 16:29:31.638710",
+ "modified": "2026-08-19 21:32:04.654549",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

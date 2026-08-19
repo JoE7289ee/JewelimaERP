@@ -15,7 +15,7 @@ frappe.pages["raw-materials"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.rm-wrap{max-width:1100px;}
+		.rm-wrap{max-width:none;}   /* full width — the tree is wide */
 		.rm-top{display:flex;align-items:center;gap:10px;margin:2px 0 12px;flex-wrap:wrap;}
 		.rm-search{width:300px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
 		.rm-count{color:var(--text-muted);font-size:12px;}
@@ -150,4 +150,75 @@ frappe.pages["raw-materials"].on_page_load = function (wrapper) {
 		if (S.tree) defaultOpen(S.tree);
 		render();
 	});
+
+	// Stone Buckets used to be its own page. It is reference data looked at now and
+	// then, so it lives here behind a button instead of in the menu.
+	function showBuckets() {
+		const S2 = { buckets: [], open: new Set(), term: "" };
+		const d = new frappe.ui.Dialog({ title: __("Stone Buckets"), size: "large",
+			fields: [{ fieldname: "html", fieldtype: "HTML" }] });
+		const esc2 = frappe.utils.escape_html;
+		const paint = () => {
+			const term = (S2.term || "").trim().toUpperCase();
+			let shown = 0;
+			const html = S2.buckets.map((b) => {
+				const items = (b.items || []).filter((it) =>
+					!term || (it.name || "").toUpperCase().includes(term) || (b.code || "").toUpperCase().includes(term));
+				if (term && !items.length) return "";
+				shown += items.length;
+				const open = S2.open.has(b.code) || !!term;
+				return `<div class="sb-grp" data-b="${esc2(b.code)}">
+						<span class="c">${open ? "▾" : "▸"}</span>
+						<b>${esc2(b.code)}</b>
+						<span class="st">${esc2(b.stone_type || "")}</span>
+						<span class="n">${items.length}</span>
+					</div>
+					${open ? items.map((it) => `<div class="sb-it">
+						<a href="/app/item/${encodeURIComponent(it.name)}">${esc2(it.name)}</a></div>`).join("") : ""}`;
+			}).join("");
+			d.get_field("html").$wrapper.find(".sb-body").html(html
+				|| `<div style="padding:24px;text-align:center;color:var(--text-muted);">${__("Nothing matches.")}</div>`);
+			d.get_field("html").$wrapper.find(".sb-count").text(term
+				? __("{0} stones matching", [shown])
+				: __("{0} stones in {1} buckets",
+					[S2.buckets.reduce((a, b) => a + (b.count || 0), 0), S2.buckets.length]));
+		};
+		d.get_field("html").$wrapper.html(`
+			<style>
+			.sb-top{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
+			.sb-top input{width:260px;border:1px solid var(--border-color);border-radius:7px;height:30px;
+				padding:2px 10px;background:var(--fg-color);color:var(--text-color);}
+			.sb-count{font-size:12px;color:var(--text-muted);}
+			.sb-body{border:1px solid var(--border-color);border-radius:10px;max-height:60vh;overflow:auto;font-size:13px;}
+			.sb-grp{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--border-color);}
+			.sb-grp:hover{background:var(--control-bg);}
+			.sb-grp .c{width:12px;color:var(--text-muted);font-size:10px;}
+			.sb-grp .st{color:var(--text-muted);}
+			.sb-grp .n{margin-left:auto;font-weight:800;}
+			.sb-it{padding:4px 12px 4px 34px;border-bottom:1px solid var(--border-color);}
+			</style>
+			<div class="sb-top">
+				<input type="text" class="sb-q" placeholder="${__("search a stone or bucket…")}">
+				<span class="sb-count"></span>
+				<button class="btn btn-xs btn-default sb-all" style="margin-left:auto;">${__("Expand all")}</button>
+				<button class="btn btn-xs btn-default sb-none">${__("Collapse")}</button>
+			</div>
+			<div class="sb-body"></div>`);
+		const $x = d.get_field("html").$wrapper;
+		$x.on("click", ".sb-grp", function () {
+			const b = this.dataset.b;
+			S2.open.has(b) ? S2.open.delete(b) : S2.open.add(b);
+			paint();
+		});
+		$x.on("click", ".sb-all", () => { S2.open = new Set(S2.buckets.map((b) => b.code)); paint(); });
+		$x.on("click", ".sb-none", () => { S2.open = new Set(); paint(); });
+		$x.on("input", ".sb-q", frappe.utils.debounce(function () { S2.term = this.value; paint(); }, 200));
+		d.show();
+		frappe.call({ method: API + ".get_stone_buckets", freeze: false }).then((r) => {
+			S2.buckets = (r.message || {}).buckets || [];
+			paint();
+		});
+	}
+	page.add_inner_button(__("Stone Buckets"), showBuckets);
+
 };
