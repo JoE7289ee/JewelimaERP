@@ -3246,7 +3246,6 @@ def get_ws_stone_candidates(bench):
 	return {"rows": rows}
 
 
-@frappe.whitelist()
 def _resolve_bag_code(barcode):
 	"""A scanned/typed bag code, forgivingly: exact first, then with the order
 	series prefix ("0009.1.1" means "E0009.1.1") — scanners and people both drop it."""
@@ -3260,6 +3259,7 @@ def _resolve_bag_code(barcode):
 	return nm
 
 
+@frappe.whitelist()
 def get_stone_issue_card(barcode):
 	"""Stone Issue station: resolve a scanned card into its BOM's STONE lines with
 	plan / already-issued / available-at-Stone-Issue numbers. Metals never show here."""
