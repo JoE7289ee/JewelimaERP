@@ -147,6 +147,13 @@ jewelima.buildWorkstation = function (wrapper, bench) {
 			: `<div class="wk-none">${__("Nobody holds a card here right now.")}</div>`);
 	}
 
+	// coming back to a workstation must show TODAY's board, not what was on screen
+	// when it was first opened — Frappe keeps the page alive between visits
+	const _route = (frappe.get_route() || [])[0];
+	if (_route && frappe.pages[_route]) {
+		frappe.pages[_route].on_page_show = function () { load(); loadDay(); };
+	}
+
 	function load() {
 		frappe.call({ method: API + ".get_bench_workstation", args: { bench }, freeze: false }).then((r) => {
 			D = r.message;

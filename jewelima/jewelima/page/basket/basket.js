@@ -183,6 +183,10 @@ frappe.pages["basket"].on_page_load = function (wrapper) {
 		frappe.set_route("place-order");
 	});
 
+	// the page object survives between visits — repaint from the store every time,
+	// otherwise you come back from the Shop and see the old list
+	frappe.pages["basket"].on_page_show = function () { loadProfiles(); };
+
 	page.add_inner_button(__("Shop"), () => frappe.set_route("shop"));
 	page.add_inner_button(__("Empty the basket"), () => {
 		frappe.confirm(__("Throw the whole basket away?"), () => { jwBasket.clear(); paint(); });
