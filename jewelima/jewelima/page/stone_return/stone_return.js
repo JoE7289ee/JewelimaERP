@@ -12,20 +12,20 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		.sr-wrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
-		.sr-main{flex:1 1 560px;min-width:480px;}
-		.sr-side{flex:0 0 330px;}
-		.sr-top{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
+		.sr-main{flex:1 1 auto;min-width:480px;}
+		.sr-side{flex:0 0 360px;}
+		.sr-top{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:12px;}
 		.sr-top .frappe-control{margin-bottom:0!important;}
 		.sr-card{border:1px solid var(--border-color);border-radius:12px;padding:14px;background:var(--fg-color);}
 		.sr-hd{display:flex;gap:14px;align-items:center;margin-bottom:10px;}
-		.sr-hd img{height:64px;border-radius:8px;border:1px solid var(--border-color);background:#fff;}
+		.sr-hd img{height:84px;border-radius:8px;border:1px solid var(--border-color);background:#fff;}
 		.sr-hd .nm{font-weight:800;font-size:15px;font-family:var(--font-family-monospace,monospace);}
 		.sr-hd .sub{font-size:12px;color:var(--text-muted);}
 		.sr-tbl{width:100%;border-collapse:collapse;font-size:13px;}
 		.sr-tbl th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);
 			border-bottom:1px solid var(--border-color);padding:4px 6px;}
 		.sr-tbl td{padding:5px 6px;border-bottom:1px solid var(--border-color);}
-		.sr-tbl input{width:82px;border:1px solid var(--border-color);border-radius:6px;height:28px;
+		.sr-tbl input{width:110px;border:1px solid var(--border-color);border-radius:6px;height:28px;
 			padding:2px 8px;background:var(--fg-color);color:var(--text-color);}
 		.sr-tbl .all{font-size:11px;color:#1f618d;cursor:pointer;font-weight:700;}
 		.sr-foot{display:flex;align-items:center;gap:14px;margin-top:12px;}
@@ -72,7 +72,7 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 	const emp = mk(".sr-emp", { fieldtype: "Link", label: __("Returned by"), fieldname: "employee",
 		options: "Employee", get_query: () => ({ filters: { status: "Active" } }) });
 	const scan = mk(".sr-scan", { fieldtype: "Data", label: __("Scan Order Bag"), fieldname: "scan",
-		description: __("scan a bag barcode (or type + Enter)") });
+		placeholder: __("scan a barcode or type + Enter") });
 
 	// ---- the day panel ------------------------------------------------------
 	function loadDay() {
