@@ -45,8 +45,8 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 		<div class="sr-wrap">
 			<div class="sr-main">
 				<div class="sr-top">
-					<div class="sr-emp" style="min-width:240px;"></div>
 					<div class="sr-scan" style="min-width:260px;"></div>
+					<div class="sr-emp" style="min-width:240px;"></div>
 				</div>
 				<div class="sr-body"><div class="sr-empty">${__("Scan a card to see what it is holding.")}</div></div>
 			</div>
