@@ -2,6 +2,7 @@
 // Shared Jewelima print branding — a letterhead-style header (logo + contact) and a clean
 // footer reused by every custom printout. Loaded app-wide via app_include_js.
 
+import "./jw_basket";   // window.jwBasket — shared by Shop + Basket
 import "./order_page"; // jewelima.buildOrderPage — shared by place-order + order-requests
 import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finished-stock + at-certification
 import "./quick_menu"; // Ctrl+Space — quick palette of everyday pages

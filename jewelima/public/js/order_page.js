@@ -1439,6 +1439,16 @@ const PO_COLUMNS = [
 						row._lastDesign = line.variant;
 						if (row.f.qty) row.f.qty.set(line.qty || 1);
 						return pullDesignBOM(row);
+					})
+					.then(() => {
+						// the basket may carry a remark and its own materials
+						if (line.remark) { row._remark = line.remark; updateRemarkBtn(row); }
+						if ((line.materials || []).length) {
+							row._materials = line.materials.map((m) => ({ ...m }));
+							row._profile = planProfile(row._materials);
+							applyProfile(row);
+							updateDesignBtn(row);   // paints the Materials button as edited
+						}
 					});
 			});
 		});

@@ -87,6 +87,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "small-file",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Basket",
+   "link_to": "basket",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "shopping-bag",
    "indent": 1,
    "keep_closed": 0,
@@ -2308,7 +2321,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-19 13:21:14.337361",
+ "modified": "2026-08-19 13:31:48.599885",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
