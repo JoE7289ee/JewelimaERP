@@ -3247,12 +3247,25 @@ def get_ws_stone_candidates(bench):
 
 
 @frappe.whitelist()
+def _resolve_bag_code(barcode):
+	"""A scanned/typed bag code, forgivingly: exact first, then with the order
+	series prefix ("0009.1.1" means "E0009.1.1") — scanners and people both drop it."""
+	nm = (barcode or "").strip().upper()
+	if not nm:
+		return nm
+	if frappe.db.exists("Order Bag", nm):
+		return nm
+	if nm[0].isdigit() and frappe.db.exists("Order Bag", "E" + nm):
+		return "E" + nm
+	return nm
+
+
 def get_stone_issue_card(barcode):
 	"""Stone Issue station: resolve a scanned card into its BOM's STONE lines with
 	plan / already-issued / available-at-Stone-Issue numbers. Metals never show here."""
 	from jewelima.setup import STONE_ISSUE_WAREHOUSE
 
-	nm = (barcode or "").strip()
+	nm = _resolve_bag_code(barcode)
 	if not frappe.db.exists("Order Bag", nm):
 		return {"error": "not_found", "card": nm or "?",
 			"message": frappe._("Card {0} does not exist — check the number and scan again.").format(nm or "?")}
@@ -3826,7 +3839,7 @@ def get_stone_issuer_history(employee):
 def get_stone_return_card(barcode):
 	"""Stone Return station: the card + the stones it actually HOLDS right now
 	(net of the ledger), so only what is in the bag can come back out."""
-	nm = (barcode or "").strip()
+	nm = _resolve_bag_code(barcode)
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("Card {0} not found.").format(nm))
 	bag = frappe.db.get_value("Order Bag", nm,

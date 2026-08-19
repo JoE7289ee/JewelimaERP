@@ -186,38 +186,42 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 		if (!ls.length) return frappe.msgprint(__("Enter a Qty + Carat on at least one line."));
 		const bad = ls.find((x) => !x.pcs || !x.ct);
 		if (bad) return frappe.msgprint(__("{0}: enter both a Qty (pcs) and a Carat weight.", [bad.item]));
-		const tail = mode === "issue" ? __("…then straight to issuing.")
-			: mode === "await" ? __("…then the card waits in the stone queue.") : "";
-		frappe.confirm(
-			__("Return <b>{0} pcs · {1} ct</b> from <b>{2}</b> to Stone Issue?{3}",
-				[ls.reduce((a, x) => a + x.pcs, 0), ls.reduce((a, x) => a + x.ct, 0).toFixed(3),
-				 S.card.name, tail ? "<br>" + tail : ""]),
-			() => {
-				const card = S.card.name;
-				frappe.dom.freeze(__("Returning…"));
-				frappe.call({ method: API + ".stone_return_apply",
-					args: { order_bag: card, lines: JSON.stringify(ls), returned_by: by } })
-					.then(() => {
-						if (mode === "stay") return null;
-						// both other exits flag the card — the Stone Issue station only
-						// pulls flagged cards, and the flag is what queues it
-						return frappe.call({ method: API + ".mark_stone_issue",
-							args: { bags: JSON.stringify([card]) } });
-					})
-					.then(() => {
-						frappe.dom.unfreeze();
-						if (mode === "issue") {
-							frappe.route_options = { card: card };
-							frappe.set_route("stone-issue");
-							return;
-						}
-						frappe.show_alert({ message: mode === "await"
-							? __("{0} returned — waiting in the stone queue.", [card])
-							: __("Back in Stone Issue — {0} updated.", [card]), indicator: "green" }, 5);
-						loadCard(card);   // repaint with what is left
-						loadDay();
-					}).catch(() => frappe.dom.unfreeze());
-			});
+		// no confirmation — the station works at scanner speed. The alert says what
+		// happened, and the page resets with the cursor back in the scanner.
+		const card = S.card.name;
+		const sumTxt = __("{0} pcs · {1} ct", [ls.reduce((a, x) => a + x.pcs, 0),
+			ls.reduce((a, x) => a + x.ct, 0).toFixed(3)]);
+		frappe.dom.freeze(__("Returning…"));
+		frappe.call({ method: API + ".stone_return_apply",
+			args: { order_bag: card, lines: JSON.stringify(ls), returned_by: by } })
+			.then(() => {
+				if (mode === "stay") return null;
+				// both other exits flag the card — the Stone Issue station only
+				// pulls flagged cards, and the flag is what queues it
+				return frappe.call({ method: API + ".mark_stone_issue",
+					args: { bags: JSON.stringify([card]) } });
+			})
+			.then(() => {
+				frappe.dom.unfreeze();
+				if (mode === "issue") {
+					frappe.route_options = { card: card };
+					frappe.set_route("stone-issue");
+					return;
+				}
+				frappe.show_alert({ message: (mode === "await"
+					? __("{0} — returned {1}, waiting in the stone queue.", [card, sumTxt])
+					: __("{0} — returned {1} to Stone Issue.", [card, sumTxt])), indicator: "green" }, 6);
+				resetForNext();
+				loadDay();
+			}).catch(() => frappe.dom.unfreeze());
+	}
+
+	// ready for the next card: clear everything, cursor in the scanner
+	function resetForNext() {
+		S.card = null;
+		S.lines = [];
+		paintCard();
+		if (scan.$input) { scan.set_value(""); scan.$input.focus(); }
 	}
 	root.on("click", ".sr-go", () => doReturn("stay"));
 	root.on("click", ".sr-go-issue", () => doReturn("issue"));
