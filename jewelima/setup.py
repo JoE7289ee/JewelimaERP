@@ -128,7 +128,7 @@ JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-vie
 ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
-JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order", "print-order-bags"]
+JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order", "print-order-bags", "shop"]
 # The runner role: moves cards from one place to another and NOTHING else.
 # One page; the transfer APIs write with ignore_permissions, and Transfer Rules
 # can further restrict which from->to moves the role may make.

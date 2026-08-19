@@ -1410,6 +1410,42 @@ const PO_COLUMNS = [
 		frappe.route_options = null;
 		po_useRequest(state, _ro.order_request);
 	}
+	// handoff from the Shop's "create a variant": open the real variant dialog here
+	// rather than keeping a second copy of the BOM rules on the Shop page
+	if (OPTS.mode === "order" && _ro.open_variant_for) {
+		const bank = _ro.open_variant_for;
+		frappe.route_options = null;
+		const row = state.rows.find((rr) => !rr.f.design.get()) || state.addRow();
+		Promise.resolve(row.f.bank ? row.f.bank.set(bank) : null).then(() => {
+			row._lastBank = bank;
+			if (state.syncDesignDep) state.syncDesignDep(row);
+			state.openVariantCreate(row, bank);
+		});
+	}
+	// handoff from the Shop basket: one line per basket item. The bank has to land
+	// before the variant (set_value is async and the Variant list is scoped to the
+	// card), so each line is chained.
+	if (OPTS.mode === "order" && (_ro.shop_cart || []).length) {
+		const cart = _ro.shop_cart;
+		frappe.route_options = null;
+		let chain = Promise.resolve();
+		cart.forEach((line, i) => {
+			chain = chain.then(() => {
+				const row = i === 0 ? state.rows.find((rr) => !rr.f.design.get()) || state.addRow() : state.addRow();
+				row._lastBank = line.bank;
+				return Promise.resolve(row.f.bank ? row.f.bank.set(line.bank) : null)
+					.then(() => { if (state.syncDesignDep) state.syncDesignDep(row); return row.f.design.set(line.variant); })
+					.then(() => {
+						row._lastDesign = line.variant;
+						if (row.f.qty) row.f.qty.set(line.qty || 1);
+						return pullDesignBOM(row);
+					});
+			});
+		});
+		chain.then(() => frappe.show_alert({
+			message: __("{0} line(s) from the basket — add the party and the type to place it.", [cart.length]),
+			indicator: "blue" }, 7));
+	}
 
 	// claim the order number up front — the same claim comes back if you re-open;
 	// abandoned claims recycle to other sessions after a while (gaps fill later)
@@ -1826,15 +1862,15 @@ function openNewDesignDialog(state, prefill) {
 			{ fieldname: "design_type", fieldtype: "Select", label: __("Design Type"), reqd: 1,
 				description: __("names the card by the type's bank code (e.g. JC-5)"),
 				default: prefill && prefill.design_type },
+			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
+			{ fieldname: "extra_lines", fieldtype: "Small Text", label: __("More notes"),
+				description: __("one note per line — shown when a variant is created") },
 			{ fieldname: "cb1", fieldtype: "Column Break" },
 			{ fieldname: "karat", fieldtype: "Select", label: __("Weighed at (karat)"), options: "18K\n22K\n14K", default: "18K",
 				description: __("the card stores an 18K gross — pick how you weighed it") },
 			{ fieldname: "gross_weight", fieldtype: "Float", label: __("Gross Weight (g)"), reqd: 1 },
 			{ fieldname: "diamond_weight", fieldtype: "Float", label: __("Diamond Weight (ct)"), read_only: 1,
 				description: __("auto — average from the sieves below") },
-			{ fieldname: "note", fieldtype: "Data", label: __("Note") },
-			{ fieldname: "extra_lines", fieldtype: "Small Text", label: __("More notes"),
-				description: __("one note per line — shown when a variant is created") },
 			{ fieldname: "sec_st", fieldtype: "Section Break", label: __("Stones / Sieves") },
 			{ fieldname: "stones_html", fieldtype: "HTML" },
 			{ fieldname: "sec_ph", fieldtype: "Section Break", label: __("Product photo") },
