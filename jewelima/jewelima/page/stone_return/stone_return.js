@@ -31,7 +31,7 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 		.sr-foot{display:flex;align-items:center;gap:14px;margin-top:12px;}
 		.sr-sum{font-size:12.5px;color:var(--text-muted);}
 		.sr-sum b{color:var(--text-color);}
-		.sr-go{margin-left:auto;font-weight:800;}
+		.sr-go{font-weight:800;}
 		.sr-empty{padding:36px;text-align:center;color:var(--text-muted);}
 		.sr-panel{border:1px solid var(--border-color);border-radius:12px;padding:12px 14px;background:var(--fg-color);}
 		.sr-panel h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;}
@@ -129,7 +129,11 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 			</tbody></table>
 			<div class="sr-foot">
 				<span class="sr-sum"></span>
-				<button class="btn btn-primary btn-sm sr-go">${__("Return to Stone Issue")}</button>
+				<span class="sr-btns" style="margin-left:auto;display:flex;gap:8px;">
+					<button class="btn btn-primary btn-sm sr-go">${__("Return")}</button>
+					<button class="btn btn-sm sr-go-issue" style="background:#1d7a33;border-color:#1d7a33;color:#fff;font-weight:700;">${__("Return & Issue")}</button>
+					<button class="btn btn-sm sr-go-await" style="background:#7a5b00;border-color:#7a5b00;color:#fff;font-weight:700;">${__("Return & Await Stone")}</button>
+				</span>
 			</div>
 		</div>`);
 		sum();
@@ -174,28 +178,50 @@ frappe.pages["stone-return"].on_page_load = function (wrapper) {
 		scan.set_value("");
 	});
 
-	root.on("click", ".sr-go", function () {
+	// one return, three exits: stay here, jump to issuing, or park in the queue
+	function doReturn(mode) {
 		const by = emp.get_value();
 		if (!by) return frappe.msgprint(__("Pick who is returning these stones."));
 		const ls = collect();
 		if (!ls.length) return frappe.msgprint(__("Enter a Qty + Carat on at least one line."));
 		const bad = ls.find((x) => !x.pcs || !x.ct);
 		if (bad) return frappe.msgprint(__("{0}: enter both a Qty (pcs) and a Carat weight.", [bad.item]));
+		const tail = mode === "issue" ? __("…then straight to issuing.")
+			: mode === "await" ? __("…then the card waits in the stone queue.") : "";
 		frappe.confirm(
-			__("Return <b>{0} pcs · {1} ct</b> from <b>{2}</b> to Stone Issue?",
-				[ls.reduce((a, x) => a + x.pcs, 0), ls.reduce((a, x) => a + x.ct, 0).toFixed(3), S.card.name]),
+			__("Return <b>{0} pcs · {1} ct</b> from <b>{2}</b> to Stone Issue?{3}",
+				[ls.reduce((a, x) => a + x.pcs, 0), ls.reduce((a, x) => a + x.ct, 0).toFixed(3),
+				 S.card.name, tail ? "<br>" + tail : ""]),
 			() => {
+				const card = S.card.name;
 				frappe.dom.freeze(__("Returning…"));
 				frappe.call({ method: API + ".stone_return_apply",
-					args: { order_bag: S.card.name, lines: JSON.stringify(ls), returned_by: by } })
+					args: { order_bag: card, lines: JSON.stringify(ls), returned_by: by } })
+					.then(() => {
+						if (mode === "stay") return null;
+						// both other exits flag the card — the Stone Issue station only
+						// pulls flagged cards, and the flag is what queues it
+						return frappe.call({ method: API + ".mark_stone_issue",
+							args: { bags: JSON.stringify([card]) } });
+					})
 					.then(() => {
 						frappe.dom.unfreeze();
-						frappe.show_alert({ message: __("Back in Stone Issue — {0} updated.", [S.card.name]), indicator: "green" }, 5);
-						loadCard(S.card.name);   // repaint with what is left
+						if (mode === "issue") {
+							frappe.route_options = { card: card };
+							frappe.set_route("stone-issue");
+							return;
+						}
+						frappe.show_alert({ message: mode === "await"
+							? __("{0} returned — waiting in the stone queue.", [card])
+							: __("Back in Stone Issue — {0} updated.", [card]), indicator: "green" }, 5);
+						loadCard(card);   // repaint with what is left
 						loadDay();
 					}).catch(() => frappe.dom.unfreeze());
 			});
-	});
+	}
+	root.on("click", ".sr-go", () => doReturn("stay"));
+	root.on("click", ".sr-go-issue", () => doReturn("issue"));
+	root.on("click", ".sr-go-await", () => doReturn("await"));
 
 	// stale numbers on revisit are worse than none
 	frappe.pages["stone-return"].on_page_show = function () { loadDay(); };
