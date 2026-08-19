@@ -1776,6 +1776,14 @@ STONE_ISSUE_WAREHOUSE = "Stone Issue"
 # detail lives in the Bag Material Ledger; this warehouse holds the aggregate gold.
 # Gold lands here on add-weight; loss moves out of here to a '<bench> -LOSS' wh.
 IN_PRODUCTION_WAREHOUSE = "In Bags"
+# The floor's own metal. A receipt that comes back HEAVIER than it went out
+# (polish build-up, scale variance) has to take that gold from somewhere — it
+# pulls from here. Allowed to go negative: a negative balance is the report of
+# what the floor has added without a top-up.
+PRODUCTION_WAREHOUSE = "Production"
+# A gain bigger than this is refused on receipt — that is a mis-typed weight,
+# not scale drift.
+MAX_RECEIPT_GAIN_G = 0.100
 # Finished pieces sent out for certification sit here (still own stock).
 CERTIFICATION_WAREHOUSE = "At Certification"
 
@@ -1791,6 +1799,7 @@ def create_store_warehouses():
 	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	# The bench flow issues gold/loss as real stock moves; gold isn't always
 	# pre-stocked in the Store, so allow negative stock (a negative balance just
 	# flags unrecorded purchasing rather than blocking the floor).

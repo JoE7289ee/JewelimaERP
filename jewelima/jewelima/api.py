@@ -6286,6 +6286,18 @@ def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
+def book_gain(order_bag, item, qty, bench=None, employee=None, remarks=None):
+	"""The mirror of book_loss: a card came back HEAVIER than it went out (polish
+	build-up, scale variance). That gold has to come from somewhere — it is pulled
+	from the shared Production warehouse into the In Bags pool, with a per-bag
+	ledger row so the card's contents match its weight."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, PRODUCTION_WAREHOUSE
+
+	name = _bag_ledger(order_bag, item, "In", qty, "Gain", bench=bench, employee=employee, remarks=remarks)
+	_stock_move(item, qty, _wh(PRODUCTION_WAREHOUSE), _wh(IN_PRODUCTION_WAREHOUSE))
+	return {"ledger": name, **get_bag_contents(order_bag)}
+
+
 # ---------------------------------------------------------------------------
 # Weight Add / Weight Reduce screens (single card, warehouse-aware).
 # ---------------------------------------------------------------------------
@@ -7438,6 +7450,7 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 	loss booked (per-bag ledger + In Bags -> '<bench> -LOSS' stock). The optional
 	collection state (complete / failed / QC failed / …) lands on every line."""
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS, bench_doctype
+	from jewelima.setup import MAX_RECEIPT_GAIN_G
 
 	if isinstance(lines, str):
 		lines = json.loads(lines or "[]")
@@ -7445,7 +7458,7 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	collection_state = _valid_bench_option(location, "Collection State", collection_state)
 	loc = (location or "").upper()
-	done, errors, total_loss = [], [], 0.0
+	done, errors, total_loss, total_gain = [], [], 0.0, 0.0
 	for ln in lines or []:
 		nm = ln.get("order_bag")
 		raw_win = ln.get("weight_in")
@@ -7464,6 +7477,17 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 			issue = frappe.get_doc("Bench Issue", issue_name)
 			wout = flt(issue.weight_out)
 			loss = max(wout - win, 0.0)
+			gain = max(win - wout, 0.0)
+			# a card heavier than it went out is scale drift or polish build-up; a
+			# BIG jump is a mis-typed weight, so refuse it rather than book metal
+			# that never existed
+			if gain > MAX_RECEIPT_GAIN_G:
+				errors.append({"name": nm, "error": frappe._(
+					"Received weight is {0} g more than issued ({1} g out, {2} g in). "
+					"The most that can be added on receipt is {3} g — re-weigh, or "
+					"use Weight Add if the metal really was added."
+				).format(round(gain, 3), round(wout, 3), round(win, 3), MAX_RECEIPT_GAIN_G)})
+				continue
 			issue_emp = issue.employee
 			if issue_emp:
 				_adjust_employee_balance(issue_emp, -wout)  # held weight returns
@@ -7472,14 +7496,19 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 				collection_state=collection_state, employee=final_emp)
 			if loss > 0:
 				book_loss(nm, _bag_gold_item(nm), loss, bench=location, employee=final_emp)
+			if gain > 0:
+				book_gain(nm, _bag_gold_item(nm), gain, bench=location, employee=final_emp)
 			# a 'Back to In Queue' state sends the card back for rework
 			_apply_collection_disposition(issue_name, location, collection_state)
 			total_loss += loss
-			done.append({"name": nm, "loss": round(loss, 3)})
+			total_gain += gain
+			done.append({"name": nm, "loss": round(loss, 3), "gain": round(gain, 3)})
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
 	frappe.db.commit()
-	return {"count": len(done), "done": done, "errors": errors, "total_loss": round(total_loss, 3), "employee": employee}
+	return {"count": len(done), "done": done, "errors": errors,
+		"total_loss": round(total_loss, 3), "total_gain": round(total_gain, 3),
+		"employee": employee}
 
 
 @frappe.whitelist()
