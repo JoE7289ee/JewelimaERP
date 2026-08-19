@@ -128,7 +128,7 @@ JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-vie
 ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
-JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order"]
+JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order", "print-order-bags"]
 # The runner role: moves cards from one place to another and NOTHING else.
 # One page; the transfer APIs write with ignore_permissions, and Transfer Rules
 # can further restrict which from->to moves the role may make.
@@ -171,7 +171,8 @@ JEWELIMA_WS_PAGES = {
 # those four pages, nothing else. The page APIs write under ignore_permissions, so
 # read on what the pages paint from is all the role needs.
 JEWELIMA_DATA_ADMIN_ROLE = "JW Data Admin"
-JEWELIMA_DATA_ADMIN_PAGES = ["assign-collect", "job-work", "casting-queue", "make-tree"]
+JEWELIMA_DATA_ADMIN_PAGES = ["assign-collect", "job-work", "casting-queue", "make-tree",
+	"print-order-bags"]
 JEWELIMA_DATA_ADMIN_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee", "Bench",
 	"Bench Employee", "Bench Work Option", "Bench Issue", "Bench Visit", "Priority Card",
 	"Bag Material Ledger", "Wax Tree", "Wax Tree Card", "Tree Making", "Casting",
