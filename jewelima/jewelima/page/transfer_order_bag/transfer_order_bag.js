@@ -281,28 +281,60 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		if (!to) return frappe.msgprint(__("Pick the destination location ('Transfer all to')."));
 		if (to === state.location) return frappe.msgprint(__("Destination is the same as the current location."));
 		const plus = TP.allowed && $(page.main).find(".tp-on").is(":checked");
-		frappe.dom.freeze(plus ? __("Transferring + issuing…") : __("Transferring…"));
-		frappe.call({
-			method: plus ? "jewelima.jewelima.api.transfer_and_issue" : "jewelima.jewelima.api.transfer_order_bags",
-			args: plus ? {
-				names: JSON.stringify(state.rows.map((r) => r.name)), to_location: to,
-				employee: TP.emp.get_value() || null,
-				work_type: $(page.main).find(".tp-wt").val() || null,
-			} : { names: JSON.stringify(state.rows.map((r) => r.name)), to_location: to },
-		}).then((r) => {
+		// Scan as many as you like — but send them in CHUNKS. The whole batch used to
+		// go in one request: a big enough batch hit the gateway timeout and left the
+		// floor half-transferred with no warning. Each chunk is its own request, so a
+		// failure is contained and reported.
+		const CHUNK = 30;
+		const all = state.rows.map((r) => r.name);
+		const chunks = [];
+		for (let i = 0; i < all.length; i += CHUNK) chunks.push(all.slice(i, i + CHUNK));
+		const from = state.location;
+		const totals = { count: 0, issued: 0, errors: [], issue_errors: [] };
+
+		const runChunk = (idx) => {
+			if (idx >= chunks.length) return Promise.resolve();
+			const part = chunks[idx];
+			frappe.dom.freeze(chunks.length > 1
+				? __("{0} {1} of {2} — {3} bag(s)…", [plus ? __("Transferring + issuing") : __("Transferring"),
+					idx + 1, chunks.length, part.length])
+				: (plus ? __("Transferring + issuing…") : __("Transferring…")));
+			return frappe.call({
+				method: plus ? "jewelima.jewelima.api.transfer_and_issue" : "jewelima.jewelima.api.transfer_order_bags",
+				args: plus ? {
+					names: JSON.stringify(part), to_location: to,
+					employee: TP.emp.get_value() || null,
+					work_type: $(page.main).find(".tp-wt").val() || null,
+				} : { names: JSON.stringify(part), to_location: to },
+			}).then((r) => {
+				const res = r.message || {};
+				totals.count += cint(res.count);
+				totals.issued += cint(res.issued);
+				totals.errors = totals.errors.concat(res.errors || []);
+				totals.issue_errors = totals.issue_errors.concat(res.issue_errors || []);
+				return runChunk(idx + 1);
+			}).catch((e) => {
+				// this chunk died (timeout, server error): stop, and say exactly where
+				part.forEach((nm) => totals.errors.push({ name: nm, error: __("not sent — the batch stopped here") }));
+				chunks.slice(idx + 1).forEach((c) => c.forEach((nm) =>
+					totals.errors.push({ name: nm, error: __("not sent — the batch stopped earlier") })));
+			});
+		};
+
+		runChunk(0).then(() => {
 			frappe.dom.unfreeze();
-			const res = r.message || {};
 			frappe.show_alert({ message: plus
-				? __("Transferred {0} bag(s) → {1}, issued {2}.", [res.count, to, res.issued || 0])
-				: __("Transferred {0} bag(s): {1} → {2}", [res.count, state.location, to]), indicator: "green" }, 6);
-			if (plus && (res.issue_errors || []).length) {
+				? __("Transferred {0} bag(s) → {1}, issued {2}.", [totals.count, to, totals.issued])
+				: __("Transferred {0} bag(s): {1} → {2}", [totals.count, from, to]), indicator: "green" }, 6);
+			if (totals.issue_errors.length) {
 				frappe.msgprint({ title: __("Transferred but not issued"), indicator: "orange",
-					message: res.issue_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
+					message: totals.issue_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
 			}
-			if (res.errors && res.errors.length) {
-				frappe.msgprint({ title: __("Some not transferred"), message: res.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
+			if (totals.errors.length) {
+				frappe.msgprint({ title: __("Some not transferred"),
+					message: totals.errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
 			}
-			logHistory("—", __("Transferred {0} → {1}", [res.count, to]), "ok");
+			logHistory("—", __("Transferred {0} → {1}", [totals.count, to]), "ok");
 			clearBatch(); // keep history; only Reset wipes it
 		}).catch(() => frappe.dom.unfreeze());
 	}
