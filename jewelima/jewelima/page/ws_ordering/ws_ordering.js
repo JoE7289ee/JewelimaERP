@@ -112,7 +112,9 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				<td><a class="jw-card-link od-card" data-card="${esc(r.name)}">${esc(r.name)}</a></td>
 				<td class="od-design" data-name="${esc(r.name)}">${r.is_cad ? `<span style="color:#9a6b1f;font-weight:700;">CAD</span> ${esc(r.design || "")}` : esc(r.design || "")}</td>
 				<td class="num">${r.qty || ""}</td><td>${esc(r.size || "")}</td>
-				<td>${esc(r.party || "")}</td><td>${esc(r.salesman || "")}</td>
+				<td>${esc(r.party || "")}${r.party_group
+					? `<div style="font-size:10.5px;color:var(--text-muted);">${esc(r.party_group)}</div>` : ""}</td>
+				<td>${esc(r.salesman || "")}</td>
 				<td>${esc(r.placed_by || "")}</td>
 				<td>${esc(r.order_type || "")}</td>
 				<td>${r.order_date ? frappe.datetime.str_to_user(r.order_date) : ""}</td>

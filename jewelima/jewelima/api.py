@@ -2404,6 +2404,16 @@ def bench_employee_query(doctype, txt, searchfield, start, page_len, filters):
 	)
 
 
+def _party_group_name(customer):
+	"""The full name of a party's group. A party is GROUP-ZONE-…, and the Party
+	Group master is named "<code> - <name>", so the name is looked up rather than
+	parsed out of the party code — a renamed group stays right."""
+	code = (customer or "").split("-")[0].strip()
+	if not code:
+		return ""
+	return frappe.db.get_value("Party Group", {"code": code}, "group_name") or ""
+
+
 @frappe.whitelist()
 def get_order_bag_cards(names):
 	"""Print-card data for a list of Order Bags: the bag's own fields plus its
@@ -2443,7 +2453,8 @@ def get_order_bag_cards(names):
 			"bank_no": bank_no,
 			"design_type": dtype, "design_style": dstyle, "image": dimg or b.image,
 			"size": b.size, "qty": b.qty, "location": b.location,
-			"customer": b.customer, "salesman": b.salesman, "order_type": b.order_type,
+			"customer": b.customer, "party_group": _party_group_name(b.customer),
+			"salesman": b.salesman, "order_type": b.order_type,
 			"order_date": frappe.utils.formatdate(b.order_date, "dd-mm-yyyy") if b.order_date else "",
 			"due_date": frappe.utils.formatdate(b.due_date, "dd-mm-yyyy") if b.due_date else "",
 			"gross_weight": b.gross_weight, "nett_weight": b.nett_weight, "purity": b.purity,
@@ -6201,7 +6212,8 @@ def get_bench_board(bench):
 		sc = stock[b.name]
 		rows.append({
 			"name": b.name, "design": b.design or "", "design_type": b.design_type or "",
-			"qty": cint(b.qty) or 1, "party": b.customer or "", "salesman": b.salesman or "",
+			"qty": cint(b.qty) or 1, "party": b.customer or "",
+			"party_group": _party_group_name(b.customer), "salesman": b.salesman or "",
 			"order_type": b.order_type or "", "due": str(b.due_date or ""),
 			"status": got.get(b.name, ("In Queue", "", ""))[0],
 			"queue_reason": got.get(b.name, ("In Queue", "", ""))[1],
