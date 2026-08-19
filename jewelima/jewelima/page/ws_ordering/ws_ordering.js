@@ -48,6 +48,17 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		.od-photos.od-hasph{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;}
 		.od-ph-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
 		.od-ph-thumbs img{height:74px;border-radius:7px;border:1px solid var(--border-color);}
+		.od-mv{margin-left:auto;display:flex;gap:8px;}
+		.od-box{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-color);border-radius:999px;
+			padding:3px 13px;cursor:pointer;font-size:12px;background:var(--fg-color);transition:border-color .12s;}
+		.od-box:hover{border-color:#1f618d;}
+		.od-box .lbl{color:var(--text-muted);text-transform:uppercase;font-size:10px;font-weight:800;letter-spacing:.04em;}
+		.od-box .n{font-size:15px;font-weight:800;}
+		.od-in .n{color:#1d7a33;} .od-out .n{color:#1f618d;}
+		.od-mvtbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+		.od-mvtbl th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);
+			border-bottom:1px solid var(--border-color);padding:4px 6px;}
+		.od-mvtbl td{padding:4px 6px;border-bottom:1px solid var(--border-color);}
 		</style>
 		<div class="od-top">
 			<span style="font-size:12px;color:var(--text-muted);">${__("Placed on")}</span>
@@ -56,6 +67,12 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			<button class="btn btn-sm od-tr" style="background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:700;">${__("Transfer →")}</button>
 			<button class="btn btn-sm od-pr" style="font-weight:700;">${__("Print 0 ⎙")}</button>
 			<button class="btn btn-sm btn-default od-clear" style="display:none;">✕ ${__("Clear selection")}</button>
+			<span class="od-mv">
+				<span class="od-box od-in" title="${__("what came into ordering")}">
+					<span class="lbl">${__("In")}</span><b class="n">0</b></span>
+				<span class="od-box od-out" title="${__("what left ordering")}">
+					<span class="lbl">${__("Out")}</span><b class="n">0</b></span>
+			</span>
 		</div>
 		<div class="od-kpis"></div>
 		<div class="od-by"></div>
@@ -364,7 +381,67 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			});
 	});
 
+	// ---- transfers in / out of ORDERING -------------------------------------
+	// the counts follow the date the desk is showing, so a box and the history
+	// behind it always agree
+	function loadMoves() {
+		const d = $(page.main).find(".od-date").val() || frappe.datetime.get_today();
+		frappe.call({ method: "jewelima.jewelima.api.get_location_transfers", freeze: false,
+			args: { location: "ORDERING", from_date: d, to_date: d } }).then((r) => {
+			const m = r.message || {};
+			$(page.main).find(".od-in .n").text(m.in_count || 0);
+			$(page.main).find(".od-out .n").text(m.out_count || 0);
+		});
+	}
+
+	function showMoves(dir) {
+		const today = $(page.main).find(".od-date").val() || frappe.datetime.get_today();
+		const S = { from: today, to: today, q: "" };
+		const dlg = new frappe.ui.Dialog({
+			title: __("Transfers {0} ordering", [dir === "in" ? __("into") : __("out of")]),
+			size: "large", fields: [{ fieldname: "html", fieldtype: "HTML" }],
+		});
+		const paint = (m) => {
+			const rows = (dir === "in" ? m.in : m.out) || [];
+			dlg.get_field("html").$wrapper.find(".od-mvbody").html(rows.length ? `
+				<table class="od-mvtbl"><thead><tr>
+					<th>${__("Card")}</th><th>${dir === "in" ? __("From") : __("To")}</th>
+					<th>${__("When")}</th><th>${__("By")}</th>
+				</tr></thead><tbody>
+				${rows.map((x) => `<tr>
+					<td><b>${esc(x.order_bag)}</b></td><td>${esc(x.other || "—")}</td>
+					<td>${esc((x.transfer_time || "").slice(0, 16))}</td>
+					<td>${esc(x.transferred_by || "")}</td></tr>`).join("")}
+				</tbody></table>
+				<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">${__("{0} move(s)", [rows.length])}</div>`
+				: `<div style="padding:26px;text-align:center;color:var(--text-muted);">${__("Nothing in this window.")}</div>`);
+		};
+		const load2 = () => frappe.call({ method: "jewelima.jewelima.api.get_location_transfers", freeze: false,
+			args: { location: "ORDERING", from_date: S.from, to_date: S.to, q: S.q } })
+			.then((r) => paint(r.message || {}));
+		dlg.get_field("html").$wrapper.html(`
+			<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+				<input type="date" class="mv-from" value="${S.from}">
+				<span style="color:var(--text-muted);">→</span>
+				<input type="date" class="mv-to" value="${S.to}">
+				<input type="text" class="mv-q" placeholder="${__("card / location / who…")}" style="min-width:200px;">
+			</div>
+			<div class="od-mvbody"></div>`);
+		const $x = dlg.get_field("html").$wrapper;
+		$x.find(".mv-from,.mv-to,.mv-q").css({ border: "1px solid var(--border-color)", "border-radius": "7px",
+			height: "30px", padding: "2px 9px", background: "var(--fg-color)", color: "var(--text-color)" });
+		$x.on("change", ".mv-from", function () { S.from = this.value; load2(); });
+		$x.on("change", ".mv-to", function () { S.to = this.value; load2(); });
+		$x.on("input", ".mv-q", frappe.utils.debounce(function () { S.q = this.value; load2(); }, 350));
+		dlg.show();
+		load2();
+	}
+	$(page.main).on("click", ".od-in", () => showMoves("in"));
+	$(page.main).on("click", ".od-out", () => showMoves("out"));
+	$(page.main).on("change", ".od-date", loadMoves);
+
 	load();
+	loadMoves();
 	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 60000);
 	$(wrapper).on("remove", () => clearInterval(t));
 };

@@ -2404,6 +2404,34 @@ def bench_employee_query(doctype, txt, searchfield, start, page_len, filters):
 	)
 
 
+@frappe.whitelist()
+def get_location_transfers(location, from_date=None, to_date=None, q=None):
+	"""What came IN to a location and what went OUT, over a date window. Same
+	shape the ws-* day view counts, so a counter and its history agree."""
+	from_date = from_date or frappe.utils.nowdate()
+	to_date = to_date or from_date
+	lo, hi = from_date + " 00:00:00", to_date + " 23:59:59"
+	loc = (location or "").upper()
+
+	def rows(field, other):
+		out = []
+		for r in frappe.get_all("Order Bag Transfer",
+				filters={field: loc, "transfer_time": ["between", [lo, hi]]},
+				fields=["order_bag", other + " as other", "transfer_time", "transferred_by", "remarks"],
+				order_by="transfer_time desc", limit_page_length=0):
+			if q and q.strip():
+				hay = " ".join(str(x or "") for x in (r.order_bag, r.other, r.transferred_by)).upper()
+				if q.strip().upper() not in hay:
+					continue
+			r["transfer_time"] = str(r["transfer_time"] or "")
+			out.append(r)
+		return out
+
+	tin, tout = rows("to_location", "from_location"), rows("from_location", "to_location")
+	return {"in": tin, "out": tout, "in_count": len(tin), "out_count": len(tout),
+		"from_date": from_date, "to_date": to_date}
+
+
 def _party_group_name(customer):
 	"""The full name of a party's group. A party is GROUP-ZONE-…, and the Party
 	Group master is named "<code> - <name>", so the name is looked up rather than
