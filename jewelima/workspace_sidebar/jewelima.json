@@ -1,6 +1,6 @@
 {
  "app": "jewelima",
- "creation": "2026-08-18 09:25:37.749323",
+ "creation": "2026-08-18 09:37:00.847522",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "diamond",
@@ -69,6 +69,19 @@
    "link_type": "",
    "show_arrow": 0,
    "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "retail",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Shop",
+   "link_to": "shop",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
    "url": ""
   },
   {
@@ -2295,7 +2308,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-18 09:36:25.075949",
+ "modified": "2026-08-19 13:21:14.337361",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -670,6 +670,13 @@ def setup_roles():
 		grant("Price Chart", "JW Party Admin", {"read": 1})
 	for _pg in ("parties", "create-party", "party-masters", "party-stock", "party-metal"):
 		set_page_roles(_pg, ("JW Party Admin",))
+	# the order desk looks parties up all day (old names, branches, who is who) —
+	# read-only: creating and classifying stays with JW Party Admin
+	set_page_roles("parties", ("Jewelima Ordering",))
+	for dt in ("Party Group", "Party Zone", "Party District", "Party State",
+			"Party Special", "Party Old Name", "Sales Person"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "Jewelima Ordering", {"read": 1})
 
 	# ---- JW Selection: full run of the Selection module (photo selection, review,
 	# selected pieces, export/import, tags, providers). Full CRUD on the Selection
