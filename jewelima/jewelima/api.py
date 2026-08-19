@@ -13247,6 +13247,59 @@ def get_print_branding():
 	}
 
 
+# --- the Shop basket ----------------------------------------------------------
+# One row per user, so a basket started at the desk is still there on a tablet.
+def _basket_doc(create=False):
+	user = frappe.session.user
+	name = frappe.db.get_value("Shop Basket", {"user": user}, "name")
+	if name:
+		return frappe.get_doc("Shop Basket", name)
+	if not create:
+		return None
+	return frappe.get_doc({"doctype": "Shop Basket", "user": user}).insert(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def get_shop_basket():
+	"""The signed-in user's basket. Never anyone else's — the user is taken from
+	the session, never from the caller."""
+	doc = _basket_doc()
+	if not doc:
+		return {"lines": []}
+	out = []
+	for r in doc.lines:
+		mats = None
+		if r.materials:
+			try:
+				mats = frappe.parse_json(r.materials)
+			except Exception:
+				mats = None
+		out.append({"variant": r.variant, "bank": r.bank, "bank_no": r.bank_no,
+			"qty": cint(r.qty) or 1, "remark": r.remark or "", "image": r.image or "",
+			"materials": mats})
+	return {"lines": out}
+
+
+@frappe.whitelist()
+def save_shop_basket(lines):
+	"""Replace the user's basket with what the page is holding."""
+	rows = frappe.parse_json(lines) if isinstance(lines, str) else (lines or [])
+	doc = _basket_doc(create=True)
+	doc.set("lines", [])
+	for r in rows:
+		if not r.get("variant"):
+			continue
+		doc.append("lines", {
+			"variant": r.get("variant"), "bank": r.get("bank"), "bank_no": r.get("bank_no"),
+			"qty": cint(r.get("qty")) or 1, "remark": r.get("remark") or "",
+			"image": r.get("image") or "",
+			"materials": json.dumps(r.get("materials")) if r.get("materials") else "",
+		})
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "lines": len(doc.lines)}
+
+
 @frappe.whitelist()
 def variant_for_code(code):
 	"""The variant + its card for a typed variant code, so picking the card can

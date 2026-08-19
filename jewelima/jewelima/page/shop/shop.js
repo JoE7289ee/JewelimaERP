@@ -310,9 +310,9 @@ frappe.pages["shop"].on_page_load = function (wrapper) {
 			`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join(""));
 	});
 
-	frappe.pages["shop"].on_page_show = function () { paintBasket(); };
+	frappe.pages["shop"].on_page_show = function () { jwBasket.load().then(paintBasket); };
 
 	page.add_inner_button(__("Basket"), () => frappe.set_route("basket"));
-	paintBasket();
+	jwBasket.load().then(paintBasket);
 	load(true);
 };

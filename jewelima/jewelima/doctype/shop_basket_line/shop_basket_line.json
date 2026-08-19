@@ -1,0 +1,17 @@
+{
+ "actions": [], "allow_rename": 0, "creation": "2026-08-19 15:00:00.000000",
+ "doctype": "DocType", "editable_grid": 1, "engine": "InnoDB", "istable": 1,
+ "field_order": ["variant","bank","bank_no","qty","remark","image","materials"],
+ "fields": [
+  {"fieldname":"variant","fieldtype":"Data","in_list_view":1,"label":"Variant","reqd":1},
+  {"fieldname":"bank","fieldtype":"Data","label":"Design Bank"},
+  {"fieldname":"bank_no","fieldtype":"Data","in_list_view":1,"label":"Design No"},
+  {"fieldname":"qty","fieldtype":"Int","in_list_view":1,"label":"Qty","default":"1"},
+  {"fieldname":"remark","fieldtype":"Small Text","label":"Remark"},
+  {"fieldname":"image","fieldtype":"Data","label":"Image"},
+  {"fieldname":"materials","fieldtype":"Long Text","label":"Materials (JSON)"}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "modified": "2026-08-19 15:00:00.000000",
+ "modified_by": "Administrator", "module": "Jewelima", "name": "Shop Basket Line",
+ "owner": "Administrator", "permissions": [], "sort_field": "creation", "sort_order": "DESC", "states": []
+}
