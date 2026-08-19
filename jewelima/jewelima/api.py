@@ -6087,6 +6087,8 @@ def get_bench_overview():
 	rows = frappe.db.sql("""
 		SELECT b.location, COUNT(*) cards, SUM(IFNULL(b.qty, 0)) qty,
 			SUM(CASE WHEN jo.due_date IS NOT NULL AND jo.due_date < CURDATE() THEN 1 ELSE 0 END) overdue,
+			SUM(CASE WHEN b.stone_issue = 1 THEN 1 ELSE 0 END) awaiting_stone,
+			SUM(CASE WHEN b.stone_oos = 1 THEN 1 ELSE 0 END) stone_oos,
 			MIN(jo.due_date) next_due,
 			MAX(DATEDIFF(CURDATE(), b.creation)) oldest_days
 		FROM `tabOrder Bag` b
@@ -6129,6 +6131,8 @@ def get_bench_overview():
 			"cards": cint(r.cards) if r else 0,
 			"qty": cint(r.qty) if r else 0,
 			"overdue": cint(r.overdue) if r else 0,
+			"awaiting_stone": cint(r.awaiting_stone) if r else 0,
+			"stone_oos": cint(r.stone_oos) if r else 0,
 			"nett_g": nett,                                   # gross - stones
 			"stone_ct": stone_ct,
 			"gross_g": round(nett + stone_ct * 0.2, 3),       # 1 ct = 0.2 g

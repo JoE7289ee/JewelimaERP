@@ -46,6 +46,8 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 				padding:1px 8px;font-size:10.5px;color:var(--text-muted);}
 			.wt-b b{color:var(--text-color);font-weight:800;}
 			.wt-od{color:#b02a2a;font-weight:800;}
+			.wt-aw{color:#7a5b00;font-weight:800;}
+			.wt-oos{color:#b02a2a;font-weight:800;}
 			.wt-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
 			.wt-hint{font-size:12.5px;color:var(--text-muted);margin:0 0 14px;}
 			.wt-tot{margin-left:auto;font-size:12.5px;font-weight:700;}
@@ -60,9 +62,9 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 			const $g = root.find(".wt-grid");
 			$g.html(`<div class="wt-none">${__("Loading…")}</div>`);
 			frappe.call({ method: "jewelima.jewelima.api.get_bench_overview", freeze: false }).then((r) => {
-				const all = (r.message || {}).rows || r.message || [];
+				const all = (r.message || {}).benches || [];
 				const byLoc = {};
-				(Array.isArray(all) ? all : []).forEach((x) => { byLoc[(x.location || "").toUpperCase()] = x; });
+				all.forEach((x) => { byLoc[(x.bench || "").toUpperCase()] = x; });
 
 				const benches = Object.keys(WS).filter(mine);
 				if (!benches.length) {
@@ -75,23 +77,24 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 				$g.html(benches.map((b) => {
 					const d = byLoc[b] || {};
 					cards += (d.cards || 0);
-					const buckets = [
-						["DMD", d.dmd_weight, "ct"], ["PS", d.ps_weight, "ct"], ["CS", d.cs_weight, "ct"],
-						["CZ", d.cz_weight, "ct"], ["CVD", d.cvd_weight, "ct"],
-					].filter((x) => parseFloat(x[1]) > 0);
+					const st = d.stones || {};
+					const buckets = Object.keys(st).filter((k) => parseFloat(st[k]) > 0)
+						.map((k) => [k, st[k]]);
 					return `<div class="wt-tile ${d.cards ? "" : "empty"}" data-b="${esc(b)}">
 						<div class="wt-nm">${esc(b)}</div>
 						<div class="wt-big">${d.cards || 0}<span class="u">${__("cards")}</span></div>
 						<div class="wt-sub">
 							<span><b>${d.qty || 0}</b> ${__("pcs")}</span>
 							${d.overdue ? `<span class="wt-od">${d.overdue} ${__("overdue")}</span>` : ""}
+							${d.awaiting_stone ? `<span class="wt-aw">${d.awaiting_stone} ${__("awaiting stone")}</span>` : ""}
+							${d.stone_oos ? `<span class="wt-oos">${d.stone_oos} ${__("stone out of stock")}</span>` : ""}
 						</div>
 						<div class="wt-wt">
-							<span>${__("Nett")} <b>${n3(d.nett_weight)}</b> g</span>
-							<span>${__("Gross")} <b>${n3(d.gross_weight)}</b> g</span>
+							<span>${__("Nett")} <b>${n3(d.nett_g)}</b> g</span>
+							<span>${__("Gross")} <b>${n3(d.gross_g)}</b> g</span>
 						</div>
 						${buckets.length ? `<div class="wt-st">${buckets.map((x) =>
-							`<span class="wt-b">${x[0]} <b>${(parseFloat(x[1]) || 0).toFixed(2)}</b> ${x[2]}</span>`).join("")}</div>` : ""}
+							`<span class="wt-b">${esc(x[0])} <b>${(parseFloat(x[1]) || 0).toFixed(2)}</b> ct</span>`).join("")}</div>` : ""}
 					</div>`;
 				}).join(""));
 				root.find(".wt-tot").text(__("{0} card(s) across your workstations", [cards]));
