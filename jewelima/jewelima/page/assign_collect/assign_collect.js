@@ -428,12 +428,11 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			paint();
 		});
 		$b.find(".tc-all").on("click", () => {
-			// select all VISIBLE cards of a single employee (the active one, else the first)
-			const vis = visible().filter((r) => !state.rows.find((x) => x.name === r.name));
-			let emp = null;
-			for (const r of S.rows) if (S.sel.has(r.name)) { emp = r.employee || ""; break; }
-			if (emp === null && vis.length) emp = vis[0].employee || "";
-			vis.forEach((r) => { if ((r.employee || "") === emp) S.sel.add(r.name); });
+			// Select all means ALL of what is showing — it used to quietly keep only
+			// one employee's cards, which read as the button half-working
+			visible()
+				.filter((r) => !state.rows.find((x) => x.name === r.name))
+				.forEach((r) => S.sel.add(r.name));
 			paint();
 		});
 		$b.find(".tc-none").on("click", () => { S.sel.clear(); paint(); });
