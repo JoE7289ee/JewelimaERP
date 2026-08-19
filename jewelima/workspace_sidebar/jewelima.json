@@ -724,6 +724,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "gem",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Stone Return",
+   "link_to": "stone-return",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "history",
    "indent": 1,
    "keep_closed": 0,
@@ -2178,7 +2191,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-19 21:32:04.654549",
+ "modified": "2026-08-19 21:49:08.474554",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

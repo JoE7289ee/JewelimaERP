@@ -177,7 +177,8 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 				const sign = r.direction === "Out" ? "−" : "";
 				const uom = r.stone_type ? "ct" : "g";
 				return `<tr${r.from_parent ? ' style="opacity:.62;"' : ""}>
-					<td>${r.entry_type === "Stone Issue" ? "Stone" : "Gold"}${r.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td>
+					<td>${r.entry_type === "Stone Return" ? '<span style="color:#7a5b00;font-weight:700;">Stone ↩</span>'
+						: r.entry_type === "Stone Issue" ? "Stone" : "Gold"}${r.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td>
 					<td><b>${esc(r.item)}</b>${r.stone_type ? ` <span class="muted">(${esc(r.stone_type)})</span>` : ""}</td>
 					<td class="num">${r.pcs ? r.pcs + " / " : ""}${sign}${flt(r.qty).toFixed(3)} ${uom}</td>
 					<td>${esc(r.who || "—")}</td><td>${r.datetime ? frappe.datetime.str_to_user(r.datetime) : "—"}</td></tr>`;

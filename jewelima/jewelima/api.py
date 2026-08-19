@@ -3823,6 +3823,103 @@ def get_stone_issuer_history(employee):
 
 
 @frappe.whitelist()
+def get_stone_return_card(barcode):
+	"""Stone Return station: the card + the stones it actually HOLDS right now
+	(net of the ledger), so only what is in the bag can come back out."""
+	nm = (barcode or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("Card {0} not found.").format(nm))
+	bag = frappe.db.get_value("Order Bag", nm,
+		["name", "design", "qty", "location", "customer", "is_finished", "stock_status", "image"], as_dict=True)
+	held = get_bag_contents(nm)["items"]
+	stypes = {}
+	codes = [h["item"] for h in held]
+	if codes:
+		for it in frappe.get_all("Item", filters={"name": ["in", codes]}, fields=["name", "stone_type"]):
+			stypes[it.name] = it.stone_type or ""
+	lines = [{"item": h["item"], "stone_type": stypes.get(h["item"], ""),
+		"held_ct": flt(h["qty"]), "held_pcs": cint(h.get("pcs"))}
+		for h in held if stypes.get(h["item"])]
+	if bag.image and not str(bag.image).startswith(("http", "/")):
+		bag.image = "/" + str(bag.image)
+	return {"bag": bag, "lines": lines}
+
+
+@frappe.whitelist()
+def stone_return_apply(order_bag, lines, returned_by=None):
+	"""Take stones OUT of a card, back to the Stone Issue warehouse. The mirror of
+	stone_issue_apply: per line a 'Stone Return' ledger Out row (pcs + carats) +
+	real stock In Bags -> Stone Issue, plus one Material Issue paper-trail record
+	so the day panel and Card Info can say who took what back."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, STONE_ISSUE_WAREHOUSE
+
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	lines = [l for l in (lines or []) if flt(l.get("ct")) > 0 or cint(l.get("pcs"))]
+	if not frappe.db.exists("Order Bag", order_bag):
+		frappe.throw(frappe._("Order Bag {0} not found.").format(order_bag))
+	if not lines:
+		frappe.throw(frappe._("Enter a Qty + Carat weight on at least one line."))
+
+	# same rule as issuing: non-admins return as themselves
+	if not _stone_issue_admin():
+		returned_by = _employee_from_user()
+		if not returned_by:
+			frappe.throw(frappe._("Your login isn't linked to an Employee, so you can't return stones."))
+	if not returned_by or not frappe.db.exists("Employee", returned_by):
+		frappe.throw(frappe._("Pick who is returning these stones."))
+
+	held = {h["item"]: h for h in get_bag_contents(order_bag)["items"]}
+	for l in lines:
+		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
+		if ct <= 0 or pcs <= 0:
+			frappe.throw(frappe._("{0}: enter both a Qty (pcs) and a Carat weight.").format(item))
+		if not frappe.db.get_value("Item", item, "stone_type"):
+			frappe.throw(frappe._("{0} is not a stone — only stones come back here.").format(item))
+		h = held.get(item)
+		if not h:
+			frappe.throw(frappe._("{0} is not in this bag.").format(item))
+		if ct > flt(h["qty"]) + 0.0005:
+			frappe.throw(frappe._("The bag holds only {0} ct of {1} — can't return {2} ct.").format(h["qty"], item, ct))
+		if cint(h.get("pcs")) and pcs > cint(h["pcs"]):
+			frappe.throw(frappe._("The bag holds only {0} pcs of {1}.").format(h["pcs"], item))
+
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+	_material_issue_record("Stone Return", order_bag, wh, issued_by=returned_by, items=[
+		{"item": l.get("item"), "pcs": cint(l.get("pcs")), "qty": flt(l.get("ct")), "uom": "Carat"} for l in lines
+	])
+	for l in lines:
+		item, ct, pcs = l.get("item"), flt(l.get("ct")), cint(l.get("pcs"))
+		_bag_ledger(order_bag, item, "Out", ct, "Stone Return", employee=returned_by,
+			pcs=pcs, remarks=l.get("remarks"))
+		_stock_move(item, ct, _wh(IN_PRODUCTION_WAREHOUSE), wh)
+	refresh_actual_weights(order_bag)
+	frappe.db.commit()
+	return {"ok": 1, **get_bag_contents(order_bag)}
+
+
+@frappe.whitelist()
+def get_stone_returner_today(employee):
+	"""What the picked person has brought BACK today — the Stone Return side panel."""
+	if not employee:
+		return {"pcs": 0, "ct": 0.0, "cards": 0, "lines": []}
+	rows = frappe.db.sql("""
+		SELECT i.item, i.pcs, i.qty, m.order_bag, m.posting
+		FROM `tabMaterial Issue Item` i
+		JOIN `tabMaterial Issue` m ON m.name = i.parent
+		WHERE m.issue_type = 'Stone Return' AND m.issued_by = %s AND DATE(m.posting) = CURDATE()
+		ORDER BY m.posting DESC
+	""", employee, as_dict=True)
+	return {
+		"pcs": sum(cint(r.pcs) for r in rows),
+		"ct": round(sum(flt(r.qty) for r in rows), 3),
+		"cards": len({r.order_bag for r in rows}),
+		"lines": [{"item": r.item, "pcs": cint(r.pcs), "ct": flt(r.qty),
+			"order_bag": r.order_bag, "time": str(r.posting)} for r in rows],
+	}
+
+
+@frappe.whitelist()
 def get_stone_issuer_today(employee):
 	"""What the picked issuer has handed out TODAY (Stone Issue station side panel):
 	totals + the line-by-line history (item, pcs, ct, card, time), newest first."""
@@ -13409,7 +13506,7 @@ def get_card_passport(order_bag):
 		FROM `tabBag Material Ledger` l
 		JOIN `tabItem` i ON i.name = l.item
 		LEFT JOIN `tabEmployee` e ON e.name = l.employee
-		WHERE l.order_bag = %s AND l.entry_type IN ('Stone Issue', 'Gold Issue', 'Loss', 'Weight Add')
+		WHERE l.order_bag = %s AND l.entry_type IN ('Stone Issue', 'Stone Return', 'Gold Issue', 'Loss', 'Weight Add')
 		ORDER BY l.datetime""", order_bag, as_dict=True)
 	# ---- the afterlife + standing: everything else we hold about this card ----
 	extras = {}
