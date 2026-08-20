@@ -66,10 +66,54 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 					<button class="btn btn-primary cb-save" style="background:#2e7d32;border-color:#2e7d32;">${__("Save — render into Design Bank")}</button>
 				</div>
 			</div>
-			<div class="cb-left"><img class="cb-prev" alt=""></div>
+			<div class="cb-left"><img class="cb-prev" alt="">
+				<div class="cb-panel cb-vars" style="display:none;">
+					<div class="cb-ptl">${__("Saving rewrites these variants")}</div>
+					<div class="cb-vbody"></div>
+				</div>
+				<div class="cb-panel cb-hist" style="display:none;">
+					<div class="cb-ptl">${__("Change history")}</div>
+					<div class="cb-hbody"></div>
+				</div>
+			</div>
 		</div>
 	`);
 	const root = $(page.main);
+	$(page.main).prepend(`<style>
+	.cb-panel{border:1px solid var(--border-color);border-radius:12px;padding:11px 14px;margin-top:12px;background:var(--fg-color);}
+	.cb-ptl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:7px;}
+	.cb-vchip{display:inline-block;border:1px solid #e0c26a;background:#fff8e6;color:#7a5b00;border-radius:10px;
+		padding:2px 10px;font-size:11.5px;font-weight:700;margin:0 5px 5px 0;font-family:var(--font-family-monospace,monospace);}
+	.cb-hrow{font-size:12px;padding:5px 0;border-bottom:1px solid var(--border-color);}
+	.cb-hrow:last-child{border-bottom:none;}
+	.cb-hrow .f{font-weight:700;}
+	.cb-hrow .d{color:var(--text-muted);font-size:11px;}
+	.cb-hrow .v{font-variant-numeric:tabular-nums;}
+	</style>`);
+
+	// what an edit touches, and what past edits did — the honesty panels
+	function loadSide(name) {
+		frappe.db.get_list("Design", { filters: { design_bank: name, status: "Active" },
+			fields: ["name"], order_by: "creation asc", limit: 0 }).then((vs) => {
+			const $p = root.find(".cb-vars").toggle(true);
+			$p.find(".cb-vbody").html((vs || []).length
+				? vs.map((v) => `<span class="cb-vchip">${frappe.utils.escape_html(v.name)}</span>`).join("")
+					+ `<div class="d" style="font-size:11px;color:var(--text-muted);margin-top:4px;">${__("Cards already on the floor keep their own BOM — they are not touched.")}</div>`
+				: `<span style="font-size:12px;color:var(--text-muted);">${__("No variant yet — nothing to rewrite.")}</span>`);
+		});
+		frappe.db.get_list("Design Bank Change", { filters: { design_bank: name },
+			fields: ["field", "old_value", "new_value", "variants_rebuilt", "owner", "creation"],
+			order_by: "creation desc", limit: 20 }).then((rows) => {
+			const $h = root.find(".cb-hist").toggle(true);
+			$h.find(".cb-hbody").html((rows || []).length ? rows.map((h) => `
+				<div class="cb-hrow">
+					<span class="f">${frappe.utils.escape_html(h.field)}</span>:
+					<span class="v">${frappe.utils.escape_html(h.old_value || "—")} → <b>${frappe.utils.escape_html(h.new_value || "—")}</b></span>
+					<div class="d">${frappe.datetime.str_to_user(h.creation)} · ${frappe.utils.escape_html(h.owner)}${h.variants_rebuilt ? " · " + __("rebuilt {0}", [frappe.utils.escape_html(h.variants_rebuilt)]) : ""}</div>
+				</div>`).join("")
+				: `<span style="font-size:12px;color:var(--text-muted);">${__("Never edited since approval.")}</span>`);
+		});
+	}
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
 	// only APPROVED cards are editable here — they already carry a proper info
 	// card; everything else gets fixed through Review first
@@ -157,6 +201,7 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 			root.find(".cb-rawlink").toggle(!!m.photo).attr("href", m.photo || "#");
 			root.find(".cb-rawdel").toggle(!!m.photo);
 			paintStones();
+			loadSide(m.name);
 			if (!m.photo && m.image) root.find(".cb-prev").attr("src", m.image);
 			else preview();
 		});
@@ -196,8 +241,11 @@ frappe.pages["card-builder"].on_page_load = function (wrapper) {
 				frappe.dom.unfreeze();
 				const m = r.message || {};
 				cur.name = m.name;
-				frappe.show_alert({ message: __("{0} saved — card rendered.", [m.design_no]), indicator: "green" }, 4);
+				frappe.show_alert({ message: (m.variants_rebuilt || []).length
+					? __("{0} saved — rebuilt {1}.", [m.design_no, m.variants_rebuilt.join(", ")])
+					: __("{0} saved — card rendered.", [m.design_no]), indicator: "green" }, 6);
 				if (m.image) root.find(".cb-prev").attr("src", m.image + "?t=" + Date.now());
+				loadSide(m.name);
 			}).catch(() => frappe.dom.unfreeze());
 	});
 
