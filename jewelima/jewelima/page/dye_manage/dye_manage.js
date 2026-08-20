@@ -188,9 +188,11 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 			root.find(".dm-move").on("click", () => {
 				const to = root.find(".dm-to").val();
 				if (!to || to === no) return frappe.msgprint(__("Pick a different drawer."));
-				move(to);
+				frappe.confirm(__("Move <b>{0}</b> entr(ies) to drawer <b>{1}</b>?", [sel.size, to]), () => move(to));
 			});
-			root.find(".dm-out").on("click", () => move(null));
+			root.find(".dm-out").on("click", () => frappe.confirm(
+				__("Take <b>{0}</b> entr(ies) OUT of their drawer? They become Unplaced — still owned, but sitting in no drawer until put back.", [sel.size]),
+				() => move(null)));
 			root.find(".dm-scrap").on("click", () => {
 				frappe.confirm(__("Scrap ONE dye off each of the {0} ticked entr(ies)? An entry at zero disappears.", [sel.size]), () =>
 					frappe.call({ method: API + ".scrap_dyes", args: { names: JSON.stringify([...sel]) } })

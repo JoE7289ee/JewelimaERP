@@ -120,8 +120,10 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 		const n = $(this).closest("tr").data("n");
 		setStatus([n], $(this).hasClass("h") ? "Damaged" : "Healthy");
 	});
-	root.on("click", ".dy-mk-h", () => setStatus([...S.sel], "Healthy"));
-	root.on("click", ".dy-mk-d", () => setStatus([...S.sel], "Damaged"));
+	root.on("click", ".dy-mk-h", () => frappe.confirm(
+		__("Mark <b>{0}</b> ticked entr(ies) Healthy?", [S.sel.size]), () => setStatus([...S.sel], "Healthy")));
+	root.on("click", ".dy-mk-d", () => frappe.confirm(
+		__("Mark <b>{0}</b> ticked entr(ies) Damaged?", [S.sel.size]), () => setStatus([...S.sel], "Damaged")));
 
 	frappe.db.get_list("Dye Drawer", { fields: ["name"], limit: 0 }).then((rows) => {
 		const ds = (rows || []).map((x) => x.name).sort((a, b) => (parseInt(a, 10) || 0) - (parseInt(b, 10) || 0));
