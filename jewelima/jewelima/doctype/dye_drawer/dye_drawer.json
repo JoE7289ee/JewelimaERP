@@ -1,0 +1,17 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "field:drawer_no",
+ "creation": "2026-08-20 14:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["drawer_no", "note"],
+ "fields": [
+  {"fieldname": "drawer_no", "fieldtype": "Data", "in_list_view": 1, "label": "Drawer No", "reqd": 1, "unique": 1},
+  {"fieldname": "note", "fieldtype": "Data", "in_list_view": 1, "label": "Note"}
+ ],
+ "links": [], "modified": "2026-08-20 14:00:00.000000", "modified_by": "Administrator",
+ "module": "Jewelima", "name": "Dye Drawer", "owner": "Administrator",
+ "permissions": [
+  {"read":1,"write":1,"create":1,"delete":1,"role":"System Manager"},
+  {"read":1,"write":1,"create":1,"delete":1,"role":"JW Manager"},
+  {"read":1,"role":"Stock Manager"}
+ ],
+ "sort_field": "creation", "sort_order": "ASC", "states": [], "track_changes": 0
+}

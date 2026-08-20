@@ -3835,6 +3835,167 @@ def get_stone_issuer_history(employee):
 	return out
 
 
+# --- the Dye register -----------------------------------------------------------
+# The physical pressing dyes, drawer by drawer. Seeded once from the frozen
+# DYE LIST excel (2-8-25); managed in-app from then on.
+
+DYE_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin")
+
+
+def _dye_guard():
+	frappe.only_for(DYE_ROLES)
+
+
+@frappe.whitelist()
+def get_dye_info():
+	"""Dye Info KPIs: how much tooling, in what shape, how well it maps to the bank."""
+	_dye_guard()
+	total = frappe.db.count("Dye")
+	healthy = frappe.db.count("Dye", {"status": "Healthy"})
+	placed = frappe.db.count("Dye", {"drawer": ["!=", ""]})
+	matched = frappe.db.sql("""SELECT COUNT(DISTINCT l.parent) FROM `tabDye Design Link` l
+		WHERE IFNULL(l.design_bank, '') != ''""")[0][0]
+	distinct = frappe.db.sql("SELECT COUNT(DISTINCT design_no) FROM `tabDye Design Link`")[0][0]
+	distinct_matched = frappe.db.sql("""SELECT COUNT(DISTINCT design_no) FROM `tabDye Design Link`
+		WHERE IFNULL(design_bank, '') != ''""")[0][0]
+	drawers = frappe.db.sql("""
+		SELECT dr.name, COUNT(d.name) n,
+			SUM(CASE WHEN d.status = 'Damaged' THEN 1 ELSE 0 END) damaged
+		FROM `tabDye Drawer` dr LEFT JOIN `tabDye` d ON d.drawer = dr.name
+		GROUP BY dr.name ORDER BY CAST(dr.name AS UNSIGNED)""", as_dict=True)
+	return {"total": total, "healthy": healthy, "damaged": total - healthy,
+		"placed": placed, "unplaced": total - placed,
+		"designs": distinct, "designs_matched": distinct_matched,
+		"dyes_matched": matched, "drawers": drawers}
+
+
+@frappe.whitelist()
+def get_dye_bank(start=0, limit=100, q=None, status=None, drawer=None, unmatched=0):
+	"""The register, paged. q searches the design number (raw or matched)."""
+	_dye_guard()
+	cond, args = ["1=1"], {"start": cint(start), "limit": cint(limit) or 100}
+	if status:
+		cond.append("d.status = %(status)s"); args["status"] = status
+	if drawer:
+		cond.append("d.drawer = %(drawer)s"); args["drawer"] = drawer
+	if q and q.strip():
+		cond.append("""EXISTS (SELECT 1 FROM `tabDye Design Link` l WHERE l.parent = d.name
+			AND (l.design_no LIKE %(q)s OR l.design_bank LIKE %(q)s))""")
+		args["q"] = "%" + q.strip() + "%"
+	if cint(unmatched):
+		cond.append("""NOT EXISTS (SELECT 1 FROM `tabDye Design Link` l
+			WHERE l.parent = d.name AND IFNULL(l.design_bank, '') != '')""")
+	where = " AND ".join(cond)
+	total = frappe.db.sql(f"SELECT COUNT(*) FROM `tabDye` d WHERE {where}", args)[0][0]
+	rows = frappe.db.sql(f"""
+		SELECT d.name, d.drawer, d.status, d.variant_note,
+			GROUP_CONCAT(l.design_no SEPARATOR ' | ') design_nos,
+			GROUP_CONCAT(IFNULL(l.design_bank, '') SEPARATOR '|') banks
+		FROM `tabDye` d LEFT JOIN `tabDye Design Link` l ON l.parent = d.name
+		WHERE {where} GROUP BY d.name
+		ORDER BY CAST(d.drawer AS UNSIGNED), d.name
+		LIMIT %(start)s, %(limit)s""", args, as_dict=True)
+	return {"rows": rows, "total": total}
+
+
+@frappe.whitelist()
+def dye_find(q):
+	"""Dye Find: a design (any spelling) -> every drawer holding its dyes."""
+	_dye_guard()
+	q = (q or "").strip()
+	if len(q) < 2:
+		return {"groups": []}
+	rows = frappe.db.sql("""
+		SELECT l.design_no, l.design_bank, d.name dye, d.drawer, d.status, d.variant_note
+		FROM `tabDye Design Link` l JOIN `tabDye` d ON d.name = l.parent
+		WHERE l.design_no LIKE %(q)s OR REPLACE(l.design_no, ' ', '') LIKE %(sq)s
+			OR l.design_bank LIKE %(q)s
+		ORDER BY l.design_no, CAST(d.drawer AS UNSIGNED)""",
+		{"q": "%" + q + "%", "sq": "%" + q.replace(" ", "") + "%"}, as_dict=True)
+	groups = {}
+	for r in rows[:800]:
+		g = groups.setdefault(r.design_no, {"design_no": r.design_no,
+			"design_bank": r.design_bank, "dyes": []})
+		g["dyes"].append({"dye": r.dye, "drawer": r.drawer or "—",
+			"status": r.status, "note": r.variant_note or ""})
+	return {"groups": list(groups.values())[:60]}
+
+
+@frappe.whitelist()
+def move_dyes(names, to_drawer=None):
+	"""Dye Manage: put the picked dyes in a drawer — or take them out (no drawer)."""
+	_dye_guard()
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	if to_drawer and not frappe.db.exists("Dye Drawer", to_drawer):
+		frappe.throw(frappe._("Drawer {0} does not exist.").format(to_drawer))
+	for nm in names:
+		frappe.db.set_value("Dye", nm, "drawer", to_drawer or None)
+	frappe.db.commit()
+	return {"moved": len(names), "to": to_drawer or ""}
+
+
+@frappe.whitelist()
+def set_dye_status(names, status):
+	_dye_guard()
+	if status not in ("Healthy", "Damaged"):
+		frappe.throw(frappe._("Status must be Healthy or Damaged."))
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	for nm in names:
+		frappe.db.set_value("Dye", nm, "status", status)
+	frappe.db.commit()
+	return {"count": len(names)}
+
+
+@frappe.whitelist()
+def add_dye_drawer(drawer_no, note=None):
+	_dye_guard()
+	no = (str(drawer_no) or "").strip()
+	if not no:
+		frappe.throw(frappe._("Give the drawer a number."))
+	if frappe.db.exists("Dye Drawer", no):
+		frappe.throw(frappe._("Drawer {0} already exists.").format(no))
+	frappe.get_doc({"doctype": "Dye Drawer", "drawer_no": no, "note": note or ""}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"drawer": no}
+
+
+@frappe.whitelist()
+def remove_dye_drawer(drawer_no):
+	"""Only an EMPTY drawer can go — move its dyes out first."""
+	_dye_guard()
+	n = frappe.db.count("Dye", {"drawer": drawer_no})
+	if n:
+		frappe.throw(frappe._("Drawer {0} still holds {1} dye(s) — move them first.").format(drawer_no, n))
+	frappe.delete_doc("Dye Drawer", drawer_no, ignore_permissions=True)
+	frappe.db.commit()
+	return {"removed": drawer_no}
+
+
+@frappe.whitelist()
+def add_dyes(drawer, design_no, count=1, note=None):
+	"""New tooling made after the freeze enters here."""
+	_dye_guard()
+	import re as _re2
+	if drawer and not frappe.db.exists("Dye Drawer", drawer):
+		frappe.throw(frappe._("Drawer {0} does not exist.").format(drawer))
+	design_no = (design_no or "").strip()
+	if not design_no:
+		frappe.throw(frappe._("Give the design number."))
+	key = _re2.sub(r"[^A-Z0-9]", "", design_no.upper())
+	hit = None
+	for name, dno in frappe.db.sql("""SELECT name, design_no FROM `tabDesign Bank`
+			WHERE REPLACE(REPLACE(REPLACE(UPPER(design_no), ' ', ''), '/', ''), '-', '') = %s LIMIT 1""", key):
+		hit = name
+	made = []
+	for _ in range(max(1, min(cint(count), 50))):
+		doc = frappe.get_doc({"doctype": "Dye", "drawer": drawer or None, "status": "Healthy",
+			"variant_note": note or "", "designs": [{"design_no": design_no, "design_bank": hit}]})
+		doc.insert(ignore_permissions=True)
+		made.append(doc.name)
+	frappe.db.commit()
+	return {"made": made, "matched": bool(hit)}
+
+
 @frappe.whitelist()
 def get_role_access_overview():
 	"""Every Jewelima-made role and what it actually opens: the desk pages it may
