@@ -180,7 +180,8 @@ frappe.pages["basket"].on_page_load = function (wrapper) {
 		if (!rows.length) return;
 		frappe.route_options = { shop_cart: rows.map((l) => ({
 			bank: l.bank, variant: l.variant, qty: l.qty, remark: l.remark || "", materials: l.materials || null })) };
-		jwBasket.clear();
+		// the basket KEEPS its lines — handing them to Place Order is not spending
+		// them. Only "Empty the basket" clears; a failed order costs nothing.
 		frappe.set_route("place-order");
 	});
 
