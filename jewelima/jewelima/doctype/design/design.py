@@ -65,7 +65,12 @@ class Design(Document):
 		self.sw_no = counts["sw_no"]
 
 	def block_edits(self):
-		"""A design can't be changed after creation — only retired."""
+		"""A design can't be changed after creation — only retired. The ONE way
+		through is the card-edit cascade (save_design_card -> _rebuild_bank_variants),
+		which re-seeds variants from their edited card and logs the change — that
+		path sets this flag; nothing hand-edited ever does."""
+		if self.flags.jw_reseed_from_card:
+			return
 		before = self.get_doc_before_save()
 		if not before:
 			return

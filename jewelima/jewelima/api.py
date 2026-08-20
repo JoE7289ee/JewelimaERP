@@ -9905,6 +9905,64 @@ def get_design_card(name):
 		"stones": [{"stone": r.stone, "sieve": r.sieve, "pcs": r.pcs, "ct": r.ct} for r in d.stones]}
 
 
+import re as _re
+
+
+def _card_change_snapshot(d):
+	"""The card fields whose edits matter to the floor, as readable strings."""
+	stones = ", ".join("{0}×{1}".format(cint(r.pcs), (r.sieve or r.stone or "?"))
+		for r in (d.stones or []) if cint(r.pcs) or r.sieve or r.stone) or "—"
+	return {
+		"gross_weight": "{0} g".format(flt(d.gross_weight)),
+		"diamond_weight": "{0} ct".format(flt(d.diamond_weight)),
+		"stones": stones,
+		"note": d.note or "—",
+		"extra_lines": d.extra_lines or "—",
+	}
+
+
+def _variant_identity(card, design_name):
+	"""Recover (karat, quality, color) from a variant's NAME — the identity is
+	baked into it (A13405NP-18EF-Y). None when the name isn't this card's."""
+	from jewelima.setup import KARAT_COLOR_LIMIT
+
+	base = "".join((card.design_no or "").split()).upper()
+	nm = (design_name or "").upper()
+	if not base or not nm.startswith(base + "-"):
+		return None
+	m = _re.match(r"^(14|18|22)([A-Z]*?)(?:-([YWP]))?$", nm[len(base) + 1:])
+	if not m:
+		return None
+	karat = m.group(1) + "K"
+	locked = KARAT_COLOR_LIMIT.get(karat)
+	color = {"Y": "YG", "W": "WG", "P": "PG"}.get(m.group(3) or "") or (locked[0] if locked else "YG")
+	return karat, (m.group(2) or ""), color
+
+
+def _rebuild_bank_variants(card):
+	"""Re-seed every ACTIVE variant of a card from its (edited) weights and
+	stones. Cards already on the floor are untouched — an Order Bag carries its
+	own copy of the BOM from the moment it is placed."""
+	rebuilt, skipped = [], []
+	for nm in frappe.get_all("Design", filters={"design_bank": card.name, "status": "Active"}, pluck="name"):
+		ident = _variant_identity(card, nm)
+		if not ident:
+			skipped.append(nm)
+			continue
+		try:
+			seed = _variant_seed(card, *ident)
+			doc = frappe.get_doc("Design", nm)
+			doc.set("materials", [{"item": m.get("item"), "qty": m.get("qty") or 0,
+				"weight": m.get("weight") or 0} for m in seed if m.get("item")])
+			doc.flags.jw_reseed_from_card = True   # the one sanctioned way past block_edits
+			doc.save(ignore_permissions=True)      # validate() re-derives counts + purity
+			rebuilt.append(nm)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "variant reseed failed: " + nm)
+			skipped.append(nm)
+	return rebuilt, skipped
+
+
 @frappe.whitelist()
 def save_design_card(payload):
 	"""Create or update a card. New records pass the code guard; Save re-renders
@@ -9914,8 +9972,10 @@ def save_design_card(payload):
 	code = (p.get("design_no") or "").strip()
 	if not code:
 		frappe.throw(frappe._("Give the design number."))
+	_before = None
 	if p.get("name"):
 		d = frappe.get_doc("Design Bank", p["name"])
+		_before = _card_change_snapshot(d)
 		other = frappe.db.get_value("Design Bank", {"design_no": code, "name": ["!=", d.name]}, "name")
 		if other:
 			frappe.throw(frappe._("{0} is already used by another card.").format(code))
@@ -9960,8 +10020,27 @@ def save_design_card(payload):
 	d.image = _write_slot_file(d.name, info_name, buf.getvalue())
 	d.photoupdate = 0
 	d.save(ignore_permissions=True)
+
+	# an EDIT to an approved card is a real event: log what changed, and re-seed
+	# the card's variants so they match. Cards on the floor are safe — a bag owns
+	# its BOM from the moment the order is placed.
+	rebuilt = []
+	if _before:
+		after = _card_change_snapshot(d)
+		changed = [k for k in _before if _before[k] != after[k]]
+		if changed:
+			if d.status == "Approved" and any(k in ("gross_weight", "stones") for k in changed):
+				rebuilt, _skipped = _rebuild_bank_variants(d)
+			for k in changed:
+				frappe.get_doc({"doctype": "Design Bank Change",
+					"design_bank": d.name, "design_no": d.design_no, "field": k,
+					"old_value": _before[k], "new_value": after[k],
+					"variants_rebuilt": ", ".join(rebuilt) if rebuilt else "",
+				}).insert(ignore_permissions=True)
+
 	frappe.db.commit()
-	return {"name": d.name, "design_no": d.design_no, "image": d.image}
+	return {"name": d.name, "design_no": d.design_no, "image": d.image,
+		"variants_rebuilt": rebuilt}
 
 
 # --- Diamond Weight check: reconcile an approved card's DW against the sieve
