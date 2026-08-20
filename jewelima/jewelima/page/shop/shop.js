@@ -9,7 +9,7 @@ frappe.pages["shop"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 
-	const S = { rows: [], start: 0, limit: 48, total: 0, busy: false,
+	const S = { rows: [], start: 0, limit: 48, total: 0, busy: false, mode: "info",
 		q: "", type: "", tags: [], match: "any", gw: [null, null], dw: [null, null] };
 
 	$(page.main).html(`
@@ -33,6 +33,10 @@ frappe.pages["shop"].on_page_load = function (wrapper) {
 		.sp-tag{border:1px solid var(--border-color);border-radius:999px;padding:3px 12px;font-size:12px;cursor:pointer;background:var(--fg-color);}
 		.sp-tag.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
 		.sp-clear{font-size:12px;color:#b02a2a;cursor:pointer;font-weight:600;}
+		.sp-view{display:inline-flex;border:1px solid var(--border-color);border-radius:999px;overflow:hidden;}
+		.sp-view .sp-v{border:none;background:var(--fg-color);color:var(--text-muted);font-size:12px;font-weight:700;
+			height:36px;padding:0 14px;cursor:pointer;}
+		.sp-view .sp-v.on{background:#1f618d;color:#fff;}
 		.sp-count{font-size:12.5px;color:var(--text-muted);}
 		.sp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:18px;}
 		.sp-card{border:1px solid var(--border-color);border-radius:16px;overflow:hidden;cursor:pointer;background:var(--card-bg,var(--fg-color));transition:box-shadow .15s,transform .15s,border-color .15s;position:relative;}
@@ -70,6 +74,9 @@ frappe.pages["shop"].on_page_load = function (wrapper) {
 					<input type="text" class="sp-q" placeholder="${__("Search a design number…")}"></div>
 				<select class="sp-sel sp-type"><option value="">${__("All types")}</option></select>
 				<button class="sp-chipbtn sp-tagbtn">${__("Tags")} <span class="sp-tn"></span></button>
+				<span class="sp-view">
+					<button class="sp-v on" data-m="info">${__("Info")}</button><button class="sp-v" data-m="print">${__("Print")}</button><button class="sp-v" data-m="customer">${__("Customer")}</button>
+				</span>
 				<div class="sp-basket">
 					<span class="sp-count"></span>
 					<button class="sp-bk">${__("Basket")} <span class="n sp-n">0</span></button>
@@ -248,7 +255,7 @@ frappe.pages["shop"].on_page_load = function (wrapper) {
 		if (reset) { S.start = 0; S.rows = []; }
 		frappe.call({ method: API + ".get_designs", freeze: false, args: {
 			search: S.q || null, start: S.start, limit: S.limit, design_type: S.type || null,
-			tags: JSON.stringify(S.tags), match: S.match, mode: "info",
+			tags: JSON.stringify(S.tags), match: S.match, mode: S.mode,
 			gw_min: S.gw[0], gw_max: S.gw[1], dw_min: S.dw[0], dw_max: S.dw[1],
 		} }).then((r) => {
 			S.busy = false;
@@ -289,6 +296,12 @@ frappe.pages["shop"].on_page_load = function (wrapper) {
 		load(true);
 	});
 
+	$(page.main).on("click", ".sp-v", function () {
+		S.mode = this.dataset.m;
+		$(page.main).find(".sp-v").removeClass("on");
+		this.classList.add("on");
+		load(true);
+	});
 	$(page.main).on("click", ".sp-card", function () {
 		const card = S.rows.find((r) => r.name === this.dataset.name);
 		if (card) openDesign(card);

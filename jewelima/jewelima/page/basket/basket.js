@@ -10,18 +10,18 @@ frappe.pages["basket"].on_page_load = function (wrapper) {
 
 	$(page.main).html(`
 		<style>
-		.bk-wrap{max-width:1080px;}
+		.bk-wrap{max-width:none;}
 		.bk-empty{text-align:center;padding:70px 20px;color:var(--text-muted);}
 		.bk-empty .big{font-size:44px;line-height:1;margin-bottom:10px;}
 		.bk-line{display:flex;gap:16px;align-items:flex-start;border:1px solid var(--border-color);border-radius:14px;padding:14px;margin-bottom:12px;background:var(--card-bg,var(--fg-color));}
-		.bk-ph{width:96px;height:96px;flex:0 0 96px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--border-color);}
+		.bk-ph{width:130px;height:130px;flex:0 0 130px;border-radius:10px;object-fit:contain;background:#fff;border:1px solid var(--border-color);}
 		.bk-nophoto{display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-muted);background:#fafafa;}
 		.bk-mid{flex:1 1 auto;min-width:220px;}
 		.bk-v{font-family:var(--font-family-monospace,monospace);font-weight:800;font-size:15px;}
 		.bk-card{font-size:12px;color:var(--text-muted);margin-top:1px;}
 		.bk-w{font-size:12px;color:var(--text-muted);margin-top:6px;}
 		.bk-rm{margin-top:9px;width:100%;border:1px solid var(--border-color);border-radius:8px;padding:6px 10px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);min-height:34px;resize:vertical;}
-		.bk-right{flex:0 0 190px;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
+		.bk-right{flex:0 0 220px;display:flex;flex-direction:column;gap:8px;align-items:flex-end;}
 		.bk-qty{display:flex;align-items:center;gap:6px;}
 		.bk-qty button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border-color);background:var(--fg-color);color:var(--text-color);font-weight:800;font-size:15px;cursor:pointer;line-height:1;}
 		.bk-qty input{width:62px;height:30px;text-align:center;border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);color:var(--text-color);font-weight:700;}
@@ -53,12 +53,12 @@ frappe.pages["basket"].on_page_load = function (wrapper) {
 	function lineWeights(l) {
 		const mats = l.materials || (profileOf(l.variant) || {}).materials || [];
 		const q = parseInt(l.qty, 10) || 1;
-		let gold = 0, stone = 0;
+		let gold = 0, stone = 0, pure = 0;
 		mats.forEach((m) => {
 			if ((m.uom || "").toLowerCase() === "carat") stone += flt(m.weight);
-			else gold += flt(m.weight);
+			else { gold += flt(m.weight); pure += (flt(m.weight) * flt(m.purity)) / 100; }
 		});
-		return { gold: gold * q, stone: stone * q };
+		return { gold: gold * q, stone: stone * q, pure: pure * q };
 	}
 
 	function paint() {
@@ -79,7 +79,7 @@ frappe.pages["basket"].on_page_load = function (wrapper) {
 				<div class="bk-mid">
 					<div class="bk-v">${esc(l.variant)}${l.materials ? `<span class="bk-edited">${__("materials edited")}</span>` : ""}</div>
 					<div class="bk-card">${esc(l.bank_no || "")}</div>
-					<div class="bk-w">${__("Gold")} <b>${n3(w.gold)}</b> g${w.stone ? ` · ${__("Stones")} <b>${flt(w.stone).toFixed(2)}</b> ct` : ""}</div>
+					<div class="bk-w">${__("Gold")} <b>${n3(w.gold)}</b> g · ${__("Pure")} <b>${n3(w.pure)}</b> g${w.stone ? ` · ${__("Stones")} <b>${flt(w.stone).toFixed(2)}</b> ct` : ""}</div>
 					<textarea class="bk-rm" rows="1" placeholder="${__("Remark for this line (optional)")}">${esc(l.remark || "")}</textarea>
 				</div>
 				<div class="bk-right">
@@ -97,11 +97,12 @@ frappe.pages["basket"].on_page_load = function (wrapper) {
 		}).join(""));
 
 		const pcs = jwBasket.count();
-		let gold = 0, stone = 0;
-		rows.forEach((l) => { const w = lineWeights(l); gold += w.gold; stone += w.stone; });
+		let gold = 0, stone = 0, pure = 0;
+		rows.forEach((l) => { const w = lineWeights(l); gold += w.gold; stone += w.stone; pure += w.pure; });
 		$foot.show().find(".bk-tot").html(
 			`${__("{0} line(s)", [rows.length])} · <b>${pcs}</b> ${__("piece(s)")}
-			 &nbsp;·&nbsp; ${__("Gold")} <b>${n3(gold)}</b> g${stone ? ` · ${__("Stones")} <b>${flt(stone).toFixed(2)}</b> ct` : ""}`);
+			 &nbsp;·&nbsp; ${__("Gold")} <b>${n3(gold)}</b> g
+			 &nbsp;·&nbsp; ${__("Pure")} <b>${n3(pure)}</b> g${stone ? ` · ${__("Stones")} <b>${flt(stone).toFixed(2)}</b> ct` : ""}`);
 	}
 
 	// pull each variant's BOM once so weights show and the editor has a starting point
