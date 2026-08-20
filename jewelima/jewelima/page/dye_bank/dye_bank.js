@@ -52,7 +52,7 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 		const html = rows.map((r) => {
 			const banks = (r.banks || "").split("|");
 			const designs = (r.design_nos || "").split(" | ").map((d, i) =>
-				banks[i] ? `<a href="/app/design-bank/${encodeURIComponent(banks[i])}"><b>${esc(d)}</b></a>`
+				banks[i] ? `<b>${esc(d)}</b>`
 					: `${esc(d)} <span class="dy-unm">${__("no card")}</span>`).join(" · ");
 			return `<tr data-n="${esc(r.name)}">
 				<td><input type="checkbox" class="dy-cb" ${S.sel.has(r.name) ? "checked" : ""} style="width:14px;height:14px;"></td>
@@ -93,6 +93,11 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 	root.find(".dy-drawer").on("change", function () { S.drawer = this.value; load(true); });
 	root.find(".dy-unmatched").on("change", function () { S.unmatched = this.checked; load(true); });
 	root.on("click", ".dy-load", () => load(false));
+	root.on("click", ".dy-body tr", function (e) {
+		if ($(e.target).is("input,button,a,.dy-st")) return;
+		frappe.route_options = { dye: $(this).data("n") };
+		frappe.set_route("dye-info");
+	});
 	root.on("change", ".dy-cb", function () {
 		const n = $(this).closest("tr").data("n");
 		this.checked ? S.sel.add(n) : S.sel.delete(n);

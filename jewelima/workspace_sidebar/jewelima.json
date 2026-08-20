@@ -449,6 +449,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "gauge",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Dye Info",
+   "link_to": "dye-info",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
@@ -2256,7 +2269,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-20 15:02:19.368264",
+ "modified": "2026-08-20 15:21:46.856968",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

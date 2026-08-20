@@ -3996,6 +3996,49 @@ def add_dyes(drawer, design_no, count=1, note=None):
 
 
 @frappe.whitelist()
+def get_dye_detail(name):
+	"""Dye Info: one entry in full — drawer, count, health, and each linked design
+	fleshed out from the bank (images + its variants) where a card matched."""
+	_dye_guard()
+	d = frappe.get_doc("Dye", name)
+	designs = []
+	for l in d.designs:
+		row = {"design_no": l.design_no, "design_bank": l.design_bank}
+		if l.design_bank and frappe.db.exists("Design Bank", l.design_bank):
+			c = frappe.db.get_value("Design Bank", l.design_bank,
+				["design_no", "image", "photo", "gross_weight", "diamond_weight", "status"], as_dict=True)
+			row.update({"card_no": c.design_no, "image": c.image or "", "photo": c.photo or "",
+				"gross_weight": flt(c.gross_weight), "diamond_weight": flt(c.diamond_weight),
+				"card_status": c.status})
+			row["variants"] = frappe.get_all("Design",
+				filters={"design_bank": l.design_bank, "status": "Active"}, pluck="name")
+		designs.append(row)
+	return {"name": d.name, "drawer": d.drawer or "", "dye_count": cint(d.dye_count) or 1,
+		"status": d.status, "variant_note": d.variant_note or "", "designs": designs}
+
+
+@frappe.whitelist()
+def scrap_dyes(names):
+	"""One dye off each picked entry — decrement, and the entry goes when it hits
+	zero. Scrapping is how tooling leaves; drawers themselves stay."""
+	_dye_guard()
+	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
+	gone, reduced = [], []
+	for nm in names:
+		if not frappe.db.exists("Dye", nm):
+			continue
+		n = cint(frappe.db.get_value("Dye", nm, "dye_count")) or 1
+		if n <= 1:
+			frappe.delete_doc("Dye", nm, force=True, ignore_permissions=True)
+			gone.append(nm)
+		else:
+			frappe.db.set_value("Dye", nm, "dye_count", n - 1)
+			reduced.append(nm)
+	frappe.db.commit()
+	return {"deleted": gone, "reduced": reduced}
+
+
+@frappe.whitelist()
 def get_role_access_overview():
 	"""Every Jewelima-made role and what it actually opens: the desk pages it may
 	use, its doctype rights (summarised), and who holds it. Read straight from
