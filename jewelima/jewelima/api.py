@@ -10848,8 +10848,8 @@ def parse_bag_status_excel(filedata):
 		loc = str(g("loc") or "").strip() or "(NO LOCATION)"
 		if loc.upper() == "REJECTION":
 			continue  # rejection bags are dead stock — killed at import
-		if loc.upper() == "STONE LOCATION":
-			# two different animals share this location: loose stones (nett IS the
+		if loc.upper() in ("STONE LOCATION", "PRODUCTION LOCATION"):
+			# these locations hold two different animals: loose stones (nett IS the
 			# stone weight) and worked pieces that already carry gold. Split them at
 			# the door — plain stays pre-production, (W) is production work.
 			_stones_g = (flt(g("dmd")) + flt(g("ps")) + flt(g("cs"))) * 0.2   # 1 ct = 0.2 g

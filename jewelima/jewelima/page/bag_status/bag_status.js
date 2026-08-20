@@ -36,9 +36,14 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	// the factory in two halves; the split Stone Location lands one in each
 	const PRE_LOCS = new Set(["ORDERING", "CAD", "CAM", "DYE CUTTING", "WAXING",
 		"WAXING CLEANING", "WAX CLEANING", "WAX SETTING", "TREE MAKING",
-		"TREE EXTRACTION", "STONE LOCATION"]);
+		"TREE EXTRACTION", "STONE LOCATION",
+		"CAD-DEPT", "CAM-DEPT", "WAXING LOC", "TREE MAKING LOC", "WAX CLEANING LOC",
+		"WAX SETTING LOC", "TREE EXTRACTION LOC", "JOB WORK", "PRODUCTION LOCATION",
+		"PENDING -NOT CONFIERMED", "PENDING - NOT CONFIRMED", "PENDING -NOT CONFIRMED"]);
 	const PROD_LOCS = new Set(["GRINDING", "FILING", "FILING ADMIN", "SETTING ADMIN",
-		"SETTING", "PRE POLISH", "FINAL POLISH", "STONE LOCATION (W)"]);
+		"SETTING", "PRE POLISH", "FINAL POLISH", "STONE LOCATION (W)",
+		"FINAL POLISH LOC", "PRE POLISH LOC", "SETTING LOC", "ITEM STOCK LOCATION",
+		"GRINDING LOCATION", "PRODUCTION LOCATION (W)"]);
 	const inGrp = (loc) => {
 		const L = (loc || "").toUpperCase();
 		if (LOCGRP === "pre") return PRE_LOCS.has(L);
