@@ -26,7 +26,12 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 		.dm-d .dmg{color:#b02a2a;font-weight:700;font-size:10.5px;}
 		.dm-d.empty{opacity:.5;}
 		/* the open drawer */
-		.dm-box{border:1px solid var(--border-color);border-radius:12px;overflow:auto;background:var(--fg-color);max-height:calc(100vh - 250px);}
+		.dm-box{border:1px solid var(--border-color);border-radius:12px;overflow:auto;background:var(--fg-color);max-height:calc(100vh - 210px);}
+		table.dm-t td.act{text-align:right;}
+		.dm-rowbtn{border:1px solid var(--border-color);border-radius:7px;background:var(--fg-color);
+			font-size:11px;font-weight:700;padding:2px 10px;cursor:pointer;margin-left:5px;}
+		.dm-rowbtn:hover{border-color:#1f618d;}
+		.dm-rowbtn.red{color:#b02a2a;} .dm-rowbtn.amber{color:#7a5b00;} .dm-rowbtn.green{color:#1d7a33;}
 		table.dm-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.dm-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;text-transform:uppercase;
 			color:var(--text-muted);padding:6px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
@@ -94,7 +99,8 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				</div>
 				<div class="dm-box"><table class="dm-t"><thead><tr>
 					<th style="width:26px;"><input type="checkbox" class="dm-all" style="width:14px;height:14px;"></th>
-					<th>#</th><th>${__("Design(s)")}</th><th>${__("Dyes")}</th><th>${__("Variant")}</th><th>${__("Status")}</th>
+					<th style="width:44px;">#</th><th>${__("Design(s)")}</th><th style="width:70px;">${__("Dyes")}</th>
+					<th>${__("Variant")}</th><th style="width:90px;">${__("Status")}</th><th style="text-align:right;">${__("Actions")}</th>
 				</tr></thead><tbody>
 				${rows.map((x, ix) => {
 					const banks = (x.banks || "").split("|");
@@ -104,8 +110,13 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 						<td><input type="checkbox" class="dm-cb" style="width:14px;height:14px;"></td>
 						<td><b>${ix + 1}</b></td><td>${designs}</td><td><b>${x.dye_count || 1}</b></td>
 						<td>${esc(x.variant_note || "")}</td>
-						<td><span class="dm-st ${x.status === "Healthy" ? "h" : "d"}">${esc(x.status)}</span></td></tr>`;
-				}).join("") || `<tr><td colspan="5" style="padding:26px;text-align:center;color:var(--text-muted);">${__("Empty drawer.")}</td></tr>`}
+						<td><span class="dm-st ${x.status === "Healthy" ? "h" : "d"}">${esc(x.status)}</span></td>
+						<td class="act">
+							<button class="dm-rowbtn r-shift">${__("Shift")}</button>
+							<button class="dm-rowbtn ${x.status === "Healthy" ? "amber r-dmg" : "green r-heal"}">${x.status === "Healthy" ? __("Mark Damaged") : __("Mark Healthy")}</button>
+							<button class="dm-rowbtn red r-rm">${__("Remove")}</button>
+						</td></tr>`;
+				}).join("") || `<tr><td colspan="7" style="padding:26px;text-align:center;color:var(--text-muted);">${__("Empty drawer.")}</td></tr>`}
 				</tbody></table></div>
 				<div class="dm-act" style="display:none;">
 					<span class="dm-n" style="font-weight:800;"></span>
@@ -120,6 +131,26 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				root.find(".dm-act").toggle(sel.size > 0);
 				root.find(".dm-n").text(__("{0} ticked", [sel.size]));
 			};
+			const rowName = (el) => $(el).closest("tr").data("n");
+			root.find(".r-shift").on("click", function () {
+				const n = rowName(this);
+				frappe.prompt([{ fieldname: "to", fieldtype: "Data", label: __("Drawer number"), reqd: 1 }],
+					(v) => frappe.call({ method: API + ".move_dyes",
+						args: { names: JSON.stringify([n]), to_drawer: (v.to || "").trim() } })
+						.then(() => { frappe.show_alert({ message: __("Shifted → drawer {0}", [v.to]), indicator: "green" }, 4); openDrawer(no); }),
+					__("Shift to which drawer?"));
+			});
+			root.find(".r-dmg, .r-heal").on("click", function () {
+				const n = rowName(this), to = $(this).hasClass("r-dmg") ? "Damaged" : "Healthy";
+				frappe.call({ method: API + ".set_dye_status", args: { names: JSON.stringify([n]), status: to } })
+					.then(() => openDrawer(no));
+			});
+			root.find(".r-rm").on("click", function () {
+				const n = rowName(this);
+				frappe.confirm(__("Remove ONE dye off this entry? At zero the entry disappears."), () =>
+					frappe.call({ method: API + ".scrap_dyes", args: { names: JSON.stringify([n]) } })
+						.then(() => openDrawer(no)));
+			});
 			root.find(".dm-t tbody tr[data-n]").css("cursor", "pointer").on("click", function (e) {
 				if ($(e.target).is("input,button,a")) return;
 				frappe.route_options = { dye: this.dataset.n };
