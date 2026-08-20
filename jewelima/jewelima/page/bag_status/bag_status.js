@@ -31,6 +31,21 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	let VIEW = "loc"; // "loc" | "user" | "party" | "cust"
 	let OPEN = new Set();
 	const CUSTOFF = new Set(); // locations ticked OUT of the CUST print
+	const LOCOFF = new Set();  // locations ticked OUT of the LOCATION view
+	let LOCGRP = "";           // "" | "pre" | "prod" — the stage-group quick pick
+	// the factory in two halves; the split Stone Location lands one in each
+	const PRE_LOCS = new Set(["ORDERING", "CAD", "CAM", "DYE CUTTING", "WAXING",
+		"WAXING CLEANING", "WAX CLEANING", "WAX SETTING", "TREE MAKING",
+		"TREE EXTRACTION", "STONE LOCATION"]);
+	const PROD_LOCS = new Set(["GRINDING", "FILING", "FILING ADMIN", "SETTING ADMIN",
+		"SETTING", "PRE POLISH", "FINAL POLISH", "STONE LOCATION (W)"]);
+	const inGrp = (loc) => {
+		const L = (loc || "").toUpperCase();
+		if (LOCGRP === "pre") return PRE_LOCS.has(L);
+		if (LOCGRP === "prod") return PROD_LOCS.has(L);
+		return true;
+	};
+	const locPass = (r) => inGrp(r.loc) && !LOCOFF.has(r.loc);
 	let CUSTDUE = "all"; // due filter: all | past | within (N days to due, past excluded)
 	let PRINT_ODATE = false; // CUST print carries the order date only when ticked
 	let FILT = {};          // per-column text filters on the flat (CUST/BULK) view
@@ -200,9 +215,10 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 		x.oldest = Math.max(x.oldest, r.days || 0);
 	}
 
-	function aggBy(k1, k2) {
+	function aggBy(k1, k2, pass) {
 		const out = {};
 		RAW.forEach((r) => {
+			if (pass && !pass(r)) return;
 			const a = k1(r), b = k2(r);
 			const L1 = (out[a] = out[a] || Object.assign({ items: {} }, blankAgg()));
 			const L2 = (L1.items[b] = L1.items[b] || blankAgg());
@@ -213,7 +229,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	}
 
 	function rollup() {
-		if (VIEW === "loc") return aggBy((r) => r.loc, (r) => r.dtype);
+		if (VIEW === "loc") return aggBy((r) => r.loc, (r) => r.dtype, locPass);
 		if (VIEW === "user") return aggBy((r) => r.user || "(NO USER)", (r) => r.loc);
 		return aggBy(groupOf, (r) => r.loc);
 	}
@@ -243,8 +259,9 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			flatFiltered(VIEW).forEach((r) => addTo(tot, r));
 			custN = tot.bags;
 		} else {
-			RAW.forEach((r) => addTo(tot, r));
-			custN = RAW.filter((r) => r.cust).length;
+			const pool = VIEW === "loc" ? RAW.filter(locPass) : RAW;
+			pool.forEach((r) => addTo(tot, r));
+			custN = pool.filter((r) => r.cust).length;
 		}
 		root.find(".bs-due, .bs-podate").css("display", isFlat(VIEW) ? "inline-flex" : "none");
 		root.find(".bs-duein").toggle(isFlat(VIEW) && CUSTDUE === "within");
@@ -258,7 +275,26 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<div class="bs-tile"><div class="k">${__("Oldest order")}</div><div class="v">${tot.oldest} ${__("days")}</div></div>`);
 		if (isFlat(VIEW)) return paintFlat(VIEW);
 		const R = rollup();
-		root.find(".bs-body").html(`
+		let locbar = "";
+		if (VIEW === "loc") {
+			const counts = {};
+			RAW.forEach((r) => { if (inGrp(r.loc)) counts[r.loc] = (counts[r.loc] || 0) + 1; });
+			const grpBtn = (v, lbl) => `<button class="bs-lgrp" data-g="${v}"
+				style="border:none;border-radius:14px;padding:3px 13px;font-size:11.5px;font-weight:700;cursor:pointer;margin-right:6px;
+				background:${LOCGRP === v ? "#1f618d" : "var(--control-bg)"};color:${LOCGRP === v ? "#fff" : "var(--text-color)"};">${lbl}</button>`;
+			const ticks = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).map((l) => `
+				<label style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-color);border-radius:14px;
+					padding:2px 10px;margin:2px 6px 2px 0;font-size:11.5px;cursor:pointer;background:${LOCOFF.has(l) ? "var(--control-bg)" : "var(--fg-color)"};
+					${LOCOFF.has(l) ? "opacity:.55;" : ""}">
+					<input type="checkbox" class="bs-loctick" data-loc="${esc(l)}" ${LOCOFF.has(l) ? "" : "checked"}
+						style="width:13px;height:13px;accent-color:#1f618d;">${esc(l)} <span style="color:var(--text-muted);">(${counts[l]})</span></label>`).join("");
+			locbar = `<div style="margin-bottom:8px;">
+				${grpBtn("", __("All"))}${grpBtn("pre", __("Pre Production"))}${grpBtn("prod", __("Production"))}
+				<button class="bs-locall2" style="border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;margin:0 4px 0 10px;">${__("Select all")}</button>
+				<button class="bs-locnone2" style="border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;color:#fff;background:#8a2f2f;cursor:pointer;margin-right:8px;">${__("Unselect all")}</button>
+				<br>${ticks}</div>`;
+		}
+		root.find(".bs-body").html(locbar + `
 			<table class="bs-t"><thead><tr>
 				<th class="l">${VIEWS[VIEW].l2}</th><th>${__("Bags")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th><th>${__("DMD ct")}</th>
 				<th title="${__("pieces per order-age band")}">0–30 d</th><th>31–90 d</th><th>91–180 d</th><th>180+ d</th><th>${__("Oldest")}</th>
@@ -274,6 +310,23 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 				</tr>`).join("") : "");
 			}).join("")}</tbody></table>`);
 	}
+
+	// the LOCATION view's stage groups + ticks
+	root.on("click", ".bs-lgrp", function () {
+		LOCGRP = this.dataset.g || "";
+		LOCOFF.clear();               // a new group starts with everything on
+		paint();
+	});
+	root.on("change", ".bs-loctick", function () {
+		const l = this.dataset.loc;
+		this.checked ? LOCOFF.delete(l) : LOCOFF.add(l);
+		paint();
+	});
+	root.on("click", ".bs-locall2", () => { LOCOFF.clear(); paint(); });
+	root.on("click", ".bs-locnone2", () => {
+		RAW.forEach((r) => { if (inGrp(r.loc)) LOCOFF.add(r.loc); });
+		paint();
+	});
 
 	// due filter (shared by CUST + BULK flat views)
 	function duePass(r) {
