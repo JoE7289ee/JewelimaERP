@@ -61,7 +61,10 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 					${m.unplaced ? tile("bad", __("Unplaced"), ni(m.unplaced)) : ""}
 				</div>
 				<div class="dm-bar">
-					<span style="font-size:12px;color:var(--text-muted);">${__("Click a drawer to open it.")}</span>
+					<input type="text" class="dm-wq" placeholder="${__("search a design across all drawers…")}"
+						style="min-width:260px;border:1px solid var(--border-color);border-radius:8px;height:32px;
+						padding:2px 12px;background:var(--fg-color);color:var(--text-color);font-size:13px;">
+					<span style="font-size:12px;color:var(--text-muted);">${__("or click a drawer")}</span>
 					<span style="margin-left:auto;display:flex;gap:6px;">
 						<button class="btn btn-xs btn-default dm-newdrawer">+ ${__("Add drawer")}</button>
 					</span>
@@ -80,18 +83,22 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 	}
 
 	// ---------- one drawer ----------
-	function openDrawer(no) {
+	function openDrawer(no, q) {
+		const search = !!q;
 		const unplaced = no === "__none__";
 		const sel = new Set();
+		const refresh = () => openDrawer(no, q);
 		frappe.call({ method: API + ".get_dye_bank", freeze: false,
-			args: unplaced ? { start: 0, limit: 500, drawer: null, q: null }
+			args: search ? { start: 0, limit: 500, q: q }
+				: unplaced ? { start: 0, limit: 500, drawer: null, q: null }
 				: { start: 0, limit: 500, drawer: no } }).then((r) => {
 			let rows = (r.message || {}).rows || [];
 			if (unplaced) rows = rows.filter((x) => !x.drawer);
 			root.html(`
 				<div class="dm-bar">
 					<button class="btn btn-sm btn-default dm-back">← ${__("All drawers")}</button>
-					<span style="font-size:16px;font-weight:800;">${unplaced ? __("Unplaced dyes") : __("Drawer {0}", [esc(no)])}</span>
+					<span style="font-size:16px;font-weight:800;">${search ? __("Search — {0}", [esc(q)])
+						: unplaced ? __("Unplaced dyes") : __("Drawer {0}", [esc(no)])}</span>
 					<span style="font-size:12px;color:var(--text-muted);">${rows.length} ${__("dye(s)")}</span>
 					<span style="margin-left:auto;">
 						${unplaced ? "" : `<button class="btn btn-xs btn-primary dm-newdye">+ ${__("Add dyes to this drawer")}</button>`}
@@ -99,7 +106,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				</div>
 				<div class="dm-box"><table class="dm-t"><thead><tr>
 					<th style="width:26px;"><input type="checkbox" class="dm-all" style="width:14px;height:14px;"></th>
-					<th style="width:44px;">#</th><th>${__("Design(s)")}</th><th style="width:70px;">${__("Dyes")}</th>
+					<th style="width:44px;">#</th>${search ? `<th style="width:80px;">${__("Drawer")}</th>` : ""}<th>${__("Design(s)")}</th><th style="width:70px;">${__("Dyes")}</th>
 					<th>${__("Variant")}</th><th style="width:90px;">${__("Status")}</th><th style="text-align:right;">${__("Actions")}</th>
 				</tr></thead><tbody>
 				${rows.map((x, ix) => {
@@ -108,7 +115,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 						banks[i] ? `<b>${esc(d)}</b>` : esc(d)).join(" · ");
 					return `<tr data-n="${esc(x.name)}">
 						<td><input type="checkbox" class="dm-cb" style="width:14px;height:14px;"></td>
-						<td><b>${ix + 1}</b></td><td>${designs}</td><td><b>${x.dye_count || 1}</b></td>
+						<td><b>${ix + 1}</b></td>${search ? `<td><b>${esc(x.drawer || "—")}</b></td>` : ""}<td>${designs}</td><td><b>${x.dye_count || 1}</b></td>
 						<td>${esc(x.variant_note || "")}</td>
 						<td><span class="dm-st ${x.status === "Healthy" ? "h" : "d"}">${esc(x.status)}</span></td>
 						<td class="act">
@@ -123,7 +130,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 					<span>${__("→ drawer")}</span>
 					<select class="dm-to">${DRAWERS.map((d) => `<option ${d === no ? "disabled" : ""}>${esc(d)}</option>`).join("")}</select>
 					<button class="btn btn-sm btn-primary dm-move">${__("Move")}</button>
-					${unplaced ? "" : `<button class="btn btn-sm btn-default dm-out">${__("Take out of drawer")}</button>`}
+					${(unplaced || search) ? "" : `<button class="btn btn-sm btn-default dm-out">${__("Take out of drawer")}</button>`}
 					<button class="btn btn-sm btn-default dm-scrap" style="color:#b02a2a;">${__("Scrap a dye")}</button>
 				</div>`);
 
@@ -134,22 +141,23 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 			const rowName = (el) => $(el).closest("tr").data("n");
 			root.find(".r-shift").on("click", function () {
 				const n = rowName(this);
-				frappe.prompt([{ fieldname: "to", fieldtype: "Data", label: __("Drawer number"), reqd: 1 }],
+				frappe.prompt([{ fieldname: "to", fieldtype: "Select", label: __("Drawer"), reqd: 1,
+					options: DRAWERS.filter((d) => d !== no).join("\n") }],
 					(v) => frappe.call({ method: API + ".move_dyes",
-						args: { names: JSON.stringify([n]), to_drawer: (v.to || "").trim() } })
-						.then(() => { frappe.show_alert({ message: __("Shifted → drawer {0}", [v.to]), indicator: "green" }, 4); openDrawer(no); }),
+						args: { names: JSON.stringify([n]), to_drawer: v.to } })
+						.then(() => { frappe.show_alert({ message: __("Shifted → drawer {0}", [v.to]), indicator: "green" }, 4); refresh(); }),
 					__("Shift to which drawer?"));
 			});
 			root.find(".r-dmg, .r-heal").on("click", function () {
 				const n = rowName(this), to = $(this).hasClass("r-dmg") ? "Damaged" : "Healthy";
 				frappe.call({ method: API + ".set_dye_status", args: { names: JSON.stringify([n]), status: to } })
-					.then(() => openDrawer(no));
+					.then(refresh);
 			});
 			root.find(".r-rm").on("click", function () {
 				const n = rowName(this);
 				frappe.confirm(__("Remove ONE dye off this entry? At zero the entry disappears."), () =>
 					frappe.call({ method: API + ".scrap_dyes", args: { names: JSON.stringify([n]) } })
-						.then(() => openDrawer(no)));
+						.then(refresh));
 			});
 			root.find(".dm-t tbody tr[data-n]").css("cursor", "pointer").on("click", function (e) {
 				if ($(e.target).is("input,button,a")) return;
@@ -175,7 +183,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				const mm = rr.message || {};
 				frappe.show_alert({ message: to ? __("{0} moved → drawer {1}", [mm.moved, to])
 					: __("{0} taken out", [mm.moved]), indicator: "green" }, 4);
-				openDrawer(no);
+				refresh();
 			});
 			root.find(".dm-move").on("click", () => {
 				const to = root.find(".dm-to").val();
@@ -222,6 +230,9 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 	});
 
 	root.on("click", ".dm-d", function () { openDrawer(this.dataset.d); });
+	root.on("keydown", ".dm-wq", function (e) {
+		if (e.key === "Enter" && (this.value || "").trim().length >= 2) openDrawer(null, this.value.trim());
+	});
 
 	frappe.pages["dye-manage"].on_page_show = showWall;
 	showWall();
