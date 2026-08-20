@@ -324,7 +324,8 @@ def setup_roles():
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
-			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
+			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE,
+			"JW Dye Admin") + JEWELIMA_TRANSFER_ROLES:
 		if not frappe.db.exists("Role", name):
 			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
 
@@ -696,6 +697,19 @@ def setup_roles():
 	for _pg in ("select-photos", "selection-review", "selected-pieces", "selection-records",
 			"selection-tags", "selection-providers"):
 		set_page_roles(_pg, ("JW Selection",))
+
+	# ---- JW Dye Admin: the dye store is theirs — every Dye page, full control
+	# of the register (the pages write through _dye_guard-ed APIs, which accept
+	# this role below in api.py's DYE_ROLES).
+	for dt in ("Dye", "Dye Drawer"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "JW Dye Admin", {"read": 1, "write": 1, "create": 1, "delete": 1,
+				"report": 1, "print": 1, "export": 1})
+	for dt in ("Design Bank", "Design"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, "JW Dye Admin", {"read": 1})
+	for _pg in ("dye-bank", "dye-find", "dye-manage", "dye-info"):
+		set_page_roles(_pg, ("JW Dye Admin",))
 
 	# ---- JW Data Admin: the bench + casting data desk. Assign/collect, issue/
 	# receipt, tree making and the casting queue — everything on those pages.

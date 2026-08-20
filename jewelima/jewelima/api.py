@@ -3839,7 +3839,7 @@ def get_stone_issuer_history(employee):
 # The physical pressing dyes, drawer by drawer. Seeded once from the frozen
 # DYE LIST excel (2-8-25); managed in-app from then on.
 
-DYE_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin")
+DYE_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin", "JW Dye Admin")
 
 
 def _dye_guard():
