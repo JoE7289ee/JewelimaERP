@@ -43,7 +43,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	const PROD_LOCS = new Set(["GRINDING", "FILING", "FILING ADMIN", "SETTING ADMIN",
 		"SETTING", "PRE POLISH", "FINAL POLISH", "STONE LOCATION (W)",
 		"FINAL POLISH LOC", "PRE POLISH LOC", "SETTING LOC", "ITEM STOCK LOCATION",
-		"GRINDING LOCATION", "PRODUCTION LOCATION (W)"]);
+		"GRINDING LOCATION", "FILING LOCATION", "PRODUCTION LOCATION (W)"]);
 	const inGrp = (loc) => {
 		const L = (loc || "").toUpperCase();
 		if (LOCGRP === "pre") return PRE_LOCS.has(L);
@@ -140,6 +140,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			<label class="bs-podate" style="display:none;align-items:center;gap:5px;font-size:11.5px;color:var(--text-muted);cursor:pointer;">
 				<input type="checkbox" class="bs-podate-cb">${__("Order date in print")}</label>
 			<button class="bs-btn bs-print">${__("Print 🖨")}</button>
+			<button class="bs-btn bs-printsum" style="background:#33691e;display:none;">${__("Summary 🖨")}</button>
 		</div>
 		<div class="bs-tiles"></div>
 		<div class="bs-body"><div class="bs-none">${__("Upload the old software's BAG STATUS report — the factory WIP map by location, user and party, with the CUST pieces called out.")}</div></div>
@@ -253,6 +254,7 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 			$(this).toggleClass("on", $(this).data("v") === VIEW);
 		});
 		root.find(".bs-print").toggle(VIEW !== "kpi");
+		root.find(".bs-printsum").toggle(VIEW === "loc");
 		if (VIEW === "kpi") {
 			root.find(".bs-due, .bs-podate, .bs-duein").hide();
 			root.find(".bs-tiles").empty();
@@ -662,6 +664,24 @@ frappe.pages["bag-status"].on_page_load = function (wrapper) {
 	const PHEAD = `<th>${__("Bags")}</th><th>${__("Pcs")}</th><th>${__("GW g")}</th><th>${__("NT g")}</th>
 		<th>${__("DMD ct")}</th><th>${__("PS ct")}</th><th>${__("CS ct")}</th>
 		<th>${__("Pcs 0–30 d")}</th><th>${__("Pcs 31–90 d")}</th><th>${__("Pcs 91–180 d")}</th><th>${__("Pcs 180+ d")}</th><th>${__("Oldest")}</th>`;
+
+	// LOCATION summary: the header line per location only — no design-type rows.
+	// Respects the stage group and the ticks, so the paper says what the screen says.
+	root.on("click", ".bs-printsum", () => {
+		if (!RAW.length || VIEW !== "loc") return;
+		const pool = RAW.filter(locPass);
+		const tot = blankAgg();
+		pool.forEach((r) => addTo(tot, r));
+		const R = aggBy((r) => r.loc, (r) => r.dtype, locPass);
+		const body = sortedKeys(R).map((name) =>
+			`<tr class="grp"><td class="l">${esc(name)}</td>${pcells(R[name])}</tr>`).join("")
+			+ `<tr class="tot"><td class="l">${__("TOTAL")}</td>${pcells(tot)}</tr>`;
+		const grp = LOCGRP === "pre" ? __("Pre Production") : LOCGRP === "prod" ? __("Production") : __("All");
+		const sub = `${esc((FILE && FILE.name) || "")} · ${__("generated")} ${frappe.datetime.now_datetime()}
+			· <b>${grp}</b> · ${tot.bags} ${__("bags")} · ${tot.pcs} ${__("pieces")} · NT ${g3(tot.nt)} g · DMD ${g3(tot.dmd)} ct`
+			+ (LOCOFF.size ? ` · ${__("{0} location(s) ticked out", [LOCOFF.size])}` : "");
+		printDoc(__("BAG STATUS — LOCATION SUMMARY"), sub, `<th class="l">${__("Location")}</th>${PHEAD}`, body);
+	});
 
 	root.on("click", ".bs-print", () => {
 		if (!RAW.length) return;
