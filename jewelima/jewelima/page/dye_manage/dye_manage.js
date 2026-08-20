@@ -93,7 +93,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				</div>
 				<div class="dm-box"><table class="dm-t"><thead><tr>
 					<th style="width:26px;"><input type="checkbox" class="dm-all" style="width:14px;height:14px;"></th>
-					<th>${__("Dye")}</th><th>${__("Design(s)")}</th><th>${__("Variant")}</th><th>${__("Status")}</th>
+					<th>${__("SL")}</th><th>${__("Dye")}</th><th>${__("Design(s)")}</th><th>${__("Variant")}</th><th>${__("Status")}</th>
 				</tr></thead><tbody>
 				${rows.map((x) => {
 					const banks = (x.banks || "").split("|");
@@ -101,9 +101,10 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 						banks[i] ? `<a href="/app/design-bank/${encodeURIComponent(banks[i])}"><b>${esc(d)}</b></a>` : esc(d)).join(" · ");
 					return `<tr data-n="${esc(x.name)}">
 						<td><input type="checkbox" class="dm-cb" style="width:14px;height:14px;"></td>
+						<td><b>${x.sl_no || ""}</b></td>
 						<td>${esc(x.name)}</td><td>${designs}</td><td>${esc(x.variant_note || "")}</td>
 						<td><span class="dm-st ${x.status === "Healthy" ? "h" : "d"}">${esc(x.status)}</span></td></tr>`;
-				}).join("") || `<tr><td colspan="5" style="padding:26px;text-align:center;color:var(--text-muted);">${__("Empty drawer.")}</td></tr>`}
+				}).join("") || `<tr><td colspan="6" style="padding:26px;text-align:center;color:var(--text-muted);">${__("Empty drawer.")}</td></tr>`}
 				</tbody></table></div>
 				<div class="dm-act" style="display:none;">
 					<span class="dm-n" style="font-weight:800;"></span>

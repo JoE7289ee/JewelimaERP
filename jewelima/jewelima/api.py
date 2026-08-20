@@ -3888,12 +3888,12 @@ def get_dye_bank(start=0, limit=100, q=None, status=None, drawer=None, unmatched
 	where = " AND ".join(cond)
 	total = frappe.db.sql(f"SELECT COUNT(*) FROM `tabDye` d WHERE {where}", args)[0][0]
 	rows = frappe.db.sql(f"""
-		SELECT d.name, d.drawer, d.status, d.variant_note,
+		SELECT d.name, d.drawer, d.status, d.variant_note, d.sl_no,
 			GROUP_CONCAT(l.design_no SEPARATOR ' | ') design_nos,
 			GROUP_CONCAT(IFNULL(l.design_bank, '') SEPARATOR '|') banks
 		FROM `tabDye` d LEFT JOIN `tabDye Design Link` l ON l.parent = d.name
 		WHERE {where} GROUP BY d.name
-		ORDER BY CAST(d.drawer AS UNSIGNED), d.name
+		ORDER BY CAST(d.drawer AS UNSIGNED), d.sl_no, d.name
 		LIMIT %(start)s, %(limit)s""", args, as_dict=True)
 	return {"rows": rows, "total": total}
 
@@ -3928,8 +3928,14 @@ def move_dyes(names, to_drawer=None):
 	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
 	if to_drawer and not frappe.db.exists("Dye Drawer", to_drawer):
 		frappe.throw(frappe._("Drawer {0} does not exist.").format(to_drawer))
+	# a moved dye files at the END of its new drawer; taken out, it has no slot
+	nxt = (frappe.db.sql("SELECT IFNULL(MAX(sl_no), 0) FROM `tabDye` WHERE drawer = %s",
+		to_drawer)[0][0] + 1) if to_drawer else 0
 	for nm in names:
-		frappe.db.set_value("Dye", nm, "drawer", to_drawer or None)
+		frappe.db.set_value("Dye", nm, {"drawer": to_drawer or None,
+			"sl_no": (nxt if to_drawer else None)})
+		if to_drawer:
+			nxt += 1
 	frappe.db.commit()
 	return {"moved": len(names), "to": to_drawer or ""}
 
@@ -3987,11 +3993,16 @@ def add_dyes(drawer, design_no, count=1, note=None):
 			WHERE REPLACE(REPLACE(REPLACE(UPPER(design_no), ' ', ''), '/', ''), '-', '') = %s LIMIT 1""", key):
 		hit = name
 	made = []
+	nxt = (frappe.db.sql("SELECT IFNULL(MAX(sl_no), 0) FROM `tabDye` WHERE drawer = %s",
+		drawer)[0][0] + 1) if drawer else 0
 	for _ in range(max(1, min(cint(count), 50))):
-		doc = frappe.get_doc({"doctype": "Dye", "drawer": drawer or None, "status": "Healthy",
+		doc = frappe.get_doc({"doctype": "Dye", "drawer": drawer or None,
+			"sl_no": (nxt if drawer else None), "status": "Healthy",
 			"variant_note": note or "", "designs": [{"design_no": design_no, "design_bank": hit}]})
 		doc.insert(ignore_permissions=True)
 		made.append(doc.name)
+		if drawer:
+			nxt += 1
 	frappe.db.commit()
 	return {"made": made, "matched": bool(hit)}
 

@@ -37,7 +37,7 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 		</div>
 		<div class="dy-box"><table class="dy-t"><thead><tr>
 			<th style="width:26px;"><input type="checkbox" class="dy-all" style="width:14px;height:14px;"></th>
-			<th>${__("Dye")}</th><th>${__("Drawer")}</th><th>${__("Design(s)")}</th>
+			<th>${__("Dye")}</th><th>${__("Drawer")}</th><th>${__("SL")}</th><th>${__("Design(s)")}</th>
 			<th>${__("Variant")}</th><th>${__("Status")}</th>
 		</tr></thead><tbody class="dy-body"></tbody></table></div>
 		<div class="dy-acts" style="display:none;">
@@ -58,13 +58,14 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 				<td><input type="checkbox" class="dy-cb" ${S.sel.has(r.name) ? "checked" : ""} style="width:14px;height:14px;"></td>
 				<td>${esc(r.name)}</td>
 				<td><b>${esc(r.drawer || "—")}</b></td>
+				<td>${r.sl_no || ""}</td>
 				<td>${designs}</td>
 				<td>${esc(r.variant_note || "")}</td>
 				<td><span class="dy-st ${r.status === "Healthy" ? "h" : "d"}" title="${__("click to flip")}">${esc(r.status)}</span></td>
 			</tr>`;
 		}).join("");
 		if (append) root.find(".dy-body").append(html);
-		else root.find(".dy-body").html(html || `<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--text-muted);">${__("Nothing matches.")}</td></tr>`);
+		else root.find(".dy-body").html(html || `<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--text-muted);">${__("Nothing matches.")}</td></tr>`);
 		root.find(".dy-count").text(__("{0} dye(s)", [S.total]));
 		root.find(".dy-more").html((S.start < S.total)
 			? `<button class="btn btn-sm btn-default dy-load">${__("Show more")} (${Math.min(S.start, S.total)}/${S.total})</button>` : "");
