@@ -3836,6 +3836,43 @@ def get_stone_issuer_history(employee):
 
 
 @frappe.whitelist()
+def get_role_access_overview():
+	"""Every Jewelima-made role and what it actually opens: the desk pages it may
+	use, its doctype rights (summarised), and who holds it. Read straight from
+	Page.roles / Custom DocPerm / Has Role, so it can never drift from reality."""
+	frappe.only_for(("System Manager", "JW Manager"))
+	roles = frappe.get_all("Role", filters=[["name", "like", "Jewelima%"]], pluck="name") \
+		+ frappe.get_all("Role", filters=[["name", "like", "JW %"]], pluck="name")
+	roles = sorted(set(roles))
+
+	page_titles = {p.name: (p.title or p.name) for p in frappe.get_all("Page", fields=["name", "title"])}
+	out = []
+	for role in roles:
+		pages = frappe.get_all("Has Role", filters={"parenttype": "Page", "role": role}, pluck="parent")
+		pages = sorted({page_titles.get(pg, pg) for pg in pages if pg in page_titles})
+		perms = frappe.get_all("Custom DocPerm", filters={"role": role},
+			fields=["parent", "read", "write", "create", "delete"])
+		full, write, read = [], [], []
+		for pr in perms:
+			if cint(pr.delete) or (cint(pr.write) and cint(pr.create)):
+				full.append(pr.parent)
+			elif cint(pr.write) or cint(pr.create):
+				write.append(pr.parent)
+			elif cint(pr.read):
+				read.append(pr.parent)
+		users = frappe.db.sql("""
+			SELECT IFNULL(u.full_name, u.name) FROM `tabHas Role` h
+			JOIN `tabUser` u ON u.name = h.parent
+			WHERE h.parenttype = 'User' AND h.role = %s AND u.enabled = 1
+			  AND u.name NOT IN ('Administrator', 'Guest')
+			ORDER BY 1""", role)
+		out.append({"role": role, "pages": pages,
+			"full": sorted(set(full)), "write": sorted(set(write)), "read": sorted(set(read)),
+			"users": [u[0] for u in users]})
+	return {"roles": out}
+
+
+@frappe.whitelist()
 def get_stone_return_card(barcode):
 	"""Stone Return station: the card + the stones it actually HOLDS right now
 	(net of the ledger), so only what is in the bag can come back out."""
