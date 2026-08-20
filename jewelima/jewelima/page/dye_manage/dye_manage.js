@@ -66,6 +66,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 						padding:2px 12px;background:var(--fg-color);color:var(--text-color);font-size:13px;">
 					<span style="font-size:12px;color:var(--text-muted);">${__("or click a drawer")}</span>
 					<span style="margin-left:auto;display:flex;gap:6px;">
+						<button class="btn btn-xs btn-default dm-history">${__("History")}</button>
 						<button class="btn btn-xs btn-default dm-newdrawer">+ ${__("Add drawer")}</button>
 					</span>
 				</div>
@@ -130,7 +131,6 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 					<span>${__("→ drawer")}</span>
 					<select class="dm-to">${DRAWERS.map((d) => `<option ${d === no ? "disabled" : ""}>${esc(d)}</option>`).join("")}</select>
 					<button class="btn btn-sm btn-primary dm-move">${__("Move")}</button>
-					${(unplaced || search) ? "" : `<button class="btn btn-sm btn-default dm-out">${__("Take out of drawer")}</button>`}
 					<button class="btn btn-sm btn-default dm-scrap" style="color:#b02a2a;">${__("Scrap a dye")}</button>
 				</div>`);
 
@@ -190,9 +190,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				if (!to || to === no) return frappe.msgprint(__("Pick a different drawer."));
 				frappe.confirm(__("Move <b>{0}</b> entr(ies) to drawer <b>{1}</b>?", [sel.size, to]), () => move(to));
 			});
-			root.find(".dm-out").on("click", () => frappe.confirm(
-				__("Take <b>{0}</b> entr(ies) OUT of their drawer? They become Unplaced — still owned, but sitting in no drawer until put back.", [sel.size]),
-				() => move(null)));
+
 			root.find(".dm-scrap").on("click", () => {
 				frappe.confirm(__("Scrap ONE dye off each of the {0} ticked entr(ies)? An entry at zero disappears.", [sel.size]), () =>
 					frappe.call({ method: API + ".scrap_dyes", args: { names: JSON.stringify([...sel]) } })
@@ -223,6 +221,38 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				openDrawer(drawer);
 			}), __("New dyes — drawer {0}", [drawer]));
 	}
+	root.on("click", ".dm-history", () => {
+		const D = { action: "", q: "" };
+		const dlg = new frappe.ui.Dialog({ title: __("Dye history"), size: "extra-large",
+			fields: [{ fieldname: "html", fieldtype: "HTML" }] });
+		const paint = () => frappe.call({ method: API + ".get_dye_logs",
+			args: { action: D.action || null, q: D.q || null } }).then((r) => {
+			const rows = (r.message || {}).rows || [];
+			dlg.get_field("html").$wrapper.find(".hl-body").html(rows.length ? `
+				<table class="dm-t"><thead><tr><th>${__("When")}</th><th>${__("Who")}</th>
+					<th>${__("Action")}</th><th>${__("Design")}</th><th>${__("Dyes")}</th><th>${__("From → To")}</th></tr></thead>
+				<tbody>${rows.map((x) => `<tr>
+					<td>${esc((x.creation || "").slice(0, 16))}</td><td>${esc(x.who)}</td>
+					<td><b>${esc(x.action)}</b></td><td>${esc(x.design_no)}</td><td>${x.count || ""}</td>
+					<td>${x.action === "Added" ? "→ " + esc(x.to_drawer)
+						: x.action === "Scrapped" ? esc(x.from_drawer) + " →"
+						: esc(x.from_drawer) + " → " + esc(x.to_drawer)}</td></tr>`).join("")}
+				</tbody></table>`
+				: `<div style="padding:26px;text-align:center;color:var(--text-muted);">${__("Nothing yet.")}</div>`);
+		});
+		dlg.get_field("html").$wrapper.html(`
+			<div style="display:flex;gap:8px;margin-bottom:10px;">
+				<select class="hl-a" style="border:1px solid var(--border-color);border-radius:7px;height:30px;background:var(--fg-color);color:var(--text-color);">
+					<option value="">${__("All actions")}</option><option>Moved</option><option>Added</option><option>Scrapped</option></select>
+				<input type="text" class="hl-q" placeholder="${__("design / drawer / person…")}"
+					style="border:1px solid var(--border-color);border-radius:7px;height:30px;padding:2px 10px;background:var(--fg-color);color:var(--text-color);min-width:220px;">
+			</div><div class="hl-body" style="max-height:62vh;overflow:auto;"></div>`);
+		const $w = dlg.get_field("html").$wrapper;
+		$w.on("change", ".hl-a", function () { D.action = this.value; paint(); });
+		$w.on("input", ".hl-q", frappe.utils.debounce(function () { D.q = this.value; paint(); }, 250));
+		dlg.show();
+		paint();
+	});
 	root.on("click", ".dm-newdrawer", () => {
 		frappe.prompt([{ fieldname: "no", fieldtype: "Data", label: __("Drawer number"), reqd: 1 },
 			{ fieldname: "note", fieldtype: "Data", label: __("Note (shelf, cabinet…)") }],

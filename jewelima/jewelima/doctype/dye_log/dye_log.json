@@ -1,0 +1,27 @@
+{
+ "actions": [], "autoname": "hash", "creation": "2026-08-20 16:30:00.000000",
+ "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["action", "design_no", "column_break_1", "dye", "count",
+  "section_break_1", "from_drawer", "to_drawer", "note"],
+ "fields": [
+  {"fieldname": "action", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1,
+   "label": "Action", "options": "Moved\nAdded\nScrapped"},
+  {"fieldname": "design_no", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Design"},
+  {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+  {"fieldname": "dye", "fieldtype": "Data", "label": "Dye Entry"},
+  {"fieldname": "count", "fieldtype": "Int", "label": "Dyes"},
+  {"fieldname": "section_break_1", "fieldtype": "Section Break"},
+  {"fieldname": "from_drawer", "fieldtype": "Data", "in_list_view": 1, "label": "From Drawer"},
+  {"fieldname": "to_drawer", "fieldtype": "Data", "in_list_view": 1, "label": "To Drawer"},
+  {"fieldname": "note", "fieldtype": "Data", "label": "Note"}
+ ],
+ "links": [], "modified": "2026-08-20 16:30:00.000000", "modified_by": "Administrator",
+ "module": "Jewelima", "name": "Dye Log", "owner": "Administrator",
+ "permissions": [
+  {"read":1,"role":"System Manager","export":1,"report":1},
+  {"read":1,"role":"JW Manager","export":1,"report":1},
+  {"read":1,"role":"JW Dye Admin"},
+  {"read":1,"role":"Stock Manager"}
+ ],
+ "sort_field": "creation", "sort_order": "DESC", "states": [], "track_changes": 0
+}

@@ -3922,17 +3922,52 @@ def dye_find(q):
 	return {"groups": list(groups.values())[:60]}
 
 
+def _dye_log(action, dye, from_drawer=None, to_drawer=None, count=None, note=None):
+	d_no = frappe.db.get_value("Dye Design Link", {"parent": dye}, "design_no") or ""
+	frappe.get_doc({"doctype": "Dye Log", "action": action, "dye": dye, "design_no": d_no,
+		"from_drawer": from_drawer or "", "to_drawer": to_drawer or "",
+		"count": cint(count) or 0, "note": note or ""}).insert(ignore_permissions=True)
+
+
 @frappe.whitelist()
 def move_dyes(names, to_drawer=None):
-	"""Dye Manage: put the picked dyes in a drawer — or take them out (no drawer)."""
+	"""Dye Manage: put the picked dyes in a drawer. Every move is logged — which
+	drawer it left, which it entered, and by whom (the log row's owner)."""
 	_dye_guard()
 	names = frappe.parse_json(names) if isinstance(names, str) else (names or [])
-	if to_drawer and not frappe.db.exists("Dye Drawer", to_drawer):
-		frappe.throw(frappe._("Drawer {0} does not exist.").format(to_drawer))
+	if not to_drawer or not frappe.db.exists("Dye Drawer", to_drawer):
+		frappe.throw(frappe._("Drawer {0} does not exist.").format(to_drawer or "?"))
 	for nm in names:
-		frappe.db.set_value("Dye", nm, "drawer", to_drawer or None)
+		old = frappe.db.get_value("Dye", nm, ["drawer", "dye_count"], as_dict=True)
+		if not old or old.drawer == to_drawer:
+			continue
+		frappe.db.set_value("Dye", nm, "drawer", to_drawer)
+		_dye_log("Moved", nm, from_drawer=old.drawer, to_drawer=to_drawer, count=old.dye_count)
 	frappe.db.commit()
 	return {"moved": len(names), "to": to_drawer or ""}
+
+
+@frappe.whitelist()
+def get_dye_logs(action=None, q=None, limit=200):
+	"""The register's paper trail, newest first."""
+	_dye_guard()
+	filters = {}
+	if action:
+		filters["action"] = action
+	rows = frappe.get_all("Dye Log", filters=filters,
+		fields=["action", "dye", "design_no", "from_drawer", "to_drawer", "count",
+			"note", "owner", "creation"],
+		order_by="creation desc", limit_page_length=cint(limit) or 200)
+	if q and q.strip():
+		needle = q.strip().upper()
+		rows = [r for r in rows if needle in " ".join(str(x or "") for x in
+			(r.design_no, r.dye, r.from_drawer, r.to_drawer, r.owner)).upper()]
+	users = {u.name: u.full_name for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.owner for r in rows})]}, fields=["name", "full_name"])} if rows else {}
+	for r in rows:
+		r["who"] = users.get(r.owner) or r.owner
+		r["creation"] = str(r.creation)
+	return {"rows": rows}
 
 
 @frappe.whitelist()
@@ -3991,6 +4026,7 @@ def add_dyes(drawer, design_no, count=1, note=None):
 		"dye_count": max(1, min(cint(count), 50)), "variant_note": note or "",
 		"designs": [{"design_no": design_no, "design_bank": hit}]})
 	doc.insert(ignore_permissions=True)
+	_dye_log("Added", doc.name, to_drawer=drawer, count=doc.dye_count, note=note)
 	frappe.db.commit()
 	return {"made": [doc.name], "count": doc.dye_count, "matched": bool(hit)}
 
@@ -4028,6 +4064,8 @@ def scrap_dyes(names):
 		if not frappe.db.exists("Dye", nm):
 			continue
 		n = cint(frappe.db.get_value("Dye", nm, "dye_count")) or 1
+		dr = frappe.db.get_value("Dye", nm, "drawer")
+		_dye_log("Scrapped", nm, from_drawer=dr, count=1)
 		if n <= 1:
 			frappe.delete_doc("Dye", nm, force=True, ignore_permissions=True)
 			gone.append(nm)
