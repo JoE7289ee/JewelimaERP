@@ -3850,20 +3850,21 @@ def _dye_guard():
 def get_dye_info():
 	"""Dye Info KPIs: how much tooling, in what shape, how well it maps to the bank."""
 	_dye_guard()
-	total = frappe.db.count("Dye")
-	healthy = frappe.db.count("Dye", {"status": "Healthy"})
-	placed = frappe.db.count("Dye", {"drawer": ["!=", ""]})
+	total = cint(frappe.db.sql("SELECT SUM(dye_count) FROM `tabDye`")[0][0])
+	entries = frappe.db.count("Dye")
+	healthy = cint(frappe.db.sql("SELECT SUM(dye_count) FROM `tabDye` WHERE status = 'Healthy'")[0][0])
+	placed = cint(frappe.db.sql("SELECT SUM(dye_count) FROM `tabDye` WHERE IFNULL(drawer, '') != ''")[0][0])
 	matched = frappe.db.sql("""SELECT COUNT(DISTINCT l.parent) FROM `tabDye Design Link` l
 		WHERE IFNULL(l.design_bank, '') != ''""")[0][0]
 	distinct = frappe.db.sql("SELECT COUNT(DISTINCT design_no) FROM `tabDye Design Link`")[0][0]
 	distinct_matched = frappe.db.sql("""SELECT COUNT(DISTINCT design_no) FROM `tabDye Design Link`
 		WHERE IFNULL(design_bank, '') != ''""")[0][0]
 	drawers = frappe.db.sql("""
-		SELECT dr.name, COUNT(d.name) n,
-			SUM(CASE WHEN d.status = 'Damaged' THEN 1 ELSE 0 END) damaged
+		SELECT dr.name, COUNT(d.name) n, IFNULL(SUM(d.dye_count), 0) dyes,
+			IFNULL(SUM(CASE WHEN d.status = 'Damaged' THEN d.dye_count ELSE 0 END), 0) damaged
 		FROM `tabDye Drawer` dr LEFT JOIN `tabDye` d ON d.drawer = dr.name
 		GROUP BY dr.name ORDER BY CAST(dr.name AS UNSIGNED)""", as_dict=True)
-	return {"total": total, "healthy": healthy, "damaged": total - healthy,
+	return {"total": total, "entries": entries, "healthy": healthy, "damaged": total - healthy,
 		"placed": placed, "unplaced": total - placed,
 		"designs": distinct, "designs_matched": distinct_matched,
 		"dyes_matched": matched, "drawers": drawers}
@@ -3888,7 +3889,7 @@ def get_dye_bank(start=0, limit=100, q=None, status=None, drawer=None, unmatched
 	where = " AND ".join(cond)
 	total = frappe.db.sql(f"SELECT COUNT(*) FROM `tabDye` d WHERE {where}", args)[0][0]
 	rows = frappe.db.sql(f"""
-		SELECT d.name, d.drawer, d.status, d.variant_note,
+		SELECT d.name, d.drawer, d.status, d.variant_note, d.dye_count,
 			GROUP_CONCAT(l.design_no SEPARATOR ' | ') design_nos,
 			GROUP_CONCAT(IFNULL(l.design_bank, '') SEPARATOR '|') banks
 		FROM `tabDye` d LEFT JOIN `tabDye Design Link` l ON l.parent = d.name
@@ -3906,7 +3907,7 @@ def dye_find(q):
 	if len(q) < 2:
 		return {"groups": []}
 	rows = frappe.db.sql("""
-		SELECT l.design_no, l.design_bank, d.name dye, d.drawer, d.status, d.variant_note
+		SELECT l.design_no, l.design_bank, d.name dye, d.drawer, d.status, d.variant_note, d.dye_count
 		FROM `tabDye Design Link` l JOIN `tabDye` d ON d.name = l.parent
 		WHERE l.design_no LIKE %(q)s OR REPLACE(l.design_no, ' ', '') LIKE %(sq)s
 			OR l.design_bank LIKE %(q)s
@@ -3916,7 +3917,7 @@ def dye_find(q):
 	for r in rows[:800]:
 		g = groups.setdefault(r.design_no, {"design_no": r.design_no,
 			"design_bank": r.design_bank, "dyes": []})
-		g["dyes"].append({"dye": r.dye, "drawer": r.drawer or "—",
+		g["dyes"].append({"dye": r.dye, "drawer": r.drawer or "—", "count": cint(r.dye_count) or 1,
 			"status": r.status, "note": r.variant_note or ""})
 	return {"groups": list(groups.values())[:60]}
 
@@ -3986,14 +3987,12 @@ def add_dyes(drawer, design_no, count=1, note=None):
 	for name, dno in frappe.db.sql("""SELECT name, design_no FROM `tabDesign Bank`
 			WHERE REPLACE(REPLACE(REPLACE(UPPER(design_no), ' ', ''), '/', ''), '-', '') = %s LIMIT 1""", key):
 		hit = name
-	made = []
-	for _ in range(max(1, min(cint(count), 50))):
-		doc = frappe.get_doc({"doctype": "Dye", "drawer": drawer or None, "status": "Healthy",
-			"variant_note": note or "", "designs": [{"design_no": design_no, "design_bank": hit}]})
-		doc.insert(ignore_permissions=True)
-		made.append(doc.name)
+	doc = frappe.get_doc({"doctype": "Dye", "drawer": drawer or None, "status": "Healthy",
+		"dye_count": max(1, min(cint(count), 50)), "variant_note": note or "",
+		"designs": [{"design_no": design_no, "design_bank": hit}]})
+	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
-	return {"made": made, "matched": bool(hit)}
+	return {"made": [doc.name], "count": doc.dye_count, "matched": bool(hit)}
 
 
 @frappe.whitelist()

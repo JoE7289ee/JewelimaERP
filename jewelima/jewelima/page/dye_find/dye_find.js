@@ -35,15 +35,16 @@ frappe.pages["dye-find"].on_page_load = function (wrapper) {
 		root.find(".df-out").html((groups || []).length ? groups.map((gp) => {
 			const byDrawer = {};
 			gp.dyes.forEach((d) => (byDrawer[d.drawer] = byDrawer[d.drawer] || []).push(d));
+			const totalDyes = gp.dyes.reduce((a, d) => a + (d.count || 1), 0);
 			return `<div class="df-g">
 				<div class="df-nm">${gp.design_bank
 					? `<a href="/app/design-bank/${encodeURIComponent(gp.design_bank)}">${esc(gp.design_no)}</a>`
 					: `${esc(gp.design_no)}<span class="df-unm">${__("no card in the bank")}</span>`}
-					<span style="font-weight:400;color:var(--text-muted);font-size:12px;"> · ${gp.dyes.length} ${__("dye(s)")}</span></div>
+					<span style="font-weight:400;color:var(--text-muted);font-size:12px;"> · ${totalDyes} ${__("dye(s)")}</span></div>
 				${Object.keys(byDrawer).map((dr) => `
 					<div class="df-row">
 						<span class="df-drawer">${__("Drawer")} ${esc(dr)}</span>
-						<span>${byDrawer[dr].length} ${__("dye(s)")}</span>
+						<span>${byDrawer[dr].reduce((a, d) => a + (d.count || 1), 0)} ${__("dye(s)")}</span>
 						${byDrawer[dr].map((d) => `<span class="df-st ${d.status === "Healthy" ? "h" : "d"}"
 							title="${esc(d.dye)}">${esc(d.status)}${d.note ? " · " + esc(d.note) : ""}</span>`).join("")}
 					</div>`).join("")}

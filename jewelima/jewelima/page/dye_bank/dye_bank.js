@@ -37,7 +37,7 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 		</div>
 		<div class="dy-box"><table class="dy-t"><thead><tr>
 			<th style="width:26px;"><input type="checkbox" class="dy-all" style="width:14px;height:14px;"></th>
-			<th>${__("Dye")}</th><th>${__("Drawer")}</th><th>${__("Design(s)")}</th>
+			<th>${__("Dye")}</th><th>${__("Drawer")}</th><th>${__("Design(s)")}</th><th>${__("Dyes")}</th>
 			<th>${__("Variant")}</th><th>${__("Status")}</th>
 		</tr></thead><tbody class="dy-body"></tbody></table></div>
 		<div class="dy-acts" style="display:none;">
@@ -59,6 +59,7 @@ frappe.pages["dye-bank"].on_page_load = function (wrapper) {
 				<td>${esc(r.name)}</td>
 				<td><b>${esc(r.drawer || "—")}</b></td>
 				<td>${designs}</td>
+				<td><b>${r.dye_count || 1}</b></td>
 				<td>${esc(r.variant_note || "")}</td>
 				<td><span class="dy-st ${r.status === "Healthy" ? "h" : "d"}" title="${__("click to flip")}">${esc(r.status)}</span></td>
 			</tr>`;

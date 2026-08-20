@@ -26,7 +26,7 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 		.dm-d .dmg{color:#b02a2a;font-weight:700;font-size:10.5px;}
 		.dm-d.empty{opacity:.5;}
 		/* the open drawer */
-		.dm-box{border:1px solid var(--border-color);border-radius:12px;overflow:auto;background:var(--fg-color);max-height:60vh;}
+		.dm-box{border:1px solid var(--border-color);border-radius:12px;overflow:auto;background:var(--fg-color);max-height:calc(100vh - 250px);}
 		table.dm-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.dm-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;text-transform:uppercase;
 			color:var(--text-muted);padding:6px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
@@ -48,11 +48,12 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 			const tile = (cls, k, v) => `<div class="dm-tile ${cls}"><div class="k">${k}</div><div class="v">${v}</div></div>`;
 			root.html(`
 				<div class="dm-hero">
+					${tile("", __("Designs"), ni(m.entries))}
 					${tile("", __("Dyes"), ni(m.total))}
 					${tile("good", __("Healthy"), ni(m.healthy))}
 					${tile("bad", __("Damaged"), ni(m.damaged))}
 					${tile("", __("Drawers"), ni((m.drawers || []).length))}
-					${tile("", __("Unplaced"), ni(m.unplaced))}
+					${m.unplaced ? tile("bad", __("Unplaced"), ni(m.unplaced)) : ""}
 				</div>
 				<div class="dm-bar">
 					<span style="font-size:12px;color:var(--text-muted);">${__("Click a drawer to open it.")}</span>
@@ -64,7 +65,8 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				<div class="dm-grid">
 					${(m.drawers || []).map((d) => `
 						<div class="dm-d ${d.n ? "" : "empty"}" data-d="${esc(d.name)}">
-							<b>${esc(d.name)}</b> <span class="n">· ${ni(d.n)}</span>
+							<b>${esc(d.name)}</b> <span class="n">· ${ni(d.n)} ${__("designs")}</span>
+							<span class="n">· ${ni(d.dyes)} ${__("dyes")}</span>
 							${d.damaged ? `<span class="dmg"> · ${ni(d.damaged)} ${__("dmg")}</span>` : ""}
 						</div>`).join("")}
 					${m.unplaced ? `<div class="dm-d" data-d="__none__" style="border-style:dashed;">
@@ -93,15 +95,16 @@ frappe.pages["dye-manage"].on_page_load = function (wrapper) {
 				</div>
 				<div class="dm-box"><table class="dm-t"><thead><tr>
 					<th style="width:26px;"><input type="checkbox" class="dm-all" style="width:14px;height:14px;"></th>
-					<th>${__("Dye")}</th><th>${__("Design(s)")}</th><th>${__("Variant")}</th><th>${__("Status")}</th>
+					<th>#</th><th>${__("Design(s)")}</th><th>${__("Dyes")}</th><th>${__("Variant")}</th><th>${__("Status")}</th>
 				</tr></thead><tbody>
-				${rows.map((x) => {
+				${rows.map((x, ix) => {
 					const banks = (x.banks || "").split("|");
 					const designs = (x.design_nos || "").split(" | ").map((d, i) =>
 						banks[i] ? `<a href="/app/design-bank/${encodeURIComponent(banks[i])}"><b>${esc(d)}</b></a>` : esc(d)).join(" · ");
 					return `<tr data-n="${esc(x.name)}">
 						<td><input type="checkbox" class="dm-cb" style="width:14px;height:14px;"></td>
-						<td>${esc(x.name)}</td><td>${designs}</td><td>${esc(x.variant_note || "")}</td>
+						<td><b>${ix + 1}</b></td><td>${designs}</td><td><b>${x.dye_count || 1}</b></td>
+						<td>${esc(x.variant_note || "")}</td>
 						<td><span class="dm-st ${x.status === "Healthy" ? "h" : "d"}">${esc(x.status)}</span></td></tr>`;
 				}).join("") || `<tr><td colspan="5" style="padding:26px;text-align:center;color:var(--text-muted);">${__("Empty drawer.")}</td></tr>`}
 				</tbody></table></div>
