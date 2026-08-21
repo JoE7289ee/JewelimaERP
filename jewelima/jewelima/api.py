@@ -111,6 +111,8 @@ def melt_gold(warehouse, output_item, output_weight, inputs, send_to_casting=0):
 			"uom": frappe.db.get_value("Item", output_item, "stock_uom") or "Gram",
 			"t_warehouse": warehouse, "allow_zero_valuation_rate": 1,
 		}],
+		"remarks": "Melt: {0} g in -> {1} g {2} (loss {3} g) at {4}".format(
+			round(total_in, 3), round(out_w, 3), output_item, round(total_in - out_w, 3), warehouse),
 	})
 	se.flags.ignore_permissions = True
 	se.insert()
@@ -6764,62 +6766,6 @@ def get_card_for_weight(order_bag):
 			"cur_pcs": cint((cur.get(r.item) or {}).get("pcs")),
 		})
 	return {"bag": bag, "item": item, "item_name": item_name, "materials": mats}
-
-
-@frappe.whitelist()
-def weight_add(order_bag, lines, from_warehouse=None):
-	"""Add real weight to a card: ledger In + stock move from_warehouse -> In Bags,
-	per line {item, weight}. Source defaults to the Raw Materials Store."""
-	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
-
-	if isinstance(lines, str):
-		lines = json.loads(lines or "[]")
-	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
-		frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
-	# from_warehouse from the UI is already the full "<name> - <abbr>"; only fall back to
-	# the Raw Materials Store (which needs the abbr appended) when nothing was passed.
-	src = from_warehouse if (from_warehouse and frappe.db.exists("Warehouse", from_warehouse)) else _wh(RAW_MATERIALS_STORE)
-	tgt = _wh(IN_PRODUCTION_WAREHOUSE)
-	added = 0.0
-	for ln in lines or []:
-		item, wt = ln.get("item"), flt(ln.get("weight"))
-		if not item or wt <= 0:
-			continue
-		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": src}, "actual_qty"))
-		if wt > avail + 0.0005:
-			frappe.throw(frappe._("Only {0} of {1} available in {2} — can't issue {3}.").format(round(avail, 3), item, src, wt))
-		_bag_ledger(order_bag, item, "In", wt, "Weight Add", remarks=ln.get("remarks"))
-		_stock_move(item, wt, src, tgt)
-		added += wt
-	_recompute_bag_from_contents(order_bag)
-	frappe.db.commit()
-	return {"added": round(added, 3), **get_bag_contents(order_bag)}
-
-
-@frappe.whitelist()
-def weight_reduce(order_bag, lines, to_warehouse=None):
-	"""Remove weight from a card: ledger Out + stock move In Bags -> to_warehouse,
-	per line {item, weight}. Destination defaults to the Raw Materials Store."""
-	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
-
-	if isinstance(lines, str):
-		lines = json.loads(lines or "[]")
-	if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
-		frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
-	src = _wh(IN_PRODUCTION_WAREHOUSE)
-	tgt = to_warehouse if (to_warehouse and frappe.db.exists("Warehouse", to_warehouse)) else _wh(RAW_MATERIALS_STORE)
-	removed = 0.0
-	for ln in lines or []:
-		item, wt = ln.get("item"), flt(ln.get("weight"))
-		if not item or wt <= 0:
-			continue
-		# stones leave with their COUNT too — pcs keep the per-card story honest
-		_bag_ledger(order_bag, item, "Out", wt, "Weight Reduce", pcs=cint(ln.get("pcs")), remarks=ln.get("remarks"))
-		_stock_move(item, wt, src, tgt)
-		removed += wt
-	_recompute_bag_from_contents(order_bag)
-	frappe.db.commit()
-	return {"removed": round(removed, 3), **get_bag_contents(order_bag)}
 
 
 @frappe.whitelist()
@@ -15521,3 +15467,78 @@ def meeting_set_status(name, status):
 	frappe.db.set_value("Meeting Minute", name, "status", status)
 	frappe.db.commit()
 	return {"status": status}
+
+
+# ---------------------------------------------------------------------------
+# Stock Records — Loss History (recoveries + permanent write-offs) and Melt
+# History, both read straight from the Stock Entries the pages created; the
+# remarks prefix is the marker ("Loss collection:", "Loss write-off:", "Melt:").
+# ---------------------------------------------------------------------------
+def _require_stock_records():
+	if not {"System Manager", "Stock Manager", "JW Manager"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Stock records are for stock admins."), frappe.PermissionError)
+
+
+def _se_history(prefix, limit=200):
+	"""Submitted Stock Entries whose remarks start with `prefix`, with their lines."""
+	ses = frappe.get_all("Stock Entry",
+		filters={"remarks": ["like", prefix + "%"], "docstatus": 1},
+		fields=["name", "remarks", "owner", "posting_date", "posting_time", "creation"],
+		order_by="posting_date desc, creation desc", limit=limit)
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({x.owner for x in ses})]}, fields=["name", "full_name"])} if ses else {}
+	out = []
+	for se in ses:
+		items = frappe.get_all("Stock Entry Detail", filters={"parent": se.name},
+			fields=["item_code", "qty", "s_warehouse", "t_warehouse"], order_by="idx")
+		out.append({"name": se.name, "remarks": se.remarks or "",
+			"who": users.get(se.owner, se.owner), "when": str(se.posting_date),
+			"consumed": [{"item": i.item_code, "qty": flt(i.qty), "warehouse": i.s_warehouse}
+				for i in items if i.s_warehouse],
+			"produced": [{"item": i.item_code, "qty": flt(i.qty), "warehouse": i.t_warehouse}
+				for i in items if i.t_warehouse]})
+	return out
+
+
+@frappe.whitelist()
+def get_loss_history():
+	"""Everything that ever LEFT the loss buckets: refining recoveries (dust ->
+	standard gold) and management write-offs (permanent loss, with its reason)."""
+	_require_stock_records()
+	def _pure(lines):
+		tot = 0.0
+		for l in lines:
+			tot += l["qty"] * flt(frappe.db.get_value("Item", l["item"], "purity_percentage")) / 100.0
+		return round(tot, 3)
+	rows = []
+	for r in _se_history("Loss collection:"):
+		rows.append({**r, "kind": "Recovered", "pure": _pure(r["consumed"]),
+			"got": round(sum(p["qty"] for p in r["produced"]), 3),
+			"got_item": (r["produced"][0]["item"] if r["produced"] else ""),
+			"reason": ""})
+	for r in _se_history("Loss write-off:"):
+		rows.append({**r, "kind": "Written Off", "pure": _pure(r["consumed"]),
+			"got": 0, "got_item": "",
+			"reason": (r["remarks"].split("Loss write-off:", 1)[1] or "").strip()})
+	rows.sort(key=lambda x: (x["when"], x["name"]), reverse=True)
+	return {"rows": rows,
+		"recovered_pure": round(sum(x["pure"] for x in rows if x["kind"] == "Recovered"), 3),
+		"writtenoff_pure": round(sum(x["pure"] for x in rows if x["kind"] == "Written Off"), 3)}
+
+
+@frappe.whitelist()
+def get_melt_history():
+	"""Every melt: what went into the pot, what karat gold came out, the melt
+	loss, where, by whom. (Melts are tagged in remarks from today on.)"""
+	_require_stock_records()
+	rows = []
+	for r in _se_history("Melt:"):
+		fed = round(sum(c["qty"] for c in r["consumed"]), 3)
+		got = round(sum(p["qty"] for p in r["produced"]), 3)
+		rows.append({**r, "fed": fed, "got": got, "loss": round(fed - got, 3),
+			"out_item": (r["produced"][0]["item"] if r["produced"] else ""),
+			"warehouse": (r["produced"][0]["warehouse"] if r["produced"] else "")})
+	return {"rows": rows,
+		"total_fed": round(sum(x["fed"] for x in rows), 3),
+		"total_got": round(sum(x["got"] for x in rows), 3),
+		"total_loss": round(sum(x["loss"] for x in rows), 3)}

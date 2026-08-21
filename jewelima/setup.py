@@ -1353,6 +1353,16 @@ def setup_item_group_tree():
 		for leaf in ("GOLD 22K", "GOLD 18K", "GOLD 14K"):
 			ensure(leaf, "GOLD ORNAMENT", 0)
 
+	# findings (clasps, hooks, posts…) mirror the ornament karats:
+	# GOLD > GOLD FINDINGS > <karat> Findings > per-colour leaves.
+	# 22K comes in yellow only; 14K/18K in all three colours.
+	def home_findings_gold():
+		ensure("GOLD FINDINGS", "GOLD", 1)
+		for karat, colours in (("14", "YWP"), ("18", "YWP"), ("22", "Y")):
+			ensure(f"{karat}K Findings", "GOLD FINDINGS", 1)
+			for c in colours:
+				ensure(f"{karat} K{c}G Findings", f"{karat}K Findings", 0)
+
 	for main, types in ITEM_GROUP_TREE.items():
 		ensure(main, root, 1)
 		for typ, groups in types.items():
@@ -1363,6 +1373,7 @@ def setup_item_group_tree():
 					ensure(leaf, grp, 0)
 
 	home_ornament_gold()
+	home_findings_gold()
 
 	# every diamond quality group sits straight under DIAMOND
 	for g in frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name"):

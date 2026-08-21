@@ -192,8 +192,12 @@ def make_demo(designs=40, orders=30, requests=5, finished=8, seed=7):
 			if wt <= 0:
 				continue
 			is_stone = bool(frappe.db.get_value("Item", item, "stone_type"))
-			japi.weight_add(b, json.dumps([{"item": item, "weight": round(wt, 3)}]),
-			                from_warehouse=sissue if is_stone else store)
+			# weight_add page is gone — book the demo weight straight onto the ledger
+			from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+			src = sissue if is_stone else store
+			japi._bag_ledger(b, item, "In", round(wt, 3), "Weight Add", remarks="demo")
+			japi._stock_move(item, round(wt, 3), src, japi._wh(IN_PRODUCTION_WAREHOUSE))
+			japi._recompute_bag_from_contents(b)
 		if doc.qty == 1:
 			issued_q1.append(b)
 		# walk part of the bench path for a real transfer trail
