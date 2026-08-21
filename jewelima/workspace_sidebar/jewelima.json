@@ -1684,32 +1684,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "file-text",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Day Sheet",
-   "link_to": "day-sheet",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "calendar",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Day Records",
-   "link_to": "Day Record",
-   "link_type": "DocType",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "warehouse",
@@ -2321,7 +2295,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-21 13:25:12.070874",
+ "modified": "2026-08-22 04:14:02.547910",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

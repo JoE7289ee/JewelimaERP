@@ -4244,19 +4244,6 @@ def get_stone_issuer_today(employee):
 
 
 @frappe.whitelist()
-def get_day_sheet_html(date):
-	"""Day Sheet page: the rendered 4-page sheet for a date (single source of
-	truth = the 'Day Sheet' print format), or exists=False when no record yet."""
-	d = str(date or "").strip()
-	if not d or not frappe.db.exists("Day Record", d):
-		return {"exists": False, "name": d}
-	# render ONLY the sheet markup (get_print wraps it in the whole print-view page)
-	pf = frappe.get_doc("Print Format", "Day Sheet")
-	html = frappe.render_template(pf.html, {"doc": frappe.get_doc("Day Record", d)})
-	return {"exists": True, "name": d, "html": html}
-
-
-@frappe.whitelist()
 def get_usage_report():
 	"""Reports > Usage (SM only): DB size + top tables, core document counts,
 	bags-per-day trend, users/sessions, and server disk — the capacity dashboard."""
@@ -4310,7 +4297,7 @@ def get_usage_report():
 	}
 
 
-# --- Data retention (prune BY CHOICE — the Day Record keeps the day's story) -------
+# --- Data retention (prune BY CHOICE) ---------------------------------------------
 # Only informative/monitoring rows of CLOSED bags (Sold / Cancelled) ever qualify;
 # Stock Ledger Entries are valuation truth and are never touched.
 
@@ -4330,20 +4317,15 @@ def _prune_candidates(months):
 		WHERE datetime < %s AND order_bag IN ({0})""".format(closed), cutoff)[0][0]
 	kinds["material_issue"] = frappe.db.sql("""SELECT COUNT(*) FROM `tabMaterial Issue`
 		WHERE posting < %s AND order_bag IN ({0})""".format(closed), cutoff)[0][0]
-	unsealed = frappe.db.sql("""
-		SELECT COUNT(DISTINCT DATE(l.datetime)) FROM `tabBag Material Ledger` l
-		WHERE l.datetime < %s AND l.order_bag IN ({0})
-		AND DATE(l.datetime) NOT IN (SELECT date FROM `tabDay Record`)""".format(closed), cutoff)[0][0]
-	return cutoff, kinds, unsealed
+	return cutoff, kinds
 
 
 @frappe.whitelist()
 def get_prune_preview(months=3):
 	"""DRY RUN: what a prune would delete. Nothing is touched."""
 	frappe.only_for(("System Manager", "JW Manager"))
-	cutoff, kinds, unsealed = _prune_candidates(months)
-	return {"cutoff": str(cutoff), "kinds": kinds, "total": sum(kinds.values()),
-		"unsealed_days": unsealed}
+	cutoff, kinds = _prune_candidates(months)
+	return {"cutoff": str(cutoff), "kinds": kinds, "total": sum(kinds.values())}
 
 
 @frappe.whitelist()
@@ -4355,7 +4337,7 @@ def prune_execute(months=3, confirm_text=None):
 		frappe.throw(frappe._('Type PRUNE to confirm — this permanently deletes old monitoring rows.'))
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
-	cutoff, kinds, _un = _prune_candidates(months)
+	cutoff, kinds = _prune_candidates(months)
 	closed = "SELECT name FROM `tabOrder Bag` WHERE stock_status IN ('Sold','Cancelled')"
 	deleted = {}
 	for dt in dict.fromkeys(BENCH_DOCTYPE.values()):

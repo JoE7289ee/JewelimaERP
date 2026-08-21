@@ -42,7 +42,7 @@ frappe.pages["usage"].on_page_load = function (wrapper) {
 			<div class="us-panel" style="margin-top:18px;">
 				<div class="p-head">${__("Data Retention — prune BY CHOICE")}</div>
 				<div style="padding:12px 14px;font-size:12.5px;">
-					<div style="color:var(--text-muted);margin-bottom:10px;">${__("Monitoring rows of CLOSED bags (Sold / Cancelled) older than the window can be deleted once their days are sealed in Day Records. Stock Ledger Entries are never touched. Preview first — nothing is deleted without typing PRUNE.")}</div>
+					<div style="color:var(--text-muted);margin-bottom:10px;">${__("Monitoring rows of CLOSED bags (Sold / Cancelled) older than the window can be deleted. Stock Ledger Entries are never touched. Preview first — nothing is deleted without typing PRUNE.")}</div>
 					${__("Older than")} <input type="number" class="us-pr-months" value="3" min="1" style="width:54px;border:1px solid var(--border-color);border-radius:4px;padding:2px 6px;text-align:right;"> ${__("months")}
 					<button class="btn btn-xs btn-default us-pr-preview" style="margin-left:10px;">${__("Preview")}</button>
 					<div class="us-pr-out" style="margin-top:10px;"></div>
@@ -87,8 +87,7 @@ frappe.pages["usage"].on_page_load = function (wrapper) {
 				`<tr><td>${esc(k.replace("bench:", ""))}</td><td class="r"><b>${Number(v).toLocaleString()}</b></td></tr>`).join("");
 			root.find(".us-pr-out").html(`
 				<table style="font-size:12px;"><tbody>${rows || `<tr><td class="text-muted">${__("Nothing qualifies.")}</td></tr>`}</tbody></table>
-				<div style="margin-top:8px;">${__("Total: {0} row(s) before {1}.", [`<b>${Number(m.total || 0).toLocaleString()}</b>`, m.cutoff])}
-				${m.unsealed_days ? `<span style="color:var(--red-600,#c0392b);font-weight:700;"> ${__("{0} day(s) NOT sealed in Day Records yet — backfill first!", [m.unsealed_days])}</span>` : ""}</div>
+				<div style="margin-top:8px;">${__("Total: {0} row(s) before {1}.", [`<b>${Number(m.total || 0).toLocaleString()}</b>`, m.cutoff])}</div>
 				${m.total ? `<button class="btn btn-xs btn-danger us-pr-go" style="margin-top:8px;">${__("Delete these rows…")}</button>` : ""}`);
 		});
 	});
