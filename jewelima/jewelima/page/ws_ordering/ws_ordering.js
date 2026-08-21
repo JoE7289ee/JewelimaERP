@@ -228,7 +228,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			const names = [...sel.keys()];
 			const totalQty = names.reduce((a, n) => a + qtyOf(n), 0);
 			const chips = names.map((n) =>
-				`<span style="display:inline-block;margin:3px 6px 0 0;padding:3px 10px;border:1px solid var(--border-color);border-radius:9px;font-family:var(--font-family-monospace,monospace);font-weight:700;">
+				`<span class="od-tr-chip" data-name="${esc(n)}" style="display:inline-block;margin:3px 6px 0 0;padding:3px 10px;border:1px solid var(--border-color);border-radius:9px;font-family:var(--font-family-monospace,monospace);font-weight:700;">
 					${esc(n)}${qtyOf(n) ? ` <span style="color:var(--text-muted);font-weight:400;">×${qtyOf(n)}</span>` : ""} <span data-rm="${esc(n)}" style="cursor:pointer;color:#b02a2a;font-weight:800;">&times;</span></span>`).join("")
 				|| `<span style="color:var(--text-muted);font-size:12px;">${__("nothing selected — tick cards on the list or scan here")}</span>`;
 			dlg.get_field("list").$wrapper.html(`
@@ -240,6 +240,27 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				<div class="od-tr-chips">${chips}</div>`);
 			dlg.get_primary_btn().text(__("Transfer {0} card(s)", [names.length]));
 		};
+		// hover a chip -> the card's print image (same popup the table hover uses);
+		// scanned cards not on today's list get their image fetched once
+		const chipImg = {};
+		dlg.get_field("list").$wrapper.on("mouseenter", ".od-tr-chip", function () {
+			const el = this, n = $(this).data("name");
+			const showAt = (src) => {
+				if (!src || !el.isConnected || !$(el).is(":hover")) return;
+				const rc = el.getBoundingClientRect();
+				$imgpop.find("img").attr("src", encodeURI(src));
+				$imgpop.css({ left: rc.right + 10 + "px", top: Math.max(10, rc.top - 80) + "px", "z-index": 1060 }).show();
+			};
+			const row = ((D && D.rows) || []).find((x) => x.name === n);
+			if (row && row.image) return showAt(row.image);
+			if (n in chipImg) return showAt(chipImg[n]);
+			frappe.db.get_value("Order Bag", n, "image").then((r) => {
+				chipImg[n] = (r.message || {}).image || "";
+				showAt(chipImg[n]);
+			});
+		});
+		dlg.get_field("list").$wrapper.on("mouseleave", ".od-tr-chip", () => $imgpop.hide());
+		dlg.$wrapper.on("hidden.bs.modal", () => $imgpop.hide());
 		dlg.get_field("list").$wrapper.on("click", "[data-rm]", function () {
 			sel.delete($(this).data("rm"));
 			paintList();

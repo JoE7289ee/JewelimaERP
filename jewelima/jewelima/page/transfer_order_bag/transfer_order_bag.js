@@ -91,9 +91,11 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const TP = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
 		|| frappe.user.has_role("Stock Manager") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")), emp: null };
 	if (TP.allowed) {
-		$(page.main).find(".tob-plus").css("display", "flex");
 		TP.emp = frappe.ui.form.make_control({
-			df: { fieldtype: "Link", label: __("Employee (optional)"), fieldname: "tp_emp", options: "Employee" },
+			df: { fieldtype: "Link", label: __("Employee (optional)"), fieldname: "tp_emp", options: "Employee",
+				// only who is allotted to the DESTINATION bench; empty roster -> nobody
+				get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query",
+					filters: { bench: state.to.get_value(), strict: 1 } }) },
 			parent: $(page.main).find(".tp-emp").get(0), render_input: true,
 		});
 		TP.emp.refresh();
@@ -101,17 +103,32 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			$(page.main).find(".tp-opts").css("display", this.checked ? "inline-flex" : "none");
 			if (this.checked) loadTargetOptions();
 		});
-		state.to.$input.on("change", loadTargetOptions);
+		// delegated: state.to.refresh() (allowed-destinations rebuild) replaces the
+		// <select>, which silently dropped a directly-bound handler — the strip then
+		// stuck to the OLD destination's state
+		$(page.main).on("change", ".tob-to select", loadTargetOptions);
 	}
+	// only destinations with an issue/assign flow get the strip — the rest
+	// (ORDERING, CAM, TREE MAKING, CASTING, BAG EXTRACTION) just transfer
+	const TOB_ISSUABLE = ["GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH",
+		"CAD", "WAXING", "WAX SETTING", "WAX CLEANING"];
 	function loadTargetOptions() {
+		// the "issue right after" strip only exists once an ISSUABLE destination is picked
 		const to = state.to.get_value();
+		if (TP.allowed) $(page.main).find(".tob-plus").css("display", to && TOB_ISSUABLE.includes(to) ? "flex" : "none");
+		if (TP.emp) TP.emp.set_value(""); // roster is per-bench — a change of destination voids the pick
 		const $wt = $(page.main).find(".tp-wt");
-		$wt.html(`<option value="">${__("— no work type —")}</option>`);
+		$wt.html("");
 		if (!to || !$(page.main).find(".tp-on").is(":checked")) return;
 		frappe.call({ method: "jewelima.jewelima.api.get_bench_work_options", args: { location: to }, freeze: false })
 			.then((r) => {
-				const wts = (r.message || {}).work_types || [];
-				$wt.append(wts.map((w) => `<option>${frappe.utils.escape_html(w)}</option>`).join(""));
+				const m = r.message || {};
+				const wts = m.work_types || [];
+				// a bench with work types MUST issue under one — no blank option; the
+				// bench's default comes preselected. No work types configured -> stays blank.
+				$wt.html(wts.length
+					? wts.map((w) => `<option ${w === m.default_work_type ? "selected" : ""}>${frappe.utils.escape_html(w)}</option>`).join("")
+					: `<option value="">${__("— no work types here —")}</option>`);
 			});
 	}
 
@@ -135,6 +152,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			const allowed = r.message || [];
 			state.to.df.options = ["", ...allowed].join("\n");
 			state.to.refresh();
+			loadTargetOptions(); // refresh may reset the pick — keep the issue strip honest
 			if (!allowed.length) setMsg(__("You have no transfer rights from <b>{0}</b>.", [frappe.utils.escape_html(fromLoc)]), "err");
 		});
 	}
@@ -244,6 +262,9 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		state.to.set_value("");
 		state.to.df.options = TOB_LOCATIONS; // restore full list until next batch locks a from
 		state.to.refresh();
+		$(page.main).find(".tp-on").prop("checked", false);
+		$(page.main).find(".tp-opts").css("display", "none");
+		loadTargetOptions(); // no destination -> the issue strip hides again
 		state.scan.set_value("");
 		setMsg("");
 		updateLoc();
@@ -280,7 +301,11 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one bag first."));
 		if (!to) return frappe.msgprint(__("Pick the destination location ('Transfer all to')."));
 		if (to === state.location) return frappe.msgprint(__("Destination is the same as the current location."));
-		const plus = TP.allowed && $(page.main).find(".tp-on").is(":checked");
+		const plus = TP.allowed && TOB_ISSUABLE.includes(to) && $(page.main).find(".tp-on").is(":checked");
+		// a destination with work types configured never issues without one picked
+		const $wt = $(page.main).find(".tp-wt");
+		if (plus && $wt.find("option").length && !$wt.val())
+			return frappe.msgprint(__("Pick the work type for {0} — no issue goes out without one.", [to]));
 		// Scan as many as you like — but send them in CHUNKS. The whole batch used to
 		// go in one request: a big enough batch hit the gateway timeout and left the
 		// floor half-transferred with no warning. Each chunk is its own request, so a

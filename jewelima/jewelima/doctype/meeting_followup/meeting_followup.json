@@ -1,0 +1,63 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-08-21 12:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "meeting",
+  "point",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "meeting",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Meeting",
+   "options": "Meeting Minute",
+   "reqd": 1
+  },
+  {
+   "fieldname": "point",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Point Row",
+   "reqd": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Follow-up",
+   "reqd": 1
+  }
+ ],
+ "idx": 0,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-21 12:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Meeting Followup",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "JW Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

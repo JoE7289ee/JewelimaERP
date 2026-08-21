@@ -197,7 +197,10 @@ JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categorie
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
 JEWELIMA_INFO_BENCH_PAGES = ["bench-info"]  # one page for every bench (the per-bench pages are retired)
-JEWELIMA_INFO_PAGES = JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES + JEWELIMA_INFO_BENCH_PAGES
+# the shared file drop — Info uploads and downloads; delete stays uploader/admin
+JEWELIMA_INFO_SHARE_PAGES = ["file-share"]
+JEWELIMA_INFO_PAGES = (JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES
+	+ JEWELIMA_INFO_BENCH_PAGES + JEWELIMA_INFO_SHARE_PAGES)
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
 	"Wax Dye", "Design", "File"]
 
@@ -417,6 +420,8 @@ def setup_roles():
 	# Info can open every bench BOARD (view-only; the one mutation, queue reason,
 	# is blocked server-side + hidden for view-only users)
 	for page in JEWELIMA_INFO_BENCH_PAGES:
+		set_page_roles(page, (JEWELIMA_INFO_ROLE,))
+	for page in JEWELIMA_INFO_SHARE_PAGES:
 		set_page_roles(page, (JEWELIMA_INFO_ROLE,))
 	for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_INFO_ROLE}, pluck="parent"):
 		if pg not in set(JEWELIMA_INFO_PAGES):

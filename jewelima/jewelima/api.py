@@ -6223,9 +6223,8 @@ def ws_issue_cards(bench, names, employee=None, work_type=None):
 	bench = (bench or "").upper()
 	_require_ws_access(bench)
 	if bench in ISSUE_RECEIPT_LOCATIONS:
-		res = issue_bench_cards(names, bench, employee=employee, work_type=work_type)
-	else:
-		res = assign_bench_cards(names, bench, employee=employee, work_type=work_type)
+		frappe.throw(frappe._("{0} books gold — issue only through the Job Work page.").format(bench))
+	res = assign_bench_cards(names, bench, employee=employee, work_type=work_type)
 	if res.get("errors") and not res.get("done"):
 		frappe.throw(frappe._("{0}").format(res["errors"][0].get("error")))
 	return res
@@ -6240,12 +6239,8 @@ def ws_collect_card(bench, order_bag, collection_state=None, weight_in=None, emp
 	bench = (bench or "").upper()
 	_require_ws_access(bench)
 	if bench in ISSUE_RECEIPT_LOCATIONS:
-		if weight_in in (None, ""):
-			frappe.throw(frappe._("{0} books metal — give the weight coming back (g).").format(bench))
-		res = receipt_bench_cards(json.dumps([{"order_bag": order_bag, "weight_in": flt(weight_in)}]),
-			bench, employee=employee, collection_state=collection_state)
-	else:
-		res = collect_bench_cards(json.dumps([order_bag]), bench, collection_state=collection_state)
+		frappe.throw(frappe._("{0} books gold — receipt only through the Job Work page.").format(bench))
+	res = collect_bench_cards(json.dumps([order_bag]), bench, collection_state=collection_state)
 	# single-card wrapper: a skip IS a failure — say why instead of a false success
 	if res.get("errors"):
 		frappe.throw(frappe._("{0}: {1}").format(order_bag, res["errors"][0].get("error")))
@@ -7448,6 +7443,8 @@ def get_bench_card(order_bag):
 			order_by="creation desc", limit=1,
 		)
 		rec = recs[0] if recs else None
+		if rec and rec.employee:
+			rec["employee_name"] = frappe.db.get_value("Employee", rec.employee, "employee_name") or rec.employee
 	return {
 		"order_bag": order_bag, "location": bag.location, "design": bag.design, "qty": bag.qty,
 		"is_cad": int(bag.is_cad or 0), "cad_design_type": bag.cad_design_type,
@@ -7921,6 +7918,13 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 				).format(round(gain, 3), round(wout, 3), round(win, 3), MAX_RECEIPT_GAIN_G)})
 				continue
 			issue_emp = issue.employee
+			# STRICT: a card issued to someone comes back under THEIR name only —
+			# a different employee at receipt means a wrong scan, not a handover
+			if issue_emp and employee and employee != issue_emp:
+				_enm = lambda e: frappe.db.get_value("Employee", e, "employee_name") or e
+				errors.append({"name": nm, "error": frappe._(
+					"Issued to {0} — receipt it under them, not {1}.").format(_enm(issue_emp), _enm(employee))})
+				continue
 			if issue_emp:
 				_adjust_employee_balance(issue_emp, -wout)  # held weight returns
 			final_emp = employee or issue_emp
@@ -15262,3 +15266,258 @@ def set_my_password(new_password):
 	update_password(user=u, pwd=pwd)
 	frappe.db.commit()
 	return {"ok": 1}
+
+
+# ---------------------------------------------------------------------------
+# File Share — one shared drop for excels / pdfs / any working file.
+# Everyone with the page (Jewelima Info up) uploads and downloads; a file is
+# deleted only by the person who put it there, or an admin. Files live PRIVATE
+# under Home/File Share — the only way out is the role-checked download below.
+# ---------------------------------------------------------------------------
+FILE_SHARE_ROLES = ("System Manager", "Stock Manager", "JW Manager", "Jewelima Info")
+FILE_SHARE_ADMIN_ROLES = ("System Manager", "JW Manager")
+FILE_SHARE_FOLDER = "Home/File Share"
+
+
+def _file_share_guard():
+	if not set(FILE_SHARE_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("No access to the File Share."), frappe.PermissionError)
+
+
+def _file_share_folder():
+	if not frappe.db.exists("File", FILE_SHARE_FOLDER):
+		frappe.get_doc({"doctype": "File", "file_name": "File Share",
+			"is_folder": 1, "folder": "Home"}).insert(ignore_permissions=True)
+	return FILE_SHARE_FOLDER
+
+
+@frappe.whitelist()
+def file_share_upload():
+	"""Take the multipart 'file' from the request and park it in the share."""
+	_file_share_guard()
+	f = frappe.request.files.get("file")
+	if not f or not f.filename:
+		frappe.throw(frappe._("No file arrived — pick one to upload."))
+	content = f.stream.read()
+	if not content:
+		frappe.throw(frappe._("{0} is empty.").format(f.filename))
+	doc = frappe.get_doc({"doctype": "File", "file_name": f.filename,
+		"folder": _file_share_folder(), "is_private": 1, "content": content,
+		"decode": False}).save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "file_name": doc.file_name}
+
+
+@frappe.whitelist()
+def file_share_list():
+	_file_share_guard()
+	rows = frappe.get_all("File",
+		filters={"folder": FILE_SHARE_FOLDER, "is_folder": 0},
+		fields=["name", "file_name", "file_size", "owner", "creation"],
+		order_by="creation desc")
+	owners = list({r.owner for r in rows})
+	names = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", owners]}, fields=["name", "full_name"])} if owners else {}
+	me, admin = frappe.session.user, bool(set(FILE_SHARE_ADMIN_ROLES) & set(frappe.get_roles()))
+	return {"rows": [{"name": r.name, "file_name": r.file_name,
+		"size": cint(r.file_size), "who": names.get(r.owner, r.owner),
+		"when": str(r.creation), "can_delete": admin or r.owner == me} for r in rows]}
+
+
+@frappe.whitelist()
+def file_share_download(name):
+	"""Stream one shared file — the role check IS the access; the file itself
+	stays private."""
+	_file_share_guard()
+	fd = frappe.get_doc("File", name)
+	if fd.folder != FILE_SHARE_FOLDER or fd.is_folder:
+		frappe.throw(frappe._("{0} is not in the File Share.").format(name))
+	with open(fd.get_full_path(), "rb") as fh:  # raw bytes — get_content() may try utf-8
+		frappe.local.response.filecontent = fh.read()
+	frappe.local.response.filename = fd.file_name
+	frappe.local.response.type = "download"
+
+
+@frappe.whitelist()
+def file_share_delete(name):
+	"""Only the uploader or an admin removes a shared file."""
+	_file_share_guard()
+	fd = frappe.get_doc("File", name)
+	if fd.folder != FILE_SHARE_FOLDER or fd.is_folder:
+		frappe.throw(frappe._("{0} is not in the File Share.").format(name))
+	if fd.owner != frappe.session.user and not set(FILE_SHARE_ADMIN_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Only {0} (who uploaded it) or an admin can delete this.").format(fd.owner))
+	frappe.delete_doc("File", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": fd.file_name}
+
+
+# ---------------------------------------------------------------------------
+# Meeting Minutes — meetings with dated action points, admins only (System
+# Manager / JW Manager). A point ticks off with who and when; a meeting closes
+# when its business is done.
+# ---------------------------------------------------------------------------
+MEETING_ROLES = ("System Manager", "JW Manager")
+
+
+def _meeting_guard():
+	if not set(MEETING_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Meeting Minutes is for admins only."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def meeting_create(title, meeting_on, points=None, note=None):
+	_meeting_guard()
+	title = (title or "").strip()
+	if not title:
+		frappe.throw(frappe._("Give the meeting a title."))
+	if not meeting_on:
+		frappe.throw(frappe._("Pick the meeting date & time."))
+	raw = json.loads(points) if isinstance(points, str) else (points or [])
+	# each point may arrive as plain text OR {point, assigned_to} — assignment at
+	# creation is first-class: "this one is yours" is said in the meeting itself
+	pts = []
+	for p in raw:
+		if isinstance(p, dict):
+			txt = (p.get("point") or "").strip()
+			if txt:
+				pts.append({"point": txt, "assigned_to": (p.get("assigned_to") or "").strip() or None})
+		elif p and str(p).strip():
+			pts.append({"point": str(p).strip()})
+	doc = frappe.get_doc({"doctype": "Meeting Minute", "title": title,
+		"meeting_on": meeting_on, "status": "Open", "created_by": frappe.session.user,
+		"note": (note or "").strip() or None,
+		"points": pts}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name}
+
+
+@frappe.whitelist()
+def meeting_list(status=None, q=None):
+	_meeting_guard()
+	filters = {}
+	if status in ("Open", "Closed"):
+		filters["status"] = status
+	rows = frappe.get_all("Meeting Minute", filters=filters,
+		fields=["name", "title", "meeting_on", "status", "created_by", "note"],
+		order_by="meeting_on desc", limit=200)
+	if q:
+		ql = q.strip().lower()
+		rows = [r for r in rows if ql in (r.title or "").lower() or ql in (r.note or "").lower()]
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.created_by for r in rows if r.created_by})]},
+		fields=["name", "full_name"])} if rows else {}
+	out = []
+	for r in rows:
+		pts = frappe.get_all("Meeting Point", filters={"parent": r.name, "parenttype": "Meeting Minute"},
+			fields=["name", "point", "status", "assigned_to", "status_by", "status_on"], order_by="idx")
+		fups = frappe.get_all("Meeting Followup", filters={"meeting": r.name},
+			fields=["name", "point", "note", "owner", "creation"], order_by="creation")
+		fu_users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+			filters={"name": ["in", list({f.owner for f in fups})]}, fields=["name", "full_name"])} if fups else {}
+		by_pt = {}
+		for f in fups:
+			by_pt.setdefault(f.point, []).append({"note": f.note,
+				"who": fu_users.get(f.owner, f.owner), "when": str(f.creation)[:16]})
+		for p in pts:
+			p["status"] = p.status or "Open"
+			if p.status_by:
+				p["status_by_name"] = frappe.db.get_value("User", p.status_by, "full_name") or p.status_by
+			p["followups"] = by_pt.get(p.name, [])
+			# age of an unfinished point — days since it was written down
+			created = frappe.db.get_value("Meeting Point", p.name, "creation")
+			p["days_open"] = (frappe.utils.now_datetime() - created).days if (created and p["status"] != "Closed") else None
+		out.append({"name": r.name, "title": r.title, "meeting_on": str(r.meeting_on or ""),
+			"status": r.status, "who": users.get(r.created_by, r.created_by), "note": r.note or "",
+			"points": pts, "open_pts": sum(1 for p in pts if p["status"] != "Closed"), "total_pts": len(pts)})
+	counts = {"Open": 0, "Closed": 0}
+	for r in frappe.get_all("Meeting Minute", fields=["status"]):
+		counts[r.status or "Open"] = counts.get(r.status or "Open", 0) + 1
+	# point-level KPIs across ALL meetings
+	pt_counts = {"Open": 0, "In Process": 0, "Closed": 0}
+	for r in frappe.get_all("Meeting Point", filters={"parenttype": "Meeting Minute"}, fields=["status"]):
+		pt_counts[r.status or "Open"] = pt_counts.get(r.status or "Open", 0) + 1
+	return {"rows": out, "counts": counts, "pt_counts": pt_counts}
+
+
+MEETING_POINT_STATUSES = ("Open", "In Process", "Closed")
+
+
+@frappe.whitelist()
+def meeting_set_point(point, status):
+	"""Move one action point through Open / In Process / Closed — stamps who and when."""
+	_meeting_guard()
+	if not frappe.db.exists("Meeting Point", point):
+		frappe.throw(frappe._("That point is gone."))
+	if status not in MEETING_POINT_STATUSES:
+		frappe.throw(frappe._("A point is Open, In Process or Closed."))
+	frappe.db.set_value("Meeting Point", point,
+		{"status": status, "status_by": frappe.session.user,
+		 "status_on": frappe.utils.now_datetime()})
+	frappe.db.commit()
+	return {"status": status}
+
+
+@frappe.whitelist()
+def meeting_assign_point(point, assigned_to=None):
+	"""Put a name on a point — free text, whoever is answerable for it."""
+	_meeting_guard()
+	if not frappe.db.exists("Meeting Point", point):
+		frappe.throw(frappe._("That point is gone."))
+	frappe.db.set_value("Meeting Point", point, "assigned_to", (assigned_to or "").strip() or None)
+	frappe.db.commit()
+	return {"assigned_to": (assigned_to or "").strip()}
+
+
+@frappe.whitelist()
+def meeting_followup_add(point, note):
+	"""One follow-up line on a point — who wrote it and when come from the record."""
+	_meeting_guard()
+	note = (note or "").strip()
+	if not note:
+		frappe.throw(frappe._("Write the follow-up."))
+	pr = frappe.db.get_value("Meeting Point", point, "parent")
+	if not pr:
+		frappe.throw(frappe._("That point is gone."))
+	frappe.get_doc({"doctype": "Meeting Followup", "meeting": pr, "point": point,
+		"note": note}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"added": note}
+
+
+@frappe.whitelist()
+def meeting_add_point(name, point):
+	_meeting_guard()
+	point = (point or "").strip()
+	if not point:
+		frappe.throw(frappe._("Write the point."))
+	doc = frappe.get_doc("Meeting Minute", name)
+	doc.append("points", {"point": point})
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"added": point}
+
+
+@frappe.whitelist()
+def meeting_remove_point(point):
+	_meeting_guard()
+	p = frappe.db.get_value("Meeting Point", point, ["parent", "point"], as_dict=True)
+	if not p:
+		return {"removed": 0}
+	doc = frappe.get_doc("Meeting Minute", p.parent)
+	doc.points = [r for r in doc.points if r.name != point]
+	doc.save(ignore_permissions=True)
+	for f in frappe.get_all("Meeting Followup", filters={"point": point}, pluck="name"):
+		frappe.delete_doc("Meeting Followup", f, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"removed": p.point}
+
+
+@frappe.whitelist()
+def meeting_set_status(name, status):
+	_meeting_guard()
+	if status not in ("Open", "Closed"):
+		frappe.throw(frappe._("Status is Open or Closed."))
+	frappe.db.set_value("Meeting Minute", name, "status", status)
+	frappe.db.commit()
+	return {"status": status}

@@ -15,7 +15,7 @@
 
 frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Job Work", single_column: true });
-	const state = { mode: "issue", rows: [], location: null, history: [] };
+	const state = { mode: "issue", rows: [], location: null, history: [], batchEmp: null };
 	const ALLOWED = ["GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"];
 
 	$(page.main).append(`
@@ -74,8 +74,13 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	};
 	state.scan = mk(".jw-scan", { fieldtype: "Data", label: "Scan Order Bag", fieldname: "scan", description: "Scan a bag barcode (or type + Enter)." });
 	state.emp = mk(".jw-emp", { fieldtype: "Link", label: "Employee", fieldname: "employee", options: "Employee" });
-	// only show employees allotted to the current bench (state.location); all if none set — see api.bench_employee_query
-	state.emp.get_query = () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: state.location || "" } });
+	// manual picks are limited to the bench roster — but once a scanned card seeds
+	// the batch employee the roster query must NOT apply: the Link control silently
+	// DROPS a set value its query can't find (an employee issued a card while off
+	// the roster then never showed up — the old "employee not showing" bug)
+	state.emp.get_query = () => state.batchEmp
+		? { filters: {} }
+		: { query: "jewelima.jewelima.api.bench_employee_query", filters: { bench: state.location || "" } };
 
 	// per-bench Work Type (issue) + Collection State (receipt) — configured on
 	// Setup > Work Types & States; pickers only show when the bench has options
@@ -125,6 +130,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const $actions = $(page.main).find(".jw-actions");
 	const focusScan = () => setTimeout(() => state.scan.$input.focus(), 30);
 	const empVal = () => state.emp.get_value();
+	const empDisp = () => (state.emp.$input && state.emp.$input.val()) || empVal(); // the NAME shown in the field, never the code
 	// once a card brings its own employee, lock the field so it can't be changed mid-issue
 	function lockEmp(on) {
 		if (state.emp.$input) state.emp.$input.prop("disabled", !!on).toggleClass("jw-emp-locked", !!on);
@@ -209,7 +215,13 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	$body.on("click", ".jw-rm", function () {
 		const nm = $(this).data("name");
 		state.rows = state.rows.filter((r) => r.name !== nm);
-		if (!state.rows.length) state.location = null;
+		if (!state.rows.length) {
+			state.location = null;
+			state.batchEmp = null; // empty batch — the next scan decides afresh
+			state.batchEmpName = null;
+			state.emp.set_value("");
+			lockEmp(false);
+		}
 		updateLoc();
 		renderRows();
 		focusScan();
@@ -275,17 +287,39 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			const row = { name: code, design: v.design, qty: v.qty, status, gold: v.gold, employee: (v.record && v.record.employee) || "" };
+			const row = { name: code, design: v.design, qty: v.qty, status, gold: v.gold,
+				employee: (v.record && v.record.employee) || "",
+				employee_name: (v.record && (v.record.employee_name || v.record.employee)) || "" };
 			if (state.mode === "receipt") {
 				row.weight_out = (v.record && v.record.weight_out) || v.gold || 0;
 				row.weight_in = null;
+				// STRICT batches: the first scan decides. A card issued to someone
+				// locks the whole batch to that person — nothing of anyone else's,
+				// nothing unassigned. A first card with NO employee locks the batch
+				// to unassigned cards only.
+				if (state.batchEmp == null) {
+					state.batchEmp = row.employee; // "" = a no-employee batch
+					state.batchEmpName = row.employee_name || row.employee;
+					// lock only AFTER the set lands — disabling the input mid-set
+					// makes the Link control drop the value (the old "employee not
+					// showing up" bug)
+					if (row.employee) Promise.resolve(state.emp.set_value(row.employee)).then(() => lockEmp(true));
+					else { state.emp.set_value(""); lockEmp(false); } // receiver names who did the work
+				} else if (row.employee !== state.batchEmp) {
+					const who = frappe.utils.escape_html(row.employee_name || row.employee);
+					const batchWho = frappe.utils.escape_html(state.batchEmpName || state.batchEmp);
+					setMsg(state.batchEmp
+						? (row.employee
+							? __("<b>{0}</b> is issued to <b>{1}</b> — this batch is receiving from <b>{2}</b>.", [safe, who, batchWho])
+							: __("<b>{0}</b> has no employee on it — this batch is locked to <b>{1}</b>.", [safe, batchWho]))
+						: __("<b>{0}</b> is issued to <b>{1}</b> — this batch is receiving unassigned cards only.", [safe, who]), "err");
+					logHistory(code, __("Wrong employee ({0})", [row.employee_name || row.employee || __("none")]), "err");
+					return;
+				}
 			}
 			state.rows.push(row);
-			// the card may already carry an employee assigned at the workbench — pull it
-			// so you don't re-enter it (the first assigned card seeds the batch employee)
-			if (row.employee && !state.emp.get_value()) { state.emp.set_value(row.employee); lockEmp(true); }
 			renderRows();
-			setMsg(__("Added <b>{0}</b>{1}  ·  {2} in batch.", [safe, row.employee ? " · " + frappe.utils.escape_html(row.employee) : "", state.rows.length]), "ok");
+			setMsg(__("Added <b>{0}</b>{1}  ·  {2} in batch.", [safe, row.employee ? " · " + frappe.utils.escape_html(row.employee_name || row.employee) : "", state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
 			if (state.mode === "receipt") {
 				// hand control to this card's weight-in box so you can type the weight straight away
@@ -318,9 +352,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		}).then((r) => {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
-			frappe.show_alert({ message: __("Issued {0} card(s) at {1}{2}", [res.count, state.location, withEmployee ? " → " + empVal() : ""]), indicator: "green" }, 6);
+			frappe.show_alert({ message: __("Issued {0} card(s) at {1}{2}", [res.count, state.location, withEmployee ? " → " + empDisp() : ""]), indicator: "green" }, 6);
 			showErrors(res.errors);
-			logHistory("—", __("Issued {0}{1}", [res.count, withEmployee ? " (" + empVal() + ")" : ""]), "ok");
+			logHistory("—", __("Issued {0}{1}", [res.count, withEmployee ? " (" + empDisp() + ")" : ""]), "ok");
 			clearBatch();
 		}).catch(() => frappe.dom.unfreeze());
 	}
@@ -337,7 +371,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		}
 		frappe.confirm(
 			__("<b>{0}</b> will be credited with <b>{1} g</b> loss across <b>{2}</b> card(s) at <b>{3}</b>.{4}<br><br>Confirm receipt?",
-				[empVal(), total.toFixed(3), state.rows.length, state.location,
+				[frappe.utils.escape_html(empDisp()), total.toFixed(3), state.rows.length, state.location,
 				 gain > 0 ? __("<br><b>{0} g</b> extra weight will be pulled from <b>Production</b>.", [gain.toFixed(3)]) : ""]),
 			() => {
 				const tpxTo = tpxDest();
@@ -352,13 +386,13 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 					const res = r.message || {};
 					frappe.show_alert({ message: tpxTo && tpxTo !== "MISSING"
 						? __("Received {0} · loss {1} g → moved {2} to {3}", [res.count, (res.total_loss || 0), res.transferred || 0, tpxTo])
-						: __("Received {0} card(s) · loss {1} g → {2}", [res.count, (res.total_loss || 0), res.employee]), indicator: "green" }, 7);
+						: __("Received {0} card(s) · loss {1} g → {2}", [res.count, (res.total_loss || 0), empDisp()]), indicator: "green" }, 7);
 					if ((res.transfer_errors || []).length) {
 						frappe.msgprint({ title: __("Received but not moved"), indicator: "orange",
 							message: res.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
 					}
 					showErrors(res.errors);
-					logHistory("—", __("Received {0} · loss {1}g ({2})", [res.count, res.total_loss, res.employee]), "ok");
+					logHistory("—", __("Received {0} · loss {1}g ({2})", [res.count, res.total_loss, empDisp()]), "ok");
 					clearBatch();
 				}).catch(() => frappe.dom.unfreeze());
 			}
@@ -383,6 +417,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	function clearBatch() {
 		state.rows = [];
 		state.location = null;
+		state.batchEmp = null;
+		state.batchEmpName = null;
 		state.scan.set_value("");
 		setMsg("");
 		lockEmp(false);          // fresh batch — employee re-pulls from its cards
@@ -400,6 +436,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		state.emp.df.reqd = mode === "receipt" ? 1 : 0;
 		state.emp.df.label = mode === "receipt" ? __("Employee (did the work)") : __("Employee (optional)");
 		state.emp.refresh();
+		if ($cardsBtn) $cardsBtn.toggle(mode === "issue");
 		toggleWorkPickers();
 		renderHead();
 		renderActions();
@@ -545,7 +582,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		if (S.location) loadLoc(); else paint();
 	}
 
-	page.add_inner_button(__("Cards"), showCards);
+	// the Cards picker is ISSUE-only: a receipt batch is built by scanning the
+	// physical cards coming back, never by browsing a list
+	const $cardsBtn = page.add_inner_button(__("Cards"), showCards);
 	page.add_inner_button(__("History"), showHistory);
 	page.add_inner_button(__("Reset"), () => {
 		clearBatch();

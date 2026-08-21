@@ -1399,6 +1399,7 @@ const PO_COLUMNS = [
 	// code, and the due-days are stripped — requests carry no dates
 	page.add_inner_button(__("New Design"), () => openNewDesignDialog(state));
 	page.add_inner_button(__("OLD Design"), () => openOldDesignDialog(state));
+	page.add_inner_button(__("By Image"), () => openTypeBrowseDialog(state));
 	page.add_inner_button(__("Add Row"), () => addRow());
 	page.add_inner_button(__("Reset"), resetPage);
 
@@ -1419,6 +1420,7 @@ const PO_COLUMNS = [
 		Promise.resolve(row.f.bank ? row.f.bank.set(bank) : null).then(() => {
 			row._lastBank = bank;
 			if (state.syncDesignDep) state.syncDesignDep(row);
+			updateDesignBtn(row);
 			state.openVariantCreate(row, bank);
 		});
 	}
@@ -1447,8 +1449,12 @@ const PO_COLUMNS = [
 							row._materials = line.materials.map((m) => ({ ...m }));
 							row._profile = planProfile(row._materials);
 							applyProfile(row);
-							updateDesignBtn(row);   // paints the Materials button as edited
 						}
+						// programmatic fills skip the fields' own change wiring —
+						// repaint every row button (Split was staying dead on qty>1)
+						updateDesignBtn(row);
+						updateSplitBtn(row);
+						updateNewBtn(row);
 					});
 			});
 		});
@@ -2230,3 +2236,83 @@ function openOldDesignDialog(state) {
 }
 
 };
+
+// ---------------------------------------------------------------------------
+// By Type — browse the approved catalog by Design Type (product photos) and
+// drop any card onto the order as a fresh line. The line lands with the BANK
+// set; the design (karat variant) is then picked on the line as usual.
+// ---------------------------------------------------------------------------
+function openTypeBrowseDialog(state) {
+	const esc = frappe.utils.escape_html;
+	const S = { type: "", q: "", rows: [], total: 0, added: 0 };
+	const dlg = new frappe.ui.Dialog({
+		title: __("Add by Design Type"),
+		size: "extra-large",
+		fields: [
+			{ fieldname: "design_type", fieldtype: "Link", label: __("Design Type"), options: "Design Type" },
+			{ fieldname: "cb", fieldtype: "Column Break" },
+			{ fieldname: "q", fieldtype: "Data", label: __("Search design no") },
+			{ fieldname: "sb", fieldtype: "Section Break" },
+			{ fieldname: "grid", fieldtype: "HTML" },
+		],
+	});
+	const $g = dlg.get_field("grid").$wrapper;
+	function paint() {
+		$g.html(`
+			<style>
+			.tb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;max-height:calc(100vh - 330px);overflow:auto;padding:2px;}
+			.tb-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);overflow:hidden;display:flex;flex-direction:column;}
+			.tb-card img{width:100%;height:150px;object-fit:contain;background:#fff;}
+			.tb-noimg{width:100%;height:150px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:11px;background:var(--control-bg);}
+			.tb-b{padding:7px 10px;display:flex;flex-direction:column;gap:3px;}
+			.tb-no{font-weight:800;font-size:12.5px;font-family:var(--font-family-monospace,monospace);}
+			.tb-kv{font-size:11px;color:var(--text-muted);}
+			.tb-add{margin:0 10px 10px;}
+			.tb-none{grid-column:1/-1;padding:40px;text-align:center;color:var(--text-muted);}
+			.tb-count{font-size:12px;color:var(--text-muted);margin:0 0 8px;}
+			</style>
+			<div class="tb-count">${S.type || S.q ? __("{0} design(s)", [S.total]) : __("Pick a design type (or search) to browse.")}</div>
+			<div class="tb-grid">${S.rows.map((r) => `
+				<div class="tb-card">
+					${r.image ? `<img src="${encodeURI(r.image)}" loading="lazy">` : `<div class="tb-noimg">${__("no photo")}</div>`}
+					<div class="tb-b">
+						<span class="tb-no">${esc(r.design_no || r.name)}</span>
+						<span class="tb-kv">${flt(r.gross_weight) ? flt(r.gross_weight).toFixed(3) + " g" : ""}${flt(r.diamond_weight) ? " · " + flt(r.diamond_weight).toFixed(2) + " ct" : ""}</span>
+					</div>
+					<button class="btn btn-xs btn-primary tb-add" data-bank="${esc(r.name)}" data-no="${esc(r.design_no || r.name)}">${__("Add to order")}</button>
+				</div>`).join("") || ((S.type || S.q) ? `<div class="tb-none">${__("Nothing approved under that.")}</div>` : "")}</div>`);
+	}
+	function load() {
+		if (!S.type && !S.q) { S.rows = []; S.total = 0; paint(); return; }
+		frappe.call({ method: "jewelima.jewelima.design_bank_api.get_designs", freeze: false,
+			args: { design_type: S.type || null, search: S.q || null, mode: "print", start: 0, limit: 60 } })
+			.then((r) => {
+				const m = r.message || {};
+				S.rows = m.rows || [];
+				S.total = m.total || 0;
+				paint();
+			});
+	}
+	dlg.get_field("design_type").df.onchange = () => { S.type = dlg.get_value("design_type") || ""; load(); };
+	dlg.get_field("q").$input.on("input", frappe.utils.debounce(function () { S.q = this.value || ""; load(); }, 300));
+	$g.on("click", ".tb-add", function () {
+		const bank = $(this).data("bank"), no = $(this).data("no");
+		// same landing as the Shop handoff: an empty line if one exists, else a new one
+		const row = state.rows.find((rr) => rr.f.bank && !rr.f.bank.get() && !rr.f.design.get()) || state.addRow();
+		row._lastBank = bank;
+		Promise.resolve(row.f.bank ? row.f.bank.set(bank) : null).then(() => {
+			if (state.syncDesignDep) state.syncDesignDep(row);
+			// programmatic set skips the field's own change wiring — repaint the row
+			// buttons so +Var lights up for the new bank
+			if (state.updateDesignBtn) state.updateDesignBtn(row);
+			if (state.updateNewBtn) state.updateNewBtn(row);
+			S.added += 1;
+			frappe.show_alert({ message: __("{0} added as line {1} — pick its variant on the line.", [no, state.rows.indexOf(row) + 1]), indicator: "green" }, 4);
+		});
+	});
+	dlg.set_secondary_action_label(__("Done"));
+	dlg.set_secondary_action(() => dlg.hide());
+	dlg.show();
+	paint();
+	setTimeout(() => dlg.get_field("design_type").$input.focus(), 300);
+}

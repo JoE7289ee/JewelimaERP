@@ -1,0 +1,62 @@
+{
+ "actions": [],
+ "creation": "2026-08-21 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "point",
+  "status",
+  "assigned_to",
+  "status_by",
+  "status_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "point",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Point",
+   "reqd": 1
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Open\nIn Process\nClosed"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Assigned To"
+  },
+  {
+   "fieldname": "status_by",
+   "fieldtype": "Link",
+   "label": "Status By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_on",
+   "fieldtype": "Datetime",
+   "label": "Status On",
+   "read_only": 1
+  }
+ ],
+ "idx": 0,
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Meeting Point",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

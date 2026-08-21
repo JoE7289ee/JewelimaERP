@@ -97,6 +97,11 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 
 	function paint() {
 		const c = D.counts;
+		// Weight (gold) benches issue and receipt through the Job Work page ONLY —
+		// their workstation stays a board: stone requests yes, issue/collect no.
+		const canIssue = D.can_act && D.flow !== "weights";
+		const actCol = D.can_act && !WK_NO_ISSUE.includes(bench)
+			&& (canIssue || WK_EXTRACT.includes(bench) || WK_STONE_REQ.includes(bench));
 		root.find(".wk-kpis").html(
 			`<div class="wk-tile"><div class="k">${__("Waiting")}</div><div class="v">${c.waiting}</div></div>
 			<div class="wk-tile"><div class="k">${__("Working")}</div><div class="v">${c.working}</div></div>
@@ -114,7 +119,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		root.find(".wk-qbody").html(D.queue.length ? `
 			<table class="wk-t"><thead><tr>
 				${D.ranked ? `<th style="width:40px">P#</th>` : ""}<th>${__("Card")}</th><th>${__("Design")}</th>
-				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${D.can_act && !WK_NO_ISSUE.includes(bench) ? `<th style="width:70px"></th>` : ""}
+				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${actCol ? `<th style="width:70px"></th>` : ""}
 			</tr></thead><tbody>
 			${D.queue.map((r) => `<tr class="${r.stones_ok == null ? "" : r.stones_ok ? "wk-stok" : "wk-stneed"}"${r.stones_pending ? ` title="${esc(__("Stones short"))}: ${esc(r.stones_pending)}"` : ""}>
 				${D.ranked ? `<td><span class="wk-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank || ""}</span></td>` : ""}
@@ -125,15 +130,15 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 				<td>${r.queue_reason
 					? `<span class="wk-qr" data-name="${esc(r.name)}">${esc(r.queue_reason)}</span>`
 					: `<span class="wk-qr add" data-name="${esc(r.name)}">+ ${__("reason")}</span>`}</td>
-				${D.can_act && WK_EXTRACT.includes(bench) ? `<td><button class="btn btn-xs wk-extract" data-name="${esc(r.name)}"
+				${actCol && WK_EXTRACT.includes(bench) ? `<td><button class="btn btn-xs wk-extract" data-name="${esc(r.name)}"
 					style="background:#2e7d32;border-color:#2e7d32;color:#fff;">${__("Extract →")}</button></td>`
-				: D.can_act && !WK_NO_ISSUE.includes(bench) ? `<td>${r.stones_ok === 0
+				: actCol ? `<td>${r.stones_ok === 0
 					? (r.stone_requested
 						? `<span class="wk-req-done">${__("REQUESTED")}</span>`
 						: `<button class="btn btn-xs wk-streq" data-name="${esc(r.name)}"
 							style="background:#e0a800;border-color:#e0a800;color:#3a2c00;font-weight:700;">${__("Stone Request")}</button>`)
-					: `<button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
-						style="background:#1f618d;border-color:#1f618d;color:#fff;">${D.flow === "weights" ? __("Issue") : __("Assign")}</button>`}</td>` : ""}
+					: canIssue ? `<button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
+						style="background:#1f618d;border-color:#1f618d;color:#fff;">${__("Assign")}</button>` : ""}</td>` : ""}
 			</tr>`).join("")}</tbody></table>`
 			: `<div class="wk-none">${__("Nothing waiting — the bench is clear.")}</div>`);
 
@@ -145,7 +150,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 				${cd.work_type ? `<span class="wk-wt">${esc(cd.work_type)}</span>` : ""}
 				<span>${esc(cd.status)}</span>
 				<span class="wk-since">${cd.since ? frappe.datetime.comment_when(cd.since) : ""}</span>
-				${D.can_act ? `<button class="btn btn-xs btn-default wk-collect" data-name="${esc(cd.name)}" data-emp="${esc(g.employee)}">${D.flow === "weights" ? __("Receipt") : __("Collect")}</button>` : ""}
+				${canIssue ? `<button class="btn btn-xs btn-default wk-collect" data-name="${esc(cd.name)}" data-emp="${esc(g.employee)}">${__("Collect")}</button>` : ""}
 			</div>`).join("")}</div>`).join("")
 			: `<div class="wk-none">${__("Nobody holds a card here right now.")}</div>`);
 	}
