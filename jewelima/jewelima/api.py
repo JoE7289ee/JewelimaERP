@@ -23,6 +23,9 @@ def _abbr():
 # Stock-desk gate: buying, moving and melting stock is the JW Stock desk
 # (the tight buyer role keeps purchase-only access).
 STOCK_ROLES = {"System Manager", "Stock Manager", "Jewelima Stock", "JW Stock Admin", "JW Manager"}
+# who may chain a transfer onto an issue / a collect onto a transfer
+TRANSFER_PLUS_ROLES = {"System Manager", "Stock Manager", "Jewelima Transfer Plus",
+	"JW Manager", "JW Data Admin"}
 
 
 def _require_stock(extra=()):
@@ -13958,7 +13961,7 @@ def _card_materials(order_bag):
 
 
 def _require_transfer_plus():
-	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus", "JW Manager"} & set(frappe.get_roles()):
+	if not TRANSFER_PLUS_ROLES & set(frappe.get_roles()):
 		frappe.throw(frappe._("This needs the Jewelima Transfer Plus role."))
 
 
@@ -14005,7 +14008,7 @@ def transfer_and_issue(names, to_location, employee=None, work_type=None, remark
 	neither flow just transfer."""
 	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, ISSUE_RECEIPT_LOCATIONS
 	roles = set(frappe.get_roles())
-	if not {"System Manager", "Stock Manager", "Jewelima Transfer Plus", "JW Manager"} & roles:
+	if not TRANSFER_PLUS_ROLES & roles:
 		frappe.throw(frappe._("Transfer-and-issue needs the Jewelima Transfer Plus role."))
 	res = transfer_order_bags(names, to_location, remarks=remarks)
 	to = (to_location or "").upper()

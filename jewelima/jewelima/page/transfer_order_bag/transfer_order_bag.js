@@ -88,8 +88,8 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	state.to = mk(".tob-to", { fieldtype: "Select", label: "Transfer all to", fieldname: "to_location", options: TOB_LOCATIONS });
 
 	// ---- Transfer Plus: transfer AND put straight to work at the target ------
-	const TP = { allowed: frappe.user.has_role("Jewelima Transfer Plus")
-		|| frappe.user.has_role("Stock Manager") || (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager")), emp: null };
+	const TP = { allowed: ["Jewelima Transfer Plus", "Stock Manager", "System Manager", "JW Manager", "JW Data Admin"]
+		.some((r) => frappe.user.has_role(r)), emp: null };
 	if (TP.allowed) {
 		TP.emp = frappe.ui.form.make_control({
 			df: { fieldtype: "Link", label: __("Employee (optional)"), fieldname: "tp_emp", options: "Employee",
