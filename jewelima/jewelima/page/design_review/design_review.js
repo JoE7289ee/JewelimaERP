@@ -15,8 +15,15 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	let photoB64 = "";
 	let searched = false; // pane holds a searched card, not the queue head
 	let SIEVES = [];
+	let SIEVE_CT = {};   // sieve label -> average carats per stone
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_chart", freeze: false })
-		.then((r) => { SIEVES = (r.message || []).map((x) => x.sieve_size).filter(Boolean); if (cur) paintStones(cur.stones || []); });
+		.then((r) => {
+			const rows = r.message || [];
+			SIEVES = rows.map((x) => x.sieve_size).filter(Boolean);
+			rows.forEach((x) => { if (x.sieve_size && flt(x.avg_cts) > 0) SIEVE_CT[x.sieve_size] = flt(x.avg_cts); });
+			if (cur) { paintStones(cur.stones || []); recalcDW(); }
+		});
+	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 
 	$(page.main).append(`
 		<style>
@@ -54,6 +61,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 				<div class="rv-sec">${__("Stones / Sieves")}<span class="add rv-addstone">+ ${__("row")}</span></div>
 				<table class="rv-t"><thead><tr><th>${__("Sieve")}</th><th>${__("Pcs")}</th><th></th></tr></thead>
 					<tbody class="rv-stones"></tbody></table>
+				<div class="rv-dwnote" style="font-size:11px;margin:-4px 0 8px;"></div>
 				<div class="rv-checks">
 					<label><input type="checkbox" class="ck-up"> ${__("Upgrade photo (crop off / background)")}</label>
 					<label><input type="checkbox" class="ck-cn"> ${__("Customer image needed (best seller)")}</label>
@@ -82,7 +90,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 	const fNo = mk(".f-no", { fieldtype: "Data", label: __("Design No"), fieldname: "n" });
 	const fDT = mk(".f-dt", { fieldtype: "Link", label: __("Design Type (needed to approve)"), fieldname: "d", options: "Design Type", only_select: 1 });
 	const fGW = mk(".f-gw", { fieldtype: "Float", label: __("GW gm"), fieldname: "g" });
-	const fDW = mk(".f-dw", { fieldtype: "Float", label: __("DW ct"), fieldname: "w" });
+	const fDW = mk(".f-dw", { fieldtype: "Float", label: __("DW ct (from the stones)"), fieldname: "w", read_only: 1 });
 	const fNote = mk(".f-note", { fieldtype: "Data", label: __("Note"), fieldname: "o" });
 
 	// stones editor — same rows as the Card Builder; whatever stands here on
@@ -103,8 +111,33 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 				pcs: Math.max(0, cint($(this).find(".p").val())), ct: 0 };
 		}).get().filter((r) => r.sieve || r.pcs);
 	}
-	root.find(".rv-addstone").on("click", () => { const rows = collectStones(); rows.push({}); paintStones(rows); });
-	root.on("click", ".rv-t .del", function () { $(this).closest("tr").remove(); });
+	root.find(".rv-addstone").on("click", () => { const rows = collectStones(); rows.push({}); paintStones(rows); recalcDW(); });
+	root.on("click", ".rv-t .del", function () { $(this).closest("tr").remove(); recalcDW(); });
+	root.on("change input", ".rv-t .v, .rv-t .p", recalcDW);
+
+	// DW follows the stones: every row is pcs x that sieve's average carats.
+	// With NO stone rows there is nothing to derive from, so the card keeps the
+	// weight it came in with rather than being zeroed.
+	function recalcDW() {
+		const rows = collectStones();
+		if (!rows.length) {
+			fDW.set_value(cur ? cur.diamond_weight || 0 : 0);
+			root.find(".rv-dwnote").html(`<span style="color:var(--text-muted);">${__("no stone rows — keeping the weight on the card")}</span>`);
+			return;
+		}
+		let ct = 0;
+		const unknown = [];
+		rows.forEach((r) => {
+			const avg = SIEVE_CT[r.sieve];
+			if (r.sieve && !avg) unknown.push(r.sieve);
+			ct += (avg || 0) * cint(r.pcs);
+		});
+		fDW.set_value(Math.round(ct * 1000) / 1000);
+		const pcs = rows.reduce((a, r) => a + cint(r.pcs), 0);
+		root.find(".rv-dwnote").html(unknown.length
+			? `<span style="color:#b02a2a;">${__("no average carat on the sieve chart for: {0}", [esc(unknown.join(", "))])}</span>`
+			: `<span style="color:var(--text-muted);">${__("{0} stone(s) across {1} row(s)", [pcs, rows.length])}</span>`);
+	}
 
 	const bust = (u) => (u && !u.startsWith("data:") ? u + (u.includes("?") ? "&" : "?") + "m=" + Date.now() : u);
 	const im = (sel, url) => root.find(".rv-im .i." + sel).html(url ? `<img src="${esc(bust(url))}">` : `<div class="none">—</div>`);
@@ -116,6 +149,7 @@ frappe.pages["design-review"].on_page_load = function (wrapper) {
 		fGW.set_value(cur.gross_weight || ""); fDW.set_value(cur.diamond_weight || "");
 		fNote.set_value(cur.note);
 		paintStones(cur.stones || []);
+		recalcDW();
 		root.find(".ck-up").prop("checked", !!cur.photoupdate);
 		root.find(".ck-cn").prop("checked", !!cur.customer_image_needed);
 		root.find(".ck-cu").prop("checked", !!cur.customer_image_update);

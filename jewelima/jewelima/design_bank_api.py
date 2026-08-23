@@ -356,6 +356,18 @@ def review_save(payload):
 	_require(DESIGN_APPROVER_ROLES | {"Jewelima Ordering"})
 	from jewelima.jewelima.api import save_design_card
 	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	# DW is derived here, never typed: every stone row is pcs x that sieve's
+	# average carats. No stone rows means nothing to derive from, so the card
+	# keeps the weight it already carries.
+	stones = p.get("stones") or []
+	if stones:
+		from frappe.utils import cint, flt
+
+		from jewelima.jewelima.api import get_sieve_map
+
+		avg = get_sieve_map()
+		p["diamond_weight"] = round(sum(
+			flt(avg.get(r.get("sieve"))) * cint(r.get("pcs")) for r in stones), 3)
 	res = save_design_card(json.dumps({k: p.get(k) for k in
 		("name", "design_no", "design_type", "gross_weight", "diamond_weight",
 		 "note", "extra_lines", "photo", "stones")}))
