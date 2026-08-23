@@ -11,7 +11,6 @@ const QUICK_ITEMS = [
 	{ label: __("Card Info"), route: "card-info" },
 	{ label: __("Sell"), route: "sell" },
 	{ label: __("Transfer Holder"), route: "transfer-holder" },
-	{ label: __("Item Stock"), route: "item-stock" },
 ];
 
 // SLOT numbers are stable per layout: the server resolves the session user's

@@ -1140,7 +1140,7 @@ def _quick_catalog():
 		fields=["name", "title"], order_by="title asc")
 	return [(r.name, r.title or r.name) for r in rows]
 QUICK_DEFAULT_SLOTS = ["transfer-order-bag", "assign-collect", "job-work", "place-order",
-	"card-info", "sell", "transfer-holder", "item-stock", None]
+	"card-info", "sell", "transfer-holder", None, None]
 
 
 @frappe.whitelist()
@@ -7088,57 +7088,6 @@ def get_finished_stock_matrix(status="In Stock"):
 # ---------------------------------------------------------------------------
 # Warehouse Stock dashboard — live balances straight from the stock ledger (Bin).
 # ---------------------------------------------------------------------------
-@frappe.whitelist()
-def get_item_stock(warehouse=None):
-	"""Every stock item (gold + all stones) with its balance in a chosen warehouse
-	(blank = totalled across all warehouses). Shows the full item list, 0 where there
-	is no stock; skips disabled/non-stock items. For the Item Stock screen."""
-	bin_filters = {}
-	if warehouse:
-		bin_filters["warehouse"] = warehouse
-	qmap = {}
-	for b in frappe.get_all("Bin", filters=bin_filters, fields=["item_code", "actual_qty"]):
-		qmap[b.item_code] = qmap.get(b.item_code, 0.0) + flt(b.actual_qty)
-	rows = []
-	for it in frappe.get_all(
-		"Item", filters={"is_stock_item": 1, "disabled": 0},
-		fields=["name", "item_name", "stock_uom", "stone_type"], order_by="item_name asc",
-	):
-		rows.append({
-			"item": it.name, "item_name": it.item_name, "uom": it.stock_uom,
-			"type": it.stone_type or "Metal", "qty": round(flt(qmap.get(it.name, 0)), 3),
-		})
-	return sorted(rows, key=lambda x: (-x["qty"], (x["item_name"] or x["item"]).lower()))
-
-
-# ---------------------------------------------------------------------------
-# Bag Extraction — split one N-piece bag into N individual order bags.
-# ---------------------------------------------------------------------------
-def _even_split(total, n, prec=3):
-	"""Split `total` into `n` parts rounded to `prec` dp, summing back to `total`
-	(the rounding remainder is spread over the first parts)."""
-	total = flt(total)
-	if n <= 0:
-		return []
-	base = round(total / n, prec)
-	parts = [base] * n
-	diff = round(total - base * n, prec)
-	step = 10 ** (-prec)
-	i = 0
-	while abs(diff) >= step / 2 and i < n:
-		parts[i] = round(parts[i] + (step if diff > 0 else -step), prec)
-		diff = round(diff - (step if diff > 0 else -step), prec)
-		i += 1
-	return parts
-
-
-def _split_counts(total, n):
-	"""Split an integer count into n parts (first parts get the remainder)."""
-	total = int(total or 0)
-	base, rem = divmod(total, n) if n else (0, 0)
-	return [base + (1 if i < rem else 0) for i in range(n)]
-
-
 @frappe.whitelist()
 def get_bag_for_split(order_bag):
 	"""Bag Extraction scan: validate the card is AT Bag Extraction and In Queue, then
