@@ -324,13 +324,27 @@ def setup_roles():
 	"""
 	from frappe.permissions import add_permission, update_permission_property
 
+	def ensure_role(name):
+		if name and not frappe.db.exists("Role", name):
+			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
+
+	# EVERY role this app names has to exist before the first Page is saved
+	# below: saving a Page validates ALL its role rows, not just the changed
+	# one, so a role created later in this function aborts the whole install
+	# (and takes seed_benches / the rosters down with it).
 	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
-			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE,
-			"JW Dye Admin") + JEWELIMA_TRANSFER_ROLES:
-		if not frappe.db.exists("Role", name):
-			frappe.get_doc({"doctype": "Role", "role_name": name, "desk_access": 1}).insert(ignore_permissions=True)
+			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE, "JW Dye Admin",
+			"JW Manager", "ESMITH") + JEWELIMA_TRANSFER_ROLES:
+		ensure_role(name)
+	for bench in JEWELIMA_WS_PAGES:
+		ensure_role("Jewelima Bench " + bench)
+	# belt and braces: the shipped page fixtures are the real source of truth for
+	# which roles must exist — anything they name and we somehow missed is created
+	# here rather than exploding on save.
+	for role in set(frappe.get_all("Has Role", filters={"parenttype": "Page"}, distinct=True, pluck="role")):
+		ensure_role(role)
 
 	# the old base 'Jewelima' role is RETIRED — only Ordering and Transfer exist now.
 	# Scrub every trace (users, pages, role profiles, doc perms), then the role itself.
@@ -436,8 +450,7 @@ def setup_roles():
 	# Everything in that menu: Sell Old, OLD FORMAT (+ saved sessions),
 	# Party Gold / Party Groups, Bag Status. The pages price through the
 	# charts (read) and persist sessions + the party lookup (full control).
-	if not frappe.db.exists("Role", "ESMITH"):
-		frappe.get_doc({"doctype": "Role", "role_name": "ESMITH", "desk_access": 1}).insert(ignore_permissions=True)
+	ensure_role("ESMITH")
 	for dt in ("Old Format Import", "Party Group Map"):
 		grant(dt, "ESMITH", {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1})
 	grant("Price Chart", "ESMITH", {"read": 1, "report": 1})
@@ -554,8 +567,7 @@ def setup_roles():
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 	for bench, page in JEWELIMA_WS_PAGES.items():
 		role = "Jewelima Bench " + bench
-		if not frappe.db.exists("Role", role):
-			frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": 1}).insert(ignore_permissions=True)
+		ensure_role(role)
 		for dt in JEWELIMA_WS_READ + [BENCH_DOCTYPE.get(bench)]:
 			if dt:
 				grant(dt, role, {"read": 1})
@@ -629,8 +641,7 @@ def setup_roles():
 	# pair a JW Manager user with the "Jewelima Only" module profile so ERPNext's
 	# own modules stay hidden. Actions run through page APIs (ignore_permissions),
 	# so READ on our doctypes + the masters our pages paint is all the desk needs.
-	if not frappe.db.exists("Role", "JW Manager"):
-		frappe.get_doc({"doctype": "Role", "role_name": "JW Manager", "desk_access": 1}).insert(ignore_permissions=True)
+	ensure_role("JW Manager")
 	jw_reads = set(our_doctypes) | set(
 		JEWELIMA_READ_ERPNEXT + JEWELIMA_ORDERING_READ + JEWELIMA_CAD_READ
 		+ JEWELIMA_STONE_ISSUE_READ + JEWELIMA_STOCK_READ + JEWELIMA_DESIGN_BANK_READ
