@@ -4081,15 +4081,25 @@ def scrap_dyes(names):
 	return {"deleted": gone, "reduced": reduced}
 
 
+def _jewelima_roles(include_disabled=True):
+	"""Every role this app made: the Jewelima-prefixed ones, the JW-prefixed
+	ones, and ESMITH. One definition — the pages that hand out access were each
+	carrying their own name filter, so a new "JW ..." role kept going missing."""
+	f = {} if include_disabled else {"disabled": 0}
+	out = set()
+	for pat in ("Jewelima%", "JW %"):
+		out |= set(frappe.get_all("Role", filters={**f, "role_name": ["like", pat]}, pluck="name"))
+	out |= set(frappe.get_all("Role", filters={**f, "role_name": "ESMITH"}, pluck="name"))
+	return sorted(out)
+
+
 @frappe.whitelist()
 def get_role_access_overview():
 	"""Every Jewelima-made role and what it actually opens: the desk pages it may
 	use, its doctype rights (summarised), and who holds it. Read straight from
 	Page.roles / Custom DocPerm / Has Role, so it can never drift from reality."""
 	frappe.only_for(("System Manager", "JW Manager"))
-	roles = frappe.get_all("Role", filters=[["name", "like", "Jewelima%"]], pluck="name") \
-		+ frappe.get_all("Role", filters=[["name", "like", "JW %"]], pluck="name")
-	roles = sorted(set(roles))
+	roles = _jewelima_roles()
 
 	page_titles = {p.name: (p.title or p.name) for p in frappe.get_all("Page", fields=["name", "title"])}
 	out = []
@@ -8396,7 +8406,8 @@ def get_user_role_editor(user):
 	hidden = {"All", "Guest", "Administrator"}
 	roles = [r.name for r in frappe.get_all("Role", filters={"disabled": 0}, fields=["name"], order_by="name")
 		if r.name not in hidden]
-	jw = [r for r in roles if r.startswith("Jewelima") or r == "ESMITH"]
+	ours = set(_jewelima_roles())
+	jw = [r for r in roles if r in ours]
 	rest = [r for r in roles if r not in jw]
 	has = set(frappe.get_roles(user))
 	return {"jewelima": jw, "others": rest, "has": [r for r in jw + rest if r in has],
@@ -8445,7 +8456,7 @@ def get_user_roles():
 		"Employee", filters={"user_id": ["in", [u.name for u in users] or [""]]},
 		fields=["user_id", "employee_name"])}
 
-	ours = sorted(frappe.get_all("Role", filters={"role_name": ["like", "Jewelima%"]}, pluck="name"))
+	ours = _jewelima_roles()
 	columns = ours + ["System Manager", "Stock Manager"]
 	hide = set(columns) | {"All", "Guest", "Desk User"}
 	out = []
@@ -8486,12 +8497,7 @@ def get_employees_without_user():
 		})
 	return {
 		"employees": out,
-		# every role this app made — the JW-prefixed ones and ESMITH were being
-		# hidden by a name filter that only matched "Jewelima%"
-		"roles": sorted(set(
-			frappe.get_all("Role", filters={"role_name": ["like", "Jewelima%"]}, pluck="name")
-			+ frappe.get_all("Role", filters={"role_name": ["like", "JW %"]}, pluck="name")
-			+ frappe.get_all("Role", filters={"role_name": "ESMITH"}, pluck="name"))),
+		"roles": _jewelima_roles(),
 	}
 
 
