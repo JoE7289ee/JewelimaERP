@@ -6185,20 +6185,16 @@ def priority_remove(code):
 	return get_priority_list()
 
 
-def _ws_bench_role(bench):
-	return "Jewelima Bench " + (bench or "").upper()
+# Workstations answer to the floor managers. The old per-bench roles
+# ("Jewelima Bench GRINDING" and its ten siblings) are retired — nobody was
+# logging in as a single bench, and eleven roles for eleven pages was a
+# permission list nobody could read.
+WS_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
 
 
 def _require_ws_access(bench):
-	"""Workstation actions are BENCH-SCOPED: the bench's own role (or the
-	global Stock Manager / System Manager) — a GRINDING user cannot issue at
-	FILING. The global Assign/Collect and Job Work pages keep their own roles."""
-	roles = set(frappe.get_roles())
-	if {"System Manager", "Stock Manager", "JW Manager"} & roles:
-		return
-	if _ws_bench_role(bench) in roles:
-		return
-	frappe.throw(frappe._("No workstation access for {0}.").format((bench or "").upper()))
+	if not WS_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("No workstation access for {0}.").format((bench or "").upper()))
 
 
 @frappe.whitelist()
@@ -6462,7 +6458,7 @@ def get_bench_workstation(bench):
 
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl, ASSIGN_COLLECT_LOCATIONS as _acl
-	can_act = bool({"System Manager", "Stock Manager", "JW Manager", _ws_bench_role(bench)} & set(frappe.get_roles()))
+	can_act = bool(WS_ROLES & set(frappe.get_roles()))
 	# completed AT this bench but NOT yet transferred onward (still sitting here)
 	completed = [r for r in rows if r.get("status") == "Completed"]
 	return {"bench": bench, "ranked": ranked,
@@ -7363,8 +7359,7 @@ def set_bench_queue_reason(order_bag, location, reason=None):
 	loc = (location or "").upper()
 	# operators/managers only — view-only roles (e.g. Jewelima Info) can't annotate
 	roles = set(frappe.get_roles())
-	if not ({"System Manager", "Stock Manager", "Jewelima CAD"} & roles
-			or any(r.startswith("Jewelima Bench ") for r in roles)):
+	if not {"System Manager", "Stock Manager", "JW Manager", "Jewelima CAD"} & roles:
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	dt = BENCH_DOCTYPE.get(loc)
 	if not dt or not frappe.db.exists("DocType", dt):
@@ -8491,7 +8486,12 @@ def get_employees_without_user():
 		})
 	return {
 		"employees": out,
-		"roles": sorted(frappe.get_all("Role", filters={"role_name": ["like", "Jewelima%"]}, pluck="name")),
+		# every role this app made — the JW-prefixed ones and ESMITH were being
+		# hidden by a name filter that only matched "Jewelima%"
+		"roles": sorted(set(
+			frappe.get_all("Role", filters={"role_name": ["like", "Jewelima%"]}, pluck="name")
+			+ frappe.get_all("Role", filters={"role_name": ["like", "JW %"]}, pluck="name")
+			+ frappe.get_all("Role", filters={"role_name": "ESMITH"}, pluck="name"))),
 	}
 
 

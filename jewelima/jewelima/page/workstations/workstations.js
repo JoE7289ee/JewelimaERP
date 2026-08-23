@@ -3,8 +3,8 @@
 // clicking one opens that workstation in place (the same jewelima.buildWorkstation
 // the individual ws-* pages use, so the detail view is identical).
 //
-// Access: each workstation has its own role, "Jewelima Bench <BENCH>", and that
-// role opens ONLY its own page. So the tiles are filtered to what the user may
+// Access: the floor managers (System Manager / Stock Manager / JW Manager)
+// open every station. The tiles are still filtered to what the user may
 // actually open — nobody is shown a tile that would then refuse to open.
 // Stock Manager / System Manager / JW Manager see the whole floor.
 frappe.pages["workstations"].on_page_load = function (wrapper) {
@@ -20,8 +20,9 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 		"BAG EXTRACTION": "ws-bag-extraction",
 	};
 	const roles = frappe.user_roles || [];
+	// the per-bench roles are gone: the floor managers see every station
 	const seesAll = ["System Manager", "Stock Manager", "JW Manager"].some((r) => roles.includes(r));
-	const mine = (bench) => seesAll || roles.includes("Jewelima Bench " + bench);
+	const mine = () => seesAll;
 
 	function showTiles() {
 		$w.empty();
@@ -70,7 +71,7 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 				if (!benches.length) {
 					root.find(".wt-tot").text("");
 					return $g.html(`<div class="wt-none">
-						${__("No workstation is assigned to you yet — ask a manager for the bench role you work on.")}</div>`);
+						${__("No workstation is open to you — ask a manager for floor access.")}</div>`);
 				}
 				const n3 = (v) => (parseFloat(v) || 0).toFixed(3);
 				let cards = 0;

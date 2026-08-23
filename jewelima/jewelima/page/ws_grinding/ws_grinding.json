@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-26 15:10:12.913931",
+ "modified": "2026-08-24 03:30:57.821120",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-grinding",
@@ -18,7 +18,7 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Jewelima Bench GRINDING"
+   "role": "JW Manager"
   }
  ],
  "script": null,

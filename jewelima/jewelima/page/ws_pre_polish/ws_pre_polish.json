@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-26 15:10:14.493906",
+ "modified": "2026-08-24 03:30:57.510204",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-pre-polish",
@@ -18,7 +18,7 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Jewelima Bench PRE POLISH"
+   "role": "JW Manager"
   }
  ],
  "script": null,

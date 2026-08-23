@@ -347,8 +347,6 @@ def setup_roles():
 			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE, "JW Dye Admin",
 			"JW Manager", "ESMITH", JEWELIMA_STOCK_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		ensure_role(name)
-	for bench in JEWELIMA_WS_PAGES:
-		ensure_role("Jewelima Bench " + bench)
 	# belt and braces: the shipped page fixtures are the real source of truth for
 	# which roles must exist — anything they name and we somehow missed is created
 	# here rather than exploding on save.
@@ -586,24 +584,21 @@ def setup_roles():
 			u.append("roles", {"role": JEWELIMA_INFO_ROLE})
 			u.save(ignore_permissions=True)
 
-	# ---- Workstation personas: one role per bench --------------------------------
-	from jewelima.jewelima.benches import BENCH_DOCTYPE
-	for bench, page in JEWELIMA_WS_PAGES.items():
-		role = "Jewelima Bench " + bench
-		ensure_role(role)
-		for dt in JEWELIMA_WS_READ + [BENCH_DOCTYPE.get(bench)]:
-			if dt:
-				grant(dt, role, {"read": 1})
-		set_page_roles(page, ("Stock Manager", role))
-		# the Workstations launcher is open to every bench role; the page itself
-		# only paints the tiles that role may actually open
-		set_page_roles("workstations", (role,))
-		# tight: this role opens ONLY its own workstation
+	# ---- Workstations: the floor managers, no per-bench personas -----------------
+	# The eleven "Jewelima Bench <BENCH>" roles are RETIRED — nobody logged in as a
+	# single bench, and they made the permission list unreadable. Every trace is
+	# scrubbed (users, pages, doc perms) before the roles themselves go.
+	for role in frappe.get_all("Role", filters={"role_name": ["like", "Jewelima Bench%"]}, pluck="name"):
 		for pg in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": role}, pluck="parent"):
-			if pg not in (page, "workstations"):   # the launcher is shared; it filters its own tiles
-				pgd = frappe.get_doc("Page", pg)
-				pgd.set("roles", [r for r in pgd.roles if r.role != role])
-				pgd.save(ignore_permissions=True)
+			pgd = frappe.get_doc("Page", pg)
+			pgd.set("roles", [r for r in pgd.roles if r.role != role])
+			pgd.save(ignore_permissions=True)
+		frappe.db.delete("Has Role", {"role": role})
+		frappe.db.delete("Custom DocPerm", {"role": role})
+		frappe.delete_doc("Role", role, force=True, ignore_permissions=True)
+	for page in JEWELIMA_WS_PAGES.values():
+		set_page_roles(page, ("Stock Manager",))
+	set_page_roles("workstations", ("Stock Manager",))
 
 	# ---- Jewelima Transfer: the runner ------------------------------------------
 	# Opens ONE page (Transfer Order Bag), reads the bag + its movement history so

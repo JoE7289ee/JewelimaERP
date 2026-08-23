@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-19 15:57:55.474027",
+ "modified": "2026-08-24 03:30:58.236781",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "workstations",
@@ -19,39 +19,6 @@
   },
   {
    "role": "JW Manager"
-  },
-  {
-   "role": "Jewelima Bench CAD"
-  },
-  {
-   "role": "Jewelima Bench CAM"
-  },
-  {
-   "role": "Jewelima Bench WAXING"
-  },
-  {
-   "role": "Jewelima Bench WAX SETTING"
-  },
-  {
-   "role": "Jewelima Bench WAX CLEANING"
-  },
-  {
-   "role": "Jewelima Bench GRINDING"
-  },
-  {
-   "role": "Jewelima Bench FILING"
-  },
-  {
-   "role": "Jewelima Bench SETTING"
-  },
-  {
-   "role": "Jewelima Bench PRE POLISH"
-  },
-  {
-   "role": "Jewelima Bench FINAL POLISH"
-  },
-  {
-   "role": "Jewelima Bench BAG EXTRACTION"
   }
  ],
  "script": null,

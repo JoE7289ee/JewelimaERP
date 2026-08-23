@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-26 15:10:11.313653",
+ "modified": "2026-08-24 03:30:58.113247",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-waxing",
@@ -18,7 +18,7 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Jewelima Bench WAXING"
+   "role": "JW Manager"
   }
  ],
  "script": null,
