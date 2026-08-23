@@ -22,7 +22,7 @@ def _abbr():
 
 # Stock-desk gate: buying, moving and melting stock is the JW Stock desk
 # (the tight buyer role keeps purchase-only access).
-STOCK_ROLES = {"System Manager", "Stock Manager", "Jewelima Stock", "JW Manager"}
+STOCK_ROLES = {"System Manager", "Stock Manager", "Jewelima Stock", "JW Stock Admin", "JW Manager"}
 
 
 def _require_stock(extra=()):
@@ -8779,6 +8779,7 @@ def collect_loss(payload):
 	allocated on the page) and produce the recovered standard gold — ONE Repack
 	Stock Entry. Conservation enforced: the dust's pure content must equal the
 	recovered gold's pure content (small rounding tolerance)."""
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"])
 	p = frappe.parse_json(payload)
 	out_item, got, out_wh = p.get("output_item"), flt(p.get("got_grams")), p.get("warehouse")
 	if not out_item or not frappe.db.exists("Item", out_item):
@@ -8821,7 +8822,7 @@ def collect_loss(payload):
 def writeoff_loss(payload):
 	"""MANAGEMENT ONLY: write unrecoverable dust out of the loss warehouses —
 	one Material Issue, reason required."""
-	frappe.only_for(["System Manager", "JW Manager"])
+	frappe.only_for(["System Manager", "JW Manager", "JW Stock Admin"])
 	p = frappe.parse_json(payload)
 	reason = (p.get("reason") or "").strip()
 	if not reason:
@@ -15457,7 +15458,7 @@ def meeting_set_status(name, status):
 # remarks prefix is the marker ("Loss collection:", "Loss write-off:", "Melt:").
 # ---------------------------------------------------------------------------
 def _require_stock_records():
-	if not {"System Manager", "Stock Manager", "JW Manager"} & set(frappe.get_roles()):
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Stock records are for stock admins."), frappe.PermissionError)
 
 

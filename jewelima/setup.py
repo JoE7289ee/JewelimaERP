@@ -148,6 +148,15 @@ JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", 
 JEWELIMA_STOCK_ROLE = "Jewelima Stock"
 JEWELIMA_STOCK_PAGES = ["purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
 JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type"]
+# JW Stock Admin — the senior stock desk: everything Jewelima Stock does, plus
+# the whole Loss branch (collection, write-off, report) and the record pages.
+# Write-off is the one destructive button here; it still demands a typed reason.
+JEWELIMA_STOCK_ADMIN_ROLE = "JW Stock Admin"
+JEWELIMA_STOCK_ADMIN_PAGES = [
+	"purchase-raw-material", "stock-transfer", "melt-gold",
+	"loss-collection", "loss-writeoff", "loss-report",
+	"purchase-history", "loss-history", "melt-history",
+]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
 JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "order-bag-photos"]
 JEWELIMA_CAD_READ = ["Order Bag", "Design", "Design Type", "Design Style", "Item", "Item Group", "Customer", "Supplier", "Diamond Sieve", "Bin", "Warehouse", "File"]
@@ -336,7 +345,7 @@ def setup_roles():
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
 			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE, "JW Dye Admin",
-			"JW Manager", "ESMITH") + JEWELIMA_TRANSFER_ROLES:
+			"JW Manager", "ESMITH", JEWELIMA_STOCK_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		ensure_role(name)
 	for bench in JEWELIMA_WS_PAGES:
 		ensure_role("Jewelima Bench " + bench)
@@ -497,6 +506,20 @@ def setup_roles():
 		if page not in set(JEWELIMA_STOCK_PAGES):
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STOCK_ROLE])
+			pg.save(ignore_permissions=True)
+
+	# ---- JW Stock Admin: the senior stock desk -----------------------------------
+	# The stock pages plus the entire Loss branch and the record pages. Reads on
+	# the same masters; every mutation goes through the role-gated APIs (the
+	# write-off still refuses without a typed reason).
+	for dt in JEWELIMA_STOCK_READ:
+		grant(dt, JEWELIMA_STOCK_ADMIN_ROLE, {"read": 1})
+	for page in JEWELIMA_STOCK_ADMIN_PAGES:
+		set_page_roles(page, (JEWELIMA_STOCK_ADMIN_ROLE,))
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_STOCK_ADMIN_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_STOCK_ADMIN_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STOCK_ADMIN_ROLE])
 			pg.save(ignore_permissions=True)
 
 	# ---- Jewelima CAD: the workstation persona ----------------------------------
