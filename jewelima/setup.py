@@ -30,6 +30,8 @@ def after_install():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	flag_melt_warehouses()
+	flag_transfer_warehouses()
+	drop_unused_warehouses()
 	setup_item_group_tree()
 	seed_raw_materials()
 	seed_karat_golds()
@@ -83,6 +85,8 @@ def after_migrate():
 	create_loss_collection_warehouses()
 	create_store_warehouses()
 	flag_melt_warehouses()
+	flag_transfer_warehouses()
+	drop_unused_warehouses()
 	setup_item_group_tree()
 	seed_raw_materials()
 	seed_karat_golds()
@@ -1109,6 +1113,53 @@ def check_sidebar_icons():
 	return {"missing": bad}
 
 
+
+# Stock Transfer only offers warehouses carrying this flag — everything else is
+# reached through the flow that owns it (issue, receipt, convert, collection).
+TRANSFER_LOCATIONS = ("Gold Issue", "Production")
+
+
+def flag_transfer_warehouses():
+	"""Turn the transfer flag on for the warehouses stock may be moved between by
+	hand. Only ever ADDS — a flag someone turned off stays off."""
+	for wh_name in TRANSFER_LOCATIONS:
+		wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name}, "name")
+		if wh and not frappe.db.get_value("Warehouse", wh, "custom_is_transfer_location"):
+			frappe.db.set_value("Warehouse", wh, "custom_is_transfer_location", 1)
+	frappe.db.commit()
+
+
+# ERPNext's setup wizard ships three warehouses this house never uses, and an
+# empty one in a picker is just a way to put stock somewhere nobody looks.
+RETIRED_WAREHOUSES = ("Stores", "Work In Progress", "Raw Materials Store")
+
+
+def drop_unused_warehouses():
+	"""Remove the warehouses we do not work out of — but only while they are
+	genuinely empty and unreferenced, so this can never eat real stock."""
+	gone, kept = [], []
+	for wh_name in RETIRED_WAREHOUSES:
+		wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name}, "name")
+		if not wh:
+			continue
+		qty = frappe.db.sql("""SELECT IFNULL(SUM(actual_qty), 0) FROM `tabBin`
+			WHERE warehouse = %s""", wh)[0][0]
+		sle = frappe.db.count("Stock Ledger Entry", {"warehouse": wh})
+		if flt(qty) or sle:
+			kept.append("%s (%s g, %s ledger rows)" % (wh_name, round(flt(qty), 3), sle))
+			continue
+		try:
+			frappe.delete_doc("Warehouse", wh, force=True, ignore_permissions=True)
+			gone.append(wh_name)
+		except Exception as e:
+			kept.append("%s (%s)" % (wh_name, str(e)[:60]))
+	if gone or kept:
+		frappe.db.commit()
+		print("Warehouses — removed: %s%s" % (", ".join(gone) or "none",
+			("  |  kept (not empty): " + "; ".join(kept)) if kept else ""))
+	return {"removed": gone, "kept": kept}
+
+
 def relax_employee_mandatory():
 	"""Workshops rarely track DOB / joining dates for karigars — make Employee's Date of
 	Birth and Date of Joining optional (Property Setters, idempotent)."""
@@ -1691,7 +1742,7 @@ def get_warehouse_custom_fields():
 
 def flag_melt_warehouses():
 	"""Flag the default gold-issue warehouse(s) so the Melting picker isn't empty out of the box."""
-	for wh_name in ("Raw Materials Store",):
+	for wh_name in ("Gold Issue",):
 		wh = frappe.db.get_value("Warehouse", {"warehouse_name": wh_name}, "name")
 		if wh and not frappe.db.get_value("Warehouse", wh, "is_melt_warehouse"):
 			frappe.db.set_value("Warehouse", wh, "is_melt_warehouse", 1)
@@ -1838,6 +1889,14 @@ def get_item_custom_fields():
 				"insert_after": "custom_is_purchase_location",
 				"description": "Material is issued from here onto bags (e.g. Gold Issue, Stone Issue, Casting).",
 			},
+			{
+				"fieldname": "custom_is_transfer_location",
+				"fieldtype": "Check",
+				"label": "Transfer Location",
+				"insert_after": "custom_is_issue_location",
+				"description": "Stock Transfer may move stock in and out of here. Untick and the "
+					"warehouse disappears from the transfer page entirely.",
+			},
 		],
 	}
 
@@ -1967,6 +2026,8 @@ def create_loss_collection_warehouses():
 #  Gold Issue / Stone Issue = staging where committed material waits to be issued
 #    to a job card from the Material Issue screen.
 #  Reserved = legacy (kept for back-compat); the flow now reserves into Gold Issue.
+# retired 2026-08-27 — purchases land in Gold Issue / Stone Issue now. The name
+# is kept only so anything still importing it resolves instead of exploding.
 RAW_MATERIALS_STORE = "Raw Materials Store"
 RESERVED_WAREHOUSE = "Reserved"
 GOLD_ISSUE_WAREHOUSE = "Gold Issue"
@@ -1995,7 +2056,6 @@ def create_store_warehouses():
 	company, abbr, root = warehouse_context()
 	if not company:
 		return
-	make_warehouse(RAW_MATERIALS_STORE, company, abbr, parent=root, is_group=0)
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)

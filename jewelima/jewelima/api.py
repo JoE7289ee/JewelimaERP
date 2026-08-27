@@ -183,10 +183,40 @@ def set_warehouse_flag(warehouse, flag, value):
 
 
 @frappe.whitelist()
+def _check_transferable(wh, side):
+	"""A warehouse may be moved in and out of by hand only if it carries the
+	transfer flag — and never if it is a loss bucket or the In Bags pool, whatever
+	the flag says. Dust leaves through Loss Collection; In Bags belongs to the
+	cards and moves through issue, receipt and convert."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	label = frappe.db.get_value("Warehouse", wh, "warehouse_name") or wh
+	if frappe.db.get_value("Warehouse", wh, "custom_is_loss"):
+		frappe.throw(frappe._("{0} is a loss bucket — dust leaves it through Loss Collection or Write-off, not a transfer.").format(label))
+	if wh == _wh(IN_PRODUCTION_WAREHOUSE):
+		frappe.throw(frappe._("{0} belongs to the cards — it fills and empties through issue, receipt and convert.").format(label))
+	if not frappe.db.get_value("Warehouse", wh, "custom_is_transfer_location"):
+		frappe.throw(frappe._("{0} is not a transfer location, so nothing can be moved {1} it. Tick 'Transfer Location' on Warehouse Management to open it.").format(label, side))
+
+
+@frappe.whitelist()
+def get_transfer_warehouses():
+	"""The warehouses Stock Transfer may work with — flagged, not loss, not In Bags."""
+	_require_stock()
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	in_bags = _wh(IN_PRODUCTION_WAREHOUSE)
+	return [w.name for w in frappe.get_all("Warehouse",
+		filters={"is_group": 0, "custom_is_transfer_location": 1, "custom_is_loss": 0},
+		fields=["name"], order_by="warehouse_name") if w.name != in_bags]
+
+
+@frappe.whitelist()
 def transfer_stock(from_warehouse, to_warehouse, items):
 	_require_stock()
 	"""Move stock between two warehouses (Material Transfer). items = [{item, weight}].
-	Refuses to transfer more than is available in the source for any item."""
+	Refuses to transfer more than is available in the source for any item, and only
+	works between warehouses flagged as transfer locations."""
 	if isinstance(items, str):
 		items = json.loads(items or "[]")
 	if not from_warehouse or not frappe.db.exists("Warehouse", from_warehouse):
@@ -195,6 +225,8 @@ def transfer_stock(from_warehouse, to_warehouse, items):
 		frappe.throw(frappe._("Pick a valid destination warehouse."))
 	if from_warehouse == to_warehouse:
 		frappe.throw(frappe._("Source and destination warehouses must be different."))
+	_check_transferable(from_warehouse, frappe._("out of"))
+	_check_transferable(to_warehouse, frappe._("into"))
 
 	rows = []
 	for i in items or []:
@@ -2777,19 +2809,6 @@ def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employe
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return doc.name
-
-
-@frappe.whitelist()
-def add_weight(order_bag, item, qty, bench=None, remarks=None):
-	"""Give gold (grams) to a bag — the Casting 'add weight' action. Records the
-	per-bag ledger row AND moves the gold as real stock: Store -> In Bags pool."""
-	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE
-
-	mi = _material_issue_record("Metal", order_bag, _wh(RAW_MATERIALS_STORE),
-		items=[{"item": item, "pcs": 0, "qty": flt(qty), "uom": "Gram"}])
-	name = _bag_ledger(order_bag, item, "In", qty, "Gold Issue", bench=bench, remarks=remarks, reference=mi.name)
-	_stock_move(item, qty, _wh(RAW_MATERIALS_STORE), _wh(IN_PRODUCTION_WAREHOUSE))
-	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
 @frappe.whitelist()
@@ -15922,7 +15941,7 @@ def get_total_gold():
 			"Jewelima Stock"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Total Gold is for the stock desk."), frappe.PermissionError)
 	from jewelima.setup import (GOLD_ISSUE_WAREHOUSE, IN_PRODUCTION_WAREHOUSE,
-		PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE)
+		PRODUCTION_WAREHOUSE)
 
 	# warehouse -> the bucket it belongs to. Anything not named here is gathered
 	# under "Elsewhere" rather than quietly dropped.
@@ -15933,7 +15952,6 @@ def get_total_gold():
 		(_wh(GOLD_ISSUE_WAREHOUSE), "Gold Issue"),
 		(_wh(PRODUCTION_WAREHOUSE), "Production"),
 		(_wh("Casting"), "Casting"),
-		(_wh(RAW_MATERIALS_STORE), "Raw Materials"),
 	]
 	bucket_of = {wh: label for wh, label in named if wh}
 
@@ -15961,7 +15979,7 @@ def get_total_gold():
 		it["pure"] += pure
 
 	order = ["In Bags", "Finished Products", "At Certification", "Gold Issue",
-		"Casting", "Production", "Raw Materials", "Loss buckets", "Elsewhere"]
+		"Casting", "Production", "Loss buckets", "Elsewhere"]
 	rows = sorted(({"bucket": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3),
 		"items": v["items"]} for k, v in buckets.items()),
 		key=lambda x: (order.index(x["bucket"]) if x["bucket"] in order else 99))

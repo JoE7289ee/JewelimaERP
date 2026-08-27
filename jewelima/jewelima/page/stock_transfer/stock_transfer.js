@@ -54,7 +54,10 @@ frappe.pages["stock-transfer"].on_page_load = function (wrapper) {
 	const flt = window.flt || ((x) => parseFloat(x) || 0);
 	const st = { from: [] };
 
-	const whQuery = () => ({ filters: { is_group: 0, custom_is_loss: 0 } });
+	// only warehouses flagged as transfer locations are on offer — loss buckets and
+	// the In Bags pool are never among them (the server refuses those outright,
+	// whatever the flag says)
+	const whQuery = () => ({ filters: { is_group: 0, custom_is_loss: 0, custom_is_transfer_location: 1 } });
 	const fromWh = mk(".st-from-wh", { fieldtype: "Link", label: "From Warehouse", fieldname: "fw", options: "Warehouse", reqd: 1, get_query: whQuery });
 	const toWh = mk(".st-to-wh", { fieldtype: "Link", label: "To Warehouse", fieldname: "tw", options: "Warehouse", reqd: 1, get_query: whQuery });
 	fromWh.$input.on("change awesomplete-selectcomplete", () => setTimeout(loadFrom, 60));
