@@ -16106,3 +16106,123 @@ def get_total_gold():
 	return {"rows": rows, "by_item": by_item[:14],
 		"totals": {"pure": total_pure, "weight": total_weight,
 			"loss": round(loss, 3), "buckets": len(rows)}}
+
+
+# ---------------------------------------------------------------------------
+# Rework (Delivery) — a finished piece goes back to the floor. This is the
+# exact reverse of convert_to_ornament: the metal and stones the piece was
+# frozen with return from Finished Goods to the In Bags pool, the bag's
+# materials come back on its ledger, and the card lands at a bench as work
+# again. Its design, HUID and certificates stay with it.
+# ---------------------------------------------------------------------------
+REWORK_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin")
+
+
+def _convert_pcs(order_bag):
+	"""{item: pcs} off the piece's frozen Convert rows — stones come back with
+	the same count they were frozen with, or the piece story stops adding up."""
+	out = {}
+	for r in frappe.get_all("Bag Material Ledger",
+			filters={"order_bag": order_bag, "entry_type": "Convert", "direction": "Out"},
+			fields=["item", "pcs"]):
+		out[r.item] = cint(out.get(r.item, 0)) + cint(r.pcs)
+	return out
+
+
+def _rework_guard():
+	if not set(REWORK_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Rework is for the floor managers."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def get_rework_piece(barcode):
+	"""Scan lookup: the finished piece, what it holds, and whether it may go back."""
+	_rework_guard()
+	nm = (barcode or "").strip()
+	b = frappe.db.get_value("Order Bag", nm, ["name", "design", "qty",
+		"is_finished", "stock_status", "held_by", "location", "huid", "certifications",
+		"act_gross_weight", "in_stock_on"], as_dict=True)
+	if not b:
+		return {"found": False, "error": frappe._("No piece {0}.").format(nm or "?")}
+	mats = _bag_convert_materials([nm])[nm]
+	gold = sum(q for it, q in mats.items() if not frappe.db.get_value("Item", it, "stone_type"))
+	stones = sum(q for it, q in mats.items() if frappe.db.get_value("Item", it, "stone_type"))
+	why = None
+	if not cint(b.is_finished):
+		why = frappe._("{0} is not a finished product — it is still on the floor at {1}.").format(nm, b.location or "—")
+	elif b.stock_status == "Sold":
+		why = frappe._("{0} is sold. A sold piece comes back through a sales return, not a rework.").format(nm)
+	elif b.stock_status == "Cancelled":
+		why = frappe._("{0} is cancelled.").format(nm)
+	elif b.stock_status == "At Certification":
+		why = frappe._("{0} is away at certification — bring it back in first.").format(nm)
+	elif b.stock_status != "In Stock":
+		why = frappe._("{0} is {1} — only a piece In Stock can be reworked.").format(nm, b.stock_status)
+	elif not mats:
+		why = frappe._("{0} has no frozen materials on record, so there is nothing to send back.").format(nm)
+	open_prep = frappe.get_all("Sale Preparation Item", filters={"order_bag": nm},
+		fields=["parent"], limit=1)
+	prep = None
+	if open_prep:
+		st = frappe.db.get_value("Sale Preparation", open_prep[0].parent, "status")
+		if st and st not in ("Cancelled", "Sold", "Completed"):
+			prep = "{0} ({1})".format(open_prep[0].parent, st)
+	return {
+		"found": True, "can_rework": not why, "error": why,
+		"order_bag": b.name, "design": b.design or "",
+		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+		"held_by": b.held_by or "", "huid": b.huid or "", "certifications": b.certifications or "",
+		"gross": flt(b.act_gross_weight), "gold": round(flt(gold), 3),
+		"stones": round(flt(stones), 3), "in_stock_on": str(b.in_stock_on or "")[:16],
+		"materials": [{"item": it, "qty": round(flt(q), 3)} for it, q in sorted(mats.items())],
+		"open_sale_prep": prep,
+	}
+
+
+@frappe.whitelist()
+def rework_piece(order_bag, to_location, remarks=None):
+	"""Send a finished piece back to the floor as work."""
+	_rework_guard()
+	from jewelima.jewelima.benches import BENCH_DOCTYPE, on_bag_arrival
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	info = get_rework_piece(order_bag)
+	if not info.get("found"):
+		frappe.throw(info.get("error") or frappe._("No such piece."))
+	if not info.get("can_rework"):
+		frappe.throw(info["error"])
+	loc = (to_location or "").upper()
+	if loc not in BENCH_DOCTYPE:
+		frappe.throw(frappe._("Pick the workstation it goes back to."))
+
+	was_at = frappe.db.get_value("Order Bag", order_bag, "location")
+	mats = _bag_convert_materials([order_bag])[order_bag]
+	pcs_of = _convert_pcs(order_bag)
+	fg, in_bags = _wh("Finished Goods"), _wh(IN_PRODUCTION_WAREHOUSE)
+	se = _stock_move_many(mats, fg, in_bags)   # the piece's weight leaves Finished Goods
+
+	# the bag holds its materials again — the mirror of the Convert rows
+	for it, q in mats.items():
+		_bag_ledger(order_bag, it, "In", flt(q), "Rework", bench=loc, reference=se,
+			remarks=(remarks or "") or frappe._("back to the floor"),
+			pcs=cint(pcs_of.get(it, 0)))
+
+	frappe.db.set_value("Order Bag", order_bag, {
+		"is_finished": 0,              # the plan is editable again
+		"stock_status": "In Production",
+		"location": loc,
+		"held_by": None,
+		"in_stock_on": None,
+	})
+	on_bag_arrival(order_bag, loc)     # it queues at that bench like any other card
+	frappe.get_doc({
+		"doctype": "Order Bag Transfer", "order_bag": order_bag,
+		"from_location": was_at or None, "to_location": loc,
+		"transfer_time": frappe.utils.now_datetime(),
+		"transferred_by": frappe.session.user,
+		"remarks": "Rework: {0}".format(remarks or frappe._("sent back to the floor")),
+	}).insert(ignore_permissions=True)
+	_recompute_bag_from_contents(order_bag)
+	frappe.db.commit()
+	return {"order_bag": order_bag, "to": loc, "stock_entry": se,
+		"gold": info["gold"], "stones": info["stones"]}

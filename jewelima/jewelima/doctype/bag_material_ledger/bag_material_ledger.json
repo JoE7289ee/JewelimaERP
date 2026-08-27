@@ -83,7 +83,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Entry Type",
-   "options": "Gold Issue\nStone Issue\nStone Return\nLoss\nGain\nConvert\nSplit Out\nSplit In\nAdjustment\nWeight Add\nWeight Reduce\nCasting\nCancel Return"
+   "options": "Gold Issue\nStone Issue\nStone Return\nLoss\nGain\nConvert\nRework\nSplit Out\nSplit In\nAdjustment\nWeight Add\nWeight Reduce\nCasting\nCancel Return"
   },
   {
    "fieldname": "context_section",

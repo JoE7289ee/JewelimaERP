@@ -200,7 +200,7 @@ JEWELIMA_WS_PAGES = {
 # read on what the pages paint from is all the role needs.
 JEWELIMA_DATA_ADMIN_ROLE = "JW Data Admin"
 JEWELIMA_DATA_ADMIN_PAGES = ["assign-collect", "job-work", "casting-queue", "make-tree",
-	"print-order-bags", "transfer-order-bag", "casting-weigh"]
+	"print-order-bags", "transfer-order-bag", "casting-weigh", "rework"]
 JEWELIMA_DATA_ADMIN_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee", "Bench",
 	"Bench Employee", "Bench Work Option", "Bench Issue", "Bench Visit", "Priority Card",
 	"Bag Material Ledger", "Wax Tree", "Wax Tree Card", "Tree Making", "Casting",
