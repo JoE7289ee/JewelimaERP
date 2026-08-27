@@ -16,8 +16,9 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 
 	// Label geometry/typography — exactly as specified.
 	const LABEL_CSS = `
-	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;gap:0.045in;
-		padding:0 0.04in;overflow:hidden;
+	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;
+		justify-content:center;gap:0.045in;
+		padding:0 0.09in;overflow:hidden;
 		font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
 		font-stretch:condensed;font-size:8pt;font-weight:400;font-style:normal;line-height:1.05;letter-spacing:-.2px;color:#000;}
 	.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
@@ -40,11 +41,25 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	table.pb-tbl th{color:#8a96a3;font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
 	table.pb-tbl td.num,table.pb-tbl th.num{text-align:right;font-variant-numeric:tabular-nums;}
 	table.pb-tbl td.warn{color:#b4690e;}
-	.pb-x{cursor:pointer;color:#c0392b;font-weight:700;}`;
+	.pb-x{cursor:pointer;color:#c0392b;font-weight:700;}
+	.pb-cal{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px;font-size:12.5px;}
+	.pb-cal .lbl{color:#8a96a3;text-transform:uppercase;font-size:10px;letter-spacing:.05em;font-weight:800;}
+	.pb-cal button{border:1px solid #c4ccd4;background:#fff;border-radius:6px;width:26px;height:24px;
+		cursor:pointer;font-weight:800;line-height:1;}
+	.pb-cal .val{font-variant-numeric:tabular-nums;font-weight:700;min-width:52px;text-align:center;}
+	.pb-cal .hint{color:#8a96a3;}`;
 
 	$(page.main).append(`<style>${LABEL_CSS}${UI_CSS}</style>
 		<div class="pb-wrap">
 			<div class="pb-bar"></div>
+			<div class="pb-cal">
+				<span class="lbl">Shift on the label</span>
+				<button class="pb-l" title="move everything left">&#8592;</button>
+				<span class="val pb-off">0.00 in</span>
+				<button class="pb-r" title="move everything right">&#8594;</button>
+				<button class="pb-0" style="width:auto;padding:0 8px;">reset</button>
+				<span class="hint">nudge if your printer starts the label off-centre</span>
+			</div>
 			<div class="pb-prev-wrap"><h4>Label preview (actual size)</h4><div class="pb-prev-out"></div></div>
 			<div class="pb-qh">Labels to print</div>
 			<div class="pb-hist"></div>
@@ -66,6 +81,26 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		return "";
 	}
 
+	// How far the whole block sits from where the printer thinks the label starts.
+	// Thermal printers rarely agree on that, so this is a per-machine nudge kept in
+	// the browser rather than a setting everyone shares.
+	const OFF_KEY = "jw_barcode_offset_in";
+	function offset() {
+		let v = 0;
+		try { v = parseFloat(localStorage.getItem(OFF_KEY) || "0") || 0; } catch (e) { v = 0; }
+		return Math.max(-0.25, Math.min(0.25, v));
+	}
+	function setOffset(v) {
+		const n = Math.max(-0.25, Math.min(0.25, Math.round(v * 100) / 100));
+		try { localStorage.setItem(OFF_KEY, String(n)); } catch (e) { /* private window */ }
+		$(page.main).find(".pb-off").text(n.toFixed(2) + " in");
+		renderPreview(state.cards[state.cards.length - 1] || null);
+	}
+	const offsetStyle = () => {
+		const o = offset();
+		return o ? `<style>.bc-label{transform:translateX(${o}in);}</style>` : "";
+	};
+
 	// Build one label's HTML — matches the reference: weights (left) · QR · codes (right)
 	function buildLabel(c) {
 		const stone = stoneLine(c);
@@ -79,8 +114,14 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	}
 
 	function renderPreview(c) {
-		$prev.html(c ? `<div class="pb-prev">${buildLabel(c)}</div>` : '<span class="pb-empty">Scan a card to preview its label.</span>');
+		$prev.html(c ? `${offsetStyle()}<div class="pb-prev">${buildLabel(c)}</div>`
+			: '<span class="pb-empty">Scan a card to preview its label.</span>');
 	}
+
+	$(page.main).find(".pb-l").on("click", () => setOffset(offset() - 0.02));
+	$(page.main).find(".pb-r").on("click", () => setOffset(offset() + 0.02));
+	$(page.main).find(".pb-0").on("click", () => setOffset(0));
+	$(page.main).find(".pb-off").text(offset().toFixed(2) + " in");
 
 	function renderHistory() {
 		if (!state.cards.length) {
@@ -172,6 +213,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			html,body{margin:0;padding:0;}
 			${LABEL_CSS}
 			.bc-label{page-break-after:always;}
+			${offset() ? `.bc-label{transform:translateX(${offset()}in);}` : ""}
 			.bc-label:last-child{page-break-after:auto;}
 			</style></head><body>${body}</body></html>`);
 		w.document.close();
