@@ -14,6 +14,7 @@ const TOB_LOCATIONS =
 frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Transfer Order Bag", single_column: true });
 	const state = { rows: [], location: null, history: [] };
+	let $batchBtn = null;   // the Batch button, created with the others further down
 
 	$(page.main).append(`
 		<style>
@@ -190,6 +191,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		const qT = sum("qty"), gT = sum("gross"), nT = sum("nett");
 		$(page.main).find(".tob-foot-row").empty(); // totals live in the pinned strip only
 		$(page.main).find(".tob-count").text(state.rows.length);
+		if ($batchBtn) $batchBtn.text(state.rows.length ? __("Batch ({0})", [state.rows.length]) : __("Batch"));
 
 		// pinned strip: bags + pieces + weights + the LIVE buckets only
 		$(page.main).find(".tob-s-bags").text(state.rows.length);
@@ -364,6 +366,98 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		}).catch(() => frappe.dom.unfreeze());
 	}
 
+	// ---- Batch check-off: the batch on screen, scanned card by card ----------
+	// The physical check before a transfer leaves: scan each card in the tray and
+	// it drops off the list. Whatever is still listed at the end is what you are
+	// missing. Scanning removes instantly (no confirm) — the tray moves faster
+	// than a dialog does.
+	function showBatch() {
+		if (!state.rows.length) return frappe.msgprint(__("Nothing in the batch yet — scan a card first."));
+		const esc = frappe.utils.escape_html;
+		const removed = [];
+		const dlg = new frappe.ui.Dialog({ title: __("Batch — scan to remove"), size: "large" });
+		const $b = $(dlg.body);
+		$b.html(`
+			<style>
+			.bt-scan{width:100%;border:2px solid var(--border-color);border-radius:10px;height:42px;
+				font-size:16px;padding:2px 16px;background:var(--fg-color);color:var(--text-color);}
+			.bt-msg{display:none;margin:8px 0 0;padding:6px 11px;border-radius:6px;font-size:13px;}
+			.bt-msg.ok{display:block;background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
+			.bt-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
+			.bt-head{display:flex;align-items:center;gap:14px;margin:12px 0 6px;font-size:13px;}
+			.bt-head b{font-size:16px;}
+			.bt-box{border:1px solid var(--border-color);border-radius:10px;overflow:auto;max-height:46vh;}
+			table.bt-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+			table.bt-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;text-transform:uppercase;
+				color:var(--text-muted);padding:6px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
+			table.bt-t td{padding:5px 10px;border-bottom:1px solid var(--border-color);}
+			table.bt-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+			.bt-rm{cursor:pointer;color:#b02a2a;font-weight:800;}
+			.bt-done{margin-top:10px;font-size:12px;color:var(--text-muted);}
+			.bt-done .c{display:inline-block;border:1px solid #bfe3c6;background:#eaf6ec;color:#1d7a33;
+				border-radius:9px;padding:1px 9px;margin:0 5px 5px 0;font-weight:700;
+				font-family:var(--font-family-monospace,monospace);}
+			.bt-empty{padding:26px;text-align:center;color:#1d7a33;font-weight:700;}
+			</style>
+			<input type="text" class="bt-scan" placeholder="${__("scan a card to take it out of the batch…")}">
+			<div class="bt-msg"></div>
+			<div class="bt-head"><span><b class="bt-left">0</b> ${__("still in the batch")}</span>
+				<span class="bt-outn" style="color:var(--text-muted);"></span></div>
+			<div class="bt-box"><table class="bt-t"><thead><tr>
+				<th>#</th><th>${__("Order Bag")}</th><th>${__("Design")}</th><th>${__("Qty")}</th>
+				<th class="num">${__("Gross (g)")}</th><th style="width:34px;"></th>
+			</tr></thead><tbody class="bt-body"></tbody></table></div>
+			<div class="bt-done"></div>`);
+
+		const flt2 = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
+		function paint() {
+			$b.find(".bt-left").text(state.rows.length);
+			$b.find(".bt-outn").text(removed.length ? __("{0} taken out", [removed.length]) : "");
+			$b.find(".bt-body").html(state.rows.map((r, i) => `
+				<tr><td>${i + 1}</td>
+					<td><b>${esc(r.name)}</b></td>
+					<td>${esc(r.design || "")}</td>
+					<td>${r.qty || ""}</td>
+					<td class="num">${flt2(r.gross) ? flt2(r.gross).toFixed(3) : ""}</td>
+					<td><span class="bt-rm" data-n="${esc(r.name)}" title="${__("take out")}">&times;</span></td>
+				</tr>`).join("") || `<tr><td colspan="6" class="bt-empty">${__("Every card scanned — the batch is empty.")}</td></tr>`);
+			$b.find(".bt-done").html(removed.length
+				? `${__("Taken out:")} ${removed.map((n) => `<span class="c">${esc(n)}</span>`).join("")}` : "");
+		}
+		function take(code, viaScan) {
+			const hit = state.rows.find((r) => r.name === code)
+				|| state.rows.find((r) => r.name.toUpperCase() === String(code).toUpperCase())
+				// the scanner may drop the leading E on a bag code
+				|| state.rows.find((r) => r.name.toUpperCase() === "E" + String(code).toUpperCase());
+			const $m = $b.find(".bt-msg").removeClass("ok err");
+            if (!hit) {
+				$m.addClass("err").html(__("<b>{0}</b> is not in this batch.", [esc(code)]));
+				return;
+			}
+			state.rows = state.rows.filter((r) => r !== hit);
+			removed.push(hit.name);
+			if (!state.rows.length) state.location = null;
+			updateLoc();
+			renderRows();          // the page behind the dialog keeps up
+			paint();
+			if (viaScan) $m.addClass("ok").html(__("<b>{0}</b> taken out — {1} left.", [esc(hit.name), state.rows.length]));
+		}
+		$b.find(".bt-scan").on("keydown", function (e) {
+			if (e.which !== 13 && e.key !== "Enter") return;
+			e.preventDefault();
+			const code = (this.value || "").trim();
+			this.value = "";
+			if (code) take(code, true);
+		});
+		$b.on("click", ".bt-rm", function () { take($(this).data("n"), false); });
+		dlg.set_secondary_action_label(__("Done"));
+		dlg.set_secondary_action(() => dlg.hide());
+		dlg.$wrapper.on("hidden.bs.modal", () => focusScan());   // back to the main scanner
+		dlg.show();
+		paint();
+		setTimeout(() => $b.find(".bt-scan").focus(), 300);
+	}
+
 	// ---- Cards picker: browse a location's cards and add them to the batch without scanning
 	function showCards() {
 		// once a batch is collecting from a location, the picker is LOCKED to it —
@@ -495,6 +589,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 
 	renderRows(); // paint the (empty) header + strip
 	page.set_primary_action(__("Transfer All"), transferAll, "arrow-right");
+	$batchBtn = page.add_inner_button(__("Batch"), showBatch);
 	page.add_inner_button(__("Cards"), showCards);
 	page.add_inner_button(__("History"), showHistory);
 	page.add_inner_button(__("Reset"), resetPage);
