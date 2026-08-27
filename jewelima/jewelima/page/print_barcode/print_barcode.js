@@ -17,7 +17,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	// Label geometry/typography — exactly as specified.
 	const LABEL_CSS = `
 	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;
-		justify-content:center;gap:0.045in;
+		justify-content:center;gap:0;
 		padding:0 0.09in;overflow:hidden;
 		font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
 		font-stretch:condensed;font-size:8pt;font-weight:400;font-style:normal;line-height:1.05;letter-spacing:-.2px;color:#000;}
@@ -26,7 +26,12 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	.bc-label .bc-qr{flex:0 0 auto;}
 	.bc-label .bc-qr img{height:0.33in;width:0.33in;display:block;}
 	.bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
-	.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
+	.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}
+	/* the two halves the label is split into — each nudges on its own, because a
+	   tag's two printable zones rarely line up with one another */
+	.bc-label .bc-half{display:flex;align-items:center;gap:0.045in;flex:0 0 auto;}
+	.bc-label .bc-a{justify-content:flex-end;}
+	.bc-label .bc-b{justify-content:flex-start;}`;
 
 	const UI_CSS = `
 	.pb-wrap{max-width:780px;}
@@ -34,7 +39,11 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	.pb-prev-wrap{margin:6px 0 14px;}
 	.pb-prev-wrap h4,.pb-qh{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a96a3;margin:0 0 5px;}
 	.pb-qh{margin:6px 0 5px;}
-	.pb-prev{display:inline-block;border:1px dashed #c4ccd4;border-radius:4px;background:#fff;}
+	.pb-prev{display:inline-block;border:1px dashed #c4ccd4;border-radius:4px;background:#fff;position:relative;}
+	/* the partition, drawn for the eye only — it never prints */
+	.pb-prev .bc-label{position:relative;}
+	.pb-prev .bc-label::after{content:"";position:absolute;top:6%;bottom:6%;left:50%;
+		border-left:1px dashed #c9d3dc;pointer-events:none;}
 	.pb-empty{color:#8a96a3;font-size:13px;}
 	table.pb-tbl{width:100%;border-collapse:collapse;font-size:13px;}
 	table.pb-tbl th,table.pb-tbl td{border-bottom:1px solid #eef1f4;padding:5px 8px;text-align:left;}
@@ -53,12 +62,20 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		<div class="pb-wrap">
 			<div class="pb-bar"></div>
 			<div class="pb-cal">
-				<span class="lbl">Shift on the label</span>
-				<button class="pb-l" title="move everything left">&#8592;</button>
-				<span class="val pb-off">0.00 in</span>
-				<button class="pb-r" title="move everything right">&#8594;</button>
-				<button class="pb-0" style="width:auto;padding:0 8px;">reset</button>
-				<span class="hint">nudge if your printer starts the label off-centre</span>
+				<span class="lbl" style="min-width:96px;">Weights &amp; QR</span>
+				<button class="pb-l" data-s="a" title="move this half left">&#8592;</button>
+				<span class="val pb-off-a">0.00 in</span>
+				<button class="pb-r" data-s="a" title="move this half right">&#8594;</button>
+				<button class="pb-0" data-s="a" style="width:auto;padding:0 8px;">reset</button>
+				<span class="hint">everything up to and including the code square</span>
+			</div>
+			<div class="pb-cal">
+				<span class="lbl" style="min-width:96px;">Design &amp; codes</span>
+				<button class="pb-l" data-s="b" title="move this half left">&#8592;</button>
+				<span class="val pb-off-b">0.00 in</span>
+				<button class="pb-r" data-s="b" title="move this half right">&#8594;</button>
+				<button class="pb-0" data-s="b" style="width:auto;padding:0 8px;">reset</button>
+				<span class="hint">the other side of the tag</span>
 			</div>
 			<div class="pb-prev-wrap"><h4>Label preview (actual size)</h4><div class="pb-prev-out"></div></div>
 			<div class="pb-qh">Labels to print</div>
@@ -84,22 +101,27 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	// How far the whole block sits from where the printer thinks the label starts.
 	// Thermal printers rarely agree on that, so this is a per-machine nudge kept in
 	// the browser rather than a setting everyone shares.
-	const OFF_KEY = "jw_barcode_offset_in";
-	function offset() {
+	// Two nudges, one per half: "a" is the weights and the QR, "b" is the codes.
+	// A tag's two printable zones rarely line up with each other, so each side
+	// moves on its own. Kept in the browser — it describes this machine, not the
+	// label everyone shares.
+	const OFF_KEY = { a: "jw_barcode_offset_a_in", b: "jw_barcode_offset_b_in" };
+	function offset(side) {
 		let v = 0;
-		try { v = parseFloat(localStorage.getItem(OFF_KEY) || "0") || 0; } catch (e) { v = 0; }
-		return Math.max(-0.25, Math.min(0.25, v));
+		try { v = parseFloat(localStorage.getItem(OFF_KEY[side]) || "0") || 0; } catch (e) { v = 0; }
+		return Math.max(-0.35, Math.min(0.35, v));
 	}
-	function setOffset(v) {
-		const n = Math.max(-0.25, Math.min(0.25, Math.round(v * 100) / 100));
-		try { localStorage.setItem(OFF_KEY, String(n)); } catch (e) { /* private window */ }
-		$(page.main).find(".pb-off").text(n.toFixed(2) + " in");
+	function setOffset(side, v) {
+		const n = Math.max(-0.35, Math.min(0.35, Math.round(v * 100) / 100));
+		try { localStorage.setItem(OFF_KEY[side], String(n)); } catch (e) { /* private window */ }
+		showOffsets();
 		renderPreview(state.cards[state.cards.length - 1] || null);
 	}
-	const offsetStyle = () => {
-		const o = offset();
-		return o ? `<style>.bc-label{transform:translateX(${o}in);}</style>` : "";
-	};
+	function showOffsets() {
+		$(page.main).find(".pb-off-a").text(offset("a").toFixed(2) + " in");
+		$(page.main).find(".pb-off-b").text(offset("b").toFixed(2) + " in");
+	}
+	const offsetStyle = () => "";   // the halves carry their own transform now
 
 	// Build one label's HTML — matches the reference: weights (left) · QR · codes (right)
 	function buildLabel(c) {
@@ -109,8 +131,14 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 			: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
 		const r1 = c.design_type ? `<div>${esc(c.design_type)}</div>` : "";
-		const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div><div>${esc(c.name)}${c.size ? " " + esc(c.size) : ""}</div></div>`;
-		return `<div class="bc-label">${left}${qr}${right}</div>`;
+		// size rides with the code, spelled out so "NA" reads as a size and not a stray word
+		const sz = c.size ? ` · SZ ${esc(c.size)}` : "";
+		const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div><div>${esc(c.name)}${sz}</div></div>`;
+		// half A is everything up to and including the QR; half B is the rest
+		return `<div class="bc-label">`
+			+ `<div class="bc-half bc-a" style="transform:translateX(${offset("a")}in);">${left}${qr}</div>`
+			+ `<div class="bc-half bc-b" style="transform:translateX(${offset("b")}in);">${right}</div>`
+			+ `</div>`;
 	}
 
 	function renderPreview(c) {
@@ -118,10 +146,10 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			: '<span class="pb-empty">Scan a card to preview its label.</span>');
 	}
 
-	$(page.main).find(".pb-l").on("click", () => setOffset(offset() - 0.02));
-	$(page.main).find(".pb-r").on("click", () => setOffset(offset() + 0.02));
-	$(page.main).find(".pb-0").on("click", () => setOffset(0));
-	$(page.main).find(".pb-off").text(offset().toFixed(2) + " in");
+	$(page.main).on("click", ".pb-l", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) - 0.02); });
+	$(page.main).on("click", ".pb-r", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) + 0.02); });
+	$(page.main).on("click", ".pb-0", function () { setOffset(this.dataset.s, 0); });
+	showOffsets();
 
 	function renderHistory() {
 		if (!state.cards.length) {
@@ -213,7 +241,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			html,body{margin:0;padding:0;}
 			${LABEL_CSS}
 			.bc-label{page-break-after:always;}
-			${offset() ? `.bc-label{transform:translateX(${offset()}in);}` : ""}
+
 			.bc-label:last-child{page-break-after:auto;}
 			</style></head><body>${body}</body></html>`);
 		w.document.close();
