@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-26 15:51:09.559506",
+ "modified": "2026-08-27 14:13:18.431447",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "stone-request",
@@ -13,6 +13,12 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stone Admin"
   }
  ],
  "script": null,

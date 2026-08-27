@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-09 13:00:00",
+ "modified": "2026-08-27 14:13:18.479787",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "stone-history",
@@ -16,6 +16,12 @@
   },
   {
    "role": "Stock Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stone Admin"
   }
  ],
  "script": null,

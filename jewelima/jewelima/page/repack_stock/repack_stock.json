@@ -1,20 +1,35 @@
 {
  "content": null,
- "creation": "2026-07-20 13:00:00.000000",
+ "creation": "2026-07-20 13:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-20 13:00:00.000000",
+ "modified": "2026-08-27 14:13:18.516372",
  "modified_by": "Administrator",
- "owner": "Administrator",
  "module": "Jewelima",
  "name": "repack-stock",
+ "owner": "Administrator",
  "page_name": "repack-stock",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "Stock User"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "Stock User"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stone Admin"
+  }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "Repack Stock"
 }

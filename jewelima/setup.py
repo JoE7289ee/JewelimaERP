@@ -208,6 +208,19 @@ JEWELIMA_DATA_ADMIN_READ = ["Order Bag", "Job Order", "Design", "Item", "Employe
 JEWELIMA_WS_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee",
 	"Bench Work Option", "Priority Card", "Bag Material Ledger"]
 JEWELIMA_STONE_ISSUE_READ = ["Order Bag", "Item", "Item Group", "Employee", "Bin", "Warehouse", "Material Issue", "Bag Material Ledger"]
+# JW Stone Admin — the whole stone room: what is in stock, what the floor is
+# asking for, bagging it, issuing it, taking it back, the sieve chart, and
+# raising a repack. APPROVING a repack is deliberately NOT here — that stays
+# with the managers, and its API refuses this role outright.
+JEWELIMA_STONE_ADMIN_ROLE = "JW Stone Admin"
+JEWELIMA_STONE_ADMIN_PAGES = [
+	"stone-info", "stone-request", "pre-bag", "stone-issue", "stone-return",
+	"stone-history", "stone-stock-info", "sieve-chart", "repack-stock",
+]
+JEWELIMA_STONE_ADMIN_READ = JEWELIMA_STONE_ISSUE_READ + [
+	"Diamond Sieve", "Stone Type", "Repack Request", "Repack Request Item",
+	"Pre Bag Record", "Design", "Job Order", "Customer",
+]
 # Design Bank personas. The base role works the catalog (browse, build cards,
 # feed the photo-update queue); the approver role ADDITIONALLY reviews/approves
 # (Review, Photo Approvals, the one-time Duplicates cleanup). Writes go through
@@ -364,7 +377,8 @@ def setup_roles():
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
 			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE, "JW Dye Admin",
-			"JW Manager", "ESMITH", JEWELIMA_STOCK_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
+			"JW Manager", "ESMITH", JEWELIMA_STOCK_ADMIN_ROLE,
+			JEWELIMA_STONE_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		ensure_role(name)
 	# belt and braces: the shipped page fixtures are the real source of truth for
 	# which roles must exist — anything they name and we somehow missed is created
@@ -537,6 +551,19 @@ def setup_roles():
 		if page not in set(JEWELIMA_STOCK_ADMIN_PAGES):
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STOCK_ADMIN_ROLE])
+			pg.save(ignore_permissions=True)
+
+	# ---- JW Stone Admin: the stone room ------------------------------------------
+	# Every stone page except the repack APPROVAL — raising a repack is theirs,
+	# approving one is not (approve_repack / reject_repack refuse this role).
+	for dt in JEWELIMA_STONE_ADMIN_READ:
+		grant(dt, JEWELIMA_STONE_ADMIN_ROLE, {"read": 1})
+	for page in JEWELIMA_STONE_ADMIN_PAGES:
+		set_page_roles(page, (JEWELIMA_STONE_ADMIN_ROLE,))
+	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_STONE_ADMIN_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_STONE_ADMIN_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_STONE_ADMIN_ROLE])
 			pg.save(ignore_permissions=True)
 
 	# ---- Jewelima CAD: the workstation persona ----------------------------------
