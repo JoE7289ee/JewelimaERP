@@ -1244,6 +1244,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "gem",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Finished Goods",
+   "link_to": "finished-goods",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -2438,7 +2451,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-27 13:31:31.829569",
+ "modified": "2026-08-27 16:08:05.473722",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

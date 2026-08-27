@@ -16268,3 +16268,91 @@ def rework_piece(order_bag, to_location, remarks=None):
 	frappe.db.commit()
 	return {"order_bag": order_bag, "to": loc, "stock_entry": se,
 		"gold": info["gold"], "stones": info["stones"]}
+
+
+# ---------------------------------------------------------------------------
+# Finished Goods (Delivery) — what is actually standing in the Finished Goods
+# warehouse: every piece, one to a line, and the metal and stones they add up
+# to. The Finished Stock report counts pieces by type; this is the list you
+# read when someone asks "what have we got?".
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_finished_goods(held_by=None, design_type=None):
+	"""Every finished piece In Stock, with what it holds and who holds it."""
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin",
+			"Jewelima Stock", "Jewelima Info"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Finished Goods is for the desk."), frappe.PermissionError)
+
+	filters = {"is_finished": 1, "stock_status": "In Stock"}
+	if held_by:
+		filters["held_by"] = held_by
+	bags = frappe.get_all("Order Bag", filters=filters,
+		fields=["name", "design", "held_by", "huid", "certifications", "size",
+			"act_gross_weight", "act_dmd_weight", "act_dmd_no", "in_stock_on", "customer"],
+		order_by="in_stock_on desc, name", limit_page_length=0)
+	if not bags:
+		return {"rows": [], "totals": {"pieces": 0, "gross": 0, "gold": 0, "pure": 0, "stones": 0},
+			"holders": [], "types": [], "warehouse": _wh("Finished Goods")}
+
+	names = [b.name for b in bags]
+	mats = {}
+	for bag, item, qty in frappe.db.sql(
+		"""select l.order_bag, l.item, sum(l.qty) from `tabBag Material Ledger` l
+		   where l.order_bag in %(n)s and l.entry_type = 'Convert' and l.direction = 'Out'
+		   group by l.order_bag, l.item""", {"n": names}):
+		mats.setdefault(bag, {})[item] = flt(qty)
+
+	# the design's type, and each item's stone-ness / purity, fetched once
+	designs = list({b.design for b in bags if b.design})
+	dtype = {d.name: (d.design_type or "") for d in frappe.get_all(
+		"Design", filters={"name": ["in", designs or [""]]},
+		fields=["name", "design_type"])} if designs else {}
+	items = list({it for m in mats.values() for it in m})
+	meta = {i.name: i for i in frappe.get_all("Item",
+		filters={"name": ["in", items or [""]]},
+		fields=["name", "stone_type", "purity_percentage", "metal_purity"])} if items else {}
+
+	rows, item_totals = [], {}
+	for b in bags:
+		gold = stones = pure = 0.0
+		karat = ""
+		for it, q in (mats.get(b.name) or {}).items():
+			m = meta.get(it)
+			if m and m.stone_type:
+				stones += q
+			else:
+				gold += q
+				if m:
+					pure += q * flt(m.purity_percentage) / 100.0
+					karat = karat or (m.metal_purity or "")
+			e = item_totals.setdefault(it, {"item": it, "qty": 0.0,
+				"stone": bool(m and m.stone_type)})
+			e["qty"] += q
+		rows.append({
+			"order_bag": b.name, "design": b.design or "",
+			"design_type": dtype.get(b.design, ""), "karat": karat,
+			"held_by": b.held_by or "", "customer": b.customer or "",
+			"huid": b.huid or "", "certifications": b.certifications or "",
+			"size": b.size or "", "gross": flt(b.act_gross_weight),
+			"gold": round(gold, 3), "pure": round(pure, 3), "stones": round(stones, 3),
+			"dmd_ct": flt(b.act_dmd_weight), "dmd_no": cint(b.act_dmd_no),
+			"since": str(b.in_stock_on or "")[:10],
+		})
+	if design_type:
+		rows = [r for r in rows if r["design_type"] == design_type]
+	return {
+		"rows": rows,
+		"warehouse": _wh("Finished Goods"),
+		"holders": sorted({r["held_by"] for r in rows if r["held_by"]}),
+		"types": sorted({r["design_type"] for r in rows if r["design_type"]}),
+		"materials": sorted(({"item": v["item"], "qty": round(v["qty"], 3), "stone": v["stone"]}
+			for v in item_totals.values()), key=lambda x: -x["qty"]),
+		"totals": {
+			"pieces": len(rows),
+			"gross": round(sum(r["gross"] for r in rows), 3),
+			"gold": round(sum(r["gold"] for r in rows), 3),
+			"pure": round(sum(r["pure"] for r in rows), 3),
+			"stones": round(sum(r["stones"] for r in rows), 3),
+			"dmd_ct": round(sum(r["dmd_ct"] for r in rows), 3),
+		},
+	}

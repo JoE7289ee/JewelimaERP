@@ -170,7 +170,8 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	"issue-findings", "recover-findings", "findings-stock", "findings-report", "add-findings",
 	"findings-history",
 	# Stock Reports — the whole sub-menu
-	"finished-stock", "at-certification", "in-bags", "location-stock", "stock-analysis",
+	"finished-stock", "finished-goods", "at-certification", "in-bags", "location-stock",
+	"stock-analysis",
 	"total-gold",
 	# Stock Setup — the shelves themselves
 	"raw-materials", "warehouse-management",
@@ -239,7 +240,7 @@ JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "d
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
 JEWELIMA_INFO_BENCH_PAGES = ["bench-info"]  # one page for every bench (the per-bench pages are retired)
 # the shared file drop — Info uploads and downloads; delete stays uploader/admin
-JEWELIMA_INFO_SHARE_PAGES = ["file-share"]
+JEWELIMA_INFO_SHARE_PAGES = ["file-share", "finished-goods"]
 JEWELIMA_INFO_PAGES = (JEWELIMA_INFO_LOOKUP_PAGES + JEWELIMA_INFO_GALLERY_PAGES
 	+ JEWELIMA_INFO_BENCH_PAGES + JEWELIMA_INFO_SHARE_PAGES)
 JEWELIMA_DESIGN_BANK_READ = ["Design Bank", "Design Tag", "Design Type", "Diversion Type",
