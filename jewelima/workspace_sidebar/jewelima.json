@@ -906,6 +906,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "undo-2",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Recover Findings",
+   "link_to": "recover-findings",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "boxes",
    "indent": 0,
    "keep_closed": 0,
@@ -2412,7 +2425,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-27 12:51:45.641889",
+ "modified": "2026-08-27 13:20:30.596212",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

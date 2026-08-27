@@ -233,6 +233,12 @@ def transfer_stock(from_warehouse, to_warehouse, items):
 		item, wt = i.get("item"), flt(i.get("weight"))
 		if not item or wt <= 0:
 			continue
+		# a finding is not ordinary stock: it leaves the shelf by being ISSUED
+		# (turning into gold), and comes back by being RECOVERED. Moving one
+		# warehouse-to-warehouse would put a finding somewhere it cannot exist.
+		if _is_finding(item):
+			frappe.throw(frappe._("{0} is a finding — issue it from the Findings page, or recover it back. "
+				"Findings are not moved between warehouses.").format(item))
 		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": from_warehouse}, "actual_qty"))
 		if wt > avail + 0.0005:
 			frappe.throw(frappe._("Only {0} of {1} in {2} — can't transfer {3}.").format(round(avail, 3), item, from_warehouse, wt))
@@ -15806,6 +15812,102 @@ def issue_finding(item, weight, target_type, order_bag=None, location=None,
 
 
 @frappe.whitelist()
+def recover_finding(item, weight, from_location, pcs=None, colour=None, remarks=None):
+	"""The mirror of issue_finding: gold standing in a location turns back into a
+	finding on the shelf.
+
+	Twenty grams of 18KPG sitting in Production becomes, say, Bombay screws back
+	in Gold Issue. One Repack: the karat gold leaves that location, the finding
+	lands in Gold Issue — the only place a finding exists as itself."""
+	_findings_guard()
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE
+
+	w = flt(weight)
+	if not item or not frappe.db.exists("Item", item):
+		frappe.throw(frappe._("Pick the finding you are getting back."))
+	if not _is_finding(item):
+		frappe.throw(frappe._("{0} is not a finding.").format(item))
+	if w <= 0:
+		frappe.throw(frappe._("Enter the weight coming back (g)."))
+	src = from_location if from_location and frappe.db.exists("Warehouse", from_location) else None
+	if not src:
+		frappe.throw(frappe._("Pick the location the gold is standing in."))
+	if frappe.db.get_value("Warehouse", src, "custom_is_loss"):
+		frappe.throw(frappe._("Loss buckets are recovered through Loss Collection, not here."))
+
+	gold = _finding_gold_item(item, colour)
+	have = flt(frappe.db.get_value("Bin", {"item_code": gold, "warehouse": src}, "actual_qty"))
+	if w > have + 0.0005:
+		frappe.throw(frappe._("Only {0} g of {1} in {2} — can't take back {3} g.").format(
+			round(have, 3), gold, src, w))
+	shelf = _wh(GOLD_ISSUE_WAREHOUSE)
+
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Repack", "company": _company(),
+		"items": [
+			{"item_code": gold, "qty": w, "uom": "Gram", "s_warehouse": src,
+				"allow_zero_valuation_rate": 1},
+			{"item_code": item, "qty": w, "uom": "Gram", "t_warehouse": shelf,
+				"allow_zero_valuation_rate": 1, "is_finished_item": 1},
+		],
+		"remarks": "Finding recovery: {0} g {1} from {2} -> {3}".format(w, gold, src, item),
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+
+	rec = frappe.get_doc({
+		"doctype": "Finding Issue", "direction": "Recovery", "finding_item": item,
+		"finding_name": frappe.db.get_value("Item", item, "item_name"),
+		"pcs": cint(pcs) or 0, "weight": w, "target_type": "Location",
+		"location": src, "gold_item": gold, "stock_entry": se.name, "remarks": remarks,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"recovery": rec.name, "stock_entry": se.name, "finding": item,
+		"gold_item": gold, "weight": w, "from": src, "to": shelf}
+
+
+@frappe.whitelist()
+def get_recoverable_gold(from_location=None):
+	"""What could come back as findings: the karat gold standing in each
+	transferable location, and which findings each karat could turn into."""
+	_findings_guard()
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE
+
+	shelf = _wh(GOLD_ISSUE_WAREHOUSE)
+	groups = _finding_groups()
+	findings = frappe.get_all("Item", filters={"item_group": ["in", groups or [""]]},
+		fields=["name", "item_name", "item_group"], order_by="name")
+	# gold item -> the findings it can become
+	becomes = {}
+	for f in findings:
+		if "Common" in f.item_group:
+			karat = (re.match(r"^(\d{2})", f.item_group) or [None, ""])[1]
+			for c in ("Y", "W", "P"):
+				becomes.setdefault("{0}K{1}G".format(karat, c), []).append(
+					{"item": f.name, "name": f.item_name, "colour": c})
+		else:
+			becomes.setdefault(_finding_gold_item(f.name), []).append(
+				{"item": f.name, "name": f.item_name, "colour": None})
+
+	locs = []
+	for wh in frappe.get_all("Warehouse", filters={"is_group": 0, "custom_is_loss": 0},
+			fields=["name", "warehouse_name"], order_by="warehouse_name"):
+		if wh.name == shelf:
+			continue        # findings already live here
+		rows = []
+		for b in frappe.get_all("Bin", filters={"warehouse": wh.name, "actual_qty": [">", 0]},
+				fields=["item_code", "actual_qty"]):
+			if b.item_code in becomes:
+				rows.append({"gold": b.item_code, "qty": round(flt(b.actual_qty), 3),
+					"can_become": becomes[b.item_code]})
+		if rows:
+			locs.append({"warehouse": wh.name, "label": wh.warehouse_name or wh.name,
+				"rows": sorted(rows, key=lambda r: -r["qty"])})
+	return {"locations": locs, "shelf": shelf}
+
+
+@frappe.whitelist()
 def get_finding_issues(period="month", item=None, limit=300):
 	"""Issue history: what left the shelf, what it became, and where it went."""
 	_findings_guard()
@@ -15816,22 +15918,28 @@ def get_finding_issues(period="month", item=None, limit=300):
 	if item:
 		filters["finding_item"] = item
 	rows = frappe.get_all("Finding Issue", filters=filters,
-		fields=["name", "finding_item", "finding_name", "pcs", "weight", "target_type",
-			"order_bag", "location", "gold_item", "owner", "creation", "remarks"],
+		fields=["name", "direction", "finding_item", "finding_name", "pcs", "weight",
+			"target_type", "order_bag", "location", "gold_item", "owner", "creation", "remarks"],
 		order_by="creation desc", limit=cint(limit))
 	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
 		filters={"name": ["in", list({r.owner for r in rows}) or [""]]},
 		fields=["name", "full_name"])} if rows else {}
 	out = [{
-		"name": r.name, "item": r.finding_item, "item_name": r.finding_name or r.finding_item,
+		"name": r.name, "direction": r.direction or "Issue",
+		"item": r.finding_item, "item_name": r.finding_name or r.finding_item,
 		"pcs": cint(r.pcs), "weight": flt(r.weight), "target_type": r.target_type,
+		# an issue goes OUT to a card or a location; a recovery comes BACK from one
 		"to": r.order_bag or (r.location or "").replace(" - JD", ""),
 		"gold_item": r.gold_item, "who": users.get(r.owner, r.owner),
 		"when": str(r.creation)[:16], "remarks": r.remarks or "",
 	} for r in rows]
+	issued = [x for x in out if x["direction"] != "Recovery"]
+	recovered = [x for x in out if x["direction"] == "Recovery"]
 	return {"rows": out, "label": label,
-		"totals": {"weight": round(sum(x["weight"] for x in out), 3),
-			"pcs": sum(x["pcs"] for x in out), "issues": len(out)}}
+		"totals": {"weight": round(sum(x["weight"] for x in issued), 3),
+			"recovered": round(sum(x["weight"] for x in recovered), 3),
+			"pcs": sum(x["pcs"] for x in issued), "issues": len(issued),
+			"recoveries": len(recovered)}}
 
 
 @frappe.whitelist()

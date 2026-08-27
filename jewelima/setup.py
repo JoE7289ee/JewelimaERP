@@ -167,7 +167,7 @@ JEWELIMA_STOCK_ADMIN_ROLE = "JW Stock Admin"
 JEWELIMA_STOCK_ADMIN_PAGES = [
 	"purchase-raw-material", "stock-transfer", "melt-gold",
 	"loss-collection", "loss-writeoff", "loss-report", "employee-loss",
-	"issue-findings", "findings-stock", "findings-report", "add-findings",
+	"issue-findings", "recover-findings", "findings-stock", "findings-report", "add-findings",
 	"findings-history",
 	# Stock Reports — the whole sub-menu
 	"finished-stock", "at-certification", "in-bags", "location-stock", "stock-analysis",

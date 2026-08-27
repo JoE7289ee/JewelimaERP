@@ -29,6 +29,7 @@ frappe.pages["findings-history"].on_page_load = function (wrapper) {
 		.fh-k{border-radius:9px;padding:1px 9px;font-size:10px;font-weight:800;}
 		.fh-k.Card{background:#eef5fa;color:#1f618d;}
 		.fh-k.Location{background:#f3eefa;color:#5b3d8f;}
+		.fh-k.Recovery{background:#e8f0f7;color:#1f618d;}
 		.fh-gold{font-weight:700;color:#8a6d00;}
 		.fh-sub{font-size:10.5px;color:var(--text-muted);}
 		.fh-none{padding:36px;text-align:center;color:var(--text-muted);}
@@ -58,8 +59,10 @@ frappe.pages["findings-history"].on_page_load = function (wrapper) {
 				<td><b>${esc(r.item)}</b><div class="fh-sub">${esc(r.item_name)}</div></td>
 				<td class="num">${r.pcs || ""}</td>
 				<td class="num">${r.weight.toFixed(3)}</td>
-				<td class="fh-gold">${esc(r.gold_item)}</td>
-				<td><span class="fh-k ${esc(r.target_type)}">${esc(r.target_type)}</span> ${esc(r.to)}
+				<td class="fh-gold">${r.direction === "Recovery"
+					? __("from {0}", [esc(r.gold_item)]) : esc(r.gold_item)}</td>
+				<td><span class="fh-k ${r.direction === "Recovery" ? "Recovery" : esc(r.target_type)}">${
+					r.direction === "Recovery" ? __("from {0}", [esc(r.to)]) : esc(r.target_type) + " " + esc(r.to)}</span>
 					${r.remarks ? `<div class="fh-sub">${esc(r.remarks)}</div>` : ""}</td>
 				<td>${esc(r.who)}</td>
 			</tr>`).join("") || `<tr><td colspan="7" class="fh-none">${__("Nothing issued in this window.")}</td></tr>`);
@@ -73,8 +76,9 @@ frappe.pages["findings-history"].on_page_load = function (wrapper) {
 			root.find(".fh-when").text(m.label || "");
 			root.find(".fh-tiles").html(`
 				<div class="fh-tile"><div class="k">${__("Issued")}</div><div class="v">${(t.weight || 0).toFixed(3)} g</div></div>
+				<div class="fh-tile"><div class="k">${__("Recovered")}</div><div class="v" style="color:#1f618d;">${(t.recovered || 0).toFixed(3)} g</div></div>
 				<div class="fh-tile"><div class="k">${__("Pieces")}</div><div class="v">${t.pcs || 0}</div></div>
-				<div class="fh-tile"><div class="k">${__("Issues")}</div><div class="v">${t.issues || 0}</div></div>`);
+				<div class="fh-tile"><div class="k">${__("Movements")}</div><div class="v">${(t.issues || 0) + (t.recoveries || 0)}</div></div>`);
 			paint();
 		});
 	}
