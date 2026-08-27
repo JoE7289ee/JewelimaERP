@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.utils import cint, flt
@@ -37,6 +39,7 @@ def after_install():
 	seed_standard_golds()
 	retag_swarovski()
 	sync_workspace_sidebar()
+	check_sidebar_icons()
 	ensure_home_block()
 	drop_retired_pages()
 	setup_roles()
@@ -89,6 +92,7 @@ def after_migrate():
 	seed_standard_golds()
 	retag_swarovski()
 	sync_workspace_sidebar()
+	check_sidebar_icons()
 	ensure_home_block()
 	drop_retired_pages()
 	setup_roles()
@@ -164,6 +168,8 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	# Stock Reports — the whole sub-menu
 	"finished-stock", "at-certification", "in-bags", "location-stock", "stock-analysis",
 	"total-gold",
+	# Stock Setup — the shelves themselves
+	"raw-materials", "warehouse-management",
 	"purchase-history", "loss-history", "melt-history",
 ]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
@@ -1080,6 +1086,27 @@ def set_default_workspace(force=False):
 		frappe.db.commit()
 	print("Landing page — set for %d user(s) -> %s" % (len(users), JEWELIMA_WORKSPACE))
 	return {"updated": len(users)}
+
+
+
+def check_sidebar_icons():
+	"""Every sidebar icon must exist in the lucide sprite — a name that does not
+	renders as a blank gap with no error anywhere. Called on migrate; it only
+	reports, so a bad name never blocks a deploy."""
+	import os
+	import re
+
+	sprite = frappe.get_app_path("frappe", "public", "icons", "lucide.svg")
+	src = frappe.get_app_path("jewelima", "workspace_sidebar", "jewelima.json")
+	if not (os.path.exists(sprite) and os.path.exists(src)):
+		return
+	have = set(re.findall(r'id="icon-([a-z0-9-]+)"', open(sprite).read()))
+	rows = json.loads(open(src).read()).get("items") or []
+	bad = [(r.get("label"), r.get("icon")) for r in rows if r.get("icon") and r["icon"] not in have]
+	if bad:
+		print("Sidebar icons that will render BLANK: %s" % ", ".join(
+			"%s (%s)" % (lbl, ic) for lbl, ic in bad))
+	return {"missing": bad}
 
 
 def relax_employee_mandatory():

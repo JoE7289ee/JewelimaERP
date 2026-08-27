@@ -1,19 +1,32 @@
 {
  "content": null,
- "creation": "2026-06-30 14:00:00.000000",
+ "creation": "2026-06-30 14:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-06-30 14:00:00.000000",
+ "modified": "2026-08-27 12:39:24.564039",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "warehouse-management",
  "owner": "Administrator",
  "page_name": "warehouse-management",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stock Admin"
+  }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "Warehouse Management"
 }

@@ -171,7 +171,7 @@ def get_warehouse_flags():
 @frappe.whitelist()
 def set_warehouse_flag(warehouse, flag, value):
 	"""Toggle ONE flag (a custom Check field) on a warehouse. Flags only — nothing else."""
-	frappe.only_for(["System Manager", "Stock Manager", "JW Manager"])
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"])
 	if not frappe.get_all("Custom Field", filters={"dt": "Warehouse", "fieldtype": "Check", "fieldname": flag}, limit=1):
 		frappe.throw(frappe._("Unknown warehouse flag: {0}").format(flag))
 	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
