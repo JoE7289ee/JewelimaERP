@@ -16,6 +16,14 @@
 frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Job Work", single_column: true });
 	const state = { mode: "issue", rows: [], location: null, history: [], batchEmp: null };
+	// gold moves per card on both sides of this page — small requests, so a
+	// timeout can never strand a long batch half-done
+	const JW_CHUNK = 20;
+	const chunk = (arr, n) => {
+		const out = [];
+		for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+		return out;
+	};
 	const ALLOWED = ["GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH"];
 
 	$(page.main).append(`
@@ -345,16 +353,38 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	function doIssue(withEmployee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
 		if (withEmployee && !empVal()) return frappe.msgprint(__("Select the employee (or use 'Issue (no employee)')."));
-		frappe.dom.freeze(__("Issuing…"));
-		frappe.call({
-			method: "jewelima.jewelima.api.issue_bench_cards",
-			args: { names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, employee: withEmployee ? empVal() : null, work_type: state.work.get_value() || null },
-		}).then((r) => {
+		// Issue in CHUNKS. Each card is a stock snapshot plus an employee-balance
+		// bump, so a long batch is a lot of work in one request — and a gateway
+		// timeout mid-way would leave the bench half-issued with nothing said.
+		// Twenty keeps each request short, and a failure names exactly what did
+		// not go out.
+		const names = state.rows.map((r) => r.name);
+		const parts = chunk(names, JW_CHUNK);
+		const tot = { count: 0, errors: [] };
+		const runIssue = (i) => {
+			if (i >= parts.length) return Promise.resolve();
+			frappe.dom.freeze(parts.length > 1
+				? __("Issuing {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
+				: __("Issuing…"));
+			return frappe.call({
+				method: "jewelima.jewelima.api.issue_bench_cards",
+				args: { names: JSON.stringify(parts[i]), location: state.location,
+					employee: withEmployee ? empVal() : null, work_type: state.work.get_value() || null },
+			}).then((r) => {
+				const res = r.message || {};
+				tot.count += cint(res.count);
+				tot.errors = tot.errors.concat(res.errors || []);
+				return runIssue(i + 1);
+			}).catch(() => {
+				parts.slice(i).forEach((c) => c.forEach((nm) =>
+					tot.errors.push({ name: nm, error: __("not sent — the batch stopped here") })));
+			});
+		};
+		runIssue(0).then(() => {
 			frappe.dom.unfreeze();
-			const res = r.message || {};
-			frappe.show_alert({ message: __("Issued {0} card(s) at {1}{2}", [res.count, state.location, withEmployee ? " → " + empDisp() : ""]), indicator: "green" }, 6);
-			showErrors(res.errors);
-			logHistory("—", __("Issued {0}{1}", [res.count, withEmployee ? " (" + empDisp() + ")" : ""]), "ok");
+			frappe.show_alert({ message: __("Issued {0} card(s) at {1}{2}", [tot.count, state.location, withEmployee ? " → " + empDisp() : ""]), indicator: "green" }, 6);
+			showErrors(tot.errors);
+			logHistory("—", __("Issued {0}{1}", [tot.count, withEmployee ? " (" + empDisp() + ")" : ""]), "ok");
 			clearBatch();
 		}).catch(() => frappe.dom.unfreeze());
 	}
@@ -376,23 +406,49 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			() => {
 				const tpxTo = tpxDest();
 				if (tpxTo === "MISSING") return;
-				frappe.dom.freeze(__("Receipting…"));
-				frappe.call({
-					method: (tpxTo && tpxTo !== "MISSING") ? "jewelima.jewelima.api.receipt_and_transfer" : "jewelima.jewelima.api.receipt_bench_cards",
-					args: Object.assign({ lines: JSON.stringify(state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }))), location: state.location, employee: empVal(), collection_state: state.cstate.get_value() || null },
-						(tpxTo && tpxTo !== "MISSING") ? { to_location: tpxTo } : {}),
-				}).then((r) => {
+				// A receipt is the heaviest thing this page does per card: loss booked
+				// to the bag ledger, gold moved out of In Bags into the bench's -LOSS
+				// warehouse, the employee's held weight released, and (with the strip
+				// ticked) an onward transfer too. Twenty at a time keeps every request
+				// short; a chunk that dies is named instead of vanishing.
+				const withTransfer = tpxTo && tpxTo !== "MISSING";
+				const allLines = state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }));
+				const parts = chunk(allLines, JW_CHUNK);
+				const tot = { count: 0, loss: 0, transferred: 0, errors: [], transfer_errors: [] };
+				const runReceipt = (i) => {
+					if (i >= parts.length) return Promise.resolve();
+					frappe.dom.freeze(parts.length > 1
+						? __("Receipting {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
+						: __("Receipting…"));
+					return frappe.call({
+						method: withTransfer ? "jewelima.jewelima.api.receipt_and_transfer" : "jewelima.jewelima.api.receipt_bench_cards",
+						args: Object.assign({ lines: JSON.stringify(parts[i]), location: state.location,
+							employee: empVal(), collection_state: state.cstate.get_value() || null },
+							withTransfer ? { to_location: tpxTo } : {}),
+					}).then((r) => {
+						const res = r.message || {};
+						tot.count += cint(res.count);
+						tot.loss += flt(res.total_loss);
+						tot.transferred += cint(res.transferred);
+						tot.errors = tot.errors.concat(res.errors || []);
+						tot.transfer_errors = tot.transfer_errors.concat(res.transfer_errors || []);
+						return runReceipt(i + 1);
+					}).catch(() => {
+						parts.slice(i).forEach((c) => c.forEach((ln) =>
+							tot.errors.push({ name: ln.order_bag, error: __("not sent — the batch stopped here") })));
+					});
+				};
+				runReceipt(0).then(() => {
 					frappe.dom.unfreeze();
-					const res = r.message || {};
-					frappe.show_alert({ message: tpxTo && tpxTo !== "MISSING"
-						? __("Received {0} · loss {1} g → moved {2} to {3}", [res.count, (res.total_loss || 0), res.transferred || 0, tpxTo])
-						: __("Received {0} card(s) · loss {1} g → {2}", [res.count, (res.total_loss || 0), empDisp()]), indicator: "green" }, 7);
-					if ((res.transfer_errors || []).length) {
+					frappe.show_alert({ message: withTransfer
+						? __("Received {0} · loss {1} g → moved {2} to {3}", [tot.count, tot.loss.toFixed(3), tot.transferred, tpxTo])
+						: __("Received {0} card(s) · loss {1} g → {2}", [tot.count, tot.loss.toFixed(3), empDisp()]), indicator: "green" }, 7);
+					if (tot.transfer_errors.length) {
 						frappe.msgprint({ title: __("Received but not moved"), indicator: "orange",
-							message: res.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
+							message: tot.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
 					}
-					showErrors(res.errors);
-					logHistory("—", __("Received {0} · loss {1}g ({2})", [res.count, res.total_loss, empDisp()]), "ok");
+					showErrors(tot.errors);
+					logHistory("—", __("Received {0} · loss {1}g ({2})", [tot.count, tot.loss.toFixed(3), empDisp()]), "ok");
 					clearBatch();
 				}).catch(() => frappe.dom.unfreeze());
 			}

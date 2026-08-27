@@ -15,6 +15,14 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Assign / Collect", single_column: true });
 	const ALLOWED = ["CAD", "WAXING", "WAX SETTING", "WAX CLEANING"];
 	const state = { mode: "assign", rows: [], location: null, history: [] };
+	// same chunking as Job Work: long batches go out in small requests so a
+	// timeout can never leave the bench half-done
+	const AC_CHUNK = 20;
+	const chunk = (arr, n) => {
+		const out = [];
+		for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+		return out;
+	};
 
 	$(page.main).append(`
 		<style>
@@ -230,16 +238,32 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	function doAssign(withEmployee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
 		if (withEmployee && !empVal()) return frappe.msgprint(__("Select the employee (or use 'Assign (no employee)')."));
-		frappe.dom.freeze(__("Assigning…"));
-		frappe.call({
-			method: "jewelima.jewelima.api.assign_bench_cards",
-			args: { names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, employee: withEmployee ? empVal() : null, work_type: state.work.get_value() || null },
-		}).then((r) => {
+		const parts = chunk(state.rows.map((r) => r.name), AC_CHUNK);
+		const tot = { count: 0, errors: [] };
+		const run = (i) => {
+			if (i >= parts.length) return Promise.resolve();
+			frappe.dom.freeze(parts.length > 1
+				? __("Assigning {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
+				: __("Assigning…"));
+			return frappe.call({
+				method: "jewelima.jewelima.api.assign_bench_cards",
+				args: { names: JSON.stringify(parts[i]), location: state.location,
+					employee: withEmployee ? empVal() : null, work_type: state.work.get_value() || null },
+			}).then((r) => {
+				const res = r.message || {};
+				tot.count += cint(res.count);
+				tot.errors = tot.errors.concat(res.errors || []);
+				return run(i + 1);
+			}).catch(() => {
+				parts.slice(i).forEach((c) => c.forEach((nm) =>
+					tot.errors.push({ name: nm, error: __("not sent — the batch stopped here") })));
+			});
+		};
+		run(0).then(() => {
 			frappe.dom.unfreeze();
-			const res = r.message || {};
-			frappe.show_alert({ message: __("Assigned {0} card(s) at {1}{2}", [res.count, state.location, withEmployee ? " → " + empName() : ""]), indicator: "green" }, 6);
-			showErrors(res.errors);
-			logHistory("—", __("Assigned {0}{1}", [res.count, withEmployee ? " (" + empName() + ")" : ""]), "ok");
+			frappe.show_alert({ message: __("Assigned {0} card(s) at {1}{2}", [tot.count, state.location, withEmployee ? " → " + empName() : ""]), indicator: "green" }, 6);
+			showErrors(tot.errors);
+			logHistory("—", __("Assigned {0}{1}", [tot.count, withEmployee ? " (" + empName() + ")" : ""]), "ok");
 			clearBatch();
 		}).catch(() => frappe.dom.unfreeze());
 	}
@@ -247,23 +271,42 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one assigned card first."));
 		const tpxTo = tpxDest();
 		if (tpxTo === "MISSING") return;
-		frappe.dom.freeze(__("Collecting…"));
-		frappe.call({
-			method: (tpxTo && tpxTo !== "MISSING") ? "jewelima.jewelima.api.collect_and_transfer" : "jewelima.jewelima.api.collect_bench_cards",
-			args: Object.assign({ names: JSON.stringify(state.rows.map((r) => r.name)), location: state.location, collection_state: state.state.get_value() || null },
-				(tpxTo && tpxTo !== "MISSING") ? { to_location: tpxTo } : {}),
-		}).then((r) => {
+		const withTransfer = tpxTo && tpxTo !== "MISSING";
+		const parts = chunk(state.rows.map((r) => r.name), AC_CHUNK);
+		const tot = { count: 0, transferred: 0, errors: [], transfer_errors: [] };
+		const run = (i) => {
+			if (i >= parts.length) return Promise.resolve();
+			frappe.dom.freeze(parts.length > 1
+				? __("Collecting {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
+				: __("Collecting…"));
+			return frappe.call({
+				method: withTransfer ? "jewelima.jewelima.api.collect_and_transfer" : "jewelima.jewelima.api.collect_bench_cards",
+				args: Object.assign({ names: JSON.stringify(parts[i]), location: state.location,
+					collection_state: state.state.get_value() || null },
+					withTransfer ? { to_location: tpxTo } : {}),
+			}).then((r) => {
+				const res = r.message || {};
+				tot.count += cint(res.count);
+				tot.transferred += cint(res.transferred);
+				tot.errors = tot.errors.concat(res.errors || []);
+				tot.transfer_errors = tot.transfer_errors.concat(res.transfer_errors || []);
+				return run(i + 1);
+			}).catch(() => {
+				parts.slice(i).forEach((c) => c.forEach((nm) =>
+					tot.errors.push({ name: nm, error: __("not sent — the batch stopped here") })));
+			});
+		};
+		run(0).then(() => {
 			frappe.dom.unfreeze();
-			const res = r.message || {};
-			frappe.show_alert({ message: tpxTo && tpxTo !== "MISSING"
-				? __("Collected {0} at {1} → moved {2} to {3}", [res.count, state.location, res.transferred || 0, tpxTo])
-				: __("Collected {0} card(s) at {1}", [res.count, state.location]), indicator: "green" }, 6);
-			if ((res.transfer_errors || []).length) {
+			frappe.show_alert({ message: withTransfer
+				? __("Collected {0} at {1} → moved {2} to {3}", [tot.count, state.location, tot.transferred, tpxTo])
+				: __("Collected {0} card(s) at {1}", [tot.count, state.location]), indicator: "green" }, 6);
+			if (tot.transfer_errors.length) {
 				frappe.msgprint({ title: __("Collected but not moved"), indicator: "orange",
-					message: res.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
+					message: tot.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
 			}
-			showErrors(res.errors);
-			logHistory("—", __("Collected {0}", [res.count]), "ok");
+			showErrors(tot.errors);
+			logHistory("—", __("Collected {0}", [tot.count]), "ok");
 			clearBatch();
 		}).catch(() => frappe.dom.unfreeze());
 	}
