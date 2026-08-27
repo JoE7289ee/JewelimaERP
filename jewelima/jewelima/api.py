@@ -15807,3 +15807,170 @@ def get_finding_issues(period="month", item=None, limit=300):
 	return {"rows": out, "label": label,
 		"totals": {"weight": round(sum(x["weight"] for x in out), 3),
 			"pcs": sum(x["pcs"] for x in out), "issues": len(out)}}
+
+
+@frappe.whitelist()
+def get_findings_report():
+	"""Findings Report: the shelf summarised — per finding, per group, and what
+	has been issued week by week."""
+	_findings_guard()
+	stock = get_findings_stock()
+	by_group = {}
+	for r in stock["rows"]:
+		g = by_group.setdefault(r["group"], {"weight": 0.0, "pure": 0.0, "kinds": 0, "stocked": 0})
+		g["weight"] += r["weight"]
+		g["pure"] += r["pure"]
+		g["kinds"] += 1
+		g["stocked"] += 1 if r["weight"] > 0 else 0
+	groups = sorted(({"group": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3),
+		"kinds": v["kinds"], "stocked": v["stocked"]} for k, v in by_group.items()),
+		key=lambda x: -x["weight"])
+
+	# twelve weeks of issuing, oldest first
+	since = frappe.utils.add_days(frappe.utils.nowdate(), -83)
+	weeks, by_gold, by_target = {}, {}, {"Card": 0.0, "Location": 0.0}
+	for r in frappe.get_all("Finding Issue", filters={"creation": [">=", since + " 00:00:00"]},
+			fields=["weight", "gold_item", "target_type", "creation"], limit_page_length=0):
+		wk = str(frappe.utils.get_first_day_of_week(str(r.creation)[:10]))
+		weeks[wk] = round(weeks.get(wk, 0) + flt(r.weight), 3)
+		by_gold[r.gold_item] = round(by_gold.get(r.gold_item, 0) + flt(r.weight), 3)
+		if r.target_type in by_target:
+			by_target[r.target_type] = round(by_target[r.target_type] + flt(r.weight), 3)
+	# twelve buckets ending with the week we are in — counting back from today,
+	# not forward from the cutoff, or this week falls off the end
+	series = []
+	d = frappe.utils.add_days(frappe.utils.get_first_day_of_week(frappe.utils.nowdate()), -77)
+	for _ in range(12):
+		series.append({"week": str(d), "weight": weeks.get(str(d), 0)})
+		d = frappe.utils.add_days(d, 7)
+	return {"stock": stock["rows"], "totals": stock["totals"], "warehouse": stock["warehouse"],
+		"elsewhere": stock["elsewhere"], "groups": groups, "weeks": series,
+		"by_gold": sorted(([k, v] for k, v in by_gold.items()), key=lambda x: -x[1]),
+		"by_target": by_target}
+
+
+# ---------------------------------------------------------------------------
+# Location Stock (Stock > Stock Reports) — what is actually sitting in the
+# working warehouses: Gold Issue, Casting and Production.
+# ---------------------------------------------------------------------------
+LOCATION_STOCK_WAREHOUSES = ("Gold Issue", "Casting", "Production")
+
+
+@frappe.whitelist()
+def get_location_stock():
+	"""Every working warehouse with what it holds — by item, and rolled up by
+	the material group behind it (gold, findings, stones, alloy)."""
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin",
+			"Jewelima Stock"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Stock is for the stock desk."), frappe.PermissionError)
+
+	out = []
+	for label in LOCATION_STOCK_WAREHOUSES:
+		wh = _wh(label)
+		if not wh:
+			continue
+		rows = []
+		for b in frappe.get_all("Bin", filters={"warehouse": wh, "actual_qty": [">", 0]},
+				fields=["item_code", "actual_qty", "stock_uom"]):
+			m = frappe.db.get_value("Item", b.item_code,
+				["item_name", "item_group", "purity_percentage", "stone_type"], as_dict=True) or {}
+			stone = bool(m.get("stone_type"))
+			qty = flt(b.actual_qty)
+			purity = flt(m.get("purity_percentage"))
+			group = m.get("item_group") or ""
+			kind = ("Stone" if stone else
+				"Findings" if group.endswith("Findings") else
+				"Alloy" if "ALLOY" in group.upper() else "Gold")
+			rows.append({"item": b.item_code, "name": m.get("item_name") or b.item_code,
+				"group": group, "kind": kind, "uom": b.stock_uom or ("Carat" if stone else "Gram"),
+				"qty": round(qty, 3), "purity": purity,
+				"pure": 0 if stone else round(qty * purity / 100.0, 3)})
+		rows.sort(key=lambda r: -r["qty"])
+		kinds = {}
+		for r in rows:
+			k = kinds.setdefault(r["kind"], {"qty": 0.0, "pure": 0.0, "items": 0})
+			k["qty"] += r["qty"]
+			k["pure"] += r["pure"]
+			k["items"] += 1
+		out.append({
+			"label": label, "warehouse": wh, "rows": rows,
+			"kinds": sorted(({"kind": k, "qty": round(v["qty"], 3), "pure": round(v["pure"], 3),
+				"items": v["items"]} for k, v in kinds.items()), key=lambda x: -x["qty"]),
+			"totals": {"items": len(rows),
+				"gold": round(sum(r["qty"] for r in rows if r["kind"] != "Stone"), 3),
+				"pure": round(sum(r["pure"] for r in rows), 3),
+				"stones": round(sum(r["qty"] for r in rows if r["kind"] == "Stone"), 3)},
+		})
+	return {"locations": out}
+
+
+# ---------------------------------------------------------------------------
+# Total Gold (Stock > Stock Reports) — every gram the company holds, and where
+# it is standing right now: raw on the shelves, inside cards on the floor, away
+# at certification, or finished and waiting to sell.
+# ---------------------------------------------------------------------------
+def _pure_of(item, qty):
+	return flt(qty) * flt(frappe.db.get_value("Item", item, "purity_percentage")) / 100.0
+
+
+@frappe.whitelist()
+def get_total_gold():
+	"""The house's gold, split by where it stands. Warehouse stock is the truth —
+	every gram lives in some warehouse — so the split is by what that warehouse
+	MEANS, and the buckets add up to the total with nothing double-counted."""
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin",
+			"Jewelima Stock"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Total Gold is for the stock desk."), frappe.PermissionError)
+	from jewelima.setup import (GOLD_ISSUE_WAREHOUSE, IN_PRODUCTION_WAREHOUSE,
+		PRODUCTION_WAREHOUSE, RAW_MATERIALS_STORE)
+
+	# warehouse -> the bucket it belongs to. Anything not named here is gathered
+	# under "Elsewhere" rather than quietly dropped.
+	named = [
+		(_wh("Finished Goods"), "Finished Products"),
+		(_wh("At Certification"), "At Certification"),
+		(_wh(IN_PRODUCTION_WAREHOUSE), "In Bags"),
+		(_wh(GOLD_ISSUE_WAREHOUSE), "Gold Issue"),
+		(_wh(PRODUCTION_WAREHOUSE), "Production"),
+		(_wh("Casting"), "Casting"),
+		(_wh(RAW_MATERIALS_STORE), "Raw Materials"),
+	]
+	bucket_of = {wh: label for wh, label in named if wh}
+
+	buckets, loss, items_seen = {}, 0.0, {}
+	for b in frappe.get_all("Bin", filters={"actual_qty": [">", 0]},
+			fields=["item_code", "warehouse", "actual_qty"], limit_page_length=0):
+		m = frappe.db.get_value("Item", b.item_code,
+			["stone_type", "purity_percentage", "item_group"], as_dict=True) or {}
+		if m.get("stone_type"):
+			continue                      # stones are carats, not gold
+		purity = flt(m.get("purity_percentage"))
+		if purity <= 0:
+			continue                      # alloy and the like carry no fine gold
+		qty, pure = flt(b.actual_qty), flt(b.actual_qty) * purity / 100.0
+		is_loss = frappe.db.get_value("Warehouse", b.warehouse, "custom_is_loss")
+		label = "Loss buckets" if is_loss else bucket_of.get(b.warehouse, "Elsewhere")
+		if is_loss:
+			loss += pure
+		e = buckets.setdefault(label, {"weight": 0.0, "pure": 0.0, "items": 0})
+		e["weight"] += qty
+		e["pure"] += pure
+		e["items"] += 1
+		it = items_seen.setdefault(b.item_code, {"weight": 0.0, "pure": 0.0})
+		it["weight"] += qty
+		it["pure"] += pure
+
+	order = ["In Bags", "Finished Products", "At Certification", "Gold Issue",
+		"Casting", "Production", "Raw Materials", "Loss buckets", "Elsewhere"]
+	rows = sorted(({"bucket": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3),
+		"items": v["items"]} for k, v in buckets.items()),
+		key=lambda x: (order.index(x["bucket"]) if x["bucket"] in order else 99))
+	by_item = sorted(({"item": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3)}
+		for k, v in items_seen.items()), key=lambda x: -x["pure"])
+	total_pure = round(sum(r["pure"] for r in rows), 3)
+	total_weight = round(sum(r["weight"] for r in rows), 3)
+	for r in rows:
+		r["share"] = round(r["pure"] / total_pure * 100, 1) if total_pure else 0
+	return {"rows": rows, "by_item": by_item[:14],
+		"totals": {"pure": total_pure, "weight": total_weight,
+			"loss": round(loss, 3), "buckets": len(rows)}}
