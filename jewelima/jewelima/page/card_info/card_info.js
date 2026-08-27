@@ -28,6 +28,12 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	.ci-badge.prod{background:#eaf6ec;color:#1d7a33;}
 	.ci-badge.wip{background:#eef2f7;color:#5a6b7b;}
 	.ci-badge.pre{background:#fdf3e7;color:#9a6b1f;}
+	.ci-badge.rw{background:#fbf0dc;color:#8a5a00;}
+	.ci-rw{margin-top:6px;}
+	.ci-rw .row{display:flex;gap:10px;align-items:baseline;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border-color);}
+	.ci-rw .row:last-child{border-bottom:none;}
+	.ci-rw .w{font-weight:700;white-space:nowrap;}
+	.ci-rw .m{color:var(--text-muted);font-size:11px;}
 	.ci-loc{font-size:11px;color:#8a96a3;text-align:right;}
 	.ci-loc b{font-size:16px;color:#222;display:block;margin-top:2px;}
 	.ci-sec{border:1px solid #e2e6ea;border-radius:9px;padding:9px 14px;background:#fff;margin-bottom:8px;}
@@ -62,6 +68,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 	.ci-sec.acc-green{border-left-color:#1d7a33;}
 	.ci-sec.acc-green h4{color:#1d7a33;}
 	.ci-sec.acc-red{border-left-color:#b02a2a;}
+	.ci-sec.acc-amber{border-left-color:#b8860b;}
 	.ci-sec.acc-red h4{color:#b02a2a;}
 	.ci-mtbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
 	.ci-mtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;color:#8a8a8a;border-bottom:1px solid #e3e3e3;padding:2px 4px;}
@@ -209,6 +216,17 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		if ((ex.preps || []).length) flags.push(`On prepared bill <b>${ex.preps.map(esc).join(", ")}</b>`);
 		const standing = !forPrint && flags.length ? `<div class="ci-sec acc-red"><h4>Standing</h4><div class="ci-line">${flags.join(" &middot; ")}</div></div>` : "";
 
+		// a card that was finished and came back — the whole point is WHEN
+		const reworkSec = (d.reworks || []).length ? `<div class="ci-sec acc-amber"><h4>${
+			(d.reworks.length > 1 ? __("Sent back to the floor ({0} times)", [d.reworks.length]) : __("Sent back to the floor"))
+			}</h4><div class="ci-rw">${d.reworks.map((r) => `
+				<div class="row">
+					<span class="w">${esc((r.when || "").replace("T", " ").slice(0, 16))}</span>
+					<span>&rarr; <b>${esc(r.to || "—")}</b></span>
+					<span class="m">${__("came back with")} ${g(r.gold)}${r.stones ? " &middot; " + r.stones.toFixed(3) + " ct" + (r.pcs ? " / " + r.pcs + " pcs" : "") : ""}</span>
+					<span class="m" style="margin-left:auto;">${esc(r.who || "")}${r.note ? " &middot; " + esc(r.note) : ""}</span>
+				</div>`).join("")}</div></div>` : "";
+
 		const cadSec = !forPrint && b.is_cad ? `<div class="ci-sec acc-blue"><h4>CAD request</h4><div class="ci-line">
 			${esc(b.cad_design_type || "")} &middot; ${esc(b.cad_karat || "")} &middot; gold ${esc(b.cad_gold_weight || "")} &middot; dmd ${esc(b.cad_diamond_weight || "")} ct &middot; ${b.cad_stone_no || 0} stones${b.cad_reference ? " &middot; ref " + esc(b.cad_reference) : ""}</div></div>` : "";
 
@@ -304,6 +322,9 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 				<div class="ci-code">${esc(b.name)}</div>
 				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item && b.item !== b.design ? " &middot; " + esc(b.item) : ""}</div>
 				<span class="ci-badge ${finished ? "prod" : flt(b.act_gross_weight) ? "wip" : "pre"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : flt(b.act_gross_weight) ? "IN PRODUCTION" : "IN PREPRODUCTION"}</span>
+				${(d.reworks || []).length ? `<span class="ci-badge rw" title="${__("This card was a finished product and went back to the floor")}">↩ ${
+					(d.reworks || []).length > 1 ? __("REWORKED &times;{0}", [d.reworks.length]) : __("REWORKED")
+					} &middot; ${esc((d.reworks[0].when || "").slice(0, 10))} &rarr; ${esc(d.reworks[0].to || "")}</span>` : ""}
 				${d.pre_bag && d.pre_bag.exists ? `<span class="ci-badge prod" title="${__("Stones pre-bagged")}" style="background:#e3f0e6;color:#1d7a33;">💎 ${d.pre_bag.fully_issued ? __("PRE-BAGGED &mdash; issued") : __("STONES PRE-BAGGED")}${d.pre_bag.status === "Partial" ? " (" + __("partial") + ")" : ""}${(d.pre_bag.bags || []).length ? " &middot; " + __("bag") + " " + esc(d.pre_bag.bags.join(", ")) : ""}</span>` : ""}
 			</div>
 			<div class="ci-photo">${img}${!forPrint && b.due_date ? dueChip(b.due_date, d.today) : ""}</div>
@@ -326,6 +347,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		<div class="ci-2col">
 			<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
 			${standing}
+			${reworkSec}
 		</div>
 		${identity}
 		${cadSec}

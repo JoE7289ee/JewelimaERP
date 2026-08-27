@@ -13908,10 +13908,43 @@ def get_card_passport(order_bag):
 		"transfers": transfers,
 		"stages": stages,
 		"issues": issue_rows,
+		"reworks": _card_reworks(order_bag),
 		"pre_bag": get_prebag_for_card(order_bag),
 		"materials": _card_materials(order_bag),
 		"today": frappe.utils.nowdate(),
 	}
+
+
+def _card_reworks(order_bag):
+	"""Every time this card was a finished product and went back to the floor.
+	The Rework ledger rows are the record: one batch per rework, so they are
+	gathered by the moment they were written."""
+	rows = frappe.get_all("Bag Material Ledger",
+		filters={"order_bag": order_bag, "entry_type": "Rework"},
+		fields=["item", "qty", "pcs", "datetime", "bench", "owner", "remarks"],
+		order_by="datetime asc")
+	if not rows:
+		return []
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.owner for r in rows})]}, fields=["name", "full_name"])}
+	events = {}
+	for r in rows:
+		key = str(r.datetime or "")[:19]
+		e = events.setdefault(key, {"when": key, "to": r.bench or "", "gold": 0.0,
+			"stones": 0.0, "pcs": 0, "who": users.get(r.owner, r.owner),
+			"note": (r.remarks or ""), "items": []})
+		if frappe.db.get_value("Item", r.item, "stone_type"):
+			e["stones"] += flt(r.qty)
+			e["pcs"] += cint(r.pcs)
+		else:
+			e["gold"] += flt(r.qty)
+		e["items"].append(r.item)
+	out = []
+	for e in events.values():
+		e["gold"] = round(e["gold"], 3)
+		e["stones"] = round(e["stones"], 3)
+		out.append(e)
+	return sorted(out, key=lambda x: x["when"], reverse=True)
 
 
 def _card_materials(order_bag):
