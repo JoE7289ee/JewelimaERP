@@ -31,6 +31,7 @@ def after_install():
 	setup_item_group_tree()
 	seed_raw_materials()
 	seed_karat_golds()
+	seed_findings()
 	seed_salesmen()
 	seed_standard_golds()
 	retag_swarovski()
@@ -81,6 +82,7 @@ def after_migrate():
 	setup_item_group_tree()
 	seed_raw_materials()
 	seed_karat_golds()
+	seed_findings()
 	seed_salesmen()
 	seed_standard_golds()
 	retag_swarovski()
@@ -155,6 +157,7 @@ JEWELIMA_STOCK_ADMIN_ROLE = "JW Stock Admin"
 JEWELIMA_STOCK_ADMIN_PAGES = [
 	"purchase-raw-material", "stock-transfer", "melt-gold",
 	"loss-collection", "loss-writeoff", "loss-report", "employee-loss",
+	"issue-findings", "findings-stock", "add-findings", "findings-history",
 	"purchase-history", "loss-history", "melt-history",
 ]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
@@ -1001,6 +1004,55 @@ def seed_karat_golds():
 			}).insert(ignore_permissions=True)
 
 
+
+# The findings we stock. code -> (item name, item group, karat, pieces are normal).
+# A finding is gold that has not become part of a piece yet: it lives in the Gold
+# Issue warehouse as itself, and turns into karat gold the moment it is issued.
+FINDINGS = [
+	("PIPE-18KYG", "Pipe 18K Yellow", "18 KYG Findings", "18K"),
+	("PIPE-18KPG", "Pipe 18K Pink", "18 KPG Findings", "18K"),
+	("TICKLY-18K-1.80", "Tickly 18K 1.80", "18K Common Findings", "18K"),
+	("TICKLY-18K-2.00", "Tickly 18K 2.00", "18K Common Findings", "18K"),
+	("TICKLY-18K-2.20", "Tickly 18K 2.20", "18K Common Findings", "18K"),
+	("TICKLY-18K-2.50", "Tickly 18K 2.50", "18K Common Findings", "18K"),
+	("TICKLY-18K-3.00", "Tickly 18K 3.00", "18K Common Findings", "18K"),
+	("TICKLY-18K-3.50", "Tickly 18K 3.50", "18K Common Findings", "18K"),
+	("NOSEPIN SCREW-18KYG", "Nosepin End Screw 18K Yellow", "18 KYG Findings", "18K"),
+	("NOSEPIN SCREW-18KPG", "Nosepin End Screw 18K Pink", "18 KPG Findings", "18K"),
+	("BOMBAY SCREW-18KYG", "Bombay Screw 18K Yellow", "18 KYG Findings", "18K"),
+	("BOMBAY SCREW-18KPG", "Bombay Screw 18K Pink", "18 KPG Findings", "18K"),
+	("BOMBAY SCREW-18KWG", "Bombay Screw 18K White", "18 KWG Findings", "18K"),
+	("BOMBAY SCREW-22KYG", "Bombay Screw 22K Yellow", "22 KYG Findings", "22K"),
+	("KERALA SCREW-18KYG", "Kerala Screw 18K Yellow", "18 KYG Findings", "18K"),
+	("KERALA SCREW-18KPG", "Kerala Screw 18K Pink", "18 KPG Findings", "18K"),
+	("KERALA SCREW-18KWG", "Kerala Screw 18K White", "18 KWG Findings", "18K"),
+	("KERALA SCREW-22KYG", "Kerala Screw 22K Yellow", "22 KYG Findings", "22K"),
+]
+
+
+def seed_findings():
+	"""Ship the findings list. Weight is the unit that matters (grams); a piece
+	count rides along when whoever is counting wants one. Idempotent."""
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		return
+	made = 0
+	for code, name, group, karat in FINDINGS:
+		if frappe.db.exists("Item", code) or not frappe.db.exists("Item Group", group):
+			continue
+		frappe.get_doc({
+			"doctype": "Item", "item_code": code, "item_name": name,
+			"item_group": group, "stock_uom": "Gram", "weight_unit": "Gram",
+			"is_stock_item": 1, "is_purchase_item": 1, "is_sales_item": 0,
+			"include_item_in_manufacturing": 1,
+			"metal_purity": karat, "purity_percentage": KARAT_GOLDS.get(karat, 0),
+		}).insert(ignore_permissions=True)
+		made += 1
+	if made:
+		frappe.db.commit()
+	print("Findings — created: %d  already there: %d" % (made, len(FINDINGS) - made))
+	return {"created": made, "total": len(FINDINGS)}
+
+
 def relax_employee_mandatory():
 	"""Workshops rarely track DOB / joining dates for karigars — make Employee's Date of
 	Birth and Date of Joining optional (Property Setters, idempotent)."""
@@ -1391,6 +1443,9 @@ def setup_item_group_tree():
 			ensure(f"{karat}K Findings", "GOLD FINDINGS", 1)
 			for c in colours:
 				ensure(f"{karat} K{c}G Findings", f"{karat}K Findings", 0)
+		# some findings come in no colour at all (tickly) — they live here and the
+		# colour is chosen when they are issued and turn into gold
+		ensure("18K Common Findings", "18K Findings", 0)
 
 	for main, types in ITEM_GROUP_TREE.items():
 		ensure(main, root, 1)

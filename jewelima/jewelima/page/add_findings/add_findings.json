@@ -1,0 +1,29 @@
+{
+ "content": null,
+ "creation": "2026-08-24 15:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-24 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "add-findings",
+ "owner": "Administrator",
+ "page_name": "add-findings",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stock Admin"
+  }
+ ],
+ "standard": "Yes",
+ "title": "Add Findings"
+}

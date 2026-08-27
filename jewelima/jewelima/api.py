@@ -15578,3 +15578,227 @@ def get_employee_loss(period="month", start=None, end=None, bench=None):
 			"sessions": sum(x["sessions"] for x in out),
 			"loss_pct": round(total_loss / total_gold * 100, 2) if total_gold else 0},
 	}
+
+
+# ---------------------------------------------------------------------------
+# Findings (Stock > Findings) — pipes, tickly, screws. A finding is gold that
+# has not joined a piece yet: it sits in the GOLD ISSUE warehouse as itself,
+# and the moment it is issued it BECOMES karat gold — onto a card, or into a
+# location. Nowhere else in the building does a finding exist as a finding.
+# Weight is the unit that counts; a piece count rides along when it helps.
+# ---------------------------------------------------------------------------
+FINDINGS_ROOT = "GOLD FINDINGS"
+FINDING_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Stock Admin")
+
+
+def _findings_guard():
+	if not set(FINDING_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Findings are for the stock desk."), frappe.PermissionError)
+
+
+def _finding_groups():
+	"""Every leaf under GOLD FINDINGS (the groups a finding may belong to)."""
+	out = []
+	for karat in frappe.get_all("Item Group", filters={"parent_item_group": FINDINGS_ROOT}, pluck="name"):
+		out += frappe.get_all("Item Group", filters={"parent_item_group": karat, "is_group": 0}, pluck="name")
+	return sorted(out)
+
+
+def _is_finding(item):
+	g = frappe.db.get_value("Item", item, "item_group")
+	return bool(g) and g in set(_finding_groups())
+
+
+def _finding_gold_item(item, colour=None):
+	"""What this finding turns into. The group name carries it: '18 KPG Findings'
+	-> 18KPG. A colourless finding ('18K Common Findings') needs the colour
+	picked at issue."""
+	g = frappe.db.get_value("Item", item, "item_group") or ""
+	m = re.match(r"^(\d{2})\s*K([YWP])G Findings$", g)
+	if m:
+		return "{0}K{1}G".format(m.group(1), m.group(2))
+	m = re.match(r"^(\d{2})K Common Findings$", g)
+	if m:
+		if not colour:
+			frappe.throw(frappe._("{0} has no colour of its own — pick the gold it becomes.").format(item))
+		c = colour.upper().replace("G", "").replace("K", "")[:1]
+		if c not in ("Y", "W", "P"):
+			frappe.throw(frappe._("Colour must be Yellow, White or Pink."))
+		return "{0}K{1}G".format(m.group(1), c)
+	frappe.throw(frappe._("{0} is not a finding.").format(item))
+
+
+@frappe.whitelist()
+def get_findings_setup():
+	"""What the Add Findings page needs: the groups a finding can go into, and
+	the karats behind them."""
+	_findings_guard()
+	groups = []
+	for g in _finding_groups():
+		karat = (re.match(r"^(\d{2})", g) or [None, ""])[1]
+		groups.append({"group": g, "karat": karat + "K" if karat else "",
+			"common": "Common" in g})
+	return {"groups": groups, "uom": "Gram"}
+
+
+@frappe.whitelist()
+def add_finding(item_code, item_name=None, item_group=None):
+	"""Add a new finding to the register. Purity follows its karat — a finding is
+	gold, so it is stocked and valued like the karat it belongs to."""
+	_findings_guard()
+	from jewelima.setup import KARAT_GOLDS
+
+	code = (item_code or "").strip().upper()
+	if not code:
+		frappe.throw(frappe._("Give the finding a code."))
+	if frappe.db.exists("Item", code):
+		frappe.throw(frappe._("{0} already exists.").format(code))
+	if item_group not in _finding_groups():
+		frappe.throw(frappe._("Pick which findings group it belongs to."))
+	karat = (re.match(r"^(\d{2})", item_group) or [None, ""])[1] + "K"
+	doc = frappe.get_doc({
+		"doctype": "Item", "item_code": code, "item_name": (item_name or code).strip(),
+		"item_group": item_group, "stock_uom": "Gram", "weight_unit": "Gram",
+		"is_stock_item": 1, "is_purchase_item": 1, "is_sales_item": 0,
+		"include_item_in_manufacturing": 1, "metal_purity": karat,
+		"purity_percentage": KARAT_GOLDS.get(karat, 0),
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"item": doc.name, "group": item_group, "karat": karat}
+
+
+@frappe.whitelist()
+def get_findings_stock():
+	"""The findings report: what is on the shelf, by group. Findings only ever
+	live in Gold Issue, so anything sitting elsewhere is called out."""
+	_findings_guard()
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE
+
+	gold_issue = _wh(GOLD_ISSUE_WAREHOUSE)
+	groups = _finding_groups()
+	items = frappe.get_all("Item", filters={"item_group": ["in", groups or [""]]},
+		fields=["name", "item_name", "item_group", "purity_percentage"], order_by="item_group, name")
+	rows, elsewhere = [], []
+	for it in items:
+		bins = frappe.get_all("Bin", filters={"item_code": it.name, "actual_qty": [">", 0]},
+			fields=["warehouse", "actual_qty"])
+		here = sum(flt(b.actual_qty) for b in bins if b.warehouse == gold_issue)
+		other = [(b.warehouse, flt(b.actual_qty)) for b in bins if b.warehouse != gold_issue]
+		rows.append({"item": it.name, "name": it.item_name, "group": it.item_group,
+			"purity": flt(it.purity_percentage), "weight": round(here, 3),
+			"pure": round(here * flt(it.purity_percentage) / 100.0, 3)})
+		for wh, q in other:
+			elsewhere.append({"item": it.name, "warehouse": wh, "weight": round(q, 3)})
+	rows.sort(key=lambda r: (-r["weight"], r["item"]))
+	return {"rows": rows, "elsewhere": elsewhere,
+		"warehouse": gold_issue,
+		"totals": {"weight": round(sum(r["weight"] for r in rows), 3),
+			"pure": round(sum(r["pure"] for r in rows), 3),
+			"items": len(rows), "stocked": len([r for r in rows if r["weight"] > 0])}}
+
+
+@frappe.whitelist()
+def issue_finding(item, weight, target_type, order_bag=None, location=None,
+		pcs=None, colour=None, remarks=None):
+	"""Issue a finding — and in the same breath turn it into gold.
+
+	One Repack does the conversion: the finding leaves Gold Issue, the karat gold
+	it becomes lands where it is going. To a CARD that is the In Bags pool plus a
+	ledger row, so the card's own materials carry the weight. To a LOCATION the
+	gold simply lands in that warehouse."""
+	_findings_guard()
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE, IN_PRODUCTION_WAREHOUSE
+
+	w = flt(weight)
+	if not item or not frappe.db.exists("Item", item):
+		frappe.throw(frappe._("Pick the finding."))
+	if not _is_finding(item):
+		frappe.throw(frappe._("{0} is not a finding.").format(item))
+	if w <= 0:
+		frappe.throw(frappe._("Enter the weight going out (g)."))
+	src = _wh(GOLD_ISSUE_WAREHOUSE)
+	have = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": src}, "actual_qty"))
+	if w > have + 0.0005:
+		frappe.throw(frappe._("Only {0} g of {1} in {2} — can't issue {3} g.").format(
+			round(have, 3), item, src, w))
+
+	gold = _finding_gold_item(item, colour)
+	if not frappe.db.exists("Item", gold):
+		frappe.throw(frappe._("The gold item {0} does not exist.").format(gold))
+
+	target_type = (target_type or "").title()
+	if target_type == "Card":
+		if not order_bag or not frappe.db.exists("Order Bag", order_bag):
+			frappe.throw(frappe._("Scan the card the finding goes onto."))
+		if frappe.db.get_value("Order Bag", order_bag, "is_finished"):
+			frappe.throw(frappe._("{0} is finished — its materials are locked.").format(order_bag))
+		tgt = _wh(IN_PRODUCTION_WAREHOUSE)
+		where = order_bag
+	elif target_type == "Location":
+		tgt = location if location and frappe.db.exists("Warehouse", location) else None
+		if not tgt:
+			frappe.throw(frappe._("Pick the warehouse the gold goes to."))
+		where = tgt
+	else:
+		frappe.throw(frappe._("Issue to a Card or to a Location."))
+
+	se = frappe.get_doc({
+		"doctype": "Stock Entry", "stock_entry_type": "Repack", "company": _company(),
+		"items": [
+			{"item_code": item, "qty": w, "uom": "Gram", "s_warehouse": src,
+				"allow_zero_valuation_rate": 1},
+			{"item_code": gold, "qty": w, "uom": "Gram", "t_warehouse": tgt,
+				"allow_zero_valuation_rate": 1, "is_finished_item": 1},
+		],
+		"remarks": "Finding issue: {0} g {1} -> {2} ({3})".format(w, item, gold, where),
+	})
+	se.flags.ignore_permissions = True
+	se.insert()
+	se.submit()
+
+	if target_type == "Card":
+		# the card carries GOLD from here on — the finding is gone
+		_bag_ledger(order_bag, gold, "In", w, "Gold Issue", reference=se.name,
+			remarks=(remarks or "") or "Finding: {0}".format(item))
+		_recompute_bag_from_contents(order_bag)
+
+	rec = frappe.get_doc({
+		"doctype": "Finding Issue", "finding_item": item,
+		"finding_name": frappe.db.get_value("Item", item, "item_name"),
+		"pcs": cint(pcs) or 0, "weight": w, "target_type": target_type,
+		"order_bag": order_bag if target_type == "Card" else None,
+		"location": tgt if target_type == "Location" else None,
+		"gold_item": gold, "stock_entry": se.name, "remarks": remarks,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"issue": rec.name, "stock_entry": se.name, "gold_item": gold,
+		"weight": w, "to": where}
+
+
+@frappe.whitelist()
+def get_finding_issues(period="month", item=None, limit=300):
+	"""Issue history: what left the shelf, what it became, and where it went."""
+	_findings_guard()
+	frm, to, label = _loss_period_range(period)
+	filters = {}
+	if frm and to:
+		filters["creation"] = ["between", [frm + " 00:00:00", to + " 23:59:59"]]
+	if item:
+		filters["finding_item"] = item
+	rows = frappe.get_all("Finding Issue", filters=filters,
+		fields=["name", "finding_item", "finding_name", "pcs", "weight", "target_type",
+			"order_bag", "location", "gold_item", "owner", "creation", "remarks"],
+		order_by="creation desc", limit=cint(limit))
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.owner for r in rows}) or [""]]},
+		fields=["name", "full_name"])} if rows else {}
+	out = [{
+		"name": r.name, "item": r.finding_item, "item_name": r.finding_name or r.finding_item,
+		"pcs": cint(r.pcs), "weight": flt(r.weight), "target_type": r.target_type,
+		"to": r.order_bag or (r.location or "").replace(" - JD", ""),
+		"gold_item": r.gold_item, "who": users.get(r.owner, r.owner),
+		"when": str(r.creation)[:16], "remarks": r.remarks or "",
+	} for r in rows]
+	return {"rows": out, "label": label,
+		"totals": {"weight": round(sum(x["weight"] for x in out), 3),
+			"pcs": sum(x["pcs"] for x in out), "issues": len(out)}}

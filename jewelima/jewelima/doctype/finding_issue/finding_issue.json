@@ -1,0 +1,147 @@
+{
+ "actions": [],
+ "autoname": "format:FI-{#####}",
+ "creation": "2026-08-24 15:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "finding_item",
+  "finding_name",
+  "pcs",
+  "weight",
+  "cb1",
+  "target_type",
+  "order_bag",
+  "location",
+  "gold_item",
+  "sec_ref",
+  "stock_entry",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "finding_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Finding",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "finding_name",
+   "fieldtype": "Data",
+   "label": "Finding Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pcs",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Pieces"
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Weight (g)",
+   "precision": "3",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cb1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Issued To",
+   "options": "Card\nLocation",
+   "reqd": 1
+  },
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Card",
+   "options": "Order Bag"
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Location"
+  },
+  {
+   "fieldname": "gold_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Became",
+   "options": "Item"
+  },
+  {
+   "fieldname": "sec_ref",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Data",
+   "label": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "idx": 0,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-24 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Finding Issue",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Stock Admin",
+   "write": 1
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
