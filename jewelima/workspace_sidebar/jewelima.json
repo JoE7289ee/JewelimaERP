@@ -722,6 +722,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "user-round-x",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Employee Loss",
+   "link_to": "employee-loss",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "history",
@@ -2295,7 +2308,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-24 03:13:44.869754",
+ "modified": "2026-08-27 10:32:34.283060",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

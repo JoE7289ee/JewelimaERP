@@ -15483,3 +15483,98 @@ def get_melt_history():
 		"total_fed": round(sum(x["fed"] for x in rows), 3),
 		"total_got": round(sum(x["got"] for x in rows), 3),
 		"total_loss": round(sum(x["loss"] for x in rows), 3)}
+
+
+# ---------------------------------------------------------------------------
+# Employee Loss (Stock > Loss) — who lost the gold, how much, and at which
+# bench. Read from Bench Issue: one row per work session, so a card worked
+# three times answers to three people, and re-issues never overwrite history
+# (the per-bench visit record only mirrors the latest session).
+# ---------------------------------------------------------------------------
+EMPLOYEE_LOSS_PERIODS = ("today", "week", "month", "year", "all")
+
+
+def _loss_period_range(period, start=None, end=None):
+	"""(from, to, label) for the picked window. Custom wins when both dates come in."""
+	today = frappe.utils.nowdate()
+	if start and end:
+		return start, end, "{0} → {1}".format(frappe.utils.formatdate(start), frappe.utils.formatdate(end))
+	period = (period or "month").lower()
+	if period == "today":
+		return today, today, frappe.utils.formatdate(today)
+	if period == "week":
+		f = frappe.utils.add_days(today, -6)
+		return f, today, frappe._("Last 7 days")
+	if period == "year":
+		f = frappe.utils.add_days(today, -364)
+		return f, today, frappe._("Last 12 months")
+	if period == "all":
+		return None, None, frappe._("Everything on record")
+	f = frappe.utils.add_days(today, -29)
+	return f, today, frappe._("Last 30 days")
+
+
+@frappe.whitelist()
+def get_employee_loss(period="month", start=None, end=None, bench=None):
+	"""Every receipted work session in the window, gathered by the person who
+	took the card out: sessions, gold handled, loss, loss %, and the split of
+	that loss across the benches they worked."""
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Employee loss is for stock admins."), frappe.PermissionError)
+
+	frm, to, label = _loss_period_range(period, start, end)
+	filters = {"status": ["in", ["Receipted", "Completed"]], "employee": ["is", "set"]}
+	if frm and to:
+		filters["receipted_at"] = ["between", [frm + " 00:00:00", to + " 23:59:59"]]
+	if bench:
+		filters["bench"] = bench
+	rows = frappe.get_all("Bench Issue", filters=filters,
+		fields=["employee", "bench", "work_type", "weight_out", "weight_in", "loss",
+			"receipted_at", "order_bag"], limit_page_length=0)
+
+	names = {e.name: (e.employee_name or e.name) for e in frappe.get_all(
+		"Employee", filters={"name": ["in", list({r.employee for r in rows}) or [""]]},
+		fields=["name", "employee_name"])}
+
+	by_emp, by_bench = {}, {}
+	for r in rows:
+		a = by_emp.setdefault(r.employee, {"sessions": 0, "gold": 0.0, "loss": 0.0,
+			"benches": {}, "last": None, "cards": set()})
+		a["sessions"] += 1
+		a["gold"] += flt(r.weight_out)
+		a["loss"] += flt(r.loss)
+		a["cards"].add(r.order_bag)
+		a["benches"][r.bench] = round(flt(a["benches"].get(r.bench, 0)) + flt(r.loss), 3)
+		when = str(r.receipted_at or "")
+		if when and (not a["last"] or when > a["last"]):
+			a["last"] = when
+		b = by_bench.setdefault(r.bench, {"loss": 0.0, "gold": 0.0, "sessions": 0})
+		b["loss"] += flt(r.loss)
+		b["gold"] += flt(r.weight_out)
+		b["sessions"] += 1
+
+	out = []
+	for emp, a in by_emp.items():
+		out.append({
+			"employee": emp, "name": names.get(emp, emp),
+			"sessions": a["sessions"], "cards": len(a["cards"]),
+			"gold": round(a["gold"], 3), "loss": round(a["loss"], 3),
+			"loss_pct": round(a["loss"] / a["gold"] * 100, 2) if a["gold"] else 0,
+			"last": (a["last"] or "")[:16],
+			# where the loss happened, heaviest bench first
+			"benches": sorted(([b, v] for b, v in a["benches"].items() if v > 0),
+				key=lambda x: -x[1]),
+		})
+	out.sort(key=lambda x: -x["loss"])   # categorised by total loss
+
+	benches = sorted(([b, round(v["loss"], 3), round(v["gold"], 3), v["sessions"]]
+		for b, v in by_bench.items()), key=lambda x: -x[1])
+	total_loss = round(sum(x["loss"] for x in out), 3)
+	total_gold = round(sum(x["gold"] for x in out), 3)
+	return {
+		"rows": out, "benches": benches, "label": label,
+		"from": str(frm or ""), "to": str(to or ""),
+		"totals": {"loss": total_loss, "gold": total_gold, "people": len(out),
+			"sessions": sum(x["sessions"] for x in out),
+			"loss_pct": round(total_loss / total_gold * 100, 2) if total_gold else 0},
+	}

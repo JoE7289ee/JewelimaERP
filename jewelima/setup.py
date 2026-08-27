@@ -154,7 +154,7 @@ JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record
 JEWELIMA_STOCK_ADMIN_ROLE = "JW Stock Admin"
 JEWELIMA_STOCK_ADMIN_PAGES = [
 	"purchase-raw-material", "stock-transfer", "melt-gold",
-	"loss-collection", "loss-writeoff", "loss-report",
+	"loss-collection", "loss-writeoff", "loss-report", "employee-loss",
 	"purchase-history", "loss-history", "melt-history",
 ]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
