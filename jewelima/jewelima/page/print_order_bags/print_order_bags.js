@@ -111,6 +111,8 @@ frappe.pages["print-order-bags"].on_page_load = function (wrapper) {
 		$body.find(".pob-cb").prop("checked", $(this).is(":checked"));
 		updateSel();
 	});
+	// click one, shift-click another: every card between them follows
+	jewelima.shiftSelect($body, ".pob-cb");
 	$body.on("change", ".pob-cb", updateSel);
 
 	page.set_primary_action(__("Print Selected (6/page)"), () => {

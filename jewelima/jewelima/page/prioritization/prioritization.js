@@ -207,6 +207,8 @@ frappe.pages["prioritization"].on_page_load = function (wrapper) {
 					<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td><td>${esc(r.location || "")}</td></tr>`).join("")
 				: `<tr><td colspan="7" class="pc-empty">${__("No cards match the filters.")}</td></tr>`);
 			$b.find(".pc-count").text(__("{0} selected · {1} shown · {2} live", [S.sel.size, vis.length, S.rows.length]));
+			// click one, shift-click another: everything between follows
+			jewelima.shiftSelect($b, ".pc-body input");
 			$b.find(".pc-body input").on("change", function () {
 				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
 				paintDlg();

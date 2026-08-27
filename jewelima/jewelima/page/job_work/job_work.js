@@ -600,6 +600,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				}).join("")
 				: `<tr><td colspan="7" class="tc-empty">${S.location ? __("No cards match.") : __("Pick a bench.")}</td></tr>`;
 			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.rows.length} at bench`);
+			// click one, shift-click another: everything between follows
+			jewelima.shiftSelect($b, ".tc-body input");
 			$b.find(".tc-body input").on("change", function () {
 				this.checked ? S.sel.add(this.dataset.nm) : S.sel.delete(this.dataset.nm);
 				paint();

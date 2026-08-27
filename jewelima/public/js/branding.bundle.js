@@ -584,3 +584,46 @@ jewelima.finalize_cad = function (order_bag, done) {
 		setTimeout(() => { window.location.assign("/app"); }, 600);
 	});
 })();
+
+// ---------------------------------------------------------------------------
+// Shift-click a range of tickables. Click one, shift-click another, and every
+// box between them takes the second one's state — the way every file list on
+// every desktop has worked for thirty years, and the way a floor supervisor
+// expects to grab "these forty cards".
+//
+// It drives the page's OWN change handler for each box, so whatever the page
+// keeps (a Set, a total, a repaint) stays correct without knowing this exists.
+// ---------------------------------------------------------------------------
+jewelima.shiftSelect = function (root, selector) {
+	const $root = $(root);
+	if ($root.data("jw-shift")) return;   // one listener per container
+	$root.data("jw-shift", 1);
+	let last = null;
+	const live = () => $root.find(selector).filter(function () { return !this.disabled; }).toArray();
+	$root.on("click", selector, function (e) {
+		const i = live().indexOf(this);
+		if (i === -1) return;
+		if (e.shiftKey && last !== null && last !== i) {
+			const on = this.checked;
+			const [a, b] = last < i ? [last, i] : [i, last];
+			// Several of these lists REPAINT on every change, which throws away the
+			// nodes we are holding. So walk by position and re-read the list each
+			// time — the row order survives a repaint even though the nodes do not.
+			for (let k = a; k <= b; k++) {
+				const box = live()[k];
+				if (box && box !== this && box.checked !== on) {
+					box.checked = on;
+					$(box).trigger("change");   // let the page do its own bookkeeping
+				}
+			}
+			// the clicked box may have been replaced by those repaints; make sure
+			// its own state landed
+			const mine = live()[i];
+			if (mine && mine.checked !== on) {
+				mine.checked = on;
+				$(mine).trigger("change");
+			}
+		}
+		last = i;
+	});
+};

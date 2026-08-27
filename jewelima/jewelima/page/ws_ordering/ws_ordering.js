@@ -379,6 +379,8 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		paintTable();
 		paintPrintBtn();
 	});
+	// click one, shift-click another: every card between them follows
+	jewelima.shiftSelect(root, ".od-cb");
 	root.on("change", ".od-cb", function () {
 		const nm = $(this).data("name");
 		this.checked ? picked.add(nm) : picked.delete(nm);
