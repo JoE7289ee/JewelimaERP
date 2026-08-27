@@ -80,15 +80,18 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 		const pool = root.querySelector(".cw-pool");
 		const unsel = S.cards.filter((c) => !(c.order_bag in S.selected));
 		pool.innerHTML = unsel.length
-			? unsel.map((c) => `
-				<div class="cw-card ${c.weighable ? "" : "off"}">
+			? unsel.map((c) => {
+				// a card is cast once: once it holds gold there is nothing left to weigh
+				const done = c.gold_held > 0;
+				return `
+				<div class="cw-card ${c.weighable && !done ? "" : "off"}">
 					<div><div class="nm">${esc(c.order_bag)}</div>
-						<div class="meta">${esc(c.design)}${c.weighable ? "" : " · " + __("at {0}", [esc(c.location)])}</div></div>
+						<div class="meta">${esc(c.design)}${done ? " · " + __("cast") : c.weighable ? "" : " · " + __("at {0}", [esc(c.location)])}</div></div>
 					${c.plan_gold ? `<span class="cw-plan">${__("BOM")} ${fmt(c.plan_gold)} g</span>` : ""}
 					${c.stone_g ? `<span class="cw-stone">${__("stones")} ${fmt(c.stone_g)} g</span>` : ""}
 					${c.gold_held ? `<span class="cw-held">${__("holds")} ${fmt(c.gold_held)} g</span>` : ""}
-					${c.weighable ? `<button class="btn btn-xs btn-default cw-add" data-bag="${esc(c.order_bag)}">${__("Add")}</button>` : ""}
-				</div>`).join("")
+					${c.weighable && !done ? `<button class="btn btn-xs btn-default cw-add" data-bag="${esc(c.order_bag)}">${__("Add")}</button>` : ""}
+				</div>`; }).join("")
 			: `<div class="cw-empty">${__("All cards selected.")}</div>`;
 		pool.querySelectorAll(".cw-add").forEach((el) =>
 			el.addEventListener("click", function () { select(this.getAttribute("data-bag")); }));
@@ -170,6 +173,11 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 			if (mine) {
 				if (!mine.weighable) {
 					frappe.msgprint(__("{0} is at {1}, not CASTING.", [code, mine.location]));
+					return;
+				}
+				if (mine.gold_held > 0) {
+					frappe.msgprint(__("{0} is already cast — it holds {1} g. A card is only cast once.",
+						[code, fmt(mine.gold_held)]));
 					return;
 				}
 				select(code, true);

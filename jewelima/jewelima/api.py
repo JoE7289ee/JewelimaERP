@@ -842,7 +842,13 @@ def cast_weigh(tree, entries):
 		loc = frappe.db.get_value("Order Bag", bag, "location")
 		if loc != "CASTING":
 			frappe.throw(frappe._("{0} is at {1}, not CASTING.").format(bag, loc or "—"))
-		stone = _bag_gold_and_stone(bag)[1]
+		held, stone = _bag_gold_and_stone(bag)
+		# a card is cast ONCE. Booking a second gross would hand it the gold twice
+		# over and pull it out of the Casting shelf twice — silently, since nothing
+		# downstream re-reads the scale.
+		if held > 0.0005:
+			frappe.throw(frappe._("{0} already holds {1} g of gold from casting — it can only be cast once. "
+				"If the weight was wrong, correct it on the card rather than weighing again.").format(bag, round(held, 3)))
 		gold = round(gross - stone, 3)
 		if gold <= 0:
 			frappe.throw(frappe._("{0}: gross {1} g ≤ its stones ({2} g) — nothing left as gold.").format(bag, gross, stone))
