@@ -20,11 +20,12 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		justify-content:center;gap:0;
 		padding:0 0.09in;overflow:hidden;
 		font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
-		font-stretch:condensed;font-size:8pt;font-weight:400;font-style:normal;line-height:1.05;letter-spacing:-.2px;color:#000;}
+		font-stretch:condensed;font-size:var(--bc-size,8pt);font-weight:400;font-style:normal;
+		line-height:1.05;letter-spacing:-.2px;color:#000;}
 	.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
 	.bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
 	.bc-label .bc-qr{flex:0 0 auto;}
-	.bc-label .bc-qr img{height:0.33in;width:0.33in;display:block;}
+	.bc-label .bc-qr img{height:var(--bc-qr,0.33in);width:var(--bc-qr,0.33in);display:block;}
 	.bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
 	.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}
 	/* the two halves the label is split into — each nudges on its own, because a
@@ -61,6 +62,14 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	$(page.main).append(`<style>${LABEL_CSS}${UI_CSS}</style>
 		<div class="pb-wrap">
 			<div class="pb-bar"></div>
+			<div class="pb-cal">
+				<span class="lbl" style="min-width:96px;">Print size</span>
+				<button class="pb-sm" title="smaller">&#8722;</button>
+				<span class="val pb-pt">8.0 pt</span>
+				<button class="pb-bg" title="bigger">+</button>
+				<button class="pb-sz0" style="width:auto;padding:0 8px;">reset</button>
+				<span class="hint pb-fit">how big it prints on the tag</span>
+			</div>
 			<div class="pb-cal">
 				<span class="lbl" style="min-width:96px;">Weights &amp; QR</span>
 				<button class="pb-l" data-s="a" title="move this half left">&#8592;</button>
@@ -117,9 +126,30 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		showOffsets();
 		renderPreview(state.cards[state.cards.length - 1] || null);
 	}
+	// How big the print is. The label height is fixed, so the type can only grow
+	// so far before three lines stop fitting — the preview says when that happens
+	// rather than letting it clip on the tag.
+	const SIZE_KEY = "jw_barcode_pt";
+	const SIZE_MIN = 7, SIZE_MAX = 13, SIZE_DEF = 8;
+	function ptSize() {
+		let v = SIZE_DEF;
+		try { v = parseFloat(localStorage.getItem(SIZE_KEY) || "") || SIZE_DEF; } catch (e) { v = SIZE_DEF; }
+		return Math.max(SIZE_MIN, Math.min(SIZE_MAX, v));
+	}
+	function setPtSize(v) {
+		const n = Math.max(SIZE_MIN, Math.min(SIZE_MAX, Math.round(v * 2) / 2));
+		try { localStorage.setItem(SIZE_KEY, String(n)); } catch (e) { /* private window */ }
+		showOffsets();
+		renderPreview(state.cards[state.cards.length - 1] || null);
+	}
+	// the code square grows with the type, but never past what the label can hold
+	const qrSize = () => Math.min(0.42, Math.round((0.33 * ptSize() / SIZE_DEF) * 100) / 100);
+	const sizeVars = () => `--bc-size:${ptSize()}pt;--bc-qr:${qrSize()}in;`;
+
 	function showOffsets() {
 		$(page.main).find(".pb-off-a").text(offset("a").toFixed(2) + " in");
 		$(page.main).find(".pb-off-b").text(offset("b").toFixed(2) + " in");
+		$(page.main).find(".pb-pt").text(ptSize().toFixed(1) + " pt");
 	}
 	const offsetStyle = () => "";   // the halves carry their own transform now
 
@@ -131,11 +161,9 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 			? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 			: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
 		const r1 = c.design_type ? `<div>${esc(c.design_type)}</div>` : "";
-		// size rides with the code, spelled out so "NA" reads as a size and not a stray word
-		const sz = c.size ? ` · SZ ${esc(c.size)}` : "";
-		const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div><div>${esc(c.name)}${sz}</div></div>`;
+		const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div><div>${esc(c.name)}</div></div>`;
 		// half A is everything up to and including the QR; half B is the rest
-		return `<div class="bc-label">`
+		return `<div class="bc-label" style="${sizeVars()}">`
 			+ `<div class="bc-half bc-a" style="transform:translateX(${offset("a")}in);">${left}${qr}</div>`
 			+ `<div class="bc-half bc-b" style="transform:translateX(${offset("b")}in);">${right}</div>`
 			+ `</div>`;
@@ -144,8 +172,37 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	function renderPreview(c) {
 		$prev.html(c ? `${offsetStyle()}<div class="pb-prev">${buildLabel(c)}</div>`
 			: '<span class="pb-empty">Scan a card to preview its label.</span>');
+		checkFit();
 	}
 
+	// The label is a fixed 0.475in tall, so past a certain size three lines of
+	// type stop fitting. Say so here, where it can still be undone, instead of
+	// letting it clip on the tag.
+	function checkFit() {
+		const $hint = $(page.main).find(".pb-fit");
+		const lab = $prev.find(".bc-label").get(0);
+		if (!lab) { $hint.text(__("how big it prints on the tag")).css("color", ""); return; }
+		// a centred flex row does not report overflow through scrollHeight — the
+		// columns simply spill past the clipped edge — so measure the tallest and
+		// widest thing in it against the label itself
+		const box = lab.getBoundingClientRect();
+		let tallest = 0, spanL = Infinity, spanR = -Infinity;
+		lab.querySelectorAll(".bc-col").forEach((el) => {
+			const r = el.getBoundingClientRect();
+			tallest = Math.max(tallest, r.height);
+			spanL = Math.min(spanL, r.left);
+			spanR = Math.max(spanR, r.right);
+		});
+		const over = tallest > box.height - 2 || spanL < box.left - 1 || spanR > box.right + 1;
+		$hint.text(over
+			? __("too big — it will be cut off on the tag")
+			: __("how big it prints on the tag"))
+			.css("color", over ? "#b4690e" : "");
+	}
+
+	$(page.main).on("click", ".pb-sm", () => setPtSize(ptSize() - 0.5));
+	$(page.main).on("click", ".pb-bg", () => setPtSize(ptSize() + 0.5));
+	$(page.main).on("click", ".pb-sz0", () => setPtSize(SIZE_DEF));
 	$(page.main).on("click", ".pb-l", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) - 0.02); });
 	$(page.main).on("click", ".pb-r", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) + 0.02); });
 	$(page.main).on("click", ".pb-0", function () { setOffset(this.dataset.s, 0); });
