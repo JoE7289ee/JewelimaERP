@@ -7433,13 +7433,22 @@ def get_bench_work_options(location):
 	the pages then skip the picker."""
 	loc = (location or "").upper()
 	rows = frappe.get_all("Bench Work Option", filters={"bench": loc},
-		fields=["name", "kind", "value", "is_default"], order_by="creation")
+		fields=["name", "kind", "value", "is_default", "disposition"], order_by="creation")
 	wts = [r for r in rows if r.kind == "Work Type"]
+	cs = [r for r in rows if r.kind == "Collection State"]
+	# The collect/receipt picker opens on the SUCCESSFUL state, because that is
+	# what nearly every collection is. A bench may nominate one; otherwise it is
+	# the first state whose outcome sends the card onward ("Ready to Transfer") —
+	# the ones that send it back to the queue are the exceptions, and an exception
+	# should be chosen deliberately, never pre-filled.
+	ready = [r for r in cs if (r.disposition or "Ready to Transfer") == "Ready to Transfer"]
 	return {
 		"work_types": [r.value for r in wts],
-		"collection_states": [r.value for r in rows if r.kind == "Collection State"],
+		"collection_states": [r.value for r in cs],
 		"queue_reasons": [r.value for r in rows if r.kind == "Queue Reason"],
 		"default_work_type": next((r.value for r in wts if r.is_default), wts[0].value if wts else None),
+		"default_collection_state": next((r.value for r in cs if r.is_default),
+			ready[0].value if ready else (cs[0].value if cs else None)),
 	}
 
 
@@ -7519,10 +7528,10 @@ def bench_work_option_set_default(name):
 	one picked). Exactly one default per bench — the rest are cleared."""
 	_require_stone_issue_admin()
 	d = frappe.get_doc("Bench Work Option", name)
-	if d.kind != "Work Type":
-		frappe.throw(frappe._("Only a Work Type can be the default."))
+	if d.kind not in ("Work Type", "Collection State"):
+		frappe.throw(frappe._("Only a Work Type or a Collection State can be the default."))
 	for other in frappe.get_all("Bench Work Option",
-			filters={"bench": d.bench, "kind": "Work Type", "name": ["!=", name]}, pluck="name"):
+			filters={"bench": d.bench, "kind": d.kind, "name": ["!=", name]}, pluck="name"):
 		frappe.db.set_value("Bench Work Option", other, "is_default", 0)
 	d.is_default = 1
 	d.save(ignore_permissions=True)

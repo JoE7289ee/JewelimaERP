@@ -89,7 +89,10 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			state.workOpts = r.message || { work_types: [], collection_states: [] };
 			state.work.df.options = state.workOpts.work_types.join("\n"); state.work.refresh();
 			if (state.workOpts.default_work_type) state.work.set_value(state.workOpts.default_work_type);
-			state.state.df.options = [""].concat(state.workOpts.collection_states).join("\n"); state.state.refresh();
+			// opens on the successful state, same as Job Work
+			state.state.df.options = [""].concat(state.workOpts.collection_states).join("\n");
+			state.state.refresh();
+			if (state.workOpts.default_collection_state) state.state.set_value(state.workOpts.default_collection_state);
 			toggleWorkPickers();
 		});
 	}

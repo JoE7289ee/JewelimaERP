@@ -109,8 +109,10 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 			box.html(list.map((o) => `
 				<div class="bw-row" data-name="${esc(o.name)}">
 					<span class="v">${esc(o.value)}</span>
-					${kind === "Work Type" ? (o.is_default
-						? `<span class="def on" title="${__("Default — used when a card is issued without a work type picked")}">★ ${__("default")}</span>`
+					${kind === "Work Type" || kind === "Collection State" ? (o.is_default
+						? `<span class="def on" title="${kind === "Work Type"
+							? __("Default — used when a card is issued without a work type picked")
+							: __("Default — the collect/receipt picker opens on this state")}">★ ${__("default")}</span>`
 						: `<span class="def" title="${__("Click to make this the default")}">${__("set default")}</span>`) : ""}
 					${kind === "Collection State" ? `<span class="disp ${o.disposition === "Back to In Queue" ? "q" : "tr"}" title="${__("Click to change what happens to the card after this state")}">${o.disposition === "Back to In Queue" ? "↺ " + __("back to queue") : "→ " + __("ready to transfer")}</span>` : ""}
 					<span class="u">${o.in_use ? __("{0} record(s)", [o.in_use]) : __("unused")}</span>

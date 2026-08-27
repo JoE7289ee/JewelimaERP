@@ -101,7 +101,11 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			state.workOpts = r.message || { work_types: [], collection_states: [] };
 			state.work.df.options = state.workOpts.work_types.join("\n"); state.work.refresh();
 			if (state.workOpts.default_work_type) state.work.set_value(state.workOpts.default_work_type);
-			state.cstate.df.options = [""].concat(state.workOpts.collection_states).join("\n"); state.cstate.refresh();
+			// the picker opens on the successful state — that is what nearly every
+			// receipt is; the exceptions are chosen deliberately
+			state.cstate.df.options = [""].concat(state.workOpts.collection_states).join("\n");
+			state.cstate.refresh();
+			if (state.workOpts.default_collection_state) state.cstate.set_value(state.workOpts.default_collection_state);
 			toggleWorkPickers();
 		});
 	}
