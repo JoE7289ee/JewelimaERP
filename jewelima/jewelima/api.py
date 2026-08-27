@@ -8547,6 +8547,11 @@ def create_employee_users(payload):
 		for r in roles:
 			if r not in have:
 				user.append("roles", {"role": r})
+		# a new login lands on the Jewelima workspace like everyone else
+		from jewelima.setup import JEWELIMA_WORKSPACE
+
+		if not user.default_workspace and frappe.db.exists("Workspace", JEWELIMA_WORKSPACE):
+			user.default_workspace = JEWELIMA_WORKSPACE
 		if frappe.db.exists("Module Profile", "Jewelima Only") and user.module_profile != "Jewelima Only":
 			user.module_profile = "Jewelima Only"
 			mp = frappe.get_doc("Module Profile", "Jewelima Only")

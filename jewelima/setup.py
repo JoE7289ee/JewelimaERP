@@ -32,6 +32,7 @@ def after_install():
 	seed_raw_materials()
 	seed_karat_golds()
 	seed_findings()
+	set_default_workspace()
 	seed_salesmen()
 	seed_standard_golds()
 	retag_swarovski()
@@ -83,6 +84,7 @@ def after_migrate():
 	seed_raw_materials()
 	seed_karat_golds()
 	seed_findings()
+	set_default_workspace()
 	seed_salesmen()
 	seed_standard_golds()
 	retag_swarovski()
@@ -963,6 +965,7 @@ def _sync_home_workspace():
 	ws.save(ignore_permissions=True)
 
 
+JEWELIMA_WORKSPACE = "Jewelima"   # where every login lands
 KARAT_GOLDS = {"14K": 58.3, "18K": 75.1, "22K": 91.7}
 GOLD_COLORS = ["YG", "WG", "PG"]  # Yellow / White / Pink(Rose) gold
 # 22K is only ever worked in yellow — 22KPG / 22KWG don't exist in reality
@@ -1051,6 +1054,28 @@ def seed_findings():
 		frappe.db.commit()
 	print("Findings — created: %d  already there: %d" % (made, len(FINDINGS) - made))
 	return {"created": made, "total": len(FINDINGS)}
+
+
+
+def set_default_workspace(force=False):
+	"""Everyone lands on the Jewelima workspace when they log in.
+
+	Frappe reads User.default_workspace for the post-login home, so this is the
+	supported way in — no redirect hack. Only EMPTY values are filled, so anyone
+	who deliberately chose a different landing keeps it; pass force=True to
+	reset the whole house back to Jewelima."""
+	if not frappe.db.exists("Workspace", JEWELIMA_WORKSPACE):
+		return
+	filters = {"enabled": 1, "user_type": "System User"}
+	if not force:
+		filters["default_workspace"] = ["in", ["", None]]
+	users = frappe.get_all("User", filters=filters, pluck="name")
+	for u in users:
+		frappe.db.set_value("User", u, "default_workspace", JEWELIMA_WORKSPACE, update_modified=False)
+	if users:
+		frappe.db.commit()
+	print("Landing page — set for %d user(s) -> %s" % (len(users), JEWELIMA_WORKSPACE))
+	return {"updated": len(users)}
 
 
 def relax_employee_mandatory():
