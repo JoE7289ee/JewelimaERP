@@ -10601,6 +10601,8 @@ def parse_old_format_excel(filedata):
 		"dmd_ct": col("DMD (CT)", "DMD(CT)", "DMD"),
 		"stn_pcs": col("STN PCS"), "stn_ct": col("STN (CT)", "STN(CT)", "STN"),
 		"nt": col("NT WT (GM)", "NT WT(GM)", "NT WT"),
+		# PURE is what tells us the karat — pure/nett is the purity
+		"pure": col("PURE (GM)", "PURE(GM)", "PURE"),
 	}
 	rows = []
 	for r in ws.iter_rows(min_row=2, values_only=True):
@@ -10614,7 +10616,7 @@ def parse_old_format_excel(filedata):
 			"gs": flt(g("gs")), "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
 			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
 			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
-			"nt": flt(g("nt")),
+			"nt": flt(g("nt")), "pure": flt(g("pure")),
 			"colour": "", "size": "", "style": "", "shape": "", "cert": "", "cert_no": "",
 		})
 	cover = {}
@@ -10628,6 +10630,368 @@ def parse_old_format_excel(filedata):
 			if joined.startswith("Name") and "party" not in cover:
 				cover["party"] = next((v for v in vals[5:] if v and v != ":"), "")
 	return {"rows": rows, "cover": cover, "count": len(rows)}
+
+
+# ---------------------------------------------------------------------------
+# Old Stock Import (Stock > Import Old Stock) — bring the old software's stock
+# in, piece by piece. The quotation excel gives weights, design codes and stone
+# counts; what it cannot give is the COLOUR of each piece and WHICH stone every
+# diamond line actually is. The operator fills those in on the page over as
+# many sittings as it takes, and only a complete sheet may be imported.
+#
+# Designs are NOT created here — a code the system does not know is reported so
+# it can be made in the Design Bank first, and the import stays blocked until
+# then. The pieces themselves land through import_finished_stock, so an
+# imported piece is the same kind of object as any other finished piece.
+# ---------------------------------------------------------------------------
+OLD_STOCK_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Stock Admin")
+# gold colour -> the letter PROD's design names carry (A13047A-18EF-P)
+GOLD_COLOURS = [("Y", "Yellow"), ("W", "White"), ("P", "Pink")]
+
+
+def _old_stock_guard():
+	if not set(OLD_STOCK_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Importing old stock is for the stock desk."), frappe.PermissionError)
+
+
+def _karat_from_purity(pure, nett):
+	"""The old sheet has no karat column, but pure/nett IS the purity: .751 -> 18K."""
+	if not flt(nett):
+		return 0, ""
+	pct = flt(pure) / flt(nett) * 100.0
+	for k, lo, hi in ((14, 56.0, 60.5), (18, 73.0, 77.0), (22, 90.0, 93.5)):
+		if lo <= pct <= hi:
+			return k, "{0}K".format(k)
+	return 0, ""
+
+
+def _quality_from_name(text):
+	"""'TVM LULU 95 PCS EF.xlsx' -> 'EF'. The token rides in the file name."""
+	up = " ".join(str(text or "").upper().replace(".", " ").split())
+	for tok in ("EF", "GH", "SI", "CZ", "CVD"):
+		if " {0} ".format(tok) in " {0} ".format(up):
+			return tok
+	return ""
+
+
+def _gold_item_for(karat, colour):
+	"""'18' + 'Y' -> 18KYG, if that item exists."""
+	if not karat or not colour:
+		return None
+	code = "{0}K{1}G".format(karat, colour)
+	return code if frappe.db.exists("Item", code) else None
+
+
+@frappe.whitelist()
+def parse_old_stock_excel(filedata, title=None, source_file=None):
+	"""Read the old software's quotation excel into a fresh working session.
+
+	Same 'Design' sheet the OLD FORMAT page takes — reused rather than parsed a
+	second way, so the two screens can never disagree about what a file says."""
+	_old_stock_guard()
+	parsed = parse_old_format_excel(filedata)
+	rows = parsed.get("rows") or []
+	cover = parsed.get("cover") or {}
+	if not rows:
+		frappe.throw(frappe._("No pieces found on the 'Design' sheet."))
+
+	pieces = []
+	for r in rows:
+		karat_n, karat_label = _karat_from_purity(r.get("pure"), r.get("nt"))
+		pieces.append({
+			"sl": r.get("sl"), "legacy_id": r.get("unique_id"), "huid": r.get("huid") or "",
+			"item": r.get("item") or "", "design_code": r.get("design") or "",
+			"gross": flt(r.get("gs")), "nett": flt(r.get("nt")), "pure": flt(r.get("pure")),
+			"karat": karat_n, "karat_label": karat_label,
+			"dmd_pcs": cint(r.get("dmd_pcs")), "dmd_ct": flt(r.get("dmd_ct")),
+			"clarity": r.get("clarity") or "",
+			"ps_pcs": cint(r.get("ps_pcs")), "ps_ct": flt(r.get("ps_ct")),
+			"stn_pcs": cint(r.get("stn_pcs")), "stn_ct": flt(r.get("stn_ct")),
+			# what the operator must supply
+			"colour": "", "design": "", "size": "",
+			"stones": [],
+		})
+
+	doc = frappe.get_doc({
+		"doctype": "Old Stock Import",
+		"title": title or (source_file or frappe._("Old stock")).rsplit(".", 1)[0],
+		"source_file": source_file or "",
+		"invoice_no": cover.get("invoice_no") or "",
+		# the batch's quality token is in the file name more often than the sheet
+		"quality_token": _quality_from_name(source_file or title or ""),
+		"status": "Draft", "piece_count": len(pieces),
+		"data": json.dumps(pieces),
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return get_old_stock_session(doc.name)
+
+
+@frappe.whitelist()
+def list_old_stock_sessions(limit=40):
+	"""Every working session, newest first."""
+	_old_stock_guard()
+	return frappe.get_all("Old Stock Import",
+		fields=["name", "title", "status", "piece_count", "customer", "supplier",
+			"job_order", "imported_on", "modified"],
+		order_by="modified desc", limit_page_length=cint(limit) or 40)
+
+
+@frappe.whitelist()
+def get_old_stock_session(name):
+	"""A session plus everything the page needs to work on it."""
+	_old_stock_guard()
+	doc = frappe.get_doc("Old Stock Import", name)
+	pieces = json.loads(doc.data or "[]")
+	return {
+		"name": doc.name, "title": doc.title, "status": doc.status,
+		"source_file": doc.source_file, "invoice_no": doc.invoice_no,
+		"quality_token": doc.quality_token or "", "customer": doc.customer,
+		"supplier": doc.supplier, "job_order": doc.job_order, "imported_on": str(doc.imported_on or ""),
+		"pieces": pieces,
+		"review": _old_stock_review(pieces, doc.quality_token or ""),
+		"options": _old_stock_options(),
+	}
+
+
+def _old_stock_options():
+	"""The masters the page picks from."""
+	sieves = frappe.get_all("Diamond Sieve",
+		fields=["name", "sieve_size", "mm_size", "avg_cts"], order_by="idx_order asc, name asc")
+	return {
+		"colours": [{"code": c, "label": l} for c, l in GOLD_COLOURS],
+		# the average carat per stone is what makes a bracket pickable by eye:
+		# 7 stones at 0.06 ct is 0.0086 ct each, which is one specific sieve
+		"sieves": [{"name": s.name, "label": s.sieve_size or s.name,
+			"mm": flt(s.mm_size), "avg_ct": flt(s.avg_cts)} for s in sieves],
+		"stones": frappe.get_all("Item", filters={"stone_type": ["is", "set"]},
+			fields=["name", "item_name", "stone_type"], order_by="name"),
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
+	}
+
+
+@frappe.whitelist()
+def save_old_stock_session(name, pieces, customer=None, supplier=None,
+		invoice_no=None, quality_token=None, title=None):
+	"""Keep the work so far. The sheet is filled over sittings, not in one go."""
+	_old_stock_guard()
+	doc = frappe.get_doc("Old Stock Import", name)
+	if doc.status == "Imported":
+		frappe.throw(frappe._("{0} is already imported — it cannot be edited.").format(name))
+	rows = json.loads(pieces) if isinstance(pieces, str) else (pieces or [])
+	doc.data = json.dumps(rows)
+	doc.piece_count = len(rows)
+	for field, val in (("customer", customer), ("supplier", supplier),
+			("invoice_no", invoice_no), ("quality_token", quality_token), ("title", title)):
+		if val is not None:
+			setattr(doc, field, val)
+	review = _old_stock_review(rows, doc.quality_token or "")
+	doc.status = "Ready" if review["ready"] else "Draft"
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status, "review": review}
+
+
+def _old_stock_review(pieces, quality_token=""):
+	"""What is filled, what is missing, and the totals — the page's KPI strip.
+
+	Every count here is a reason the import is or is not allowed to run, so the
+	operator can see the finish line rather than discovering it at the end."""
+	missing_colour, missing_design, missing_stone, unknown_design = [], [], [], []
+	missing_karat, no_gold_item = [], []
+	design_wanted = {}          # composed name -> [legacy ids]
+	by_gold, by_type = {}, {}
+	sieve_use, stone_use = {}, {}
+	gross = nett = pure = 0.0
+	dmd_pcs, dmd_ct = 0, 0.0
+	other_pcs, other_ct = 0, 0.0
+
+	for p in pieces:
+		gross += flt(p.get("gross"))
+		nett += flt(p.get("nett"))
+		pure += flt(p.get("pure"))
+		lid = p.get("legacy_id") or p.get("sl")
+
+		colour = (p.get("colour") or "").strip().upper()
+		karat = cint(p.get("karat"))
+		if not karat:
+			missing_karat.append(lid)
+		if not colour:
+			missing_colour.append(lid)
+		gold_item = _gold_item_for(karat, colour) if colour else None
+		if colour and karat and not gold_item:
+			# the colour is picked and the karat is known, but no such gold item
+			no_gold_item.append(lid)
+		if gold_item:
+			g = by_gold.setdefault(gold_item, {"pieces": 0, "grams": 0.0})
+			g["pieces"] += 1
+			g["grams"] += flt(p.get("nett"))
+
+		# the design must already exist — this page does not create them.
+		# Composed the way PROD names them: CODE-<karat><quality>-<colour>
+		design = (p.get("design") or "").strip()
+		if not design:
+			want = _compose_design_name(p.get("design_code"), karat, quality_token, colour)
+			if want:
+				design_wanted.setdefault(want, []).append(lid)
+			missing_design.append(lid)
+		elif not frappe.db.exists("Design", design):
+			unknown_design.append(lid)
+
+		t = (p.get("item") or "").strip().upper()
+		if t:
+			by_type[t] = by_type.get(t, 0) + 1
+
+		# every stone line on the sheet has to become a real stone item
+		want_pcs = cint(p.get("dmd_pcs")) + cint(p.get("ps_pcs")) + cint(p.get("stn_pcs"))
+		got_pcs = sum(cint(s.get("pcs")) for s in p.get("stones") or [])
+		dmd_pcs += cint(p.get("dmd_pcs"))
+		dmd_ct += flt(p.get("dmd_ct"))
+		other_pcs += cint(p.get("ps_pcs")) + cint(p.get("stn_pcs"))
+		other_ct += flt(p.get("ps_ct")) + flt(p.get("stn_ct"))
+		if want_pcs and got_pcs != want_pcs:
+			missing_stone.append(lid)
+		for s in p.get("stones") or []:
+			if s.get("sieve"):
+				sv = sieve_use.setdefault(s["sieve"], {"pcs": 0, "ct": 0.0})
+				sv["pcs"] += cint(s.get("pcs"))
+				sv["ct"] += flt(s.get("ct"))
+			if s.get("item"):
+				st = stone_use.setdefault(s["item"], {"pcs": 0, "ct": 0.0})
+				st["pcs"] += cint(s.get("pcs"))
+				st["ct"] += flt(s.get("ct"))
+
+	# which of the designs the sheet wants actually exist yet
+	missing_masters = []
+	for name in sorted(design_wanted):
+		if not frappe.db.exists("Design", name):
+			missing_masters.append({"design": name, "pieces": len(design_wanted[name])})
+
+	blockers = []
+	if missing_karat:
+		blockers.append({"what": frappe._("karat unreadable"), "count": len(set(missing_karat))})
+	if missing_colour:
+		blockers.append({"what": frappe._("colour not set"), "count": len(set(missing_colour))})
+	if no_gold_item:
+		blockers.append({"what": frappe._("no such gold item"), "count": len(set(no_gold_item))})
+	if missing_design:
+		blockers.append({"what": frappe._("design not matched"), "count": len(set(missing_design))})
+	if unknown_design:
+		blockers.append({"what": frappe._("design no longer exists"), "count": len(set(unknown_design))})
+	if missing_stone:
+		blockers.append({"what": frappe._("stones not assigned"), "count": len(set(missing_stone))})
+
+	return {
+		"pieces": len(pieces),
+		"ready": not blockers and bool(pieces),
+		"blockers": blockers,
+		"missing_designs": missing_masters,
+		"totals": {
+			"gross": round(gross, 3), "nett": round(nett, 3), "pure": round(pure, 3),
+			"dmd_pcs": dmd_pcs, "dmd_ct": round(dmd_ct, 3),
+			"other_pcs": other_pcs, "other_ct": round(other_ct, 3),
+			"types": len(by_type), "designs": len({(p.get("design") or p.get("design_code")) for p in pieces}),
+		},
+		"gold": sorted(([k, v["pieces"], round(v["grams"], 3)] for k, v in by_gold.items()),
+			key=lambda x: -x[2]),
+		"types": sorted(([k, v] for k, v in by_type.items()), key=lambda x: -x[1]),
+		"sieves": sorted(([k, v["pcs"], round(v["ct"], 3)] for k, v in sieve_use.items()),
+			key=lambda x: -x[1]),
+		"stones": sorted(([k, v["pcs"], round(v["ct"], 3)] for k, v in stone_use.items()),
+			key=lambda x: -x[1]),
+	}
+
+
+def _compose_design_name(code, karat, quality, colour):
+	"""How PROD names a design: A13047A-18EF-P — code, karat+quality, colour."""
+	code = " ".join(str(code or "").split()).replace(" ", "")
+	if not code or not karat or not colour:
+		return ""
+	q = (quality or "").strip().upper()
+	return "{0}-{1}{2}-{3}".format(code, karat, q, colour) if q else "{0}-{1}-{2}".format(code, karat, colour)
+
+
+@frappe.whitelist()
+def suggest_old_stock_designs(name):
+	"""For each piece, the Design the system already holds for its code+colour.
+
+	Matching is by the composed name first, then by the bare code, so a design
+	named a little differently is still found instead of being reported missing."""
+	_old_stock_guard()
+	doc = frappe.get_doc("Old Stock Import", name)
+	pieces = json.loads(doc.data or "[]")
+	q = (doc.quality_token or "").strip().upper()
+	hits = 0
+	for p in pieces:
+		if p.get("design"):
+			continue
+		colour = (p.get("colour") or "").strip().upper()
+		if not colour:
+			continue
+		want = _compose_design_name(p.get("design_code"), cint(p.get("karat")), q, colour)
+		found = want if want and frappe.db.exists("Design", want) else None
+		if not found:
+			bare = " ".join(str(p.get("design_code") or "").split()).replace(" ", "")
+			if bare:
+				cand = frappe.get_all("Design", filters={"name": ["like", bare + "%"]},
+					limit=2, pluck="name")
+				# only when it is unambiguous — one match, or nothing
+				if len(cand) == 1:
+					found = cand[0]
+		if found:
+			p["design"] = found
+			hits += 1
+	doc.data = json.dumps(pieces)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"matched": hits, **get_old_stock_session(name)}
+
+
+@frappe.whitelist()
+def commit_old_stock_import(name):
+	"""Bring the finished sheet in: one Purchase Receipt worth of stock into
+	Finished Goods, one Order Bag per piece, each keeping its old unique ID."""
+	_old_stock_guard()
+	doc = frappe.get_doc("Old Stock Import", name)
+	if doc.status == "Imported":
+		frappe.throw(frappe._("{0} has already been imported (Job Order {1}).").format(name, doc.job_order or "—"))
+	pieces = json.loads(doc.data or "[]")
+	review = _old_stock_review(pieces, doc.quality_token or "")
+	if not review["ready"]:
+		frappe.throw(frappe._("Not ready yet: {0}.").format(
+			", ".join("{0} ({1})".format(b["what"], b["count"]) for b in review["blockers"])))
+	if not doc.customer:
+		frappe.throw(frappe._("Pick who holds these pieces."))
+	if not doc.supplier:
+		frappe.throw(frappe._("Pick the supplier the stock is booked against."))
+
+	payload = {"mode": "purchase", "customer": doc.customer, "supplier": doc.supplier,
+		"remarks": frappe._("Old stock import {0}").format(doc.name), "pieces": []}
+	for p in pieces:
+		gold_item = _gold_item_for(cint(p.get("karat")), (p.get("colour") or "").upper())
+		payload["pieces"].append({
+			"design": p.get("design"), "karat": gold_item,
+			"gold": flt(p.get("nett")), "gross": flt(p.get("gross")),
+			"size": p.get("size") or None, "huid": p.get("huid") or None,
+			"stones": [{"item": s.get("item"), "pcs": cint(s.get("pcs")), "ct": flt(s.get("ct"))}
+				for s in p.get("stones") or []],
+		})
+	res = import_finished_stock(json.dumps(payload))
+
+	# stamp each new bag with the ID it had in the old software, in sheet order —
+	# import_finished_stock creates them in the order it is given
+	made = res.get("bags") or res.get("order_bags") or []
+	for p, bag in zip(pieces, made):
+		nm = bag if isinstance(bag, str) else (bag or {}).get("name")
+		if nm and p.get("legacy_id"):
+			frappe.db.set_value("Order Bag", nm, "legacy_id", str(p["legacy_id"]), update_modified=False)
+
+	doc.status = "Imported"
+	doc.job_order = res.get("job_order") or ""
+	doc.imported_on = frappe.utils.now_datetime()
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"session": doc.name, "job_order": doc.job_order,
+		"pieces": len(payload["pieces"]), "result": res}
 
 
 # --- OLD FORMAT session round-trip (template / export / import) --------------

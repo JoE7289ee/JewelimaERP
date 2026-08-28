@@ -683,6 +683,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "download",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Import Old Stock",
+   "link_to": "import-old-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "flame",
@@ -2464,7 +2477,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-28 12:20:14.034345",
+ "modified": "2026-08-28 13:24:30.514266",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
