@@ -353,6 +353,16 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		if (output_weight <= 0) return frappe.msgprint(__("Output weight must be greater than zero."));
 		const over = S.rows.filter((r) => flt(r.weight) > flt(r.available) + 0.0005);
 		if (over.length) return frappe.msgprint(__("Not enough stock: {0}. Use “Full” or lower the weight.", [over.map((r) => `${r.item} (need ${fmt(r.weight)}, have ${fmt(r.available)})`).join("; ")]));
+		// the blend warning has always been on screen; now it stops the melt, because
+		// the pot cannot change how much pure gold there is and the server refuses it
+		const totalIn = S.rows.reduce((a, r) => a + flt(r.weight), 0);
+		const pureIn = S.rows.reduce((a, r) => a + flt(r.weight) * r.purity / 100, 0);
+		const target = S.out.purity;
+		if (target && totalIn > 0 && Math.abs(pureIn / totalIn * 100 - target) > 0.05) {
+			return frappe.msgprint({ title: __("The blend does not match"), indicator: "orange",
+				message: __("This mix is <b>{0}%</b> pure but {1} is <b>{2}%</b>. Adjust the gold or alloy — melting cannot change how much pure gold there is.",
+					[(pureIn / totalIn * 100).toFixed(2), frappe.utils.escape_html(output_item), target.toFixed(2)]) });
+		}
 
 		frappe.dom.freeze(sendToCasting ? __("Melting + sending to Casting…") : __("Melting…"));
 		frappe.call({

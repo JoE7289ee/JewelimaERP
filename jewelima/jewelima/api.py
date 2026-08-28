@@ -106,6 +106,34 @@ def melt_gold(warehouse, output_item, output_weight, inputs, send_to_casting=0):
 		if s["qty"] > avail + 0.0005:
 			frappe.throw(frappe._("Only {0} of {1} in stock here — can't melt {2}.").format(round(avail, 3), s["item_code"], s["qty"]))
 
+	# The pot cannot change how much PURE gold there is. Everything fed in comes
+	# back out as the output item — the yield plus the dust — so the mix's pure
+	# content must match what that many grams of the output item holds. Without
+	# this a wrong ratio was accepted and the difference simply left the books:
+	# 80 g of fine + 24 g of alloy declared as 18K quietly lost 1.816 g pure.
+	# Loss collection has always enforced this; melting did not.
+	out_purity = flt(frappe.db.get_value("Item", output_item, "purity_percentage"))
+	if out_purity > 0:
+		pure_in = sum(flt(s["qty"]) * flt(frappe.db.get_value("Item", s["item_code"], "purity_percentage")) / 100.0
+			for s in src)
+		pure_out = total_in * out_purity / 100.0
+		if abs(pure_in - pure_out) > 0.05:
+			mix_pct = pure_in / total_in * 100.0 if total_in else 0
+			# what to change, in the terms the person at the pot is working in
+			fine = next((s["item_code"] for s in src
+				if flt(frappe.db.get_value("Item", s["item_code"], "purity_percentage")) >= out_purity), None)
+			fix = ""
+			if fine:
+				diff = round((pure_out - pure_in) / (flt(frappe.db.get_value("Item", fine, "purity_percentage")) / 100.0), 3)
+				fix = (frappe._(" Add about {0} g more {1}.").format(abs(diff), fine) if diff > 0
+					else frappe._(" That is about {0} g more {1} than this mix needs.").format(abs(diff), fine))
+			frappe.throw(frappe._(
+				"This mix is {0}% pure, but {1} is {2}%. Melting {3} g of it would "
+				"{4} {5} g of pure gold on the books.{6}").format(
+					round(mix_pct, 2), output_item, round(out_purity, 2), round(total_in, 3),
+					frappe._("lose") if pure_in > pure_out else frappe._("invent"),
+					round(abs(pure_in - pure_out), 3), fix))
+
 	# What the pot keeps does not evaporate: produce it too, into the Melting
 	# -LOSS bucket, so the ledger balances and the gold stays recoverable through
 	# Loss Collection like any bench loss. Below the rounding floor, skip the row.
@@ -154,6 +182,8 @@ def get_melt_stock(warehouse):
 	"""Non-empty stock in a warehouse for the Melting screen: item, group, purity, weight
 	(balance) and pure gold grams (weight x purity% for gram-weighted metals; 0 for stones).
 	Sorted by pure desc. Returns rows + gross/pure totals (grams only)."""
+	# a full warehouse listing with pure gold against every line
+	_require_stock()
 	if not warehouse or not frappe.db.exists("Warehouse", warehouse):
 		return {"rows": [], "total_weight": 0, "total_pure": 0}
 	rows, tw, tp = [], 0.0, 0.0
@@ -8521,6 +8551,9 @@ def _stock_move_many(item_qty, source, target):
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
 def get_loss_report(from_date=None, to_date=None):
+	# what is sitting in every loss bucket, by item and pure content — not a
+	# figure for anyone who happens to be logged in
+	_require_stock()
 	whs = frappe.get_all("Warehouse", filters={"custom_is_loss": 1, "is_group": 0},
 	                     fields=["name", "warehouse_name"], order_by="warehouse_name")
 	if not whs:
@@ -17047,8 +17080,21 @@ def get_total_gold():
 		for k, v in items_seen.items()), key=lambda x: -x["pure"])
 	total_pure = round(sum(r["pure"] for r in rows), 3)
 	total_weight = round(sum(r["weight"] for r in rows), 3)
-	for r in rows:
-		r["share"] = round(r["pure"] / total_pure * 100, 1) if total_pure else 0
+	# Shares rounded one at a time can print as 99.9 or 100.1, and a gold report
+	# whose percentages do not add up invites doubt about the rest of it. Round
+	# them together instead: the odd tenth goes to the largest bucket.
+	if total_pure:
+		exact = [r["pure"] / total_pure * 100 for r in rows]
+		shares = [round(x, 1) for x in exact]
+		drift = round(100.0 - sum(shares), 1)
+		if abs(drift) >= 0.05 and shares:
+			big = max(range(len(shares)), key=lambda i: exact[i])
+			shares[big] = round(shares[big] + drift, 1)
+		for r, sh in zip(rows, shares):
+			r["share"] = sh
+	else:
+		for r in rows:
+			r["share"] = 0
 	return {"rows": rows, "by_item": by_item[:14],
 		"totals": {"pure": total_pure, "weight": total_weight,
 			"loss": round(loss, 3), "buckets": len(rows)}}
