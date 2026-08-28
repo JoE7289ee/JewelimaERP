@@ -14,7 +14,7 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		#page-card-gold .container{max-width:100%;}
-		.cg-wrap{max-width:1120px;}
+		.cg-wrap{max-width:100%;}
 		.cg-scan{display:flex;gap:10px;align-items:center;margin-bottom:14px;}
 		.cg-scan input{flex:0 0 300px;border:1px solid var(--border-color);border-radius:9px;
 			padding:9px 13px;font-size:14px;background:var(--fg-color);color:var(--text-color);}
@@ -25,8 +25,8 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 		.cg-msg.ok{background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 
 		.cg-cols{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
-		.cg-left{flex:1 1 460px;min-width:380px;}
-		.cg-right{flex:0 0 400px;}
+		.cg-left{flex:1 1 520px;min-width:360px;}
+		.cg-right{flex:0 0 380px;}
 		.cg-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
 			padding:15px 17px;margin-bottom:14px;}
 		.cg-card .h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
@@ -228,7 +228,18 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 	root.on("click", ".cg-go", function () {
 		if (!S.card || !S.item) return;
 		const w = flt(root.find(".cg-w").val());
-		if (!w) return say(__("Enter the weight."), "err");
+		if (!w || w <= 0) return say(__("Enter the weight."), "err");
+		// the same two limits the server enforces, said here so a typed-over
+		// number is caught before the round trip. The server stays the real gate:
+		// this figure is from the last load and someone else may have moved stock.
+		const cap = flt(root.find(".cg-item option:selected").data("qty"));
+		if (w > cap + 0.0005) {
+			return say(S.side === "add"
+				? __("Only <b>{0} g</b> of {1} in {2}.", [cap.toFixed(3), esc(S.item), esc(S.wh)])
+				: __("<b>{0}</b> only holds <b>{1} g</b> of {2}.",
+					[esc(S.card.bag.name), cap.toFixed(3), esc(S.item)]), "err");
+		}
+		say("");
 		const $btn = $(this).prop("disabled", true);
 		frappe.call({ method: API + ".adjust_card_gold", args: {
 			order_bag: S.card.bag.name, direction: S.side, item: S.item,
@@ -240,7 +251,8 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 					? __("{0} g added — {1} now holds {2} g", [m.weight, m.order_bag, m.gold])
 					: __("{0} g taken off — {1} now holds {2} g", [m.weight, m.order_bag, m.gold]) }, 6);
 			load(S.card.bag.name);
-		}).always(() => $btn.prop("disabled", false));
+		}).fail(() => say(__("That move was refused — reload the card and check the figures."), "err"))
+		.always(() => $btn.prop("disabled", false));
 	});
 
 	page.add_inner_button(__("History"), () => frappe.set_route("card-gold-history"));
