@@ -1993,6 +1993,8 @@ MANUFACTURING_GROUP = "Manufacturing"
 
 # Loss collection warehouses — where recoverable loss is credited, per stage.
 LOSS_COLLECTION_GROUP = "Loss Collection"
+MELT_LOSS_STAGE = "Melting"
+MELT_LOSS_WAREHOUSE = "{0} -LOSS".format(MELT_LOSS_STAGE)
 LOSS_STAGES = [
 	"Filing",
 	"Final Polish",
@@ -2000,6 +2002,10 @@ LOSS_STAGES = [
 	"Setting",
 	"Grinding",
 	"Casting",
+	# what the pot keeps: the difference between what is fed into a melt and the
+	# karat gold that comes out. Credited here by melt_gold so it is recoverable
+	# like any other loss instead of vanishing from the ledger.
+	MELT_LOSS_STAGE,
 ]
 
 

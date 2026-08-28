@@ -362,7 +362,11 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 			frappe.dom.unfreeze();
 			const res = r.message || {};
 			if (!res.name) return;
-			frappe.show_alert({ message: __("Melted {0} g → {1} g of {2} (loss {3} g)", [res.total_in, res.output, output_item, res.loss]), indicator: "green" }, 7);
+			frappe.show_alert({ message: res.loss_warehouse
+				? __("Melted {0} g → {1} g of {2} · {3} g loss to {4}",
+					[res.total_in, res.output, output_item, res.loss, res.loss_warehouse])
+				: __("Melted {0} g → {1} g of {2}, no loss", [res.total_in, res.output, output_item]),
+				indicator: "green" }, 7);
 			frappe.msgprint({
 				title: sendToCasting ? __("Melted + sent to Casting") : __("Melt complete"),
 				indicator: "green",

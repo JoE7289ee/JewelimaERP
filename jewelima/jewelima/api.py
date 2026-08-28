@@ -105,22 +105,42 @@ def melt_gold(warehouse, output_item, output_weight, inputs, send_to_casting=0):
 		if s["qty"] > avail + 0.0005:
 			frappe.throw(frappe._("Only {0} of {1} in stock here — can't melt {2}.").format(round(avail, 3), s["item_code"], s["qty"]))
 
+	# What the pot keeps does not evaporate: produce it too, into the Melting
+	# -LOSS bucket, so the ledger balances and the gold stays recoverable through
+	# Loss Collection like any bench loss. Below the rounding floor, skip the row.
+	from jewelima.setup import MELT_LOSS_WAREHOUSE
+
+	loss_w = round(total_in - out_w, 3)
+	produced = [{
+		"item_code": output_item, "qty": out_w,
+		"uom": frappe.db.get_value("Item", output_item, "stock_uom") or "Gram",
+		"t_warehouse": warehouse, "allow_zero_valuation_rate": 1,
+	}]
+	loss_wh = None
+	if loss_w > 0.0005:
+		loss_wh = _wh(MELT_LOSS_WAREHOUSE)
+		if not loss_wh:
+			frappe.throw(frappe._("The {0} warehouse is missing, so the {1} g melt loss has nowhere to go. "
+				"Run a migrate to create it.").format(MELT_LOSS_WAREHOUSE, loss_w))
+		produced.append({
+			"item_code": output_item, "qty": loss_w,
+			"uom": frappe.db.get_value("Item", output_item, "stock_uom") or "Gram",
+			"t_warehouse": loss_wh, "allow_zero_valuation_rate": 1,
+		})
+
 	se = frappe.get_doc({
 		"doctype": "Stock Entry",
 		"stock_entry_type": "Repack",
 		"company": _company(),
-		"items": src + [{
-			"item_code": output_item, "qty": out_w,
-			"uom": frappe.db.get_value("Item", output_item, "stock_uom") or "Gram",
-			"t_warehouse": warehouse, "allow_zero_valuation_rate": 1,
-		}],
+		"items": src + produced,
 		"remarks": "Melt: {0} g in -> {1} g {2} (loss {3} g) at {4}".format(
-			round(total_in, 3), round(out_w, 3), output_item, round(total_in - out_w, 3), warehouse),
+			round(total_in, 3), round(out_w, 3), output_item, loss_w, warehouse),
 	})
 	se.flags.ignore_permissions = True
 	se.insert()
 	se.submit()
-	out = {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3), "loss": round(total_in - out_w, 3)}
+	out = {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3),
+		"loss": loss_w, "loss_warehouse": loss_wh}
 	if cint(send_to_casting):
 		out["casting_transfer"] = _stock_move(output_item, out_w, warehouse, _wh("Casting"))
 		out["casting_warehouse"] = _wh("Casting")
@@ -15551,12 +15571,20 @@ def get_melt_history():
 	loss, where, by whom. (Melts are tagged in remarks from today on.)"""
 	_require_stock_records()
 	rows = []
+	loss_whs = set(frappe.get_all("Warehouse", filters={"custom_is_loss": 1}, pluck="name"))
 	for r in _se_history("Melt:"):
 		fed = round(sum(c["qty"] for c in r["consumed"]), 3)
-		got = round(sum(p["qty"] for p in r["produced"]), 3)
-		rows.append({**r, "fed": fed, "got": got, "loss": round(fed - got, 3),
-			"out_item": (r["produced"][0]["item"] if r["produced"] else ""),
-			"warehouse": (r["produced"][0]["warehouse"] if r["produced"] else "")})
+		# melts from 2026-08-28 on book their loss as a line into a -LOSS
+		# warehouse; before that it was simply a shortfall in the yield, so fall
+		# back to fed-got for those older entries.
+		kept = [p for p in r["produced"] if p["warehouse"] not in loss_whs]
+		lost = [p for p in r["produced"] if p["warehouse"] in loss_whs]
+		got = round(sum(p["qty"] for p in kept), 3)
+		loss = round(sum(p["qty"] for p in lost), 3) if lost else round(fed - got, 3)
+		rows.append({**r, "fed": fed, "got": got, "loss": loss,
+			"loss_warehouse": (lost[0]["warehouse"] if lost else ""),
+			"out_item": (kept[0]["item"] if kept else ""),
+			"warehouse": (kept[0]["warehouse"] if kept else "")})
 	return {"rows": rows,
 		"total_fed": round(sum(x["fed"] for x in rows), 3),
 		"total_got": round(sum(x["got"] for x in rows), 3),

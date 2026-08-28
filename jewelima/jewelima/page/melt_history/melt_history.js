@@ -46,7 +46,7 @@ frappe.pages["melt-history"].on_page_load = function (wrapper) {
 				<td class="mh-lines">${x.consumed.map((c) => `${c.qty.toFixed(3)} g ${esc(c.item)}`).join("<br>")}
 					<div style="margin-top:2px;"><b style="color:var(--text-color);">${x.fed.toFixed(3)} g ${__("total")}</b></div></td>
 				<td><b>${x.got.toFixed(3)} g</b> ${esc(x.out_item)}</td>
-				<td class="num ${x.loss > 0 ? "mh-loss" : ""}">${x.loss.toFixed(3)}</td>
+				<td class="num ${x.loss > 0 ? "mh-loss" : ""}" title="${esc(x.loss_warehouse || "")}">${x.loss.toFixed(3)}</td>
 				<td>${esc((x.warehouse || "").replace(" - JD", ""))}</td>
 				<td>${esc(x.who)}</td>
 				<td style="font-size:11px;color:var(--text-muted);">${esc(x.name)}</td>
