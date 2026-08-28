@@ -7,6 +7,7 @@ import json
 import os
 
 import frappe
+from frappe import _
 from frappe.utils import cint, flt
 
 
@@ -5899,7 +5900,6 @@ def export_cad_sheet_xlsx(payload):
 	# embed the design image (top-left), scaled to ~360px wide
 	anchor_row = 10
 	def _embed(pil, cell, w):
-		nonlocal anchor_row
 		pil = pil.resize((w, int(pil.height * (w / pil.width))))
 		bio = BytesIO(); pil.save(bio, "PNG"); bio.seek(0)
 		ws.add_image(XLImage(bio), cell)
@@ -7140,6 +7140,31 @@ def get_finished_stock_matrix(status="In Stock"):
 			"types": len(types),
 		},
 	}
+
+
+def _even_split(total, n, prec=3):
+	"""Split `total` into `n` parts rounded to `prec` dp, summing back to `total`
+	(the rounding remainder is spread over the first parts)."""
+	total = flt(total)
+	if n <= 0:
+		return []
+	base = round(total / n, prec)
+	parts = [base] * n
+	diff = round(total - base * n, prec)
+	step = 10 ** (-prec)
+	i = 0
+	while abs(diff) >= step / 2 and i < n:
+		parts[i] = round(parts[i] + (step if diff > 0 else -step), prec)
+		diff = round(diff - (step if diff > 0 else -step), prec)
+		i += 1
+	return parts
+
+
+def _split_counts(total, n):
+	"""Split an integer count into n parts (first parts get the remainder)."""
+	total = int(total or 0)
+	base, rem = divmod(total, n) if n else (0, 0)
+	return [base + (1 if i < rem else 0) for i in range(n)]
 
 
 # ---------------------------------------------------------------------------
