@@ -271,9 +271,13 @@ def transfer_stock(from_warehouse, to_warehouse, items):
 	if not rows:
 		frappe.throw(frappe._("Add at least one item with a weight to transfer."))
 
+	# tag it: a Material Transfer is written by half the app, and Transfer History
+	# has to show the ones a person made on the Stock Transfer page and no others
 	se = frappe.get_doc({
 		"doctype": "Stock Entry", "stock_entry_type": "Material Transfer",
 		"company": _company(), "items": rows,
+		"remarks": "Stock transfer: {0} item(s) {1} -> {2}".format(
+			len(rows), from_warehouse, to_warehouse),
 	})
 	se.flags.ignore_permissions = True
 	se.insert()
@@ -16269,10 +16273,16 @@ def _require_stock_records():
 		frappe.throw(frappe._("Stock records are for stock admins."), frappe.PermissionError)
 
 
-def _se_history(prefix, limit=200):
-	"""Submitted Stock Entries whose remarks start with `prefix`, with their lines."""
+def _se_history(prefix, limit=200, frm=None, to=None):
+	"""Submitted Stock Entries whose remarks start with `prefix`, with their lines.
+
+	`frm`/`to` narrow it by posting date — the histories are read far more often
+	for "what happened this week" than for everything ever."""
+	filters = {"remarks": ["like", prefix + "%"], "docstatus": 1}
+	if frm and to:
+		filters["posting_date"] = ["between", [str(frm), str(to)]]
 	ses = frappe.get_all("Stock Entry",
-		filters={"remarks": ["like", prefix + "%"], "docstatus": 1},
+		filters=filters,
 		fields=["name", "remarks", "owner", "posting_date", "posting_time", "creation"],
 		order_by="posting_date desc, creation desc", limit=limit)
 	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
@@ -16291,39 +16301,41 @@ def _se_history(prefix, limit=200):
 
 
 @frappe.whitelist()
-def get_loss_history():
+def get_loss_history(period="all", start=None, end=None):
 	"""Everything that ever LEFT the loss buckets: refining recoveries (dust ->
 	standard gold) and management write-offs (permanent loss, with its reason)."""
 	_require_stock_records()
+	frm, to, label = _loss_period_range(period, start, end)
 	def _pure(lines):
 		tot = 0.0
 		for l in lines:
 			tot += l["qty"] * flt(frappe.db.get_value("Item", l["item"], "purity_percentage")) / 100.0
 		return round(tot, 3)
 	rows = []
-	for r in _se_history("Loss collection:"):
+	for r in _se_history("Loss collection:", frm=frm, to=to):
 		rows.append({**r, "kind": "Recovered", "pure": _pure(r["consumed"]),
 			"got": round(sum(p["qty"] for p in r["produced"]), 3),
 			"got_item": (r["produced"][0]["item"] if r["produced"] else ""),
 			"reason": ""})
-	for r in _se_history("Loss write-off:"):
+	for r in _se_history("Loss write-off:", frm=frm, to=to):
 		rows.append({**r, "kind": "Written Off", "pure": _pure(r["consumed"]),
 			"got": 0, "got_item": "",
 			"reason": (r["remarks"].split("Loss write-off:", 1)[1] or "").strip()})
 	rows.sort(key=lambda x: (x["when"], x["name"]), reverse=True)
-	return {"rows": rows,
+	return {"rows": rows, "label": label,
 		"recovered_pure": round(sum(x["pure"] for x in rows if x["kind"] == "Recovered"), 3),
 		"writtenoff_pure": round(sum(x["pure"] for x in rows if x["kind"] == "Written Off"), 3)}
 
 
 @frappe.whitelist()
-def get_melt_history():
+def get_melt_history(period="all", start=None, end=None):
 	"""Every melt: what went into the pot, what karat gold came out, the melt
 	loss, where, by whom. (Melts are tagged in remarks from today on.)"""
 	_require_stock_records()
+	frm, to, label = _loss_period_range(period, start, end)
 	rows = []
 	loss_whs = set(frappe.get_all("Warehouse", filters={"custom_is_loss": 1}, pluck="name"))
-	for r in _se_history("Melt:"):
+	for r in _se_history("Melt:", frm=frm, to=to):
 		fed = round(sum(c["qty"] for c in r["consumed"]), 3)
 		# melts from 2026-08-28 on book their loss as a line into a -LOSS
 		# warehouse; before that it was simply a shortfall in the yield, so fall
@@ -16336,10 +16348,58 @@ def get_melt_history():
 			"loss_warehouse": (lost[0]["warehouse"] if lost else ""),
 			"out_item": (kept[0]["item"] if kept else ""),
 			"warehouse": (kept[0]["warehouse"] if kept else "")})
-	return {"rows": rows,
+	return {"rows": rows, "label": label,
 		"total_fed": round(sum(x["fed"] for x in rows), 3),
 		"total_got": round(sum(x["got"] for x in rows), 3),
 		"total_loss": round(sum(x["loss"] for x in rows), 3)}
+
+
+@frappe.whitelist()
+def get_transfer_history(period="month", start=None, end=None):
+	"""Every move made on the Stock Transfer page: what went where, by whom.
+
+	Only that page's transfers. A Material Transfer is written by half the app —
+	casting, findings, card gold, the importers — so these are read from the tag
+	transfer_stock leaves in the remarks, not from the entry type. Transfers made
+	before that tag went in (2026-08-28) are not here."""
+	_require_stock_records()
+	frm, to, label = _loss_period_range(period, start, end)
+	rows, moved = [], 0.0
+	pairs, items_seen = {}, {}
+	for r in _se_history("Stock transfer:", frm=frm, to=to):
+		lines = []
+		for c in r["consumed"]:
+			# a Material Transfer line carries both warehouses; the produced list
+			# is the same rows seen from the other side, so read one of them
+			lines.append({"item": c["item"], "qty": round(flt(c["qty"]), 3), "from": c["warehouse"]})
+		to_wh = (r["produced"][0]["warehouse"] if r["produced"] else "")
+		from_wh = (lines[0]["from"] if lines else "")
+		qty = round(sum(l["qty"] for l in lines), 3)
+		moved += qty
+		key = "{0} → {1}".format(_wh_label(from_wh), _wh_label(to_wh))
+		p = pairs.setdefault(key, {"moves": 0, "qty": 0.0})
+		p["moves"] += 1
+		p["qty"] += qty
+		for l in lines:
+			it = items_seen.setdefault(l["item"], {"moves": 0, "qty": 0.0})
+			it["moves"] += 1
+			it["qty"] += l["qty"]
+		rows.append({**r, "from_warehouse": _wh_label(from_wh), "to_warehouse": _wh_label(to_wh),
+			"qty": qty, "items": len(lines), "lines": lines})
+	return {
+		"rows": rows, "label": label,
+		"totals": {"moves": len(rows), "qty": round(moved, 3),
+			"routes": len(pairs), "items": len(items_seen)},
+		"routes": sorted(([k, v["moves"], round(v["qty"], 3)] for k, v in pairs.items()),
+			key=lambda x: -x[2]),
+		"items": sorted(([k, v["moves"], round(v["qty"], 3)] for k, v in items_seen.items()),
+			key=lambda x: -x[2]),
+	}
+
+
+def _wh_label(wh):
+	"""'Casting - JD' -> 'Casting'. The abbr is noise in a history."""
+	return frappe.db.get_value("Warehouse", wh, "warehouse_name") or wh or ""
 
 
 # ---------------------------------------------------------------------------

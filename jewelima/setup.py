@@ -175,7 +175,7 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	"total-gold",
 	# Stock Setup — the shelves themselves
 	"raw-materials", "warehouse-management",
-	"purchase-history", "loss-history", "melt-history",
+	"purchase-history", "loss-history", "melt-history", "transfer-history",
 	# gold on / off a card, and its trail
 	"card-gold", "card-gold-history",
 	# the old software's stock, brought in piece by piece
