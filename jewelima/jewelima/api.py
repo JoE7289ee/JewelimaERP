@@ -14025,10 +14025,226 @@ def get_card_passport(order_bag):
 		"stages": stages,
 		"issues": issue_rows,
 		"reworks": _card_reworks(order_bag),
+		"gold_moves": _card_gold_moves(order_bag),
 		"pre_bag": get_prebag_for_card(order_bag),
 		"materials": _card_materials(order_bag),
 		"today": frappe.utils.nowdate(),
 	}
+
+
+# ---------------------------------------------------------------------------
+# Card Gold (Stock > Card Gold) — put gold onto a card, or take it back off.
+# The card's materials live in the In Bags pool, so adding means Casting or
+# Production -> In Bags with a ledger In row, and reducing is the exact reverse.
+# Only a card actually on the floor qualifies: a sold, cancelled or finished
+# piece is a closed book, and its weights must not move under it.
+# ---------------------------------------------------------------------------
+CARD_GOLD_LOCATIONS = ("Casting", "Production")
+CARD_GOLD_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Stock Admin")
+
+
+def _card_gold_guard():
+	if not set(CARD_GOLD_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Adding or reducing a card's gold is for the stock desk."), frappe.PermissionError)
+
+
+def _card_gold_warehouses():
+	"""The warehouses gold may come from or go back to, as {label: name}."""
+	out = {}
+	for label in CARD_GOLD_LOCATIONS:
+		wh = _wh(label)
+		if wh:
+			out[label] = wh
+	return out
+
+
+def _card_gold_check(order_bag):
+	"""(bag, error) — the card this may be done to, or why it may not.
+
+	Returned rather than thrown so a scan can say what is wrong with the card
+	instead of the page having to read an exception."""
+	if not order_bag:
+		return None, frappe._("Scan a card.")
+	bag = frappe.db.get_value("Order Bag", order_bag,
+		["name", "design", "qty", "location", "stock_status", "is_finished", "is_cad",
+		 "act_gross_weight", "narration"], as_dict=True)
+	if not bag:
+		return None, frappe._("No card {0}.").format(order_bag)
+	if cint(bag.is_finished):
+		return None, frappe._("{0} is a finished product — its weights are frozen. Send it back to the floor from Rework first.").format(order_bag)
+	if bag.stock_status == "Sold":
+		return None, frappe._("{0} is sold — its gold cannot be touched.").format(order_bag)
+	if bag.stock_status == "Cancelled":
+		return None, frappe._("{0} is cancelled.").format(order_bag)
+	if bag.stock_status != "In Production":
+		return None, frappe._("{0} is {1}, not in bags — only a card on the floor can take gold.").format(
+			order_bag, bag.stock_status or "—")
+	return bag, None
+
+
+@frappe.whitelist()
+def get_card_gold(order_bag):
+	"""Scan lookup: the card, what it holds now, and the gold available in each
+	warehouse it can draw from."""
+	_card_gold_guard()
+	bag, err = _card_gold_check(order_bag)
+	if err:
+		return {"error": err}
+
+	contents = get_bag_contents(order_bag)
+	held = [{"item": it["item"],
+		"item_name": frappe.db.get_value("Item", it["item"], "item_name") or it["item"],
+		"qty": round(flt(it["qty"]), 3)}
+		for it in contents["items"]
+		if flt(it["qty"]) > 0.0005 and not frappe.db.get_value("Item", it["item"], "stone_type")]
+
+	# what each warehouse can give: gold in stock there, heaviest first
+	stock = {}
+	for label, wh in _card_gold_warehouses().items():
+		rows = []
+		for b in frappe.get_all("Bin", filters={"warehouse": wh, "actual_qty": [">", 0]},
+				fields=["item_code", "actual_qty"]):
+			meta = frappe.db.get_value("Item", b.item_code,
+				["item_name", "stone_type", "purity_percentage"], as_dict=True) or {}
+			if meta.get("stone_type"):
+				continue
+			rows.append({"item": b.item_code, "item_name": meta.get("item_name") or b.item_code,
+				"qty": round(flt(b.actual_qty), 3), "purity": flt(meta.get("purity_percentage"))})
+		stock[label] = sorted(rows, key=lambda r: -r["qty"])
+
+	return {"bag": bag, "held": held, "stock": stock,
+		"gold": round(flt(contents.get("gold_grams")), 3),
+		"warehouses": list(_card_gold_warehouses().keys()),
+		"history": _card_gold_moves(order_bag)}
+
+
+@frappe.whitelist()
+def adjust_card_gold(order_bag, direction, item, weight, warehouse, remarks=None):
+	"""Move gold between a card and a warehouse.
+
+	'Add': warehouse -> In Bags, ledger In. 'Reduce': In Bags -> warehouse,
+	ledger Out. One ledger row and one stock move per call, so the card's
+	materials and the warehouse balance never disagree."""
+	_card_gold_guard()
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	bag, err = _card_gold_check(order_bag)
+	if err:
+		frappe.throw(err)
+
+	side = (direction or "").strip().lower()
+	if side not in ("add", "reduce"):
+		frappe.throw(frappe._("Say whether gold is being added or reduced."))
+	whs = _card_gold_warehouses()
+	label = (warehouse or "").strip()
+	# accept either the label ("Casting") or the full warehouse name
+	if label not in whs:
+		label = next((k for k, v in whs.items() if v == label), None)
+	if not label:
+		frappe.throw(frappe._("Gold moves between a card and {0} only.").format(" or ".join(CARD_GOLD_LOCATIONS)))
+	other = whs[label]
+	bags_wh = _wh(IN_PRODUCTION_WAREHOUSE)
+
+	w = round(flt(weight), 3)
+	if w <= 0:
+		frappe.throw(frappe._("Enter a weight greater than zero."))
+	if not item or not frappe.db.exists("Item", item):
+		frappe.throw(frappe._("Pick the gold being moved."))
+	if frappe.db.get_value("Item", item, "stone_type"):
+		frappe.throw(frappe._("{0} is a stone — this page moves gold.").format(item))
+
+	if side == "add":
+		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": other}, "actual_qty"))
+		if w > avail + 0.0005:
+			frappe.throw(frappe._("Only {0} g of {1} in {2} — can't issue {3} g.").format(
+				round(avail, 3), item, label, w))
+		_bag_ledger(order_bag, item, "In", w, "Weight Add", remarks=remarks)
+		_stock_move(item, w, other, bags_wh)
+	else:
+		# a card cannot give back gold it is not holding
+		held = 0.0
+		for it in get_bag_contents(order_bag)["items"]:
+			if it["item"] == item:
+				held = flt(it["qty"])
+				break
+		if w > held + 0.0005:
+			frappe.throw(frappe._("{0} holds {1} g of {2} — can't take back {3} g.").format(
+				order_bag, round(held, 3), item, w))
+		_bag_ledger(order_bag, item, "Out", w, "Weight Reduce", remarks=remarks)
+		_stock_move(item, w, bags_wh, other)
+
+	_recompute_bag_from_contents(order_bag)
+	frappe.db.commit()
+	contents = get_bag_contents(order_bag)
+	return {"order_bag": order_bag, "direction": side, "item": item, "weight": w,
+		"warehouse": label, "gold": round(flt(contents.get("gold_grams")), 3),
+		"history": _card_gold_moves(order_bag)}
+
+
+def _card_gold_moves(order_bag):
+	"""This card's gold add / reduce trail, newest first."""
+	rows = frappe.get_all("Bag Material Ledger",
+		filters={"order_bag": order_bag, "entry_type": ["in", ["Weight Add", "Weight Reduce"]]},
+		fields=["name", "item", "qty", "direction", "entry_type", "datetime", "owner", "remarks"],
+		order_by="datetime desc")
+	if not rows:
+		return []
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.owner for r in rows})]}, fields=["name", "full_name"])}
+	out = []
+	for r in rows:
+		out.append({
+			"when": str(r.datetime or "")[:16],
+			"kind": "Added" if r.entry_type == "Weight Add" else "Reduced",
+			"item": r.item,
+			"item_name": frappe.db.get_value("Item", r.item, "item_name") or r.item,
+			"qty": round(flt(r.qty), 3),
+			"who": users.get(r.owner, r.owner),
+			"note": r.remarks or "",
+		})
+	return out
+
+
+@frappe.whitelist()
+def get_card_gold_history(period="month", start=None, end=None, kind=None, limit=400):
+	"""Every add / reduce made from this page: what moved, on which card, by whom."""
+	_card_gold_guard()
+	frm, to, label = _loss_period_range(period, start, end)
+	filters = {"entry_type": ["in", ["Weight Add", "Weight Reduce"]]}
+	if kind in ("Added", "Reduced"):
+		filters["entry_type"] = "Weight Add" if kind == "Added" else "Weight Reduce"
+	if frm and to:
+		filters["datetime"] = ["between", [str(frm) + " 00:00:00", str(to) + " 23:59:59"]]
+	rows = frappe.get_all("Bag Material Ledger", filters=filters,
+		fields=["name", "order_bag", "item", "qty", "entry_type", "datetime", "owner", "remarks"],
+		order_by="datetime desc", limit_page_length=cint(limit) or 400)
+
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.owner for r in rows}) or [""]]}, fields=["name", "full_name"])}
+	bags = {b.name: b for b in frappe.get_all("Order Bag",
+		filters={"name": ["in", list({r.order_bag for r in rows}) or [""]]},
+		fields=["name", "design", "location", "stock_status"])}
+
+	out, added, reduced = [], 0.0, 0.0
+	for r in rows:
+		b = bags.get(r.order_bag) or {}
+		is_add = r.entry_type == "Weight Add"
+		added += flt(r.qty) if is_add else 0
+		reduced += flt(r.qty) if not is_add else 0
+		out.append({
+			"name": r.name, "when": str(r.datetime or "")[:16],
+			"kind": "Added" if is_add else "Reduced",
+			"order_bag": r.order_bag, "design": b.get("design") or "",
+			"location": b.get("location") or "", "stock_status": b.get("stock_status") or "",
+			"item": r.item,
+			"item_name": frappe.db.get_value("Item", r.item, "item_name") or r.item,
+			"qty": round(flt(r.qty), 3),
+			"who": users.get(r.owner, r.owner), "note": r.remarks or "",
+		})
+	return {"rows": out, "label": label,
+		"totals": {"added": round(added, 3), "reduced": round(reduced, 3),
+			"net": round(added - reduced, 3), "moves": len(out),
+			"cards": len({r["order_bag"] for r in out})}}
 
 
 def _card_reworks(order_bag):

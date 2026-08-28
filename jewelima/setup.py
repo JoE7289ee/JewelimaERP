@@ -176,6 +176,8 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	# Stock Setup — the shelves themselves
 	"raw-materials", "warehouse-management",
 	"purchase-history", "loss-history", "melt-history",
+	# gold on / off a card, and its trail
+	"card-gold", "card-gold-history",
 ]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
 JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "order-bag-photos"]

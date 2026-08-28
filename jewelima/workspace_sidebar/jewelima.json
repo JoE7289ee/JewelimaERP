@@ -659,6 +659,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "diff",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Card Gold",
+   "link_to": "card-gold",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "circle-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -2451,7 +2464,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-27 16:08:05.473722",
+ "modified": "2026-08-28 12:20:14.034345",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

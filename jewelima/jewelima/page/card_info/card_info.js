@@ -227,6 +227,22 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 					<span class="m" style="margin-left:auto;">${esc(r.who || "")}${r.note ? " &middot; " + esc(r.note) : ""}</span>
 				</div>`).join("")}</div></div>` : "";
 
+		// gold put on or taken off this card by hand (Stock > Card Gold)
+		const gm = d.gold_moves || [];
+		const gmNet = gm.reduce((a, r) => a + (r.kind === "Added" ? r.qty : -r.qty), 0);
+		const goldSec = gm.length ? `<div class="ci-sec acc-green"><h4>${
+			__("Gold added / reduced by hand ({0})", [gm.length])
+			}</h4><div class="ci-rw">${gm.map((r) => `
+				<div class="row">
+					<span class="w">${esc((r.when || "").replace("T", " ").slice(0, 16))}</span>
+					<span style="color:${r.kind === "Added" ? "#1d7a33" : "#b02a2a"};font-weight:700;">
+						${r.kind === "Added" ? "+" : "&minus;"}${r.qty.toFixed(3)} g</span>
+					<span class="m">${esc(r.item_name || r.item)}</span>
+					<span class="m" style="margin-left:auto;">${esc(r.who || "")}${r.note ? " &middot; " + esc(r.note) : ""}</span>
+				</div>`).join("")}<div class="row"><span class="w">${__("Net")}</span>
+				<span style="font-weight:800;">${gmNet >= 0 ? "+" : "&minus;"}${Math.abs(gmNet).toFixed(3)} g</span></div>
+			</div></div>` : "";
+
 		const cadSec = !forPrint && b.is_cad ? `<div class="ci-sec acc-blue"><h4>CAD request</h4><div class="ci-line">
 			${esc(b.cad_design_type || "")} &middot; ${esc(b.cad_karat || "")} &middot; gold ${esc(b.cad_gold_weight || "")} &middot; dmd ${esc(b.cad_diamond_weight || "")} ct &middot; ${b.cad_stone_no || 0} stones${b.cad_reference ? " &middot; ref " + esc(b.cad_reference) : ""}</div></div>` : "";
 
@@ -348,6 +364,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
 			${standing}
 			${reworkSec}
+			${goldSec}
 		</div>
 		${identity}
 		${cadSec}
