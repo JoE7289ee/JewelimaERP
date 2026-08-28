@@ -23,6 +23,17 @@ frappe.pages["recover-findings"].on_page_load = function (wrapper) {
 			padding:7px 9px;border:1px solid var(--border-color);border-radius:9px;margin-bottom:6px;cursor:pointer;}
 		.rf-row:hover{border-color:#1f618d;background:var(--control-bg);}
 		.rf-row.on{border-color:#1f618d;box-shadow:0 0 0 1px #1f618d inset;}
+		/* tint each line with the gold it holds — the karat code carries the
+		   colour (18KYG / 18KPG / 18KWG). Kept faint so the selected-row outline
+		   still reads on top of it, and set in rgba so it survives dark mode. */
+		.rf-row.c-y{background:rgba(214,163,26,.10);border-color:rgba(214,163,26,.45);}
+		.rf-row.c-p{background:rgba(214,116,116,.10);border-color:rgba(214,116,116,.45);}
+		.rf-row.c-w{background:rgba(150,160,170,.12);border-color:rgba(150,160,170,.5);}
+		.rf-row.c-y .rf-dot{background:#d6a31a;}
+		.rf-row.c-p .rf-dot{background:#d67474;}
+		.rf-row.c-w .rf-dot{background:#96a0aa;}
+		.rf-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
+			vertical-align:middle;background:var(--text-muted);}
 		.rf-gold{font-weight:800;}
 		.rf-qty{font-variant-numeric:tabular-nums;font-weight:700;}
 		.rf-can{font-size:10.5px;color:var(--text-muted);}
@@ -51,7 +62,6 @@ frappe.pages["recover-findings"].on_page_load = function (wrapper) {
 				<div class="sub rf-picked">${__("nothing picked yet")}</div>
 				<label>${__("Recover as")}</label><select class="rf-item"></select>
 				<label>${__("Weight (g)")}</label><input type="number" step="0.001" min="0" class="rf-w">
-				<label>${__("Pieces (optional)")}</label><input type="number" step="1" min="0" class="rf-p">
 				<label>${__("Remarks")}</label><input type="text" class="rf-r">
 				<div class="rf-flow"></div>
 				<button class="rf-go" disabled>${__("Recover")}</button>
@@ -60,12 +70,18 @@ frappe.pages["recover-findings"].on_page_load = function (wrapper) {
 		</div>`);
 	const root = $(page.main);
 
+	// 18KYG -> yellow, 18KPG -> pink, 18KWG -> white. Anything else stays neutral.
+	function goldClass(gold) {
+		const m = /^\d{2}K([YPW])G$/.exec(String(gold || "").toUpperCase());
+		return m ? "c-" + m[1].toLowerCase() : "";
+	}
+
 	function paint() {
 		root.find(".rf-list").html(S.locations.length ? S.locations.map((L) => `
 			<div class="rf-loc">${esc(L.label)}</div>
 			${L.rows.map((r) => `
-				<div class="rf-row" data-wh="${esc(L.warehouse)}" data-gold="${esc(r.gold)}">
-					<div><span class="rf-gold">${esc(r.gold)}</span>
+				<div class="rf-row ${goldClass(r.gold)}" data-wh="${esc(L.warehouse)}" data-gold="${esc(r.gold)}">
+					<div><span class="rf-dot"></span><span class="rf-gold">${esc(r.gold)}</span>
 						<div class="rf-can">${__("can come back as")} ${r.can_become.map((c) => esc(c.item)).slice(0, 4).join(", ")}${r.can_become.length > 4 ? "…" : ""}</div></div>
 					<span class="rf-qty">${r.qty.toFixed(3)} g</span>
 					<span style="color:var(--text-muted);font-size:11px;">${__("standing")}</span>
@@ -120,13 +136,12 @@ frappe.pages["recover-findings"].on_page_load = function (wrapper) {
 		$(this).prop("disabled", true);
 		frappe.call({ method: API + ".recover_finding", args: {
 			item: root.find(".rf-item").val(), weight: w, from_location: S.picked.wh,
-			pcs: parseInt(root.find(".rf-p").val(), 10) || 0,
 			colour: $opt.data("colour") || null, remarks: root.find(".rf-r").val() || null,
 		} }).then((r) => {
 			const m = r.message || {};
 			$msg.addClass("ok").html(__("{0} g back as <b>{1}</b> on the shelf.", [m.weight, esc(m.finding)]));
 			frappe.show_alert({ message: __("{0} → {1}", [esc(m.gold_item), esc(m.finding)]), indicator: "green" }, 4);
-			root.find(".rf-w, .rf-p, .rf-r").val("");
+			root.find(".rf-w, .rf-r").val("");
 			load();
 		}).always(() => root.find(".rf-go").prop("disabled", false));
 	});
