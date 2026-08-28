@@ -24,7 +24,10 @@ jewelima.viz = {
 			padding:3px 0;font-size:12px;}
 		.jw-bar-lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-color);}
 		.jw-bar-track{height:14px;border-radius:4px;background:var(--control-bg);overflow:hidden;}
-		.jw-bar-fill{height:100%;border-radius:4px;transition:width .25s;}
+		/* the fill is a span inside a plain span track, so it is inline unless we
+		   say otherwise — and width/height do nothing to an inline box. Without
+		   this every bar renders as an empty groove. */
+		.jw-bar-fill{display:block;height:100%;border-radius:4px;transition:width .25s;}
 		.jw-bar-val{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;color:var(--text-color);}
 		.jw-bar-row:hover .jw-bar-lbl{color:var(--text-color);font-weight:700;}
 		.jw-empty{padding:26px;text-align:center;color:var(--text-muted);font-size:12.5px;}
@@ -39,13 +42,16 @@ jewelima.viz = {
 
 	// horizontal bars: magnitude by identity, biggest first, every bar directly labelled
 	bars($el, rows, opts) {
-		const o = Object.assign({ unit: "g", colour: 0, max: null, empty: __("Nothing to show yet.") }, opts || {});
+		// `label` caps the name column: in a narrow card the default 190px leaves
+		// the track a stub, and a bar too short to compare is not a bar.
+		const o = Object.assign({ unit: "g", colour: 0, max: null, label: 190,
+			empty: __("Nothing to show yet.") }, opts || {});
 		const esc = frappe.utils.escape_html;
 		const max = o.max || Math.max(...rows.map((r) => Math.abs(r.value)), 0) || 1;
 		$el.html(rows.length ? rows.map((r) => {
 			const pct = Math.max(Math.abs(r.value) / max * 100, r.value ? 1.5 : 0);
 			const c = jewelima.viz.SERIES[(r.colour != null ? r.colour : o.colour) % 4];
-			return `<div class="jw-bar-row" title="${esc(r.label)} — ${r.value} ${o.unit}">
+			return `<div class="jw-bar-row" style="grid-template-columns:minmax(60px,${o.label}px) 1fr auto;" title="${esc(r.label)} — ${r.value} ${o.unit}">
 				<span class="jw-bar-lbl">${esc(r.label)}</span>
 				<span class="jw-bar-track"><span class="jw-bar-fill" style="width:${pct}%;background:${c};"></span></span>
 				<span class="jw-bar-val">${(+r.value).toFixed(o.dp == null ? 3 : o.dp)}${o.unit ? " " + o.unit : ""}</span>

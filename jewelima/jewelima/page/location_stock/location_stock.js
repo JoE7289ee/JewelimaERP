@@ -79,7 +79,7 @@ frappe.pages["location-stock"].on_page_load = function (wrapper) {
 			if (!(L.kinds || []).length) { $k.html(`<div class="ls-empty">${__("nothing here right now")}</div>`); return; }
 			V.bars($k, L.kinds.map((k) => ({
 				label: k.kind, value: k.qty, colour: KIND_SLOT[k.kind] != null ? KIND_SLOT[k.kind] : 0,
-			})), { unit: "", dp: 3 });
+			})), { label: 110, unit: "", dp: 3 });
 		});
 	}
 
