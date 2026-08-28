@@ -10,7 +10,7 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	let DATA = null;
-	let FST = "";     // status filter
+	let FST = "Open"; // status filter — the page opens on what still needs doing
 	let FCAT = "";    // category filter
 	let MINE = false; // only my requests
 
@@ -81,7 +81,10 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 
 	function paint() {
 		const c = DATA.counts || {};
-		const tiles = [["", __("All")], ["Open", "Open"], ["In Progress", "In Progress"], ["In Test", "In Test"], ["On Hold", "On Hold"], ["Closed", "Closed"], ["Declined", "Declined"]];
+		// the working states first, All last: the page is for what is still live,
+		// and All is where you go to look something up rather than where you start
+		const tiles = [["Open", "Open"], ["In Progress", "In Progress"], ["In Test", "In Test"],
+			["On Hold", "On Hold"], ["Closed", "Closed"], ["Declined", "Declined"], ["", __("All")]];
 		root.find(".rf-tiles").html(tiles.map(([k, lbl]) => {
 			const v = k === "" ? Object.values(c).reduce((a, b) => a + (b || 0), 0) : (c[k] || 0);
 			return `<div class="rf-tile ${FST === k ? "on" : ""}" data-s="${esc(k)}"><div class="k">${lbl}</div><div class="v">${v}</div></div>`;
@@ -111,7 +114,9 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 						`<button class="rf-set" data-n="${esc(r.name)}" data-s="${s}" style="background:${s === "Closed" ? "#1d7a33" : s === "Declined" ? "#b02a2a" : s === "In Progress" ? "#333d8f" : s === "In Test" ? "#0f6e66" : s === "On Hold" ? "#777" : "#8a6d00"};">${__("→ {0}", [s])}</button>`).join("")}
 				</div>` : ""}
 			</div>`).join("")
-			: `<div class="rf-none">${FST || MINE ? __("Nothing matches.") : __("No requests yet — raise the first one.")}</div>`);
+			: `<div class="rf-none">${FST || FCAT || MINE
+				? __("Nothing matches.")
+				: __("No requests yet — raise the first one.")}</div>`);
 	}
 
 	let rfBusy = false; // guard: a double Enter / double click must not file twice
