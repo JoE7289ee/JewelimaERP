@@ -671,22 +671,36 @@ def get_gold_casting_report():
 		   join `tabWax Tree` wt on wt.name = ob.tree
 		   where ob.location = 'CASTING' and ifnull(ob.tree, '') != '' and ifnull(wt.cast, 0) = 0""")]
 	trees, per_karat = [], {}
+	blocked_trees = []
 	for t in sorted(tree_names):
 		doc = frappe.get_doc("Wax Tree", t)
-		sw, gr, pg = flt(doc.stone_weight), flt(doc.gold_required), flt(doc.pure_gold_needed)
-		if not gr and flt(doc.wax_weight) and doc.karat:
-			# tree made before the casting fields existed — compute on the fly
-			n = _tree_casting_numbers(doc.karat, doc.wax_weight, [c.order_bag for c in doc.cards])
-			sw, gr, pg = n["stone_weight"], n["gold_required"], n["pure_gold_needed"]
-		mp = frappe.db.get_value("Item", doc.karat, "metal_purity") if doc.karat else ""
+		# ALWAYS recompute. The stored figure is written when the tree is made or
+		# edited and nothing refreshes it afterwards, so a stone issued to a card
+		# later left the requirement quietly wrong — and the old code only fell
+		# back to a fresh calculation when the stored one was zero, which is
+		# exactly the case it could not fix.
+		n = _tree_casting_numbers(doc.karat, doc.wax_weight, [c.order_bag for c in doc.cards])
+		sw, gr, pg = n["stone_weight"], n["gold_required"], n["pure_gold_needed"]
+		# keep the tree itself in step, so every other screen reading the stored
+		# field agrees with this one
+		if (abs(flt(doc.gold_required) - gr) > 0.0015 or abs(flt(doc.stone_weight) - sw) > 0.0015
+				or abs(flt(doc.pure_gold_needed) - pg) > 0.0015):
+			frappe.db.set_value("Wax Tree", t, {"stone_weight": sw, "gold_required": gr,
+				"pure_gold_needed": pg}, update_modified=False)
 		trees.append({
-			"tree": t, "karat": doc.karat or "", "metal_purity": mp or "",
+			"tree": t, "karat": doc.karat or "", "metal_purity": n["metal_purity"],
 			"cards": len(doc.cards),
 			"employee": (frappe.db.get_value("Employee", doc.employee, "employee_name") if doc.employee else "") or "",
 			"made_on": doc.made_on, "wax_weight": flt(doc.wax_weight),
 			"stone_weight": sw, "gold_required": gr, "pure_gold_needed": pg,
+			"blocked": n["blocked"] or "",
 		})
-		if doc.karat:
+		if n["blocked"]:
+			blocked_trees.append({"tree": t, "why": n["blocked"]})
+		# a tree that could not be worked out contributes no requirement, so it must
+		# not be counted either — the karat row said "2 trees" beside one tree's worth
+		# of gold, which reads as though the second one needed nothing
+		elif doc.karat:
 			agg = per_karat.setdefault(doc.karat, {"trees": 0, "required": 0.0})
 			agg["trees"] += 1
 			agg["required"] += gr
@@ -696,7 +710,10 @@ def get_gold_casting_report():
 		agg = per_karat[item]
 		purity = flt(frappe.db.get_value("Item", item, "purity_percentage"))
 		available = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": casting_wh}, "actual_qty"))
-		short = max(0.0, agg["required"] - available)
+		# a negative balance is a ledger fault, not gold to be melted: cover the
+		# requirement, and flag the hole separately rather than folding it in
+		negative = available < 0
+		short = max(0.0, agg["required"] - max(available, 0.0))
 		pure = short * purity / 100.0
 		alloy = short - pure
 		pure_needed_total += pure
@@ -704,6 +721,7 @@ def get_gold_casting_report():
 		karats.append({
 			"item": item, "purity": purity, "trees": agg["trees"],
 			"required": round(agg["required"], 3), "available": round(available, 3),
+			"negative": 1 if negative else 0,
 			"shortfall": round(short, 3), "pure_needed": round(pure, 3), "alloy_needed": round(alloy, 3),
 		})
 
@@ -723,6 +741,9 @@ def get_gold_casting_report():
 		"casting_warehouse": casting_wh,
 		"trees": trees,
 		"karats": karats,
+		# trees whose requirement could not be worked out — they are NOT in the
+		# karat totals, so the page has to say so rather than let them vanish
+		"blocked": blocked_trees,
 		"melt": {
 			"pure_needed": round(pure_needed_total, 3),
 			"pure_available": round(pure_available, 3),
@@ -911,7 +932,11 @@ CASTING_STEM_G = 3.0
 
 
 def _tree_casting_numbers(karat_item, wax_weight, bag_names):
-	"""stone_weight (issued stones only, ct x 0.2), gold_required, pure_gold_needed."""
+	"""stone_weight (issued stones only, ct x 0.2), gold_required, pure_gold_needed.
+
+	`blocked` says why a requirement could not be worked out, so a screen can
+	tell the difference between "needs nothing" and "cannot be told yet" — both
+	of which used to print as a flat 0.000."""
 	stone_g = 0.0
 	for nm in bag_names or []:
 		for it in get_bag_contents(nm)["items"]:
@@ -919,11 +944,22 @@ def _tree_casting_numbers(karat_item, wax_weight, bag_names):
 				stone_g += flt(it["qty"]) * 0.2
 	mp, purity = frappe.db.get_value("Item", karat_item, ["metal_purity", "purity_percentage"]) or (None, 0)
 	mult = CASTING_MULTIPLIER.get(mp or "", 0)
+	blocked = None
+	if not karat_item:
+		blocked = frappe._("no karat on this tree")
+	elif not mult:
+		blocked = frappe._("{0} has no casting multiplier — its metal purity reads {1}").format(
+			karat_item, "'{0}'".format(mp) if mp else frappe._("blank"))
+	elif not flt(wax_weight):
+		blocked = frappe._("tree not weighed yet")
 	gold = max(0.0, flt(wax_weight) - CASTING_STEM_G - stone_g) * mult if flt(wax_weight) else 0.0
 	return {
 		"stone_weight": round(stone_g, 3),
 		"gold_required": round(gold, 3),
 		"pure_gold_needed": round(gold * flt(purity) / 100.0, 3),
+		"blocked": blocked,
+		"multiplier": mult,
+		"metal_purity": mp or "",
 	}
 
 
@@ -968,7 +1004,9 @@ def make_tree(karat, names, employee=None, wax_weight=None):
 		"made_on": frappe.utils.now_datetime(),
 		"wax_weight": flt(wax_weight) or None,
 		"cards": [{"order_bag": c.name, "design": c.design, "qty": c.qty} for c in cards],
-		**nums,
+		# only the three stored numbers — the rest of what the maths returns
+		# explains a zero and is not a field on the tree
+		**{k: nums[k] for k in ("stone_weight", "gold_required", "pure_gold_needed") if k in nums},
 	}).insert(ignore_permissions=True)
 
 	# stamp the bags + their TREE MAKING records, then move everything to CASTING
@@ -996,6 +1034,7 @@ def make_tree(karat, names, employee=None, wax_weight=None):
 @frappe.whitelist()
 def get_trees(only_open=0):
 	"""Edit Tree page list: every wax tree, newest first (only_open=1 hides cast)."""
+	_tree_edit_guard()
 	filters = {"cast": 0} if cint(only_open) else {}
 	rows = frappe.get_all("Wax Tree", filters=filters,
 		fields=["name", "tree_no", "karat", "employee", "made_on", "wax_weight",
@@ -1014,6 +1053,7 @@ def get_trees(only_open=0):
 @frappe.whitelist()
 def get_tree_edit(tree):
 	"""One tree's editable detail: its pieces + casting numbers + cast state."""
+	_tree_edit_guard()
 	if not frappe.db.exists("Wax Tree", tree):
 		frappe.throw(frappe._("No tree {0}.").format(tree))
 	doc = frappe.get_doc("Wax Tree", tree)
@@ -1033,6 +1073,7 @@ def get_tree_edit(tree):
 @frappe.whitelist()
 def get_tree_add_candidates(tree):
 	"""Cards addable to this tree: at TREE MAKING, not on any tree, same karat."""
+	_tree_edit_guard()
 	if not frappe.db.exists("Wax Tree", tree):
 		frappe.throw(frappe._("No tree {0}.").format(tree))
 	doc = frappe.get_doc("Wax Tree", tree)
@@ -1046,6 +1087,17 @@ def get_tree_add_candidates(tree):
 		if (_bag_karat(r.name, karat_names) or None) == karat_val:
 			out.append(r)
 	return {"cards": out, "karat": karat_val or "OTHER"}
+
+
+# Editing a tree moves real pieces between benches, so it is not for everyone —
+# these APIs carried no role check at all, which made the page's own role list
+# decorative.
+TREE_EDIT_ROLES = {"System Manager", "Stock Manager", "Stock User", "JW Manager", "JW Data Admin"}
+
+
+def _tree_edit_guard():
+	if not TREE_EDIT_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Editing a wax tree is for the casting desk."), frappe.PermissionError)
 
 
 def _tree_not_cast(doc):
@@ -1067,6 +1119,7 @@ def _apply_tree_recompute(doc, wax_weight=None):
 def tree_remove_piece(tree, order_bag, wax_weight=None):
 	"""Pluck a piece off a wax tree (pre-cast): send it back to TREE MAKING, clear
 	its tree link, drop it, and recompute on the (optionally re-weighed) wax weight."""
+	_tree_edit_guard()
 	doc = frappe.get_doc("Wax Tree", tree)
 	_tree_not_cast(doc)
 	if not any(c.order_bag == order_bag for c in doc.cards):
@@ -1092,6 +1145,7 @@ def tree_remove_piece(tree, order_bag, wax_weight=None):
 def tree_add_piece(tree, order_bag, wax_weight=None):
 	"""Mount another TREE MAKING card onto a waiting tree, move it to CASTING, and
 	recompute on the (optionally re-weighed) wax weight."""
+	_tree_edit_guard()
 	doc = frappe.get_doc("Wax Tree", tree)
 	_tree_not_cast(doc)
 	if any(c.order_bag == order_bag for c in doc.cards):

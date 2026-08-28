@@ -36,8 +36,15 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 		.gc-karat{font-weight:800;}
 		.gc-empty{padding:18px;text-align:center;color:var(--text-muted);}
 		.gc-hint{margin:10px 2px 0;color:var(--text-muted);font-size:12px;}
+		/* a tree whose requirement cannot be worked out is absent from the karat
+		   totals, so it is called out rather than left to be noticed */
+		.gc-warnbox{margin:0 0 12px;padding:9px 13px;border-radius:9px;font-size:12.5px;
+			background:#fdf3e3;border:1px solid #e6c98f;color:#8a5a00;}
+		.gc-blocked{color:#b4690e;font-weight:700;font-size:11.5px;}
+		tr.gc-why td{padding-top:0;border-top:none;color:#8a5a00;font-size:11.5px;background:#fdf9f1;}
 		</style>
 		<div class="gc-melt"></div>
+		<div class="gc-warn"></div>
 		<div class="gc-h">${__("Per karat gold — required vs the Casting warehouse")}</div>
 		<div class="gc-box"><table class="gc-tbl"><thead><tr>
 			<th>${__("Gold")}</th><th>${__("Purity %")}</th><th>${__("Trees")}</th>
@@ -73,6 +80,18 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 			meltCard(__("Pure gold to melt"), m.pure_needed, m.pure_available, "g") +
 			meltCard(__("Alloy to melt"), m.alloy_needed, m.alloy_available, "g");
 
+		// trees whose requirement could not be worked out are NOT in the karat
+		// totals above — say so, or the totals quietly read low
+		const warn = root.querySelector(".gc-warn");
+		const bl = d.blocked || [];
+		warn.innerHTML = bl.length
+			? `<div class="gc-warnbox"><b>${
+				bl.length > 1
+					? __("{0} trees are not counted below", [bl.length])
+					: __("1 tree is not counted below")
+				}</b> — ${bl.map((b) => `${esc(b.tree)} (${esc(b.why)})`).join(" · ")}</div>`
+			: "";
+
 		const kb = root.querySelector(".gc-karats");
 		kb.innerHTML = (d.karats || []).length
 			? d.karats.map((k) => `
@@ -81,7 +100,9 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 					<td>${flt(k.purity).toFixed(1)}%</td>
 					<td>${k.trees}</td>
 					<td>${fmt(k.required)}</td>
-					<td>${fmt(k.available)}</td>
+					<td class="${k.negative ? "bad" : ""}"${k.negative
+						? ` title="${__("the Casting warehouse balance is negative — the ledger needs looking at")}"` : ""
+						}>${fmt(k.available)}${k.negative ? " ⚠" : ""}</td>
 					<td class="${k.shortfall ? "bad" : "good"}">${k.shortfall ? fmt(k.shortfall) : __("covered")}</td>
 					<td>${fmt(k.pure_needed)}</td>
 					<td>${fmt(k.alloy_needed)}</td>
@@ -108,9 +129,12 @@ frappe.pages["gold-casting"].on_page_load = function (wrapper) {
 					<td>${esc(t.employee)}</td>
 					<td>${fmt(t.wax_weight)}</td>
 					<td>${fmt(t.stone_weight)}</td>
-					<td><b>${fmt(t.gold_required)}</b></td>
-					<td>${fmt(t.pure_gold_needed)}</td>
-				</tr>`).join("")
+					<td>${t.blocked
+						? `<span class="gc-blocked" title="${esc(t.blocked)}">${__("can't tell")}</span>`
+						: `<b>${fmt(t.gold_required)}</b>`}</td>
+					<td>${t.blocked ? "—" : fmt(t.pure_gold_needed)}</td>
+				</tr>${t.blocked ? `<tr class="gc-why"><td colspan="8">${
+					__("{0}: {1}", [esc(t.tree), esc(t.blocked)])}</td></tr>` : ""}`).join("")
 			: `<tr><td colspan="8" class="gc-empty">${__("No trees waiting at CASTING.")}</td></tr>`;
 		tb.querySelectorAll(".gc-tree-link").forEach((el) =>
 			el.addEventListener("click", function (e) { e.preventDefault(); showTree(this.getAttribute("data-tree"), this.getAttribute("data-emp")); }));
