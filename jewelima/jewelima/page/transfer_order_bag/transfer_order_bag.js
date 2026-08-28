@@ -228,8 +228,11 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				return;
 			}
 			if (v.issued) {
-				setMsg(__("<b>{0}</b> is currently ISSUED (out with a worker) — collect it first.", [safe]), "err");
-				logHistory(code, __("Issued — can't transfer"), "err");
+				// name who is holding it, so the card can actually be chased down
+				setMsg(v.blocked_reason
+					? __("<b>{0}</b> is {1}.", [safe, frappe.utils.escape_html(v.blocked_reason)])
+					: __("<b>{0}</b> is currently ISSUED (out with a worker) — collect it first.", [safe]), "err");
+				logHistory(code, v.blocked_reason || __("Issued — can't transfer"), "err");
 				return;
 			}
 			if (!state.location) {
@@ -308,6 +311,10 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		const $wt = $(page.main).find(".tp-wt");
 		if (plus && $wt.find("option").length && !$wt.val())
 			return frappe.msgprint(__("Pick the work type for {0} — no issue goes out without one.", [to]));
+		// and never without somebody to answer for it. Asked here rather than at the
+		// server so the batch is not part-way through when it comes up.
+		if (plus && !TP.emp.get_value())
+			return frappe.msgprint(__("Pick who takes the work at {0}.", [to]));
 		// Scan as many as you like — but send them in CHUNKS. The whole batch used to
 		// go in one request: a big enough batch hit the gateway timeout and left the
 		// floor half-transferred with no warning. Each chunk is its own request, so a
@@ -551,7 +558,10 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		function loadLoc() {
 			if (!S.location) { S.rows = []; fillJO(); paint(); return; }
 			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
-				.then((r) => { S.rows = (r.message || []).filter((x) => x.status !== "Issued"); fillJO(); paint(); });
+				// a card out with a worker cannot be transferred, so it is not offered.
+				// `locked` is read from the open work session itself — the status
+				// string is the visit's mirror of it and misses "Ongoing".
+				.then((r) => { S.rows = (r.message || []).filter((x) => !x.locked); fillJO(); paint(); });
 		}
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;

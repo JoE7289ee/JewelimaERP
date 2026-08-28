@@ -5,7 +5,7 @@
 // Wax Cleaning). Same scan-batch UX as Job Work but TIMES ONLY — no weight, no loss.
 //
 // ASSIGN tab:  scan cards (1st scan locks the bench; only same-bench cards accepted),
-//   then "Assign with Employee" or "Assign (no employee)" — stamps the assign time.
+//   then "Assign" to the chosen employee — stamps the assign time.
 // COLLECT tab: scan assigned cards and "Collect" — stamps the collect time.
 // Route: /app/assign-collect
 //
@@ -240,7 +240,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 
 	function doAssign(withEmployee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
-		if (withEmployee && !empVal()) return frappe.msgprint(__("Select the employee (or use 'Assign (no employee)')."));
+		if (!empVal()) return frappe.msgprint(__("Select who is taking the work."));
 		const parts = chunk(state.rows.map((r) => r.name), AC_CHUNK);
 		const tot = { count: 0, errors: [] };
 		const run = (i) => {
@@ -321,10 +321,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	function renderActions() {
 		$actions.empty();
 		if (state.mode === "assign") {
-			$(`<button class="btn btn-primary btn-sm">${__("Assign with Employee")}</button>`).appendTo($actions).on("click", () => doAssign(true));
-			// CAD work is always owned by someone — no anonymous assigns there
-			if (state.location !== "CAD")
-				$(`<button class="btn btn-default btn-sm">${__("Assign (no employee)")}</button>`).appendTo($actions).on("click", () => doAssign(false));
+			// every assignment is owned by someone: the card has to be collectable
+			// back off a named person, and the anonymous assign made that impossible
+			$(`<button class="btn btn-primary btn-sm">${__("Assign")}</button>`).appendTo($actions).on("click", () => doAssign(true));
 		} else {
 			$(`<button class="btn btn-primary btn-sm">${__("Collect")}</button>`).appendTo($actions).on("click", doCollect);
 		}

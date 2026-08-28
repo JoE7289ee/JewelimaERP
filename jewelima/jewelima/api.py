@@ -2716,10 +2716,11 @@ def get_bag_transfer_info(order_bag):
 		out[bk + "_weight"] = p[bk + "_weight"]
 		out[bk + "_no"] = p[bk + "_no"]
 	# a card with an OPEN work session (out with a worker) can't be transferred —
-	# it must be receipted / collected first
-	open_issue = _open_bench_issue(order_bag, bag.location)
-	out["status"] = "Issued" if open_issue else None
-	out["issued"] = 1 if open_issue else 0
+	# it must be receipted / collected first, wherever that session was opened
+	blocked = _transfer_block_reason(order_bag)
+	out["status"] = "Issued" if blocked else None
+	out["issued"] = 1 if blocked else 0
+	out["blocked_reason"] = blocked or ""
 	return out
 
 
@@ -2742,10 +2743,11 @@ def transfer_order_bag(order_bag, to_location, remarks=None):
 			frappe.throw(frappe._("{0} is a CAD job — it must go to CAD first.").format(order_bag))
 	if not _transfer_allowed(set(frappe.get_roles()), from_location, to_location):
 		frappe.throw(frappe._("You don't have permission to move {0} from {1} to {2}.").format(order_bag, from_location or "—", to_location))
-	# a card still out with a worker (open Bench Issue) can't leave — the work
-	# session must be receipted / collected first.
-	if _open_bench_issue(order_bag, from_location):
-		frappe.throw(frappe._("{0} is still issued at {1} — receipt / collect it before transferring.").format(order_bag, from_location or "—"))
+	# a card still out with a worker can't leave — the session must be receipted
+	# or collected first, whichever bench it was opened at
+	blocked = _transfer_block_reason(order_bag)
+	if blocked:
+		frappe.throw(frappe._("{0} is {1}.").format(order_bag, blocked))
 	t = frappe.get_doc({
 		"doctype": "Order Bag Transfer",
 		"order_bag": order_bag,
@@ -7633,6 +7635,13 @@ def _bench_default_work_type(location):
 	return next((r.value for r in rows if r.is_default), rows[0].value)
 
 
+def _bench_work_types(location):
+	"""Every Work Type configured for a bench. Empty for the benches that have
+	none (CAM / ORDERING / TREE MAKING / CASTING), where a blank is correct."""
+	return frappe.get_all("Bench Work Option",
+		filters={"bench": (location or "").upper(), "kind": "Work Type"}, pluck="value")
+
+
 def _valid_bench_option(location, kind, value):
 	"""A picked option must actually be configured for THIS bench. A blank Work Type
 	falls back to the bench's DEFAULT — empty issues aren't allowed where work types
@@ -7653,18 +7662,58 @@ def _valid_bench_option(location, kind, value):
 # ONE issue is open (Issued/Ongoing) at a time; the visit MIRRORS the open/last
 # issue's headline fields so single-record readers keep working during rollout.
 # ---------------------------------------------------------------------------
+OPEN_ISSUE_STATUSES = ["Issued", "Ongoing"]
+
+
 def _open_bench_issue(order_bag, bench):
 	"""The single OPEN Bench Issue (Issued/Ongoing) for a card at a bench, else None."""
 	recs = frappe.get_all("Bench Issue",
 		filters={"order_bag": order_bag, "bench": (bench or "").upper(),
-			"status": ["in", ["Issued", "Ongoing"]]},
+			"status": ["in", OPEN_ISSUE_STATUSES]},
 		order_by="creation desc", limit=1, pluck="name")
 	return recs[0] if recs else None
 
 
+def _any_open_bench_issue(order_bag):
+	"""Any open session on this card, at ANY bench — {bench, employee, status} or None.
+
+	Transfer asked only about the card's current bench, so a session left open
+	after the card moved on stayed invisible and the card travelled while still
+	booked out to somebody. The card is out with a worker or it is not; which
+	bench opened the session does not change that."""
+	recs = frappe.get_all("Bench Issue",
+		filters={"order_bag": order_bag, "status": ["in", OPEN_ISSUE_STATUSES]},
+		fields=["name", "bench", "employee", "status"], order_by="creation desc", limit=1)
+	return recs[0] if recs else None
+
+
+def _transfer_block_reason(order_bag):
+	"""Why this card may not be transferred, in words for the user — or None."""
+	open_issue = _any_open_bench_issue(order_bag)
+	if not open_issue:
+		return None
+	who = frappe.db.get_value("Employee", open_issue.employee, "employee_name") or open_issue.employee
+	if who:
+		return frappe._("issued to {0} at {1} — receipt / collect it first").format(who, open_issue.bench or "—")
+	return frappe._("still issued at {0} — receipt / collect it first").format(open_issue.bench or "—")
+
+
 def _new_bench_issue(order_bag, bench, dt, visit, employee=None, work_type=None, weight_out=0.0):
-	"""Open a new work session (Bench Issue = Issued) and mirror it onto the Visit."""
+	"""Open a new work session (Bench Issue = Issued) and mirror it onto the Visit.
+
+	Every route into a work session comes through here — issue, assign, reassign —
+	so the two invariants live here rather than being restated (and forgotten) at
+	each call site: a session belongs to somebody, and it carries the bench's work
+	type. Callers that resolved the work type already pass it in; a blank one is
+	resolved here to the bench default, and an invalid one is refused."""
 	loc = (bench or "").upper()
+	if not employee:
+		frappe.throw(frappe._("{0}: pick who is taking the card — a work session has to belong to someone.").format(order_bag))
+	if not frappe.db.exists("Employee", employee):
+		frappe.throw(frappe._("Employee {0} not found.").format(employee))
+	work_type = _valid_bench_option(loc, "Work Type", work_type)
+	if not work_type and _bench_work_types(loc):
+		frappe.throw(frappe._("{0}: pick a work type for {1}.").format(order_bag, loc))
 	now = frappe.utils.now_datetime()
 	issue = frappe.get_doc({
 		"doctype": "Bench Issue", "order_bag": order_bag, "bench": loc,
@@ -7746,6 +7795,8 @@ def issue_bench_cards(names, location, employee=None, work_type=None):
 	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	loc = (location or "").upper()
+	if not employee:
+		frappe.throw(frappe._("Pick who the gold is being issued to."))
 	work_type = _valid_bench_option(location, "Work Type", work_type)
 	dt = bench_doctype(location)
 	done, errors = [], []
@@ -7782,9 +7833,10 @@ def assign_bench_cards(names, location, employee=None, work_type=None):
 	loc = (location or "").upper()
 	if loc not in ASSIGN_COLLECT_LOCATIONS:
 		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
-	# CAD work is always owned by someone — it lands on their Workstation
-	if loc == "CAD" and not employee:
-		frappe.throw(frappe._("CAD cards must be assigned TO an employee — pick who takes the work."))
+	# every assignment is owned by someone — CAD lands on their Workstation, and
+	# the rest need an owner so the card can be collected back off a named person
+	if not employee:
+		frappe.throw(frappe._("Cards must be assigned TO an employee — pick who takes the work."))
 	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	dt = bench_doctype(loc)
 	done, errors = [], []
@@ -7807,7 +7859,7 @@ def assign_bench_cards(names, location, employee=None, work_type=None):
 
 
 @frappe.whitelist()
-def collect_bench_cards(names, location, collection_state=None):
+def collect_bench_cards(names, location, collection_state=None, employee=None):
 	"""Collect a batch of assigned bags at a transfer bench: status -> Completed, stamp
 	receipted_at + time_out (+ collection state — complete / failed / QC failed / … —
 	if given). Times only — no weight/loss. Only assigned (Issued) cards."""
@@ -7832,7 +7884,14 @@ def collect_bench_cards(names, location, collection_state=None):
 			if not issue:
 				errors.append({"name": nm, "error": frappe._("Not assigned — nothing to collect")})
 				continue
-			_close_bench_issue(issue, "Completed", collection_state=collection_state)
+			# a collected card answers to somebody. New sessions always carry an
+			# employee; sessions opened before that was enforced may not, so one
+			# can be named at collection rather than the card being stranded.
+			who = frappe.db.get_value("Bench Issue", issue, "employee") or employee
+			if not who:
+				errors.append({"name": nm, "error": frappe._("No employee on this assignment — say who worked it")})
+				continue
+			_close_bench_issue(issue, "Completed", collection_state=collection_state, employee=who)
 			# a 'Back to In Queue' state sends the card back for rework
 			_apply_collection_disposition(issue, loc, collection_state)
 			done.append(nm)
@@ -7928,6 +7987,9 @@ def reassign_bench_card(order_bag, location, new_employee, weight_in=None, work_
 	loc = (location or "").upper()
 	if not new_employee or not frappe.db.exists("Employee", new_employee):
 		frappe.throw(frappe._("Pick who the card is being reassigned to."))
+	# the fresh session gets a checked work type like any other — this path used
+	# to hand whatever arrived straight to the new issue
+	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	issue_name = _open_bench_issue(order_bag, loc)
 	if not issue_name:
 		frappe.throw(frappe._("{0} has no open work session at {1} to reassign.").format(order_bag, loc))
@@ -14063,10 +14125,10 @@ def receipt_and_transfer(lines, location, to_location, employee=None, collection
 
 
 @frappe.whitelist()
-def collect_and_transfer(names, location, to_location, collection_state=None):
+def collect_and_transfer(names, location, to_location, collection_state=None, employee=None):
 	"""Transfer Plus: COLLECT at the bench and move the collected cards onward."""
 	_require_transfer_plus()
-	res = collect_bench_cards(names, location, collection_state=collection_state)
+	res = collect_bench_cards(names, location, collection_state=collection_state, employee=employee)
 	done = res.get("done") or []
 	if done:
 		tr = transfer_order_bags(json.dumps(done), to_location)
@@ -14081,15 +14143,25 @@ def collect_and_transfer(names, location, to_location, collection_state=None):
 @frappe.whitelist()
 def transfer_and_issue(names, to_location, employee=None, work_type=None, remarks=None):
 	"""Transfer Plus: move the batch AND put it straight to work at the
-	destination — issue (weight benches) or assign (light benches), employee
-	optional, work type from the TARGET bench's options. Destinations with
-	neither flow just transfer."""
+	destination — issue (weight benches) or assign (light benches). The employee
+	and work type are those of the TARGET bench and are checked before anything
+	moves. Destinations with neither flow just transfer."""
 	from jewelima.jewelima.benches import ASSIGN_COLLECT_LOCATIONS, ISSUE_RECEIPT_LOCATIONS
 	roles = set(frappe.get_roles())
 	if not TRANSFER_PLUS_ROLES & roles:
 		frappe.throw(frappe._("Transfer-and-issue needs the Jewelima Transfer Plus role."))
-	res = transfer_order_bags(names, to_location, remarks=remarks)
 	to = (to_location or "").upper()
+	# check what the issue needs BEFORE the cards move: failing afterwards leaves
+	# them transferred but not issued, which is the state this page exists to avoid
+	if to in ISSUE_RECEIPT_LOCATIONS or to in ASSIGN_COLLECT_LOCATIONS:
+		if not employee:
+			frappe.throw(frappe._("Pick who takes the work at {0} — the cards are being put straight to work.").format(to))
+		if not frappe.db.exists("Employee", employee):
+			frappe.throw(frappe._("Employee {0} not found.").format(employee))
+		work_type = _valid_bench_option(to, "Work Type", work_type)
+		if not work_type and _bench_work_types(to):
+			frappe.throw(frappe._("Pick a work type for {0}.").format(to))
+	res = transfer_order_bags(names, to_location, remarks=remarks)
 	moved = res.get("transferred") or []
 	issued = {}
 	if moved:
@@ -14125,13 +14197,33 @@ def get_cards_at_location(location):
 		):
 			smap[r.order_bag] = r.status  # last record per bag wins
 			emap[r.order_bag] = r.employee
-	codes = list({e for e in emap.values() if e})
+	# an OPEN work session is what actually blocks a transfer — read it straight
+	# rather than inferring it from the visit's mirrored status, and hand the page
+	# the reason so a card that cannot move is never offered as though it could
+	open_by_bag = {}
+	if bags:
+		for r in frappe.get_all("Bench Issue",
+				filters={"order_bag": ["in", [b.name for b in bags]],
+					"status": ["in", OPEN_ISSUE_STATUSES]},
+				fields=["order_bag", "bench", "employee", "status"], order_by="creation asc"):
+			open_by_bag[r.order_bag] = r      # latest wins
+
+	codes = list({e for e in emap.values() if e} | {r.employee for r in open_by_bag.values() if r.employee})
 	names = {r.name: (r.employee_name or r.name) for r in frappe.get_all(
 		"Employee", filters={"name": ["in", codes]}, fields=["name", "employee_name"])} if codes else {}
 	for b in bags:
 		b["status"] = smap.get(b.name) or "In Queue"
 		b["employee"] = emap.get(b.name) or ""
 		b["employee_name"] = names.get(b["employee"], b["employee"])
+		op = open_by_bag.get(b.name)
+		b["locked"] = bool(op)
+		if op:
+			who = names.get(op.employee, op.employee)
+			b["locked_reason"] = (frappe._("issued to {0} at {1}").format(who, op.bench or "—")
+				if who else frappe._("issued at {0}").format(op.bench or "—"))
+			b["status"] = op.status
+		else:
+			b["locked_reason"] = ""
 	return bags
 
 

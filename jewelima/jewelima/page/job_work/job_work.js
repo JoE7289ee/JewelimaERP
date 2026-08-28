@@ -4,9 +4,8 @@
 // Job Work — bench Issue / Receipt, barcode-scanner batch flow.
 //
 // ISSUE tab:  scan cards (1st scan locks the bench location; only same-location
-//   cards accepted), select many, then "Issue with Employee" (enter who) or
-//   "Issue (no employee)" (just starts the clock). Cards already issued are
-//   rejected inline.
+//   cards accepted), select many, then "Issue" to the picked employee. Cards
+//   already issued are rejected inline.
 // RECEIPT tab: scan issued cards (location + employee locked for the batch),
 //   type the gross weight coming in per card — loss = weight out - weight in is
 //   shown live but not committed. "Receipt" confirms "<employee> -> <loss> g"
@@ -356,7 +355,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// ---- actions ---------------------------------------------------------
 	function doIssue(withEmployee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
-		if (withEmployee && !empVal()) return frappe.msgprint(__("Select the employee (or use 'Issue (no employee)')."));
+		if (!empVal()) return frappe.msgprint(__("Select who the gold is being issued to."));
 		// Issue in CHUNKS. Each card is a stock snapshot plus an employee-balance
 		// bump, so a long batch is a lot of work in one request — and a gateway
 		// timeout mid-way would leave the bench half-issued with nothing said.
@@ -466,8 +465,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	function renderActions() {
 		$actions.empty();
 		if (state.mode === "issue") {
-			$(`<button class="btn btn-primary btn-sm">${__("Issue with Employee")}</button>`).appendTo($actions).on("click", () => doIssue(true));
-			$(`<button class="btn btn-default btn-sm">${__("Issue (no employee)")}</button>`).appendTo($actions).on("click", () => doIssue(false));
+			// gold never leaves the bench anonymously — the loss on receipt has to
+			// answer to somebody, so there is no employee-less issue
+			$(`<button class="btn btn-primary btn-sm">${__("Issue")}</button>`).appendTo($actions).on("click", () => doIssue(true));
 		} else {
 			$(`<button class="btn btn-primary btn-sm">${__("Receipt")}</button>`).appendTo($actions).on("click", doReceipt);
 		}
