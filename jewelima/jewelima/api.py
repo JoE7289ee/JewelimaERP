@@ -15598,14 +15598,27 @@ def get_melt_history():
 # (the per-bench visit record only mirrors the latest session).
 # ---------------------------------------------------------------------------
 EMPLOYEE_LOSS_PERIODS = ("today", "week", "month", "year", "all")
+EMPLOYEE_LOSS_ROLES = {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"}
 
 
 def _loss_period_range(period, start=None, end=None):
-	"""(from, to, label) for the picked window. Custom wins when both dates come in."""
+	"""(from, to, label) for the picked window. Custom wins when both dates come in.
+
+	Dates arrive from a URL, so parse them rather than trusting them: junk is
+	refused outright and a backwards range is turned round instead of quietly
+	matching nothing."""
 	today = frappe.utils.nowdate()
 	if start and end:
-		return start, end, "{0} → {1}".format(frappe.utils.formatdate(start), frappe.utils.formatdate(end))
+		try:
+			f, t = frappe.utils.getdate(start), frappe.utils.getdate(end)
+		except Exception:
+			frappe.throw(frappe._("From and To must be dates."))
+		if f > t:
+			f, t = t, f
+		return str(f), str(t), "{0} → {1}".format(frappe.utils.formatdate(f), frappe.utils.formatdate(t))
 	period = (period or "month").lower()
+	if period not in EMPLOYEE_LOSS_PERIODS:
+		period = "month"
 	if period == "today":
 		return today, today, frappe.utils.formatdate(today)
 	if period == "week":
@@ -15624,65 +15637,117 @@ def _loss_period_range(period, start=None, end=None):
 def get_employee_loss(period="month", start=None, end=None, bench=None):
 	"""Every receipted work session in the window, gathered by the person who
 	took the card out: sessions, gold handled, loss, loss %, and the split of
-	that loss across the benches they worked."""
-	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"} & set(frappe.get_roles()):
+	that loss across the benches they worked.
+
+	Only the weighing benches count. CAD, Waxing, Wax Setting and Wax Cleaning
+	hand out a card and take it back on time alone — no gold ever leaves with
+	the person, so they cannot lose any, and letting them into this report put
+	zero-loss rows in a list whose whole point is loss.
+
+	Aggregated in SQL: a year of sessions is tens of thousands of rows, and the
+	answer is one line per person per bench."""
+	if not EMPLOYEE_LOSS_ROLES & set(frappe.get_roles()):
 		frappe.throw(frappe._("Employee loss is for stock admins."), frappe.PermissionError)
 
+	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS
+
+	gold_benches = sorted(ISSUE_RECEIPT_LOCATIONS)
 	frm, to, label = _loss_period_range(period, start, end)
-	filters = {"status": ["in", ["Receipted", "Completed"]], "employee": ["is", "set"]}
-	if frm and to:
-		filters["receipted_at"] = ["between", [frm + " 00:00:00", to + " 23:59:59"]]
+
+	conds = ["bi.status IN ('Receipted', 'Completed')", "IFNULL(bi.employee, '') != ''",
+		"bi.bench IN %(benches)s"]
+	params = {"benches": tuple(gold_benches)}
 	if bench:
-		filters["bench"] = bench
-	rows = frappe.get_all("Bench Issue", filters=filters,
-		fields=["employee", "bench", "work_type", "weight_out", "weight_in", "loss",
-			"receipted_at", "order_bag"], limit_page_length=0)
+		# a bench that books no loss has nothing to show — say so rather than
+		# quietly answering with every bench
+		if bench not in ISSUE_RECEIPT_LOCATIONS:
+			frappe.throw(frappe._("{0} does not weigh gold in or out, so no loss is booked there.").format(bench))
+		conds.append("bi.bench = %(bench)s")
+		params["bench"] = bench
+	if frm and to:
+		conds.append("bi.receipted_at BETWEEN %(frm)s AND %(to)s")
+		params["frm"] = str(frm) + " 00:00:00"
+		params["to"] = str(to) + " 23:59:59"
+	where = " AND ".join(conds)
+
+	# one row per person per bench: the whole report is built from this
+	grid = frappe.db.sql("""
+		SELECT bi.employee, bi.bench,
+			COUNT(*) sessions,
+			COUNT(DISTINCT bi.order_bag) cards,
+			SUM(IFNULL(bi.weight_out, 0)) gold,
+			SUM(IFNULL(bi.loss, 0)) loss,
+			MAX(bi.receipted_at) last_at,
+			SUM(IFNULL(bi.loss, 0) < 0
+				OR IFNULL(bi.loss, 0) > IFNULL(bi.weight_out, 0) + 0.0005
+				OR (IFNULL(bi.weight_out, 0) <= 0 AND IFNULL(bi.loss, 0) > 0.0005)
+				OR ABS(IFNULL(bi.loss, 0) - (IFNULL(bi.weight_out, 0) - IFNULL(bi.weight_in, 0))) > 0.0015
+			) suspect
+		FROM `tabBench Issue` bi
+		WHERE {0}
+		GROUP BY bi.employee, bi.bench
+	""".format(where), params, as_dict=True)
+
+	# cards are counted per person across benches — one card worked at three
+	# benches is one card to that person, not three
+	card_count = {r.employee: cint(r.cards) for r in frappe.db.sql("""
+		SELECT bi.employee, COUNT(DISTINCT bi.order_bag) cards
+		FROM `tabBench Issue` bi WHERE {0} GROUP BY bi.employee
+	""".format(where), params, as_dict=True)}
 
 	names = {e.name: (e.employee_name or e.name) for e in frappe.get_all(
-		"Employee", filters={"name": ["in", list({r.employee for r in rows}) or [""]]},
+		"Employee", filters={"name": ["in", list({r.employee for r in grid}) or [""]]},
 		fields=["name", "employee_name"])}
 
 	by_emp, by_bench = {}, {}
-	for r in rows:
+	for r in grid:
 		a = by_emp.setdefault(r.employee, {"sessions": 0, "gold": 0.0, "loss": 0.0,
-			"benches": {}, "last": None, "cards": set()})
-		a["sessions"] += 1
-		a["gold"] += flt(r.weight_out)
+			"benches": {}, "last": None, "suspect": 0})
+		a["sessions"] += cint(r.sessions)
+		a["gold"] += flt(r.gold)
 		a["loss"] += flt(r.loss)
-		a["cards"].add(r.order_bag)
+		a["suspect"] += cint(r.suspect)
 		a["benches"][r.bench] = round(flt(a["benches"].get(r.bench, 0)) + flt(r.loss), 3)
-		when = str(r.receipted_at or "")
+		when = str(r.last_at or "")
 		if when and (not a["last"] or when > a["last"]):
 			a["last"] = when
 		b = by_bench.setdefault(r.bench, {"loss": 0.0, "gold": 0.0, "sessions": 0})
 		b["loss"] += flt(r.loss)
-		b["gold"] += flt(r.weight_out)
-		b["sessions"] += 1
+		b["gold"] += flt(r.gold)
+		b["sessions"] += cint(r.sessions)
 
 	out = []
 	for emp, a in by_emp.items():
 		out.append({
 			"employee": emp, "name": names.get(emp, emp),
-			"sessions": a["sessions"], "cards": len(a["cards"]),
+			"sessions": a["sessions"], "cards": card_count.get(emp, 0),
 			"gold": round(a["gold"], 3), "loss": round(a["loss"], 3),
-			"loss_pct": round(a["loss"] / a["gold"] * 100, 2) if a["gold"] else 0,
+			"loss_pct": round(a["loss"] / a["gold"] * 100, 2) if a["gold"] > 0 else 0,
 			"last": (a["last"] or "")[:16],
+			"suspect": a["suspect"],
 			# where the loss happened, heaviest bench first
 			"benches": sorted(([b, v] for b, v in a["benches"].items() if v > 0),
 				key=lambda x: -x[1]),
 		})
 	out.sort(key=lambda x: -x["loss"])   # categorised by total loss
 
+	# every weighing bench is listed, worked or not, so a silent bench reads as
+	# a silent bench rather than as one that does not exist
+	for b in gold_benches:
+		by_bench.setdefault(b, {"loss": 0.0, "gold": 0.0, "sessions": 0})
 	benches = sorted(([b, round(v["loss"], 3), round(v["gold"], 3), v["sessions"]]
 		for b, v in by_bench.items()), key=lambda x: -x[1])
+
 	total_loss = round(sum(x["loss"] for x in out), 3)
 	total_gold = round(sum(x["gold"] for x in out), 3)
 	return {
 		"rows": out, "benches": benches, "label": label,
 		"from": str(frm or ""), "to": str(to or ""),
+		"gold_benches": gold_benches,
 		"totals": {"loss": total_loss, "gold": total_gold, "people": len(out),
 			"sessions": sum(x["sessions"] for x in out),
-			"loss_pct": round(total_loss / total_gold * 100, 2) if total_gold else 0},
+			"suspect": sum(x["suspect"] for x in out),
+			"loss_pct": round(total_loss / total_gold * 100, 2) if total_gold > 0 else 0},
 	}
 
 

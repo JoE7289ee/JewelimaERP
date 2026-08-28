@@ -24,6 +24,9 @@ frappe.pages["employee-loss"].on_page_load = function (wrapper) {
 		.el-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.el-tile .v{font-size:19px;font-weight:800;}
 		.el-tile.loss .v{color:#b02a2a;}
+		.el-tile.el-susp .v{color:#b4690e;}
+		.el-flag{display:inline-block;min-width:15px;height:15px;line-height:15px;text-align:center;
+			border-radius:50%;background:#b4690e;color:#fff;font-size:10px;font-weight:800;}
 		.el-cols{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
 		.el-main{flex:1 1 640px;min-width:520px;}
 		.el-side{flex:0 0 270px;}
@@ -91,13 +94,15 @@ frappe.pages["employee-loss"].on_page_load = function (wrapper) {
 			<div class="el-tile"><div class="k">${__("Gold handled")}</div><div class="v">${f3(t.gold)} g</div></div>
 			<div class="el-tile"><div class="k">${__("Loss %")}</div><div class="v">${(t.loss_pct || 0).toFixed(2)}%</div></div>
 			<div class="el-tile"><div class="k">${__("People")}</div><div class="v">${t.people || 0}</div></div>
-			<div class="el-tile"><div class="k">${__("Sessions")}</div><div class="v">${t.sessions || 0}</div></div>`);
+			<div class="el-tile"><div class="k">${__("Sessions")}</div><div class="v">${t.sessions || 0}</div></div>
+			${t.suspect ? `<div class="el-tile el-susp" title="${__("loss that does not match the weights on the session")}">
+				<div class="k">${__("Needs a look")}</div><div class="v">${t.suspect}</div></div>` : ""}`);
 
 		const q = S.q.trim().toLowerCase();
 		const rows = (d.rows || []).filter((r) => !q || r.name.toLowerCase().includes(q) || r.employee.toLowerCase().includes(q));
 		root.find(".el-body").html(rows.map((r) => `
 			<tr>
-				<td><div class="el-nm">${esc(r.name)}</div>
+				<td><div class="el-nm">${esc(r.name)}${r.suspect ? ` <span class="el-flag" title="${__("{0} session(s) whose loss does not match the weights", [r.suspect])}">!</span>` : ""}</div>
 					<div class="el-sub">${__("{0} session(s) · {1} card(s)", [r.sessions, r.cards])}${r.last ? " · " + __("last") + " " + esc(r.last) : ""}</div></td>
 				<td class="num">${f3(r.gold)}</td>
 				<td class="num el-loss">${f3(r.loss)}</td>
