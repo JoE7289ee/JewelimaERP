@@ -4594,8 +4594,8 @@ def stone_audit_fix(order_bag, item, action, bench=None):
 
 @frappe.whitelist()
 def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
-		in_stock=None, gold_min=None, gold_max=None, cts_min=None, cts_max=None,
-		karat="18k", limit=500):
+		collection=None, in_stock=None, gold_min=None, gold_max=None,
+		cts_min=None, cts_max=None, karat="18k", limit=500):
 	"""The photo catalog for the Selection page + everything there is to filter by
 	(design types, providers, tags). ONLY reviewed photos show — the unreviewed
 	imports live on the Review page until a human confirms them."""
@@ -4603,6 +4603,8 @@ def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 		"SELECT DISTINCT design_type FROM `tabSelection Photo` WHERE IFNULL(design_type,'') != '' AND reviewed=1 ORDER BY design_type")
 	providers = frappe.db.sql_list(
 		"SELECT DISTINCT provider FROM `tabSelection Photo` WHERE IFNULL(provider,'') != '' AND reviewed=1 ORDER BY provider")
+	collections = frappe.db.sql_list(
+		"SELECT DISTINCT collection FROM `tabSelection Photo` WHERE IFNULL(collection,'') != '' AND reviewed=1 ORDER BY collection")
 	# EVERY tag ever created (the master), not just the used ones — the filter bar
 	# shows the whole vocabulary, with its colours
 	tags_all = frappe.get_all("Selection Tag", fields=["name as tag", "color"], order_by="tag_name")
@@ -4612,13 +4614,16 @@ def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 		filters["design_type"] = design_type
 	if provider:
 		filters["provider"] = provider
+	if collection:
+		filters["collection"] = collection
 	if search:
 		filters["code"] = ["like", "%{0}%".format(search)]
 	if cint(in_stock):
 		filters["stock_pcs"] = [">", 0]
 	rows = frappe.get_all("Selection Photo", filters=filters,
 		fields=["name", "code", "image", "gold_18k", "gold_14k", "gold_9k",
-			"dmd_no", "dmd_weight", "cs_no", "cs_weight", "design_type", "provider", "stock_pcs"],
+			"dmd_no", "dmd_weight", "cs_no", "cs_weight",
+			"design_type", "provider", "collection", "stock_pcs"],
 		order_by="code", limit_page_length=cint(limit) or 500)
 	# a weight range has to say WHICH karat it means — grams of 18K and grams of
 	# 9K are different things. Default 18K, which is what every photo carries.
@@ -4644,7 +4649,7 @@ def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 	if tag:
 		rows = [r for r in rows if tag in r["tags"]]
 	return {"design_types": design_types, "providers": providers,
-		"tags": tags_all, "photos": rows, "total": len(rows)}
+		"collections": collections, "tags": tags_all, "photos": rows, "total": len(rows)}
 
 
 @frappe.whitelist()

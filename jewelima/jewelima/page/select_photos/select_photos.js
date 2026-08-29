@@ -9,7 +9,7 @@
 frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selection", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { photos: [], dtp: "", provider: "", tag: "", sel: new Set(), view: 0 };
+	const S = { photos: [], dtp: "", provider: "", tag: "", collection: "", sel: new Set(), view: 0 };
 	const esc = frappe.utils.escape_html;
 	// a photo can carry a weight in more than one karat; show the ones it has
 	const KARATS = ["18k", "14k", "9k"];
@@ -138,6 +138,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	function load() {
 		frappe.call({ method: API + ".get_selection_photos",
 			args: { design_type: S.dtp || null, provider: S.provider || null,
+				collection: S.collection || null,
 				tag: S.tag || null, search: (search.get_value() || "").trim() || null,
 				gold_min: gmin.get_value() || null, gold_max: gmax.get_value() || null,
 				cts_min: cmin.get_value() || null, cts_max: cmax.get_value() || null } }).then((r) => {
@@ -156,8 +157,12 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 
 	function paintPills(m) {
 		// levels: provider · design type · tags
+		// provider, then collection where there is one — an album comes in as a
+		// collection and it is the fastest way to a whole book
 		root.find(".sl2-dtypes").html(
-			pillRow(__("Provider"), m.providers || [], S.provider, "provider"));
+			pillRow(__("Provider"), m.providers || [], S.provider, "provider")
+			+ ((m.collections || []).length
+				? pillRow(__("Collection"), m.collections, S.collection, "collection") : ""));
 		root.find(".sl2-tagrow").html(
 			pillRow(__("Design Type"), m.design_types || [], S.dtp, "dtp"));
 		const tags = m.tags || [];

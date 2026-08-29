@@ -9,6 +9,8 @@
   "code",
   "design_type",
   "provider",
+  "collection",
+  "batch",
   "image",
   "col_sp",
   "gold_18k",
@@ -51,6 +53,18 @@
    "in_standard_filter": 1,
    "label": "Provider",
    "options": "Supplier"
+  },
+  {
+   "fieldname": "collection",
+   "fieldtype": "Data",
+   "label": "Collection",
+   "description": "The album or collection this piece came in with."
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Data",
+   "label": "Batch",
+   "description": "The import batch (the folder the photo came from)."
   },
   {
    "fieldname": "image",
