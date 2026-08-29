@@ -105,8 +105,14 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 						<input type="number" step="0.001" data-f="gold_14k" value="${p.gold_14k || ""}"></div>
 					<div class="rv-f"><label>${__("Gold 9K g")}</label>
 						<input type="number" step="0.001" data-f="gold_9k" value="${p.gold_9k || ""}"></div>
+					<div class="rv-f"><label>${__("Diamond pcs")}</label>
+						<input type="number" step="1" data-f="dmd_no" value="${p.dmd_no || ""}"></div>
 					<div class="rv-f"><label>${__("Diamond ct")}</label>
-						<input type="number" step="0.01" data-f="cts" value="${p.cts || ""}"></div>
+						<input type="number" step="0.001" data-f="dmd_weight" value="${p.dmd_weight || ""}"></div>
+					<div class="rv-f"><label>${__("Colour stone pcs")}</label>
+						<input type="number" step="1" data-f="cs_no" value="${p.cs_no || ""}"></div>
+					<div class="rv-f"><label>${__("Colour stone ct")}</label>
+						<input type="number" step="0.001" data-f="cs_weight" value="${p.cs_weight || ""}"></div>
 					<div class="rv-f"><label>${__("Stock pcs")}</label>
 						<input type="number" step="1" data-f="stock_pcs" value="${p.stock_pcs || 0}"></div>
 				</div>
@@ -210,8 +216,9 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 		return `<div class="side">
 			<img src="${encodeURI(d.image || "")}">
 			<h5>${esc(d.name)} <span style="color:var(--text-muted);font-weight:400;">(${label})</span></h5>
-			<div class="vals">${__("18K {0} · 14K {1} · 9K {2} g · Dia {3} ct · Stock {4}",
-				[d.gold_18k || 0, d.gold_14k || 0, d.gold_9k || 0, d.cts || 0, d.stock_pcs || 0])}
+			<div class="vals">${__("18K {0} · 14K {1} · 9K {2} g · Dia {3}/{4} ct · CS {5}/{6} ct · Stock {7}",
+				[d.gold_18k || 0, d.gold_14k || 0, d.gold_9k || 0,
+				 d.dmd_no || 0, d.dmd_weight || 0, d.cs_no || 0, d.cs_weight || 0, d.stock_pcs || 0])}
 				${d.reviewed ? " · ✓ " + __("reviewed") : ""}<br>
 				${d.selections ? __("used in {0} selection(s)", [d.selections]) : __("in no selections")}</div>
 			<button class="btn btn-danger btn-sm rv-del" data-del="${esc(d.name)}">${__("Delete this one")}</button>

@@ -4617,8 +4617,8 @@ def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 	if cint(in_stock):
 		filters["stock_pcs"] = [">", 0]
 	rows = frappe.get_all("Selection Photo", filters=filters,
-		fields=["name", "code", "image", "gold_18k", "gold_14k", "gold_9k", "cts",
-			"design_type", "provider", "stock_pcs"],
+		fields=["name", "code", "image", "gold_18k", "gold_14k", "gold_9k",
+			"dmd_no", "dmd_weight", "cs_no", "cs_weight", "design_type", "provider", "stock_pcs"],
 		order_by="code", limit_page_length=cint(limit) or 500)
 	# a weight range has to say WHICH karat it means — grams of 18K and grams of
 	# 9K are different things. Default 18K, which is what every photo carries.
@@ -4630,9 +4630,9 @@ def get_selection_photos(search=None, design_type=None, provider=None, tag=None,
 	if gold_max not in (None, ""):
 		rows = [r for r in rows if flt(r.get(gk)) and flt(r.get(gk)) <= flt(gold_max)]
 	if cts_min not in (None, ""):
-		rows = [r for r in rows if flt(r.cts) >= flt(cts_min)]
+		rows = [r for r in rows if flt(r.dmd_weight) >= flt(cts_min)]
 	if cts_max not in (None, ""):
-		rows = [r for r in rows if flt(r.cts) and flt(r.cts) <= flt(cts_max)]
+		rows = [r for r in rows if flt(r.dmd_weight) and flt(r.dmd_weight) <= flt(cts_max)]
 
 	# tags per photo, painted on the cards + used for the tag filter
 	photo_tags = {}
@@ -4704,7 +4704,7 @@ def get_selection_records(party=None, from_date=None, to_date=None, limit=300):
 	rows = frappe.get_all("Selection", filters=filters,
 		fields=["name", "party", "selection_date", "batch", "total_photos",
 			"total_gold_18k", "total_gold_14k", "total_gold_9k",
-			"total_cts", "creation"],
+			"total_dmd_no", "total_dmd_weight", "total_cs_no", "total_cs_weight", "creation"],
 		order_by="selection_date desc, creation desc", limit_page_length=cint(limit) or 300)
 	previews = {}
 	for r in frappe.db.sql("""SELECT parent, image FROM `tabSelection Item`
@@ -4716,7 +4716,11 @@ def get_selection_records(party=None, from_date=None, to_date=None, limit=300):
 		"total_photos": r.total_photos or 0,
 		"total_gold_18k": flt(r.total_gold_18k), "total_gold_14k": flt(r.total_gold_14k),
 		"total_gold_9k": flt(r.total_gold_9k),
-		"total_cts": flt(r.total_cts), "preview": previews.get(r.name, ""),
+		"total_dmd_no": cint(r.total_dmd_no), "total_dmd_weight": flt(r.total_dmd_weight),
+		"total_cs_no": cint(r.total_cs_no), "total_cs_weight": flt(r.total_cs_weight),
+		"total_dmd_no": cint(r.total_dmd_no), "total_dmd_weight": flt(r.total_dmd_weight),
+		"total_cs_no": cint(r.total_cs_no), "total_cs_weight": flt(r.total_cs_weight),
+		"preview": previews.get(r.name, ""),
 	} for r in rows]
 	return {"rows": out, "count": len(out)}
 
@@ -4733,8 +4737,8 @@ def get_selection_review(status="pending", search=None, limit=100):
 	if search:
 		filters["code"] = ["like", "%{0}%".format(search)]
 	rows = frappe.get_all("Selection Photo", filters=filters,
-		fields=["name", "code", "image", "gold_18k", "gold_14k", "gold_9k", "cts", "stock_pcs",
-			"design_type", "provider", "reviewed"],
+		fields=["name", "code", "image", "gold_18k", "gold_14k", "gold_9k",
+			"dmd_no", "dmd_weight", "cs_no", "cs_weight", "stock_pcs", "design_type", "provider", "reviewed"],
 		order_by="reviewed asc, code asc", limit_page_length=cint(limit) or 100)
 	return {"rows": rows,
 		"total": frappe.db.count("Selection Photo", {"active": 1}),
@@ -4743,6 +4747,7 @@ def get_selection_review(status="pending", search=None, limit=100):
 
 @frappe.whitelist()
 def review_save(name, gold_18k=None, gold_14k=None, gold_9k=None,
+		dmd_no=None, dmd_weight=None, cs_no=None, cs_weight=None,
 		cts=None, stock_pcs=None, reviewed=None,
 		design_type=None, provider=None):
 	"""One review row: save values and/or the Reviewed tick."""
@@ -4750,11 +4755,15 @@ def review_save(name, gold_18k=None, gold_14k=None, gold_9k=None,
 	if not frappe.db.exists("Selection Photo", name):
 		frappe.throw(frappe._("Photo {0} not found.").format(name))
 	doc = frappe.get_doc("Selection Photo", name)
-	for fld, val in (("gold_18k", gold_18k), ("gold_14k", gold_14k), ("gold_9k", gold_9k)):
+	for fld, val in (("gold_18k", gold_18k), ("gold_14k", gold_14k), ("gold_9k", gold_9k),
+			("dmd_weight", dmd_weight if dmd_weight is not None else cts), ("cs_weight", cs_weight)):
 		if val is not None:
 			setattr(doc, fld, flt(val))
+	for fld, val in (("dmd_no", dmd_no), ("cs_no", cs_no)):
+		if val is not None:
+			setattr(doc, fld, cint(val))
 	if cts is not None:
-		doc.cts = flt(cts)
+		doc.dmd_weight = flt(cts)
 	if stock_pcs is not None:
 		doc.stock_pcs = max(cint(stock_pcs), 0)
 	if design_type is not None:
@@ -4780,7 +4789,8 @@ def review_rename_code(name, new_code):
 	if new_code == name:
 		return {"renamed": 0, "name": name}
 	if frappe.db.exists("Selection Photo", new_code):
-		fields = ["name", "code", "image", "gold_18k", "gold_14k", "gold_9k", "cts", "stock_pcs",
+		fields = ["name", "code", "image", "gold_18k", "gold_14k", "gold_9k",
+			"dmd_no", "dmd_weight", "cs_no", "cs_weight", "stock_pcs",
 			"design_type", "provider", "reviewed"]
 		mine = frappe.db.get_value("Selection Photo", name, fields, as_dict=True)
 		other = frappe.db.get_value("Selection Photo", new_code, fields, as_dict=True)
@@ -5374,7 +5384,9 @@ def create_selection(payload):
 	frappe.db.commit()
 	return {"name": doc.name, "total_photos": doc.total_photos,
 		"total_gold_18k": doc.total_gold_18k, "total_gold_14k": doc.total_gold_14k,
-		"total_gold_9k": doc.total_gold_9k, "total_cts": doc.total_cts}
+		"total_gold_9k": doc.total_gold_9k, "total_dmd_no": doc.total_dmd_no,
+		"total_dmd_weight": doc.total_dmd_weight, "total_cs_no": doc.total_cs_no,
+		"total_cs_weight": doc.total_cs_weight}
 
 
 @frappe.whitelist()
@@ -5401,12 +5413,14 @@ def get_selected_pieces(party=None, batch=None, from_date=None, to_date=None, se
 
 	sels = frappe.db.sql("""
 		SELECT s.name, s.party, s.selection_date, s.batch, s.total_photos,
-		       s.total_gold_18k, s.total_gold_14k, s.total_gold_9k, s.total_cts, s.remarks
+		       s.total_gold_18k, s.total_gold_14k, s.total_gold_9k,
+		       s.total_dmd_no, s.total_dmd_weight, s.total_cs_no, s.total_cs_weight, s.remarks
 		FROM `tabSelection` s WHERE {0} ORDER BY s.selection_date DESC, s.creation DESC
 	""".format(where), vals, as_dict=True)
 
 	items = frappe.db.sql("""
-		SELECT i.photo, i.code, i.image, i.gold_18k, i.gold_14k, i.gold_9k, i.cts,
+		SELECT i.photo, i.code, i.image, i.gold_18k, i.gold_14k, i.gold_9k,
+		       i.dmd_no, i.dmd_weight, i.cs_no, i.cs_weight,
 			s.name AS selection, s.party, s.selection_date, s.batch
 		FROM `tabSelection Item` i JOIN `tabSelection` s ON s.name = i.parent
 		WHERE {0} ORDER BY s.selection_date DESC, s.creation DESC, i.idx
@@ -5422,7 +5436,11 @@ def get_selected_pieces(party=None, batch=None, from_date=None, to_date=None, se
 		"total_gold_18k": round(sum(flt(r.gold_18k) for r in items), 3),
 		"total_gold_14k": round(sum(flt(r.gold_14k) for r in items), 3),
 		"total_gold_9k": round(sum(flt(r.gold_9k) for r in items), 3),
-		"total_cts": round(sum(flt(r.cts) for r in items), 3),
+		"total_dmd_no": sum(cint(r.dmd_no) for r in items),
+		"total_dmd_weight": round(sum(flt(r.dmd_weight) for r in items), 3),
+		"total_cs_no": sum(cint(r.cs_no) for r in items),
+		"total_cs_weight": round(sum(flt(r.cs_weight) for r in items), 3),
+		"total_dmd_weight": round(sum(flt(r.dmd_weight) for r in items), 3),
 		"unique_photos": len({r.photo for r in items}),
 	}
 
@@ -5445,14 +5463,17 @@ def update_selection(name, photos):
 	frappe.db.commit()
 	return {"name": doc.name, "total_photos": doc.total_photos,
 		"total_gold_18k": doc.total_gold_18k, "total_gold_14k": doc.total_gold_14k,
-		"total_gold_9k": doc.total_gold_9k, "total_cts": doc.total_cts}
+		"total_gold_9k": doc.total_gold_9k, "total_dmd_no": doc.total_dmd_no,
+		"total_dmd_weight": doc.total_dmd_weight, "total_cs_no": doc.total_cs_no,
+		"total_cs_weight": doc.total_cs_weight}
 
 
 @frappe.whitelist()
 def get_recent_selections(limit=15):
 	"""Latest selection records for the page's side list."""
 	return frappe.get_all("Selection", fields=["name", "party", "selection_date", "batch",
-		"total_photos", "total_gold_18k", "total_gold_14k", "total_gold_9k", "total_cts"],
+		"total_photos", "total_gold_18k", "total_gold_14k", "total_gold_9k",
+		"total_dmd_no", "total_dmd_weight", "total_cs_no", "total_cs_weight"],
 		order_by="creation desc", limit_page_length=cint(limit) or 15)
 
 

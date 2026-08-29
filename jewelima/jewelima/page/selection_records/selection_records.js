@@ -60,7 +60,9 @@ frappe.pages["selection-records"].on_page_load = function (wrapper) {
 					<div class="sr-nums"><span><b>${r.total_photos || 0}</b> ${__("pcs")}</span>
 						${["18k", "14k", "9k"].filter((k) => r["total_gold_" + k])
 							.map((k) => `<span><b>${g(r["total_gold_" + k])}</b> g ${k.toUpperCase()}</span>`).join("")}
-						<span><b>${g(r.total_cts, 2)}</b> ct</span></div>
+						<span><b>${r.total_dmd_no || 0}</b>/<b>${g(r.total_dmd_weight, 2)}</b> ct</span>
+						${r.total_cs_no || r.total_cs_weight
+							? `<span>CS <b>${r.total_cs_no || 0}</b>/<b>${g(r.total_cs_weight, 2)}</b> ct</span>` : ""}</div>
 					<div class="sr-pdf">📄 ${__("Open PDF")}</div>
 				</div>
 			</div>`).join("")}</div>`

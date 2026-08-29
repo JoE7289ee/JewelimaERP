@@ -11,7 +11,10 @@
   "gold_18k",
   "gold_14k",
   "gold_9k",
-  "cts"
+  "dmd_no",
+  "dmd_weight",
+  "cs_no",
+  "cs_weight"
  ],
  "fields": [
   {
@@ -57,11 +60,27 @@
    "precision": "3"
   },
   {
+   "fieldname": "dmd_no",
+   "fieldtype": "Int",
+   "label": "Diamond (pcs)"
+  },
+  {
    "columns": 2,
-   "fieldname": "cts",
+   "fieldname": "dmd_weight",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Diamond (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "cs_no",
+   "fieldtype": "Int",
+   "label": "Colour Stone (pcs)"
+  },
+  {
+   "fieldname": "cs_weight",
+   "fieldtype": "Float",
+   "label": "Colour Stone (ct)",
    "precision": "3"
   }
  ],

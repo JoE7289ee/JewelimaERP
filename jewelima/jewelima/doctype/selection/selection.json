@@ -15,7 +15,10 @@
   "total_gold_18k",
   "total_gold_14k",
   "total_gold_9k",
-  "total_cts",
+  "total_dmd_no",
+  "total_dmd_weight",
+  "total_cs_no",
+  "total_cs_weight",
   "sec_items",
   "items",
   "sec_remarks",
@@ -77,9 +80,28 @@
    "read_only": 1
   },
   {
-   "fieldname": "total_cts",
+   "fieldname": "total_dmd_no",
+   "fieldtype": "Int",
+   "label": "Total Diamond (pcs)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_dmd_weight",
    "fieldtype": "Float",
    "label": "Total Diamond (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_cs_no",
+   "fieldtype": "Int",
+   "label": "Total Colour Stone (pcs)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_cs_weight",
+   "fieldtype": "Float",
+   "label": "Total Colour Stone (ct)",
    "precision": "3",
    "read_only": 1
   },

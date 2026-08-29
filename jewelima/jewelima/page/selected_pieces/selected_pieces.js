@@ -127,7 +127,10 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 			[__("18K g"), (m.total_gold_18k || 0).toFixed(3)],
 			[__("14K g"), (m.total_gold_14k || 0).toFixed(3)],
 			[__("9K g"), (m.total_gold_9k || 0).toFixed(3)],
-			[__("Diamond ct"), (m.total_cts || 0).toFixed(3)],
+			[__("Dia pcs"), m.total_dmd_no || 0],
+			[__("Dia ct"), (m.total_dmd_weight || 0).toFixed(3)],
+			[__("CS pcs"), m.total_cs_no || 0],
+			[__("CS ct"), (m.total_cs_weight || 0).toFixed(3)],
 		].map(([k, v]) => `<div class="sp-tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join(""));
 
 		const bs = m.batches || [];
@@ -177,7 +180,11 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		root.find(".sp-vcode").text(p.code || p.photo);
 		const gold = ["18k", "14k", "9k"].filter((k) => p["gold_" + k])
 			.map((k) => `${k.toUpperCase()} ${p["gold_" + k].toFixed(2)} g`).join(" · ");
-		root.find(".sp-vmeta").text([gold, p.cts ? p.cts.toFixed(2) + " ct" : ""].filter(Boolean).join(" · "));
+		const stones = [
+			p.dmd_weight || p.dmd_no ? `DIA ${p.dmd_no || 0}/${(p.dmd_weight || 0).toFixed(2)} ct` : "",
+			p.cs_weight || p.cs_no ? `CS ${p.cs_no || 0}/${(p.cs_weight || 0).toFixed(2)} ct` : "",
+		].filter(Boolean).join(" · ");
+		root.find(".sp-vmeta").text([gold, stones].filter(Boolean).join(" · "));
 		paintKeep();
 		root.find(".sp-view").addClass("on");
 	}

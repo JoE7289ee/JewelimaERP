@@ -17,6 +17,11 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.filter((k) => p["gold_" + k])
 		.map((k) => `${k.toUpperCase()} ${p["gold_" + k].toFixed(2)} g`)
 		.join(" · ");
+	// stones read as count/weight — a piece can carry diamonds, colour stones or both
+	const stoneLabel = (p) => [
+		p.dmd_weight || p.dmd_no ? `DIA ${p.dmd_no || 0}/${(p.dmd_weight || 0).toFixed(2)} ct` : "",
+		p.cs_weight || p.cs_no ? `CS ${p.cs_no || 0}/${(p.cs_weight || 0).toFixed(2)} ct` : "",
+	].filter(Boolean).join(" · ");
 
 	$(page.main).append(`
 		<style>
@@ -104,7 +109,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<div class="b tot"><div class="bk">${__("SELECTED")}</div><div class="bv sl2-n">0</div></div>
 				<div class="b"><div class="bk">${__("OF")}</div><div class="bv sl2-of">0</div></div>
 				<div class="b"><div class="bk">${__("GOLD g")}</div><div class="bv sl2-gold" style="font-size:15px;">0.000</div></div>
-				<div class="b"><div class="bk">${__("DIAMOND ct")}</div><div class="bv sl2-cts">0.000</div></div>
+				<div class="b"><div class="bk">${__("STONES pcs/ct")}</div><div class="bv sl2-cts" style="font-size:15px;">0/0.00</div></div>
 				<button class="btn btn-default sl2-selall" style="margin-left:auto;">${__("Select All")}</button>
 				<button class="btn btn-default sl2-reset">${__("Reset")}</button>
 				<button class="btn btn-default sl2-addtag">${__("Add Tag")}</button>
@@ -177,7 +182,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<div class="cap">${esc(p.code)}${p.stock_pcs ? `<span class="stk">${p.stock_pcs} ${__("in stock")}</span>` : ""}</div>
 				<div class="sub">${[
 					goldLabel(p),
-					p.cts ? p.cts.toFixed(2) + " ct" : "",
+					stoneLabel(p),
 					p.design_type ? esc(p.design_type) : "",
 				].filter(Boolean).join(" · ")}</div>
 				${(p.tags || []).length ? `<div class="tgs">${p.tags.map((t) => `<span class="tg">${esc(t)}</span>`).join("")}</div>` : ""}
@@ -195,7 +200,11 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		root.find(".sl2-gold").text(KARATS
 			.filter((k) => tot(k) > 0)
 			.map((k) => `${k.toUpperCase()} ${tot(k).toFixed(3)}`).join("  ") || "0.000");
-		root.find(".sl2-cts").text(picked.reduce((a, p) => a + (p.cts || 0), 0).toFixed(3));
+		// diamonds and colour stones are counted apart, both as pcs / carats
+		const sum = (f) => picked.reduce((a, p) => a + (p[f] || 0), 0);
+		root.find(".sl2-cts").text(
+			`${sum("dmd_no")}/${sum("dmd_weight").toFixed(2)}`
+			+ (sum("cs_no") || sum("cs_weight") ? `  CS ${sum("cs_no")}/${sum("cs_weight").toFixed(2)}` : ""));
 	}
 
 	// a card opens the photo full screen — picking happens in there
@@ -211,7 +220,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		root.find(".sl2-vcode").text(p.code);
 		root.find(".sl2-vmeta").text([
 			goldLabel(p),
-			p.cts ? p.cts.toFixed(2) + " ct" : "",
+			stoneLabel(p),
 			p.design_type || "",
 			p.provider || "",
 			p.stock_pcs ? __("{0} pcs in stock", [p.stock_pcs]) : "",
