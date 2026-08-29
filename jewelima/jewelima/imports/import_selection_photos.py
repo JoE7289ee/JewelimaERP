@@ -62,14 +62,17 @@ _CTS_RE = re.compile(r"CTS?\s*[-–:]?\s*([\d.]+)\s*(?:CTS|CT)\b", re.I)
 
 
 def ocr_fill(limit=500):
-	"""Fill gold_gms / cts by OCR-ing the cards. Needs tesseract + pytesseract."""
+	"""Fill gold_18k / cts by OCR-ing the cards. Needs tesseract + pytesseract.
+
+	The printed card carries one gold weight and it is the 18K one — 14K and 9K
+	are entered by hand on the Review page."""
 	try:
 		import pytesseract
 		from PIL import Image
 	except ImportError:
 		frappe.throw("pytesseract / Pillow not installed — cannot OCR.")
 
-	filters = {"gold_gms": 0}
+	filters = {"gold_18k": 0}
 	rows = frappe.get_all("Selection Photo", filters=filters, fields=["name", "source_file"], limit=limit)
 	done = 0
 	for r in rows:
@@ -84,7 +87,7 @@ def ocr_fill(limit=500):
 		c = _CTS_RE.search(text)
 		vals = {}
 		if g:
-			vals["gold_gms"] = float(g.group(1))
+			vals["gold_18k"] = float(g.group(1))
 		if c:
 			vals["cts"] = float(c.group(1))
 		if vals:

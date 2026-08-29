@@ -124,7 +124,9 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 			[__("Selections"), m.total_selections || 0],
 			[__("Photos picked"), m.total_photos || 0],
 			[__("Unique photos"), m.unique_photos || 0],
-			[__("Gold g"), (m.total_gold || 0).toFixed(3)],
+			[__("18K g"), (m.total_gold_18k || 0).toFixed(3)],
+			[__("14K g"), (m.total_gold_14k || 0).toFixed(3)],
+			[__("9K g"), (m.total_gold_9k || 0).toFixed(3)],
 			[__("Diamond ct"), (m.total_cts || 0).toFixed(3)],
 		].map(([k, v]) => `<div class="sp-tile"><div class="k">${k}</div><div class="v">${v}</div></div>`).join(""));
 
@@ -173,7 +175,9 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		const p = items[i];
 		root.find(".sp-vimg").attr("src", encodeURI(p.image || ""));
 		root.find(".sp-vcode").text(p.code || p.photo);
-		root.find(".sp-vmeta").text([p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "", p.cts ? p.cts.toFixed(2) + " ct" : ""].filter(Boolean).join(" · "));
+		const gold = ["18k", "14k", "9k"].filter((k) => p["gold_" + k])
+			.map((k) => `${k.toUpperCase()} ${p["gold_" + k].toFixed(2)} g`).join(" · ");
+		root.find(".sp-vmeta").text([gold, p.cts ? p.cts.toFixed(2) + " ct" : ""].filter(Boolean).join(" · "));
 		paintKeep();
 		root.find(".sp-view").addClass("on");
 	}

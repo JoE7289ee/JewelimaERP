@@ -3,7 +3,8 @@
 #
 # Selection — what a party picked from the photo catalog on a given day.
 # Totals are derived from the picked photos, so the record always tells you
-# HOW MANY images were selected and what they weigh.
+# HOW MANY images were selected and what they weigh — per karat, since a
+# catalogue photo can carry an 18K, a 14K and a 9K weight.
 
 import frappe
 from frappe.model.document import Document
@@ -21,14 +22,18 @@ class Selection(Document):
 			seen.add(r.photo)
 			# keep the line's snapshot honest with the catalog
 			p = frappe.db.get_value("Selection Photo", r.photo,
-				["code", "image", "gold_gms", "cts", "batch"], as_dict=True)
+				["code", "image", "gold_18k", "gold_14k", "gold_9k", "cts"], as_dict=True)
 			if p:
 				r.code = p.code
 				r.image = p.image
-				r.gold_gms = flt(p.gold_gms)
+				r.gold_18k = flt(p.gold_18k)
+				r.gold_14k = flt(p.gold_14k)
+				r.gold_9k = flt(p.gold_9k)
 				r.cts = flt(p.cts)
-				if not self.batch:
-					self.batch = p.batch
 		self.total_photos = len(self.items)
-		self.total_gold = round(sum(flt(r.gold_gms) for r in self.items), 3)
+		# one total per karat — grams of 18K and grams of 9K are not the same
+		# thing and adding them together would say nothing
+		self.total_gold_18k = round(sum(flt(r.gold_18k) for r in self.items), 3)
+		self.total_gold_14k = round(sum(flt(r.gold_14k) for r in self.items), 3)
+		self.total_gold_9k = round(sum(flt(r.gold_9k) for r in self.items), 3)
 		self.total_cts = round(sum(flt(r.cts) for r in self.items), 3)

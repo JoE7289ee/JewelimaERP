@@ -8,7 +8,9 @@
   "photo",
   "code",
   "image",
-  "gold_gms",
+  "gold_18k",
+  "gold_14k",
+  "gold_9k",
   "cts"
  ],
  "fields": [
@@ -36,10 +38,22 @@
   },
   {
    "columns": 2,
-   "fieldname": "gold_gms",
+   "fieldname": "gold_18k",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Gold (g)",
+   "label": "Gold 18K (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "gold_14k",
+   "fieldtype": "Float",
+   "label": "Gold 14K (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "gold_9k",
+   "fieldtype": "Float",
+   "label": "Gold 9K (g)",
    "precision": "3"
   },
   {

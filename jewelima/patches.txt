@@ -12,3 +12,4 @@ jewelima.patches.rename_igi_to_igl
 jewelima.patches.backfill_certifications
 jewelima.patches.backfill_bench_issues
 jewelima.patches.rename_wax_injecting_to_waxing
+jewelima.patches.split_selection_gold_by_karat

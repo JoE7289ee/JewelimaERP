@@ -11,6 +11,12 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const S = { photos: [], dtp: "", provider: "", tag: "", sel: new Set(), view: 0 };
 	const esc = frappe.utils.escape_html;
+	// a photo can carry a weight in more than one karat; show the ones it has
+	const KARATS = ["18k", "14k", "9k"];
+	const goldLabel = (p) => KARATS
+		.filter((k) => p["gold_" + k])
+		.map((k) => `${k.toUpperCase()} ${p["gold_" + k].toFixed(2)} g`)
+		.join(" · ");
 
 	$(page.main).append(`
 		<style>
@@ -97,7 +103,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 			<div class="sl2-strip">
 				<div class="b tot"><div class="bk">${__("SELECTED")}</div><div class="bv sl2-n">0</div></div>
 				<div class="b"><div class="bk">${__("OF")}</div><div class="bv sl2-of">0</div></div>
-				<div class="b"><div class="bk">${__("GOLD g")}</div><div class="bv sl2-gold">0.000</div></div>
+				<div class="b"><div class="bk">${__("GOLD g")}</div><div class="bv sl2-gold" style="font-size:15px;">0.000</div></div>
 				<div class="b"><div class="bk">${__("DIAMOND ct")}</div><div class="bv sl2-cts">0.000</div></div>
 				<button class="btn btn-default sl2-selall" style="margin-left:auto;">${__("Select All")}</button>
 				<button class="btn btn-default sl2-reset">${__("Reset")}</button>
@@ -170,7 +176,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				<img src="${encodeURI(p.image || "")}" loading="lazy" onerror="this.style.visibility='hidden'">
 				<div class="cap">${esc(p.code)}${p.stock_pcs ? `<span class="stk">${p.stock_pcs} ${__("in stock")}</span>` : ""}</div>
 				<div class="sub">${[
-					p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "",
+					goldLabel(p),
 					p.cts ? p.cts.toFixed(2) + " ct" : "",
 					p.design_type ? esc(p.design_type) : "",
 				].filter(Boolean).join(" · ")}</div>
@@ -184,7 +190,11 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		// count every pick, even ones filtered out of view right now
 		root.find(".sl2-n").text(S.sel.size);
 		root.find(".sl2-of").text(S.photos.length);
-		root.find(".sl2-gold").text(picked.reduce((a, p) => a + (p.gold_gms || 0), 0).toFixed(3));
+		// one running total per karat — adding 18K grams to 9K grams says nothing
+		const tot = (k) => picked.reduce((a, p) => a + (p["gold_" + k] || 0), 0);
+		root.find(".sl2-gold").text(KARATS
+			.filter((k) => tot(k) > 0)
+			.map((k) => `${k.toUpperCase()} ${tot(k).toFixed(3)}`).join("  ") || "0.000");
 		root.find(".sl2-cts").text(picked.reduce((a, p) => a + (p.cts || 0), 0).toFixed(3));
 	}
 
@@ -200,7 +210,7 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		root.find(".sl2-vimg").attr("src", encodeURI(p.image || ""));
 		root.find(".sl2-vcode").text(p.code);
 		root.find(".sl2-vmeta").text([
-			p.gold_gms ? p.gold_gms.toFixed(2) + " g" : "",
+			goldLabel(p),
 			p.cts ? p.cts.toFixed(2) + " ct" : "",
 			p.design_type || "",
 			p.provider || "",

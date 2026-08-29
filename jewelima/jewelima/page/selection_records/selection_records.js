@@ -58,7 +58,9 @@ frappe.pages["selection-records"].on_page_load = function (wrapper) {
 					<div class="sr-top"><span class="sr-party">${esc(r.party || "—")}</span><span class="sr-id">${esc(r.name)}</span></div>
 					<div class="sr-meta">${esc(r.selection_date || "")}${r.batch ? " · " + esc(r.batch) : ""}</div>
 					<div class="sr-nums"><span><b>${r.total_photos || 0}</b> ${__("pcs")}</span>
-						<span><b>${g(r.total_gold)}</b> g</span><span><b>${g(r.total_cts, 2)}</b> ct</span></div>
+						${["18k", "14k", "9k"].filter((k) => r["total_gold_" + k])
+							.map((k) => `<span><b>${g(r["total_gold_" + k])}</b> g ${k.toUpperCase()}</span>`).join("")}
+						<span><b>${g(r.total_cts, 2)}</b> ct</span></div>
 					<div class="sr-pdf">📄 ${__("Open PDF")}</div>
 				</div>
 			</div>`).join("")}</div>`

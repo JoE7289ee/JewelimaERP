@@ -12,7 +12,9 @@
   "batch",
   "col_head",
   "total_photos",
-  "total_gold",
+  "total_gold_18k",
+  "total_gold_14k",
+  "total_gold_9k",
   "total_cts",
   "sec_items",
   "items",
@@ -54,9 +56,23 @@
    "read_only": 1
   },
   {
-   "fieldname": "total_gold",
+   "fieldname": "total_gold_18k",
    "fieldtype": "Float",
-   "label": "Total Gold (g)",
+   "label": "Total Gold 18K (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_gold_14k",
+   "fieldtype": "Float",
+   "label": "Total Gold 14K (g)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_gold_9k",
+   "fieldtype": "Float",
+   "label": "Total Gold 9K (g)",
    "precision": "3",
    "read_only": 1
   },

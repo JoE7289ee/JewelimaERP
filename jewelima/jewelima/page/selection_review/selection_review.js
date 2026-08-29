@@ -99,8 +99,12 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 				<div class="rv-fields">
 					<div class="rv-f"><label>${__("Code")}</label>
 						<input class="rv-code" data-f="code" value="${esc(p.code)}"></div>
-					<div class="rv-f"><label>${__("Gold g")}</label>
-						<input type="number" step="0.001" data-f="gold_gms" value="${p.gold_gms || ""}"></div>
+					<div class="rv-f"><label>${__("Gold 18K g")}</label>
+						<input type="number" step="0.001" data-f="gold_18k" value="${p.gold_18k || ""}"></div>
+					<div class="rv-f"><label>${__("Gold 14K g")}</label>
+						<input type="number" step="0.001" data-f="gold_14k" value="${p.gold_14k || ""}"></div>
+					<div class="rv-f"><label>${__("Gold 9K g")}</label>
+						<input type="number" step="0.001" data-f="gold_9k" value="${p.gold_9k || ""}"></div>
 					<div class="rv-f"><label>${__("Diamond ct")}</label>
 						<input type="number" step="0.01" data-f="cts" value="${p.cts || ""}"></div>
 					<div class="rv-f"><label>${__("Stock pcs")}</label>
@@ -176,7 +180,7 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 		const row = rowOf(this);
 		saveRow(row, dataOf(this), () => {
 			const next = row.next(".rv-row");
-			if (next.length) next.find("input[data-f='gold_gms']").focus().select();
+			if (next.length) next.find("input[data-f='gold_18k']").focus().select();
 		});
 	});
 
@@ -206,7 +210,8 @@ frappe.pages["selection-review"].on_page_load = function (wrapper) {
 		return `<div class="side">
 			<img src="${encodeURI(d.image || "")}">
 			<h5>${esc(d.name)} <span style="color:var(--text-muted);font-weight:400;">(${label})</span></h5>
-			<div class="vals">${__("Gold {0} g · Dia {1} ct · Stock {2}", [d.gold_gms || 0, d.cts || 0, d.stock_pcs || 0])}
+			<div class="vals">${__("18K {0} · 14K {1} · 9K {2} g · Dia {3} ct · Stock {4}",
+				[d.gold_18k || 0, d.gold_14k || 0, d.gold_9k || 0, d.cts || 0, d.stock_pcs || 0])}
 				${d.reviewed ? " · ✓ " + __("reviewed") : ""}<br>
 				${d.selections ? __("used in {0} selection(s)", [d.selections]) : __("in no selections")}</div>
 			<button class="btn btn-danger btn-sm rv-del" data-del="${esc(d.name)}">${__("Delete this one")}</button>
