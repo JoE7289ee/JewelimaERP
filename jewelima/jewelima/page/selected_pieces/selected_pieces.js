@@ -3,7 +3,12 @@
 //
 // Selected Pieces (Selection > Selected Pieces) — what has been selected, and by
 // whom. Filter by party / batch / date; the left rail lists the selection records
-// (click one to focus it), the right shows the actual picked photos. Info only.
+// (click one to focus it), the right shows the actual picked photos.
+//
+// Two things can be changed here: a piece's NOTE — what the party asked for on
+// it ("no round diamond", "create as pendant"), written in the viewer and saved
+// against the pick as you leave the box — and, once a record is focused, which
+// pieces the party is keeping.
 // Route: /app/selected-pieces
 
 frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
@@ -50,6 +55,16 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		.sp-editbar .sp-update{margin-left:auto;font-weight:700;background:#2e7d32;border-color:#2e7d32;color:#fff;}
 		.sp-view{position:fixed;inset:0;z-index:1060;background:rgba(0,0,0,.92);display:none;flex-direction:column;}
 		.sp-view.on{display:flex;}
+		/* the note is written here, against the piece, and saves as you leave the box */
+		.sp-vnoteedit{flex:1 1 320px;max-width:520px;font-size:13px;padding:9px 13px;border-radius:8px;
+			border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#eef2f6;}
+		.sp-vnoteedit::placeholder{color:#9aa6b2;}
+		.sp-vnoteedit:focus{outline:none;border-color:#b4690e;background:rgba(255,255,255,.14);}
+		.sp-vsaved{display:none;font-size:11.5px;font-weight:700;color:#7ed492;}
+		.sp-vsaved.on{display:inline;}
+		.sp-card{position:relative;}
+		.sp-card .noted{position:absolute;top:6px;left:6px;font-size:10px;font-weight:800;
+			padding:1px 7px;border-radius:9px;background:#b4690e;color:#fff;}
 		.sp-vhead{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:10px 18px;color:#fff;}
 		.sp-vhead .code{font-size:19px;font-weight:800;letter-spacing:.5px;}
 		.sp-vhead .meta{font-size:13px;color:#bfc7cf;}
@@ -90,6 +105,9 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 				</div>
 				<div class="sp-vfoot">
 					<button class="sp-keep"></button>
+					<input class="sp-vnoteedit" placeholder="${
+						__("Note for this piece — e.g. no round diamond, create as pendant")}">
+					<span class="sp-vsaved">${__("saved")}</span>
 					<span class="sp-vhint">${__("← → browse · Space keeps/removes · Esc closes")}</span>
 				</div>
 			</div>
@@ -153,6 +171,7 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		root.find(".sp-grid").html(items.length ? items.map((p, i) => `
 			<div class="sp-card ${editing ? "pick" : ""} ${editing && !S.keep.has(p.photo) ? "gone" : ""}" data-i="${i}" data-p="${esc(p.photo)}">
 				<img src="${encodeURI(p.image || "")}" loading="lazy" onerror="this.style.visibility='hidden'">
+				${p.note ? `<span class="noted" title="${esc(p.note)}">${__("note")}</span>` : ""}
 				<div class="cap">${esc(p.code || p.photo)}</div>
 				<div class="sub">${esc(p.party || "")} · <a href="/app/selection/${encodeURIComponent(p.selection)}">${esc(p.selection)}</a></div>
 			</div>`).join("") : `<div class="sp-none">${__("Nothing selected for these filters.")}</div>`);
@@ -187,7 +206,10 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 		].filter(Boolean).join(" · ");
 		root.find(".sp-vmeta").text([gold, stones].filter(Boolean).join(" · "));
 		root.find(".sp-vnote").text(p.note || "").toggle(!!p.note);
+		root.find(".sp-vnoteedit").val(p.note || "");
+		root.find(".sp-vsaved").removeClass("on");
 		paintKeep();
+		root.find(".sp-keep").toggle(!!(S.sel && S.keep));
 		root.find(".sp-view").addClass("on");
 	}
 	function paintKeep() {
@@ -214,7 +236,39 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 	};
 	const closeViewer = () => root.find(".sp-view").removeClass("on");
 
-	root.on("click", ".sp-card.pick", function () { openViewer(cint(this.getAttribute("data-i"))); });
+	root.on("click", ".sp-card", function () { openViewer(cint(this.getAttribute("data-i"))); });
+
+	// the note saves against the piece as you leave the box, or on Enter
+	function saveNote($input) {
+		const items = (S.data || {}).items || [];
+		const p = items[S.view];
+		if (!p) return;
+		const val = ($input.val() || "").trim();
+		if (val === (p.note || "")) return;          // nothing changed
+		// Enter blurs, and blur saves — without this the two fire together and
+		// the second save of the same document comes back a conflict
+		if (p._saving) return;
+		p._saving = true;
+		frappe.call({ method: API + ".set_selection_note", freeze: false,
+			args: { selection: p.selection, photo: p.photo, note: val } })
+			.then(() => {
+				p.note = val || null;
+				root.find(".sp-vnote").text(val).toggle(!!val);
+				root.find(".sp-vsaved").addClass("on");
+				setTimeout(() => root.find(".sp-vsaved").removeClass("on"), 1400);
+				// keep the grid marker honest without redrawing the whole board
+				const $card = root.find(`.sp-card[data-i="${S.view}"]`);
+				$card.find(".noted").remove();
+				if (val) $card.append(`<span class="noted" title="${frappe.utils.escape_html(val)}">${__("note")}</span>`);
+			})
+			.fail(() => frappe.show_alert({ message: __("That note did not save."), indicator: "red" }, 5))
+			.always(() => { p._saving = false; });
+	}
+	root.on("blur", ".sp-vnoteedit", function () { saveNote($(this)); });
+	root.on("keydown", ".sp-vnoteedit", function (e) {
+		e.stopPropagation();                          // Space must type, not keep/remove
+		if (e.key === "Enter") { e.preventDefault(); this.blur(); }   // blur saves it
+	});
 	root.find(".sp-keep").on("click", toggleKeep);
 	root.find(".sp-vclose").on("click", closeViewer);
 	root.find(".sp-nav.prev").on("click", () => stepV(-1));
