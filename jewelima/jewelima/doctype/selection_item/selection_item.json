@@ -14,7 +14,8 @@
   "dmd_no",
   "dmd_weight",
   "cs_no",
-  "cs_weight"
+  "cs_weight",
+  "note"
  ],
  "fields": [
   {
@@ -82,6 +83,13 @@
    "fieldtype": "Float",
    "label": "Colour Stone (ct)",
    "precision": "3"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "in_list_view": 1,
+   "description": "What the party asked for on this piece — 'no round diamond', 'create as pendant'."
   }
  ],
  "istable": 1,

@@ -80,6 +80,7 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 			<div class="sp-view">
 				<div class="sp-vhead">
 					<span class="code sp-vcode"></span><span class="meta sp-vmeta"></span>
+					<span class="sp-vnote"></span>
 					<span class="count sp-vcount"></span><span class="x sp-vclose">&times;</span>
 				</div>
 				<div class="sp-vbody">
@@ -185,6 +186,7 @@ frappe.pages["selected-pieces"].on_page_load = function (wrapper) {
 			p.cs_weight || p.cs_no ? `CS ${p.cs_no || 0}/${(p.cs_weight || 0).toFixed(2)} ct` : "",
 		].filter(Boolean).join(" · ");
 		root.find(".sp-vmeta").text([gold, stones].filter(Boolean).join(" · "));
+		root.find(".sp-vnote").text(p.note || "").toggle(!!p.note);
 		paintKeep();
 		root.find(".sp-view").addClass("on");
 	}

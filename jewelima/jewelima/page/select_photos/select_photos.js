@@ -9,7 +9,8 @@
 frappe.pages["select-photos"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Selection", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { photos: [], dtp: "", provider: "", tag: "", collection: "", sel: new Set(), view: 0 };
+	const S = { photos: [], dtp: "", provider: "", tag: "", collection: "",
+		sel: new Set(), notes: {}, view: 0 };
 	const esc = frappe.utils.escape_html;
 	// a photo can carry a weight in more than one karat; show the ones it has
 	const KARATS = ["18k", "14k", "9k"];
@@ -69,6 +70,15 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		.sl2-vfoot{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:14px;}
 		.sl2-pick{font-size:16px;font-weight:800;padding:11px 44px;border-radius:8px;border:2px solid #2e7d32;background:#2e7d32;color:#fff;cursor:pointer;}
 		.sl2-pick.picked{background:#fff;color:#2e7d32;}
+		/* the note belongs to the pick, so it only appears once a piece is picked */
+		.sl2-vnote{display:none;flex:1 1 320px;max-width:520px;font-size:13px;padding:9px 13px;
+			border-radius:8px;border:1px solid rgba(255,255,255,.25);
+			background:rgba(255,255,255,.08);color:#eef2f6;}
+		.sl2-vnote::placeholder{color:#9aa6b2;}
+		.sl2-vnote:focus{outline:none;border-color:#2e7d32;background:rgba(255,255,255,.14);}
+		.sl2-vnote.on{display:block;}
+		.sl2-card .noted{position:absolute;top:6px;left:6px;font-size:10px;font-weight:800;
+			padding:1px 7px;border-radius:9px;background:#b4690e;color:#fff;}
 		.sl2-vhint{color:#8c959d;font-size:11.5px;}
 		.sl2-strip{flex:0 0 auto;display:flex;align-items:center;gap:12px;border-top:2px solid var(--border-color);background:var(--fg-color);padding:9px 14px;flex-wrap:wrap;}
 		.sl2-strip .b{border:1px solid var(--border-color);border-radius:8px;padding:4px 16px;text-align:center;background:var(--control-bg);min-width:96px;}
@@ -102,6 +112,8 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 				</div>
 				<div class="sl2-vfoot">
 					<button class="sl2-pick"></button>
+					<input class="sl2-vnote" placeholder="${
+						__("Note for this piece — e.g. no round diamond, create as pendant")}">
 					<span class="sl2-vhint">${__("← → browse · Space picks · Esc closes")}</span>
 				</div>
 			</div>
@@ -240,11 +252,20 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		const picked = p && S.sel.has(p.name);
 		root.find(".sl2-pick").toggleClass("picked", !!picked)
 			.text(picked ? __("✓ Selected — click to remove") : __("Select this"));
+		// nothing to note about a piece that has not been picked
+		root.find(".sl2-vnote").toggleClass("on", !!picked)
+			.val(p ? (S.notes[p.name] || "") : "");
 	}
 	function togglePick() {
 		const p = S.photos[S.view];
 		if (!p) return;
-		S.sel.has(p.name) ? S.sel.delete(p.name) : S.sel.add(p.name);
+		if (S.sel.has(p.name)) {
+			S.sel.delete(p.name);
+			delete S.notes[p.name];      // the note went with the pick
+			root.find(`.sl2-card[data-n="${p.name}"] .noted`).remove();
+		} else {
+			S.sel.add(p.name);
+		}
 		root.find(`.sl2-card[data-n="${p.name}"]`).toggleClass("on", S.sel.has(p.name));
 		paintPick();
 		root.find(".sl2-vcount").text(__("{0} of {1} · {2} picked", [S.view + 1, S.photos.length, S.sel.size]));
@@ -267,6 +288,17 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 		else return;
 		e.preventDefault();
 	});
+	root.on("input", ".sl2-vnote", function () {
+		const p = S.photos[S.view];
+		if (!p) return;
+		const v = (this.value || "").trim();
+		if (v) S.notes[p.name] = v; else delete S.notes[p.name];
+		root.find(`.sl2-card[data-n="${p.name}"] .noted`).remove();
+		if (v) root.find(`.sl2-card[data-n="${p.name}"]`).append('<span class="noted">note</span>');
+	});
+	// Space picks and the arrows browse — not while a note is being written
+	root.on("keydown", ".sl2-vnote", (e) => e.stopPropagation());
+
 	root.on("click", ".sl2-pill", function () {
 		S[this.getAttribute("data-k")] = this.getAttribute("data-v");
 		load();
@@ -349,7 +381,8 @@ frappe.pages["select-photos"].on_page_load = function (wrapper) {
 			frappe.dom.freeze(__("Saving..."));
 			frappe.call({ method: API + ".create_selection", args: { payload: {
 				party: p, selection_date: dt.get_value(),
-				remarks: "", photos: [...S.sel],
+				remarks: "",
+				photos: [...S.sel].map((c) => ({ photo: c, note: S.notes[c] || "" })),
 			} } }).then((r) => {
 				frappe.dom.unfreeze();
 				const m = r.message || {};

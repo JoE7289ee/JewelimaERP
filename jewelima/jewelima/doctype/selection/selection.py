@@ -5,6 +5,10 @@
 # Totals are derived from the picked photos, so the record always tells you
 # HOW MANY images were selected and what they weigh — per karat, since a
 # catalogue photo can carry an 18K, a 14K and a 9K weight.
+#
+# A line's `note` is the exception to all that: it is what the party asked for
+# on that piece ("no round diamond", "create as pendant"), so it belongs to the
+# pick and is never refreshed from the catalogue.
 
 import frappe
 from frappe.model.document import Document

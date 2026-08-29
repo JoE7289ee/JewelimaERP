@@ -5379,11 +5379,24 @@ def create_selection(payload):
 		frappe.throw(frappe._("Pick the Party."))
 	if not codes:
 		frappe.throw(frappe._("Select at least one photo."))
+	missing = [(c.get("photo") if isinstance(c, dict) else c) for c in codes]
+	missing = [c for c in missing if not frappe.db.exists("Selection Photo", c)]
+	if missing:
+		frappe.throw(frappe._("Not in the catalogue: {0}").format(", ".join(missing)))
+	# `photos` is a plain list of codes, or {photo, note} where the party said
+	# something about that piece — "no round diamond", "create as pendant".
+	rows, notes = [], p.get("notes") or {}
+	for c in codes:
+		if isinstance(c, dict):
+			rows.append({"photo": c.get("photo") or c.get("code"),
+				"note": (c.get("note") or "").strip() or None})
+		else:
+			rows.append({"photo": c, "note": (notes.get(c) or "").strip() or None})
 	doc = frappe.get_doc({
 		"doctype": "Selection", "party": party,
 		"selection_date": p.get("selection_date") or frappe.utils.today(),
 		"batch": p.get("batch") or None, "remarks": p.get("remarks"),
-		"items": [{"photo": c} for c in codes],
+		"items": rows,
 	})
 	doc.insert(ignore_permissions=True)   # controller fills code/image/weights + totals
 	frappe.db.commit()
@@ -5425,7 +5438,7 @@ def get_selected_pieces(party=None, batch=None, from_date=None, to_date=None, se
 
 	items = frappe.db.sql("""
 		SELECT i.photo, i.code, i.image, i.gold_18k, i.gold_14k, i.gold_9k,
-		       i.dmd_no, i.dmd_weight, i.cs_no, i.cs_weight,
+		       i.dmd_no, i.dmd_weight, i.cs_no, i.cs_weight, i.note,
 			s.name AS selection, s.party, s.selection_date, s.batch
 		FROM `tabSelection Item` i JOIN `tabSelection` s ON s.name = i.parent
 		WHERE {0} ORDER BY s.selection_date DESC, s.creation DESC, i.idx
@@ -5463,7 +5476,10 @@ def update_selection(name, photos):
 	if not photos:
 		frappe.throw(frappe._("Nothing left — remove the whole Selection instead."))
 	doc = frappe.get_doc("Selection", name)
-	doc.set("items", [{"photo": p} for p in photos])
+	# rebuilding the lines from codes would throw the notes away with them — the
+	# note is the one thing on a line that came from the party, not the catalogue
+	kept = {r.photo: r.note for r in doc.items if r.note}
+	doc.set("items", [{"photo": p, "note": kept.get(p)} for p in photos])
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name, "total_photos": doc.total_photos,
@@ -5471,6 +5487,23 @@ def update_selection(name, photos):
 		"total_gold_9k": doc.total_gold_9k, "total_dmd_no": doc.total_dmd_no,
 		"total_dmd_weight": doc.total_dmd_weight, "total_cs_no": doc.total_cs_no,
 		"total_cs_weight": doc.total_cs_weight}
+
+
+@frappe.whitelist()
+def set_selection_note(selection, photo, note=None):
+	"""What the party asked for on one picked piece — 'no round diamond',
+	'create as pendant'. Set on the pick, not on the catalogue photo: the same
+	piece can be asked for differently by the next party."""
+	if not frappe.db.exists("Selection", selection):
+		frappe.throw(frappe._("Selection {0} not found.").format(selection))
+	doc = frappe.get_doc("Selection", selection)
+	row = next((r for r in doc.items if r.photo == photo), None)
+	if not row:
+		frappe.throw(frappe._("{0} is not on {1}.").format(photo, selection))
+	row.note = (note or "").strip() or None
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"selection": selection, "photo": photo, "note": row.note}
 
 
 @frappe.whitelist()
