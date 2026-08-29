@@ -776,6 +776,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "calendar",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stock Day",
+   "link_to": "stock-day",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "history",
    "indent": 0,
    "keep_closed": 0,
@@ -2503,7 +2516,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-28 13:53:13.993747",
+ "modified": "2026-08-29 11:11:23.018756",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

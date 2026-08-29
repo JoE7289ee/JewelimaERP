@@ -16436,6 +16436,288 @@ def _wh_label(wh):
 
 
 # ---------------------------------------------------------------------------
+# Stock Day (Stock > Records > Stock Day) — everything that moved in one day.
+#
+# Computed from the ledger every time it is asked for, never from a stored
+# snapshot: a day therefore always agrees with the books, any date back to the
+# first entry works, and there is no nightly job to miss. A day can then be
+# SEALED — the figures as they read at that moment are kept, and because the
+# day can still be recomputed the page shows sealed against now. A difference
+# means someone changed a day after it was signed off (a cancellation, a
+# back-dated posting, an amendment), which is exactly the thing worth seeing.
+# ---------------------------------------------------------------------------
+def _pure_of(item, qty):
+	return flt(qty) * flt(frappe.db.get_value("Item", item, "purity_percentage") or 0) / 100.0
+
+
+def _pure_on_hand(upto=None, before=None):
+	"""Pure gold on the books, at the end of `upto` or the start of `before`."""
+	cond, params = "", {}
+	if upto:
+		cond, params = "AND sle.posting_date <= %(d)s", {"d": str(upto)}
+	elif before:
+		cond, params = "AND sle.posting_date < %(d)s", {"d": str(before)}
+	return flt(frappe.db.sql("""
+		SELECT SUM(sle.actual_qty * IFNULL(i.purity_percentage, 0) / 100.0)
+		FROM `tabStock Ledger Entry` sle JOIN `tabItem` i ON i.name = sle.item_code
+		WHERE sle.is_cancelled = 0 AND IFNULL(i.stone_type, '') = '' {0}""".format(cond),
+		params)[0][0] or 0)
+
+
+def _day_entries(day, prefix):
+	"""Submitted stock entries of one kind posted on `day`, with their lines."""
+	names = frappe.get_all("Stock Entry",
+		filters={"remarks": ["like", prefix + "%"], "docstatus": 1, "posting_date": str(day)},
+		fields=["name", "remarks", "owner", "posting_time"], order_by="posting_time")
+	out = []
+	for se in names:
+		lines = frappe.get_all("Stock Entry Detail", filters={"parent": se.name},
+			fields=["item_code", "qty", "s_warehouse", "t_warehouse"], order_by="idx")
+		out.append({"name": se.name, "remarks": se.remarks or "", "who": se.owner,
+			"at": str(se.posting_time or "")[:8], "lines": lines})
+	return out
+
+
+@frappe.whitelist()
+def get_stock_day(day=None):
+	"""Everything that moved on one day, straight from the ledger."""
+	_require_stock_records()
+	day = str(day or frappe.utils.nowdate())[:10]
+	users = {}
+	def who(u):
+		if u not in users:
+			users[u] = frappe.db.get_value("User", u, "full_name") or u
+		return users[u]
+
+	sections, moves = [], 0
+
+	# --- purchases -----------------------------------------------------------
+	rows = []
+	for pr in frappe.get_all("Purchase Record", filters={"purchase_date": day},
+			fields=["name", "supplier", "warehouse", "total_amount", "recorded_by"], order_by="creation"):
+		items = frappe.get_all("Purchase Record Item", filters={"parent": pr.name},
+			fields=["item", "weight", "rate", "amount"]) if frappe.db.exists("DocType", "Purchase Record Item") else []
+		# weight is grams for metal, carats for stone — keep them apart
+		g = sum(flt(i.weight) for i in items if not frappe.db.get_value("Item", i.item, "stone_type"))
+		ct = sum(flt(i.weight) for i in items if frappe.db.get_value("Item", i.item, "stone_type"))
+		pure = sum(_pure_of(i.item, i.weight) for i in items)
+		rows.append({"ref": pr.name, "who": who(pr.recorded_by), "party": pr.supplier,
+			"where": _wh_label(pr.warehouse), "grams": round(g, 3), "carats": round(ct, 3),
+			"pure": round(pure, 3), "amount": flt(pr.total_amount),
+			"detail": ", ".join("{0} {1}".format(round(flt(i.weight), 3), i.item) for i in items)})
+	sections.append({"key": "purchase", "title": frappe._("Bought in"), "kind": "in", "rows": rows,
+		"total": round(sum(r["pure"] for r in rows), 3)})
+	moves += len(rows)
+
+	# --- melting -------------------------------------------------------------
+	rows = []
+	loss_whs = set(frappe.get_all("Warehouse", filters={"custom_is_loss": 1}, pluck="name"))
+	for e in _day_entries(day, "Melt:"):
+		fed = [l for l in e["lines"] if l.s_warehouse]
+		kept = [l for l in e["lines"] if l.t_warehouse and l.t_warehouse not in loss_whs]
+		lost = [l for l in e["lines"] if l.t_warehouse and l.t_warehouse in loss_whs]
+		rows.append({"ref": e["name"], "who": who(e["who"]), "at": e["at"],
+			"fed": round(sum(flt(l.qty) for l in fed), 3),
+			"got": round(sum(flt(l.qty) for l in kept), 3),
+			"loss": round(sum(flt(l.qty) for l in lost), 3),
+			"out_item": (kept[0].item_code if kept else ""),
+			"where": _wh_label(kept[0].t_warehouse if kept else ""),
+			"detail": ", ".join("{0} g {1}".format(round(flt(l.qty), 3), l.item_code) for l in fed)})
+	sections.append({"key": "melt", "title": frappe._("Melted"), "kind": "move", "rows": rows,
+		"total": round(sum(r["loss"] for r in rows), 3)})
+	moves += len(rows)
+
+	# --- transfers -----------------------------------------------------------
+	rows = []
+	for e in _day_entries(day, "Stock transfer:"):
+		ins = [l for l in e["lines"] if l.s_warehouse]
+		rows.append({"ref": e["name"], "who": who(e["who"]), "at": e["at"],
+			"from": _wh_label(ins[0].s_warehouse if ins else ""),
+			"to": _wh_label(ins[0].t_warehouse if ins else ""),
+			"grams": round(sum(flt(l.qty) for l in ins), 3),
+			"detail": ", ".join("{0} g {1}".format(round(flt(l.qty), 3), l.item_code) for l in ins)})
+	sections.append({"key": "transfer", "title": frappe._("Moved between warehouses"), "kind": "move",
+		"rows": rows, "total": round(sum(r["grams"] for r in rows), 3)})
+	moves += len(rows)
+
+	# --- findings ------------------------------------------------------------
+	rows = []
+	for f in frappe.get_all("Finding Issue",
+			filters={"creation": ["between", [day + " 00:00:00", day + " 23:59:59"]]},
+			fields=["name", "direction", "finding_item", "finding_name", "weight", "pcs",
+				"target_type", "location", "order_bag", "gold_item", "owner"], order_by="creation"):
+		rows.append({"ref": f.name, "who": who(f.owner), "direction": f.direction,
+			"item": f.finding_name or f.finding_item, "grams": round(flt(f.weight), 3),
+			"pcs": cint(f.pcs), "where": f.location or f.order_bag or "",
+			"gold_item": f.gold_item or ""})
+	sections.append({"key": "findings", "title": frappe._("Findings issued / recovered"), "kind": "move",
+		"rows": rows, "total": round(sum(r["grams"] for r in rows), 3)})
+	moves += len(rows)
+
+	# --- gold on and off cards ----------------------------------------------
+	rows = []
+	for l in frappe.get_all("Bag Material Ledger",
+			filters={"entry_type": ["in", ["Weight Add", "Weight Reduce"]],
+				"datetime": ["between", [day + " 00:00:00", day + " 23:59:59"]]},
+			fields=["name", "order_bag", "item", "qty", "entry_type", "owner", "remarks"],
+			order_by="datetime"):
+		rows.append({"ref": l.order_bag, "who": who(l.owner), "item": l.item,
+			"grams": round(flt(l.qty), 3),
+			"direction": "Added" if l.entry_type == "Weight Add" else "Reduced",
+			"note": l.remarks or ""})
+	sections.append({"key": "card", "title": frappe._("Gold put on / taken off cards"), "kind": "move",
+		"rows": rows, "total": round(sum(r["grams"] if r["direction"] == "Added" else -r["grams"]
+			for r in rows), 3)})
+	moves += len(rows)
+
+	# --- bench loss ----------------------------------------------------------
+	rows = []
+	for b in frappe.get_all("Bench Issue",
+			filters={"status": ["in", ["Receipted", "Completed"]], "loss": [">", 0.0005],
+				"receipted_at": ["between", [day + " 00:00:00", day + " 23:59:59"]]},
+			fields=["name", "order_bag", "bench", "employee", "weight_out", "weight_in", "loss"],
+			order_by="receipted_at"):
+		rows.append({"ref": b.order_bag, "bench": b.bench,
+			"who": frappe.db.get_value("Employee", b.employee, "employee_name") or b.employee or "",
+			"out": round(flt(b.weight_out), 3), "back": round(flt(b.weight_in), 3),
+			"grams": round(flt(b.loss), 3)})
+	sections.append({"key": "bench", "title": frappe._("Lost at the bench"), "kind": "move",
+		"rows": rows, "total": round(sum(r["grams"] for r in rows), 3)})
+	moves += len(rows)
+
+	# --- loss recovered / written off ---------------------------------------
+	rows = []
+	for e in _day_entries(day, "Loss collection:"):
+		got = [l for l in e["lines"] if l.t_warehouse]
+		rows.append({"ref": e["name"], "who": who(e["who"]), "at": e["at"], "kind": "Recovered",
+			"grams": round(sum(flt(l.qty) for l in got), 3),
+			"pure": round(sum(_pure_of(l.item_code, l.qty) for l in got), 3),
+			"detail": ", ".join("{0} g {1}".format(round(flt(l.qty), 3), l.item_code) for l in got)})
+	for e in _day_entries(day, "Loss write-off:"):
+		gone = [l for l in e["lines"] if l.s_warehouse]
+		rows.append({"ref": e["name"], "who": who(e["who"]), "at": e["at"], "kind": "Written off",
+			"grams": round(sum(flt(l.qty) for l in gone), 3),
+			"pure": round(sum(_pure_of(l.item_code, l.qty) for l in gone), 3),
+			"detail": (e["remarks"].split("Loss write-off:", 1)[-1] or "").strip()})
+	sections.append({"key": "loss", "title": frappe._("Loss recovered / written off"), "kind": "move",
+		"rows": rows, "total": round(sum(r["pure"] for r in rows if r["kind"] == "Written off"), 3)})
+	moves += len(rows)
+
+	# --- pieces sold (weight leaving the building) --------------------------
+	rows = []
+	# a sale carries its own date — the day it was made, not the day it was keyed
+	total_field = next((f for f in ("grand_total", "total", "net_total")
+		if frappe.get_meta("Product Sale").has_field(f)), None)
+	for sale in frappe.get_all("Product Sale", filters={"sale_date": day},
+			fields=["name", "customer", "owner"] + ([total_field] if total_field else []),
+			order_by="creation"):
+		lines = frappe.get_all("Product Sale Item", filters={"parent": sale.name},
+			fields=["order_bag", "design", "nett", "dmd_ct"])
+		rows.append({"ref": sale.name, "who": who(sale.owner), "party": sale.customer,
+			"pieces": len(lines), "grams": round(sum(flt(l.nett) for l in lines), 3),
+			"carats": round(sum(flt(l.dmd_ct) for l in lines), 3),
+			"amount": flt(sale.get(total_field)) if total_field else 0,
+			"detail": ", ".join(l.order_bag for l in lines[:6]) + ("…" if len(lines) > 6 else "")})
+	sections.append({"key": "sold", "title": frappe._("Sold and written out"), "kind": "out",
+		"rows": rows, "total": round(sum(r["grams"] for r in rows), 3)})
+	moves += len(rows)
+
+	# --- finished / reworked -------------------------------------------------
+	conv = frappe.db.sql("""
+		SELECT COUNT(DISTINCT l.order_bag) bags, SUM(l.qty) qty
+		FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+		WHERE l.entry_type='Convert' AND l.direction='Out' AND IFNULL(i.stone_type,'')=''
+		  AND DATE(l.datetime) = %s""", (day,), as_dict=True)[0]
+	rew = frappe.db.sql("""
+		SELECT COUNT(DISTINCT l.order_bag) bags, SUM(l.qty) qty
+		FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+		WHERE l.entry_type='Rework' AND IFNULL(i.stone_type,'')=''
+		  AND DATE(l.datetime) = %s""", (day,), as_dict=True)[0]
+	rows = []
+	if cint(conv.bags):
+		rows.append({"what": frappe._("Finished (became products)"), "pieces": cint(conv.bags),
+			"grams": round(flt(conv.qty), 3)})
+	if cint(rew.bags):
+		rows.append({"what": frappe._("Sent back to the floor"), "pieces": cint(rew.bags),
+			"grams": round(flt(rew.qty), 3)})
+	sections.append({"key": "convert", "title": frappe._("Finished / reworked"), "kind": "move",
+		"rows": rows, "total": round(sum(r["grams"] for r in rows), 3)})
+	moves += len(rows)
+
+	opening = round(_pure_on_hand(before=day), 3)
+	closing = round(_pure_on_hand(upto=day), 3)
+	seal = frappe.db.exists("Stock Day Seal", {"day": day})
+	out = {
+		"day": day, "sections": sections, "movements": moves,
+		"opening_pure": opening, "closing_pure": closing,
+		"net_pure": round(closing - opening, 3),
+		"sealed": None,
+	}
+	if seal:
+		d = frappe.get_doc("Stock Day Seal", seal)
+		out["sealed"] = {
+			"name": d.name, "by": who(d.sealed_by), "on": str(d.sealed_on or "")[:16],
+			"opening_pure": flt(d.opening_pure), "closing_pure": flt(d.closing_pure),
+			"movements": cint(d.movements),
+		}
+		out["drift"] = _seal_drift(d, out)
+	return out
+
+
+def _seal_drift(sealed_doc, now):
+	"""What has changed on this day since it was sealed — empty when nothing has."""
+	diffs = []
+	for label, a, b in (
+			(frappe._("opening"), flt(sealed_doc.opening_pure), now["opening_pure"]),
+			(frappe._("closing"), flt(sealed_doc.closing_pure), now["closing_pure"])):
+		if abs(a - b) > 0.0015:
+			diffs.append({"what": label, "sealed": round(a, 3), "now": round(b, 3),
+				"delta": round(b - a, 3)})
+	if cint(sealed_doc.movements) != cint(now["movements"]):
+		diffs.append({"what": frappe._("movements"), "sealed": cint(sealed_doc.movements),
+			"now": cint(now["movements"]), "delta": cint(now["movements"]) - cint(sealed_doc.movements)})
+	return diffs
+
+
+@frappe.whitelist()
+def seal_stock_day(day):
+	"""Keep the day exactly as it reads now. Sealing does not change the ledger,
+	and a sealed day is never rewritten — the page compares it against the books."""
+	_require_stock_records()
+	day = str(day)[:10]
+	if day >= frappe.utils.nowdate():
+		frappe.throw(frappe._("A day can only be sealed once it is over."))
+	if frappe.db.exists("Stock Day Seal", {"day": day}):
+		frappe.throw(frappe._("{0} is already sealed.").format(frappe.utils.formatdate(day)))
+	snap = get_stock_day(day)
+	doc = frappe.get_doc({
+		"doctype": "Stock Day Seal", "day": day,
+		"sealed_by": frappe.session.user, "sealed_on": frappe.utils.now_datetime(),
+		"opening_pure": snap["opening_pure"], "closing_pure": snap["closing_pure"],
+		"moved_pure": snap["net_pure"], "movements": snap["movements"],
+		"data": json.dumps(snap),
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"sealed": doc.name, "day": day}
+
+
+@frappe.whitelist()
+def get_stock_day_seals(limit=60):
+	"""The sealed days, newest first — and whether each still matches the books."""
+	_require_stock_records()
+	out = []
+	for d in frappe.get_all("Stock Day Seal",
+			fields=["name", "day", "sealed_by", "sealed_on", "opening_pure", "closing_pure", "movements"],
+			order_by="day desc", limit_page_length=cint(limit) or 60):
+		doc = frappe.get_doc("Stock Day Seal", d.name)
+		drift = _seal_drift(doc, get_stock_day(str(d.day)))
+		out.append({**d, "day": str(d.day),
+			"sealed_by": frappe.db.get_value("User", d.sealed_by, "full_name") or d.sealed_by,
+			"sealed_on": str(d.sealed_on or "")[:16], "drift": drift})
+	return out
+
+
+# ---------------------------------------------------------------------------
 # Employee Loss (Stock > Loss) — who lost the gold, how much, and at which
 # bench. Read from Bench Issue: one row per work session, so a card worked
 # three times answers to three people, and re-issues never overwrite history

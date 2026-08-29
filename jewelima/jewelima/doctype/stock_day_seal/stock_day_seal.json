@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:SDS-{day}",
+ "creation": "2026-08-28 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["day", "sealed_by", "sealed_on", "cb1", "opening_pure", "closing_pure",
+  "moved_pure", "movements", "sec_data", "data"],
+ "fields": [
+  {"fieldname": "day", "fieldtype": "Date", "label": "Day", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "sealed_by", "fieldtype": "Link", "options": "User", "label": "Sealed By", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sealed_on", "fieldtype": "Datetime", "label": "Sealed On", "read_only": 1},
+  {"fieldname": "cb1", "fieldtype": "Column Break"},
+  {"fieldname": "opening_pure", "fieldtype": "Float", "label": "Opening Pure (g)", "precision": "3", "read_only": 1},
+  {"fieldname": "closing_pure", "fieldtype": "Float", "label": "Closing Pure (g)", "precision": "3", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "moved_pure", "fieldtype": "Float", "label": "Net Movement (g)", "precision": "3", "read_only": 1},
+  {"fieldname": "movements", "fieldtype": "Int", "label": "Movements", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sec_data", "fieldtype": "Section Break", "label": "Sealed Figures"},
+  {"fieldname": "data", "fieldtype": "Long Text", "label": "Data", "read_only": 1,
+   "description": "The day exactly as it read when sealed. Never rewritten — the page compares it against the ledger now."}
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-28 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stock Day Seal",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "Stock Manager", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "JW Stock Admin", "share": 1, "write": 1},
+  {"create": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "JW Manager", "share": 1, "write": 1}
+ ],
+ "sort_field": "day",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
