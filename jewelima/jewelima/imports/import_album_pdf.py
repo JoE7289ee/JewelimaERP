@@ -138,17 +138,29 @@ def read(path):
 	return {"collection": collection, "pieces": pieces, "pages": len(reader.pages)}
 
 
-def run(path, collection=None, provider=None, design_type=None, dry_run=0):
-	"""Create one unreviewed Selection Photo per piece. Idempotent on the code."""
+def run(path, collection=None, provider=None, design_type=None, tag=None, dry_run=0):
+	"""Create one unreviewed Selection Photo per piece. Idempotent on the code.
+
+	`provider` and `design_type` are what the album does not say and a person
+	does: the supplier it came from, and a starting design type for pieces that
+	are mostly one thing (the reviewer changes the odd one). `tag` puts the whole
+	book under one label in the catalogue's own vocabulary."""
 	if not os.path.isfile(path):
 		frappe.throw("No such file: {0}".format(path))
+	if provider and not frappe.db.exists("Supplier", provider):
+		frappe.throw("No such supplier: {0}".format(provider))
+	if design_type and not frappe.db.exists("Design Type", design_type):
+		frappe.throw("No such design type: {0}".format(design_type))
+	if tag and not cint(dry_run) and not frappe.db.exists("Selection Tag", tag):
+		frappe.get_doc({"doctype": "Selection Tag", "tag_name": tag}).insert(ignore_permissions=True)
 	album = read(path)
 	coll = collection or album["collection"] or os.path.basename(path).rsplit(".", 1)[0]
 	pieces = album["pieces"]
 
 	dupes = [p["code"] for p in pieces if frappe.db.exists("Selection Photo", p["code"])]
 	blank = [p for p in pieces if not p["gold_18k"] and not p["gold_14k"] and not p["gold_9k"]]
-	out = {"collection": coll, "pages": album["pages"], "found": len(pieces),
+	out = {"collection": coll, "provider": provider, "design_type": design_type,
+		"tag": tag, "pages": album["pages"], "found": len(pieces),
 		"already_in": len(dupes), "without_weights": len(blank), "created": 0}
 
 	if cint(dry_run):
@@ -168,6 +180,7 @@ def run(path, collection=None, provider=None, design_type=None, dry_run=0):
 			"dmd_no": p["dmd_no"], "dmd_weight": p["dmd_weight"],
 			"cs_no": p["cs_no"], "cs_weight": p["cs_weight"],
 			"active": 1, "reviewed": 0,        # the review desk confirms it
+			"tags": [{"tag": tag}] if tag else [],
 			# source_file is unique and a page carries two pieces, so name the
 			# image as well — that is what actually identifies this one
 			"source_file": "{0} p{1} {2}".format(
