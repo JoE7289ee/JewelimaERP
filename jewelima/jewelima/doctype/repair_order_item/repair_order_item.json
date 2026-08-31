@@ -1,17 +1,66 @@
 {
- "actions": [], "allow_rename": 1, "creation": "2026-08-31 09:00:00.000000",
- "doctype": "DocType", "editable_grid": 1, "engine": "InnoDB", "istable": 1,
- "field_order": ["repair", "design_type", "qty", "work_type", "narration"],
- "fields": [
-  {"fieldname": "repair", "fieldtype": "Data", "label": "Repair", "read_only": 1, "in_list_view": 1,
-   "description": "This row's own repair number — the batch ID with the line on the end (REP-00001-3)."},
-  {"fieldname": "design_type", "fieldtype": "Link", "options": "Design Type", "label": "Design Type", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "qty", "fieldtype": "Int", "label": "Qty", "default": "1", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "work_type", "fieldtype": "Link", "options": "Repair Work Type", "label": "Type of Work", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "narration", "fieldtype": "Small Text", "label": "Narration", "in_list_view": 1}
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-31 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "istable": 1,
+ "field_order": [
+  "repair",
+  "design_type",
+  "qty",
+  "work_types",
+  "narration"
  ],
- "index_web_pages_for_search": 1, "links": [],
- "modified": "2026-08-31 09:00:00.000000", "modified_by": "Administrator",
- "module": "Jewelima", "name": "Repair Order Item", "owner": "Administrator",
- "permissions": [], "sort_field": "idx", "sort_order": "ASC", "states": []
+ "fields": [
+  {
+   "fieldname": "repair",
+   "fieldtype": "Data",
+   "label": "Repair",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "This row's own repair number — the batch ID with the line on the end (REP-00001-3)."
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "options": "Design Type",
+   "label": "Design Type",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Int",
+   "label": "Qty",
+   "default": "1",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "work_types",
+   "fieldtype": "Small Text",
+   "label": "Types of Work",
+   "in_list_view": 1,
+   "description": "One or more, comma separated. Frappe has no table inside a table, so the chosen types live on the row and are checked against Repair Work Type on save."
+  },
+  {
+   "fieldname": "narration",
+   "fieldtype": "Small Text",
+   "label": "Narration",
+   "in_list_view": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-31 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Repair Order Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
 }

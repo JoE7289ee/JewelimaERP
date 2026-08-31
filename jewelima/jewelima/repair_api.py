@@ -136,7 +136,7 @@ def set_repair_work_type(name, work_name=None, active=None, notes=None):
 @frappe.whitelist()
 def delete_repair_work_type(name):
 	_guard()
-	used = frappe.db.count("Repair Order Item", {"work_type": name})
+	used = frappe.db.count("Repair Order Item", {"work_types": ["like", "%{0}%".format(name)]})
 	if used:
 		frappe.throw(frappe._("{0} is on {1} line(s) — untick Active to retire it instead.").format(name, used))
 	frappe.delete_doc("Repair Work Type", name, force=True, ignore_permissions=True)
@@ -156,8 +156,12 @@ def repair_party_usage():
 def repair_work_type_usage():
 	"""{type of work: how many lines name it}."""
 	_guard()
-	return {r[0]: r[1] for r in frappe.db.sql(
-		"SELECT work_type, COUNT(*) FROM `tabRepair Order Item` GROUP BY work_type")}
+	# the row holds a comma-separated list, so count by looking inside it
+	out = {}
+	for name in frappe.get_all("Repair Work Type", pluck="name"):
+		out[name] = frappe.db.count("Repair Order Item",
+			{"work_types": ["like", "%{0}%".format(name)]})
+	return out
 
 
 # --- taking a batch in ------------------------------------------------------
@@ -192,15 +196,26 @@ def create_repair_order(payload):
 	items = []
 	for i, r in enumerate(rows, start=1):
 		dt = (r.get("design_type") or "").strip()
-		if not dt or not frappe.db.exists("Design Type", dt):
-			frappe.throw(frappe._("Row {0}: pick a design type.").format(i))
+		if not dt:
+			frappe.throw(frappe._("Row {0}: pick a design type — it cannot be blank.").format(i))
+		if not frappe.db.exists("Design Type", dt):
+			frappe.throw(frappe._("Row {0}: {1} is not a design type.").format(i, dt))
 		qty = cint(r.get("qty"))
 		if qty <= 0:
 			frappe.throw(frappe._("Row {0}: quantity must be at least 1.").format(i))
-		work = _master("Repair Work Type", "work_name", r.get("work_type"))
-		if not work:
-			frappe.throw(frappe._("Row {0}: say what work it needs.").format(i))
-		items.append({"design_type": dt, "qty": qty, "work_type": work,
+		# a piece can need several things doing to it, or nothing decided yet
+		raw = r.get("work_types")
+		if raw is None:
+			raw = r.get("work_type")          # a single value still works
+		if not isinstance(raw, (list, tuple)):
+			raw = str(raw or "").split(",")
+		works = []
+		for w in raw:
+			name = _master("Repair Work Type", "work_name", w)
+			if name and name not in works:
+				works.append(name)
+		items.append({"design_type": dt, "qty": qty,
+			"work_types": ", ".join(works) or None,
 			"narration": (r.get("narration") or "").strip() or None})
 
 	doc = frappe.get_doc({
@@ -226,7 +241,8 @@ def get_repair_order(name):
 		"narration": doc.narration or "",
 		"total_qty": cint(doc.total_qty), "total_rows": cint(doc.total_rows),
 		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
-			"work_type": r.work_type, "narration": r.narration or ""} for r in doc.items],
+			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
+			"narration": r.narration or ""} for r in doc.items],
 	}
 
 

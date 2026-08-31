@@ -40,6 +40,13 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			border-radius:7px;padding:6px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		table.nr-t td.num input{text-align:right;font-variant-numeric:tabular-nums;}
 		.nr-del{border:none;background:none;color:#b02a2a;font-size:16px;cursor:pointer;line-height:1;}
+		.nr-works{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+		.nr-works input{flex:1 1 90px;min-width:80px;}
+		.nr-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;
+			padding:2px 4px 2px 9px;border-radius:999px;background:#e9f0f7;color:#1f618d;
+			border:1px solid #b9d0e6;white-space:nowrap;}
+		.nr-chip b{cursor:pointer;font-size:13px;line-height:1;opacity:.65;}
+		.nr-chip b:hover{opacity:1;}
 		.nr-add{margin-top:9px;}
 		.nr-tot{display:flex;gap:18px;margin-top:10px;font-size:12.5px;color:var(--text-muted);}
 		.nr-tot b{color:var(--text-color);font-variant-numeric:tabular-nums;}
@@ -87,7 +94,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		<datalist id="nr-dtypes"></datalist>`);
 	const root = $(page.main);
 
-	const blank = () => ({ design_type: "", qty: 1, work_type: "", narration: "" });
+	const blank = () => ({ design_type: "", qty: 1, work_types: [], narration: "" });
 
 	function paintRows() {
 		const o = S.opts;
@@ -96,17 +103,28 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<td><input class="nr-dt" list="nr-dtypes" value="${esc(r.design_type)}"
 					placeholder="${__("design type")}"></td>
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
-				<td><input class="nr-work" list="nr-works" value="${esc(r.work_type)}"
-					placeholder="${__("pick or type")}"></td>
+				<td><div class="nr-works">
+					${(r.work_types || []).map((w) =>
+						`<span class="nr-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
+					<input class="nr-work" list="nr-works"
+						placeholder="${(r.work_types || []).length ? __("add another") : __("optional")}">
+				</div></td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
 				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
 			</tr>`).join("") : `<tr><td colspan="5" class="nr-none">${
 				__("Nothing on the list yet — add a piece.")}</td></tr>`);
-		const pieces = S.rows.reduce((a, r) => a + cint(r.qty), 0);
-		root.find(".nr-tot").html(S.rows.length
-			? `<span>${__("Lines")} <b>${S.rows.length}</b></span><span>${__("Pieces")} <b>${pieces}</b></span>`
-			: "");
+		paintTotals();
 		page.set_primary_action(__("Take it in"), save, "add");
+	}
+
+	// an empty row is scaffolding, not a piece — it is the design type that makes
+	// a line real, so nothing is counted until one is picked
+	function paintTotals() {
+		const real = S.rows.filter((r) => (r.design_type || "").trim());
+		root.find(".nr-tot").html(real.length
+			? `<span>${__("Lines")} <b>${real.length}</b></span>`
+			  + `<span>${__("Pieces")} <b>${real.reduce((a, r) => a + cint(r.qty), 0)}</b></span>`
+			: "");
 	}
 
 	function fillLists() {
@@ -132,18 +150,49 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	}
 
 	// keep what is typed as it is typed — a repaint must never lose a half-filled row
-	root.on("input change", ".nr-dt, .nr-qty, .nr-work, .nr-nar", function () {
+	function addWork(i, val) {
+		const r = S.rows[i];
+		const name = (val || "").trim();
+		if (!r || !name) return;
+		r.work_types = r.work_types || [];
+		// same name twice on one piece says nothing extra
+		if (!r.work_types.some((w) => w.toLowerCase() === name.toLowerCase())) r.work_types.push(name);
+		paintRows();
+		// carry on where they were: the next type for the same piece
+		root.find(`tr[data-i="${i}"] .nr-work`).trigger("focus");
+	}
+	root.on("keydown", ".nr-work", function (e) {
+		if (e.key !== "Enter" && e.key !== ",") return;
+		e.preventDefault();
+		addWork(cint($(this).closest("tr").data("i")), this.value);
+		this.value = "";
+	});
+	// picking from the list fires change, not Enter
+	root.on("change", ".nr-work", function () {
+		if (!this.value) return;
+		addWork(cint($(this).closest("tr").data("i")), this.value);
+		this.value = "";
+	});
+	root.on("blur", ".nr-work", function () {
+		if (!this.value.trim()) return;
+		addWork(cint($(this).closest("tr").data("i")), this.value);
+		this.value = "";
+	});
+	root.on("click", ".nr-chip b", function () {
+		const i = cint($(this).closest("tr").data("i"));
+		const w = this.getAttribute("data-w");
+		S.rows[i].work_types = (S.rows[i].work_types || []).filter((x) => x !== w);
+		paintRows();
+	});
+
+	root.on("input change", ".nr-dt, .nr-qty, .nr-nar", function () {
 		const i = cint($(this).closest("tr").data("i"));
 		const r = S.rows[i];
 		if (!r) return;
 		if ($(this).hasClass("nr-dt")) r.design_type = this.value;
 		else if ($(this).hasClass("nr-qty")) r.qty = cint(this.value);
-		else if ($(this).hasClass("nr-work")) r.work_type = this.value;
 		else r.narration = this.value;
-		if ($(this).hasClass("nr-qty")) {
-			const pieces = S.rows.reduce((a, x) => a + cint(x.qty), 0);
-			root.find(".nr-tot").html(`<span>${__("Lines")} <b>${S.rows.length}</b></span><span>${__("Pieces")} <b>${pieces}</b></span>`);
-		}
+		if ($(this).hasClass("nr-qty") || $(this).hasClass("nr-dt")) paintTotals();
 	});
 	root.on("click", ".nr-add", () => { S.rows.push(blank()); paintRows(); });
 	root.on("click", ".nr-del", function () {
@@ -155,12 +204,13 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	function save() {
 		const party = (root.find(".nr-party").val() || "").trim();
 		if (!party) return frappe.msgprint(__("Say which party this came from."));
-		const rows = S.rows.filter((r) => (r.design_type || "").trim() && (r.work_type || "").trim());
-		if (!rows.length) return frappe.msgprint(__("Every piece needs a design type and a type of work."));
-		const short = S.rows.filter((r) => (r.design_type || r.work_type || r.narration) &&
-			!((r.design_type || "").trim() && (r.work_type || "").trim()));
+		const rows = S.rows.filter((r) => (r.design_type || "").trim());
+		if (!rows.length) return frappe.msgprint(__("Every piece needs a design type."));
+		// a line with work or a note but no design type is half-written, not a piece
+		const short = S.rows.filter((r) => !(r.design_type || "").trim() &&
+			((r.work_types || []).length || (r.narration || "").trim()));
 		if (short.length) return frappe.msgprint(
-			__("{0} half-filled line(s) — each piece needs both a design type and a type of work.", [short.length]));
+			__("{0} line(s) have no design type — it cannot be left blank.", [short.length]));
 
 		const when = root.find(".nr-when").val();
 		frappe.dom.freeze(__("Taking it in…"));
@@ -187,7 +237,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				· ${m.total_rows} ${__("line(s)")} · ${m.total_qty} ${__("piece(s)")}
 				<table><tbody>${(m.items || []).map((r) => `
 					<tr><td><b>${esc(r.repair)}</b></td><td>${esc(r.design_type)}</td>
-					<td>${r.qty}</td><td>${esc(r.work_type)}</td>
+					<td>${r.qty}</td><td>${esc((r.work_types || []).join(", ") || "—")}</td>
 					<td>${esc(r.narration || "")}</td></tr>`).join("")}</tbody></table>
 			</div>`);
 	}
