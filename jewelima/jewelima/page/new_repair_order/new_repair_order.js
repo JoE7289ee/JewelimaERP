@@ -77,9 +77,9 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<div class="h">${__("The pieces")}</div>
 				<table class="nr-t"><thead><tr>
 					<th style="width:21%;">${__("Design Type")}</th>
-					<th style="width:16%;">${__("Type")}</th>
 					<th style="width:8%;">${__("Qty")}</th>
-					<th style="width:26%;">${__("Type of Work")}</th>
+					<th style="width:24%;">${__("Type of Work")}</th>
+					<th style="width:15%;">${__("Type")}</th>
 					<th>${__("Narration")}</th>
 					<th style="width:34px;"></th>
 				</tr></thead><tbody class="nr-body"></tbody></table>
@@ -105,8 +105,6 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			<tr data-i="${i}">
 				<td><input class="nr-dt" list="nr-dtypes" value="${esc(r.design_type)}"
 					placeholder="${__("design type")}"></td>
-				<td><input class="nr-type" list="nr-types" value="${esc(r.repair_type)}"
-					placeholder="${__("pick or type")}"></td>
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
 				<td><div class="nr-works">
 					${(r.work_types || []).map((w) =>
@@ -114,6 +112,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 					<input class="nr-work" list="nr-works"
 						placeholder="${(r.work_types || []).length ? __("add another") : __("optional")}">
 				</div></td>
+				<td><input class="nr-type" list="nr-types" value="${esc(r.repair_type)}"
+					placeholder="${__("pick or type")}"></td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
 				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
 			</tr>`).join("") : `<tr><td colspan="6" class="nr-none">${
@@ -244,13 +244,12 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				· ${m.total_rows} ${__("line(s)")} · ${m.total_qty} ${__("piece(s)")}
 				<table><tbody>${(m.items || []).map((r) => `
 					<tr><td><b>${esc(r.repair)}</b></td><td>${esc(r.design_type)}</td>
-					<td>${esc(r.repair_type || "—")}</td>
 					<td>${r.qty}</td><td>${esc((r.work_types || []).join(", ") || "—")}</td>
+					<td>${esc(r.repair_type || "—")}</td>
 					<td>${esc(r.narration || "")}</td></tr>`).join("")}</tbody></table>
 			</div>`);
 	}
 
-	page.add_inner_button(__("Parties"), () => frappe.set_route("repair-parties"));
-	page.add_inner_button(__("Types of Work"), () => frappe.set_route("repair-tow"));
+	page.add_inner_button(__("Masters"), () => frappe.set_route("repair-masters"));
 	frappe.pages["new-repair-order"].on_page_show = load;
 };

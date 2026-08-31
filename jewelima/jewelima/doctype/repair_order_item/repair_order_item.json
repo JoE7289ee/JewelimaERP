@@ -9,9 +9,9 @@
  "field_order": [
   "repair",
   "design_type",
-  "repair_type",
   "qty",
   "work_types",
+  "repair_type",
   "narration"
  ],
  "fields": [
@@ -32,13 +32,6 @@
    "in_list_view": 1
   },
   {
-   "fieldname": "repair_type",
-   "fieldtype": "Link",
-   "options": "Repair Type",
-   "label": "Type",
-   "in_list_view": 1
-  },
-  {
    "fieldname": "qty",
    "fieldtype": "Int",
    "label": "Qty",
@@ -52,6 +45,13 @@
    "label": "Types of Work",
    "in_list_view": 1,
    "description": "One or more, comma separated. Frappe has no table inside a table, so the chosen types live on the row and are checked against Repair Work Type on save."
+  },
+  {
+   "fieldname": "repair_type",
+   "fieldtype": "Link",
+   "options": "Repair Type",
+   "label": "Type",
+   "in_list_view": 1
   },
   {
    "fieldname": "narration",

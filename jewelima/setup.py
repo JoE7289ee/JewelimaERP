@@ -270,7 +270,7 @@ JEWELIMA_GRAPHICS_PAGES = ["photo-update", "photo-urgent", "photo-queue", "custo
 # One role runs it; everyone else sees nothing. Writes go through
 # repair_api (role-gated + ignore_permissions), same as everywhere.
 JEWELIMA_REPAIR_ROLE = "Jewelima Repair"
-JEWELIMA_REPAIR_PAGES = ["new-repair-order", "repair-parties", "repair-tow", "repair-types"]
+JEWELIMA_REPAIR_PAGES = ["new-repair-order", "repair-masters"]
 JEWELIMA_REPAIR_DOCTYPES = ["Repair Order", "Repair Order Item", "Repair Party",
 	"Repair Work Type", "Repair Type"]
 # the sheet's polish IF-formula, as editable master rows
@@ -279,7 +279,9 @@ JEWELIMA_REPAIR_DOCTYPES = ["Repair Order", "Repair Order Item", "Repair Party",
 RETIRED_PAGES = ["design-transfer",
 	# the repair module was rebuilt from scratch (2026-08-31) — these four and
 	# their doctypes are gone from the app, so their Page docs must go too
-	"repair-intake", "repair-desk", "repair-bills", "repair-setup"]
+	"repair-intake", "repair-desk", "repair-bills", "repair-setup",
+	# the three master screens folded into one (repair-masters)
+	"repair-parties", "repair-tow", "repair-types"]
 
 
 def retag_swarovski():
