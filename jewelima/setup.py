@@ -202,6 +202,23 @@ JEWELIMA_STONE_ISSUE_ROLE = "Jewelima Stone Issue"
 JEWELIMA_STONE_ISSUE_PAGES = ["stone-issue", "stone-return", "pre-bag"]
 # Workstation personas — ONE role per bench: see + act on THAT workstation only
 # (the global Assign/Collect and Job Work pages keep their own wider roles).
+# ---- JW CAM: the CAM bench, and the moves that leave it ----------------------
+# One bench and one runner's page. The CAM operator works their own station and
+# passes finished work on, so they get ws-cam plus Transfer Order Bag — but the
+# transfer page is deliberately narrow for them:
+#
+#   * the batch may only be picked up FROM CAM. Transfer Rules match on the from
+#     as well as the to, so a bag scanned anywhere else has no matching rule and
+#     is refused.
+#   * it may only go to WAXING or CAD.
+#   * "issue right after transfer" is out of reach: that path needs Jewelima
+#     Transfer Plus, which this role does not have, so the strip never renders
+#     and transfer_and_issue refuses it server-side even if it were called.
+JEWELIMA_CAM_ROLE = "JW CAM"
+JEWELIMA_CAM_PAGES = ["ws-cam", "transfer-order-bag"]
+JEWELIMA_CAM_FROM = "CAM"
+JEWELIMA_CAM_TO = ("WAXING", "CAD")
+
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
 	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
@@ -677,6 +694,32 @@ def setup_roles():
 				pg = frappe.get_doc("Page", page)
 				pg.set("roles", [r for r in pg.roles if r.role != role])
 				pg.save(ignore_permissions=True)
+
+	# ---- JW CAM: the CAM bench plus a narrow transfer ---------------------------
+	ensure_role(JEWELIMA_CAM_ROLE)
+	for dt in JEWELIMA_TRANSFER_READ:
+		grant(dt, JEWELIMA_CAM_ROLE, {"read": 1})
+	for dt in JEWELIMA_WS_READ:
+		grant(dt, JEWELIMA_CAM_ROLE, {"read": 1})
+	for page in JEWELIMA_CAM_PAGES:
+		set_page_roles(page, (JEWELIMA_CAM_ROLE,))
+	# tight: this role opens those two pages and nothing else
+	for page in frappe.get_all("Has Role",
+			filters={"parenttype": "Page", "role": JEWELIMA_CAM_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_CAM_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_CAM_ROLE])
+			pg.save(ignore_permissions=True)
+
+	# The matrix rows that pin it to CAM -> WAXING / CAD. Rewritten from scratch
+	# each run: a stale row would silently widen where the bench can send work.
+	if frappe.db.exists("DocType", "Transfer Rule"):
+		for r in frappe.get_all("Transfer Rule",
+				filters={"role": JEWELIMA_CAM_ROLE}, pluck="name"):
+			frappe.delete_doc("Transfer Rule", r, force=True, ignore_permissions=True)
+		for to in JEWELIMA_CAM_TO:
+			frappe.get_doc({"doctype": "Transfer Rule", "role": JEWELIMA_CAM_ROLE,
+				"from_location": JEWELIMA_CAM_FROM, "to_location": to}).insert(ignore_permissions=True)
 
 	# Strip Jewelima Ordering from any page it shouldn't reach (e.g. import-stock was
 	# authored with it). The Ordering role only opens the order-flow pages above.
