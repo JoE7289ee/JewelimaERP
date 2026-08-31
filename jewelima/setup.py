@@ -502,6 +502,13 @@ def setup_roles():
 	for dt in JEWELIMA_REPAIR_DOCTYPES:
 		grant(dt, JEWELIMA_REPAIR_ROLE, {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1})
 	grant("Design Type", JEWELIMA_REPAIR_ROLE, {"read": 1})   # the intake page picks from it
+	# the old module reached into Warehouse and its own settings; the rebuilt one
+	# does not, and dropping the grant from this file does not revoke a grant
+	# already sitting in the database
+	for _dt in ("Warehouse", "Repair Settings", "Repair Item Type", "Repair Receipt", "Repair Bill"):
+		for _tbl in ("Custom DocPerm", "DocPerm"):
+			for _n in frappe.get_all(_tbl, filters={"role": JEWELIMA_REPAIR_ROLE, "parent": _dt}, pluck="name"):
+				frappe.delete_doc(_tbl, _n, force=True, ignore_permissions=True)
 	for page in JEWELIMA_REPAIR_PAGES:
 		set_page_roles(page, (JEWELIMA_REPAIR_ROLE,))
 	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_REPAIR_ROLE}, pluck="parent"):
