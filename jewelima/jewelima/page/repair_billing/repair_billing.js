@@ -529,9 +529,17 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				openBatch(S.D.repair_order);      // the rest of the batch, still to bill
 			}).catch(() => { S.saving = false; });
 		};
-		if (missing.length) {
-			frappe.confirm(__("{0} of the picked pieces have no weight out. Bill them anyway?",
-				[missing.length]), go);
+		// Forgetting the board rate bills every gram of added metal at nothing, and
+		// the bill still looks finished — so it is worth asking rather than
+		// quietly undercharging.
+		const addedMetal = picked.some((i) => flt(i.weight_out) && flt(i.weight_out) > flt(i.weight_in));
+		const ask = [];
+		if (missing.length)
+			ask.push(__("{0} of the picked pieces have no weight out.", [missing.length]));
+		if (addedMetal && !flt(S.gold))
+			ask.push(__("There is metal added but no gold board rate, so it will be charged at nothing."));
+		if (ask.length) {
+			frappe.confirm(ask.join("<br><br>") + "<br><br>" + __("Bill anyway?"), go);
 		} else { go(); }
 	});
 

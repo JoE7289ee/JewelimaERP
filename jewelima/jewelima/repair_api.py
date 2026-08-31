@@ -756,16 +756,17 @@ def update_repair_order(name, items, narration=None):
 
 	What came in is left alone — the design type, how many, and the party are
 	what was received, and changing those after the fact would make the record
-	disagree with the goods. A billed batch is refused outright: the bill copied
-	these weights when it was made, so moving them now would leave the two
-	saying different things about the same job."""
+	disagree with the goods.
+
+	A BILLED PIECE is locked: its bill copied those weights, so moving them now
+	would leave the two saying different things about the same job. The lock is
+	per piece, not per batch — half a batch is routinely billed while the rest is
+	still on the bench, and those pieces are exactly the ones still waiting for a
+	weight or for someone to say what work they need. Refusing the whole batch
+	because one piece is settled would block the job this screen exists for."""
 	_guard()
 	if not frappe.db.exists("Repair Order", name):
 		frappe.throw(frappe._("No repair {0}.").format(name))
-	bill = frappe.db.get_value("Repair Bill", {"repair_order": name}, "name")
-	if bill:
-		frappe.throw(frappe._("{0} is billed as {1} — change it on the bill, or the two will "
-			"disagree about the same job.").format(name, bill))
 
 	items = frappe.parse_json(items) if isinstance(items, str) else (items or [])
 	doc = frappe.get_doc("Repair Order", name)
@@ -773,6 +774,13 @@ def update_repair_order(name, items, narration=None):
 	for r in items or []:
 		row = by_repair.get(r.get("repair"))
 		if not row:
+			continue
+		if row.bill:
+			# settled: only complain if the edit would actually move something
+			wants = ("weight" in r and abs(flt(r.get("weight")) - flt(row.weight)) > 0.0005)
+			if wants:
+				frappe.throw(frappe._("{0} is billed on {1} — its weight cannot change.")
+					.format(row.repair, row.bill))
 			continue
 		if "weight" in r:
 			row.weight = flt(r.get("weight"))
