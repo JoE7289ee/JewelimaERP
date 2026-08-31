@@ -3,10 +3,10 @@
 // clicking one opens that workstation in place (the same jewelima.buildWorkstation
 // the individual ws-* pages use, so the detail view is identical).
 //
-// Access: the floor managers (System Manager / Stock Manager / JW Manager)
-// open every station. The tiles are still filtered to what the user may
-// actually open — nobody is shown a tile that would then refuse to open.
-// Stock Manager / System Manager / JW Manager see the whole floor.
+// Access: anyone who can open this page sees the whole floor — the numbers are
+// worth having even to someone who does not work at a bench. Opening a station
+// is separate, and decided by that station's own page: a tile the user may not
+// open is marked "view only" and does not act like a button.
 frappe.pages["workstations"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const $w = $(wrapper);
@@ -19,10 +19,15 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 		"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
 		"BAG EXTRACTION": "ws-bag-extraction",
 	};
-	const roles = frappe.user_roles || [];
-	// the per-bench roles are gone: the floor managers see every station
-	const seesAll = ["System Manager", "Stock Manager", "JW Manager"].some((r) => roles.includes(r));
-	const mine = () => seesAll;
+	// Who may OPEN a station is already decided — Frappe hands the client the
+	// list of pages it will let this user open. Reading that beats a hardcoded
+	// role list here, which went stale the moment a role was given the page and
+	// then saw an empty floor.
+	const canOpen = (bench) => !!((frappe.boot && frappe.boot.page_info) || {})[WS[bench]];
+	// Seeing the floor is not the same as working at a station: anyone who can
+	// open this page sees every tile, and only the stations they may open are
+	// clickable.
+	const mine = () => true;
 
 	function showTiles() {
 		$w.empty();
@@ -35,6 +40,13 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 				cursor:pointer;transition:box-shadow .12s,transform .12s;}
 			.wt-tile:hover{box-shadow:0 6px 18px rgba(0,0,0,.12);transform:translateY(-2px);}
 			.wt-tile.empty{opacity:.55;}
+			/* a station this user may not open still shows its numbers — the floor is
+			   worth seeing even when the bench is not yours to work at */
+			.wt-tile.locked{cursor:default;}
+			.wt-tile.locked:hover{box-shadow:none;transform:none;}
+			.wt-ro{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+				color:var(--text-muted);border:1px solid var(--border-color);border-radius:9px;
+				padding:0 6px;margin-left:5px;}
 			.wt-nm{font-weight:800;font-size:13.5px;letter-spacing:.03em;margin-bottom:8px;}
 			.wt-big{font-size:26px;font-weight:800;line-height:1;}
 			.wt-big .u{font-size:11px;font-weight:600;color:var(--text-muted);margin-left:4px;}
@@ -81,8 +93,11 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 					const st = d.stones || {};
 					const buckets = Object.keys(st).filter((k) => parseFloat(st[k]) > 0)
 						.map((k) => [k, st[k]]);
-					return `<div class="wt-tile ${d.cards ? "" : "empty"}" data-b="${esc(b)}">
-						<div class="wt-nm">${esc(b)}</div>
+					const open = canOpen(b);
+					return `<div class="wt-tile ${d.cards ? "" : "empty"} ${open ? "" : "locked"}"
+						data-b="${esc(b)}" title="${open ? __("Open {0}", [esc(b)]) : __("View only")}">
+						<div class="wt-nm">${esc(b)}${open ? "" :
+							` <span class="wt-ro">${__("view only")}</span>`}</div>
 						<div class="wt-big">${d.cards || 0}<span class="u">${__("cards")}</span></div>
 						<div class="wt-sub">
 							<span><b>${d.qty || 0}</b> ${__("pcs")}</span>
@@ -102,12 +117,15 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 			}).catch(() => $g.html(`<div class="wt-none">${__("Could not load the floor.")}</div>`));
 		}
 
-		root.on("click", ".wt-tile", function () { openOne(this.dataset.b); });
+		root.on("click", ".wt-tile", function () {
+			if (!canOpen(this.dataset.b)) return;      // a look, not a door
+			openOne(this.dataset.b);
+		});
 		load();
 	}
 
 	function openOne(bench) {
-		if (!mine(bench)) return frappe.msgprint(__("You do not have access to {0}.", [bench]));
+		if (!canOpen(bench)) return frappe.msgprint(__("You do not have access to {0}.", [bench]));
 		$w.empty();
 		jewelima.buildWorkstation(wrapper, bench, { onBack: showTiles });
 	}

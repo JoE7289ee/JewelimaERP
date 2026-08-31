@@ -141,7 +141,10 @@ JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-vie
 	# the CAD board, to see where a design has got to. Assigning a card is
 	# System Manager / JW Manager only (assign_cad_card refuses anyone else),
 	# so this is a view for the order desk.
-	"cad-workstation"]
+	"cad-workstation",
+	# the floor at a glance — view only; opening a station is still that
+	# station's own page to allow
+	"workstations"]
 
 # every page in the E-SMITH menu — the ESMITH role gets exactly these
 ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]

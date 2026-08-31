@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-24 03:30:58.236781",
+ "modified": "2026-08-31 15:48:07.287145",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "workstations",
@@ -19,6 +19,9 @@
   },
   {
    "role": "JW Manager"
+  },
+  {
+   "role": "Jewelima Ordering"
   }
  ],
  "script": null,
