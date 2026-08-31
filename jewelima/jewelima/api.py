@@ -3847,7 +3847,21 @@ def _material_issue_record(issue_type, order_bag, warehouse, issued_by=None, ite
 	}).insert(ignore_permissions=True)
 
 
-STONE_HISTORY_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
+def _may_open_page(page):
+	"""True if this user could open that desk page.
+
+	Reading the page's OWN roles rather than keeping a second list here is the
+	point: a hardcoded set drifts the moment a role is granted the page, and the
+	page then opens onto an endpoint that refuses it — which is exactly how
+	JW Stone Admin came to see "Not permitted" on a page it had been given.
+	A page with no roles at all is open to everyone, as Frappe treats it.
+	"""
+	roles = set(frappe.get_roles())
+	if "System Manager" in roles:
+		return True
+	allowed = set(frappe.get_all("Has Role",
+		filters={"parent": page, "parenttype": "Page"}, pluck="role"))
+	return bool(roles & allowed) if allowed else True
 
 # stone_type -> bucket code, the same families the whole app speaks
 _SH_BUCKET = {"Diamond": "DMD", "Precious Stone": "PS", "Color Stone": "CS",
@@ -3885,7 +3899,7 @@ def get_stone_issue_history():
 	"""Stone Issue History page: per-bucket and per-issuer carats/pieces for
 	TODAY, THIS WEEK (Monday -> today) and THIS MONTH, plus the month's
 	day-by-day series. One call, the page slices."""
-	if not STONE_HISTORY_ROLES & set(frappe.get_roles()):
+	if not _may_open_page("stone-history"):
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	today, monday, first = _sh_bounds()
 	frm = min(monday, first)
@@ -3944,7 +3958,7 @@ def get_stone_issue_history():
 def get_stone_issuer_history(employee):
 	"""Drill-in for ONE issuer: same period tiles + month bucket split + the
 	line-by-line trail (newest first, this month)."""
-	if not STONE_HISTORY_ROLES & set(frappe.get_roles()):
+	if not _may_open_page("stone-history"):
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
 	today, monday, first = _sh_bounds()
 	lines = frappe.db.sql("""
@@ -6419,8 +6433,29 @@ def priority_remove(code):
 WS_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
 
 
+def _ws_page_for(bench):
+	"""The desk page that IS this bench, or None if it has none."""
+	from jewelima.setup import JEWELIMA_WS_PAGES
+	return JEWELIMA_WS_PAGES.get((bench or "").upper())
+
+
+def _may_work_at(bench):
+	"""May this user work at that bench — issue, collect, act on its cards?
+
+	The floor managers work every bench. Beyond them, being given a bench's own
+	page IS the grant: a role handed ws-cam is meant to run CAM, and reading the
+	page's roles rather than keeping a second list here stops the two drifting
+	apart — a bench page that opens onto a board where nothing can be done is
+	worse than no page at all.
+	"""
+	if WS_ROLES & set(frappe.get_roles()):
+		return True
+	page = _ws_page_for(bench)
+	return bool(page) and _may_open_page(page)
+
+
 def _require_ws_access(bench):
-	if not WS_ROLES & set(frappe.get_roles()):
+	if not _may_work_at(bench):
 		frappe.throw(frappe._("No workstation access for {0}.").format((bench or "").upper()))
 
 
@@ -6685,7 +6720,7 @@ def get_bench_workstation(bench):
 
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl, ASSIGN_COLLECT_LOCATIONS as _acl
-	can_act = bool(WS_ROLES & set(frappe.get_roles()))
+	can_act = _may_work_at(bench)
 	# completed AT this bench but NOT yet transferred onward (still sitting here)
 	completed = [r for r in rows if r.get("status") == "Completed"]
 	return {"bench": bench, "ranked": ranked,

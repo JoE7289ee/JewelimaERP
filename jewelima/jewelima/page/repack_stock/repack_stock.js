@@ -27,8 +27,20 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		.rp2-meta{font-size:12.5px;color:var(--text-muted);margin:8px 0;}
 		.rp2-meta b{color:var(--text-color);}
 		.rp2-tbl{border-collapse:collapse;font-size:12.5px;}
-		.rp2-tbl th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:3px 6px;white-space:nowrap;}
-		.rp2-tbl td{padding:2px 6px;white-space:nowrap;}
+		/* Ruled both ways. This is a long column of sieves being weighed one after
+		   another, and without lines it is easy to read a figure off the wrong row. */
+		.rp2-tbl th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+			color:var(--text-muted);padding:5px 8px;white-space:nowrap;
+			border-right:1px solid var(--border-color);border-bottom:1px solid var(--border-color);}
+		.rp2-tbl td{padding:3px 8px;white-space:nowrap;
+			border-right:1px solid var(--border-color);border-bottom:1px solid var(--border-color);}
+		.rp2-tbl th:last-child,.rp2-tbl td:last-child{border-right:0;}
+		.rp2-tbl tbody tr:last-child td{border-bottom:0;}
+		/* the row being weighed right now — the eye has to find it again after
+		   every trip to the scale */
+		.rp2-tbl tbody tr:hover td{background:var(--control-bg);}
+		.rp2-tbl tbody tr.rp2-live td{background:#fff8e1;box-shadow:inset 2px 0 0 #e0a800;}
+		.rp2-tbl tbody tr.rp2-live td:first-child{font-weight:700;}
 		.rp2-tbl input.qty{width:74px;border:1px solid var(--border-color);border-radius:6px;padding:4px 7px;
 			background:var(--control-bg);font-variant-numeric:tabular-nums;text-align:right;}
 		.rp2-x{color:#b02a2a;cursor:pointer;font-weight:800;padding:0 6px;}
@@ -79,6 +91,16 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		</div>
 	`);
 	const root = $(page.main);
+
+	// The weigher looks away to the scale and back on every line, so the row
+	// being filled stays marked while its box has focus.
+	root.on("focusin", ".rp2-tbl input", function () {
+		root.find(".rp2-tbl tr.rp2-live").removeClass("rp2-live");
+		$(this).closest("tr").addClass("rp2-live");
+	});
+	root.on("focusout", ".rp2-tbl input", function () {
+		$(this).closest("tr").removeClass("rp2-live");
+	});
 	let listStatus = "Pending";
 
 	const mk = (sel, df) => {
