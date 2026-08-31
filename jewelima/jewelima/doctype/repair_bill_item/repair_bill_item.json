@@ -1,22 +1,155 @@
 {
- "actions": [], "allow_rename": 1, "creation": "2026-08-31 12:00:00.000000",
- "doctype": "DocType", "editable_grid": 1, "engine": "InnoDB", "istable": 1,
- "field_order": ["repair", "design_type", "qty", "weight_in", "weight_out", "metal_added",
-  "work_types", "repair_type", "narration"],
- "fields": [
-  {"fieldname": "repair", "fieldtype": "Data", "label": "Repair", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "design_type", "fieldtype": "Link", "options": "Design Type", "label": "Design Type", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "qty", "fieldtype": "Int", "label": "Qty", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "weight_in", "fieldtype": "Float", "label": "Weight In (g)", "precision": "3", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "weight_out", "fieldtype": "Float", "label": "Weight Out (g)", "precision": "3", "in_list_view": 1},
-  {"fieldname": "metal_added", "fieldtype": "Float", "label": "Metal Added (g)", "precision": "3", "read_only": 1, "in_list_view": 1,
-   "description": "Weight out less weight in. Negative means it came back lighter."},
-  {"fieldname": "work_types", "fieldtype": "Small Text", "label": "Types of Work", "read_only": 1},
-  {"fieldname": "repair_type", "fieldtype": "Link", "options": "Repair Type", "label": "Type", "read_only": 1},
-  {"fieldname": "narration", "fieldtype": "Small Text", "label": "Narration", "read_only": 1}
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-31 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "istable": 1,
+ "field_order": [
+  "repair",
+  "design_type",
+  "qty",
+  "weight_in",
+  "weight_out",
+  "metal_added",
+  "work_types",
+  "repair_type",
+  "narration",
+  "work_amount",
+  "metal_amount",
+  "stone_pcs",
+  "stone_ct",
+  "stone_amount",
+  "amount",
+  "karat",
+  "gold_rate_used"
  ],
- "index_web_pages_for_search": 1, "links": [],
- "modified": "2026-08-31 12:00:00.000000", "modified_by": "Administrator",
- "module": "Jewelima", "name": "Repair Bill Item", "owner": "Administrator",
- "permissions": [], "sort_field": "idx", "sort_order": "ASC", "states": []
+ "fields": [
+  {
+   "fieldname": "repair",
+   "fieldtype": "Data",
+   "label": "Repair",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "options": "Design Type",
+   "label": "Design Type",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Int",
+   "label": "Qty",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "weight_in",
+   "fieldtype": "Float",
+   "label": "Weight In (g)",
+   "precision": "3",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "weight_out",
+   "fieldtype": "Float",
+   "label": "Weight Out (g)",
+   "precision": "3",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "metal_added",
+   "fieldtype": "Float",
+   "label": "Metal Added (g)",
+   "precision": "3",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "Weight out less weight in. Negative means it came back lighter."
+  },
+  {
+   "fieldname": "work_types",
+   "fieldtype": "Small Text",
+   "label": "Types of Work",
+   "read_only": 1
+  },
+  {
+   "fieldname": "repair_type",
+   "fieldtype": "Link",
+   "options": "Repair Type",
+   "label": "Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "narration",
+   "fieldtype": "Small Text",
+   "label": "Narration",
+   "read_only": 1
+  },
+  {
+   "fieldname": "work_amount",
+   "fieldtype": "Currency",
+   "label": "Work",
+   "read_only": 1
+  },
+  {
+   "fieldname": "metal_amount",
+   "fieldtype": "Currency",
+   "label": "Metal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_pcs",
+   "fieldtype": "Int",
+   "label": "Stone Pcs",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_ct",
+   "fieldtype": "Float",
+   "label": "Stone Cts",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stone_amount",
+   "fieldtype": "Currency",
+   "label": "Stones",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karat",
+   "fieldtype": "Select",
+   "options": "22\n18\n14\n9",
+   "label": "Karat"
+  },
+  {
+   "fieldname": "gold_rate_used",
+   "fieldtype": "Currency",
+   "label": "Gold Rate Used",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-31 18:15:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Repair Bill Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "states": []
 }

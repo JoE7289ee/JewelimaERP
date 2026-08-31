@@ -17,7 +17,9 @@
   "sec_items",
   "items",
   "sec_note",
-  "narration"
+  "narration",
+  "sec_stones",
+  "stones"
  ],
  "fields": [
   {
@@ -87,11 +89,22 @@
    "fieldname": "narration",
    "fieldtype": "Small Text",
    "label": "Narration"
+  },
+  {
+   "fieldname": "sec_stones",
+   "fieldtype": "Section Break",
+   "label": "Stones"
+  },
+  {
+   "fieldname": "stones",
+   "fieldtype": "Table",
+   "options": "Repair Stone",
+   "label": "Stones"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-31 09:00:00.000000",
+ "modified": "2026-08-31 18:05:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Repair Order",

@@ -412,23 +412,49 @@ def get_repair_for_billing(repair_order):
 	items, tally = [], {}
 	for r in o.items:
 		works = [w.strip() for w in (r.work_types or "").split(",") if w.strip()]
-		for w in works:
-			tally[w] = tally.get(w, 0) + 1
+		if not r.bill:                      # pieces already billed are not charged again
+			for w in works:
+				tally[w] = tally.get(w, 0) + 1
 		prior = out_of.get(r.repair)
 		items.append({
 			"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
 			"weight_in": flt(r.weight),
-			"weight_out": (flt(prior.weight_out) if prior else 0),
+			# the row is the record — a piece is weighed out at the counter long
+			# before anyone prices it, so the bill is a copy, not the source
+			"weight_out": flt(r.weight_out) or (flt(prior.weight_out) if prior else 0),
+			"weighed_out_at": str(r.weighed_out_at or "")[:16],
 			"work_types": works, "repair_type": r.repair_type or "",
 			"narration": r.narration or "",
+			"karat": r.karat or "",
+			"stones": [{"stone": st.stone, "sieve": st.sieve or "", "pcs": cint(st.pcs),
+				"ct": flt(st.ct)} for st in o.stones if st.repair == r.repair],
+			"bill": r.bill or "",
 		})
 	charges = [{"work_type": w, "pieces": n, "rate": rate_of.get(w, 0)}
 		for w, n in sorted(tally.items(), key=lambda x: (-x[1], x[0]))]
+
+	# stones are priced per carat by quality+sieve, the same shape as the work
+	open_ids = {r.repair for r in o.items if not r.bill}
+	st_rate = {}
+	if bill:
+		for st in bill.stones:
+			st_rate[(st.stone, st.sieve or "")] = flt(st.rate)
+	grp = {}
+	for st in o.stones:
+		if st.repair not in open_ids:
+			continue
+		k = (st.stone, st.sieve or "")
+		g = grp.setdefault(k, {"stone": st.stone, "sieve": st.sieve or "", "pcs": 0, "ct": 0.0})
+		g["pcs"] += cint(st.pcs)
+		g["ct"] = round(g["ct"] + flt(st.ct), 3)
+	stone_lines = [{**g, "rate": st_rate.get((g["stone"], g["sieve"]), 0)}
+		for g in sorted(grp.values(), key=lambda x: (x["stone"], x["sieve"]))]
 	return {
 		"repair_order": o.name, "party": o.party,
 		"received_at": str(o.received_at or "")[:16],
 		"total_qty": cint(o.total_qty), "total_weight_in": flt(o.total_weight),
-		"items": items, "charges": charges,
+		"items": items, "charges": charges, "stone_lines": stone_lines,
+		"gold_rate": flt(bill.gold_rate) if bill else 0,
 		"bill": (bill.name if bill else None),
 		"billed_at": (str(bill.billed_at or "")[:16] if bill else ""),
 		"narration": (bill.narration if bill else ""),
@@ -436,9 +462,167 @@ def get_repair_for_billing(repair_order):
 
 
 @frappe.whitelist()
+def save_repair_weights(repair_order, rows):
+	"""Weigh pieces out without billing them.
+
+	Half a batch is often finished and weighed while the rest is still on the
+	bench, and that weight must survive being written down — so it is kept on the
+	piece, not held on screen until somebody is ready to price the whole batch."""
+	_guard()
+	if not frappe.db.exists("Repair Order", repair_order):
+		frappe.throw(frappe._("No repair {0}.").format(repair_order))
+	o = frappe.get_doc("Repair Order", repair_order)
+	by_id = {r.repair: r for r in o.items}
+	touched = 0
+	for r in frappe.parse_json(rows) or []:
+		row = by_id.get(r.get("repair"))
+		if not row or row.bill:            # a billed piece is settled; leave it
+			continue
+		w = flt(r.get("weight_out"))
+		if w < 0:
+			frappe.throw(frappe._("{0}: weight out cannot be negative.").format(row.repair))
+		if abs(flt(row.weight_out) - w) > 0.0005:
+			row.weight_out = w
+			touched += 1
+		if "karat" in r and (r.get("karat") or "") != (row.karat or ""):
+			row.karat = r.get("karat") or None
+			touched += 1
+	if touched:
+		o.save(ignore_permissions=True)
+		frappe.db.commit()
+	return {"saved": touched, **get_repair_for_billing(repair_order)}
+
+
+@frappe.whitelist()
+def set_piece_work_types(repair_order, repair, work_types):
+	"""Put the work a piece needs on it, from wherever it is noticed.
+
+	What a piece needs is often only clear once it is in front of you at the
+	weigh-out, so the billing screen can say so too — not just the intake."""
+	_guard()
+	if not frappe.db.exists("Repair Order", repair_order):
+		frappe.throw(frappe._("No repair {0}.").format(repair_order))
+	o = frappe.get_doc("Repair Order", repair_order)
+	row = next((r for r in o.items if r.repair == repair), None)
+	if not row:
+		frappe.throw(frappe._("No piece {0}.").format(repair))
+	if row.bill:
+		frappe.throw(frappe._("{0} is billed on {1} — its work cannot change.").format(repair, row.bill))
+	names = frappe.parse_json(work_types) if isinstance(work_types, str) else work_types
+	row.work_types = ", ".join(_clean_types(names)) or None
+	o.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_repair_for_billing(repair_order)
+
+
+def _clean_types(names):
+	"""Names as typed -> real Repair Work Types, creating one that is new. The
+	counter should not have to leave the screen to record work it just found."""
+	out = []
+	for n in (names or []):
+		n = " ".join(str(n or "").split())
+		if not n:
+			continue
+		real = _master("Repair Work Type", "work_name", n, create=True)
+		if real and real not in out:
+			out.append(real)
+	return out
+
+
+@frappe.whitelist()
+def get_repair_sieves():
+	"""The sieve chart, for putting stones on a piece.
+
+	Repair stones are NOT taken from stock — nothing is issued or reserved. The
+	chart is used only so the sizes written down are the same ones used
+	everywhere else, and so carats can be worked out from a count."""
+	_guard()
+	rows = frappe.get_all("Diamond Sieve", fields=["sieve_size", "avg_cts", "idx_order"],
+		order_by="idx_order asc, sieve_size asc")
+	return [{"sieve": r.sieve_size, "avg_cts": flt(r.avg_cts)} for r in rows]
+
+
+@frappe.whitelist()
+def set_piece_stones(repair_order, repair, stones):
+	"""Replace the stones set into one piece."""
+	_guard()
+	if not frappe.db.exists("Repair Order", repair_order):
+		frappe.throw(frappe._("No repair {0}.").format(repair_order))
+	o = frappe.get_doc("Repair Order", repair_order)
+	row = next((r for r in o.items if r.repair == repair), None)
+	if not row:
+		frappe.throw(frappe._("No piece {0}.").format(repair))
+	if row.bill:
+		frappe.throw(frappe._("{0} is billed on {1} — its stones cannot change.").format(repair, row.bill))
+	want = frappe.parse_json(stones) if isinstance(stones, str) else (stones or [])
+	kept = [st for st in o.stones if st.repair != repair]
+	fresh = []
+	for st in want:
+		name = " ".join(str(st.get("stone") or "").split())
+		if not name:
+			continue
+		if cint(st.get("pcs")) < 0 or flt(st.get("ct")) < 0:
+			frappe.throw(frappe._("Stones cannot be negative."))
+		fresh.append({"repair": repair, "stone": name, "sieve": (st.get("sieve") or "").strip(),
+			"pcs": cint(st.get("pcs")), "ct": flt(st.get("ct"))})
+	o.set("stones", [{"repair": k.repair, "stone": k.stone, "sieve": k.sieve,
+		"pcs": cint(k.pcs), "ct": flt(k.ct)} for k in kept] + fresh)
+	o.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_repair_for_billing(repair_order)
+
+
+@frappe.whitelist()
+def list_open_repairs(include_done=0):
+	"""The billing floor: one tile per batch that still has pieces to bill.
+
+	A batch is 'open' while any piece is unbilled, so a half-billed batch stays
+	on screen with only its remaining pieces counted — that is what someone at
+	the counter is looking for."""
+	_guard()
+	rows = []
+	orders = frappe.get_all("Repair Order",
+		fields=["name", "party", "received_at", "total_qty", "total_weight"],
+		order_by="received_at desc, creation desc", limit_page_length=400)
+	if not orders:
+		return rows
+	pieces = frappe.get_all("Repair Order Item",
+		filters={"parent": ["in", [o.name for o in orders]]},
+		fields=["parent", "repair", "weight", "weight_out", "bill", "work_types"])
+	by_order = {}
+	for p in pieces:
+		by_order.setdefault(p.parent, []).append(p)
+	for o in orders:
+		ps = by_order.get(o.name) or []
+		open_ps = [p for p in ps if not p.bill]
+		done_ps = [p for p in ps if p.bill]
+		if not open_ps and not cint(include_done):
+			continue
+		rows.append({
+			"repair_order": o.name, "party": o.party,
+			"received_at": str(o.received_at or "")[:16],
+			"pieces_open": len(open_ps), "pieces_billed": len(done_ps), "pieces_total": len(ps),
+			"weight_in_open": round(sum(flt(p.weight) for p in open_ps), 3),
+			"weighed_out": sum(1 for p in open_ps if flt(p.weight_out)),
+			"no_work": sum(1 for p in open_ps if not (p.work_types or "").strip()),
+			"bills": sorted({p.bill for p in done_ps}),
+			# part-billed batches first: someone is mid-way through them
+			"state": ("part" if (open_ps and done_ps) else ("open" if open_ps else "done")),
+		})
+	rank = {"part": 0, "open": 1, "done": 2}
+	rows.sort(key=lambda r: (rank[r["state"]], r["received_at"]))
+	return rows
+
+
+@frappe.whitelist()
 def save_repair_bill(payload):
-	"""Weigh the batch out and price the work. One bill per repair — billing a
-	second time edits the first rather than making a rival copy of it."""
+	"""Bill some or all of a batch.
+
+	Pieces are billed a handful at a time — half a batch goes back to the party
+	while the rest is still on the bench — so a bill covers the pieces named in
+	it and marks exactly those as settled. The rest stay open and get their own
+	bill later. Re-sending a bill's own id edits that bill rather than making a
+	rival copy of it."""
 	_guard()
 	p = frappe.parse_json(payload)
 	order = p.get("repair_order")
@@ -447,16 +631,26 @@ def save_repair_bill(payload):
 	o = frappe.get_doc("Repair Order", order)
 	src = {r.repair: r for r in o.items}
 
+	editing = p.get("bill") or None
+	if editing and not frappe.db.exists("Repair Bill", editing):
+		frappe.throw(frappe._("No bill {0}.").format(editing))
+
+	wanted = [r for r in (p.get("items") or []) if src.get(r.get("repair"))]
+	if not wanted:
+		frappe.throw(frappe._("Pick at least one piece to bill."))
+
 	items = []
-	for r in p.get("items") or []:
-		row = src.get(r.get("repair"))
-		if not row:
-			continue
+	for r in wanted:
+		row = src[r.get("repair")]
+		# a piece belongs to one bill; only the bill holding it may re-bill it
+		if row.bill and row.bill != editing:
+			frappe.throw(frappe._("{0} is already billed on {1}.").format(row.repair, row.bill))
+		w_out = flt(r.get("weight_out")) if r.get("weight_out") is not None else flt(row.weight_out)
 		items.append({
 			"repair": row.repair, "design_type": row.design_type, "qty": cint(row.qty),
-			"weight_in": flt(row.weight), "weight_out": flt(r.get("weight_out")),
+			"weight_in": flt(row.weight), "weight_out": w_out,
 			"work_types": row.work_types, "repair_type": row.repair_type,
-			"narration": row.narration,
+			"narration": row.narration, "karat": row.karat,
 		})
 	charges = []
 	for c in p.get("charges") or []:
@@ -465,15 +659,37 @@ def save_repair_bill(payload):
 			continue
 		charges.append({"work_type": w, "pieces": cint(c.get("pieces")), "rate": flt(c.get("rate"))})
 
-	existing = frappe.db.get_value("Repair Bill", {"repair_order": order}, "name")
-	doc = frappe.get_doc("Repair Bill", existing) if existing else frappe.new_doc("Repair Bill")
+	# the stones on the billed pieces, at the rate agreed for each quality+sieve
+	rate_of_stone = {}
+	for sl in p.get("stone_lines") or []:
+		rate_of_stone[(sl.get("stone"), sl.get("sieve") or "")] = flt(sl.get("rate"))
+	billing = {i["repair"] for i in items}
+	stones = [{"repair": st.repair, "stone": st.stone, "sieve": st.sieve or "",
+		"pcs": cint(st.pcs), "ct": flt(st.ct),
+		"rate": rate_of_stone.get((st.stone, st.sieve or ""), 0)}
+		for st in o.stones if st.repair in billing]
+
+	doc = frappe.get_doc("Repair Bill", editing) if editing else frappe.new_doc("Repair Bill")
 	doc.repair_order = order
 	doc.party = o.party
 	doc.billed_at = p.get("billed_at") or frappe.utils.now_datetime()
 	doc.narration = (p.get("narration") or "").strip() or None
+	doc.gold_rate = flt(p.get("gold_rate"))
 	doc.set("items", items)
 	doc.set("charges", charges)
+	doc.set("stones", stones)
 	doc.save(ignore_permissions=True)
+
+	# stamp the pieces this bill covers, and release any it no longer does
+	covered = {i["repair"] for i in items}
+	for row in o.items:
+		if row.repair in covered:
+			row.bill = doc.name
+			if flt(row.weight_out) != flt(next(i["weight_out"] for i in items if i["repair"] == row.repair)):
+				row.weight_out = next(i["weight_out"] for i in items if i["repair"] == row.repair)
+		elif row.bill == doc.name:
+			row.bill = None
+	o.save(ignore_permissions=True)
 	frappe.db.commit()
 	return get_repair_bill(doc.name)
 
@@ -489,9 +705,19 @@ def get_repair_bill(name):
 		"total_weight_in": flt(d.total_weight_in), "total_weight_out": flt(d.total_weight_out),
 		"total_metal_added": flt(d.total_metal_added), "total_charges": flt(d.total_charges),
 		"narration": d.narration or "",
+		"gold_rate": flt(d.gold_rate),
+		"total_work_amount": flt(d.total_work_amount), "total_metal_amount": flt(d.total_metal_amount),
+		"total_stone_amount": flt(d.total_stone_amount), "grand_total": flt(d.grand_total),
+		"stones": [{"repair": st.repair, "stone": st.stone, "sieve": st.sieve or "",
+			"pcs": cint(st.pcs), "ct": flt(st.ct), "rate": flt(st.rate),
+			"amount": flt(st.amount)} for st in d.stones],
 		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
 			"weight_in": flt(r.weight_in), "weight_out": flt(r.weight_out),
-			"metal_added": flt(r.metal_added),
+			"metal_added": flt(r.metal_added), "karat": r.karat or "",
+			"gold_rate_used": flt(r.gold_rate_used),
+			"work_amount": flt(r.work_amount), "metal_amount": flt(r.metal_amount),
+			"stone_pcs": cint(r.stone_pcs), "stone_ct": flt(r.stone_ct),
+			"stone_amount": flt(r.stone_amount), "amount": flt(r.amount),
 			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
 			"repair_type": r.repair_type or "", "narration": r.narration or ""} for r in d.items],
 		"charges": [{"work_type": c.work_type, "pieces": cint(c.pieces),

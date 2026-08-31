@@ -14,7 +14,11 @@
   "weighed_at",
   "work_types",
   "repair_type",
-  "narration"
+  "narration",
+  "weight_out",
+  "weighed_out_at",
+  "bill",
+  "karat"
  ],
  "fields": [
   {
@@ -74,11 +78,37 @@
    "fieldtype": "Small Text",
    "label": "Narration",
    "in_list_view": 1
+  },
+  {
+   "fieldname": "weight_out",
+   "fieldtype": "Float",
+   "label": "Weight Out (g)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "weighed_out_at",
+   "fieldtype": "Datetime",
+   "label": "Last Weighed Out",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bill",
+   "fieldtype": "Link",
+   "options": "Repair Bill",
+   "label": "Billed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "karat",
+   "fieldtype": "Select",
+   "options": "22\n18\n14\n9",
+   "label": "Karat",
+   "description": "The karat of this piece's gold. Set per piece — one batch often mixes them."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-31 09:00:00.000000",
+ "modified": "2026-08-31 18:15:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Repair Order Item",

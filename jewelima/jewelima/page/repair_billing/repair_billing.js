@@ -1,12 +1,24 @@
-// Repair Billing (REPAIR > Billing) — the batch weighed out and priced.
+// Repair Billing (REPAIR > Billing) — the floor of what is still to bill, and
+// the batch weighed out and priced.
 //
-// The same pieces that came in, each with the weight it arrived at and the
-// weight it leaves at. The difference is metal added: a soldered piece comes
-// back heavier and that gold belongs on the bill, so it is totalled as its own
-// figure rather than buried in the weights.
+// It opens on the batches with pieces still to bill, one tile each, because
+// that is the question someone at the counter actually has: what is waiting.
+// Picking one opens it.
 //
-// Work is priced by TYPE on the right, not piece by piece — five solderings is
-// one line at a rate, because that is how the rate is agreed.
+// A batch is rarely finished all at once: half goes back to the party while the
+// rest is still on the bench. So pieces are TICKED and only the ticked ones are
+// billed; the rest stay open and get their own bill later. A piece belongs to
+// one bill, and the server refuses to bill it twice.
+//
+// The weigh-out is not held hostage to billing either — a weight can be written
+// on a piece and saved on its own, which is how it happens in practice. Same for
+// the work a piece turns out to need, which is often only obvious at this
+// counter, so it can be added here rather than back at the intake.
+//
+// The difference between the weights is metal added: a soldered piece comes back
+// heavier and that gold belongs on the bill, so it is its own figure rather than
+// buried in the weights. Work is priced by TYPE on the right, not piece by
+// piece — five solderings is one line at a rate, because that is how it is agreed.
 // Route: /app/repair-billing
 frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Repair Billing"), single_column: true });
@@ -15,15 +27,46 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 	const cint = (v) => parseInt(v, 10) || 0;
 	const g3 = (v) => flt(v).toFixed(3);
-	const S = { list: [], bill: null };
+	const $w = $(page.main);
 
-	$(page.main).append(`
+	// D = the batch on screen; picked = the pieces ticked to bill now
+	const S = { tiles: [], D: null, picked: new Set(), rates: {}, stoneRates: {},
+		gold: 0, sieves: [], saving: false };
+
+	// The same split the bill does. Keeping it here means the screen shows the
+	// money the server will store, not an estimate of it — see rate_for_karat
+	// in repair_bill.py, which is the one place the derivation lives.
+	const rateForKarat = (board, karat) => (flt(karat) ? flt(board) * flt(karat) / 24 : flt(board));
+	const sKey = (st) => `${st.stone}||${st.sieve || ""}`;
+
+	function priceRow(i) {
+		const work = (i.work_types || []).reduce((a, w) => a + flt(S.rates[w]), 0);
+		const added = flt(i.weight_out) ? flt(i.weight_out) - flt(i.weight_in) : 0;
+		const metal = added * rateForKarat(S.gold, i.karat);
+		const stone = (i.stones || []).reduce((a, st) => a + flt(st.ct) * flt(S.stoneRates[sKey(st)]), 0);
+		return { work, metal, stone, total: work + metal + stone, added };
+	}
+
+	$w.append(`
 		<style>
 		#page-repair-billing .container{max-width:100%;}
 		.rb-wrap{max-width:100%;}
-		.rb-pick{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
-		.rb-sel{min-width:340px;border:1px solid var(--border-color);border-radius:8px;height:33px;
-			padding:2px 11px;font-size:13px;background:var(--fg-color);color:var(--text-color);}
+		.rb-bar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:13px;}
+		.rb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:13px;}
+		.rb-card2{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
+			padding:13px 15px;cursor:pointer;transition:box-shadow .12s,transform .12s;}
+		.rb-card2:hover{box-shadow:0 3px 12px rgba(0,0,0,.10);transform:translateY(-1px);}
+		.rb-card2 .p{font-size:14px;font-weight:800;margin-bottom:1px;}
+		.rb-card2 .r{font-size:11px;color:var(--text-muted);margin-bottom:9px;}
+		.rb-card2 .n{display:flex;gap:14px;align-items:baseline;}
+		.rb-card2 .n b{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;}
+		.rb-card2 .n span{font-size:11px;color:var(--text-muted);}
+		.rb-flag{display:inline-block;font-size:9.5px;font-weight:800;text-transform:uppercase;
+			letter-spacing:.04em;border-radius:9px;padding:1px 7px;margin-left:6px;vertical-align:2px;}
+		.rb-flag.part{background:#fff3cd;color:#8a6d00;border:1px solid #e8d18a;}
+		.rb-flag.ready{background:#e6f4ea;color:#1d7a33;border:1px solid #a8d5b5;}
+		.rb-hint{font-size:11px;color:var(--text-muted);margin-top:8px;}
+
 		.rb-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
 		.rb-tile{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);
 			padding:9px 16px;min-width:120px;}
@@ -33,207 +76,467 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		.rb-tile.money .v{color:#1f618d;}
 
 		.rb-cols{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
-		.rb-main{flex:1 1 640px;min-width:520px;}
-		.rb-side{flex:0 0 330px;}
+		/* the pieces table runs the full width — it carries the money breakup now,
+		   so the charge panels sit under it rather than stealing a third of it */
+		.rb-half{flex:1 1 420px;min-width:340px;}
+		.rb-tile.rate .v input{width:120px;border:1px solid var(--border-color);border-radius:7px;
+			padding:2px 8px;font-size:17px;font-weight:800;text-align:right;background:var(--fg-color);
+			color:var(--text-color);font-variant-numeric:tabular-nums;}
+		.rb-tile.grand{background:var(--control-bg);}
+		.rb-tile.grand .v{color:#1f618d;}
+		.rb-grand{font-size:15px;margin-bottom:8px;}
+		.rb-grand b{font-size:20px;font-variant-numeric:tabular-nums;}
+		table.rb-t select.rb-kt{width:100%;border:1px solid var(--border-color);border-radius:7px;
+			padding:4px 6px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+		td.rb-st{font-size:11px;line-height:1.45;cursor:pointer;}
+		td.rb-st:hover{color:var(--text-color);}
+		.rb-add{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
 		.rb-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
 			overflow:hidden;margin-bottom:12px;}
 		.rb-h{padding:10px 14px;border-bottom:1px solid var(--border-color);background:var(--control-bg);
-			font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);}
+			font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);
+			display:flex;justify-content:space-between;align-items:center;gap:8px;}
 		table.rb-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.rb-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
 			color:var(--text-muted);padding:7px 10px;font-weight:700;border-bottom:1px solid var(--border-color);}
-		table.rb-t td{padding:5px 10px;border-bottom:1px solid var(--border-color);}
+		table.rb-t td{padding:5px 10px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
 		table.rb-t tr:last-child td{border-bottom:none;}
 		table.rb-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
-		table.rb-t input{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+		table.rb-t input[type=number]{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:5px 9px;font-size:12.5px;text-align:right;
 			background:var(--fg-color);color:var(--text-color);font-variant-numeric:tabular-nums;}
+		tr.rb-done{opacity:.55;}
+		tr.rb-on{background:var(--control-bg);}
 		.rb-added{font-weight:700;} .rb-added.up{color:#1d7a33;} .rb-added.down{color:#b02a2a;}
-		.rb-work{font-size:11px;color:var(--text-muted);}
+		.rb-work{font-size:11px;color:var(--text-muted);cursor:pointer;border-bottom:1px dashed var(--border-color);}
+		.rb-work:hover{color:var(--text-color);}
+		.rb-work.none{font-style:italic;}
 		.rb-none{padding:40px;text-align:center;color:var(--text-muted);}
 		.rb-foot{padding:9px 14px;border-top:1px solid var(--border-color);display:flex;
 			justify-content:space-between;font-size:13px;font-weight:800;}
 		.rb-note{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:8px;
 			padding:8px 11px;font-size:13px;background:var(--fg-color);color:var(--text-color);}
+		.rb-billed{font-size:10.5px;color:var(--text-muted);}
 		</style>
-		<div class="rb-wrap">
-			<div class="rb-pick">
-				<select class="rb-sel"></select>
-				<label style="font-size:12px;color:var(--text-muted);">
-					<input type="checkbox" class="rb-hidebilled"> ${__("hide billed")}</label>
-				<span class="rb-who" style="font-size:12px;color:var(--text-muted);"></span>
+		<div class="rb-wrap"><div class="rb-body"></div></div>
+	`);
+	const $body = $w.find(".rb-body");
+
+	// ---- the floor: batches with pieces still to bill ----------------------
+	function showFloor() {
+		S.D = null; S.picked.clear();
+		page.set_title(__("Repair Billing"));
+		page.clear_secondary_action();
+		frappe.call({ method: API + ".list_open_repairs", freeze: false }).then((r) => {
+			S.tiles = r.message || [];
+			if (!S.tiles.length) {
+				$body.html(`<div class="rb-none">${__("Nothing waiting to be billed.")}</div>`);
+				return;
+			}
+			$body.html(`<div class="rb-grid">` + S.tiles.map((t) => {
+				const flag = t.state === "part"
+					? `<span class="rb-flag part">${__("part billed")}</span>`
+					: (t.weighed_out === t.pieces_open && t.pieces_open
+						? `<span class="rb-flag ready">${__("weighed out")}</span>` : "");
+				const notes = [];
+				if (t.no_work) notes.push(__("{0} with no work set", [t.no_work]));
+				if (t.pieces_billed) notes.push(__("{0} already billed", [t.pieces_billed]));
+				return `<div class="rb-card2" data-o="${esc(t.repair_order)}">
+					<div class="p">${esc(t.party || "—")}${flag}</div>
+					<div class="r">${esc(t.repair_order)} · ${esc(t.received_at || "")}</div>
+					<div class="n">
+						<b>${t.pieces_open}</b><span>${__("to bill")}</span>
+						<b>${g3(t.weight_in_open)}</b><span>${__("g in")}</span>
+					</div>
+					${notes.length ? `<div class="rb-hint">${esc(notes.join(" · "))}</div>` : ""}
+				</div>`;
+			}).join("") + `</div>`);
+		});
+	}
+
+	$body.on("click", ".rb-card2", function () { openBatch(this.dataset.o); });
+
+	// ---- one batch ---------------------------------------------------------
+	function openBatch(order) {
+		if (!S.sieves.length) {
+			frappe.call({ method: API + ".get_repair_sieves" })
+				.then((r) => { S.sieves = r.message || []; });
+		}
+		frappe.call({ method: API + ".get_repair_for_billing", args: { repair_order: order } })
+			.then((r) => {
+				S.D = r.message;
+				S.picked = new Set(S.D.items.filter((i) => !i.bill).map((i) => i.repair));
+				S.rates = {}; S.stoneRates = {};
+				(S.D.charges || []).forEach((c) => { S.rates[c.work_type] = c.rate; });
+				(S.D.stone_lines || []).forEach((l) => {
+					S.stoneRates[sKey(l)] = l.rate; });
+				S.gold = flt(S.D.gold_rate) || S.gold;
+				page.set_title(__("Billing {0}", [S.D.party || order]));
+				page.set_secondary_action(__("← All repairs"), showFloor);
+				drawBatch();
+			});
+	}
+
+	function openRows() { return (S.D.items || []).filter((i) => !i.bill); }
+
+	function drawBatch() {
+		const D = S.D;
+		const KARATS = ["", "22", "18", "14", "9"];
+		const rows = D.items.map((i) => {
+			const done = !!i.bill;
+			const on = S.picked.has(i.repair);
+			const P = priceRow(i);
+			const work = (i.work_types || []).join(", ");
+			const stones = (i.stones || []);
+			const stTxt = stones.length
+				? stones.map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${cint(st.pcs)}/${flt(st.ct).toFixed(3)}`).join("<br>")
+				: `<span class="rb-add">${__("add stone")}</span>`;
+			return `<tr class="${done ? "rb-done" : ""} ${on ? "rb-on" : ""}" data-r="${esc(i.repair)}">
+				<td>${done ? `<span class="rb-billed">${esc(i.bill)}</span>`
+					: `<input type="checkbox" class="rb-pick2" ${on ? "checked" : ""}>`}</td>
+				<td><b>${esc(i.repair)}</b><div class="rb-work ${work ? "" : "none"}">${
+					esc(work || __("add work"))}</div></td>
+				<td>${esc(i.design_type || "")}</td>
+				<td>${done ? esc(i.karat || "—")
+					: `<select class="rb-kt">${KARATS.map((k) =>
+						`<option value="${k}" ${(i.karat || "") === k ? "selected" : ""}>${k || "—"}</option>`).join("")}</select>`}</td>
+				<td class="num">${cint(i.qty)}</td>
+				<td class="num">${g3(i.weight_in)}</td>
+				<td class="num">${done ? g3(i.weight_out)
+					: `<input type="number" step="0.001" min="0" class="rb-out" value="${
+						flt(i.weight_out) ? g3(i.weight_out) : ""}" placeholder="—">`}</td>
+				<td class="num rb-added ${!flt(i.weight_out) ? "" : (P.added >= 0 ? "up" : "down")}">${
+					!flt(i.weight_out) ? "—" : (P.added >= 0 ? "+" : "") + g3(P.added)}</td>
+				<td class="rb-st">${stTxt}</td>
+				<td class="num rb-m-work">${format_currency(P.work)}</td>
+				<td class="num rb-m-metal">${format_currency(P.metal)}</td>
+				<td class="num rb-m-stone">${format_currency(P.stone)}</td>
+				<td class="num rb-m-tot"><b>${format_currency(P.total)}</b></td>
+			</tr>`;
+		}).join("");
+
+		const picked = D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
+		const wIn = picked.reduce((a, i) => a + flt(i.weight_in), 0);
+		const wOut = picked.reduce((a, i) => a + flt(i.weight_out), 0);
+		const metalG = picked.length && picked.every((i) => flt(i.weight_out)) ? wOut - wIn : null;
+		const sums = picked.reduce((a, i) => {
+			const P = priceRow(i);
+			return { work: a.work + P.work, metal: a.metal + P.metal, stone: a.stone + P.stone };
+		}, { work: 0, metal: 0, stone: 0 });
+		const grand = sums.work + sums.metal + sums.stone;
+
+		// work on the ticked pieces, priced by type
+		const tally = {};
+		picked.forEach((i) => (i.work_types || []).forEach((w) => { tally[w] = (tally[w] || 0) + 1; }));
+		const charges = Object.keys(tally).sort((a, b) => tally[b] - tally[a] || a.localeCompare(b));
+
+		// stones on the ticked pieces, priced by quality + sieve
+		const sg = {};
+		picked.forEach((i) => (i.stones || []).forEach((st) => {
+			const k = sKey(st);
+			const g = sg[k] || (sg[k] = { stone: st.stone, sieve: st.sieve || "", pcs: 0, ct: 0 });
+			g.pcs += cint(st.pcs); g.ct += flt(st.ct);
+		}));
+		const stoneKeys = Object.keys(sg).sort();
+
+		$body.html(`
+			<div class="rb-tiles">
+				<div class="rb-tile"><div class="k">${__("Picked")}</div><div class="v">${picked.length}<span style="font-size:12px;color:var(--text-muted);"> / ${openRows().length}</span></div></div>
+				<div class="rb-tile"><div class="k">${__("Weight In")}</div><div class="v">${g3(wIn)}</div></div>
+				<div class="rb-tile"><div class="k">${__("Weight Out")}</div><div class="v">${g3(wOut)}</div></div>
+				<div class="rb-tile ${metalG === null ? "" : (metalG >= 0 ? "add" : "less")}">
+					<div class="k">${__("Metal Added")}</div>
+					<div class="v">${metalG === null ? "—" : (metalG >= 0 ? "+" : "") + g3(metalG)}</div></div>
+				<div class="rb-tile rate"><div class="k">${__("Gold Board Rate / g")}</div>
+					<div class="v"><input type="number" step="0.01" min="0" class="rb-gold" value="${
+						S.gold || ""}" placeholder="0"></div></div>
+				<div class="rb-tile money"><div class="k">${__("Work")}</div><div class="v">${format_currency(sums.work)}</div></div>
+				<div class="rb-tile money"><div class="k">${__("Metal")}</div><div class="v">${format_currency(sums.metal)}</div></div>
+				<div class="rb-tile money"><div class="k">${__("Stones")}</div><div class="v">${format_currency(sums.stone)}</div></div>
+				<div class="rb-tile grand"><div class="k">${__("Total")}</div><div class="v">${format_currency(grand)}</div></div>
 			</div>
-			<div class="rb-tiles"></div>
-			<div class="rb-body"></div>
-		</div>`);
-	const root = $(page.main);
 
-	function loadList() {
-		const hide = root.find(".rb-hidebilled").is(":checked") ? 1 : 0;
-		return frappe.call({ method: API + ".list_billable_repairs", freeze: false,
-			args: { unbilled_only: hide } }).then((r) => {
-			S.list = r.message || [];
-			root.find(".rb-sel").html(`<option value="">${__("Pick a repair to bill…")}</option>`
-				+ S.list.map((o) => `<option value="${esc(o.name)}">${esc(o.name)} — ${esc(o.party)}`
-					+ ` · ${o.total_qty} ${__("pc")} · ${g3(o.total_weight)} g`
-					+ `${o.billed ? " · " + __("billed") : ""}</option>`).join(""));
-			// keep whatever is open selected, so a save does not look like a reset
-			if (S.bill) root.find(".rb-sel").val(S.bill.repair_order);
-		});
-	}
+			<div class="rb-card">
+				<div class="rb-h"><span>${__("Pieces")} — ${esc(D.repair_order)} · ${esc(D.party || "")}</span>
+					<span><a class="rb-all">${__("all")}</a> · <a class="rb-non">${__("none")}</a>
+						· <button class="btn btn-default btn-xs rb-savew">${__("Save weights")}</button></span></div>
+				<table class="rb-t">
+					<thead><tr><th style="width:34px;"></th><th>${__("Piece")}</th><th>${__("Design")}</th>
+						<th style="width:74px;">${__("Karat")}</th>
+						<th class="num">${__("Qty")}</th><th class="num">${__("In (g)")}</th>
+						<th class="num" style="width:104px;">${__("Out (g)")}</th>
+						<th class="num">${__("Added")}</th>
+						<th style="width:150px;">${__("Stones")}</th>
+						<th class="num">${__("Work")}</th><th class="num">${__("Metal")}</th>
+						<th class="num">${__("Stone")}</th><th class="num">${__("Amount")}</th></tr></thead>
+					<tbody>${rows}</tbody>
+				</table>
+			</div>
 
-	function open(name) {
-		if (!name) { S.bill = null; paint(); return; }
-		frappe.call({ method: API + ".get_repair_for_billing", args: { repair_order: name } })
-			.then((r) => { S.bill = r.message || null; paint(); });
-	}
-
-	function totals() {
-		const b = S.bill || { items: [], charges: [] };
-		const win = b.items.reduce((a, i) => a + flt(i.weight_in), 0);
-		const wout = b.items.reduce((a, i) => a + flt(i.weight_out), 0);
-		// only a piece actually weighed out has a difference to speak of
-		const added = b.items.reduce((a, i) =>
-			a + (flt(i.weight_out) ? flt(i.weight_out) - flt(i.weight_in) : 0), 0);
-		const money = b.charges.reduce((a, c) => a + cint(c.pieces) * flt(c.rate), 0);
-		return { win, wout, added, money };
-	}
-
-	function paintTotals() {
-		const t = totals();
-		root.find(".rb-tiles").html(!S.bill ? "" : `
-			<div class="rb-tile"><div class="k">${__("Weight in")}</div><div class="v">${g3(t.win)}<span style="font-size:11px;"> g</span></div></div>
-			<div class="rb-tile"><div class="k">${__("Weight out")}</div><div class="v">${g3(t.wout)}<span style="font-size:11px;"> g</span></div></div>
-			<div class="rb-tile ${t.added >= 0 ? "add" : "less"}"><div class="k">${__("Metal added")}</div>
-				<div class="v">${t.added >= 0 ? "+" : ""}${g3(t.added)}<span style="font-size:11px;"> g</span></div></div>
-			<div class="rb-tile money"><div class="k">${__("Charges")}</div>
-				<div class="v">${format_currency(t.money)}</div></div>`);
-		root.find(".rb-charged").text(format_currency(t.money));
-	}
-
-	function paint() {
-		paintTotals();
-		if (!S.bill) {
-			root.find(".rb-body").html(`<div class="rb-card"><div class="rb-none">${
-				__("Pick a repair above to weigh it out and price it.")}</div></div>`);
-			page.clear_primary_action();
-			return;
-		}
-		const b = S.bill;
-		root.find(".rb-who").html(__("<b>{0}</b> · taken in {1}", [esc(b.party), esc(b.received_at)])
-			+ (b.bill ? " · " + __("already billed as {0}", [esc(b.bill)]) : ""));
-
-		root.find(".rb-body").html(`
 			<div class="rb-cols">
-				<div class="rb-main">
+				<div class="rb-half">
 					<div class="rb-card">
-						<div class="rb-h">${__("The pieces — weigh each one out")}</div>
-						<table class="rb-t"><thead><tr>
-							<th>${__("Repair")}</th><th>${__("Design Type")}</th>
-							<th class="num">${__("Qty")}</th>
-							<th class="num">${__("In (g)")}</th>
-							<th class="num" style="width:110px;">${__("Out (g)")}</th>
-							<th class="num">${__("Added (g)")}</th>
-						</tr></thead><tbody>${b.items.map((i, k) => `
-							<tr data-i="${k}">
-								<td><b>${esc(i.repair)}</b>
-									<div class="rb-work">${esc((i.work_types || []).join(", ") || "—")}${
-										i.repair_type ? " · " + esc(i.repair_type) : ""}</div></td>
-								<td>${esc(i.design_type)}</td>
-								<td class="num">${i.qty}</td>
-								<td class="num">${g3(i.weight_in)}</td>
-								<td class="num"><input class="rb-out" type="number" min="0" step="0.001"
-									value="${i.weight_out || ""}"></td>
-								<td class="num rb-cell"></td>
-							</tr>`).join("")}</tbody></table>
-					</div>
-					<div class="rb-card">
-						<div class="rb-h">${__("Note")}</div>
-						<div style="padding:10px 14px;">
-							<input class="rb-note" value="${esc(b.narration || "")}"
-								placeholder="${__("anything to say on this bill")}"></div>
+						<div class="rb-h">${__("Work Charged")}</div>
+						${charges.length ? `<table class="rb-t">
+							<thead><tr><th>${__("Type")}</th><th class="num">${__("Pcs")}</th>
+								<th class="num" style="width:104px;">${__("Rate")}</th>
+								<th class="num">${__("Amount")}</th></tr></thead>
+							<tbody>${charges.map((w) => `<tr data-w="${esc(w)}">
+								<td>${esc(w)}</td><td class="num">${tally[w]}</td>
+								<td class="num"><input type="number" step="0.01" min="0" class="rb-rate"
+									value="${flt(S.rates[w]) || ""}" placeholder="0"></td>
+								<td class="num">${format_currency(tally[w] * flt(S.rates[w]))}</td></tr>`).join("")}</tbody>
+						</table>
+						<div class="rb-foot"><span>${__("Work")}</span><span>${format_currency(sums.work)}</span></div>`
+						: `<div class="rb-none">${__("No work set on the picked pieces.")}</div>`}
 					</div>
 				</div>
-				<div class="rb-side">
+				<div class="rb-half">
 					<div class="rb-card">
-						<div class="rb-h">${__("Work on this batch")}</div>
-						${b.charges.length ? `<table class="rb-t"><thead><tr>
-							<th>${__("Type of Work")}</th><th class="num">${__("Pcs")}</th>
-							<th class="num" style="width:92px;">${__("Rate")}</th>
-							<th class="num">${__("Amount")}</th>
-						</tr></thead><tbody>${b.charges.map((c, k) => `
-							<tr data-c="${k}">
-								<td>${esc(c.work_type)}</td>
-								<td class="num">${c.pieces}</td>
-								<td class="num"><input class="rb-rate" type="number" min="0" step="0.01"
-									value="${c.rate || ""}"></td>
-								<td class="num rb-amt"></td>
-							</tr>`).join("")}</tbody></table>
-						<div class="rb-foot"><span>${__("Total")}</span><span class="rb-charged"></span></div>`
-						: `<div class="rb-none">${__("No types of work were set on this batch.")}</div>`}
+						<div class="rb-h">${__("Stones Charged")}</div>
+						${stoneKeys.length ? `<table class="rb-t">
+							<thead><tr><th>${__("Stone")}</th><th>${__("Sieve")}</th>
+								<th class="num">${__("Pcs")}</th><th class="num">${__("Cts")}</th>
+								<th class="num" style="width:104px;">${__("Rate / ct")}</th>
+								<th class="num">${__("Amount")}</th></tr></thead>
+							<tbody>${stoneKeys.map((k) => { const g = sg[k]; return `<tr data-s="${esc(k)}">
+								<td>${esc(g.stone)}</td><td>${esc(g.sieve || "—")}</td>
+								<td class="num">${g.pcs}</td><td class="num">${flt(g.ct).toFixed(3)}</td>
+								<td class="num"><input type="number" step="0.01" min="0" class="rb-srate"
+									value="${flt(S.stoneRates[k]) || ""}" placeholder="0"></td>
+								<td class="num">${format_currency(flt(g.ct) * flt(S.stoneRates[k]))}</td></tr>`; }).join("")}</tbody>
+						</table>
+						<div class="rb-foot"><span>${__("Stones")}</span><span>${format_currency(sums.stone)}</span></div>`
+						: `<div class="rb-none">${__("No stones on the picked pieces.")}</div>`}
 					</div>
 				</div>
-			</div>`);
-		paintRowNumbers();
-		page.set_primary_action(b.bill ? __("Update bill") : __("Bill it"), save, "check");
+			</div>
+
+			<div class="rb-cols">
+				<div class="rb-half"><div class="rb-card"><div class="rb-h">${__("Note")}</div>
+					<div style="padding:11px 14px;">
+						<textarea class="rb-note" rows="2">${esc(D.narration || "")}</textarea></div></div></div>
+				<div class="rb-half" style="text-align:right;">
+					<div class="rb-grand">${__("Total")} <b>${format_currency(grand)}</b></div>
+					<button class="btn btn-primary rb-bill" ${picked.length ? "" : "disabled"}>
+						${__("Bill {0} piece(s)", [picked.length])}</button>
+				</div>
+			</div>
+		`);
 	}
 
-	// the derived numbers, redrawn as the weights and rates are typed
-	function paintRowNumbers() {
-		const b = S.bill;
-		b.items.forEach((i, k) => {
-			const has = flt(i.weight_out) > 0;
-			const d = has ? flt(i.weight_out) - flt(i.weight_in) : 0;
-			root.find(`tr[data-i="${k}"] .rb-cell`)
-				.attr("class", "num rb-cell rb-added " + (has ? (d >= 0 ? "up" : "down") : ""))
-				.text(has ? (d >= 0 ? "+" : "") + g3(d) : "—");
+	// ---- ticking, weighing, pricing ----------------------------------------
+	$body.on("change", ".rb-pick2", function () {
+		const id = $(this).closest("tr").data("r");
+		if (this.checked) S.picked.add(id); else S.picked.delete(id);
+		drawBatch();
+	});
+	$body.on("click", ".rb-all", () => { openRows().forEach((i) => S.picked.add(i.repair)); drawBatch(); });
+	$body.on("click", ".rb-non", () => { S.picked.clear(); drawBatch(); });
+
+	// A weight must never rebuild the table. Redrawing on every keystroke — or
+	// even on change — replaces the input being typed in, which drops the entry
+	// and the focus with it: tabbing down a column of weights kept only the
+	// first one. So the row object is updated and just the figures that depend
+	// on it are patched in place.
+	$body.on("input", ".rb-out", function () {
+		const $tr = $(this).closest("tr");
+		const row = S.D.items.find((i) => i.repair === $tr.data("r"));
+		if (!row) return;
+		row.weight_out = flt(this.value);
+		const added = flt(row.weight_out) ? flt(row.weight_out) - flt(row.weight_in) : null;
+		$tr.find(".rb-added")
+			.removeClass("up down")
+			.addClass(added === null ? "" : (added >= 0 ? "up" : "down"))
+			.text(added === null ? "—" : (added >= 0 ? "+" : "") + g3(added));
+		syncTotals();
+	});
+	// A rate changes every money column, so the table is redrawn — but only on
+	// change (leaving the field), never per keystroke, so typing is not
+	// interrupted the way the weights were.
+	$body.on("input", ".rb-rate", function () {
+		S.rates[$(this).closest("tr").data("w")] = flt(this.value);
+	});
+	$body.on("change", ".rb-rate", () => drawBatch());
+	$body.on("input", ".rb-srate", function () {
+		S.stoneRates[$(this).closest("tr").data("s")] = flt(this.value);
+	});
+	$body.on("change", ".rb-srate", () => drawBatch());
+	$body.on("input", ".rb-gold", function () { S.gold = flt(this.value); });
+	$body.on("change", ".rb-gold", () => drawBatch());
+
+	// karat is saved with the weights, not on its own — they are set together
+	$body.on("change", ".rb-kt", function () {
+		const row = S.D.items.find((i) => i.repair === $(this).closest("tr").data("r"));
+		if (row) { row.karat = this.value || ""; drawBatch(); }
+	});
+
+	$body.on("click", ".rb-savew", function () {
+		const rows = openRows().map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out),
+			karat: i.karat || "" }));
+		frappe.call({ method: API + ".save_repair_weights",
+			args: { repair_order: S.D.repair_order, rows: JSON.stringify(rows) } })
+			.then((r) => {
+				S.D = r.message;
+				frappe.show_alert({ message: __("Weights saved"), indicator: "green" });
+				drawBatch();
+			});
+	});
+
+	function syncTotals() {
+		const picked = S.D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
+		const wIn = picked.reduce((a, i) => a + flt(i.weight_in), 0);
+		const wOut = picked.reduce((a, i) => a + flt(i.weight_out), 0);
+		const metal = picked.length && picked.every((i) => flt(i.weight_out)) ? wOut - wIn : null;
+		const $t = $body.find(".rb-tile");
+		$t.eq(1).find(".v").text(g3(wIn));
+		$t.eq(2).find(".v").text(g3(wOut));
+		$t.eq(3).removeClass("add less")
+			.addClass(metal === null ? "" : (metal >= 0 ? "add" : "less"))
+			.find(".v").text(metal === null ? "—" : (metal >= 0 ? "+" : "") + g3(metal));
+	}
+
+	// ---- the work a piece needs, set from here ------------------------------
+	$body.on("click", ".rb-work", function () {
+		const id = $(this).closest("tr").data("r");
+		const row = S.D.items.find((i) => i.repair === id);
+		if (!row || row.bill) return;
+		frappe.call({ method: API + ".get_repair_work_types" }).then((r) => {
+			const all = (r.message || []).map((w) => w.name || w.work_name || w);
+			const d = new frappe.ui.Dialog({
+				title: __("Work on {0}", [id]),
+				fields: [{
+					fieldname: "works", fieldtype: "MultiSelectPills", label: __("Types of Work"),
+					// typing a name that is not on the list adds it, same as the intake
+					get_data: (txt) => all.filter((w) => !txt || w.toLowerCase().includes(txt.toLowerCase())),
+					default: row.work_types || [],
+				}],
+				primary_action_label: __("Save"),
+				primary_action: (v) => {
+					d.hide();
+					frappe.call({ method: API + ".set_piece_work_types",
+						args: { repair_order: S.D.repair_order, repair: id,
+							work_types: JSON.stringify(v.works || []) } })
+						.then((res) => { S.D = res.message; drawBatch(); });
+				},
+			});
+			d.show();
+			d.fields_dict.works.set_value(row.work_types || []);
 		});
-		b.charges.forEach((c, k) => {
-			root.find(`tr[data-c="${k}"] .rb-amt`).text(format_currency(cint(c.pieces) * flt(c.rate)));
+	});
+
+	// ---- the stones set into a piece ---------------------------------------
+	// Nothing is issued from stock here: repairs take stones from the party's own
+	// packet or the bench tray, so this is a record of what went in, written in
+	// the sieve chart's own sizes so it reads the same as everywhere else.
+	$body.on("click", "td.rb-st", function () {
+		const id = $(this).closest("tr").data("r");
+		const row = S.D.items.find((i) => i.repair === id);
+		if (!row || row.bill) return;
+		const draw = (list) => list.map((st, n) => `<tr data-n="${n}">
+			<td><input class="sd-q" value="${esc(st.stone || "")}" placeholder="EF"></td>
+			<td><input class="sd-s" list="sd-sieves" value="${esc(st.sieve || "")}" placeholder="OOO-OO"></td>
+			<td><input class="sd-p" type="number" min="0" step="1" value="${cint(st.pcs) || ""}" placeholder="0"></td>
+			<td><input class="sd-c" type="number" min="0" step="0.001" value="${flt(st.ct) || ""}" placeholder="0.000"></td>
+			<td><a class="sd-x" title="${__("Remove")}">&times;</a></td></tr>`).join("");
+		const list = JSON.parse(JSON.stringify(row.stones || []));
+		const d = new frappe.ui.Dialog({
+			title: __("Stones in {0}", [id]), size: "large",
+			fields: [{ fieldname: "html", fieldtype: "HTML" }],
+			primary_action_label: __("Save"),
+			primary_action: () => {
+				const out = [];
+				// the rows live in the dialog, which Frappe renders outside the
+				// page — reading from the page finds nothing and saves an empty list
+				d.fields_dict.html.$wrapper.find(".sd-t tbody tr").each(function () {
+					const q = $(this).find(".sd-q").val().trim();
+					if (!q) return;
+					out.push({ stone: q, sieve: $(this).find(".sd-s").val().trim(),
+						pcs: cint($(this).find(".sd-p").val()), ct: flt($(this).find(".sd-c").val()) });
+				});
+				d.hide();
+				frappe.call({ method: API + ".set_piece_stones",
+					args: { repair_order: S.D.repair_order, repair: id, stones: JSON.stringify(out) } })
+					.then((r) => { S.D = r.message; drawBatch(); });
+			},
 		});
-		paintTotals();
-	}
-
-	root.on("change", ".rb-sel", function () { open(this.value); });
-	root.on("change", ".rb-hidebilled", () => loadList().then(() => { S.bill = null; paint(); }));
-	root.on("input", ".rb-out", function () {
-		S.bill.items[cint($(this).closest("tr").data("i"))].weight_out = this.value;
-		paintRowNumbers();
+		d.fields_dict.html.$wrapper.html(`
+			<datalist id="sd-sieves">${S.sieves.map((x) => `<option value="${esc(x.sieve)}">`).join("")}</datalist>
+			<style>
+			.sd-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+			.sd-t th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);
+				padding:6px 7px;border-bottom:1px solid var(--border-color);}
+			.sd-t td{padding:4px 7px;border-bottom:1px solid var(--border-color);}
+			.sd-t input{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+				border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+			.sd-t a.sd-x{color:#b02a2a;cursor:pointer;font-size:16px;}
+			</style>
+			<table class="sd-t"><thead><tr><th style="width:22%;">${__("Stone")}</th>
+				<th style="width:28%;">${__("Sieve")}</th><th style="width:18%;">${__("Pcs")}</th>
+				<th style="width:24%;">${__("Cts")}</th><th style="width:8%;"></th></tr></thead>
+				<tbody>${draw(list.length ? list : [{}])}</tbody></table>
+			<button class="btn btn-default btn-xs sd-more" style="margin-top:9px;">${__("Add row")}</button>
+			<div style="margin-top:7px;font-size:11px;color:var(--text-muted);">${
+				__("Carats fill in from the sieve chart when left blank.")}</div>
+		`);
+		const $t = d.fields_dict.html.$wrapper;
+		$t.on("click", ".sd-more", () => $t.find("tbody").append(draw([{}])));
+		$t.on("click", ".sd-x", function () {
+			const $tb = $t.find("tbody");
+			$(this).closest("tr").remove();
+			if (!$tb.find("tr").length) $tb.append(draw([{}]));
+		});
+		// a count with no carats is the common case — the chart knows the weight
+		$t.on("change", ".sd-s, .sd-p", function () {
+			const $tr = $(this).closest("tr");
+			const hit = S.sieves.find((x) => x.sieve.toUpperCase() === ($tr.find(".sd-s").val() || "").trim().toUpperCase());
+            const pcs = cint($tr.find(".sd-p").val());
+			if (hit && pcs && !flt($tr.find(".sd-c").val())) {
+				$tr.find(".sd-c").val((pcs * flt(hit.avg_cts)).toFixed(3));
+			}
+		});
+		d.show();
 	});
-	root.on("input", ".rb-rate", function () {
-		S.bill.charges[cint($(this).closest("tr").data("c"))].rate = this.value;
-		paintRowNumbers();
-	});
-	root.on("input", ".rb-note", function () { S.bill.narration = this.value; });
 
-	function save() {
-		const b = S.bill;
-		if (!b) return;
-		frappe.dom.freeze(__("Saving the bill…"));
-		frappe.call({ method: API + ".save_repair_bill", args: { payload: {
-			repair_order: b.repair_order,
-			narration: b.narration || "",
-			items: b.items.map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out) })),
-			charges: b.charges.map((c) => ({ work_type: c.work_type, pieces: c.pieces, rate: flt(c.rate) })),
-		} } }).then((r) => {
-			const m = r.message || {};
-			frappe.msgprint({ title: __("Billed"), indicator: "green",
-				message: __("<b>{0}</b> — {1} g metal added, {2} charged.",
-					[esc(m.name), g3(m.total_metal_added), format_currency(m.total_charges)]) });
-			loadList().then(() => open(b.repair_order));
-		}).always(() => frappe.dom.unfreeze());
-	}
-
-	page.add_inner_button(__("Status"), () => frappe.set_route("repair-status"));
-	page.add_inner_button(__("New Repair Order"), () => frappe.set_route("new-repair-order"));
-	// /app/repair-billing/REP-00001 opens that batch — Status links straight here
-	frappe.pages["repair-billing"].on_page_show = () => loadList().then(() => {
-		const want = (frappe.get_route() || [])[1];
-		if (want && (!S.bill || S.bill.repair_order !== want)) {
-			root.find(".rb-sel").val(want);
-			open(want);
-		} else {
-			paint();
-		}
+	// ---- billing what is ticked --------------------------------------------
+	$body.on("click", ".rb-bill", function () {
+		if (S.saving) return;
+		const picked = S.D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
+		if (!picked.length) return;
+		const missing = picked.filter((i) => !flt(i.weight_out));
+		const go = () => {
+			const tally = {};
+			picked.forEach((i) => (i.work_types || []).forEach((w) => { tally[w] = (tally[w] || 0) + 1; }));
+			S.saving = true;
+			frappe.call({
+				method: API + ".save_repair_bill",
+				args: { payload: JSON.stringify({
+					repair_order: S.D.repair_order,
+					gold_rate: flt(S.gold),
+					stone_lines: Object.keys(S.stoneRates).map((k) => ({
+						stone: k.split("||")[0], sieve: k.split("||")[1] || "",
+						rate: flt(S.stoneRates[k]) })),
+					items: picked.map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out) })),
+					charges: Object.keys(tally).map((w) => ({
+						work_type: w, pieces: tally[w], rate: flt(S.rates[w]) })),
+					narration: $body.find(".rb-note").val(),
+				}) },
+			}).then((r) => {
+				S.saving = false;
+				const b = r.message;
+				frappe.show_alert({ message: __("{0} saved — {1} piece(s)", [b.name, b.items.length]),
+					indicator: "green" });
+				openBatch(S.D.repair_order);      // the rest of the batch, still to bill
+			}).catch(() => { S.saving = false; });
+		};
+		if (missing.length) {
+			frappe.confirm(__("{0} of the picked pieces have no weight out. Bill them anyway?",
+				[missing.length]), go);
+		} else { go(); }
 	});
+
+	// on_page_show covers the first show too — see the workstations note
+	frappe.pages["repair-billing"].on_page_show = function () {
+		if (S.D) openBatch(S.D.repair_order); else showFloor();
+	};
 };

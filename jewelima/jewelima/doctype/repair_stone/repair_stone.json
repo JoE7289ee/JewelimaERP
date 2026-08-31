@@ -1,0 +1,29 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-31 18:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["repair", "stone", "sieve", "pcs", "ct"],
+ "fields": [
+  {"fieldname": "repair", "fieldtype": "Data", "in_list_view": 1, "label": "Piece", "reqd": 1,
+   "description": "Which piece of the batch these stones went into. Frappe has no table inside a table, so the piece is named on the row."},
+  {"fieldname": "stone", "fieldtype": "Data", "in_list_view": 1, "label": "Stone", "reqd": 1},
+  {"fieldname": "sieve", "fieldtype": "Data", "in_list_view": 1, "label": "Sieve"},
+  {"fieldname": "pcs", "fieldtype": "Int", "in_list_view": 1, "label": "Pcs"},
+  {"fieldname": "ct", "fieldtype": "Float", "in_list_view": 1, "label": "Cts", "precision": "3"}
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-31 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Repair Stone",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

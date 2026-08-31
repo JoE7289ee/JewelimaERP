@@ -9,11 +9,32 @@
 # belongs on the bill.
 #
 # Work is priced per TYPE, not per piece: five solderings on a batch is one line
-# at a rate, because that is how the rate is agreed.
+# at a rate, because that is how the rate is agreed. The same goes for stones,
+# which are priced per carat by quality and sieve.
+#
+# The party is still owed a line per piece, so those agreed rates are shared back
+# out over the pieces they came from: a piece's work share, its metal at the
+# board rate stamped here, and the stones set into it. Splitting it this way
+# means the pieces always add up to the bill, which pricing each piece
+# separately would not guarantee.
 
 import frappe
 from frappe.model.document import Document
 from frappe.utils import cint, flt
+
+
+def rate_for_karat(board_rate, karat):
+	"""The per-gram rate for a piece's own gold, from the board rate.
+
+	PLACEHOLDER derivation — proportional to fineness, i.e. the board rate is
+	taken as the 24k rate and 22k is 22/24 of it. This is the one place the
+	arithmetic lives: when the real conversion is given, change it here and every
+	bill, old and new, follows.
+	"""
+	k = flt(karat)
+	if not k:
+		return flt(board_rate)          # karat not recorded — bill at the board rate
+	return flt(board_rate) * k / 24.0
 
 
 class RepairBill(Document):
@@ -41,3 +62,44 @@ class RepairBill(Document):
 			c.amount = round(cint(c.pieces) * flt(c.rate), 2)
 			total += flt(c.amount)
 		self.total_charges = round(total, 2)
+
+		stones = 0.0
+		for st in self.stones:
+			st.amount = round(flt(st.ct) * flt(st.rate), 2)
+			stones += flt(st.amount)
+
+		self._share_out(stones)
+
+	def _share_out(self, stone_total):
+		"""Give every piece its own line: work, metal, stones.
+
+		Work is agreed per type for the whole batch, so a piece carries the rate
+		of each type of work on it. Metal is its own gold at the board rate.
+		Stones are what was actually set into that piece."""
+		rate_of = {c.work_type: flt(c.rate) for c in self.charges}
+		st_by_piece, st_pcs, st_ct = {}, {}, {}
+		for st in self.stones:
+			st_by_piece[st.repair] = st_by_piece.get(st.repair, 0.0) + flt(st.amount)
+			st_pcs[st.repair] = st_pcs.get(st.repair, 0) + cint(st.pcs)
+			st_ct[st.repair] = st_ct.get(st.repair, 0.0) + flt(st.ct)
+
+		work_t = metal_t = 0.0
+		for r in self.items:
+			works = [w.strip() for w in (r.work_types or "").split(",") if w.strip()]
+			r.work_amount = round(sum(rate_of.get(w, 0.0) for w in works), 2)
+			# metal added is gold the workshop put in; metal returned is a credit,
+			# and the sign carries through so the piece never overstates the bill
+			r.gold_rate_used = round(rate_for_karat(flt(self.gold_rate), r.karat), 2)
+			r.metal_amount = round(flt(r.metal_added) * flt(r.gold_rate_used), 2)
+			r.stone_pcs = cint(st_pcs.get(r.repair, 0))
+			r.stone_ct = round(flt(st_ct.get(r.repair, 0.0)), 3)
+			r.stone_amount = round(flt(st_by_piece.get(r.repair, 0.0)), 2)
+			r.amount = round(flt(r.work_amount) + flt(r.metal_amount) + flt(r.stone_amount), 2)
+			work_t += flt(r.work_amount)
+			metal_t += flt(r.metal_amount)
+
+		self.total_work_amount = round(self.total_charges, 2)
+		self.total_metal_amount = round(metal_t, 2)
+		self.total_stone_amount = round(stone_total, 2)
+		self.grand_total = round(flt(self.total_work_amount) + flt(self.total_metal_amount)
+			+ flt(self.total_stone_amount), 2)

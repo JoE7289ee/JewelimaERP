@@ -47,9 +47,12 @@ class RepairOrder(Document):
 				frappe.throw(frappe._("Row {0}: quantity must be at least 1.").format(r.idx))
 			if flt(r.weight) < 0:
 				frappe.throw(frappe._("Row {0}: weight cannot be negative.").format(r.idx))
+			if flt(r.weight_out) < 0:
+				frappe.throw(frappe._("Row {0}: weight out cannot be negative.").format(r.idx))
 			# types of work are optional, but a name written here must be a real one
 			r.work_types = ", ".join(_clean_work_types(r.work_types)) or None
 			self._stamp_weighing(r)
+			self._stamp_weighing_out(r)
 		self.total_rows = len(self.items)
 		self.total_qty = sum(cint(r.qty) for r in self.items)
 		self.total_weight = round(sum(flt(r.weight) for r in self.items), 3)
@@ -65,6 +68,18 @@ class RepairOrder(Document):
 		before = frappe.db.get_value("Repair Order Item", row.name, "weight") if row.name else None
 		if before is None or abs(flt(before) - now) > 0.0005 or not row.weighed_at:
 			row.weighed_at = frappe.utils.now_datetime()
+
+	def _stamp_weighing_out(self, row):
+		"""Same rule as the weigh-in, for the weight the piece leaves at. A piece
+		is weighed out at the counter well before anyone prices the work, so this
+		lives on the row and not only on a bill."""
+		now = flt(row.weight_out)
+		if not now:
+			row.weighed_out_at = None
+			return
+		before = frappe.db.get_value("Repair Order Item", row.name, "weight_out") if row.name else None
+		if before is None or abs(flt(before) - now) > 0.0005 or not row.weighed_out_at:
+			row.weighed_out_at = frappe.utils.now_datetime()
 
 	def after_insert(self):
 		self._stamp_rows()
