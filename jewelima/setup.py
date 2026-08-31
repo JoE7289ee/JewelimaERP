@@ -246,6 +246,29 @@ JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "
 	"Certification Center", "Price Chart", "Holder Transfer", "Certification Type",
 	"Design Type"]
 
+# ---- JW WAXING / JW WAX CLEANING: the wax line --------------------------------
+# Same shape as JW CAM: the benches they run, plus Transfer Order Bag narrowed
+# to the moves that leave those benches. Transfer Rules match on the FROM as
+# well as the to, so a bag scanned anywhere else has no matching rule and the
+# page refuses it by name.
+#
+# Neither gets Jewelima Transfer Plus, so "issue right after transfer" is out of
+# reach — the strip never renders and transfer_and_issue refuses it server-side.
+#
+# Requesting stones at WAX SETTING needs no extra grant: that endpoint checks
+# _require_ws_access, and holding a bench's own page is what grants working at
+# that bench.
+JEWELIMA_WAXING_ROLE = "JW WAXING"
+JEWELIMA_WAXING_PAGES = ["ws-waxing", "ws-wax-setting", "ws-wax-cleaning", "workstations",
+	"transfer-order-bag"]
+JEWELIMA_WAXING_FROM = ("WAXING", "WAX SETTING")
+JEWELIMA_WAXING_TO = ("WAXING", "WAX SETTING", "WAX CLEANING", "TREE MAKING")
+
+JEWELIMA_WAXCLEAN_ROLE = "JW WAX CLEANING"
+JEWELIMA_WAXCLEAN_PAGES = ["ws-wax-cleaning", "transfer-order-bag"]
+JEWELIMA_WAXCLEAN_FROM = ("WAX CLEANING",)
+JEWELIMA_WAXCLEAN_TO = ("WAX SETTING", "WAXING")
+
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
 	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
@@ -722,31 +745,42 @@ def setup_roles():
 				pg.set("roles", [r for r in pg.roles if r.role != role])
 				pg.save(ignore_permissions=True)
 
-	# ---- JW CAM: the CAM bench plus a narrow transfer ---------------------------
-	ensure_role(JEWELIMA_CAM_ROLE)
-	for dt in JEWELIMA_TRANSFER_READ:
-		grant(dt, JEWELIMA_CAM_ROLE, {"read": 1})
-	for dt in JEWELIMA_WS_READ:
-		grant(dt, JEWELIMA_CAM_ROLE, {"read": 1})
-	for page in JEWELIMA_CAM_PAGES:
-		set_page_roles(page, (JEWELIMA_CAM_ROLE,))
-	# tight: this role opens those two pages and nothing else
-	for page in frappe.get_all("Has Role",
-			filters={"parenttype": "Page", "role": JEWELIMA_CAM_ROLE}, pluck="parent"):
-		if page not in set(JEWELIMA_CAM_PAGES):
-			pg = frappe.get_doc("Page", page)
-			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_CAM_ROLE])
-			pg.save(ignore_permissions=True)
+	# ---- the bench desks: CAM and the wax line ----------------------------------
+	def bench_role(role, pages, froms, tos):
+		"""A bench desk: its own stations, and the moves that leave them.
 
-	# The matrix rows that pin it to CAM -> WAXING / CAD. Rewritten from scratch
-	# each run: a stale row would silently widen where the bench can send work.
-	if frappe.db.exists("DocType", "Transfer Rule"):
-		for r in frappe.get_all("Transfer Rule",
-				filters={"role": JEWELIMA_CAM_ROLE}, pluck="name"):
+		The matrix rows are rewritten from scratch every run. A stale row would
+		silently widen where a bench can send work, and nobody would notice."""
+		ensure_role(role)
+		for dt in JEWELIMA_TRANSFER_READ:
+			grant(dt, role, {"read": 1})
+		for dt in JEWELIMA_WS_READ:
+			grant(dt, role, {"read": 1})
+		for page in pages:
+			set_page_roles(page, (role,))
+		for page in frappe.get_all("Has Role",
+				filters={"parenttype": "Page", "role": role}, pluck="parent"):
+			if page not in set(pages):
+				pg = frappe.get_doc("Page", page)
+				pg.set("roles", [r for r in pg.roles if r.role != role])
+				pg.save(ignore_permissions=True)
+		if not frappe.db.exists("DocType", "Transfer Rule"):
+			return
+		for r in frappe.get_all("Transfer Rule", filters={"role": role}, pluck="name"):
 			frappe.delete_doc("Transfer Rule", r, force=True, ignore_permissions=True)
-		for to in JEWELIMA_CAM_TO:
-			frappe.get_doc({"doctype": "Transfer Rule", "role": JEWELIMA_CAM_ROLE,
-				"from_location": JEWELIMA_CAM_FROM, "to_location": to}).insert(ignore_permissions=True)
+		for frm in froms:
+			for to in tos:
+				if frm == to:
+					continue          # a bench does not transfer to itself
+				frappe.get_doc({"doctype": "Transfer Rule", "role": role,
+					"from_location": frm, "to_location": to}).insert(ignore_permissions=True)
+
+	bench_role(JEWELIMA_CAM_ROLE, JEWELIMA_CAM_PAGES,
+		(JEWELIMA_CAM_FROM,), JEWELIMA_CAM_TO)
+	bench_role(JEWELIMA_WAXING_ROLE, JEWELIMA_WAXING_PAGES,
+		JEWELIMA_WAXING_FROM, JEWELIMA_WAXING_TO)
+	bench_role(JEWELIMA_WAXCLEAN_ROLE, JEWELIMA_WAXCLEAN_PAGES,
+		JEWELIMA_WAXCLEAN_FROM, JEWELIMA_WAXCLEAN_TO)
 
 	# ---- JW Delivery: goods out, certification, and a bill it may only prepare --
 	ensure_role(JEWELIMA_DELIVERY_ROLE)
