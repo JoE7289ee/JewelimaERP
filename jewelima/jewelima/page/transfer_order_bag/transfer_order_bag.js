@@ -149,13 +149,14 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		$(page.main).find(".tob-locval").text(state.location || "—");
 	}
 	function setAllowedDestinations(fromLoc) {
-		frappe.call({ method: "jewelima.jewelima.api.allowed_to_locations", args: { from_location: fromLoc } }).then((r) => {
-			const allowed = r.message || [];
-			state.to.df.options = ["", ...allowed].join("\n");
-			state.to.refresh();
-			loadTargetOptions(); // refresh may reset the pick — keep the issue strip honest
-			if (!allowed.length) setMsg(__("You have no transfer rights from <b>{0}</b>.", [frappe.utils.escape_html(fromLoc)]), "err");
-		});
+		return frappe.call({ method: "jewelima.jewelima.api.allowed_to_locations", args: { from_location: fromLoc } })
+			.then((r) => {
+				const allowed = r.message || [];
+				state.to.df.options = ["", ...allowed].join("\n");
+				state.to.refresh();
+				loadTargetOptions(); // refresh may reset the pick — keep the issue strip honest
+				return allowed;
+			});
 	}
 	// stone columns appear only when the batch actually carries that bucket
 	const TOB_BUCKETS = ["dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"];
@@ -235,19 +236,39 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				logHistory(code, v.blocked_reason || __("Issued — can't transfer"), "err");
 				return;
 			}
-			if (!state.location) {
-				state.location = v.location; // first scan locks the location
-				updateLoc();
-				setAllowedDestinations(state.location); // limit destinations to what this user may do
-			} else if (v.location !== state.location) {
+			if (state.location && v.location !== state.location) {
 				setMsg(__("<b>{0}</b> is at <b>{1}</b> — this batch is collecting from <b>{2}</b>.", [safe, frappe.utils.escape_html(v.location), frappe.utils.escape_html(state.location)]), "err");
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			state.rows.push({ name: code, ...v });
-			renderRows();
-			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
-			logHistory(code, __("Added ({0})", [v.location]), "ok");
+			// The FIRST scan decides where this batch is collecting from, so the
+			// right to move anything out of there is settled before the bag is
+			// taken. Adding it first and refusing afterwards left the operator
+			// with a bag in the batch, the page locked to a location they cannot
+			// use, and nothing to do but Reset.
+			const ready = state.location
+				? Promise.resolve(true)
+				: setAllowedDestinations(v.location).then((allowed) => {
+					if (!allowed.length) {
+						setMsg(__("You have no transfer rights from <b>{0}</b> — <b>{1}</b> not added.",
+							[frappe.utils.escape_html(v.location), safe]), "err");
+						logHistory(code, __("No rights from {0}", [v.location]), "err");
+						state.to.df.options = "";      // leave nothing half-set behind
+						state.to.refresh();
+						return false;
+					}
+					state.location = v.location;       // only now does the batch have a home
+					updateLoc();
+					return true;
+				});
+
+			ready.then((go) => {
+				if (!go) return;
+				state.rows.push({ name: code, ...v });
+				renderRows();
+				setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
+				logHistory(code, __("Added ({0})", [v.location]), "ok");
+			});
 		});
 	}
 

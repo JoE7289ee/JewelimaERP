@@ -17,7 +17,9 @@
   "sec_admin",
   "admin_note",
   "closed_by",
-  "closed_on"
+  "closed_on",
+  "edited_on",
+  "edited_by"
  ],
  "fields": [
   {
@@ -34,7 +36,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Category",
-   "options": "Feature\nImprovement\nBug\nOther\nClaude"
+   "options": "Feature\nImprovement\nBug\nOther\nClaude\nJOE TODO"
   },
   {
    "default": "Open",
@@ -97,12 +99,25 @@
    "fieldtype": "Datetime",
    "label": "Closed On",
    "read_only": 1
+  },
+  {
+   "fieldname": "edited_on",
+   "fieldtype": "Datetime",
+   "label": "Edited",
+   "read_only": 1
+  },
+  {
+   "fieldname": "edited_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Edited By",
+   "read_only": 1
   }
  ],
  "idx": 0,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-10 15:00:00",
+ "modified": "2026-09-01 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Feature Request",

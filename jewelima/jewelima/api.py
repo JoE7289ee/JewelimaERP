@@ -15267,7 +15267,7 @@ def _is_feature_admin():
 	return bool({"System Manager", "JW Manager"} & set(frappe.get_roles())) or frappe.session.user == "Administrator"
 
 
-FEATURE_REQUEST_CATEGORIES = ("Feature", "Improvement", "Bug", "Claude", "Other")
+FEATURE_REQUEST_CATEGORIES = ("Feature", "Improvement", "Bug", "Claude", "JOE TODO", "Other")
 
 
 @frappe.whitelist()
@@ -15324,6 +15324,51 @@ def list_feature_requests(status=None, mine=0, category=None):
 		counts[st] = frappe.db.count("Feature Request", {"status": st})
 	return {"rows": rows, "counts": counts, "cat_counts": cat_counts,
 		"is_admin": 1 if _is_feature_admin() else 0, "me": frappe.session.user}
+
+
+@frappe.whitelist()
+def edit_feature_request(name, description=None, category=None, title=None):
+	"""Reword a request while it is still Open.
+
+	Whoever raised it can fix their own wording, and the administrator can fix
+	anyone's. Only while OPEN: once it is In Progress or closed, somebody has
+	acted on what it said, and quietly changing the text underneath them would
+	leave the work and the request describing different things.
+	"""
+	if not frappe.db.exists("Feature Request", name):
+		frappe.throw(frappe._("No request {0}.").format(name))
+	row = frappe.db.get_value("Feature Request", name,
+		["status", "requested_by"], as_dict=True)
+	admin = _is_feature_admin()
+	if not admin and row.requested_by != frappe.session.user:
+		frappe.throw(frappe._("This is not your request."), frappe.PermissionError)
+	if row.status != "Open":
+		frappe.throw(frappe._("{0} is {1} — only an Open request can be edited.")
+			.format(name, row.status))
+
+	vals = {}
+	if description is not None:
+		description = (description or "").strip()
+		if not description:
+			frappe.throw(frappe._("Write your request."))
+		vals["description"] = description
+		# the heading follows the text, the same way it does when one is raised
+		first = next((ln.strip() for ln in description.splitlines() if ln.strip()), "")
+		src = first or description
+		vals["title"] = (src[:117] + "\u2026") if len(src) > 118 else src
+	if title:
+		vals["title"] = (title or "").strip()[:140]
+	if category is not None:
+		if category not in FEATURE_REQUEST_CATEGORIES:
+			frappe.throw(frappe._("{0} is not a category.").format(category))
+		vals["category"] = category
+	if not vals:
+		return {"name": name}
+	vals["edited_on"] = frappe.utils.now_datetime()
+	vals["edited_by"] = frappe.session.user
+	frappe.db.set_value("Feature Request", name, vals)
+	frappe.db.commit()
+	return {"name": name, **vals}
 
 
 @frappe.whitelist()

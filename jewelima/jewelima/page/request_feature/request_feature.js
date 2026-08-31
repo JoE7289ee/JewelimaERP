@@ -51,6 +51,11 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 		.rf-admin{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;border-top:1px dashed var(--border-color);padding-top:8px;}
 		.rf-admin button{border:none;border-radius:6px;padding:4px 11px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;}
 		.rf-note{border:1px solid var(--border-color);border-radius:6px;padding:4px 8px;font-size:11.5px;background:var(--control-bg);color:var(--text-color);margin-top:6px;}
+		.rf-own{margin-top:7px;}
+		.rf-own button{border:1px solid var(--border-color);background:var(--fg-color);
+			color:var(--text-color);border-radius:7px;padding:3px 11px;font-size:11.5px;
+			font-weight:700;cursor:pointer;}
+		.rf-own button:hover{background:var(--control-bg);}
 		.rf-none{padding:30px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
 		</style>
 		<div class="rf-top">
@@ -90,7 +95,7 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 			return `<div class="rf-tile ${FST === k ? "on" : ""}" data-s="${esc(k)}"><div class="k">${lbl}</div><div class="v">${v}</div></div>`;
 		}).join(""));
 		const cc = DATA.cat_counts || {};
-		const cats = ["", "Feature", "Improvement", "Bug", "Claude", "Other"];
+		const cats = ["", "Feature", "Improvement", "Bug", "Claude", "JOE TODO", "Other"];
 		root.find(".rf-cats").html(`<span class="lbl">${__("Category")}</span>` + cats.map((k) => {
 			const n = k === "" ? Object.values(cc).reduce((a, b) => a + (b || 0), 0) : (cc[k] || 0);
 			return `<span class="rf-cat-f ${FCAT === k ? "on" : ""}" data-c="${esc(k)}">${k || __("All")} (${n})</span>`;
@@ -109,6 +114,9 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 					· ${esc((r.requested_on || "").slice(0, 16))}
 					${r.closed_by ? " · " + __("closed by {0}", [esc((r.closed_by || "").split("@")[0])]) + " " + esc((r.closed_on || "").slice(0, 16)) : ""}</div>
 				${r.admin_note ? `<div class="rf-note">📌 ${esc(r.admin_note)}</div>` : ""}
+				${r.status === "Open" && (DATA.is_admin || r.requested_by === DATA.me)
+					? `<div class="rf-own"><button class="rf-edit" data-n="${esc(r.name)}">${__("Edit")}</button></div>`
+					: ""}
 				${DATA.is_admin ? `<div class="rf-admin">
 					${["Open", "In Progress", "In Test", "On Hold", "Closed", "Declined"].filter((s) => s !== r.status).map((s) =>
 						`<button class="rf-set" data-n="${esc(r.name)}" data-s="${s}" style="background:${s === "Closed" ? "#1d7a33" : s === "Declined" ? "#b02a2a" : s === "In Progress" ? "#333d8f" : s === "In Test" ? "#0f6e66" : s === "On Hold" ? "#777" : "#8a6d00"};">${__("→ {0}", [s])}</button>`).join("")}
@@ -118,6 +126,37 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 				? __("Nothing matches.")
 				: __("No requests yet — raise the first one.")}</div>`);
 	}
+
+	// A request can be reworded while it is still Open: the person who raised it
+	// fixes their own, the admin fixes anyone's. Once it moves on somebody has
+	// acted on what it said, so the text stops being editable — the server
+	// enforces that, this just hides the button.
+	root.on("click", ".rf-edit", function () {
+		const name = this.getAttribute("data-n");
+		const r = (DATA.rows || []).find((x) => x.name === name);
+		if (!r) return;
+		const d = new frappe.ui.Dialog({
+			title: __("Edit {0}", [name]), size: "large",
+			fields: [
+				{ fieldname: "description", fieldtype: "Small Text", label: __("Request"),
+					reqd: 1, default: r.description || r.title || "" },
+				{ fieldname: "category", fieldtype: "Select", label: __("Category"),
+					options: ["Feature", "Improvement", "Bug", "Claude", "JOE TODO", "Other"].join("\n"),
+					default: r.category || "Feature" },
+			],
+			primary_action_label: __("Save"),
+			primary_action(v) {
+				frappe.call({ method: API + ".edit_feature_request",
+					args: { name, description: v.description, category: v.category } })
+					.then(() => {
+						d.hide();
+						frappe.show_alert({ message: __("{0} updated", [name]), indicator: "green" }, 4);
+						load();
+					});
+			},
+		});
+		d.show();
+	});
 
 	let rfBusy = false; // guard: a double Enter / double click must not file twice
 	root.on("click", ".rf-submit", () => {
