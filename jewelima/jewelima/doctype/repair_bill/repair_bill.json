@@ -1,0 +1,34 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "RB-.#####",
+ "creation": "2026-08-31 12:00:00.000000", "doctype": "DocType", "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["repair_order", "party", "billed_at", "cb_head", "billed_by",
+  "total_weight_in", "total_weight_out", "total_metal_added", "total_charges",
+  "sec_items", "items", "sec_charges", "charges", "sec_note", "narration"],
+ "fields": [
+  {"fieldname": "repair_order", "fieldtype": "Link", "options": "Repair Order", "label": "Repair", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "party", "fieldtype": "Link", "options": "Repair Party", "label": "Party", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "billed_at", "fieldtype": "Datetime", "label": "Billed", "reqd": 1},
+  {"fieldname": "cb_head", "fieldtype": "Column Break"},
+  {"fieldname": "billed_by", "fieldtype": "Link", "options": "User", "label": "Billed By", "read_only": 1},
+  {"fieldname": "total_weight_in", "fieldtype": "Float", "label": "Weight In (g)", "precision": "3", "read_only": 1},
+  {"fieldname": "total_weight_out", "fieldtype": "Float", "label": "Weight Out (g)", "precision": "3", "read_only": 1},
+  {"fieldname": "total_metal_added", "fieldtype": "Float", "label": "Metal Added (g)", "precision": "3", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "total_charges", "fieldtype": "Currency", "label": "Charges", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sec_items", "fieldtype": "Section Break", "label": "Pieces"},
+  {"fieldname": "items", "fieldtype": "Table", "options": "Repair Bill Item", "label": "Pieces"},
+  {"fieldname": "sec_charges", "fieldtype": "Section Break", "label": "Work Charged"},
+  {"fieldname": "charges", "fieldtype": "Table", "options": "Repair Bill Charge", "label": "Charges"},
+  {"fieldname": "sec_note", "fieldtype": "Section Break"},
+  {"fieldname": "narration", "fieldtype": "Small Text", "label": "Narration"}
+ ],
+ "index_web_pages_for_search": 1, "links": [],
+ "modified": "2026-08-31 12:00:00.000000", "modified_by": "Administrator",
+ "module": "Jewelima", "name": "Repair Bill", "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "Jewelima Repair", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "JW Manager", "share": 1, "write": 1}
+ ],
+ "sort_field": "creation", "sort_order": "DESC", "states": [], "title_field": "party", "track_changes": 1
+}

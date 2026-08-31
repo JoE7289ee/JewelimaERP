@@ -336,3 +336,182 @@ def list_repair_orders(party=None, from_date=None, to_date=None, limit=200):
 			"weight": round(sum(flt(r["total_weight"]) for r in out), 3),
 			"lines": sum(cint(r["total_rows"]) for r in out),
 			"parties": len({r["party"] for r in out})}}
+
+
+# --- status ----------------------------------------------------------------
+@frappe.whitelist()
+def get_repair_status(party=None, state="all", from_date=None, to_date=None, limit=200):
+	"""Every batch as a card: what came in, what it weighs, and whether it is
+	billed. `state`: all | open | billed."""
+	_guard()
+	filters = {}
+	if party:
+		filters["party"] = party
+	if from_date and to_date:
+		filters["received_at"] = ["between", [str(from_date) + " 00:00:00", str(to_date) + " 23:59:59"]]
+	orders = frappe.get_all("Repair Order", filters=filters,
+		fields=["name", "party", "received_at", "received_by", "total_qty", "total_rows",
+			"total_weight", "narration"],
+		order_by="received_at desc, creation desc", limit_page_length=cint(limit) or 200)
+
+	billed = {b.repair_order: b for b in frappe.get_all("Repair Bill",
+		filters={"repair_order": ["in", [o.name for o in orders] or [""]]},
+		fields=["name", "repair_order", "billed_at", "total_charges", "total_metal_added"])}
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({o.received_by for o in orders}) or [""]]},
+		fields=["name", "full_name"])} if orders else {}
+
+	rows = []
+	for o in orders:
+		b = billed.get(o.name)
+		if state == "open" and b:
+			continue
+		if state == "billed" and not b:
+			continue
+		items = frappe.get_all("Repair Order Item", filters={"parent": o.name},
+			fields=["repair", "design_type", "qty", "weight", "weighed_at",
+				"work_types", "repair_type", "narration"], order_by="idx")
+		rows.append({
+			"name": o.name, "party": o.party,
+			"received_at": str(o.received_at or "")[:16],
+			"received_by": users.get(o.received_by, o.received_by),
+			"total_qty": cint(o.total_qty), "total_rows": cint(o.total_rows),
+			"total_weight": flt(o.total_weight), "narration": o.narration or "",
+			"bill": (b.name if b else None),
+			"billed_at": (str(b.billed_at or "")[:16] if b else ""),
+			"charges": (flt(b.total_charges) if b else 0),
+			"metal_added": (flt(b.total_metal_added) if b else 0),
+			"items": [{**i, "qty": cint(i["qty"]), "weight": flt(i["weight"]),
+				"weighed_at": str(i["weighed_at"] or "")[:16],
+				"work_types": [w.strip() for w in (i["work_types"] or "").split(",") if w.strip()]}
+				for i in items],
+		})
+	return {"rows": rows,
+		"parties": [p["party_name"] for p in get_repair_parties(include_inactive=1)],
+		"totals": {"batches": len(rows),
+			"pieces": sum(r["total_qty"] for r in rows),
+			"weight": round(sum(r["total_weight"] for r in rows), 3),
+			"open": sum(1 for r in rows if not r["bill"]),
+			"billed": sum(1 for r in rows if r["bill"])}}
+
+
+# --- billing ---------------------------------------------------------------
+@frappe.whitelist()
+def get_repair_for_billing(repair_order):
+	"""A batch ready to be billed: its pieces with the weight they came in at,
+	and every type of work on it with how many pieces need it."""
+	_guard()
+	if not frappe.db.exists("Repair Order", repair_order):
+		frappe.throw(frappe._("No repair {0}.").format(repair_order))
+	o = frappe.get_doc("Repair Order", repair_order)
+	existing = frappe.db.get_value("Repair Bill", {"repair_order": repair_order}, "name")
+	bill = frappe.get_doc("Repair Bill", existing) if existing else None
+	out_of = {r.repair: r for r in (bill.items if bill else [])}
+	rate_of = {c.work_type: flt(c.rate) for c in (bill.charges if bill else [])}
+
+	items, tally = [], {}
+	for r in o.items:
+		works = [w.strip() for w in (r.work_types or "").split(",") if w.strip()]
+		for w in works:
+			tally[w] = tally.get(w, 0) + 1
+		prior = out_of.get(r.repair)
+		items.append({
+			"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
+			"weight_in": flt(r.weight),
+			"weight_out": (flt(prior.weight_out) if prior else 0),
+			"work_types": works, "repair_type": r.repair_type or "",
+			"narration": r.narration or "",
+		})
+	charges = [{"work_type": w, "pieces": n, "rate": rate_of.get(w, 0)}
+		for w, n in sorted(tally.items(), key=lambda x: (-x[1], x[0]))]
+	return {
+		"repair_order": o.name, "party": o.party,
+		"received_at": str(o.received_at or "")[:16],
+		"total_qty": cint(o.total_qty), "total_weight_in": flt(o.total_weight),
+		"items": items, "charges": charges,
+		"bill": (bill.name if bill else None),
+		"billed_at": (str(bill.billed_at or "")[:16] if bill else ""),
+		"narration": (bill.narration if bill else ""),
+	}
+
+
+@frappe.whitelist()
+def save_repair_bill(payload):
+	"""Weigh the batch out and price the work. One bill per repair — billing a
+	second time edits the first rather than making a rival copy of it."""
+	_guard()
+	p = frappe.parse_json(payload)
+	order = p.get("repair_order")
+	if not order or not frappe.db.exists("Repair Order", order):
+		frappe.throw(frappe._("Pick the repair to bill."))
+	o = frappe.get_doc("Repair Order", order)
+	src = {r.repair: r for r in o.items}
+
+	items = []
+	for r in p.get("items") or []:
+		row = src.get(r.get("repair"))
+		if not row:
+			continue
+		items.append({
+			"repair": row.repair, "design_type": row.design_type, "qty": cint(row.qty),
+			"weight_in": flt(row.weight), "weight_out": flt(r.get("weight_out")),
+			"work_types": row.work_types, "repair_type": row.repair_type,
+			"narration": row.narration,
+		})
+	charges = []
+	for c in p.get("charges") or []:
+		w = c.get("work_type")
+		if not w or not frappe.db.exists("Repair Work Type", w):
+			continue
+		charges.append({"work_type": w, "pieces": cint(c.get("pieces")), "rate": flt(c.get("rate"))})
+
+	existing = frappe.db.get_value("Repair Bill", {"repair_order": order}, "name")
+	doc = frappe.get_doc("Repair Bill", existing) if existing else frappe.new_doc("Repair Bill")
+	doc.repair_order = order
+	doc.party = o.party
+	doc.billed_at = p.get("billed_at") or frappe.utils.now_datetime()
+	doc.narration = (p.get("narration") or "").strip() or None
+	doc.set("items", items)
+	doc.set("charges", charges)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_repair_bill(doc.name)
+
+
+@frappe.whitelist()
+def get_repair_bill(name):
+	_guard()
+	d = frappe.get_doc("Repair Bill", name)
+	return {
+		"name": d.name, "repair_order": d.repair_order, "party": d.party,
+		"billed_at": str(d.billed_at or "")[:16],
+		"billed_by": frappe.db.get_value("User", d.billed_by, "full_name") or d.billed_by,
+		"total_weight_in": flt(d.total_weight_in), "total_weight_out": flt(d.total_weight_out),
+		"total_metal_added": flt(d.total_metal_added), "total_charges": flt(d.total_charges),
+		"narration": d.narration or "",
+		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
+			"weight_in": flt(r.weight_in), "weight_out": flt(r.weight_out),
+			"metal_added": flt(r.metal_added),
+			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
+			"repair_type": r.repair_type or "", "narration": r.narration or ""} for r in d.items],
+		"charges": [{"work_type": c.work_type, "pieces": cint(c.pieces),
+			"rate": flt(c.rate), "amount": flt(c.amount)} for c in d.charges],
+	}
+
+
+@frappe.whitelist()
+def list_billable_repairs(unbilled_only=1):
+	"""The batches to pick from on the billing screen."""
+	_guard()
+	billed = set(frappe.get_all("Repair Bill", pluck="repair_order"))
+	rows = []
+	for o in frappe.get_all("Repair Order",
+			fields=["name", "party", "received_at", "total_qty", "total_weight"],
+			order_by="received_at desc, creation desc", limit_page_length=300):
+		is_billed = o.name in billed
+		if cint(unbilled_only) and is_billed:
+			continue
+		rows.append({**o, "received_at": str(o.received_at or "")[:16],
+			"total_qty": cint(o.total_qty), "total_weight": flt(o.total_weight),
+			"billed": is_billed})
+	return rows

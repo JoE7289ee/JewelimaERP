@@ -112,8 +112,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 					placeholder="${__("design type")}"></td>
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
 				<td class="num"><input class="nr-wt" type="number" min="0" step="0.001"
-					value="${r.weight === "" || r.weight === undefined ? "" : r.weight}"
-					placeholder="${__("optional")}"></td>
+					value="${r.weight === "" || r.weight === undefined ? "" : r.weight}"></td>
 				<td><div class="nr-works">
 					${(r.work_types || []).map((w) =>
 						`<span class="nr-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}

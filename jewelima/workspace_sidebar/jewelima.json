@@ -2076,6 +2076,32 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "list",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Repair Status",
+   "link_to": "repair-status",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "file-text",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Billing",
+   "link_to": "repair-billing",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "settings",
    "indent": 1,
    "keep_closed": 0,
@@ -2490,7 +2516,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-31 15:06:04.371591",
+ "modified": "2026-08-31 15:31:55.263537",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
