@@ -1,0 +1,198 @@
+// New Repair Order (REPAIR > New Repair Order) — taking work in over the counter.
+//
+// One batch is one party arriving once: who sent it, when, and who took it. The
+// rows below are the pieces. The batch is numbered REP-00001 and each row gets
+// its own number under it (REP-00001-3), so a single piece can be talked about
+// without the batch.
+//
+// Party and Type of Work are open lists: type one that does not exist and it is
+// added. The counter is not the place to stop and set up a master first.
+// Route: /app/new-repair-order
+frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("New Repair Order"), single_column: true });
+	const API = "jewelima.jewelima.repair_api";
+	const esc = frappe.utils.escape_html;
+	const cint = (v) => parseInt(v, 10) || 0;
+	const S = { opts: { parties: [], work_types: [], design_types: [] }, rows: [], saved: null };
+
+	$(page.main).append(`
+		<style>
+		#page-new-repair-order .container{max-width:100%;}
+		.nr-wrap{max-width:1180px;}
+		.nr-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
+			padding:14px 16px;margin-bottom:14px;}
+		.nr-card .h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+			color:var(--text-muted);margin-bottom:10px;}
+		.nr-head{display:flex;gap:14px;flex-wrap:wrap;}
+		.nr-f{flex:1 1 220px;min-width:190px;}
+		.nr-f label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+			color:var(--text-muted);margin-bottom:3px;}
+		.nr-f input,.nr-f select,.nr-f textarea{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+			border-radius:8px;padding:8px 11px;font-size:13px;background:var(--fg-color);color:var(--text-color);}
+		.nr-f .who{padding:8px 11px;font-size:13px;color:var(--text-muted);}
+		.nr-hint{font-size:11px;color:var(--text-muted);margin-top:3px;}
+
+		table.nr-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+		table.nr-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+			color:var(--text-muted);padding:7px 8px;font-weight:700;border-bottom:1px solid var(--border-color);}
+		table.nr-t td{padding:5px 8px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
+		table.nr-t td input,table.nr-t td select{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+			border-radius:7px;padding:6px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+		table.nr-t td.num input{text-align:right;font-variant-numeric:tabular-nums;}
+		.nr-del{border:none;background:none;color:#b02a2a;font-size:16px;cursor:pointer;line-height:1;}
+		.nr-add{margin-top:9px;}
+		.nr-tot{display:flex;gap:18px;margin-top:10px;font-size:12.5px;color:var(--text-muted);}
+		.nr-tot b{color:var(--text-color);font-variant-numeric:tabular-nums;}
+		.nr-none{padding:20px;text-align:center;color:var(--text-muted);font-size:12.5px;}
+		.nr-done{border:1px solid #bfe3c6;background:#eaf6ec;color:#1d7a33;border-radius:11px;
+			padding:12px 15px;margin-bottom:14px;}
+		.nr-done b{font-size:15px;}
+		.nr-done table{width:100%;margin-top:8px;font-size:12px;color:var(--text-color);}
+		.nr-done td{padding:3px 6px;border-bottom:1px solid #cfe6d4;}
+		</style>
+		<div class="nr-wrap">
+			<div class="nr-doneslot"></div>
+			<div class="nr-card">
+				<div class="h">${__("Where it came from")}</div>
+				<div class="nr-head">
+					<div class="nr-f"><label>${__("Party")}</label>
+						<input class="nr-party" list="nr-parties" placeholder="${__("pick, or type a new one")}">
+						<datalist id="nr-parties"></datalist>
+						<div class="nr-hint">${__("a name that is not on the list is added to Repair Parties")}</div></div>
+					<div class="nr-f"><label>${__("Received")}</label>
+						<input type="datetime-local" class="nr-when"></div>
+					<div class="nr-f"><label>${__("Received by")}</label>
+						<div class="who nr-who"></div></div>
+				</div>
+			</div>
+			<div class="nr-card">
+				<div class="h">${__("The pieces")}</div>
+				<table class="nr-t"><thead><tr>
+					<th style="width:26%;">${__("Design Type")}</th>
+					<th style="width:9%;">${__("Qty")}</th>
+					<th style="width:26%;">${__("Type of Work")}</th>
+					<th>${__("Narration")}</th>
+					<th style="width:34px;"></th>
+				</tr></thead><tbody class="nr-body"></tbody></table>
+				<button class="btn btn-xs btn-default nr-add">+ ${__("another piece")}</button>
+				<div class="nr-tot"></div>
+			</div>
+			<div class="nr-card">
+				<div class="h">${__("Anything else")}</div>
+				<div class="nr-f"><textarea class="nr-note" rows="2"
+					placeholder="${__("a note about the whole batch")}"></textarea></div>
+			</div>
+		</div>
+		<datalist id="nr-works"></datalist>
+		<datalist id="nr-dtypes"></datalist>`);
+	const root = $(page.main);
+
+	const blank = () => ({ design_type: "", qty: 1, work_type: "", narration: "" });
+
+	function paintRows() {
+		const o = S.opts;
+		root.find(".nr-body").html(S.rows.length ? S.rows.map((r, i) => `
+			<tr data-i="${i}">
+				<td><input class="nr-dt" list="nr-dtypes" value="${esc(r.design_type)}"
+					placeholder="${__("design type")}"></td>
+				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
+				<td><input class="nr-work" list="nr-works" value="${esc(r.work_type)}"
+					placeholder="${__("pick or type")}"></td>
+				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
+				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
+			</tr>`).join("") : `<tr><td colspan="5" class="nr-none">${
+				__("Nothing on the list yet — add a piece.")}</td></tr>`);
+		const pieces = S.rows.reduce((a, r) => a + cint(r.qty), 0);
+		root.find(".nr-tot").html(S.rows.length
+			? `<span>${__("Lines")} <b>${S.rows.length}</b></span><span>${__("Pieces")} <b>${pieces}</b></span>`
+			: "");
+		page.set_primary_action(__("Take it in"), save, "add");
+	}
+
+	function fillLists() {
+		const o = S.opts;
+		root.find("#nr-parties").html(o.parties.map((p) => `<option value="${esc(p)}">`).join(""));
+		root.find("#nr-works").html(o.work_types.map((w) => `<option value="${esc(w)}">`).join(""));
+		root.find("#nr-dtypes").html(o.design_types.map((d) => `<option value="${esc(d)}">`).join(""));
+		root.find(".nr-who").text(o.received_by_name || o.received_by || "");
+	}
+
+	function load() {
+		frappe.call({ method: API + ".get_repair_intake_options", freeze: false }).then((r) => {
+			S.opts = r.message || S.opts;
+			fillLists();
+			if (!root.find(".nr-when").val()) {
+				// the counter's clock, not the server's midnight
+				const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+				root.find(".nr-when").val(d.toISOString().slice(0, 16));
+			}
+			if (!S.rows.length) S.rows = [blank()];
+			paintRows();
+		});
+	}
+
+	// keep what is typed as it is typed — a repaint must never lose a half-filled row
+	root.on("input change", ".nr-dt, .nr-qty, .nr-work, .nr-nar", function () {
+		const i = cint($(this).closest("tr").data("i"));
+		const r = S.rows[i];
+		if (!r) return;
+		if ($(this).hasClass("nr-dt")) r.design_type = this.value;
+		else if ($(this).hasClass("nr-qty")) r.qty = cint(this.value);
+		else if ($(this).hasClass("nr-work")) r.work_type = this.value;
+		else r.narration = this.value;
+		if ($(this).hasClass("nr-qty")) {
+			const pieces = S.rows.reduce((a, x) => a + cint(x.qty), 0);
+			root.find(".nr-tot").html(`<span>${__("Lines")} <b>${S.rows.length}</b></span><span>${__("Pieces")} <b>${pieces}</b></span>`);
+		}
+	});
+	root.on("click", ".nr-add", () => { S.rows.push(blank()); paintRows(); });
+	root.on("click", ".nr-del", function () {
+		S.rows.splice(cint($(this).closest("tr").data("i")), 1);
+		if (!S.rows.length) S.rows = [blank()];
+		paintRows();
+	});
+
+	function save() {
+		const party = (root.find(".nr-party").val() || "").trim();
+		if (!party) return frappe.msgprint(__("Say which party this came from."));
+		const rows = S.rows.filter((r) => (r.design_type || "").trim() && (r.work_type || "").trim());
+		if (!rows.length) return frappe.msgprint(__("Every piece needs a design type and a type of work."));
+		const short = S.rows.filter((r) => (r.design_type || r.work_type || r.narration) &&
+			!((r.design_type || "").trim() && (r.work_type || "").trim()));
+		if (short.length) return frappe.msgprint(
+			__("{0} half-filled line(s) — each piece needs both a design type and a type of work.", [short.length]));
+
+		const when = root.find(".nr-when").val();
+		frappe.dom.freeze(__("Taking it in…"));
+		frappe.call({ method: API + ".create_repair_order", args: { payload: {
+			party, received_at: when ? when.replace("T", " ") + ":00" : null,
+			narration: root.find(".nr-note").val() || "",
+			items: rows,
+		} } }).then((r) => {
+			const m = r.message || {};
+			S.saved = m;
+			showDone(m);
+			S.rows = [blank()];
+			root.find(".nr-party").val("");
+			root.find(".nr-note").val("");
+			paintRows();
+			load();          // a newly typed party or work type joins the lists
+		}).always(() => frappe.dom.unfreeze());
+	}
+
+	function showDone(m) {
+		root.find(".nr-doneslot").html(`
+			<div class="nr-done">
+				<b>${esc(m.name)}</b> — ${__("taken in from")} <b>${esc(m.party)}</b>
+				· ${m.total_rows} ${__("line(s)")} · ${m.total_qty} ${__("piece(s)")}
+				<table><tbody>${(m.items || []).map((r) => `
+					<tr><td><b>${esc(r.repair)}</b></td><td>${esc(r.design_type)}</td>
+					<td>${r.qty}</td><td>${esc(r.work_type)}</td>
+					<td>${esc(r.narration || "")}</td></tr>`).join("")}</tbody></table>
+			</div>`);
+	}
+
+	page.add_inner_button(__("Parties"), () => frappe.set_route("repair-parties"));
+	page.add_inner_button(__("Types of Work"), () => frappe.set_route("repair-tow"));
+	frappe.pages["new-repair-order"].on_page_show = load;
+};

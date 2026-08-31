@@ -264,34 +264,21 @@ JEWELIMA_GRAPHICS_PAGES = ["photo-update", "photo-urgent", "photo-queue", "custo
 	"customer-update", "photo-kpi", "photo-approvals", "rejection"]
 
 
-# REPAIR — the isolated repair module (intake -> billing -> register).
+# REPAIR — taking work in from a party. A batch is one arrival (REP-00001) and
+# its rows are the pieces, each numbered under it (REP-00001-3). Party and Type
+# of Work are open lists: typing a new one on the intake page adds it.
 # One role runs it; everyone else sees nothing. Writes go through
 # repair_api (role-gated + ignore_permissions), same as everywhere.
 JEWELIMA_REPAIR_ROLE = "Jewelima Repair"
-JEWELIMA_REPAIR_PAGES = ["repair-intake", "repair-desk", "repair-bills", "repair-setup"]
-JEWELIMA_REPAIR_DOCTYPES = ["Repair Party", "Repair Item Type", "Repair Receipt", "Repair Bill"]
+JEWELIMA_REPAIR_PAGES = ["new-repair-order", "repair-parties", "repair-tow"]
+JEWELIMA_REPAIR_DOCTYPES = ["Repair Order", "Repair Order Item", "Repair Party", "Repair Work Type"]
 # the sheet's polish IF-formula, as editable master rows
-REPAIR_ITEM_TYPE_SEED = {"NOSE PIN": 150, "NECKLACE": 300, "BRACELET": 300, "BANGLE": 300,
-	"RING": 200, "STUD": 200, "PENDANT": 200, "CHAIN": 200, "ANKLET": 200, "CHAIN NECKLACE": 200}
-
-
-def seed_repair_defaults():
-	"""Idempotent: the item types (with the sheet's polish rates) and the
-	settings constants exist after every migrate; edits on top survive."""
-	for t, rate in REPAIR_ITEM_TYPE_SEED.items():
-		if not frappe.db.exists("Repair Item Type", t):
-			frappe.get_doc({"doctype": "Repair Item Type", "type_name": t,
-				"polish_rate": rate}).insert(ignore_permissions=True)
-	st = frappe.get_single("Repair Settings")
-	if not flt(st.soldering_rate):
-		st.soldering_rate, st.stone_fix_rate = 200, 200
-		st.gst_percent, st.factor_75, st.factor_92 = 3, 75.5, 92
-		st.save(ignore_permissions=True)
-
-
 # Pages the app no longer ships — migrate does not remove deleted Page docs,
 # so stale rows would keep serving a dead route on every site.
-RETIRED_PAGES = ["design-transfer"]
+RETIRED_PAGES = ["design-transfer",
+	# the repair module was rebuilt from scratch (2026-08-31) — these four and
+	# their doctypes are gone from the app, so their Page docs must go too
+	"repair-intake", "repair-desk", "repair-bills", "repair-setup"]
 
 
 def retag_swarovski():
@@ -514,8 +501,7 @@ def setup_roles():
 	# its four pages — and stripped from every other page it may grab.
 	for dt in JEWELIMA_REPAIR_DOCTYPES:
 		grant(dt, JEWELIMA_REPAIR_ROLE, {"read": 1, "write": 1, "create": 1, "delete": 1, "report": 1})
-	grant("Repair Settings", JEWELIMA_REPAIR_ROLE, {"read": 1})
-	grant("Warehouse", JEWELIMA_REPAIR_ROLE, {"read": 1})
+	grant("Design Type", JEWELIMA_REPAIR_ROLE, {"read": 1})   # the intake page picks from it
 	for page in JEWELIMA_REPAIR_PAGES:
 		set_page_roles(page, (JEWELIMA_REPAIR_ROLE,))
 	for page in frappe.get_all("Has Role", filters={"parenttype": "Page", "role": JEWELIMA_REPAIR_ROLE}, pluck="parent"):
@@ -523,7 +509,6 @@ def setup_roles():
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_REPAIR_ROLE])
 			pg.save(ignore_permissions=True)
-	seed_repair_defaults()
 
 	# ---- Jewelima Purchase: the stock buyer -------------------------------------
 	# One page (Purchase Raw Material), read on the masters its pickers paint —

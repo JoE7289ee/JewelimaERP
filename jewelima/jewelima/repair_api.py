@@ -1,263 +1,255 @@
 # Copyright (c) 2026, efeone and contributors
 # For license information, please see license.txt
-"""Whitelisted APIs for the REPAIR module — the isolated repair desk
-(intake -> billing -> register). Every mutator checks the Repair role
-server-side; the doctypes stay view-only for everyone else."""
+"""REPAIR — taking work in from a party.
 
-import json
+A batch is one party, one arrival: who sent it, when it came, who took it. The
+rows are the pieces — a design type, how many, what work they need. The batch is
+numbered REP-00001 and every row carries its own number under it (REP-00001-3),
+so a single piece can be referred to without dragging the batch along.
+
+Party and Type of Work are their own tables, and both are open vocabularies:
+typing a new one on the intake page adds it, because the person at the counter
+is not going to stop and go set up a master first.
+"""
 
 import frappe
-from frappe import _
-from frappe.utils import flt, cint, today
+from frappe.utils import cint
 
-REPAIR_ROLES = {"System Manager", "Jewelima Repair"}
-
-
-def _require():
-	if not REPAIR_ROLES & set(frappe.get_roles()):
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
+REPAIR_ROLES = ("System Manager", "JW Manager", "Jewelima Repair")
 
 
-def _j(payload):
-	return frappe.parse_json(payload) if isinstance(payload, str) else (payload or {})
+def _guard():
+	if not set(REPAIR_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("The repair desk is for the repair team."), frappe.PermissionError)
 
 
-# --- bootstrap ---------------------------------------------------------------------
+# --- the two open vocabularies ---------------------------------------------
+def _master(dt, field, value, create=True):
+	"""Find a party / work type by name, adding it if it is new."""
+	value = " ".join(str(value or "").split())
+	if not value:
+		return None
+	hit = frappe.db.get_value(dt, {field: value}, "name")
+	if hit:
+		return hit
+	# a different case of the same name is the same name
+	hit = frappe.db.get_value(dt, {field: ["like", value]}, "name")
+	if hit:
+		return hit
+	if not create:
+		frappe.throw(frappe._("{0} {1} not found.").format(dt, value))
+	return frappe.get_doc({"doctype": dt, field: value, "active": 1}).insert(
+		ignore_permissions=True).name
+
 
 @frappe.whitelist()
-def get_repair_boot():
-	"""Everything the pages need on load: parties (+rates/extras), item
-	types (+polish rates), settings, and the open-work counts."""
-	_require()
-	parties = []
-	for p in frappe.get_all("Repair Party", fields=["name", "dia_rate", "active"], order_by="name"):
-		p["extras"] = frappe.get_all("Repair Party Charge", filters={"parent": p.name},
-			fields=["charge_name", "rate"], order_by="idx")
-		parties.append(p)
-	st = frappe.get_single("Repair Settings")
-	return {
-		"parties": parties,
-		"item_types": frappe.get_all("Repair Item Type", fields=["name", "polish_rate"], order_by="name"),
-		"settings": {k: flt(st.get(k)) for k in
-			("soldering_rate", "stone_fix_rate", "gst_percent", "factor_75", "factor_92")},
-		"repair_warehouse": st.repair_warehouse,
-		"open_receipts": frappe.db.count("Repair Receipt", {"status": "Received"}),
-		"open_bills": frappe.db.count("Repair Bill", {"status": "In Progress"}),
-	}
+def get_repair_parties(include_inactive=0):
+	_guard()
+	filters = {} if cint(include_inactive) else {"active": 1}
+	return frappe.get_all("Repair Party", filters=filters,
+		fields=["name", "party_name", "active", "notes"], order_by="party_name")
 
-
-# --- masters -----------------------------------------------------------------------
 
 @frappe.whitelist()
-def save_repair_party(payload):
-	"""Create/update a party: name, dia rate, extras list [{charge_name, rate}]."""
-	_require()
-	p = _j(payload)
-	name = (p.get("party_name") or "").strip().upper()
+def add_repair_party(party_name, notes=None):
+	_guard()
+	name = _master("Repair Party", "party_name", party_name)
 	if not name:
-		frappe.throw(_("Party name is required"))
-	if frappe.db.exists("Repair Party", name):
-		doc = frappe.get_doc("Repair Party", name)
-	else:
-		doc = frappe.new_doc("Repair Party")
-		doc.party_name = name
-	doc.dia_rate = flt(p.get("dia_rate"))
-	doc.active = 1 if p.get("active", 1) else 0
-	doc.set("extras", [{"charge_name": (e.get("charge_name") or "").strip().upper(), "rate": flt(e.get("rate"))}
-		for e in (p.get("extras") or []) if (e.get("charge_name") or "").strip()])
-	doc.save(ignore_permissions=True)
-	return {"name": doc.name}
-
-
-@frappe.whitelist()
-def save_repair_item_type(type_name, polish_rate):
-	_require()
-	name = (type_name or "").strip().upper()
-	if not name:
-		frappe.throw(_("Item type is required"))
-	if frappe.db.exists("Repair Item Type", name):
-		frappe.db.set_value("Repair Item Type", name, "polish_rate", flt(polish_rate))
-	else:
-		frappe.get_doc({"doctype": "Repair Item Type", "type_name": name,
-			"polish_rate": flt(polish_rate)}).insert(ignore_permissions=True)
+		frappe.throw(frappe._("Enter the party's name."))
+	if notes:
+		frappe.db.set_value("Repair Party", name, "notes", notes)
+	frappe.db.commit()
 	return {"name": name}
 
 
 @frappe.whitelist()
-def delete_repair_item_type(type_name):
-	_require()
-	if frappe.db.exists("Repair Bill Item", {"item_type": type_name}) \
-			or frappe.db.exists("Repair Receipt Item", {"item_type": type_name}):
-		frappe.throw(_("{0} is used on receipts/bills — cannot delete.").format(type_name))
-	frappe.delete_doc("Repair Item Type", type_name, ignore_permissions=True)
-	return {"ok": 1}
+def set_repair_party(name, party_name=None, active=None, notes=None):
+	"""Rename, retire or annotate a party. A rename follows every batch."""
+	_guard()
+	if not frappe.db.exists("Repair Party", name):
+		frappe.throw(frappe._("No party {0}.").format(name))
+	if party_name and party_name.strip() and party_name.strip() != name:
+		frappe.rename_doc("Repair Party", name, party_name.strip(), force=True)
+		name = party_name.strip()
+	vals = {}
+	if active is not None:
+		vals["active"] = cint(active)
+	if notes is not None:
+		vals["notes"] = notes
+	if vals:
+		frappe.db.set_value("Repair Party", name, vals)
+	frappe.db.commit()
+	return {"name": name}
 
 
 @frappe.whitelist()
-def save_repair_settings(payload):
-	_require()
-	p = _j(payload)
-	st = frappe.get_single("Repair Settings")
-	for k in ("soldering_rate", "stone_fix_rate", "gst_percent", "factor_75", "factor_92"):
-		if k in p:
-			st.set(k, flt(p[k]))
-	if "repair_warehouse" in p:
-		st.repair_warehouse = p.get("repair_warehouse") or None
-	st.save(ignore_permissions=True)
-	return {"ok": 1}
-
-
-# --- intake ------------------------------------------------------------------------
-
-@frappe.whitelist()
-def save_repair_receipt(payload):
-	"""Create/update an intake lot. items: [{item_type, qty, narration, remarks}]."""
-	_require()
-	p = _j(payload)
-	if p.get("name"):
-		doc = frappe.get_doc("Repair Receipt", p["name"])
-		if doc.status == "Billed":
-			frappe.throw(_("{0} is already billed — it can no longer be edited.").format(doc.name))
-	else:
-		doc = frappe.new_doc("Repair Receipt")
-	doc.party = p.get("party")
-	doc.receipt_date = p.get("receipt_date") or today()
-	doc.jd_ref = (p.get("jd_ref") or "").strip()
-	doc.remarks = p.get("remarks")
-	doc.set("items", [{"item_type": i.get("item_type"), "qty": cint(i.get("qty")) or 1,
-		"narration": (i.get("narration") or "").strip(), "remarks": (i.get("remarks") or "").strip()}
-		for i in (p.get("items") or []) if i.get("item_type") or (i.get("narration") or "").strip()])
-	if not doc.items:
-		frappe.throw(_("At least one piece is required"))
-	doc.save(ignore_permissions=True)
-	return {"name": doc.name, "pieces": doc.piece_count}
+def delete_repair_party(name):
+	"""Only while nothing has come in from them — otherwise retire instead."""
+	_guard()
+	used = frappe.db.count("Repair Order", {"party": name})
+	if used:
+		frappe.throw(frappe._("{0} is on {1} repair(s) — untick Active to retire them instead.").format(name, used))
+	frappe.delete_doc("Repair Party", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": name}
 
 
 @frappe.whitelist()
-def list_repair_receipts(status=None, party=None):
-	_require()
-	f = {}
-	if status:
-		f["status"] = status
+def get_repair_work_types(include_inactive=0):
+	_guard()
+	filters = {} if cint(include_inactive) else {"active": 1}
+	return frappe.get_all("Repair Work Type", filters=filters,
+		fields=["name", "work_name", "active", "notes"], order_by="work_name")
+
+
+@frappe.whitelist()
+def add_repair_work_type(work_name, notes=None):
+	_guard()
+	name = _master("Repair Work Type", "work_name", work_name)
+	if not name:
+		frappe.throw(frappe._("Enter the type of work."))
+	if notes:
+		frappe.db.set_value("Repair Work Type", name, "notes", notes)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def set_repair_work_type(name, work_name=None, active=None, notes=None):
+	_guard()
+	if not frappe.db.exists("Repair Work Type", name):
+		frappe.throw(frappe._("No type of work {0}.").format(name))
+	if work_name and work_name.strip() and work_name.strip() != name:
+		frappe.rename_doc("Repair Work Type", name, work_name.strip(), force=True)
+		name = work_name.strip()
+	vals = {}
+	if active is not None:
+		vals["active"] = cint(active)
+	if notes is not None:
+		vals["notes"] = notes
+	if vals:
+		frappe.db.set_value("Repair Work Type", name, vals)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def delete_repair_work_type(name):
+	_guard()
+	used = frappe.db.count("Repair Order Item", {"work_type": name})
+	if used:
+		frappe.throw(frappe._("{0} is on {1} line(s) — untick Active to retire it instead.").format(name, used))
+	frappe.delete_doc("Repair Work Type", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": name}
+
+
+@frappe.whitelist()
+def repair_party_usage():
+	"""{party: how many batches name it} — what makes a delete safe or not."""
+	_guard()
+	return {r[0]: r[1] for r in frappe.db.sql(
+		"SELECT party, COUNT(*) FROM `tabRepair Order` GROUP BY party")}
+
+
+@frappe.whitelist()
+def repair_work_type_usage():
+	"""{type of work: how many lines name it}."""
+	_guard()
+	return {r[0]: r[1] for r in frappe.db.sql(
+		"SELECT work_type, COUNT(*) FROM `tabRepair Order Item` GROUP BY work_type")}
+
+
+# --- taking a batch in ------------------------------------------------------
+@frappe.whitelist()
+def get_repair_intake_options():
+	"""Everything the intake page picks from."""
+	_guard()
+	return {
+		"parties": [p["party_name"] for p in get_repair_parties()],
+		"work_types": [w["work_name"] for w in get_repair_work_types()],
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
+		"received_by": frappe.session.user,
+		"received_by_name": frappe.db.get_value("User", frappe.session.user, "full_name")
+			or frappe.session.user,
+	}
+
+
+@frappe.whitelist()
+def create_repair_order(payload):
+	"""Take a batch in. A party or type of work typed for the first time is
+	added to its table rather than refused — the counter is not the place to
+	stop and set up a master."""
+	_guard()
+	p = frappe.parse_json(payload)
+	rows = p.get("items") or []
+	if not rows:
+		frappe.throw(frappe._("Add at least one piece."))
+	party = _master("Repair Party", "party_name", p.get("party"))
+	if not party:
+		frappe.throw(frappe._("Pick or type the party."))
+
+	items = []
+	for i, r in enumerate(rows, start=1):
+		dt = (r.get("design_type") or "").strip()
+		if not dt or not frappe.db.exists("Design Type", dt):
+			frappe.throw(frappe._("Row {0}: pick a design type.").format(i))
+		qty = cint(r.get("qty"))
+		if qty <= 0:
+			frappe.throw(frappe._("Row {0}: quantity must be at least 1.").format(i))
+		work = _master("Repair Work Type", "work_name", r.get("work_type"))
+		if not work:
+			frappe.throw(frappe._("Row {0}: say what work it needs.").format(i))
+		items.append({"design_type": dt, "qty": qty, "work_type": work,
+			"narration": (r.get("narration") or "").strip() or None})
+
+	doc = frappe.get_doc({
+		"doctype": "Repair Order", "party": party,
+		"received_at": p.get("received_at") or frappe.utils.now_datetime(),
+		"received_by": frappe.session.user,
+		"narration": (p.get("narration") or "").strip() or None,
+		"items": items,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return get_repair_order(doc.name)
+
+
+@frappe.whitelist()
+def get_repair_order(name):
+	_guard()
+	doc = frappe.get_doc("Repair Order", name)
+	return {
+		"name": doc.name, "party": doc.party,
+		"received_at": str(doc.received_at or ""),
+		"received_by": doc.received_by,
+		"received_by_name": frappe.db.get_value("User", doc.received_by, "full_name") or doc.received_by,
+		"narration": doc.narration or "",
+		"total_qty": cint(doc.total_qty), "total_rows": cint(doc.total_rows),
+		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
+			"work_type": r.work_type, "narration": r.narration or ""} for r in doc.items],
+	}
+
+
+@frappe.whitelist()
+def list_repair_orders(party=None, from_date=None, to_date=None, limit=200):
+	"""The batches taken in, newest first."""
+	_guard()
+	filters = {}
 	if party:
-		f["party"] = party
-	rows = frappe.get_all("Repair Receipt", filters=f,
-		fields=["name", "party", "receipt_date", "jd_ref", "status", "piece_count", "billed_in", "remarks"],
-		order_by="receipt_date desc, name desc", limit_page_length=500)
-	return rows
-
-
-@frappe.whitelist()
-def get_repair_receipt(name):
-	_require()
-	doc = frappe.get_doc("Repair Receipt", name)
-	return {"name": doc.name, "party": doc.party, "receipt_date": str(doc.receipt_date or ""),
-		"jd_ref": doc.jd_ref, "status": doc.status, "remarks": doc.remarks, "billed_in": doc.billed_in,
-		"items": [{"item_type": i.item_type, "qty": i.qty, "narration": i.narration, "remarks": i.remarks}
-			for i in doc.items]}
-
-
-@frappe.whitelist()
-def delete_repair_receipt(name):
-	_require()
-	doc = frappe.get_doc("Repair Receipt", name)
-	if doc.status == "Billed":
-		frappe.throw(_("{0} is billed — cannot delete.").format(name))
-	frappe.delete_doc("Repair Receipt", name, ignore_permissions=True)
-	return {"ok": 1}
-
-
-# --- billing -----------------------------------------------------------------------
-
-LINE_FIELDS = ("item_type", "narration", "qty", "jd_ref", "receipt", "solder_count",
-	"polish", "polish_rate", "other_desc", "other_amt", "stn_fix_units",
-	"add_wt_75", "add_wt_92", "dmd_qty", "dmd_wt", "service", "remarks")
-
-
-@frappe.whitelist()
-def save_repair_bill(payload):
-	"""Create/update a bill. The controller recomputes every amount — the page
-	numbers are previews only. Receipts pulled onto lines flip to Billed."""
-	_require()
-	p = _j(payload)
-	if p.get("name"):
-		doc = frappe.get_doc("Repair Bill", p["name"])
-		if doc.status == "Delivered":
-			frappe.throw(_("{0} is delivered — it can no longer be edited.").format(doc.name))
-	else:
-		doc = frappe.new_doc("Repair Bill")
-	was = {i.receipt for i in getattr(doc, "items", []) if i.receipt}
-	doc.party = p.get("party")
-	doc.bill_date = p.get("bill_date") or today()
-	doc.tm_rate = flt(p.get("tm_rate"))
-	doc.dia_rate = flt(p.get("dia_rate"))
-	doc.remarks = p.get("remarks")
-	if p.get("status") in ("In Progress", "Billed"):
-		doc.status = p["status"]
-	doc.set("items", [{k: i.get(k) for k in LINE_FIELDS} for i in (p.get("items") or [])])
-	doc.save(ignore_permissions=True)
-	# receipt statuses follow the bill's lines
-	now = {i.receipt for i in doc.items if i.receipt}
-	for r in now - was:
-		frappe.db.set_value("Repair Receipt", r, {"status": "Billed", "billed_in": doc.name})
-	for r in was - now:
-		frappe.db.set_value("Repair Receipt", r, {"status": "Received", "billed_in": None})
-	out = get_repair_bill(doc.name)
-	return out
-
-
-@frappe.whitelist()
-def get_repair_bill(name):
-	_require()
-	doc = frappe.get_doc("Repair Bill", name)
-	fields = LINE_FIELDS + ("solder_amt", "polish_amt", "stn_fix_amt", "repair_charges",
-		"add_wt_75_amt", "add_wt_92_amt", "dmd_tot_ct", "dmd_amt", "total_amt")
-	return {"name": doc.name, "party": doc.party, "bill_date": str(doc.bill_date or ""),
-		"status": doc.status, "tm_rate": doc.tm_rate, "rate_18k": doc.rate_18k,
-		"rate_22k": doc.rate_22k, "dia_rate": doc.dia_rate, "remarks": doc.remarks,
-		"tot_pieces": doc.tot_pieces, "tot_repair": doc.tot_repair, "tot_diamond": doc.tot_diamond,
-		"tot_wt75": doc.tot_wt75, "tot_wt75_amt": doc.tot_wt75_amt,
-		"tot_wt92": doc.tot_wt92, "tot_wt92_amt": doc.tot_wt92_amt,
-		"grand_total": doc.grand_total,
-		"items": [{k: i.get(k) for k in fields} for i in doc.items]}
-
-
-@frappe.whitelist()
-def list_repair_bills(party=None, status=None, from_date=None, to_date=None):
-	_require()
-	f = {}
-	if party:
-		f["party"] = party
-	if status:
-		f["status"] = status
+		filters["party"] = party
 	if from_date and to_date:
-		f["bill_date"] = ["between", [from_date, to_date]]
-	elif from_date:
-		f["bill_date"] = [">=", from_date]
-	elif to_date:
-		f["bill_date"] = ["<=", to_date]
-	return frappe.get_all("Repair Bill", filters=f,
-		fields=["name", "party", "bill_date", "status", "tot_pieces", "tot_repair",
-			"tot_diamond", "tot_wt75", "tot_wt75_amt", "tot_wt92", "tot_wt92_amt", "grand_total"],
-		order_by="bill_date desc, name desc", limit_page_length=500)
-
-
-@frappe.whitelist()
-def set_repair_bill_status(name, status):
-	_require()
-	if status not in ("In Progress", "Billed", "Delivered"):
-		frappe.throw(_("Bad status"))
-	frappe.db.set_value("Repair Bill", name, "status", status)
-	return {"ok": 1}
-
-
-@frappe.whitelist()
-def delete_repair_bill(name):
-	_require()
-	doc = frappe.get_doc("Repair Bill", name)
-	if doc.status != "In Progress":
-		frappe.throw(_("Only In Progress bills can be deleted."))
-	for r in {i.receipt for i in doc.items if i.receipt}:
-		frappe.db.set_value("Repair Receipt", r, {"status": "Received", "billed_in": None})
-	frappe.delete_doc("Repair Bill", name, ignore_permissions=True)
-	return {"ok": 1}
+		filters["received_at"] = ["between", [str(from_date) + " 00:00:00", str(to_date) + " 23:59:59"]]
+	rows = frappe.get_all("Repair Order", filters=filters,
+		fields=["name", "party", "received_at", "received_by", "total_qty", "total_rows", "narration"],
+		order_by="received_at desc, creation desc", limit_page_length=cint(limit) or 200)
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.received_by for r in rows}) or [""]]},
+		fields=["name", "full_name"])} if rows else {}
+	out = []
+	for r in rows:
+		out.append({**r, "received_at": str(r.received_at or "")[:16],
+			"received_by_name": users.get(r.received_by, r.received_by)})
+	return {"rows": out,
+		"totals": {"batches": len(out), "qty": sum(cint(r["total_qty"]) for r in out),
+			"lines": sum(cint(r["total_rows"]) for r in out),
+			"parties": len({r["party"] for r in out})}}

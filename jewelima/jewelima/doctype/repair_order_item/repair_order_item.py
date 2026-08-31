@@ -1,10 +1,10 @@
 # Copyright (c) 2026, efeone and contributors
 # For license information, please see license.txt
+#
+# One piece on a repair batch. Its own repair number is stamped by the parent.
 
 from frappe.model.document import Document
 
 
-class RepairItemType(Document):
-	"""A repairable item type and its per-piece polish charge (was buried in the sheet's IF formula)."""
-
+class RepairOrderItem(Document):
 	pass
