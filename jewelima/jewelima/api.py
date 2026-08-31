@@ -9508,6 +9508,9 @@ def get_price_chart(name):
 def save_price_chart(payload):
 	"""Save = a NEW Active version (the controller supersedes the previous Active
 	chart of the same name — history is never edited)."""
+	if not can_edit_price_charts():
+		frappe.throw(frappe._("You can read the price charts but not change them."),
+			frappe.PermissionError)
 	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
 	if not (p.get("chart_name") or "").strip():
 		frappe.throw(frappe._("Give the chart a name — usually the party's name."))
@@ -13233,6 +13236,26 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			filters={"order_bag": nm, "parenttype": "Sale Preparation"}, fields=["parent"])
 			if frappe.db.get_value("Sale Preparation", x.parent, "status") in ("Draft", "Sent")],
 	}
+
+
+# Desks that may READ the price charts without changing them. Same shape as the
+# selling rule below: a list of who is held back, so a role that is not named
+# here keeps whatever it had.
+PRICE_CHART_VIEW_ONLY_ROLES = {"JW Delivery"}
+PRICE_CHART_EDIT_ROLES = {"System Manager", "JW Manager", "Stock Manager"}
+
+
+def can_edit_price_charts():
+	roles = set(frappe.get_roles())
+	if roles & PRICE_CHART_EDIT_ROLES:
+		return True
+	return not (roles & PRICE_CHART_VIEW_ONLY_ROLES)
+
+
+@frappe.whitelist()
+def price_chart_rights():
+	"""What the Price Charts page may offer this user."""
+	return {"can_edit": 1 if can_edit_price_charts() else 0}
 
 
 # Roles that may PREPARE a bill but not close it. The delivery desk builds the

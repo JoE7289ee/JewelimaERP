@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-29 12:00:00",
+ "modified": "2026-09-01 02:59:57.907767",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "sales-records",
@@ -16,6 +16,12 @@
   },
   {
    "role": "Stock Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Delivery"
   }
  ],
  "script": null,

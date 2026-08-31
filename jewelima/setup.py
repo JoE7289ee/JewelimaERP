@@ -233,14 +233,18 @@ JEWELIMA_DELIVERY_PAGES = [
 	"finished-goods", "transfer-holder", "rework",
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
-	# Sales — price and park it; closing the sale belongs to someone else
-	"sell", "prepare-sale",
+	# Sales — price and park it; closing the sale belongs to someone else.
+	# sales-records and price-charts are VIEW ONLY: the records page only ever
+	# reads, and save_price_chart refuses this role, so the chart can be looked
+	# up when pricing a bill without being edited.
+	"sell", "prepare-sale", "sales-records", "price-charts",
 ]
 # read is all the desk needs: every action runs through a page API that writes
 # with ignore_permissions
 JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "Customer",
 	"Job Order", "Employee", "Product Sale", "Sale Prep Board", "Certification",
-	"Certification Center", "Price Chart", "Holder Transfer"]
+	"Certification Center", "Price Chart", "Holder Transfer", "Certification Type",
+	"Design Type"]
 
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",

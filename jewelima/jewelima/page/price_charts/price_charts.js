@@ -21,6 +21,10 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
+		/* view-only: the chart still reads normally, it just cannot be typed into */
+		.pc-readonly input,.pc-readonly select,.pc-readonly textarea{pointer-events:none;
+			background:var(--control-bg);opacity:.85;}
+		.pc-readonly [contenteditable]{pointer-events:none;}
 		.pc-cols{display:flex;gap:20px;align-items:flex-start;}
 		.pc-left{flex:0 0 300px;}
 		.pc-right{flex:1;min-width:0;}
@@ -63,6 +67,18 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		</div>
 	`);
 	const root = $(page.main);
+	// A desk that may read the charts but not change them gets no New Chart and
+	// no Save. The server refuses either way; this stops offering what would be
+	// turned down, and stops someone filling a whole chart in before finding out.
+	let CAN_EDIT = true;
+	frappe.call({ method: API + ".price_chart_rights", freeze: false }).then((r) => {
+		CAN_EDIT = !!(r.message || {}).can_edit;
+		if (!CAN_EDIT) {
+			page.clear_primary_action();
+			$(page.main).find(".pc-save").remove();
+			$(page.main).addClass("pc-readonly");
+		}
+	});
 	page.set_primary_action(__("New Chart"), () => openChart(null), "add");
 
 	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Certification Type",
@@ -227,7 +243,9 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				<div><label>${__("Signatory phone")}</label><input class="pc-f" data-f="signatory_phone" value="${esc(cur.signatory_phone)}"></div>
 			</div>
 			<div class="pc-actions">
-				<button class="btn btn-primary pc-save">${cur.name ? __("Save as New Version") : __("Save Chart")}</button>
+				${CAN_EDIT ? `<button class="btn btn-primary pc-save">${
+					cur.name ? __("Save as New Version") : __("Save Chart")}</button>`
+					: `<span class="pc-hint">${__("View only — ask someone with pricing rights to change a chart.")}</span>`}
 				${cur.name ? `<button class="btn btn-default pc-pdf">${__("Export PDF")}</button>
 				<button class="btn btn-default pc-print">${__("Print")}</button>` : ""}
 			</div>
