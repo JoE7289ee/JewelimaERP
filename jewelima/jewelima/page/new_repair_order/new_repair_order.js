@@ -13,13 +13,13 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.repair_api";
 	const esc = frappe.utils.escape_html;
 	const cint = (v) => parseInt(v, 10) || 0;
-	const S = { opts: { parties: [], work_types: [], types: [], design_types: [] },
+	const S = { opts: { parties: [], work_types: [], types: [], design_types: [], sieves: [] },
 		rows: [], saved: null };
 
 	$(page.main).append(`
 		<style>
 		#page-new-repair-order .container{max-width:100%;}
-		.nr-wrap{max-width:1180px;}
+		.nr-wrap{max-width:100%;}
 		.nr-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
 			padding:14px 16px;margin-bottom:14px;}
 		.nr-card .h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
@@ -43,6 +43,10 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		.nr-del{border:none;background:none;color:#b02a2a;font-size:16px;cursor:pointer;line-height:1;}
 		.nr-works{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
 		.nr-works input{flex:1 1 90px;min-width:80px;}
+		td.nr-st{font-size:11px;line-height:1.45;cursor:pointer;}
+		.nr-addst{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
+		table.nr-t td select.nr-kt{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+			border-radius:7px;padding:5px 6px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		.nr-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;
 			padding:2px 4px 2px 9px;border-radius:999px;background:#e9f0f7;color:#1f618d;
 			border:1px solid #b9d0e6;white-space:nowrap;}
@@ -79,11 +83,13 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			<div class="nr-card">
 				<div class="h">${__("The pieces")}</div>
 				<table class="nr-t"><thead><tr>
-					<th style="width:21%;">${__("Design Type")}</th>
-					<th style="width:8%;">${__("Qty")}</th>
-					<th style="width:11%;">${__("Weight g")}</th>
-					<th style="width:22%;">${__("Type of Work")}</th>
-					<th style="width:15%;">${__("Type")}</th>
+					<th style="width:18%;">${__("Design Type")}</th>
+					<th style="width:6%;">${__("Qty")}</th>
+					<th style="width:9%;">${__("Weight g")}</th>
+					<th style="width:7%;">${__("Karat")}</th>
+					<th style="width:19%;">${__("Type of Work")}</th>
+					<th style="width:12%;">${__("Type")}</th>
+					<th style="width:14%;">${__("Stones")}</th>
 					<th>${__("Narration")}</th>
 					<th style="width:34px;"></th>
 				</tr></thead><tbody class="nr-body"></tbody></table>
@@ -102,7 +108,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	const blank = () => ({ design_type: "", repair_type: "", qty: 1, weight: "",
-		work_types: [], narration: "" });
+		karat: "", work_types: [], stones: [], narration: "" });
 
 	function paintRows() {
 		const o = S.opts;
@@ -113,6 +119,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
 				<td class="num"><input class="nr-wt" type="number" min="0" step="0.001"
 					value="${r.weight === "" || r.weight === undefined ? "" : r.weight}"></td>
+				<td><select class="nr-kt">${["", "22", "18", "14", "9"].map((k) =>
+					`<option value="${k}" ${(r.karat || "") === k ? "selected" : ""}>${k || "—"}</option>`).join("")}</select></td>
 				<td><div class="nr-works">
 					${(r.work_types || []).map((w) =>
 						`<span class="nr-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
@@ -121,9 +129,13 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				</div></td>
 				<td><input class="nr-type" list="nr-types" value="${esc(r.repair_type)}"
 					placeholder="${__("pick or type")}"></td>
+				<td class="nr-st">${(r.stones || []).length
+					? (r.stones || []).map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${
+						cint(st.pcs)}/${(parseFloat(st.ct) || 0).toFixed(3)}`).join("<br>")
+					: `<span class="nr-addst">${__("add stone")}</span>`}</td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
 				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
-			</tr>`).join("") : `<tr><td colspan="7" class="nr-none">${
+			</tr>`).join("") : `<tr><td colspan="9" class="nr-none">${
 				__("Nothing on the list yet — add a piece.")}</td></tr>`);
 		paintTotals();
 		page.set_primary_action(__("Take it in"), save, "add");
@@ -200,6 +212,10 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		paintRows();
 	});
 
+	root.on("change", ".nr-kt", function () {
+		S.rows[cint($(this).closest("tr").data("i"))].karat = this.value || "";
+	});
+
 	root.on("input change", ".nr-dt, .nr-type, .nr-qty, .nr-wt, .nr-nar", function () {
 		const i = cint($(this).closest("tr").data("i"));
 		const r = S.rows[i];
@@ -217,6 +233,17 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		S.rows.splice(cint($(this).closest("tr").data("i")), 1);
 		if (!S.rows.length) S.rows = [blank()];
 		paintRows();
+	});
+
+	// Stones a piece comes in with, recorded at the counter. Same editor as the
+	// billing screen — nothing is issued from stock, the sieve chart is only used
+	// so the sizes read the same everywhere.
+	root.on("click", "td.nr-st", function () {
+		const i = cint($(this).closest("tr").data("i"));
+		jewelima.repairStoneDialog(S.rows[i].stones || [], S.opts.sieves || [], (out) => {
+			S.rows[i].stones = out;
+			paintRows();
+		});
 	});
 
 	function save() {

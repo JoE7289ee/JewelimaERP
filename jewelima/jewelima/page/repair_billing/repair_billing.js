@@ -107,6 +107,18 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			background:var(--fg-color);color:var(--text-color);font-variant-numeric:tabular-nums;}
 		tr.rb-done{opacity:.55;}
 		tr.rb-on{background:var(--control-bg);}
+		/* Colour here marks what is NOT ready, so the eye lands on the pieces
+		   that still need something rather than on decoration. */
+		tr.rb-warn td{background:rgba(224,168,0,.10);}
+		tr.rb-warn.rb-on td{background:rgba(224,168,0,.16);}
+		td.rb-miss input{border-color:#d9534f !important;background:rgba(217,83,79,.07);}
+		td.rb-miss input::placeholder{color:#b02a2a;}
+		.rb-flag2{display:inline-block;font-size:9px;font-weight:800;text-transform:uppercase;
+			letter-spacing:.04em;border-radius:8px;padding:0 5px;margin-left:5px;vertical-align:1px;
+			background:#fdecea;color:#b02a2a;border:1px solid #f0b6b2;}
+		.rb-tile.warn{border-color:#e8d18a;background:#fffdf5;}
+		.rb-tile.warn .v{color:#8a6d00;}
+		.rb-tile.rate.unset .v input{border-color:#d9534f;background:rgba(217,83,79,.07);}
 		.rb-added{font-weight:700;} .rb-added.up{color:#1d7a33;} .rb-added.down{color:#b02a2a;}
 		.rb-work{font-size:11px;color:var(--text-muted);cursor:pointer;border-bottom:1px dashed var(--border-color);}
 		.rb-work:hover{color:var(--text-color);}
@@ -188,21 +200,24 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			const P = priceRow(i);
 			const work = (i.work_types || []).join(", ");
 			const stones = (i.stones || []);
+			const noOut = !done && !flt(i.weight_out);
+			const noWork = !done && !(i.work_types || []).length;
 			const stTxt = stones.length
 				? stones.map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${cint(st.pcs)}/${flt(st.ct).toFixed(3)}`).join("<br>")
 				: `<span class="rb-add">${__("add stone")}</span>`;
-			return `<tr class="${done ? "rb-done" : ""} ${on ? "rb-on" : ""}" data-r="${esc(i.repair)}">
+			return `<tr class="${done ? "rb-done" : ""} ${on ? "rb-on" : ""} ${
+				(noOut || noWork) && on ? "rb-warn" : ""}" data-r="${esc(i.repair)}">
 				<td>${done ? `<span class="rb-billed">${esc(i.bill)}</span>`
 					: `<input type="checkbox" class="rb-pick2" ${on ? "checked" : ""}>`}</td>
-				<td><b>${esc(i.repair)}</b><div class="rb-work ${work ? "" : "none"}">${
-					esc(work || __("add work"))}</div></td>
+				<td><b>${esc(i.repair)}</b>${noOut ? `<span class="rb-flag2">${__("no weight out")}</span>` : ""}
+					<div class="rb-work ${work ? "" : "none"}">${esc(work || __("add work"))}</div></td>
 				<td>${esc(i.design_type || "")}</td>
 				<td>${done ? esc(i.karat || "—")
 					: `<select class="rb-kt">${KARATS.map((k) =>
 						`<option value="${k}" ${(i.karat || "") === k ? "selected" : ""}>${k || "—"}</option>`).join("")}</select>`}</td>
 				<td class="num">${cint(i.qty)}</td>
 				<td class="num">${g3(i.weight_in)}</td>
-				<td class="num">${done ? g3(i.weight_out)
+				<td class="num ${noOut ? "rb-miss" : ""}">${done ? g3(i.weight_out)
 					: `<input type="number" step="0.001" min="0" class="rb-out" value="${
 						flt(i.weight_out) ? g3(i.weight_out) : ""}" placeholder="—">`}</td>
 				<td class="num rb-added ${!flt(i.weight_out) ? "" : (P.added >= 0 ? "up" : "down")}">${
@@ -241,13 +256,17 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 
 		$body.html(`
 			<div class="rb-tiles">
-				<div class="rb-tile"><div class="k">${__("Picked")}</div><div class="v">${picked.length}<span style="font-size:12px;color:var(--text-muted);"> / ${openRows().length}</span></div></div>
+				<div class="rb-tile ${picked.some((i) => !flt(i.weight_out)) ? "warn" : ""}">
+					<div class="k">${__("Picked")}</div>
+					<div class="v">${picked.length}<span style="font-size:12px;color:var(--text-muted);"> / ${openRows().length}</span></div></div>
 				<div class="rb-tile"><div class="k">${__("Weight In")}</div><div class="v">${g3(wIn)}</div></div>
 				<div class="rb-tile"><div class="k">${__("Weight Out")}</div><div class="v">${g3(wOut)}</div></div>
 				<div class="rb-tile ${metalG === null ? "" : (metalG >= 0 ? "add" : "less")}">
 					<div class="k">${__("Metal Added")}</div>
 					<div class="v">${metalG === null ? "—" : (metalG >= 0 ? "+" : "") + g3(metalG)}</div></div>
-				<div class="rb-tile rate"><div class="k">${__("Gold Board Rate / g")}</div>
+				<div class="rb-tile rate ${!flt(S.gold) && picked.some((i) =>
+					flt(i.weight_out) > flt(i.weight_in)) ? "unset" : ""}">
+					<div class="k">${__("Gold Board Rate / g")}</div>
 					<div class="v"><input type="number" step="0.01" min="0" class="rb-gold" value="${
 						S.gold || ""}" placeholder="0"></div></div>
 				<div class="rb-tile money"><div class="k">${__("Work")}</div><div class="v">${format_currency(sums.work)}</div></div>
@@ -349,6 +368,21 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			.removeClass("up down")
 			.addClass(added === null ? "" : (added >= 0 ? "up" : "down"))
 			.text(added === null ? "—" : (added >= 0 ? "+" : "") + g3(added));
+
+		// the "not ready" marks belong to the weight, so they clear as it is typed
+		// — the row is not redrawn here, so they are cleared by hand
+		const noOut = !flt(row.weight_out);
+		const noWork = !(row.work_types || []).length;
+		$tr.find("td").eq(6).toggleClass("rb-miss", noOut);
+		$tr.find(".rb-flag2").remove();
+		if (noOut) $tr.find("td").eq(1).find("b").after(
+			`<span class="rb-flag2">${__("no weight out")}</span>`);
+		$tr.toggleClass("rb-warn", (noOut || noWork) && S.picked.has(row.repair));
+
+		// the money columns move with the weight too
+		const P = priceRow(row);
+		$tr.find(".rb-m-metal").text(format_currency(P.metal));
+		$tr.find(".rb-m-tot").html(`<b>${format_currency(P.total)}</b>`);
 		syncTotals();
 	});
 	// A rate changes every money column, so the table is redrawn — but only on
@@ -391,6 +425,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		const $t = $body.find(".rb-tile");
 		$t.eq(1).find(".v").text(g3(wIn));
 		$t.eq(2).find(".v").text(g3(wOut));
+		$t.filter(".rate").toggleClass("unset", !flt(S.gold) &&
+			picked.some((i) => flt(i.weight_out) > flt(i.weight_in)));
+		$t.filter(".rb-tile").first().toggleClass("warn", picked.some((i) => !flt(i.weight_out)));
 		$t.eq(3).removeClass("add less")
 			.addClass(metal === null ? "" : (metal >= 0 ? "add" : "less"))
 			.find(".v").text(metal === null ? "—" : (metal >= 0 ? "+" : "") + g3(metal));
@@ -426,76 +463,15 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	});
 
 	// ---- the stones set into a piece ---------------------------------------
-	// Nothing is issued from stock here: repairs take stones from the party's own
-	// packet or the bench tray, so this is a record of what went in, written in
-	// the sieve chart's own sizes so it reads the same as everywhere else.
 	$body.on("click", "td.rb-st", function () {
 		const id = $(this).closest("tr").data("r");
 		const row = S.D.items.find((i) => i.repair === id);
 		if (!row || row.bill) return;
-		const draw = (list) => list.map((st, n) => `<tr data-n="${n}">
-			<td><input class="sd-q" value="${esc(st.stone || "")}" placeholder="EF"></td>
-			<td><input class="sd-s" list="sd-sieves" value="${esc(st.sieve || "")}" placeholder="OOO-OO"></td>
-			<td><input class="sd-p" type="number" min="0" step="1" value="${cint(st.pcs) || ""}" placeholder="0"></td>
-			<td><input class="sd-c" type="number" min="0" step="0.001" value="${flt(st.ct) || ""}" placeholder="0.000"></td>
-			<td><a class="sd-x" title="${__("Remove")}">&times;</a></td></tr>`).join("");
-		const list = JSON.parse(JSON.stringify(row.stones || []));
-		const d = new frappe.ui.Dialog({
-			title: __("Stones in {0}", [id]), size: "large",
-			fields: [{ fieldname: "html", fieldtype: "HTML" }],
-			primary_action_label: __("Save"),
-			primary_action: () => {
-				const out = [];
-				// the rows live in the dialog, which Frappe renders outside the
-				// page — reading from the page finds nothing and saves an empty list
-				d.fields_dict.html.$wrapper.find(".sd-t tbody tr").each(function () {
-					const q = $(this).find(".sd-q").val().trim();
-					if (!q) return;
-					out.push({ stone: q, sieve: $(this).find(".sd-s").val().trim(),
-						pcs: cint($(this).find(".sd-p").val()), ct: flt($(this).find(".sd-c").val()) });
-				});
-				d.hide();
-				frappe.call({ method: API + ".set_piece_stones",
-					args: { repair_order: S.D.repair_order, repair: id, stones: JSON.stringify(out) } })
-					.then((r) => { S.D = r.message; drawBatch(); });
-			},
+		jewelima.repairStoneDialog(row.stones || [], S.sieves, (out) => {
+			frappe.call({ method: API + ".set_piece_stones",
+				args: { repair_order: S.D.repair_order, repair: id, stones: JSON.stringify(out) } })
+				.then((r) => { S.D = r.message; drawBatch(); });
 		});
-		d.fields_dict.html.$wrapper.html(`
-			<datalist id="sd-sieves">${S.sieves.map((x) => `<option value="${esc(x.sieve)}">`).join("")}</datalist>
-			<style>
-			.sd-t{width:100%;border-collapse:collapse;font-size:12.5px;}
-			.sd-t th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);
-				padding:6px 7px;border-bottom:1px solid var(--border-color);}
-			.sd-t td{padding:4px 7px;border-bottom:1px solid var(--border-color);}
-			.sd-t input{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
-				border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
-			.sd-t a.sd-x{color:#b02a2a;cursor:pointer;font-size:16px;}
-			</style>
-			<table class="sd-t"><thead><tr><th style="width:22%;">${__("Stone")}</th>
-				<th style="width:28%;">${__("Sieve")}</th><th style="width:18%;">${__("Pcs")}</th>
-				<th style="width:24%;">${__("Cts")}</th><th style="width:8%;"></th></tr></thead>
-				<tbody>${draw(list.length ? list : [{}])}</tbody></table>
-			<button class="btn btn-default btn-xs sd-more" style="margin-top:9px;">${__("Add row")}</button>
-			<div style="margin-top:7px;font-size:11px;color:var(--text-muted);">${
-				__("Carats fill in from the sieve chart when left blank.")}</div>
-		`);
-		const $t = d.fields_dict.html.$wrapper;
-		$t.on("click", ".sd-more", () => $t.find("tbody").append(draw([{}])));
-		$t.on("click", ".sd-x", function () {
-			const $tb = $t.find("tbody");
-			$(this).closest("tr").remove();
-			if (!$tb.find("tr").length) $tb.append(draw([{}]));
-		});
-		// a count with no carats is the common case — the chart knows the weight
-		$t.on("change", ".sd-s, .sd-p", function () {
-			const $tr = $(this).closest("tr");
-			const hit = S.sieves.find((x) => x.sieve.toUpperCase() === ($tr.find(".sd-s").val() || "").trim().toUpperCase());
-            const pcs = cint($tr.find(".sd-p").val());
-			if (hit && pcs && !flt($tr.find(".sd-c").val())) {
-				$tr.find(".sd-c").val((pcs * flt(hit.avg_cts)).toFixed(3));
-			}
-		});
-		d.show();
 	});
 
 	// ---- billing what is ticked --------------------------------------------

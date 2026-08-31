@@ -8,6 +8,7 @@ import "./finished_matrix"; // jewelima.buildFinishedMatrix — shared by finish
 import "./quick_menu"; // Ctrl+Space — quick palette of everyday pages
 import "./filter_bar"; // jewelima.buildFilterBar — generic reusable filter engine
 import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
+import "./repair_stones"; // jewelima.repairStoneDialog — shared by repair intake + billing
 import "./job_cards"; // jewelima.printJobCards — shared job-card printer (Print Order Bags + Ordering desk)
 import "./workstation"; // jewelima.buildWorkstation — the per-bench workstation pages
 

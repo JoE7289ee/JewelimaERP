@@ -14,6 +14,11 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
+		.re-st{font-size:11px;line-height:1.4;cursor:pointer;min-height:26px;padding-top:3px;}
+		.re-st.locked{cursor:default;opacity:.6;}
+		.re-addst{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
+		.re-row select.re-kt{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+			border-radius:7px;padding:5px 7px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		#page-repair-status .container{max-width:100%;}
 		.rs-wrap{max-width:1180px;}
 		.rs-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
@@ -150,6 +155,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 			args: { party: S.party || null, state: S.state } }).then((r) => {
 			const m = r.message || {};
 			S.rows = m.rows || [];
+			S.sieves = m.sieves || S.sieves || [];
 			if (!WORKS.length) {
 				frappe.call({ method: API + ".get_repair_work_types", freeze: false })
 					.then((w) => (WORKS = (w.message || []).map((x) => x.work_name)));
@@ -181,15 +187,33 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 			repair: i.repair, design_type: i.design_type, qty: i.qty,
 			weight: i.weight || "", work_types: (i.work_types || []).slice(),
 			narration: i.narration || "",
+			// the weigh-out and what it is made of, so the whole piece can be
+			// finished here rather than only at the billing counter
+			weight_out: i.weight_out || "", karat: i.karat || "",
+			stones: JSON.parse(JSON.stringify(i.stones || [])),
+			bill: i.bill || "",
 		}));
 
 		const dlg = new frappe.ui.Dialog({
 			title: __("{0} — {1}", [name, r.party]), size: "extra-large",
 			primary_action_label: __("Save"),
 			primary_action() {
+				// the batch first (weights in, work, notes), then the parts that
+				// belong to the piece itself — weigh-out, karat and stones
 				frappe.call({ method: API + ".update_repair_order", args: {
 					name, items: JSON.stringify(rows),
-				} }).then(() => {
+				} }).then(() => frappe.call({ method: API + ".save_repair_weights", args: {
+					repair_order: name,
+					rows: JSON.stringify(rows.filter((x) => !x.bill).map((x) => ({
+						repair: x.repair, weight_out: parseFloat(x.weight_out) || 0,
+						karat: x.karat || "" }))),
+				} })).then(() => {
+					const withStones = rows.filter((x) => !x.bill);
+					return withStones.reduce((chain, x) => chain.then(() =>
+						frappe.call({ method: API + ".set_piece_stones", args: {
+							repair_order: name, repair: x.repair,
+							stones: JSON.stringify(x.stones || []) } })), Promise.resolve());
+				}).then(() => {
 					dlg.hide();
 					frappe.show_alert({ message: __("{0} updated", [name]), indicator: "green" }, 4);
 					load();
@@ -206,8 +230,22 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 						<div class="ro">${esc(x.design_type)}</div></div>
 					<div><div class="lab">${__("Qty")}</div>
 						<div class="ro">${x.qty}</div></div>
-					<div><div class="lab">${__("Weight g")}</div>
-						<input class="re-wt" type="number" min="0" step="0.001" value="${x.weight}"></div>
+					<div><div class="lab">${__("Weight In g")}</div>
+						<input class="re-wt" type="number" min="0" step="0.001" value="${x.weight}"
+							${x.bill ? "disabled" : ""}></div>
+					<div><div class="lab">${__("Weight Out g")}</div>
+						<input class="re-wo" type="number" min="0" step="0.001" value="${x.weight_out}"
+							${x.bill ? "disabled" : ""}></div>
+					<div><div class="lab">${__("Karat")}</div>
+						<select class="re-kt" ${x.bill ? "disabled" : ""}>${
+							["", "22", "18", "14", "9"].map((k) =>
+								`<option value="${k}" ${(x.karat || "") === k ? "selected" : ""}>${k || "—"}</option>`
+							).join("")}</select></div>
+					<div><div class="lab">${__("Stones")}</div>
+						<div class="re-st ${x.bill ? "locked" : ""}">${x.stones.length
+							? x.stones.map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${
+								cint(st.pcs)}/${(parseFloat(st.ct) || 0).toFixed(3)}`).join("<br>")
+							: `<span class="re-addst">${x.bill ? __("none") : __("add stone")}</span>`}</div></div>
 					<div><div class="lab">${__("Type of Work")}</div>
 						<div class="re-works">
 							${x.work_types.map((w) =>
@@ -231,6 +269,19 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 
 		$(dlg.body).on("input", ".re-wt", function () {
 			rows[cint($(this).closest(".re-row").data("k"))].weight = this.value;
+		});
+		$(dlg.body).on("input", ".re-wo", function () {
+			rows[cint($(this).closest(".re-row").data("k"))].weight_out = this.value;
+		});
+		$(dlg.body).on("change", ".re-kt", function () {
+			rows[cint($(this).closest(".re-row").data("k"))].karat = this.value || "";
+		});
+		$(dlg.body).on("click", ".re-st", function () {
+			const k = cint($(this).closest(".re-row").data("k"));
+			if (rows[k].bill) return;                 // settled — its stones are the bill's
+			jewelima.repairStoneDialog(rows[k].stones, S.sieves || [], (out) => {
+				rows[k].stones = out; paintDlg();
+			});
 		});
 		$(dlg.body).on("input", ".re-nar", function () {
 			rows[cint($(this).closest(".re-row").data("k"))].narration = this.value;

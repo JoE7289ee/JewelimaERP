@@ -233,6 +233,7 @@ def get_repair_intake_options():
 		"work_types": [w["work_name"] for w in get_repair_work_types()],
 		"types": [t["type_name"] for t in get_repair_types()],
 		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
+		"sieves": get_repair_sieves(),
 		"received_by": frappe.session.user,
 		"received_by_name": frappe.db.get_value("User", frappe.session.user, "full_name")
 			or frappe.session.user,
@@ -253,7 +254,7 @@ def create_repair_order(payload):
 	if not party:
 		frappe.throw(frappe._("Pick or type the party."))
 
-	items = []
+	items, stones = [], []
 	for i, r in enumerate(rows, start=1):
 		dt = (r.get("design_type") or "").strip()
 		if not dt:
@@ -274,11 +275,18 @@ def create_repair_order(payload):
 			name = _master("Repair Work Type", "work_name", w)
 			if name and name not in works:
 				works.append(name)
+		karat = str(r.get("karat") or "").strip()
+		if karat and karat not in ("22", "18", "14", "9"):
+			frappe.throw(frappe._("Row {0}: {1} is not a karat we take in.").format(i, karat))
 		items.append({"design_type": dt, "qty": qty,
 			"weight": flt(r.get("weight")),
+			"karat": karat or None,
 			"repair_type": _master("Repair Type", "type_name", r.get("repair_type")),
 			"work_types": ", ".join(works) or None,
 			"narration": (r.get("narration") or "").strip() or None})
+		# stones are named against the piece, which only gets its number on insert,
+		# so they are held by row index here and stamped once the batch exists
+		stones.append(r.get("stones") or [])
 
 	doc = frappe.get_doc({
 		"doctype": "Repair Order", "party": party,
@@ -287,6 +295,20 @@ def create_repair_order(payload):
 		"narration": (p.get("narration") or "").strip() or None,
 		"items": items,
 	}).insert(ignore_permissions=True)
+
+	if any(stones):
+		rows = []
+		for row, group in zip(doc.items, stones):
+			for st in (group or []):
+				name = " ".join(str(st.get("stone") or "").split())
+				if not name:
+					continue
+				rows.append({"repair": row.repair, "stone": name,
+					"sieve": (st.get("sieve") or "").strip(),
+					"pcs": cint(st.get("pcs")), "ct": flt(st.get("ct"))})
+		if rows:
+			doc.set("stones", rows)
+			doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return get_repair_order(doc.name)
 
@@ -368,9 +390,14 @@ def get_repair_status(party=None, state="all", from_date=None, to_date=None, lim
 			continue
 		if state == "billed" and not b:
 			continue
+		stone_rows = {}
+		for st in frappe.get_all("Repair Stone", filters={"parent": o.name},
+				fields=["repair", "stone", "sieve", "pcs", "ct"], order_by="idx"):
+			stone_rows.setdefault(st.repair, []).append(st)
 		items = frappe.get_all("Repair Order Item", filters={"parent": o.name},
 			fields=["repair", "design_type", "qty", "weight", "weighed_at",
-				"work_types", "repair_type", "narration"], order_by="idx")
+				"work_types", "repair_type", "narration",
+				"weight_out", "karat", "bill"], order_by="idx")
 		rows.append({
 			"name": o.name, "party": o.party,
 			"received_at": str(o.received_at or "")[:16],
@@ -382,11 +409,15 @@ def get_repair_status(party=None, state="all", from_date=None, to_date=None, lim
 			"charges": (flt(b.total_charges) if b else 0),
 			"metal_added": (flt(b.total_metal_added) if b else 0),
 			"items": [{**i, "qty": cint(i["qty"]), "weight": flt(i["weight"]),
+				"weight_out": flt(i.get("weight_out")), "karat": i.get("karat") or "",
+				"bill": i.get("bill") or "",
+				"stones": [{"stone": st.stone, "sieve": st.sieve or "", "pcs": cint(st.pcs),
+					"ct": flt(st.ct)} for st in stone_rows.get(i["repair"], [])],
 				"weighed_at": str(i["weighed_at"] or "")[:16],
 				"work_types": [w.strip() for w in (i["work_types"] or "").split(",") if w.strip()]}
 				for i in items],
 		})
-	return {"rows": rows,
+	return {"rows": rows, "sieves": get_repair_sieves(),
 		"parties": [p["party_name"] for p in get_repair_parties(include_inactive=1)],
 		"totals": {"batches": len(rows),
 			"pieces": sum(r["total_qty"] for r in rows),
