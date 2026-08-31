@@ -763,6 +763,23 @@ def setup_roles():
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_DELIVERY_ROLE])
 			pg.save(ignore_permissions=True)
 
+	# ---- ERPNext roles that got stamped on our pages by accident ----------------
+	# Authoring a Page in the desk writes whatever roles the author happened to
+	# hold onto it. "Stock User" is ERPNext's own, we grant it to nobody and name
+	# it nowhere, yet it had landed on 32 Jewelima pages — pages it could open
+	# while STOCK_ROLES refused every action behind them.
+	#
+	# Only OUR pages are touched: stock-balance and warehouse-capacity-summary
+	# are ERPNext's, and a real Stock User is meant to have those.
+	for role in ("Stock User",):
+		for page in frappe.get_all("Has Role",
+				filters={"parenttype": "Page", "role": role}, pluck="parent"):
+			if frappe.db.get_value("Page", page, "module") != "Jewelima":
+				continue
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != role])
+			pg.save(ignore_permissions=True)
+
 	# Strip Jewelima Ordering from any page it shouldn't reach (e.g. import-stock was
 	# authored with it). The Ordering role only opens the order-flow pages above.
 	ordering_ok = set(JEWELIMA_ORDER_PAGES) | set(JEWELIMA_ORDERING_ONLY_PAGES) | {"all-requests"}

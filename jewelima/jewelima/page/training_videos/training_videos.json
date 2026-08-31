@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-16 13:00:32.408362",
+ "modified": "2026-09-01 03:14:21.835414",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "training-videos",
@@ -18,49 +18,37 @@
    "role": "ESMITH"
   },
   {
-   "role": "Jewelima Bench BAG EXTRACTION"
-  },
-  {
    "role": "Jewelima CAD"
-  },
-  {
-   "role": "Jewelima Bench CAD"
-  },
-  {
-   "role": "Jewelima Bench CAM"
   },
   {
    "role": "Stock Manager"
   },
   {
-   "role": "Jewelima Bench FILING"
+   "role": "JW Party Admin"
   },
   {
-   "role": "Jewelima Bench FINAL POLISH"
+   "role": "JW Selection"
   },
   {
-   "role": "Stock User"
+   "role": "JW Data Admin"
   },
   {
-   "role": "Jewelima Bench GRINDING"
+   "role": "JW Dye Admin"
   },
   {
-   "role": "Jewelima Bench PRE POLISH"
+   "role": "JW CAM"
+  },
+  {
+   "role": "JW Delivery"
+  },
+  {
+   "role": "JW Stock Admin"
   },
   {
    "role": "System Manager"
   },
   {
-   "role": "Jewelima Bench SETTING"
-  },
-  {
-   "role": "Jewelima Bench WAX CLEANING"
-  },
-  {
-   "role": "Jewelima Bench WAX SETTING"
-  },
-  {
-   "role": "Jewelima Bench WAXING"
+   "role": "JW Stone Admin"
   },
   {
    "role": "Jewelima Design Approver"

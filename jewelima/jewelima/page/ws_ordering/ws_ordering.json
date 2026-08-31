@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-31 05:24:31.420858",
+ "modified": "2026-09-01 03:14:03.517802",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-ordering",
@@ -18,10 +18,10 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
+   "role": "Jewelima Ordering"
   },
   {
-   "role": "Jewelima Ordering"
+   "role": "JW Manager"
   }
  ],
  "script": null,

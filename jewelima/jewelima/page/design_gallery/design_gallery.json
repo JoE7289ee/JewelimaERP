@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-08 13:18:03.645088",
+ "modified": "2026-09-01 03:14:03.611992",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "design-gallery",
@@ -18,9 +18,6 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
-  },
-  {
    "role": "Jewelima Design Bank"
   },
   {
@@ -28,6 +25,9 @@
   },
   {
    "role": "Jewelima Info"
+  },
+  {
+   "role": "JW Manager"
   }
  ],
  "script": null,

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 01:48:29.032075",
+ "modified": "2026-09-01 03:14:21.873024",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "request-feature",
@@ -33,19 +33,19 @@
    "role": "JW Data Admin"
   },
   {
-   "role": "Stock User"
-  },
-  {
    "role": "JW Dye Admin"
   },
   {
    "role": "JW CAM"
   },
   {
-   "role": "System Manager"
+   "role": "JW Delivery"
   },
   {
    "role": "JW Stock Admin"
+  },
+  {
+   "role": "System Manager"
   },
   {
    "role": "JW Stone Admin"

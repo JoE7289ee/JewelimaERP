@@ -1,10 +1,10 @@
 {
  "content": null,
- "creation": "2026-06-17 10:00:00.000000",
+ "creation": "2026-06-17 10:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-06-17 10:00:00.000000",
+ "modified": "2026-09-01 03:14:03.725287",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "print-order-bags",
@@ -18,9 +18,18 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
+   "role": "JW Manager"
+  },
+  {
+   "role": "Jewelima Ordering"
+  },
+  {
+   "role": "JW Data Admin"
   }
  ],
+ "script": null,
  "standard": "Yes",
+ "style": null,
+ "system_page": 0,
  "title": "Print Order Bags"
 }

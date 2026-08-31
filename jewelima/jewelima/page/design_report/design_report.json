@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-29 10:14:06.040519",
+ "modified": "2026-09-01 03:14:03.536677",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "design-report",
@@ -18,7 +18,7 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
+   "role": "JW Manager"
   }
  ],
  "script": null,

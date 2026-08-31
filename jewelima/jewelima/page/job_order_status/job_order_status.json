@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-28 02:27:42.789754",
+ "modified": "2026-09-01 03:14:03.650806",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "job-order-status",
@@ -18,13 +18,13 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
-  },
-  {
    "role": "Jewelima Ordering"
   },
   {
    "role": "Jewelima Info"
+  },
+  {
+   "role": "JW Manager"
   }
  ],
  "script": null,

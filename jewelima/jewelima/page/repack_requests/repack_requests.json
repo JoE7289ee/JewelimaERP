@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-31 12:00:00",
+ "modified": "2026-09-01 03:14:03.508277",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "repack-requests",
@@ -18,7 +18,7 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
+   "role": "JW Manager"
   }
  ],
  "script": null,

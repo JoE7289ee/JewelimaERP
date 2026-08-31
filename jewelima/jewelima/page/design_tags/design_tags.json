@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-07-24 10:16:37.178055",
+ "modified": "2026-09-01 03:14:03.622335",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "design-tags",
@@ -18,13 +18,13 @@
    "role": "Stock Manager"
   },
   {
-   "role": "Stock User"
-  },
-  {
    "role": "Jewelima Design Bank"
   },
   {
    "role": "Jewelima Design Approver"
+  },
+  {
+   "role": "JW Manager"
   }
  ],
  "script": null,

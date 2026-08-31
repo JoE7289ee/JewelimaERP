@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-27 14:13:18.491509",
+ "modified": "2026-09-01 03:14:03.469246",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "stone-stock-info",
@@ -16,9 +16,6 @@
   },
   {
    "role": "Stock Manager"
-  },
-  {
-   "role": "Stock User"
   },
   {
    "role": "Jewelima CAD"
