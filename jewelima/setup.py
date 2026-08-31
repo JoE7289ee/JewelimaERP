@@ -261,7 +261,7 @@ JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "
 JEWELIMA_WAXING_ROLE = "JW WAXING"
 JEWELIMA_WAXING_PAGES = ["ws-waxing", "ws-wax-setting", "ws-wax-cleaning", "workstations",
 	"transfer-order-bag"]
-JEWELIMA_WAXING_FROM = ("WAXING", "WAX SETTING")
+JEWELIMA_WAXING_FROM = ("WAXING", "WAX SETTING", "WAX CLEANING")
 JEWELIMA_WAXING_TO = ("WAXING", "WAX SETTING", "WAX CLEANING", "TREE MAKING")
 
 JEWELIMA_WAXCLEAN_ROLE = "JW WAX CLEANING"
