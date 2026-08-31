@@ -145,6 +145,65 @@ def delete_repair_work_type(name):
 
 
 @frappe.whitelist()
+def get_repair_types(include_inactive=0):
+	_guard()
+	filters = {} if cint(include_inactive) else {"active": 1}
+	return frappe.get_all("Repair Type", filters=filters,
+		fields=["name", "type_name", "active", "notes"], order_by="type_name")
+
+
+@frappe.whitelist()
+def add_repair_type(type_name, notes=None):
+	_guard()
+	name = _master("Repair Type", "type_name", type_name)
+	if not name:
+		frappe.throw(frappe._("Enter the type."))
+	if notes:
+		frappe.db.set_value("Repair Type", name, "notes", notes)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def set_repair_type(name, type_name=None, active=None, notes=None):
+	_guard()
+	if not frappe.db.exists("Repair Type", name):
+		frappe.throw(frappe._("No type {0}.").format(name))
+	if type_name and type_name.strip() and type_name.strip() != name:
+		frappe.rename_doc("Repair Type", name, type_name.strip(), force=True)
+		name = type_name.strip()
+	vals = {}
+	if active is not None:
+		vals["active"] = cint(active)
+	if notes is not None:
+		vals["notes"] = notes
+	if vals:
+		frappe.db.set_value("Repair Type", name, vals)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def delete_repair_type(name):
+	_guard()
+	used = frappe.db.count("Repair Order Item", {"repair_type": name})
+	if used:
+		frappe.throw(frappe._("{0} is on {1} line(s) — untick Active to retire it instead.").format(name, used))
+	frappe.delete_doc("Repair Type", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": name}
+
+
+@frappe.whitelist()
+def repair_type_usage():
+	"""{type: how many lines name it}."""
+	_guard()
+	return {r[0]: r[1] for r in frappe.db.sql(
+		"SELECT repair_type, COUNT(*) FROM `tabRepair Order Item` "
+		"WHERE IFNULL(repair_type,'') != '' GROUP BY repair_type")}
+
+
+@frappe.whitelist()
 def repair_party_usage():
 	"""{party: how many batches name it} — what makes a delete safe or not."""
 	_guard()
@@ -172,6 +231,7 @@ def get_repair_intake_options():
 	return {
 		"parties": [p["party_name"] for p in get_repair_parties()],
 		"work_types": [w["work_name"] for w in get_repair_work_types()],
+		"types": [t["type_name"] for t in get_repair_types()],
 		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
 		"received_by": frappe.session.user,
 		"received_by_name": frappe.db.get_value("User", frappe.session.user, "full_name")
@@ -215,6 +275,7 @@ def create_repair_order(payload):
 			if name and name not in works:
 				works.append(name)
 		items.append({"design_type": dt, "qty": qty,
+			"repair_type": _master("Repair Type", "type_name", r.get("repair_type")),
 			"work_types": ", ".join(works) or None,
 			"narration": (r.get("narration") or "").strip() or None})
 
@@ -240,7 +301,8 @@ def get_repair_order(name):
 		"received_by_name": frappe.db.get_value("User", doc.received_by, "full_name") or doc.received_by,
 		"narration": doc.narration or "",
 		"total_qty": cint(doc.total_qty), "total_rows": cint(doc.total_rows),
-		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
+		"items": [{"repair": r.repair, "design_type": r.design_type,
+			"repair_type": r.repair_type or "", "qty": cint(r.qty),
 			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
 			"narration": r.narration or ""} for r in doc.items],
 	}

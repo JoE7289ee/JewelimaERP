@@ -2100,6 +2100,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "tag",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Repair Types",
+   "link_to": "repair-types",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "users",
@@ -2503,7 +2516,7 @@
    "url": ""
   }
  ],
- "modified": "2026-08-31 14:24:30.777863",
+ "modified": "2026-08-31 14:59:50.207413",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

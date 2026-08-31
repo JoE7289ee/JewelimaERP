@@ -9,6 +9,7 @@
  "field_order": [
   "repair",
   "design_type",
+  "repair_type",
   "qty",
   "work_types",
   "narration"
@@ -28,6 +29,13 @@
    "options": "Design Type",
    "label": "Design Type",
    "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "repair_type",
+   "fieldtype": "Link",
+   "options": "Repair Type",
+   "label": "Type",
    "in_list_view": 1
   },
   {

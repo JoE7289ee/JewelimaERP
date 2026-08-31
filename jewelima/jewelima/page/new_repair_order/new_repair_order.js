@@ -13,7 +13,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.repair_api";
 	const esc = frappe.utils.escape_html;
 	const cint = (v) => parseInt(v, 10) || 0;
-	const S = { opts: { parties: [], work_types: [], design_types: [] }, rows: [], saved: null };
+	const S = { opts: { parties: [], work_types: [], types: [], design_types: [] },
+		rows: [], saved: null };
 
 	$(page.main).append(`
 		<style>
@@ -75,8 +76,9 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			<div class="nr-card">
 				<div class="h">${__("The pieces")}</div>
 				<table class="nr-t"><thead><tr>
-					<th style="width:26%;">${__("Design Type")}</th>
-					<th style="width:9%;">${__("Qty")}</th>
+					<th style="width:21%;">${__("Design Type")}</th>
+					<th style="width:16%;">${__("Type")}</th>
+					<th style="width:8%;">${__("Qty")}</th>
 					<th style="width:26%;">${__("Type of Work")}</th>
 					<th>${__("Narration")}</th>
 					<th style="width:34px;"></th>
@@ -91,10 +93,11 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			</div>
 		</div>
 		<datalist id="nr-works"></datalist>
+		<datalist id="nr-types"></datalist>
 		<datalist id="nr-dtypes"></datalist>`);
 	const root = $(page.main);
 
-	const blank = () => ({ design_type: "", qty: 1, work_types: [], narration: "" });
+	const blank = () => ({ design_type: "", repair_type: "", qty: 1, work_types: [], narration: "" });
 
 	function paintRows() {
 		const o = S.opts;
@@ -102,6 +105,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			<tr data-i="${i}">
 				<td><input class="nr-dt" list="nr-dtypes" value="${esc(r.design_type)}"
 					placeholder="${__("design type")}"></td>
+				<td><input class="nr-type" list="nr-types" value="${esc(r.repair_type)}"
+					placeholder="${__("pick or type")}"></td>
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
 				<td><div class="nr-works">
 					${(r.work_types || []).map((w) =>
@@ -111,7 +116,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				</div></td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
 				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
-			</tr>`).join("") : `<tr><td colspan="5" class="nr-none">${
+			</tr>`).join("") : `<tr><td colspan="6" class="nr-none">${
 				__("Nothing on the list yet — add a piece.")}</td></tr>`);
 		paintTotals();
 		page.set_primary_action(__("Take it in"), save, "add");
@@ -131,6 +136,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		const o = S.opts;
 		root.find("#nr-parties").html(o.parties.map((p) => `<option value="${esc(p)}">`).join(""));
 		root.find("#nr-works").html(o.work_types.map((w) => `<option value="${esc(w)}">`).join(""));
+		root.find("#nr-types").html((o.types || []).map((t) => `<option value="${esc(t)}">`).join(""));
 		root.find("#nr-dtypes").html(o.design_types.map((d) => `<option value="${esc(d)}">`).join(""));
 		root.find(".nr-who").text(o.received_by_name || o.received_by || "");
 	}
@@ -185,11 +191,12 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		paintRows();
 	});
 
-	root.on("input change", ".nr-dt, .nr-qty, .nr-nar", function () {
+	root.on("input change", ".nr-dt, .nr-type, .nr-qty, .nr-nar", function () {
 		const i = cint($(this).closest("tr").data("i"));
 		const r = S.rows[i];
 		if (!r) return;
 		if ($(this).hasClass("nr-dt")) r.design_type = this.value;
+		else if ($(this).hasClass("nr-type")) r.repair_type = this.value;
 		else if ($(this).hasClass("nr-qty")) r.qty = cint(this.value);
 		else r.narration = this.value;
 		if ($(this).hasClass("nr-qty") || $(this).hasClass("nr-dt")) paintTotals();
@@ -208,7 +215,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		if (!rows.length) return frappe.msgprint(__("Every piece needs a design type."));
 		// a line with work or a note but no design type is half-written, not a piece
 		const short = S.rows.filter((r) => !(r.design_type || "").trim() &&
-			((r.work_types || []).length || (r.narration || "").trim()));
+			((r.work_types || []).length || (r.repair_type || "").trim() || (r.narration || "").trim()));
 		if (short.length) return frappe.msgprint(
 			__("{0} line(s) have no design type — it cannot be left blank.", [short.length]));
 
@@ -237,6 +244,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				· ${m.total_rows} ${__("line(s)")} · ${m.total_qty} ${__("piece(s)")}
 				<table><tbody>${(m.items || []).map((r) => `
 					<tr><td><b>${esc(r.repair)}</b></td><td>${esc(r.design_type)}</td>
+					<td>${esc(r.repair_type || "—")}</td>
 					<td>${r.qty}</td><td>${esc((r.work_types || []).join(", ") || "—")}</td>
 					<td>${esc(r.narration || "")}</td></tr>`).join("")}</tbody></table>
 			</div>`);
