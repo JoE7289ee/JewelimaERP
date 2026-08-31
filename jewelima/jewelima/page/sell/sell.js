@@ -76,10 +76,24 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		<div class="sl-warn"></div>
 		<div class="sl-strip"><span class="sl-strip-totals" style="display:contents"></span>
 			<button class="sl-prep">${__("PREPARE TO SELL")}</button>
-			<button class="sl-sell" style="margin-left:0;">${__("SELL")}</button>
+			<button class="sl-sell" style="margin-left:0;display:none;">${__("SELL")}</button>
 		</div>
 		</div>
 	`);
+
+	// The delivery desk prices a bill and parks it; closing the sale is someone
+	// else's right. The server refuses it either way — this only stops offering
+	// a button that would be turned down.
+	let CAN_SELL = false;
+	frappe.call({ method: "jewelima.jewelima.api.sale_rights", freeze: false }).then((r) => {
+		CAN_SELL = !!(r.message || {}).can_sell;
+		$(page.main).find(".sl-sell").toggle(CAN_SELL);
+		if (!CAN_SELL) {
+			$(page.main).find(".sl-prep").attr("title",
+				__("Prepare the bill — someone with selling rights closes it."));
+		}
+	});
+
 	const root = $(page.main)[0];
 
 	const mk = (sel, df) => {

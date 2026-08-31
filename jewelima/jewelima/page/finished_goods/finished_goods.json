@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-27 16:08:11.549504",
+ "modified": "2026-09-01 02:52:45.030020",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "finished-goods",
@@ -25,6 +25,9 @@
   },
   {
    "role": "Jewelima Info"
+  },
+  {
+   "role": "JW Delivery"
   }
  ],
  "script": null,

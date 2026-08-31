@@ -13235,11 +13235,41 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	}
 
 
+# Roles that may PREPARE a bill but not close it. The delivery desk builds the
+# board, prices it and parks it; somebody else sells it. This is deliberately a
+# list of who is held back rather than a list of who may sell: adding a role
+# here cannot accidentally lock out everyone who sells today.
+SALE_PREPARE_ONLY_ROLES = {"JW Delivery"}
+SALE_CLOSE_ROLES = {"System Manager", "JW Manager", "Stock Manager"}
+
+
+def can_sell():
+	"""False for a desk that may price a sale but not complete it."""
+	roles = set(frappe.get_roles())
+	if roles & SALE_CLOSE_ROLES:
+		return True
+	return not (roles & SALE_PREPARE_ONLY_ROLES)
+
+
+def _require_can_sell():
+	if not can_sell():
+		frappe.throw(frappe._(
+			"You can prepare this sale but not complete it \u2014 use PREPARE TO SELL, "
+			"and someone with selling rights will close it."), frappe.PermissionError)
+
+
+@frappe.whitelist()
+def sale_rights():
+	"""What the Sell page may offer this user."""
+	return {"can_sell": 1 if can_sell() else 0}
+
+
 @frappe.whitelist()
 def create_product_sale(payload):
 	"""Record the sale: Product Sale doc + ONE Material Issue writing the pieces'
 	materials out of Finished Goods + bags -> Sold (kept for returns), held_by ->
 	the buyer (logged as a Holder Transfer)."""
+	_require_can_sell()
 	p = frappe.parse_json(payload)
 	customer = p.get("customer")
 	if not customer or not frappe.db.exists("Customer", customer):

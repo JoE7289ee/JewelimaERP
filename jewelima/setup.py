@@ -219,6 +219,29 @@ JEWELIMA_CAM_PAGES = ["ws-cam", "transfer-order-bag"]
 JEWELIMA_CAM_FROM = "CAM"
 JEWELIMA_CAM_TO = ("WAXING", "CAD")
 
+# ---- JW Delivery: what goes out, and what comes back --------------------------
+# The delivery desk: finished goods out to the party, pieces away to a lab and
+# back, and the bill built ready to close.
+#
+# It can PREPARE a sale but not complete one. That is not a page grant — the
+# Sell page carries both actions — so create_product_sale refuses the close for
+# this role (see SALE_PREPARE_ONLY_ROLES in api.py) and the page hides the
+# button. Prepare To Sell parks the priced board for whoever does sell.
+JEWELIMA_DELIVERY_ROLE = "JW Delivery"
+JEWELIMA_DELIVERY_PAGES = [
+	# Delivery
+	"finished-goods", "transfer-holder", "rework",
+	# Certification — away to the lab and back again
+	"certify", "send-certifications", "certification-out", "confirm-certifications",
+	# Sales — price and park it; closing the sale belongs to someone else
+	"sell", "prepare-sale",
+]
+# read is all the desk needs: every action runs through a page API that writes
+# with ignore_permissions
+JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "Customer",
+	"Job Order", "Employee", "Product Sale", "Sale Prep Board", "Certification",
+	"Certification Center", "Price Chart", "Holder Transfer"]
+
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
 	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
@@ -720,6 +743,21 @@ def setup_roles():
 		for to in JEWELIMA_CAM_TO:
 			frappe.get_doc({"doctype": "Transfer Rule", "role": JEWELIMA_CAM_ROLE,
 				"from_location": JEWELIMA_CAM_FROM, "to_location": to}).insert(ignore_permissions=True)
+
+	# ---- JW Delivery: goods out, certification, and a bill it may only prepare --
+	ensure_role(JEWELIMA_DELIVERY_ROLE)
+	for dt in JEWELIMA_DELIVERY_READ:
+		if frappe.db.exists("DocType", dt):
+			grant(dt, JEWELIMA_DELIVERY_ROLE, {"read": 1})
+	for page in JEWELIMA_DELIVERY_PAGES:
+		set_page_roles(page, (JEWELIMA_DELIVERY_ROLE,))
+	# tight: the delivery desk opens those pages and nothing else
+	for page in frappe.get_all("Has Role",
+			filters={"parenttype": "Page", "role": JEWELIMA_DELIVERY_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_DELIVERY_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_DELIVERY_ROLE])
+			pg.save(ignore_permissions=True)
 
 	# Strip Jewelima Ordering from any page it shouldn't reach (e.g. import-stock was
 	# authored with it). The Ordering role only opens the order-flow pages above.
