@@ -83,7 +83,7 @@ class RepairBill(Document):
 			st_pcs[st.repair] = st_pcs.get(st.repair, 0) + cint(st.pcs)
 			st_ct[st.repair] = st_ct.get(st.repair, 0.0) + flt(st.ct)
 
-		work_t = metal_t = 0.0
+		work_t = metal_t = manual_t = 0.0
 		for r in self.items:
 			works = [w.strip() for w in (r.work_types or "").split(",") if w.strip()]
 			r.work_amount = round(sum(rate_of.get(w, 0.0) for w in works), 2)
@@ -94,12 +94,18 @@ class RepairBill(Document):
 			r.stone_pcs = cint(st_pcs.get(r.repair, 0))
 			r.stone_ct = round(flt(st_ct.get(r.repair, 0.0)), 3)
 			r.stone_amount = round(flt(st_by_piece.get(r.repair, 0.0)), 2)
-			r.amount = round(flt(r.work_amount) + flt(r.metal_amount) + flt(r.stone_amount), 2)
+			# a hand adjustment on the piece: positive adds, negative takes off.
+			# It is its own column so the bill still shows what the work, metal and
+			# stones came to before anyone leaned on the number.
+			r.amount = round(flt(r.work_amount) + flt(r.metal_amount)
+				+ flt(r.stone_amount) + flt(r.manual_amount), 2)
 			work_t += flt(r.work_amount)
 			metal_t += flt(r.metal_amount)
+			manual_t += flt(r.manual_amount)
 
 		self.total_work_amount = round(self.total_charges, 2)
 		self.total_metal_amount = round(metal_t, 2)
 		self.total_stone_amount = round(stone_total, 2)
+		self.total_manual_amount = round(manual_t, 2)
 		self.grand_total = round(flt(self.total_work_amount) + flt(self.total_metal_amount)
-			+ flt(self.total_stone_amount), 2)
+			+ flt(self.total_stone_amount) + flt(self.total_manual_amount), 2)

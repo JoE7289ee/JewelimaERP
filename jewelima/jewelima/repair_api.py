@@ -300,11 +300,20 @@ def create_repair_order(payload):
 		rows = []
 		for row, group in zip(doc.items, stones):
 			for st in (group or []):
-				name = " ".join(str(st.get("stone") or "").split())
-				if not name:
+				bucket = (st.get("bucket") or "").upper()
+				if not bucket:
+					if (st.get("stone") or "").strip() or (st.get("sieve") or "").strip() \
+							or cint(st.get("pcs")) or flt(st.get("ct")):
+						frappe.throw(frappe._("Pick a bucket (DMD, CZ or CVD) for the stones on row {0}.")
+							.format(row.idx))
 					continue
-				rows.append({"repair": row.repair, "stone": name,
-					"sieve": (st.get("sieve") or "").strip(),
+				if bucket not in REPAIR_STONE_BUCKETS:
+					frappe.throw(frappe._("{0} is not a stone bucket.").format(bucket))
+				sieve = (st.get("sieve") or "").strip()
+				_check_stone_weight(bucket, sieve, st.get("pcs"), st.get("ct"))
+				rows.append({"repair": row.repair, "bucket": bucket,
+					"stone": " ".join(str(st.get("stone") or "").split()),
+					"sieve": sieve,
 					"pcs": cint(st.get("pcs")), "ct": flt(st.get("ct"))})
 		if rows:
 			doc.set("stones", rows)
@@ -392,7 +401,7 @@ def get_repair_status(party=None, state="all", from_date=None, to_date=None, lim
 			continue
 		stone_rows = {}
 		for st in frappe.get_all("Repair Stone", filters={"parent": o.name},
-				fields=["repair", "stone", "sieve", "pcs", "ct"], order_by="idx"):
+				fields=["repair", "bucket", "stone", "sieve", "pcs", "ct"], order_by="idx"):
 			stone_rows.setdefault(st.repair, []).append(st)
 		items = frappe.get_all("Repair Order Item", filters={"parent": o.name},
 			fields=["repair", "design_type", "qty", "weight", "weighed_at",
@@ -411,8 +420,9 @@ def get_repair_status(party=None, state="all", from_date=None, to_date=None, lim
 			"items": [{**i, "qty": cint(i["qty"]), "weight": flt(i["weight"]),
 				"weight_out": flt(i.get("weight_out")), "karat": i.get("karat") or "",
 				"bill": i.get("bill") or "",
-				"stones": [{"stone": st.stone, "sieve": st.sieve or "", "pcs": cint(st.pcs),
-					"ct": flt(st.ct)} for st in stone_rows.get(i["repair"], [])],
+				"stones": [{"bucket": st.bucket or "", "stone": st.stone or "",
+					"sieve": st.sieve or "", "pcs": cint(st.pcs), "ct": flt(st.ct)}
+					for st in stone_rows.get(i["repair"], [])],
 				"weighed_at": str(i["weighed_at"] or "")[:16],
 				"work_types": [w.strip() for w in (i["work_types"] or "").split(",") if w.strip()]}
 				for i in items],
@@ -457,8 +467,9 @@ def get_repair_for_billing(repair_order):
 			"work_types": works, "repair_type": r.repair_type or "",
 			"narration": r.narration or "",
 			"karat": r.karat or "",
-			"stones": [{"stone": st.stone, "sieve": st.sieve or "", "pcs": cint(st.pcs),
-				"ct": flt(st.ct)} for st in o.stones if st.repair == r.repair],
+			"stones": [{"bucket": st.bucket or "", "stone": st.stone or "",
+				"sieve": st.sieve or "", "pcs": cint(st.pcs), "ct": flt(st.ct)}
+				for st in o.stones if st.repair == r.repair],
 			"bill": r.bill or "",
 		})
 	charges = [{"work_type": w, "pieces": n, "rate": rate_of.get(w, 0)}
@@ -469,17 +480,18 @@ def get_repair_for_billing(repair_order):
 	st_rate = {}
 	if bill:
 		for st in bill.stones:
-			st_rate[(st.stone, st.sieve or "")] = flt(st.rate)
+			st_rate[(st.bucket or "", st.sieve or "")] = flt(st.rate)
 	grp = {}
 	for st in o.stones:
 		if st.repair not in open_ids:
 			continue
-		k = (st.stone, st.sieve or "")
-		g = grp.setdefault(k, {"stone": st.stone, "sieve": st.sieve or "", "pcs": 0, "ct": 0.0})
+		k = (st.bucket or "", st.sieve or "")
+		g = grp.setdefault(k, {"bucket": st.bucket or "", "stone": st.stone or "",
+			"sieve": st.sieve or "", "pcs": 0, "ct": 0.0})
 		g["pcs"] += cint(st.pcs)
 		g["ct"] = round(g["ct"] + flt(st.ct), 3)
-	stone_lines = [{**g, "rate": st_rate.get((g["stone"], g["sieve"]), 0)}
-		for g in sorted(grp.values(), key=lambda x: (x["stone"], x["sieve"]))]
+	stone_lines = [{**g, "rate": st_rate.get((g["bucket"], g["sieve"]), 0)}
+		for g in sorted(grp.values(), key=lambda x: (x["bucket"], x["sieve"]))]
 	return {
 		"repair_order": o.name, "party": o.party,
 		"received_at": str(o.received_at or "")[:16],
@@ -568,9 +580,45 @@ def get_repair_sieves():
 	chart is used only so the sizes written down are the same ones used
 	everywhere else, and so carats can be worked out from a count."""
 	_guard()
-	rows = frappe.get_all("Diamond Sieve", fields=["sieve_size", "avg_cts", "idx_order"],
+	rows = frappe.get_all("Diamond Sieve",
+		fields=["sieve_size", "avg_cts", "cz_avg_cts", "cvd_avg_cts", "idx_order"],
 		order_by="idx_order asc, sieve_size asc")
-	return [{"sieve": r.sieve_size, "avg_cts": flt(r.avg_cts)} for r in rows]
+	# one average per bucket, the same columns the stone desk uses
+	return [{"sieve": r.sieve_size, "avg_cts": flt(r.avg_cts),
+		"DMD": flt(r.avg_cts), "CZ": flt(r.cz_avg_cts), "CVD": flt(r.cvd_avg_cts)}
+		for r in rows]
+
+
+# A repair is weighed on a bench scale, not the stone desk's, so the carats are
+# allowed to wander from the chart — but only so far. Half the sieve average
+# either way catches a slipped decimal or the wrong sieve while leaving normal
+# variation alone.
+REPAIR_STONE_TOLERANCE = 50.0
+REPAIR_STONE_BUCKETS = ("DMD", "CZ", "CVD")
+
+
+def _sieve_avg(bucket, sieve):
+	"""The per-stone average for a bucket + sieve, 0 when the chart has none."""
+	col = {"DMD": "avg_cts", "CZ": "cz_avg_cts", "CVD": "cvd_avg_cts"}.get((bucket or "").upper())
+	if not col or not sieve:
+		return 0.0
+	return flt(frappe.db.get_value("Diamond Sieve", {"sieve_size": sieve}, col))
+
+
+def _check_stone_weight(bucket, sieve, pcs, ct):
+	"""Refuse a weigh that cannot be that many stones of that size."""
+	avg = _sieve_avg(bucket, sieve)
+	if avg <= 0 or cint(pcs) <= 0 or flt(ct) <= 0:
+		return                                  # nothing to check it against
+	expect = avg * cint(pcs)
+	lo = expect * (1 - REPAIR_STONE_TOLERANCE / 100.0)
+	hi = expect * (1 + REPAIR_STONE_TOLERANCE / 100.0)
+	if flt(ct) < lo or flt(ct) > hi:
+		frappe.throw(frappe._(
+			"{0} {1}: {2} pc(s) should weigh about {3} ct. {4} ct is outside \u00b1{5}% of that "
+			"({6} to {7}) \u2014 check the sieve or the weigh.").format(
+			bucket, sieve, cint(pcs), round(expect, 3), flt(ct),
+			int(REPAIR_STONE_TOLERANCE), round(lo, 3), round(hi, 3)))
 
 
 @frappe.whitelist()
@@ -590,11 +638,23 @@ def set_piece_stones(repair_order, repair, stones):
 	fresh = []
 	for st in want:
 		name = " ".join(str(st.get("stone") or "").split())
-		if not name:
+		bucket_in = (st.get("bucket") or "").strip()
+		if not bucket_in:
+			# an untouched row is the blank one waiting at the bottom, and is
+			# dropped quietly. A row with anything in it and no bucket is a
+			# mistake worth saying out loud — dropping it would lose stones
+			# without a word.
+			if name or (st.get("sieve") or "").strip() or cint(st.get("pcs")) or flt(st.get("ct")):
+				frappe.throw(frappe._("Pick a bucket (DMD, CZ or CVD) for the stones on {0}.").format(repair))
 			continue
 		if cint(st.get("pcs")) < 0 or flt(st.get("ct")) < 0:
 			frappe.throw(frappe._("Stones cannot be negative."))
-		fresh.append({"repair": repair, "stone": name, "sieve": (st.get("sieve") or "").strip(),
+		bucket = (st.get("bucket") or "").upper()
+		if bucket and bucket not in REPAIR_STONE_BUCKETS:
+			frappe.throw(frappe._("{0} is not a stone bucket.").format(bucket))
+		sieve = (st.get("sieve") or "").strip()
+		_check_stone_weight(bucket, sieve, st.get("pcs"), st.get("ct"))
+		fresh.append({"repair": repair, "bucket": bucket or None, "stone": name, "sieve": sieve,
 			"pcs": cint(st.get("pcs")), "ct": flt(st.get("ct"))})
 	o.set("stones", [{"repair": k.repair, "stone": k.stone, "sieve": k.sieve,
 		"pcs": cint(k.pcs), "ct": flt(k.ct)} for k in kept] + fresh)
@@ -682,6 +742,7 @@ def save_repair_bill(payload):
 			"weight_in": flt(row.weight), "weight_out": w_out,
 			"work_types": row.work_types, "repair_type": row.repair_type,
 			"narration": row.narration, "karat": row.karat,
+			"manual_amount": flt(r.get("manual_amount")),
 		})
 	charges = []
 	for c in p.get("charges") or []:
@@ -693,11 +754,11 @@ def save_repair_bill(payload):
 	# the stones on the billed pieces, at the rate agreed for each quality+sieve
 	rate_of_stone = {}
 	for sl in p.get("stone_lines") or []:
-		rate_of_stone[(sl.get("stone"), sl.get("sieve") or "")] = flt(sl.get("rate"))
+		rate_of_stone[((sl.get("bucket") or ""), sl.get("sieve") or "")] = flt(sl.get("rate"))
 	billing = {i["repair"] for i in items}
-	stones = [{"repair": st.repair, "stone": st.stone, "sieve": st.sieve or "",
-		"pcs": cint(st.pcs), "ct": flt(st.ct),
-		"rate": rate_of_stone.get((st.stone, st.sieve or ""), 0)}
+	stones = [{"repair": st.repair, "bucket": st.bucket or "", "stone": st.stone or "",
+		"sieve": st.sieve or "", "pcs": cint(st.pcs), "ct": flt(st.ct),
+		"rate": rate_of_stone.get(((st.bucket or ""), st.sieve or ""), 0)}
 		for st in o.stones if st.repair in billing]
 
 	doc = frappe.get_doc("Repair Bill", editing) if editing else frappe.new_doc("Repair Bill")
@@ -738,9 +799,10 @@ def get_repair_bill(name):
 		"narration": d.narration or "",
 		"gold_rate": flt(d.gold_rate),
 		"total_work_amount": flt(d.total_work_amount), "total_metal_amount": flt(d.total_metal_amount),
-		"total_stone_amount": flt(d.total_stone_amount), "grand_total": flt(d.grand_total),
-		"stones": [{"repair": st.repair, "stone": st.stone, "sieve": st.sieve or "",
-			"pcs": cint(st.pcs), "ct": flt(st.ct), "rate": flt(st.rate),
+		"total_stone_amount": flt(d.total_stone_amount),
+		"total_manual_amount": flt(d.total_manual_amount), "grand_total": flt(d.grand_total),
+		"stones": [{"repair": st.repair, "bucket": st.bucket or "", "stone": st.stone or "",
+			"sieve": st.sieve or "", "pcs": cint(st.pcs), "ct": flt(st.ct), "rate": flt(st.rate),
 			"amount": flt(st.amount)} for st in d.stones],
 		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
 			"weight_in": flt(r.weight_in), "weight_out": flt(r.weight_out),
@@ -748,7 +810,8 @@ def get_repair_bill(name):
 			"gold_rate_used": flt(r.gold_rate_used),
 			"work_amount": flt(r.work_amount), "metal_amount": flt(r.metal_amount),
 			"stone_pcs": cint(r.stone_pcs), "stone_ct": flt(r.stone_ct),
-			"stone_amount": flt(r.stone_amount), "amount": flt(r.amount),
+			"stone_amount": flt(r.stone_amount), "manual_amount": flt(r.manual_amount),
+			"amount": flt(r.amount),
 			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
 			"repair_type": r.repair_type or "", "narration": r.narration or ""} for r in d.items],
 		"charges": [{"work_type": c.work_type, "pieces": cint(c.pieces),

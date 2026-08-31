@@ -23,7 +23,8 @@
   "stone_amount",
   "amount",
   "karat",
-  "gold_rate_used"
+  "gold_rate_used",
+  "manual_amount"
  ],
  "fields": [
   {
@@ -139,11 +140,17 @@
    "fieldtype": "Currency",
    "label": "Gold Rate Used",
    "read_only": 1
+  },
+  {
+   "fieldname": "manual_amount",
+   "fieldtype": "Currency",
+   "label": "Manual",
+   "description": "A hand adjustment on this piece: 10 adds ten, -10 takes ten off."
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-31 18:15:00.000000",
+ "modified": "2026-09-01 10:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Repair Bill Item",

@@ -20,7 +20,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 		.re-row select.re-kt{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:5px 7px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		#page-repair-status .container{max-width:100%;}
-		.rs-wrap{max-width:1180px;}
+		.rs-wrap{max-width:100%;}
 		.rs-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
 		.rs-pill{border:1px solid var(--border-color);background:var(--fg-color);color:var(--text-muted);
 			border-radius:999px;padding:5px 13px;font-size:11.5px;cursor:pointer;font-weight:600;}
@@ -243,7 +243,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 							).join("")}</select></div>
 					<div><div class="lab">${__("Stones")}</div>
 						<div class="re-st ${x.bill ? "locked" : ""}">${x.stones.length
-							? x.stones.map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${
+							? x.stones.map((st) => `${esc(st.bucket || st.stone || "")} ${esc(st.sieve || "")} ${
 								cint(st.pcs)}/${(parseFloat(st.ct) || 0).toFixed(3)}`).join("<br>")
 							: `<span class="re-addst">${x.bill ? __("none") : __("add stone")}</span>`}</div></div>
 					<div><div class="lab">${__("Type of Work")}</div>

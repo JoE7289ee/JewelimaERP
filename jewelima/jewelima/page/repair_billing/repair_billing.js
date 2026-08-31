@@ -37,14 +37,15 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	// money the server will store, not an estimate of it — see rate_for_karat
 	// in repair_bill.py, which is the one place the derivation lives.
 	const rateForKarat = (board, karat) => (flt(karat) ? flt(board) * flt(karat) / 24 : flt(board));
-	const sKey = (st) => `${st.stone}||${st.sieve || ""}`;
+	const sKey = (st) => `${st.bucket || ""}||${st.sieve || ""}`;
 
 	function priceRow(i) {
 		const work = (i.work_types || []).reduce((a, w) => a + flt(S.rates[w]), 0);
 		const added = flt(i.weight_out) ? flt(i.weight_out) - flt(i.weight_in) : 0;
 		const metal = added * rateForKarat(S.gold, i.karat);
 		const stone = (i.stones || []).reduce((a, st) => a + flt(st.ct) * flt(S.stoneRates[sKey(st)]), 0);
-		return { work, metal, stone, total: work + metal + stone, added };
+		const manual = flt(i.manual_amount);
+		return { work, metal, stone, manual, total: work + metal + stone + manual, added };
 	}
 
 	$w.append(`
@@ -203,7 +204,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			const noOut = !done && !flt(i.weight_out);
 			const noWork = !done && !(i.work_types || []).length;
 			const stTxt = stones.length
-				? stones.map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${cint(st.pcs)}/${flt(st.ct).toFixed(3)}`).join("<br>")
+				? stones.map((st) => `${esc(st.bucket || st.stone || "")} ${esc(st.sieve || "")} ${
+					cint(st.pcs)}/${flt(st.ct).toFixed(3)}`).join("<br>")
 				: `<span class="rb-add">${__("add stone")}</span>`;
 			return `<tr class="${done ? "rb-done" : ""} ${on ? "rb-on" : ""} ${
 				(noOut || noWork) && on ? "rb-warn" : ""}" data-r="${esc(i.repair)}">
@@ -226,6 +228,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				<td class="num rb-m-work">${format_currency(P.work)}</td>
 				<td class="num rb-m-metal">${format_currency(P.metal)}</td>
 				<td class="num rb-m-stone">${format_currency(P.stone)}</td>
+				<td class="num">${done ? format_currency(P.manual)
+					: `<input type="number" step="0.01" class="rb-man" value="${
+						flt(i.manual_amount) || ""}" placeholder="0">`}</td>
 				<td class="num rb-m-tot"><b>${format_currency(P.total)}</b></td>
 			</tr>`;
 		}).join("");
@@ -236,9 +241,10 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		const metalG = picked.length && picked.every((i) => flt(i.weight_out)) ? wOut - wIn : null;
 		const sums = picked.reduce((a, i) => {
 			const P = priceRow(i);
-			return { work: a.work + P.work, metal: a.metal + P.metal, stone: a.stone + P.stone };
-		}, { work: 0, metal: 0, stone: 0 });
-		const grand = sums.work + sums.metal + sums.stone;
+			return { work: a.work + P.work, metal: a.metal + P.metal,
+				stone: a.stone + P.stone, manual: a.manual + P.manual };
+		}, { work: 0, metal: 0, stone: 0, manual: 0 });
+		const grand = sums.work + sums.metal + sums.stone + sums.manual;
 
 		// work on the ticked pieces, priced by type
 		const tally = {};
@@ -249,7 +255,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		const sg = {};
 		picked.forEach((i) => (i.stones || []).forEach((st) => {
 			const k = sKey(st);
-			const g = sg[k] || (sg[k] = { stone: st.stone, sieve: st.sieve || "", pcs: 0, ct: 0 });
+			const g = sg[k] || (sg[k] = { bucket: st.bucket || "", stone: st.stone || "",
+				sieve: st.sieve || "", pcs: 0, ct: 0 });
 			g.pcs += cint(st.pcs); g.ct += flt(st.ct);
 		}));
 		const stoneKeys = Object.keys(sg).sort();
@@ -272,6 +279,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				<div class="rb-tile money"><div class="k">${__("Work")}</div><div class="v">${format_currency(sums.work)}</div></div>
 				<div class="rb-tile money"><div class="k">${__("Metal")}</div><div class="v">${format_currency(sums.metal)}</div></div>
 				<div class="rb-tile money"><div class="k">${__("Stones")}</div><div class="v">${format_currency(sums.stone)}</div></div>
+				${sums.manual ? `<div class="rb-tile money"><div class="k">${__("Manual")}</div>
+					<div class="v">${format_currency(sums.manual)}</div></div>` : ""}
 				<div class="rb-tile grand"><div class="k">${__("Total")}</div><div class="v">${format_currency(grand)}</div></div>
 			</div>
 
@@ -287,7 +296,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 						<th class="num">${__("Added")}</th>
 						<th style="width:150px;">${__("Stones")}</th>
 						<th class="num">${__("Work")}</th><th class="num">${__("Metal")}</th>
-						<th class="num">${__("Stone")}</th><th class="num">${__("Amount")}</th></tr></thead>
+						<th class="num">${__("Stone")}</th>
+						<th class="num" style="width:96px;">${__("Manual")}</th>
+						<th class="num">${__("Amount")}</th></tr></thead>
 					<tbody>${rows}</tbody>
 				</table>
 			</div>
@@ -314,12 +325,12 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 					<div class="rb-card">
 						<div class="rb-h">${__("Stones Charged")}</div>
 						${stoneKeys.length ? `<table class="rb-t">
-							<thead><tr><th>${__("Stone")}</th><th>${__("Sieve")}</th>
+							<thead><tr><th>${__("Bucket")}</th><th>${__("Sieve")}</th>
 								<th class="num">${__("Pcs")}</th><th class="num">${__("Cts")}</th>
 								<th class="num" style="width:104px;">${__("Rate / ct")}</th>
 								<th class="num">${__("Amount")}</th></tr></thead>
 							<tbody>${stoneKeys.map((k) => { const g = sg[k]; return `<tr data-s="${esc(k)}">
-								<td>${esc(g.stone)}</td><td>${esc(g.sieve || "—")}</td>
+								<td>${esc(g.bucket || g.stone || "—")}</td><td>${esc(g.sieve || "—")}</td>
 								<td class="num">${g.pcs}</td><td class="num">${flt(g.ct).toFixed(3)}</td>
 								<td class="num"><input type="number" step="0.01" min="0" class="rb-srate"
 									value="${flt(S.stoneRates[k]) || ""}" placeholder="0"></td>
@@ -388,6 +399,18 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	// A rate changes every money column, so the table is redrawn — but only on
 	// change (leaving the field), never per keystroke, so typing is not
 	// interrupted the way the weights were.
+	// 10 adds ten to the piece, -10 takes ten off. Patched in place like the
+	// weights — redrawing would replace the box being typed in.
+	$body.on("input", ".rb-man", function () {
+		const $tr = $(this).closest("tr");
+		const row = S.D.items.find((i) => i.repair === $tr.data("r"));
+		if (!row) return;
+		row.manual_amount = flt(this.value);
+		const P = priceRow(row);
+		$tr.find(".rb-m-tot").html(`<b>${format_currency(P.total)}</b>`);
+		syncTotals();
+	});
+
 	$body.on("input", ".rb-rate", function () {
 		S.rates[$(this).closest("tr").data("w")] = flt(this.value);
 	});
@@ -419,6 +442,11 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 
 	function syncTotals() {
 		const picked = S.D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
+		const money = picked.reduce((a, i) => {
+			const P = priceRow(i);
+			return a + P.work + P.metal + P.stone + P.manual; }, 0);
+		$body.find(".rb-tile.grand .v").text(format_currency(money));
+		$body.find(".rb-grand b").text(format_currency(money));
 		const wIn = picked.reduce((a, i) => a + flt(i.weight_in), 0);
 		const wOut = picked.reduce((a, i) => a + flt(i.weight_out), 0);
 		const metal = picked.length && picked.every((i) => flt(i.weight_out)) ? wOut - wIn : null;
@@ -490,9 +518,10 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 					repair_order: S.D.repair_order,
 					gold_rate: flt(S.gold),
 					stone_lines: Object.keys(S.stoneRates).map((k) => ({
-						stone: k.split("||")[0], sieve: k.split("||")[1] || "",
+						bucket: k.split("||")[0], sieve: k.split("||")[1] || "",
 						rate: flt(S.stoneRates[k]) })),
-					items: picked.map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out) })),
+					items: picked.map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out),
+						manual_amount: flt(i.manual_amount) })),
 					charges: Object.keys(tally).map((w) => ({
 						work_type: w, pieces: tally[w], rate: flt(S.rates[w]) })),
 					narration: $body.find(".rb-note").val(),

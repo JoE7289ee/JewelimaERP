@@ -28,7 +28,8 @@
   "total_stone_amount",
   "grand_total",
   "sec_stones",
-  "stones"
+  "stones",
+  "total_manual_amount"
  ],
  "fields": [
   {
@@ -164,11 +165,17 @@
    "fieldtype": "Table",
    "options": "Repair Bill Stone",
    "label": "Stones"
+  },
+  {
+   "fieldname": "total_manual_amount",
+   "fieldtype": "Currency",
+   "label": "Manual",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-31 18:05:00.000000",
+ "modified": "2026-09-01 10:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Repair Bill",

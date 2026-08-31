@@ -130,7 +130,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<td><input class="nr-type" list="nr-types" value="${esc(r.repair_type)}"
 					placeholder="${__("pick or type")}"></td>
 				<td class="nr-st">${(r.stones || []).length
-					? (r.stones || []).map((st) => `${esc(st.stone)} ${esc(st.sieve || "")} ${
+					? (r.stones || []).map((st) => `${esc(st.bucket || st.stone || "")} ${esc(st.sieve || "")} ${
 						cint(st.pcs)}/${(parseFloat(st.ct) || 0).toFixed(3)}`).join("<br>")
 					: `<span class="nr-addst">${__("add stone")}</span>`}</td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
