@@ -74,5 +74,5 @@ frappe.pages["bench-info"].on_page_load = function (wrapper) {
 		jewelima.buildBenchBoard(wrapper, bench, { onBack: showTiles });
 	}
 
-	showTiles();
+	frappe.pages["bench-info"].on_page_show = showTiles;   // covers the first show too
 };

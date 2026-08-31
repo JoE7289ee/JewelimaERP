@@ -463,8 +463,10 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 	$(page.main).on("click", ".od-out", () => showMoves("out"));
 	$(page.main).on("change", ".od-date", loadMoves);
 
-	load();
-	loadMoves();
+	// the desk is a live board — coming back to it must show today, not whatever
+	// was on screen when it was last left. on_page_show covers the first show
+	// too, so loading here as well would fetch everything twice on entry.
+	frappe.pages["ws-ordering"].on_page_show = () => { load(); loadMoves(); };
 	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 60000);
 	$(wrapper).on("remove", () => clearInterval(t));
 };

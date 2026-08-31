@@ -620,7 +620,16 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 			}).catch(() => frappe.dom.unfreeze());
 	});
 
-	load();
+	// Coming back to a bench must show the bench as it is NOW. The poll below
+	// keeps it live while you watch, but on its own it leaves you looking at a
+	// board up to half a minute old the moment you navigate back.
+	//
+	// on_page_show fires on the FIRST show as well as every return, so it does
+	// the opening load too — calling load() here as well would fetch the board
+	// twice on every entry.
+	const route = (frappe.get_route() || [])[0];
+	if (route && frappe.pages[route]) frappe.pages[route].on_page_show = load;
+	else load();                       // no route to hook — load the once
 	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 30000);
 	$(wrapper).on("remove", () => clearInterval(t));
 };

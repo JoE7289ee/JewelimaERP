@@ -489,6 +489,10 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 
 	page.add_inner_button(__("Cards"), showCards);
 	page.add_inner_button(__("History"), showHistory);
+	// the scanned batch belongs to the operator and is left alone — but the
+	// bench's work types and collection states are refreshed, so one added
+	// while they were on another page is there when they come back
+	frappe.pages["assign-collect"].on_page_show = loadWorkOptions;
 	page.add_inner_button(__("Reset"), () => { clearBatch(); state.history = []; });
 	setMode("assign");
 };

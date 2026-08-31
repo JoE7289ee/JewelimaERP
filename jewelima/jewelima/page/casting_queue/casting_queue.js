@@ -176,5 +176,5 @@ frappe.pages["casting-queue"].on_page_load = function (wrapper) {
 	}
 	page.add_inner_button(__("Weight Add"), () => frappe.set_route("casting-weigh"));
 	page.add_inner_button(__("Refresh"), load);
-	load();
+	frappe.pages["casting-queue"].on_page_show = load;     // covers the first show too
 };
