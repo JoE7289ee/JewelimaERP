@@ -60,7 +60,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			<div class="rb-pick">
 				<select class="rb-sel"></select>
 				<label style="font-size:12px;color:var(--text-muted);">
-					<input type="checkbox" class="rb-showall"> ${__("include billed")}</label>
+					<input type="checkbox" class="rb-hidebilled"> ${__("hide billed")}</label>
 				<span class="rb-who" style="font-size:12px;color:var(--text-muted);"></span>
 			</div>
 			<div class="rb-tiles"></div>
@@ -69,14 +69,16 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	function loadList() {
-		const all = root.find(".rb-showall").is(":checked") ? 0 : 1;
+		const hide = root.find(".rb-hidebilled").is(":checked") ? 1 : 0;
 		return frappe.call({ method: API + ".list_billable_repairs", freeze: false,
-			args: { unbilled_only: all } }).then((r) => {
+			args: { unbilled_only: hide } }).then((r) => {
 			S.list = r.message || [];
 			root.find(".rb-sel").html(`<option value="">${__("Pick a repair to bill…")}</option>`
 				+ S.list.map((o) => `<option value="${esc(o.name)}">${esc(o.name)} — ${esc(o.party)}`
 					+ ` · ${o.total_qty} ${__("pc")} · ${g3(o.total_weight)} g`
 					+ `${o.billed ? " · " + __("billed") : ""}</option>`).join(""));
+			// keep whatever is open selected, so a save does not look like a reset
+			if (S.bill) root.find(".rb-sel").val(S.bill.repair_order);
 		});
 	}
 
@@ -193,7 +195,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	}
 
 	root.on("change", ".rb-sel", function () { open(this.value); });
-	root.on("change", ".rb-showall", () => loadList().then(() => { S.bill = null; paint(); }));
+	root.on("change", ".rb-hidebilled", () => loadList().then(() => { S.bill = null; paint(); }));
 	root.on("input", ".rb-out", function () {
 		S.bill.items[cint($(this).closest("tr").data("i"))].weight_out = this.value;
 		paintRowNumbers();
@@ -224,5 +226,14 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 
 	page.add_inner_button(__("Status"), () => frappe.set_route("repair-status"));
 	page.add_inner_button(__("New Repair Order"), () => frappe.set_route("new-repair-order"));
-	frappe.pages["repair-billing"].on_page_show = () => loadList().then(paint);
+	// /app/repair-billing/REP-00001 opens that batch — Status links straight here
+	frappe.pages["repair-billing"].on_page_show = () => loadList().then(() => {
+		const want = (frappe.get_route() || [])[1];
+		if (want && (!S.bill || S.bill.repair_order !== want)) {
+			root.find(".rb-sel").val(want);
+			open(want);
+		} else {
+			paint();
+		}
+	});
 };

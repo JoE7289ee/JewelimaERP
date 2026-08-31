@@ -500,8 +500,13 @@ def get_repair_bill(name):
 
 
 @frappe.whitelist()
-def list_billable_repairs(unbilled_only=1):
-	"""The batches to pick from on the billing screen."""
+def list_billable_repairs(unbilled_only=0):
+	"""The batches to pick from on the billing screen.
+
+	Billed ones are listed too, and said to be billed. Hiding them made a batch
+	vanish from the picker the moment it was billed, which reads as the bill not
+	having saved — the one thing the screen must never suggest. Unbilled first,
+	since that is what someone standing at the counter is looking for."""
 	_guard()
 	billed = set(frappe.get_all("Repair Bill", pluck="repair_order"))
 	rows = []
@@ -514,4 +519,51 @@ def list_billable_repairs(unbilled_only=1):
 		rows.append({**o, "received_at": str(o.received_at or "")[:16],
 			"total_qty": cint(o.total_qty), "total_weight": flt(o.total_weight),
 			"billed": is_billed})
+	rows.sort(key=lambda r: (r["billed"],))       # still-to-bill at the top
 	return rows
+
+
+@frappe.whitelist()
+def update_repair_order(name, items, narration=None):
+	"""Fill in what was not known at the counter: a weight nobody had time to
+	take, the work a piece turns out to need.
+
+	What came in is left alone — the design type, how many, and the party are
+	what was received, and changing those after the fact would make the record
+	disagree with the goods. A billed batch is refused outright: the bill copied
+	these weights when it was made, so moving them now would leave the two
+	saying different things about the same job."""
+	_guard()
+	if not frappe.db.exists("Repair Order", name):
+		frappe.throw(frappe._("No repair {0}.").format(name))
+	bill = frappe.db.get_value("Repair Bill", {"repair_order": name}, "name")
+	if bill:
+		frappe.throw(frappe._("{0} is billed as {1} — change it on the bill, or the two will "
+			"disagree about the same job.").format(name, bill))
+
+	items = frappe.parse_json(items) if isinstance(items, str) else (items or [])
+	doc = frappe.get_doc("Repair Order", name)
+	by_repair = {r.repair: r for r in doc.items}
+	for r in items or []:
+		row = by_repair.get(r.get("repair"))
+		if not row:
+			continue
+		if "weight" in r:
+			row.weight = flt(r.get("weight"))
+		if "work_types" in r:
+			raw = r.get("work_types")
+			if not isinstance(raw, (list, tuple)):
+				raw = str(raw or "").split(",")
+			works = []
+			for w in raw:
+				got = _master("Repair Work Type", "work_name", w)
+				if got and got not in works:
+					works.append(got)
+			row.work_types = ", ".join(works) or None
+		if "narration" in r:
+			row.narration = (r.get("narration") or "").strip() or None
+	if narration is not None:
+		doc.narration = (narration or "").strip() or None
+	doc.save(ignore_permissions=True)      # re-stamps the weighing, re-totals the batch
+	frappe.db.commit()
+	return get_repair_order(name)

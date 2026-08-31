@@ -9,6 +9,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.repair_api";
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
+	const cint = (v) => parseInt(v, 10) || 0;
 	const S = { rows: [], parties: [], party: "", state: "all", q: "" };
 
 	$(page.main).append(`
@@ -45,9 +46,32 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 		.rs-card td{padding:3px 6px;border-bottom:1px solid #cfe6d4;}
 		.rs-card.billed td{border-bottom-color:#cddcea;}
 		.rs-card .note{margin-top:6px;font-size:11.5px;font-style:italic;}
+		/* only a batch still with us can be edited — once billed the two records
+		   have to keep agreeing, so the button is not drawn */
+		.rs-edit{border:1px solid currentColor;background:rgba(255,255,255,.55);color:inherit;
+			border-radius:7px;font-size:11px;font-weight:800;padding:2px 11px;cursor:pointer;}
+		.rs-edit:hover{background:#fff;}
+		.rs-open{border:none;background:none;color:inherit;font-size:11.5px;font-weight:800;
+			text-decoration:underline;cursor:pointer;padding:0 0 0 6px;font-style:normal;}
+		.re-row{display:grid;grid-template-columns:120px 1fr 60px 110px 1.4fr;gap:8px;
+			align-items:start;padding:8px 0;border-bottom:1px solid var(--border-color);}
+		.re-row:last-child{border-bottom:none;}
+		.re-row .lab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);}
+		.re-row input{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
+			border-radius:7px;padding:6px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+		.re-row .ro{font-size:12.5px;padding:6px 0;}
+		.re-row .ro b{font-size:13px;}
+		.re-works{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+		.re-works input{flex:1 1 90px;min-width:80px;}
+		.re-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;
+			padding:2px 4px 2px 9px;border-radius:999px;background:#e9f0f7;color:#1f618d;
+			border:1px solid #b9d0e6;white-space:nowrap;}
+		.re-chip b{cursor:pointer;font-size:13px;line-height:1;opacity:.65;}
+		.re-chip b:hover{opacity:1;}
 		.rs-none{padding:44px;text-align:center;color:var(--text-muted);}
 		@media print {
-			.rs-bar, .rs-tiles, .page-head, .navbar, .page-actions { display:none !important; }
+			.rs-bar, .rs-tiles, .page-head, .navbar, .page-actions,
+			.rs-edit, .rs-open { display:none !important; }
 			.rs-card { break-inside:avoid; page-break-inside:avoid; }
 		}
 		</style>
@@ -99,6 +123,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 					<span class="tag">${r.bill
 						? __("billed {0}", [esc(r.billed_at)])
 						: __("with us")}</span>
+					${r.bill ? "" : `<button class="rs-edit" data-n="${esc(r.name)}">${__("Edit")}</button>`}
 				</div>
 				<table><thead><tr>
 					<th>${__("Repair")}</th><th>${__("Design Type")}</th><th>${__("Qty")}</th>
@@ -113,8 +138,10 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 					<td>${esc(i.narration || "")}</td></tr>`).join("")}</tbody></table>
 				${r.narration ? `<div class="note">${esc(r.narration)}</div>` : ""}
 				${r.bill ? `<div class="note">${__("Bill {0} · {1} g metal added · {2} charged",
-					[esc(r.bill), flt(r.metal_added).toFixed(3),
-					 format_currency(r.charges)])}</div>` : ""}
+					[esc(r.bill), flt(r.metal_added).toFixed(3), format_currency(r.charges)])}
+					<button class="rs-open" data-n="${esc(r.name)}">${__("open bill")}</button></div>`
+					: `<div class="note"><button class="rs-open" data-n="${esc(r.name)}">${
+						__("bill this")}</button></div>`}
 			</div>`).join("") : `<div class="rs-none">${__("Nothing matches.")}</div>`);
 	}
 
@@ -123,6 +150,10 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 			args: { party: S.party || null, state: S.state } }).then((r) => {
 			const m = r.message || {};
 			S.rows = m.rows || [];
+			if (!WORKS.length) {
+				frappe.call({ method: API + ".get_repair_work_types", freeze: false })
+					.then((w) => (WORKS = (w.message || []).map((x) => x.work_name)));
+			}
 			if (!S.parties.length) {
 				S.parties = m.parties || [];
 				root.find(".rs-party").html(`<option value="">${__("Every party")}</option>`
@@ -138,6 +169,103 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 	});
 	root.on("change", ".rs-party", function () { S.party = this.value; load(); });
 	root.on("input", ".rs-q", function () { S.q = this.value; paint(); });
+
+	// ---- filling in what the counter did not have time for ------------------
+	let WORKS = [];
+	root.on("click", ".rs-edit", function () {
+		const name = this.getAttribute("data-n");
+		const r = S.rows.find((x) => x.name === name);
+		if (!r) return;
+		// a working copy — nothing on screen changes unless it is saved
+		const rows = (r.items || []).map((i) => ({
+			repair: i.repair, design_type: i.design_type, qty: i.qty,
+			weight: i.weight || "", work_types: (i.work_types || []).slice(),
+			narration: i.narration || "",
+		}));
+
+		const dlg = new frappe.ui.Dialog({
+			title: __("{0} — {1}", [name, r.party]), size: "extra-large",
+			primary_action_label: __("Save"),
+			primary_action() {
+				frappe.call({ method: API + ".update_repair_order", args: {
+					name, items: JSON.stringify(rows),
+				} }).then(() => {
+					dlg.hide();
+					frappe.show_alert({ message: __("{0} updated", [name]), indicator: "green" }, 4);
+					load();
+				});
+			},
+		});
+
+		const paintDlg = () => {
+			$(dlg.body).find(".re-list").html(rows.map((x, k) => `
+				<div class="re-row" data-k="${k}">
+					<div><div class="lab">${__("Repair")}</div>
+						<div class="ro"><b>${esc(x.repair)}</b></div></div>
+					<div><div class="lab">${__("Design Type")}</div>
+						<div class="ro">${esc(x.design_type)}</div></div>
+					<div><div class="lab">${__("Qty")}</div>
+						<div class="ro">${x.qty}</div></div>
+					<div><div class="lab">${__("Weight g")}</div>
+						<input class="re-wt" type="number" min="0" step="0.001" value="${x.weight}"></div>
+					<div><div class="lab">${__("Type of Work")}</div>
+						<div class="re-works">
+							${x.work_types.map((w) =>
+								`<span class="re-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
+							<input class="re-work" list="re-works-list"
+								placeholder="${x.work_types.length ? __("add another") : __("add")}">
+						</div>
+						<input class="re-nar" style="margin-top:6px;" value="${esc(x.narration)}"
+							placeholder="${__("narration")}"></div>
+				</div>`).join(""));
+		};
+
+		$(dlg.body).html(`
+			<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+				${__("Taken in {0}. Design type and quantity are what was received and stay as they are.",
+					[esc(r.received_at)])}
+			</div>
+			<div class="re-list"></div>
+			<datalist id="re-works-list">${WORKS.map((w) => `<option value="${esc(w)}">`).join("")}</datalist>`);
+		paintDlg();
+
+		$(dlg.body).on("input", ".re-wt", function () {
+			rows[cint($(this).closest(".re-row").data("k"))].weight = this.value;
+		});
+		$(dlg.body).on("input", ".re-nar", function () {
+			rows[cint($(this).closest(".re-row").data("k"))].narration = this.value;
+		});
+		const addWork = (k, val) => {
+			const v = (val || "").trim();
+			if (!v) return;
+			const w = rows[k].work_types;
+			if (!w.some((x) => x.toLowerCase() === v.toLowerCase())) w.push(v);
+			paintDlg();
+			$(dlg.body).find(`.re-row[data-k="${k}"] .re-work`).trigger("focus");
+		};
+		$(dlg.body).on("keydown", ".re-work", function (e) {
+			if (e.key !== "Enter" && e.key !== ",") return;
+			e.preventDefault();
+			addWork(cint($(this).closest(".re-row").data("k")), this.value);
+			this.value = "";
+		});
+		$(dlg.body).on("change blur", ".re-work", function () {
+			if (!this.value.trim()) return;
+			addWork(cint($(this).closest(".re-row").data("k")), this.value);
+			this.value = "";
+		});
+		$(dlg.body).on("click", ".re-chip b", function () {
+			const k = cint($(this).closest(".re-row").data("k"));
+			const w = this.getAttribute("data-w");
+			rows[k].work_types = rows[k].work_types.filter((x) => x !== w);
+			paintDlg();
+		});
+		dlg.show();
+	});
+
+	root.on("click", ".rs-open", function () {
+		frappe.set_route("repair-billing", this.getAttribute("data-n"));
+	});
 
 	page.set_primary_action(__("Print"), () => window.print(), "printer");
 	page.add_inner_button(__("New Repair Order"), () => frappe.set_route("new-repair-order"));
