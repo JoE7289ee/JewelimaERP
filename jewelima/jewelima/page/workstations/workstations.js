@@ -30,6 +30,7 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 	const mine = () => true;
 
 	function showTiles() {
+		openBench = null;              // back on the floor — a return resumes here
 		$w.empty();
 		const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Workstations"), single_column: true });
 		const root = $(page.main);
@@ -124,13 +125,24 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 		load();
 	}
 
+	// Which bench is open inside this page, if any. The floor and a bench share
+	// one page, so returning to it must resume whichever of the two was on screen.
+	let openBench = null;
+
 	function openOne(bench) {
 		if (!canOpen(bench)) return frappe.msgprint(__("You do not have access to {0}.", [bench]));
 		$w.empty();
-		jewelima.buildWorkstation(wrapper, bench, { onBack: showTiles });
+		openBench = bench;
+		// ownRefresh: this page keeps its own on_page_show — see workstation.js
+		jewelima.buildWorkstation(wrapper, bench, { onBack: showTiles, ownRefresh: true });
 	}
 
 	// coming back to the page should show today's numbers, not a stale board
-	frappe.pages["workstations"].on_page_show = function () { showTiles(); };
+	// Coming back shows what was left on screen, freshly loaded: the floor, or the
+	// bench that was opened from it.
+	frappe.pages["workstations"].on_page_show = function () {
+		if (openBench) openOne(openBench);
+		else showTiles();
+	};
 	showTiles();
 };

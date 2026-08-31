@@ -624,12 +624,25 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 	// keeps it live while you watch, but on its own it leaves you looking at a
 	// board up to half a minute old the moment you navigate back.
 	//
-	// on_page_show fires on the FIRST show as well as every return, so it does
-	// the opening load too — calling load() here as well would fetch the board
-	// twice on every entry.
-	const route = (frappe.get_route() || [])[0];
-	if (route && frappe.pages[route]) frappe.pages[route].on_page_show = load;
-	else load();                       // no route to hook — load the once
+	// A ws- page IS one bench, so hooking the route's on_page_show reloads it on
+	// every return, first show included — no load() here, or entering would fetch
+	// twice. The workstations floor is different: it swaps between its tiles and a
+	// bench inside ONE page, so it owns that hook already. Taking it there would
+	// replace showTiles with this bench's load, and the floor would never come
+	// back. That page passes ownRefresh and drives the reloading itself.
+	if (opts && opts.ownRefresh) {
+		load();                        // the host decides when to build; build means load
+	} else {
+		const route = (frappe.get_route() || [])[0];
+		if (route && frappe.pages[route]) frappe.pages[route].on_page_show = load;
+		else load();                   // no route to hook — load the once
+	}
+
+	// One poll per wrapper. The floor rebuilds into the same wrapper each time a
+	// bench is opened, and that wrapper is not removed in between, so without
+	// clearing the old timer every visit would leave another poll running.
+	clearInterval($(wrapper).data("jw-ws-poll"));
 	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 30000);
+	$(wrapper).data("jw-ws-poll", t);
 	$(wrapper).on("remove", () => clearInterval(t));
 };
