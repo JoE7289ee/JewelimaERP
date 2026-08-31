@@ -10,6 +10,8 @@
   "repair",
   "design_type",
   "qty",
+  "weight",
+  "weighed_at",
   "work_types",
   "repair_type",
   "narration"
@@ -38,6 +40,20 @@
    "default": "1",
    "reqd": 1,
    "in_list_view": 1
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Float",
+   "label": "Weight (g)",
+   "precision": "3",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "weighed_at",
+   "fieldtype": "Datetime",
+   "label": "Last Weighed",
+   "read_only": 1,
+   "description": "Stamped whenever the weight is set or changed — the last time this piece went on the scale."
   },
   {
    "fieldname": "work_types",

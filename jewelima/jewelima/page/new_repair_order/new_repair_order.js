@@ -57,6 +57,9 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		.nr-done b{font-size:15px;}
 		.nr-done table{width:100%;margin-top:8px;font-size:12px;color:var(--text-color);}
 		.nr-done td{padding:3px 6px;border-bottom:1px solid #cfe6d4;}
+		.nr-done th{padding:3px 6px;text-align:left;font-size:10px;text-transform:uppercase;
+			letter-spacing:.04em;color:#4f7a58;border-bottom:1px solid #cfe6d4;}
+		.nr-done .wat{font-size:11px;color:#4f7a58;white-space:nowrap;}
 		</style>
 		<div class="nr-wrap">
 			<div class="nr-doneslot"></div>
@@ -78,7 +81,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<table class="nr-t"><thead><tr>
 					<th style="width:21%;">${__("Design Type")}</th>
 					<th style="width:8%;">${__("Qty")}</th>
-					<th style="width:24%;">${__("Type of Work")}</th>
+					<th style="width:11%;">${__("Weight g")}</th>
+					<th style="width:22%;">${__("Type of Work")}</th>
 					<th style="width:15%;">${__("Type")}</th>
 					<th>${__("Narration")}</th>
 					<th style="width:34px;"></th>
@@ -97,7 +101,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		<datalist id="nr-dtypes"></datalist>`);
 	const root = $(page.main);
 
-	const blank = () => ({ design_type: "", repair_type: "", qty: 1, work_types: [], narration: "" });
+	const blank = () => ({ design_type: "", repair_type: "", qty: 1, weight: "",
+		work_types: [], narration: "" });
 
 	function paintRows() {
 		const o = S.opts;
@@ -106,6 +111,9 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<td><input class="nr-dt" list="nr-dtypes" value="${esc(r.design_type)}"
 					placeholder="${__("design type")}"></td>
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
+				<td class="num"><input class="nr-wt" type="number" min="0" step="0.001"
+					value="${r.weight === "" || r.weight === undefined ? "" : r.weight}"
+					placeholder="${__("optional")}"></td>
 				<td><div class="nr-works">
 					${(r.work_types || []).map((w) =>
 						`<span class="nr-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
@@ -116,7 +124,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 					placeholder="${__("pick or type")}"></td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
 				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
-			</tr>`).join("") : `<tr><td colspan="6" class="nr-none">${
+			</tr>`).join("") : `<tr><td colspan="7" class="nr-none">${
 				__("Nothing on the list yet — add a piece.")}</td></tr>`);
 		paintTotals();
 		page.set_primary_action(__("Take it in"), save, "add");
@@ -126,9 +134,11 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	// a line real, so nothing is counted until one is picked
 	function paintTotals() {
 		const real = S.rows.filter((r) => (r.design_type || "").trim());
+		const grams = real.reduce((a, r) => a + (parseFloat(r.weight) || 0), 0);
 		root.find(".nr-tot").html(real.length
 			? `<span>${__("Lines")} <b>${real.length}</b></span>`
 			  + `<span>${__("Pieces")} <b>${real.reduce((a, r) => a + cint(r.qty), 0)}</b></span>`
+			  + (grams ? `<span>${__("Weight")} <b>${grams.toFixed(3)} g</b></span>` : "")
 			: "");
 	}
 
@@ -191,15 +201,17 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		paintRows();
 	});
 
-	root.on("input change", ".nr-dt, .nr-type, .nr-qty, .nr-nar", function () {
+	root.on("input change", ".nr-dt, .nr-type, .nr-qty, .nr-wt, .nr-nar", function () {
 		const i = cint($(this).closest("tr").data("i"));
 		const r = S.rows[i];
 		if (!r) return;
 		if ($(this).hasClass("nr-dt")) r.design_type = this.value;
 		else if ($(this).hasClass("nr-type")) r.repair_type = this.value;
 		else if ($(this).hasClass("nr-qty")) r.qty = cint(this.value);
+		else if ($(this).hasClass("nr-wt")) r.weight = this.value;
 		else r.narration = this.value;
-		if ($(this).hasClass("nr-qty") || $(this).hasClass("nr-dt")) paintTotals();
+		if ($(this).hasClass("nr-qty") || $(this).hasClass("nr-dt")
+			|| $(this).hasClass("nr-wt")) paintTotals();
 	});
 	root.on("click", ".nr-add", () => { S.rows.push(blank()); paintRows(); });
 	root.on("click", ".nr-del", function () {
@@ -242,10 +254,16 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			<div class="nr-done">
 				<b>${esc(m.name)}</b> — ${__("taken in from")} <b>${esc(m.party)}</b>
 				· ${m.total_rows} ${__("line(s)")} · ${m.total_qty} ${__("piece(s)")}
-				<table><tbody>${(m.items || []).map((r) => `
+				<table><thead><tr>
+					<th>${__("Repair")}</th><th>${__("Design Type")}</th><th>${__("Qty")}</th>
+					<th>${__("Weight")}</th><th>${__("Type of Work")}</th><th>${__("Type")}</th>
+					<th>${__("Weighed")}</th></tr></thead><tbody>${(m.items || []).map((r) => `
 					<tr><td><b>${esc(r.repair)}</b></td><td>${esc(r.design_type)}</td>
-					<td>${r.qty}</td><td>${esc((r.work_types || []).join(", ") || "—")}</td>
+					<td>${r.qty}</td>
+					<td>${r.weight ? r.weight.toFixed(3) + " g" : "—"}</td>
+					<td>${esc((r.work_types || []).join(", ") || "—")}</td>
 					<td>${esc(r.repair_type || "—")}</td>
+					<td class="wat">${esc(r.weighed_at || "")}</td>
 					<td>${esc(r.narration || "")}</td></tr>`).join("")}</tbody></table>
 			</div>`);
 	}

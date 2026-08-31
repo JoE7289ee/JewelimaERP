@@ -12,6 +12,7 @@
   "cb_head",
   "received_by",
   "total_qty",
+  "total_weight",
   "total_rows",
   "sec_items",
   "items",
@@ -49,6 +50,14 @@
    "fieldname": "total_qty",
    "fieldtype": "Int",
    "label": "Total Qty",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "total_weight",
+   "fieldtype": "Float",
+   "label": "Total Weight (g)",
+   "precision": "3",
    "read_only": 1,
    "in_list_view": 1
   },

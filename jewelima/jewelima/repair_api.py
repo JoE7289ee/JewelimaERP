@@ -13,7 +13,7 @@ is not going to stop and go set up a master first.
 """
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 REPAIR_ROLES = ("System Manager", "JW Manager", "Jewelima Repair")
 
@@ -275,6 +275,7 @@ def create_repair_order(payload):
 			if name and name not in works:
 				works.append(name)
 		items.append({"design_type": dt, "qty": qty,
+			"weight": flt(r.get("weight")),
 			"repair_type": _master("Repair Type", "type_name", r.get("repair_type")),
 			"work_types": ", ".join(works) or None,
 			"narration": (r.get("narration") or "").strip() or None})
@@ -301,8 +302,10 @@ def get_repair_order(name):
 		"received_by_name": frappe.db.get_value("User", doc.received_by, "full_name") or doc.received_by,
 		"narration": doc.narration or "",
 		"total_qty": cint(doc.total_qty), "total_rows": cint(doc.total_rows),
+		"total_weight": flt(doc.total_weight),
 		"items": [{"repair": r.repair, "design_type": r.design_type,
 			"repair_type": r.repair_type or "", "qty": cint(r.qty),
+			"weight": flt(r.weight), "weighed_at": str(r.weighed_at or "")[:16],
 			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
 			"narration": r.narration or ""} for r in doc.items],
 	}
@@ -318,7 +321,8 @@ def list_repair_orders(party=None, from_date=None, to_date=None, limit=200):
 	if from_date and to_date:
 		filters["received_at"] = ["between", [str(from_date) + " 00:00:00", str(to_date) + " 23:59:59"]]
 	rows = frappe.get_all("Repair Order", filters=filters,
-		fields=["name", "party", "received_at", "received_by", "total_qty", "total_rows", "narration"],
+		fields=["name", "party", "received_at", "received_by", "total_qty", "total_weight",
+			"total_rows", "narration"],
 		order_by="received_at desc, creation desc", limit_page_length=cint(limit) or 200)
 	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
 		filters={"name": ["in", list({r.received_by for r in rows}) or [""]]},
@@ -329,5 +333,6 @@ def list_repair_orders(party=None, from_date=None, to_date=None, limit=200):
 			"received_by_name": users.get(r.received_by, r.received_by)})
 	return {"rows": out,
 		"totals": {"batches": len(out), "qty": sum(cint(r["total_qty"]) for r in out),
+			"weight": round(sum(flt(r["total_weight"]) for r in out), 3),
 			"lines": sum(cint(r["total_rows"]) for r in out),
 			"parties": len({r["party"] for r in out})}}

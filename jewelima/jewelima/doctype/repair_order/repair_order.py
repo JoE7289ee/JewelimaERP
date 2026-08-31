@@ -8,7 +8,7 @@
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import cint
+from frappe.utils import cint, flt
 
 
 def _clean_work_types(value):
@@ -45,10 +45,26 @@ class RepairOrder(Document):
 				frappe.throw(frappe._("Row {0}: pick a design type.").format(r.idx))
 			if cint(r.qty) <= 0:
 				frappe.throw(frappe._("Row {0}: quantity must be at least 1.").format(r.idx))
+			if flt(r.weight) < 0:
+				frappe.throw(frappe._("Row {0}: weight cannot be negative.").format(r.idx))
 			# types of work are optional, but a name written here must be a real one
 			r.work_types = ", ".join(_clean_work_types(r.work_types)) or None
+			self._stamp_weighing(r)
 		self.total_rows = len(self.items)
 		self.total_qty = sum(cint(r.qty) for r in self.items)
+		self.total_weight = round(sum(flt(r.weight) for r in self.items), 3)
+
+	def _stamp_weighing(self, row):
+		"""The scale time, kept honest: stamped when a weight first appears and
+		again whenever it changes, left alone when it does not. A piece can come
+		in unweighed, so no weight means no stamp."""
+		now = flt(row.weight)
+		if not now:
+			row.weighed_at = None
+			return
+		before = frappe.db.get_value("Repair Order Item", row.name, "weight") if row.name else None
+		if before is None or abs(flt(before) - now) > 0.0005 or not row.weighed_at:
+			row.weighed_at = frappe.utils.now_datetime()
 
 	def after_insert(self):
 		self._stamp_rows()
