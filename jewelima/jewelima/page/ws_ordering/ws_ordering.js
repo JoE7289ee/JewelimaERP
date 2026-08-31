@@ -169,9 +169,9 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			});
 	}
 
-	// scan-and-transfer: ORDERING is ALWAYS the source, and only the two first
-	// stations are reachable from here — anything else goes through the global
-	// Transfer page (rules, holders, issue combos live there)
+	// scan-and-transfer: ORDERING is ALWAYS the source, and only the stations a
+	// card can start at are reachable from here — anything else goes through the
+	// global Transfer page (rules, holders, issue combos live there)
 	root.find(".od-tr").on("click", () => {
 		const sel = new Map([...picked].map((n) => [n, 1])); // seed from the table selection
 		const qtyOf = (n) => flt(((D.rows || []).find((r) => r.name === n) || {}).qty) || 0;
@@ -179,7 +179,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			title: __("Transfer from ORDERING"),
 			fields: [
 				{ fieldname: "to", fieldtype: "Select", label: __("To"), reqd: 1,
-					options: "CAD\nWAXING", default: "CAD" },
+					options: "CAD\nCAM\nWAXING", default: "CAD" },
 				{ fieldname: "scan", fieldtype: "Data", label: __("Scan card"),
 					description: __("Enter adds the card — it must be sitting in ORDERING") },
 				{ fieldname: "list", fieldtype: "HTML" },
