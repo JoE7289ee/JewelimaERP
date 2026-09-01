@@ -37,13 +37,14 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	// money the server will store, not an estimate of it — see rate_for_karat
 	// in repair_bill.py, which is the one place the derivation lives.
 	// Kept in step with rate_for_karat() in repair_bill.py — the board rate is
-	// quoted with GST, so that comes off first, then the karat's purity.
+	// quoted WITH GST, so the tax comes out of it (board / 1.03, not board less
+	// 3%) before the karat's purity is taken.
 	const GST = 3;
 	const PURITY = { "22": 91.6, "18": 75, "14": 58.3, "9": 37.5 };
 	const rateForKarat = (board, karat) => {
 		const k = String(karat || "").trim();
 		if (!k) return flt(board);
-		const net = flt(board) * (100 - GST) / 100;
+		const net = flt(board) / (1 + GST / 100);
 		return net * (PURITY[k] !== undefined ? PURITY[k] : flt(k) * 100 / 24) / 100;
 	};
 	const sKey = (st) => `${st.bucket || ""}||${st.sieve || ""}`;
@@ -74,11 +75,11 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		if (!flt(i.weight_out)) return __("Weigh the piece out first.");
 		const P = priceRow(i);
 		if (!flt(S.gold)) return __("No gold board rate entered, so metal is not charged.");
-		const net = flt(S.gold) * (100 - GST) / 100;
+		const net = flt(S.gold) / (1 + GST / 100);
 		const pur = PURITY[i.karat];
 		return [
-			__("Board rate {0} (with {1}% GST)", [money(S.gold), GST]),
-			__("less GST = {0}", [money(net)]),
+			__("Board rate {0} (with {1}% GST in it)", [money(S.gold), GST]),
+			__("GST taken out ({0} / 1.{1}) = {2}", [money(S.gold), GST < 10 ? "0" + GST : GST, money(net)]),
 			i.karat ? __("{0}k is {1}% of that = {2} / g", [i.karat, pur, money(P.rate)])
 			        : __("no karat set, so the board rate is used as it is"),
 			__("{0} g added x {1} = {2}", [g3(P.added), money(P.rate), money(P.metal)]),

@@ -39,7 +39,10 @@ def rate_for_karat(board_rate, karat):
 	"""The per-gram rate for a piece's own gold, from the board rate.
 
 	Two steps, in this order:
-	  1. take the GST off the board rate — it is quoted with 3% in it;
+	  1. take the GST OUT of the board rate — it is quoted with 3% already in it,
+	     so the rate before tax is board / 1.03, not board less 3%. Taking 3% off
+	     undershoots: 10,000 less 3% is 9,700, but 9,700 plus 3% is only 9,991,
+	     so it was never the rate the board was quoting;
 	  2. take that karat's purity of what is left.
 
 	A piece with no karat recorded is billed at the board rate untouched, which
@@ -49,7 +52,7 @@ def rate_for_karat(board_rate, karat):
 	k = str(karat or "").strip()
 	if not k:
 		return flt(board_rate)
-	net = flt(board_rate) * (100.0 - GOLD_GST_PERCENT) / 100.0
+	net = flt(board_rate) / (1.0 + GOLD_GST_PERCENT / 100.0)
 	purity = KARAT_PURITY.get(k)
 	if purity is None:
 		return net * flt(k) / 24.0      # a karat we have no figure for, by fineness
