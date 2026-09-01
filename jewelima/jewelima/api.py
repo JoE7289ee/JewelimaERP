@@ -17724,9 +17724,21 @@ def get_rework_piece(barcode):
 	}
 
 
+# Everything sent back from Finished Goods lands in the REWORK queue. Whoever
+# picks it up decides where it actually goes — that call is better made looking
+# at the piece than at the counter, and it was being made twice: once here and
+# again when the card was moved on.
+REWORK_LOCATION = "REWORK"
+
+
 @frappe.whitelist()
-def rework_piece(order_bag, to_location, remarks=None):
-	"""Send a finished piece back to the floor as work."""
+def rework_piece(order_bag, to_location=None, remarks=None):
+	"""Send a finished piece back to the floor, into the rework queue.
+
+	`to_location` is accepted and ignored: the destination is no longer chosen
+	here. Keeping the argument means a browser still holding the old page does
+	not fall over on an unexpected keyword.
+	"""
 	_rework_guard()
 	from jewelima.jewelima.benches import BENCH_DOCTYPE, on_bag_arrival
 	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
@@ -17736,9 +17748,9 @@ def rework_piece(order_bag, to_location, remarks=None):
 		frappe.throw(info.get("error") or frappe._("No such piece."))
 	if not info.get("can_rework"):
 		frappe.throw(info["error"])
-	loc = (to_location or "").upper()
+	loc = REWORK_LOCATION
 	if loc not in BENCH_DOCTYPE:
-		frappe.throw(frappe._("Pick the workstation it goes back to."))
+		frappe.throw(frappe._("The {0} queue is not set up.").format(loc))
 
 	was_at = frappe.db.get_value("Order Bag", order_bag, "location")
 	mats = _bag_convert_materials([order_bag])[order_bag]

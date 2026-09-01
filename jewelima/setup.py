@@ -798,6 +798,15 @@ def setup_roles():
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_DELIVERY_ROLE])
 			pg.save(ignore_permissions=True)
 
+	# A DocType named "Rework" claims /app/rework and hides the Delivery page of
+	# that name — the very page that sends pieces to the queue. It was called
+	# that for one deploy; drop the record Frappe leaves behind when the folder
+	# goes, or the route stays shadowed on every site that saw it.
+	if frappe.db.exists("DocType", "Rework"):
+		if not frappe.db.count("Rework"):
+			frappe.delete_doc("DocType", "Rework", force=True, ignore_permissions=True)
+			frappe.db.commit()
+
 	# ---- ERPNext roles that got stamped on our pages by accident ----------------
 	# Authoring a Page in the desk writes whatever roles the author happened to
 	# hold onto it. "Stock User" is ERPNext's own, we grant it to nobody and name

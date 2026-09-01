@@ -1,20 +1,23 @@
-// Rework (Delivery) — a finished piece goes back to the floor. Scan it, pick the
-// workstation, send it. The weight it was frozen with leaves Finished Goods and
-// returns to the In Bags pool, the card holds its materials again and queues at
-// that bench as work. Its design, HUID and certificates travel with it.
+// Rework (Delivery) — a finished piece goes back to the floor. Scan it and send
+// it; it lands in the REWORK queue. The weight it was frozen with leaves
+// Finished Goods and returns to the In Bags pool, the card holds its materials
+// again and waits in that queue. Its design, HUID and certificates travel with it.
+//
+// The bench is no longer chosen here. It was being decided twice — once at this
+// counter by someone holding the piece but not the job, and again when the card
+// was moved on. Whoever picks it out of the queue decides where it goes.
 // Route: /app/rework
 frappe.pages["rework"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Rework"), single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	const S = { piece: null, sent: [] };
-	const BENCHES = ["ORDERING", "CAD", "CAM", "WAXING", "TREE MAKING", "CASTING", "GRINDING",
-		"FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH", "WAX CLEANING", "BAG EXTRACTION"];
+	const REWORK = "REWORK";      // where everything sent back goes
 
 	$(page.main).append(`
 		<style>
 		#page-rework .container{max-width:100%;}
-		.rw-top{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;align-items:end;margin-bottom:12px;}
+		.rw-top{display:grid;grid-template-columns:1fr;gap:12px;align-items:end;margin-bottom:12px;}
 		.rw-top .control-label{font-size:11px;color:var(--text-muted);}
 		.rw-top .help-box{display:none !important;}
 		.rw-msg{display:none;margin-bottom:12px;padding:9px 13px;border-radius:8px;font-size:13px;}
@@ -41,7 +44,6 @@ frappe.pages["rework"].on_page_load = function (wrapper) {
 		</style>
 		<div class="rw-top">
 			<div class="rw-scan"></div>
-			<div class="rw-to"></div>
 		</div>
 		<div class="rw-msg"></div>
 		<div class="rw-cols">
@@ -57,9 +59,6 @@ frappe.pages["rework"].on_page_load = function (wrapper) {
 	};
 	const fScan = mk(".rw-scan", { fieldtype: "Data", label: __("Scan finished product"),
 		fieldname: "scan", description: __("only a finished piece In Stock can go back") });
-	const fTo = mk(".rw-to", { fieldtype: "Select", label: __("Send it to"), fieldname: "to",
-		options: BENCHES.join("\n") });
-	fTo.set_value("SETTING");   // the usual reason a piece comes back
 	const focusScan = () => setTimeout(() => fScan.$input.focus(), 30);
 
 	function msg(kind, html) { root.find(".rw-msg").removeClass("ok err warn").addClass(kind).html(html); }
@@ -86,8 +85,8 @@ frappe.pages["rework"].on_page_load = function (wrapper) {
 				<div class="row" style="border-top:1px solid var(--border-color);margin-top:4px;padding-top:5px;">
 					<span>${__("gold {0} g · stones {1}", [(p.gold || 0).toFixed(3), (p.stones || 0).toFixed(3)])}</span></div>
 			</div>
-			${p.can_rework ? `<div class="rw-flow">${__("Its weight leaves <b>Finished Goods</b>, returns to <b>In Bags</b>, and the card queues at <b>{0}</b> as work again.", [esc(fTo.get_value() || "—")])}</div>
-				<button class="rw-go">${__("Send back to {0}", [esc(fTo.get_value() || "—")])}</button>`
+			${p.can_rework ? `<div class="rw-flow">${__("Its weight leaves <b>Finished Goods</b>, returns to <b>In Bags</b>, and the card waits in the <b>{0}</b> queue.", [REWORK])}</div>
+				<button class="rw-go">${__("Send back to {0}", [REWORK])}</button>`
 			: `<div class="rw-flow" style="background:#fbeaea;border-color:#e6b3b3;color:#b00020;">${esc(p.error || "")}</div>`}`);
 	}
 
@@ -110,17 +109,15 @@ frappe.pages["rework"].on_page_load = function (wrapper) {
 		fScan.set_value("");
 		if (code) lookup(code);
 	});
-	fTo.$input.on("change", paint);
 
 	root.on("click", ".rw-go", function () {
 		const p = S.piece;
-		const to = fTo.get_value();
-		if (!p || !to) return;
-		frappe.confirm(__("Send <b>{0}</b> back to <b>{1}</b>?<br><br>{2} g of gold and {3} of stones leave Finished Goods and the piece stops being stock.",
-			[esc(p.order_bag), esc(to), (p.gold || 0).toFixed(3), (p.stones || 0).toFixed(3)]), () => {
+		if (!p) return;
+		frappe.confirm(__("Send <b>{0}</b> back to the <b>{1}</b> queue?<br><br>{2} g of gold and {3} of stones leave Finished Goods and the piece stops being stock.",
+			[esc(p.order_bag), REWORK, (p.gold || 0).toFixed(3), (p.stones || 0).toFixed(3)]), () => {
 			frappe.dom.freeze(__("Sending back…"));
 			frappe.call({ method: API + ".rework_piece",
-				args: { order_bag: p.order_bag, to_location: to, remarks: null } })
+				args: { order_bag: p.order_bag, remarks: null } })
 				.then((r) => {
 					frappe.dom.unfreeze();
 					const m = r.message || {};
