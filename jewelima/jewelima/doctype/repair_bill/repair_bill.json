@@ -29,7 +29,9 @@
   "grand_total",
   "sec_stones",
   "stones",
-  "total_manual_amount"
+  "total_manual_amount",
+  "gst_percent",
+  "gst_amount"
  ],
  "fields": [
   {
@@ -171,11 +173,24 @@
    "fieldtype": "Currency",
    "label": "Manual",
    "read_only": 1
+  },
+  {
+   "fieldname": "gst_percent",
+   "fieldtype": "Float",
+   "label": "GST %",
+   "precision": "2",
+   "description": "3 when GST is added to this bill, 0 when it is not."
+  },
+  {
+   "fieldname": "gst_amount",
+   "fieldtype": "Currency",
+   "label": "GST",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-01 10:30:00.000000",
+ "modified": "2026-09-01 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Repair Bill",

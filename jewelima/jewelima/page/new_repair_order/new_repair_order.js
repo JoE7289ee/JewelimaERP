@@ -108,7 +108,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	const blank = () => ({ design_type: "", repair_type: "", qty: 1, weight: "",
-		karat: "", work_types: [], stones: [], narration: "" });
+		// most work in is 18k, so that is what a fresh line starts on
+		karat: "18", work_types: [], stones: [], narration: "" });
 
 	function paintRows() {
 		const o = S.opts;
@@ -119,8 +120,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
 				<td class="num"><input class="nr-wt" type="number" min="0" step="0.001"
 					value="${r.weight === "" || r.weight === undefined ? "" : r.weight}"></td>
-				<td><select class="nr-kt">${["", "22", "18", "14", "9"].map((k) =>
-					`<option value="${k}" ${(r.karat || "") === k ? "selected" : ""}>${k || "—"}</option>`).join("")}</select></td>
+				<td><select class="nr-kt">${["22", "18", "14", "9"].map((k) =>
+					`<option value="${k}" ${(r.karat || "18") === k ? "selected" : ""}>${k}</option>`).join("")}</select></td>
 				<td><div class="nr-works">
 					${(r.work_types || []).map((w) =>
 						`<span class="nr-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
@@ -275,9 +276,17 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		}).always(() => frappe.dom.unfreeze());
 	}
 
+	// the sheet that goes back with the party
+	root.on("click", ".nr-print", () => {
+		if (!S.saved) return;
+		frappe.call({ method: API + ".get_repair_order", args: { name: S.saved.name } })
+			.then((r) => jewelima.printRepairOrder(r.message));
+	});
+
 	function showDone(m) {
 		root.find(".nr-doneslot").html(`
 			<div class="nr-done">
+				<button class="btn btn-default btn-xs nr-print" style="float:right;">${__("Print")}</button>
 				<b>${esc(m.name)}</b> — ${__("taken in from")} <b>${esc(m.party)}</b>
 				· ${m.total_rows} ${__("line(s)")} · ${m.total_qty} ${__("piece(s)")}
 				<table><thead><tr>

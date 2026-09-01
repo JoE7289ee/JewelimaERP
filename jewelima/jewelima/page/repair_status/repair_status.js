@@ -14,6 +14,9 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
+		.re-add-wrap{margin-top:9px;display:flex;gap:9px;align-items:center;}
+		.re-fresh{background:var(--control-bg);border-radius:8px;}
+		.re-fresh a.rf-x{color:#b02a2a;cursor:pointer;font-size:17px;}
 		.re-st{font-size:11px;line-height:1.4;cursor:pointer;min-height:26px;padding-top:3px;}
 		.re-st.locked{cursor:default;opacity:.6;}
 		.re-addst{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
@@ -129,6 +132,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 						? __("billed {0}", [esc(r.billed_at)])
 						: __("with us")}</span>
 					${r.bill ? "" : `<button class="rs-edit" data-n="${esc(r.name)}">${__("Edit")}</button>`}
+					<button class="rs-print" data-n="${esc(r.name)}">${__("Print")}</button>
 				</div>
 				<table><thead><tr>
 					<th>${__("Repair")}</th><th>${__("Design Type")}</th><th>${__("Qty")}</th>
@@ -156,6 +160,7 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 			const m = r.message || {};
 			S.rows = m.rows || [];
 			S.sieves = m.sieves || S.sieves || [];
+			S.designTypes = m.design_types || S.designTypes || [];
 			if (!WORKS.length) {
 				frappe.call({ method: API + ".get_repair_work_types", freeze: false })
 					.then((w) => (WORKS = (w.message || []).map((x) => x.work_name)));
@@ -178,6 +183,12 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 
 	// ---- filling in what the counter did not have time for ------------------
 	let WORKS = [];
+	root.on("click", ".rs-print", function () {
+		const name = this.getAttribute("data-n");
+		frappe.call({ method: API + ".get_repair_order", args: { name } })
+			.then((r) => jewelima.printRepairOrder(r.message));
+	});
+
 	root.on("click", ".rs-edit", function () {
 		const name = this.getAttribute("data-n");
 		const r = S.rows.find((x) => x.name === name);
@@ -198,11 +209,22 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 			title: __("{0} — {1}", [name, r.party]), size: "extra-large",
 			primary_action_label: __("Save"),
 			primary_action() {
-				// the batch first (weights in, work, notes), then the parts that
-				// belong to the piece itself — weigh-out, karat and stones
-				frappe.call({ method: API + ".update_repair_order", args: {
+				const real = fresh.filter((f) => (f.design_type || "").trim());
+				const half = fresh.filter((f) => !(f.design_type || "").trim() &&
+					(String(f.weight || "").trim() || (f.work_types || "").trim()));
+				if (half.length) return frappe.msgprint(
+					__("{0} new line(s) have no design type.", [half.length]));
+
+				// new pieces join the batch first, so they are numbered before the
+				// edits below re-read it
+				const addFirst = real.length
+					? frappe.call({ method: API + ".add_repair_pieces",
+						args: { name, items: JSON.stringify(real) } })
+					: Promise.resolve();
+
+				addFirst.then(() => frappe.call({ method: API + ".update_repair_order", args: {
 					name, items: JSON.stringify(rows),
-				} }).then(() => frappe.call({ method: API + ".save_repair_weights", args: {
+				} })).then(() => frappe.call({ method: API + ".save_repair_weights", args: {
 					repair_order: name,
 					rows: JSON.stringify(rows.filter((x) => !x.bill).map((x) => ({
 						repair: x.repair, weight_out: parseFloat(x.weight_out) || 0,
@@ -264,12 +286,64 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 					[esc(r.received_at)])}
 			</div>
 			<div class="re-list"></div>
-			<datalist id="re-works-list">${WORKS.map((w) => `<option value="${esc(w)}">`).join("")}</datalist>`);
+			<div class="re-add-wrap">
+				<button class="btn btn-default btn-xs re-add">+ ${__("another piece")}</button>
+				<span class="re-add-hint"></span>
+			</div>
+			<datalist id="re-works-list">${WORKS.map((w) => `<option value="${esc(w)}">`).join("")}</datalist>
+			<datalist id="re-dt-list">${(S.designTypes || []).map((w) => `<option value="${esc(w)}">`).join("")}</datalist>`);
 		paintDlg();
 
 		$(dlg.body).on("input", ".re-wt", function () {
 			rows[cint($(this).closest(".re-row").data("k"))].weight = this.value;
 		});
+		// Pieces added here are CREATED when the dialog is saved, so they are kept
+		// in their own list — mixing them into `rows` would send a row with no
+		// repair number through the edit path, which only knows how to update.
+		const fresh = [];
+		const paintFresh = () => {
+			$(dlg.body).find(".re-fresh").remove();
+            const html = fresh.map((f, k) => `
+				<div class="re-row re-fresh" data-f="${k}">
+					<div><div class="lab">${__("Repair")}</div><div class="ro"><i>${__("new")}</i></div></div>
+					<div><div class="lab">${__("Design Type")}</div>
+						<input class="rf-dt" list="re-dt-list" value="${esc(f.design_type)}"
+							placeholder="${__("design type")}"></div>
+					<div><div class="lab">${__("Qty")}</div>
+						<input class="rf-qty" type="number" min="1" step="1" value="${f.qty}"></div>
+					<div><div class="lab">${__("Weight In g")}</div>
+						<input class="rf-wt" type="number" min="0" step="0.001" value="${f.weight}"></div>
+					<div><div class="lab">${__("Karat")}</div>
+						<select class="rf-kt">${["22","18","14","9"].map((k) =>
+							`<option value="${k}" ${f.karat === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
+					<div><div class="lab">${__("Type of Work")}</div>
+						<input class="rf-work" list="re-works-list" value="${esc(f.work_types)}"
+							placeholder="${__("comma separated")}">
+						<input class="rf-nar" style="margin-top:6px;" value="${esc(f.narration)}"
+							placeholder="${__("narration")}"></div>
+					<div><a class="rf-x" title="${__("Remove")}">&times;</a></div>
+				</div>`).join("");
+			$(dlg.body).find(".re-add-wrap").before(html);
+		};
+		$(dlg.body).on("click", ".re-add", () => {
+			fresh.push({ design_type: "", qty: 1, weight: "", karat: "18", work_types: "", narration: "" });
+			paintFresh();
+		});
+		$(dlg.body).on("click", ".rf-x", function () {
+			fresh.splice(cint($(this).closest(".re-fresh").data("f")), 1); paintFresh();
+		});
+		$(dlg.body).on("input change", ".rf-dt, .rf-qty, .rf-wt, .rf-kt, .rf-work, .rf-nar", function () {
+			const f = fresh[cint($(this).closest(".re-fresh").data("f"))];
+			if (!f) return;
+			const $r = $(this).closest(".re-fresh");
+			f.design_type = $r.find(".rf-dt").val();
+			f.qty = $r.find(".rf-qty").val();
+			f.weight = $r.find(".rf-wt").val();
+			f.karat = $r.find(".rf-kt").val();
+			f.work_types = $r.find(".rf-work").val();
+			f.narration = $r.find(".rf-nar").val();
+		});
+
 		$(dlg.body).on("input", ".re-wo", function () {
 			rows[cint($(this).closest(".re-row").data("k"))].weight_out = this.value;
 		});

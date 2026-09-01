@@ -23,18 +23,37 @@ from frappe.model.document import Document
 from frappe.utils import cint, flt
 
 
+# The board rate is quoted WITH GST, so the tax comes off before any karat is
+# worked out. Written as its own figure because it is the kind of number that
+# changes by government notice, not by anything we do.
+GOLD_GST_PERCENT = 3.0
+
+# Purity by karat, as the trade quotes it. These are the fineness percentages
+# (22/24 = 91.6, 18/24 = 75, 14/24 = 58.3, 9/24 = 37.5) but they are written out
+# rather than computed, because the rounded figures are what a bill is checked
+# against by hand.
+KARAT_PURITY = {"22": 91.6, "18": 75.0, "14": 58.3, "9": 37.5}
+
+
 def rate_for_karat(board_rate, karat):
 	"""The per-gram rate for a piece's own gold, from the board rate.
 
-	PLACEHOLDER derivation — proportional to fineness, i.e. the board rate is
-	taken as the 24k rate and 22k is 22/24 of it. This is the one place the
-	arithmetic lives: when the real conversion is given, change it here and every
-	bill, old and new, follows.
+	Two steps, in this order:
+	  1. take the GST off the board rate — it is quoted with 3% in it;
+	  2. take that karat's purity of what is left.
+
+	A piece with no karat recorded is billed at the board rate untouched, which
+	is deliberately wrong-looking: an unpriced karat should stand out on the bill
+	rather than quietly bill at some assumed purity.
 	"""
-	k = flt(karat)
+	k = str(karat or "").strip()
 	if not k:
-		return flt(board_rate)          # karat not recorded — bill at the board rate
-	return flt(board_rate) * k / 24.0
+		return flt(board_rate)
+	net = flt(board_rate) * (100.0 - GOLD_GST_PERCENT) / 100.0
+	purity = KARAT_PURITY.get(k)
+	if purity is None:
+		return net * flt(k) / 24.0      # a karat we have no figure for, by fineness
+	return net * purity / 100.0
 
 
 class RepairBill(Document):
@@ -107,5 +126,8 @@ class RepairBill(Document):
 		self.total_metal_amount = round(metal_t, 2)
 		self.total_stone_amount = round(stone_total, 2)
 		self.total_manual_amount = round(manual_t, 2)
-		self.grand_total = round(flt(self.total_work_amount) + flt(self.total_metal_amount)
-			+ flt(self.total_stone_amount) + flt(self.total_manual_amount), 2)
+		# what the job came to, before tax
+		sub = (flt(self.total_work_amount) + flt(self.total_metal_amount)
+			+ flt(self.total_stone_amount) + flt(self.total_manual_amount))
+		self.gst_amount = round(sub * flt(self.gst_percent) / 100.0, 2)
+		self.grand_total = round(sub + flt(self.gst_amount), 2)

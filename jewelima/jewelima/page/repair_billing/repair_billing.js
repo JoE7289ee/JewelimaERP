@@ -31,21 +31,65 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 
 	// D = the batch on screen; picked = the pieces ticked to bill now
 	const S = { tiles: [], D: null, picked: new Set(), rates: {}, stoneRates: {},
-		gold: 0, sieves: [], saving: false };
+		gold: 0, gst: 0, sieves: [], saving: false };
 
 	// The same split the bill does. Keeping it here means the screen shows the
 	// money the server will store, not an estimate of it — see rate_for_karat
 	// in repair_bill.py, which is the one place the derivation lives.
-	const rateForKarat = (board, karat) => (flt(karat) ? flt(board) * flt(karat) / 24 : flt(board));
+	// Kept in step with rate_for_karat() in repair_bill.py — the board rate is
+	// quoted with GST, so that comes off first, then the karat's purity.
+	const GST = 3;
+	const PURITY = { "22": 91.6, "18": 75, "14": 58.3, "9": 37.5 };
+	const rateForKarat = (board, karat) => {
+		const k = String(karat || "").trim();
+		if (!k) return flt(board);
+		const net = flt(board) * (100 - GST) / 100;
+		return net * (PURITY[k] !== undefined ? PURITY[k] : flt(k) * 100 / 24) / 100;
+	};
 	const sKey = (st) => `${st.bucket || ""}||${st.sieve || ""}`;
 
 	function priceRow(i) {
 		const work = (i.work_types || []).reduce((a, w) => a + flt(S.rates[w]), 0);
 		const added = flt(i.weight_out) ? flt(i.weight_out) - flt(i.weight_in) : 0;
-		const metal = added * rateForKarat(S.gold, i.karat);
+		const rate = rateForKarat(S.gold, i.karat);
+		const metal = added * rate;
 		const stone = (i.stones || []).reduce((a, st) => a + flt(st.ct) * flt(S.stoneRates[sKey(st)]), 0);
 		const manual = flt(i.manual_amount);
-		return { work, metal, stone, manual, total: work + metal + stone + manual, added };
+		return { work, metal, stone, manual, total: work + metal + stone + manual, added, rate };
+	}
+
+	// Nobody should have to take a figure on trust. Each money cell carries the
+	// sum that produced it — the metal one especially, now that the board rate
+	// goes through GST and a purity before it reaches the piece.
+	const money = (v) => format_currency(v);
+	function whyWork(i) {
+		const w = (i.work_types || []);
+		if (!w.length) return __("No type of work on this piece.");
+		const parts = w.map((n) => `${n} ${money(flt(S.rates[n]))}`);
+		const total = w.reduce((a, n) => a + flt(S.rates[n]), 0);
+		return __("One rate per type of work on the piece:") + "\n  "
+			+ parts.join("\n  ") + "\n  " + __("= {0}", [money(total)]);
+	}
+	function whyMetal(i) {
+		if (!flt(i.weight_out)) return __("Weigh the piece out first.");
+		const P = priceRow(i);
+		if (!flt(S.gold)) return __("No gold board rate entered, so metal is not charged.");
+		const net = flt(S.gold) * (100 - GST) / 100;
+		const pur = PURITY[i.karat];
+		return [
+			__("Board rate {0} (with {1}% GST)", [money(S.gold), GST]),
+			__("less GST = {0}", [money(net)]),
+			i.karat ? __("{0}k is {1}% of that = {2} / g", [i.karat, pur, money(P.rate)])
+			        : __("no karat set, so the board rate is used as it is"),
+			__("{0} g added x {1} = {2}", [g3(P.added), money(P.rate), money(P.metal)]),
+		].join("\n");
+	}
+	function whyStone(i) {
+		const st = (i.stones || []);
+		if (!st.length) return __("No stones on this piece.");
+		return __("Each line at its rate per carat:") + "\n  "
+			+ st.map((x) => `${x.bucket || x.stone} ${x.sieve || ""} ${flt(x.ct).toFixed(3)} ct `
+				+ `x ${money(flt(S.stoneRates[sKey(x)]))} = ${money(flt(x.ct) * flt(S.stoneRates[sKey(x)]))}`).join("\n  ");
 	}
 
 	$w.append(`
@@ -120,6 +164,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		.rb-tile.warn{border-color:#e8d18a;background:#fffdf5;}
 		.rb-tile.warn .v{color:#8a6d00;}
 		.rb-tile.rate.unset .v input{border-color:#d9534f;background:rgba(217,83,79,.07);}
+		/* a figure you can ask about */
+		.rb-why{cursor:help;}
+		.rb-why:hover{background:var(--control-bg);}
 		.rb-added{font-weight:700;} .rb-added.up{color:#1d7a33;} .rb-added.down{color:#b02a2a;}
 		.rb-work{font-size:11px;color:var(--text-muted);cursor:pointer;border-bottom:1px dashed var(--border-color);}
 		.rb-work:hover{color:var(--text-color);}
@@ -130,6 +177,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		.rb-note{width:100%;box-sizing:border-box;border:1px solid var(--border-color);border-radius:8px;
 			padding:8px 11px;font-size:13px;background:var(--fg-color);color:var(--text-color);}
 		.rb-billed{font-size:10.5px;color:var(--text-muted);}
+		.rb-print{cursor:pointer;text-decoration:underline dotted;}
+		.rb-print:hover{color:var(--text-color);}
 		</style>
 		<div class="rb-wrap"><div class="rb-body"></div></div>
 	`);
@@ -184,6 +233,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				(S.D.stone_lines || []).forEach((l) => {
 					S.stoneRates[sKey(l)] = l.rate; });
 				S.gold = flt(S.D.gold_rate) || S.gold;
+				S.gst = flt(S.D.gst_percent) || 0;
 				page.set_title(__("Billing {0}", [S.D.party || order]));
 				page.set_secondary_action(__("← All repairs"), showFloor);
 				drawBatch();
@@ -209,7 +259,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				: `<span class="rb-add">${__("add stone")}</span>`;
 			return `<tr class="${done ? "rb-done" : ""} ${on ? "rb-on" : ""} ${
 				(noOut || noWork) && on ? "rb-warn" : ""}" data-r="${esc(i.repair)}">
-				<td>${done ? `<span class="rb-billed">${esc(i.bill)}</span>`
+				<td>${done ? `<span class="rb-billed rb-print" title="${__("Print this bill")}">${esc(i.bill)}</span>`
 					: `<input type="checkbox" class="rb-pick2" ${on ? "checked" : ""}>`}</td>
 				<td><b>${esc(i.repair)}</b>${noOut ? `<span class="rb-flag2">${__("no weight out")}</span>` : ""}
 					<div class="rb-work ${work ? "" : "none"}">${esc(work || __("add work"))}</div></td>
@@ -225,9 +275,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				<td class="num rb-added ${!flt(i.weight_out) ? "" : (P.added >= 0 ? "up" : "down")}">${
 					!flt(i.weight_out) ? "—" : (P.added >= 0 ? "+" : "") + g3(P.added)}</td>
 				<td class="rb-st">${stTxt}</td>
-				<td class="num rb-m-work">${format_currency(P.work)}</td>
-				<td class="num rb-m-metal">${format_currency(P.metal)}</td>
-				<td class="num rb-m-stone">${format_currency(P.stone)}</td>
+				<td class="num rb-m-work rb-why" title="${esc(whyWork(i))}">${format_currency(P.work)}</td>
+				<td class="num rb-m-metal rb-why" title="${esc(whyMetal(i))}">${format_currency(P.metal)}</td>
+				<td class="num rb-m-stone rb-why" title="${esc(whyStone(i))}">${format_currency(P.stone)}</td>
 				<td class="num">${done ? format_currency(P.manual)
 					: `<input type="number" step="0.01" class="rb-man" value="${
 						flt(i.manual_amount) || ""}" placeholder="0">`}</td>
@@ -244,7 +294,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			return { work: a.work + P.work, metal: a.metal + P.metal,
 				stone: a.stone + P.stone, manual: a.manual + P.manual };
 		}, { work: 0, metal: 0, stone: 0, manual: 0 });
-		const grand = sums.work + sums.metal + sums.stone + sums.manual;
+		const sub = sums.work + sums.metal + sums.stone + sums.manual;
+		const gst = sub * flt(S.gst) / 100;
+		const grand = sub + gst;
 
 		// work on the ticked pieces, priced by type
 		const tally = {};
@@ -281,6 +333,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				<div class="rb-tile money"><div class="k">${__("Stones")}</div><div class="v">${format_currency(sums.stone)}</div></div>
 				${sums.manual ? `<div class="rb-tile money"><div class="k">${__("Manual")}</div>
 					<div class="v">${format_currency(sums.manual)}</div></div>` : ""}
+				${flt(S.gst) ? `<div class="rb-tile money"><div class="k">${__("GST {0}%", [S.gst])}</div>
+					<div class="v">${format_currency(gst)}</div></div>` : ""}
 				<div class="rb-tile grand"><div class="k">${__("Total")}</div><div class="v">${format_currency(grand)}</div></div>
 			</div>
 
@@ -348,6 +402,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 						<textarea class="rb-note" rows="2">${esc(D.narration || "")}</textarea></div></div></div>
 				<div class="rb-half" style="text-align:right;">
 					<div class="rb-grand">${__("Total")} <b>${format_currency(grand)}</b></div>
+					<button class="btn btn-default btn-sm rb-gst" style="margin-bottom:8px;">${
+						flt(S.gst) ? __("Remove {0}% GST", [S.gst]) : __("Add 3% GST")}</button>
 					<button class="btn btn-primary rb-bill" ${picked.length ? "" : "disabled"}>
 						${__("Bill {0} piece(s)", [picked.length])}</button>
 				</div>
@@ -503,6 +559,19 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	});
 
 	// ---- billing what is ticked --------------------------------------------
+	// 3% on or off the whole bill, and it is stored, so a reprint shows the same
+	$body.on("click", ".rb-print", function (e) {
+		e.stopPropagation();
+		const name = this.textContent.trim();
+		frappe.call({ method: API + ".get_repair_bill", args: { name } })
+			.then((r) => jewelima.printRepairBill(r.message));
+	});
+
+	$body.on("click", ".rb-gst", function () {
+		S.gst = flt(S.gst) ? 0 : 3;
+		drawBatch();
+	});
+
 	$body.on("click", ".rb-bill", function () {
 		if (S.saving) return;
 		const picked = S.D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
@@ -517,6 +586,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				args: { payload: JSON.stringify({
 					repair_order: S.D.repair_order,
 					gold_rate: flt(S.gold),
+					gst_percent: flt(S.gst),
 					stone_lines: Object.keys(S.stoneRates).map((k) => ({
 						bucket: k.split("||")[0], sieve: k.split("||")[1] || "",
 						rate: flt(S.stoneRates[k]) })),
@@ -531,6 +601,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				const b = r.message;
 				frappe.show_alert({ message: __("{0} saved — {1} piece(s)", [b.name, b.items.length]),
 					indicator: "green" });
+				// straight to the printer, which is what happens next at the counter
+				frappe.confirm(__("{0} saved. Print it?", [b.name]),
+					() => jewelima.printRepairBill(b));
 				openBatch(S.D.repair_order);      // the rest of the batch, still to bill
 			}).catch(() => { S.saving = false; });
 		};

@@ -337,6 +337,11 @@ def get_repair_order(name):
 		"items": [{"repair": r.repair, "design_type": r.design_type,
 			"repair_type": r.repair_type or "", "qty": cint(r.qty),
 			"weight": flt(r.weight), "weighed_at": str(r.weighed_at or "")[:16],
+			"karat": r.karat or "",
+			"weight_out": flt(r.weight_out), "bill": r.bill or "",
+			"stones": [{"bucket": st.bucket or "", "stone": st.stone or "",
+				"sieve": st.sieve or "", "pcs": cint(st.pcs), "ct": flt(st.ct)}
+				for st in doc.stones if st.repair == r.repair],
 			"work_types": [w.strip() for w in (r.work_types or "").split(",") if w.strip()],
 			"narration": r.narration or ""} for r in doc.items],
 	}
@@ -428,6 +433,7 @@ def get_repair_status(party=None, state="all", from_date=None, to_date=None, lim
 				for i in items],
 		})
 	return {"rows": rows, "sieves": get_repair_sieves(),
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
 		"parties": [p["party_name"] for p in get_repair_parties(include_inactive=1)],
 		"totals": {"batches": len(rows),
 			"pieces": sum(r["total_qty"] for r in rows),
@@ -498,6 +504,7 @@ def get_repair_for_billing(repair_order):
 		"total_qty": cint(o.total_qty), "total_weight_in": flt(o.total_weight),
 		"items": items, "charges": charges, "stone_lines": stone_lines,
 		"gold_rate": flt(bill.gold_rate) if bill else 0,
+		"gst_percent": flt(bill.gst_percent) if bill else 0,
 		"bill": (bill.name if bill else None),
 		"billed_at": (str(bill.billed_at or "")[:16] if bill else ""),
 		"narration": (bill.narration if bill else ""),
@@ -767,6 +774,7 @@ def save_repair_bill(payload):
 	doc.billed_at = p.get("billed_at") or frappe.utils.now_datetime()
 	doc.narration = (p.get("narration") or "").strip() or None
 	doc.gold_rate = flt(p.get("gold_rate"))
+	doc.gst_percent = flt(p.get("gst_percent"))
 	doc.set("items", items)
 	doc.set("charges", charges)
 	doc.set("stones", stones)
@@ -800,7 +808,9 @@ def get_repair_bill(name):
 		"gold_rate": flt(d.gold_rate),
 		"total_work_amount": flt(d.total_work_amount), "total_metal_amount": flt(d.total_metal_amount),
 		"total_stone_amount": flt(d.total_stone_amount),
-		"total_manual_amount": flt(d.total_manual_amount), "grand_total": flt(d.grand_total),
+		"total_manual_amount": flt(d.total_manual_amount),
+		"gst_percent": flt(d.gst_percent), "gst_amount": flt(d.gst_amount),
+		"grand_total": flt(d.grand_total),
 		"stones": [{"repair": st.repair, "bucket": st.bucket or "", "stone": st.stone or "",
 			"sieve": st.sieve or "", "pcs": cint(st.pcs), "ct": flt(st.ct), "rate": flt(st.rate),
 			"amount": flt(st.amount)} for st in d.stones],
@@ -841,6 +851,50 @@ def list_billable_repairs(unbilled_only=0):
 			"billed": is_billed})
 	rows.sort(key=lambda r: (r["billed"],))       # still-to-bill at the top
 	return rows
+
+
+@frappe.whitelist()
+def add_repair_pieces(name, items):
+	"""Add pieces to a batch that is already in.
+
+	A party turns up with one more, or a piece was missed at the counter. The
+	batch is the same batch — the same day, the same party — so the pieces join
+	it and take the next numbers rather than starting a second order that would
+	then have to be billed separately."""
+	_guard()
+	if not frappe.db.exists("Repair Order", name):
+		frappe.throw(frappe._("No repair {0}.").format(name))
+	doc = frappe.get_doc("Repair Order", name)
+	rows = frappe.parse_json(items) if isinstance(items, str) else (items or [])
+	if not rows:
+		frappe.throw(frappe._("Nothing to add."))
+	added = 0
+	for r in rows:
+		dt = (r.get("design_type") or "").strip()
+		if not dt:
+			frappe.throw(frappe._("Every piece needs a design type."))
+		if not frappe.db.exists("Design Type", dt):
+			frappe.throw(frappe._("{0} is not a design type.").format(dt))
+		works = []
+		raw = r.get("work_types")
+		if not isinstance(raw, (list, tuple)):
+			raw = str(raw or "").split(",")
+		for w in raw:
+			got = _master("Repair Work Type", "work_name", w)
+			if got and got not in works:
+				works.append(got)
+		karat = str(r.get("karat") or "").strip()
+		doc.append("items", {
+			"design_type": dt, "qty": cint(r.get("qty")) or 1,
+			"weight": flt(r.get("weight")), "karat": karat or None,
+			"repair_type": _master("Repair Type", "type_name", r.get("repair_type")),
+			"work_types": ", ".join(works) or None,
+			"narration": (r.get("narration") or "").strip() or None,
+		})
+		added += 1
+	doc.save(ignore_permissions=True)      # numbers the new rows, re-totals the batch
+	frappe.db.commit()
+	return {"added": added, **get_repair_order(name)}
 
 
 @frappe.whitelist()
