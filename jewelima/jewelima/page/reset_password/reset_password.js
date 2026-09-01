@@ -174,34 +174,83 @@ frappe.pages["reset-password"].on_page_load = function (wrapper) {
 	});
 
 
+
+	// The sheet itself. Printed through a hidden iframe — the same trick the job
+	// cards use — so the dialog opens over this page with no pop-up to be blocked,
+	// and "Save as PDF" in that dialog is how it becomes a file.
+	function printSheet(rows, defaultPassword) {
+		const esc = frappe.utils.escape_html;
+		const when = frappe.datetime.str_to_user(frappe.datetime.now_datetime());
+		const body = rows.map((x, i) => `<tr>
+			<td class="n">${i + 1}</td>
+			<td class="u">${esc(x.username)}</td>
+			<td>${esc(x.full_name || "")}</td>
+			<td class="r">${esc(x.roles.join(", ")) || "—"}</td>
+			<td class="p ${x.changed ? "ch" : ""}">${x.changed ? __("changed") : esc(x.password)}</td>
+		</tr>`).join("");
+		const changed = rows.filter((x) => x.changed).length;
+
+		document.getElementById("jw-logins-frame")?.remove();
+		const fr = document.createElement("iframe");
+		fr.id = "jw-logins-frame";
+		fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+		document.body.appendChild(fr);
+		const doc = fr.contentDocument;
+		doc.open();
+		doc.write(`<!doctype html><html><head><meta charset="utf-8">
+			<title>${__("Logins")}</title><style>
+			@page { size: A4 portrait; margin: 12mm 10mm; }
+			*{box-sizing:border-box;}
+			body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:11px;}
+			h1{font-size:15px;margin:0 0 2px;letter-spacing:.3px;}
+			.sub{font-size:10px;color:#444;margin-bottom:9px;}
+			table{width:100%;border-collapse:collapse;}
+			th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.04em;
+				border-bottom:1.2px solid #000;padding:4px 6px;}
+			td{padding:4px 6px;border-bottom:1px solid #bbb;vertical-align:top;}
+			/* the sheet gets read across a counter — the row must not wander */
+			tr:nth-child(even) td{background:#f4f4f4;}
+			td.n{width:22px;color:#666;}
+			td.u{font-weight:700;white-space:nowrap;}
+			td.r{font-size:9.5px;color:#333;}
+			td.p{font-family:"Courier New",monospace;font-weight:700;white-space:nowrap;width:78px;}
+			td.p.ch{font-family:inherit;font-weight:400;font-style:italic;color:#444;}
+			tfoot td{border:0;padding-top:8px;font-size:9.5px;color:#444;}
+			thead{display:table-header-group;}   /* repeat the header on every page */
+			tr{page-break-inside:avoid;}
+			</style></head><body>
+			<h1>${__("Jewelima logins")}</h1>
+			<div class="sub">${esc(when)} &nbsp;·&nbsp; ${__("{0} login(s)", [rows.length])}
+				&nbsp;·&nbsp; ${__("default password")} <b>${esc(defaultPassword)}</b></div>
+			<table>
+				<thead><tr><th></th><th>${__("Username")}</th><th>${__("Name")}</th>
+					<th>${__("Roles")}</th><th>${__("Password")}</th></tr></thead>
+				<tbody>${body}</tbody>
+				${changed ? `<tfoot><tr><td colspan="5">${
+					__("{0} of these have changed their own password, so there is none to hand out.", [changed])
+				}</td></tr></tfoot>` : ""}
+			</table></body></html>`);
+		doc.close();
+		setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 250);
+	}
+
 	function exportSheet() {
 		frappe.call({ method: API + ".get_login_export" }).then((r) => {
 			const d = r.message || {};
 			const rows = d.rows || [];
-			if (!rows.length) return frappe.msgprint(__("No logins to export."));
+			if (!rows.length) return frappe.msgprint(__("No logins to print."));
 			const esc = frappe.utils.escape_html;
 			const picked = new Set(rows.map((x) => x.user));   // all in, to start
 
 			const dlg = new frappe.ui.Dialog({
-				title: __("Export logins"), size: "large",
+				title: __("Print logins"), size: "large",
 				fields: [{ fieldname: "html", fieldtype: "HTML" }],
-				primary_action_label: __("Download CSV"),
+				primary_action_label: __("Print"),
 				primary_action() {
 					const take = rows.filter((x) => picked.has(x.user));
 					if (!take.length) return frappe.msgprint(__("Nothing ticked."));
-					const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-					const csv = [["Username", "Name", "Roles", "Password"].map(q).join(",")]
-						.concat(take.map((x) => [x.username, x.full_name, x.roles.join(", "),
-							// never invent a password for someone who changed theirs
-							x.password || __("changed")].map(q).join(",")))
-						.join("\n");
-					const a = document.createElement("a");
-					a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" }));
-					a.download = "jewelima-logins-" + frappe.datetime.get_today() + ".csv";
-					document.body.appendChild(a); a.click(); a.remove();
-					URL.revokeObjectURL(a.href);
+					printSheet(take, d.default_password);
 					dlg.hide();
-					frappe.show_alert({ message: __("{0} login(s) exported", [take.length]), indicator: "green" }, 5);
 				},
 			});
 
@@ -266,7 +315,7 @@ frappe.pages["reset-password"].on_page_load = function (wrapper) {
 	// ---- the hand-out sheet ------------------------------------------------
 	// Everyone by default, because that is the usual job; the list is there to
 	// take people OUT of, and to pick one or two when that is all you need.
-	page.add_inner_button(__("Export"), exportSheet);
+	page.add_inner_button(__("Print Logins"), exportSheet);
 
 	page.add_inner_button(__("User Roles"), () => frappe.set_route("user-roles"));
 	page.add_inner_button(__("Add User"), () => frappe.set_route("add-user"));
