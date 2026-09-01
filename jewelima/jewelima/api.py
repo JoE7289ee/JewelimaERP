@@ -8885,11 +8885,17 @@ def create_employee_users(payload):
 			user = frappe.get_doc("User", email)
 		else:
 			full = (emp.employee_name or base).split()
+			# The roles go on BEFORE the first save. Creating the user and adding
+			# them a moment later worked, but Frappe checks for roles during that
+			# first insert and warns "newly created user has no roles enabled" —
+			# true at that instant, wrong by the time anyone reads it, and it reads
+			# as the roles not having been given at all.
 			user = frappe.get_doc({
 				"doctype": "User", "email": email,
 				"first_name": (full[0].title() if full else base),
 				"last_name": " ".join(x.title() for x in full[1:]),
 				"user_type": "System User", "send_welcome_email": 0,
+				"roles": [{"role": r} for r in roles],
 			}).insert(ignore_permissions=True)
 		user.username = _free_username(base, user.name)
 		have = {x.role for x in user.get("roles")}
