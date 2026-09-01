@@ -9042,6 +9042,62 @@ def end_user_sessions(user):
 	return {"user": user}
 
 
+# The password every login is created with (import_users.set_passwords). It is
+# not a secret — it is what the operator types when handing a login over — but
+# it is only true until somebody changes theirs, which is why the export checks
+# rather than assumes.
+JEWELIMA_DEFAULT_PASSWORD = "jew123"
+
+
+@frappe.whitelist()
+def get_login_export(users=None, default_password=None):
+	"""The hand-out sheet: username, roles, and the password to give them.
+
+	The password column is CHECKED, not assumed. Frappe stores a hash, so the
+	real password cannot be read back — but it can be tested against the default,
+	which answers the only question that matters here: is this login still on the
+	password we set, or has that person changed it? Printing "jew123" beside
+	someone who changed theirs a month ago would send the operator to the counter
+	with a password that does not work.
+	"""
+	frappe.only_for(("System Manager", "JW Manager"))
+	from frappe.utils.password import check_password
+
+	default = (default_password or JEWELIMA_DEFAULT_PASSWORD).strip() or JEWELIMA_DEFAULT_PASSWORD
+	want = frappe.parse_json(users) if isinstance(users, str) else users
+	filters = {"user_type": "System User", "name": ["!=", "Guest"]}
+	if want:
+		filters["name"] = ["in", list(want)]
+
+	roles = {}
+	for r in frappe.get_all("Has Role", filters={"parenttype": "User"},
+			fields=["parent", "role"], limit_page_length=0):
+		roles.setdefault(r.parent, []).append(r.role)
+
+	rows = []
+	for u in frappe.get_all("User", filters=filters,
+			fields=["name", "username", "full_name", "enabled"],
+			order_by="enabled desc, username asc, name asc", limit_page_length=0):
+		mine = sorted(roles.get(u.name) or [])
+		# the housekeeping roles everyone carries say nothing about the job
+		mine = [r for r in mine if r not in ("All", "Guest", "Desk User")]
+		try:
+			check_password(u.name, default)
+			pwd = default
+		except Exception:
+			pwd = ""                      # changed, or never set — say so, do not guess
+		rows.append({
+			"user": u.name,
+			"username": u.username or u.name.split("@")[0],
+			"full_name": u.full_name or "",
+			"roles": mine,
+			"password": pwd,
+			"changed": 0 if pwd else 1,
+			"enabled": 1 if u.enabled else 0,
+		})
+	return {"rows": rows, "default_password": default}
+
+
 @frappe.whitelist()
 def admin_reset_password(user, new_password):
 	frappe.only_for(("System Manager", "JW Manager"))

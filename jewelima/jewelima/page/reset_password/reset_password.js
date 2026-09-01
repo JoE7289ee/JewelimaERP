@@ -173,7 +173,101 @@ frappe.pages["reset-password"].on_page_load = function (wrapper) {
 		});
 	});
 
+
+	function exportSheet() {
+		frappe.call({ method: API + ".get_login_export" }).then((r) => {
+			const d = r.message || {};
+			const rows = d.rows || [];
+			if (!rows.length) return frappe.msgprint(__("No logins to export."));
+			const esc = frappe.utils.escape_html;
+			const picked = new Set(rows.map((x) => x.user));   // all in, to start
+
+			const dlg = new frappe.ui.Dialog({
+				title: __("Export logins"), size: "large",
+				fields: [{ fieldname: "html", fieldtype: "HTML" }],
+				primary_action_label: __("Download CSV"),
+				primary_action() {
+					const take = rows.filter((x) => picked.has(x.user));
+					if (!take.length) return frappe.msgprint(__("Nothing ticked."));
+					const q = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+					const csv = [["Username", "Name", "Roles", "Password"].map(q).join(",")]
+						.concat(take.map((x) => [x.username, x.full_name, x.roles.join(", "),
+							// never invent a password for someone who changed theirs
+							x.password || __("changed")].map(q).join(",")))
+						.join("\n");
+					const a = document.createElement("a");
+					a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" }));
+					a.download = "jewelima-logins-" + frappe.datetime.get_today() + ".csv";
+					document.body.appendChild(a); a.click(); a.remove();
+					URL.revokeObjectURL(a.href);
+					dlg.hide();
+					frappe.show_alert({ message: __("{0} login(s) exported", [take.length]), indicator: "green" }, 5);
+				},
+			});
+
+			const changed = rows.filter((x) => x.changed).length;
+			dlg.fields_dict.html.$wrapper.html(`
+				<style>
+				.ex-bar{display:flex;gap:10px;align-items:center;margin-bottom:9px;font-size:12px;}
+				.ex-bar a{cursor:pointer;font-weight:700;}
+				.ex-count{margin-left:auto;color:var(--text-muted);}
+				.ex-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+				.ex-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+					color:var(--text-muted);padding:6px 8px;border-bottom:1px solid var(--border-color);}
+				.ex-t td{padding:5px 8px;border-bottom:1px solid var(--border-color);vertical-align:top;}
+				.ex-t tr:last-child td{border-bottom:0;}
+				.ex-wrap{max-height:52vh;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
+				.ex-roles{font-size:11px;color:var(--text-muted);}
+				.ex-pw{font-family:monospace;font-weight:700;}
+				.ex-pw.ch{font-family:inherit;font-weight:400;color:#b02a2a;font-style:italic;}
+				.ex-off{opacity:.55;}
+				</style>
+				<div class="ex-bar">
+					<a class="ex-all">${__("Select all")}</a> ·
+					<a class="ex-none">${__("Clear all")}</a>
+					<span class="ex-count"></span>
+				</div>
+				<div class="ex-wrap"><table class="ex-t">
+					<thead><tr><th style="width:34px;"></th><th>${__("Username")}</th>
+						<th>${__("Name")}</th><th>${__("Roles")}</th><th style="width:110px;">${__("Password")}</th></tr></thead>
+					<tbody>${rows.map((x) => `<tr class="${x.enabled ? "" : "ex-off"}" data-u="${esc(x.user)}">
+						<td><input type="checkbox" class="ex-c" checked></td>
+						<td><b>${esc(x.username)}</b>${x.enabled ? "" : ` <small>(${__("disabled")})</small>`}</td>
+						<td>${esc(x.full_name)}</td>
+						<td class="ex-roles">${esc(x.roles.join(", ")) || "—"}</td>
+						<td class="ex-pw ${x.changed ? "ch" : ""}">${x.changed ? __("changed") : esc(x.password)}</td>
+					</tr>`).join("")}</tbody>
+				</table></div>
+				${changed ? `<div style="margin-top:8px;font-size:11.5px;color:var(--text-muted);">${
+					__("{0} of these have changed their own password, so there is none to hand out.", [changed])
+				}</div>` : ""}
+			`);
+
+			const $w = dlg.fields_dict.html.$wrapper;
+			const count = () => $w.find(".ex-count").text(__("{0} of {1} ticked", [picked.size, rows.length]));
+			$w.on("change", ".ex-c", function () {
+				const u = $(this).closest("tr").data("u");
+				if (this.checked) picked.add(u); else picked.delete(u);
+				count();
+			});
+			$w.on("click", ".ex-all", () => {
+				rows.forEach((x) => picked.add(x.user));
+				$w.find(".ex-c").prop("checked", true); count();
+			});
+			$w.on("click", ".ex-none", () => {
+				picked.clear(); $w.find(".ex-c").prop("checked", false); count();
+			});
+			count();
+			dlg.show();
+		});
+	}
+
 	page.set_primary_action(__("Refresh"), () => load(), "refresh");
+	// ---- the hand-out sheet ------------------------------------------------
+	// Everyone by default, because that is the usual job; the list is there to
+	// take people OUT of, and to pick one or two when that is all you need.
+	page.add_inner_button(__("Export"), exportSheet);
+
 	page.add_inner_button(__("User Roles"), () => frappe.set_route("user-roles"));
 	page.add_inner_button(__("Add User"), () => frappe.set_route("add-user"));
 	load();
