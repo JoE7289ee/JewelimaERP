@@ -44,7 +44,7 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Bench",
-   "options": "\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION"
+   "options": "\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION\nREWORK"
   },
   {
    "fieldname": "item",
@@ -109,7 +109,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-18 11:00:00.000000",
+ "modified": "2026-09-01 14:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Employee Issue",

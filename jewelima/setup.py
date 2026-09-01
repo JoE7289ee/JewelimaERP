@@ -272,6 +272,7 @@ JEWELIMA_WAXCLEAN_TO = ("WAX SETTING", "WAXING")
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
 	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
+	"REWORK": "ws-rework",
 	"GRINDING": "ws-grinding", "FILING": "ws-filing", "SETTING": "ws-setting",
 	"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
 	"BAG EXTRACTION": "ws-bag-extraction",
@@ -991,7 +992,35 @@ BENCH_COLLECTION_STATES = [
 	("Re-Assign", "Back to In Queue"),
 	("Partial", "Back to In Queue"),
 ]
-BENCH_WORK_EXCLUDE = {"CAM", "ORDERING", "TREE MAKING", "CASTING"}
+# Benches with no work-type picker: nothing is issued and no type of work is
+# recorded, so there is nothing to seed. REWORK is one of these — it is a queue
+# a card waits in, not a bench somebody works at.
+BENCH_WORK_EXCLUDE = {"CAM", "ORDERING", "TREE MAKING", "CASTING", "REWORK"}
+
+
+def resync_series(prefix, doctype):
+	"""Point a naming series at the highest name actually in use.
+
+	A counter that has fallen behind its own table hands out a name that is
+	already taken, and the next insert dies on a duplicate key. It happens when
+	rows arrive by a route that does not go through the counter — a restore, a
+	fixture, a direct copy — and it stays invisible until somebody adds the next
+	record, which may be months later and nowhere near the cause.
+	"""
+	rows = frappe.db.sql(
+		"""SELECT MAX(CAST(SUBSTRING(name, %s) AS UNSIGNED)) FROM `tab{0}`
+		   WHERE name LIKE %s""".format(doctype), (len(prefix) + 1, prefix + "%"))
+	used = cint(rows[0][0]) if rows and rows[0] else 0
+	if not used:
+		return 0
+	at = frappe.db.sql("SELECT current FROM tabSeries WHERE name=%s", prefix)
+	at = cint(at[0][0]) if at else 0
+	if at >= used:
+		return 0
+	frappe.db.sql("""INSERT INTO tabSeries (name, current) VALUES (%s, %s)
+		ON DUPLICATE KEY UPDATE current = %s""", (prefix, used, used))
+	frappe.db.commit()
+	return used
 
 
 def seed_bench_work_options():
@@ -999,6 +1028,10 @@ def seed_bench_work_options():
 	Idempotent: upserts by (bench, kind, value); enforces exactly one default Work
 	Type per bench and the right disposition on each Collection State."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
+
+	# the counter here had fallen to 0 with fifty rows already named, so the next
+	# work type anyone added would have collided — on this site and on PROD
+	resync_series("BWO-", "Bench Work Option")
 
 	# CREATE-IF-MISSING only, so an admin's later edits (a changed default, a renamed
 	# state, a tweaked disposition) are never clobbered on the next migrate.

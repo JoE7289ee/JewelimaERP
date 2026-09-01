@@ -39,6 +39,10 @@ BENCH_DOCTYPE = {
 	"FINAL POLISH": "Final Polish",
 	"WAX CLEANING": "Wax Cleaning",
 	"BAG EXTRACTION": "Bag Extraction",
+	# a holding queue: cards wait here to go back into the line. No employee is
+	# issued the work and no work type is recorded, so it appears in neither of
+	# the two sets below — the same shape as CAM.
+	"REWORK": "Rework",
 }
 
 

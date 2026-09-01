@@ -18,6 +18,9 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 		"GRINDING": "ws-grinding", "FILING": "ws-filing", "SETTING": "ws-setting",
 		"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
 		"BAG EXTRACTION": "ws-bag-extraction",
+		// a holding queue rather than a worked bench — it has a board so the
+		// waiting cards can be seen, but nothing is issued there
+		"REWORK": "ws-rework",
 	};
 	// Who may OPEN a station is already decided — Frappe hands the client the
 	// list of pages it will let this user open. Reading that beats a hardcoded

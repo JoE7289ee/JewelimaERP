@@ -71,7 +71,7 @@
    "reqd": 1
   },
   {
-   "description": "Stone count (number of pieces) for this line \u2014 0 for metal.",
+   "description": "Stone count (number of pieces) for this line — 0 for metal.",
    "fieldname": "pcs",
    "fieldtype": "Int",
    "in_list_view": 1,
@@ -95,7 +95,7 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Bench",
-   "options": "\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION"
+   "options": "\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION\nREWORK"
   },
   {
    "fieldname": "employee",
@@ -122,7 +122,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-09 15:00:00.000000",
+ "modified": "2026-09-01 14:30:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Bag Material Ledger",
