@@ -67,7 +67,7 @@ jewelima.printRepairOrder = function (d) {
 		<div class="sub"><b>${esc(d.party || "")}</b> &nbsp;·&nbsp; ${__("received")} ${esc(d.received_at || "")}
 			${d.received_by_name ? " &nbsp;·&nbsp; " + __("by") + " " + esc(d.received_by_name) : ""}</div>
 		<table><thead><tr><th class="n"></th><th>${__("Piece")}</th><th>${__("Design")}</th>
-			<th class="n">${__("Qty")}</th><th class="n">${__("Weight g")}</th><th class="n">${__("Karat")}</th>
+			<th class="n">${__("Qty")}</th><th class="n">${__("Weight g")}</th><th class="n">${__("Purity")}</th>
 			<th>${__("Type of Work")}</th><th>${__("Stones")}</th><th>${__("Narration")}</th></tr></thead>
 			<tbody>${rows}</tbody></table>
 		<table class="tot"><tr><td>${__("Pieces")}</td><td class="n">${qty}</td></tr>
@@ -109,7 +109,7 @@ jewelima.printRepairBill = function (b) {
 			&nbsp;·&nbsp; ${esc(b.billed_at || "")}
 			${flt(b.gold_rate) ? " &nbsp;·&nbsp; " + __("board rate") + " " + m(b.gold_rate) + "/g" : ""}</div>
 		<table><thead><tr><th class="n"></th><th>${__("Piece")}</th><th>${__("Design")}</th>
-			<th class="n">${__("Karat")}</th><th class="n">${__("In g")}</th><th class="n">${__("Out g")}</th>
+			<th class="n">${__("Purity")}</th><th class="n">${__("In g")}</th><th class="n">${__("Out g")}</th>
 			<th class="n">${__("Added")}</th><th class="n">${__("Work")}</th><th class="n">${__("Metal")}</th>
 			<th class="n">${__("Stone")}</th><th class="n">${__("Manual")}</th>
 			<th class="n">${__("Amount")}</th></tr></thead><tbody>${rows}</tbody></table>

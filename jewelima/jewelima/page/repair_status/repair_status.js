@@ -10,13 +10,19 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const cint = (v) => parseInt(v, 10) || 0;
-	const S = { rows: [], parties: [], party: "", state: "all", q: "" };
+	// opens on what is still here: the batches with us are the ones anyone came
+	// to this page to look at
+	const S = { rows: [], parties: [], party: "", state: "open", q: "" };
 
 	$(page.main).append(`
 		<style>
 		.re-add-wrap{margin-top:9px;display:flex;gap:9px;align-items:center;}
-		.re-fresh{background:var(--control-bg);border-radius:8px;}
+		table.re-tbl tbody tr.re-fresh td{background:rgba(31,97,141,.09);}
 		.re-fresh a.rf-x{color:#b02a2a;cursor:pointer;font-size:17px;}
+		table.re-tbl td input,table.re-tbl td select{width:100%;box-sizing:border-box;
+			border:1px solid var(--border-color);border-radius:7px;padding:5px 8px;font-size:12.5px;
+			background:var(--fg-color);color:var(--text-color);}
+		table.re-tbl td.n input{text-align:right;font-variant-numeric:tabular-nums;}
 		.re-st{font-size:11px;line-height:1.4;cursor:pointer;min-height:26px;padding-top:3px;}
 		.re-st.locked{cursor:default;opacity:.6;}
 		.re-addst{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
@@ -74,14 +80,26 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 		.rs-card .note{margin-top:6px;font-size:11.5px;font-style:italic;}
 		/* only a batch still with us can be edited — once billed the two records
 		   have to keep agreeing, so the button is not drawn */
-		.rs-edit{border:1px solid currentColor;background:transparent;color:inherit;
-			border-radius:7px;font-size:11px;font-weight:800;padding:2px 11px;cursor:pointer;}
-		.rs-edit:hover{background:rgba(128,128,128,.18);}
+		/* Edit and Print are the same kind of thing and now look it — the Print
+		   button carried no styling at all and rendered as a raw browser button
+		   in the middle of a coloured card. */
+		.rs-edit,.rs-print{border:1px solid currentColor;background:transparent;color:inherit;
+			border-radius:7px;font-size:11px;font-weight:800;padding:2px 11px;cursor:pointer;
+			line-height:1.6;}
+		.rs-edit:hover,.rs-print:hover{background:rgba(128,128,128,.18);}
 		.rs-open{border:none;background:none;color:inherit;font-size:11.5px;font-weight:800;
 			text-decoration:underline;cursor:pointer;padding:0 0 0 6px;font-style:normal;}
-		.re-row{display:grid;grid-template-columns:120px 1fr 60px 110px 1.4fr;gap:8px;
-			align-items:start;padding:8px 0;border-bottom:1px solid var(--border-color);}
-		.re-row:last-child{border-bottom:none;}
+		table.re-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+		table.re-tbl th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+			color:var(--text-muted);padding:6px 7px;border-bottom:1.5px solid var(--border-color);
+			background:var(--control-bg);white-space:nowrap;}
+		table.re-tbl th.n,table.re-tbl td.n{text-align:right;}
+		table.re-tbl td{padding:5px 7px;border-bottom:1px solid var(--border-color);vertical-align:top;}
+		table.re-tbl td:first-child{white-space:nowrap;}
+		table.re-tbl td select.re-kt,table.re-tbl td select.rf-kt{min-width:62px;}
+		table.re-tbl tbody tr:nth-child(even) td{background:rgba(128,128,128,.055);}
+		table.re-tbl tbody tr.done td{opacity:.55;}
+		.re-lock{font-size:10px;color:var(--text-muted);font-weight:400;}
 		.re-row .lab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);}
 		.re-row input{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:6px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
@@ -103,8 +121,8 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 		</style>
 		<div class="rs-wrap">
 			<div class="rs-bar">
-				<span class="rs-pill on" data-s="all">${__("All")}</span>
-				<span class="rs-pill" data-s="open">${__("With us")}</span>
+				<span class="rs-pill" data-s="all">${__("All")}</span>
+				<span class="rs-pill on" data-s="open">${__("With us")}</span>
 				<span class="rs-pill" data-s="billed">${__("Billed")}</span>
 				<select class="rs-sel rs-party"></select>
 				<input class="rs-q" placeholder="${__("Filter repair, design or work")}">
@@ -262,46 +280,50 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 		});
 
 		const paintDlg = () => {
-			$(dlg.body).find(".re-list").html(rows.map((x, k) => `
-				<div class="re-row" data-k="${k}">
-					<div><div class="lab">${__("Repair")}</div>
-						<div class="ro"><b>${esc(x.repair)}</b></div></div>
-					<div><div class="lab">${__("Design Type")}</div>
-						<div class="ro">${esc(x.design_type)}</div></div>
-					<div><div class="lab">${__("Qty")}</div>
-						<div class="ro">${x.qty}</div></div>
-					<div><div class="lab">${__("Weight In g")}</div>
-						<input class="re-wt" type="number" min="0" step="0.001" value="${x.weight}"
-							${x.bill ? "disabled" : ""}></div>
-					<div><div class="lab">${__("Weight Out g")}</div>
-						<input class="re-wo" type="number" min="0" step="0.001" value="${x.weight_out}"
-							${x.bill ? "disabled" : ""}></div>
-					<div><div class="lab">${__("Karat")}</div>
-						<select class="re-kt" ${x.bill ? "disabled" : ""}>${
-							["", "22", "18", "14", "9"].map((k) =>
-								`<option value="${k}" ${(x.karat || "") === k ? "selected" : ""}>${k || "—"}</option>`
-							).join("")}</select></div>
-					<div><div class="lab">${__("Stones")}</div>
-						<div class="re-st ${x.bill ? "locked" : ""}">${x.stones.length
-							? x.stones.map((st) => `${esc(st.bucket || st.stone || "")} ${esc(st.sieve || "")} ${
-								cint(st.pcs)}/${(parseFloat(st.ct) || 0).toFixed(3)}`).join("<br>")
-							: `<span class="re-addst">${x.bill ? __("none") : __("add stone")}</span>`}</div></div>
-					<div><div class="lab">${__("Type of Work")}</div>
-						<div class="re-works">
-							${x.work_types.map((w) =>
-								`<span class="re-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
-							<input class="re-work" list="re-works-list"
-								placeholder="${x.work_types.length ? __("add another") : __("add")}">
-						</div>
-						<input class="re-nar" style="margin-top:6px;" value="${esc(x.narration)}"
-							placeholder="${__("narration")}"></div>
-				</div>`).join(""));
+			// One header row instead of a label on every cell. The grid grew from
+			// five columns to eight as weigh-out, purity and stones were added, and
+			// a dialog that repeats "WEIGHT IN G" once per piece is unreadable by
+			// the third row.
+			const head = `<tr><th>${__("Repair")}</th><th>${__("Design")}</th>
+				<th class="n">${__("Qty")}</th><th class="n">${__("In g")}</th>
+				<th class="n">${__("Out g")}</th><th>${__("Purity")}</th>
+				<th>${__("Stones")}</th><th>${__("Type of Work")}</th>
+				<th>${__("Narration")}</th><th style="width:26px;"></th></tr>`;
+			const body = rows.map((x, k) => `
+				<tr class="re-row ${x.bill ? "done" : ""}" data-k="${k}">
+					<td><b>${esc(x.repair)}</b>${x.bill
+						? `<div class="re-lock">${esc(x.bill)}</div>` : ""}</td>
+					<td>${esc(x.design_type)}</td>
+					<td class="n">${x.qty}</td>
+					<td class="n"><input class="re-wt" type="number" min="0" step="0.001"
+						value="${x.weight}" ${x.bill ? "disabled" : ""}></td>
+					<td class="n"><input class="re-wo" type="number" min="0" step="0.001"
+						value="${x.weight_out}" ${x.bill ? "disabled" : ""}></td>
+					<td><select class="re-kt" ${x.bill ? "disabled" : ""}>${
+						["", "22", "18", "14", "9"].map((k2) =>
+							`<option value="${k2}" ${(x.karat || "") === k2 ? "selected" : ""}>${k2 || "—"}</option>`
+						).join("")}</select></td>
+					<td><div class="re-st ${x.bill ? "locked" : ""}">${x.stones.length
+						? x.stones.map((st) => `${esc(st.bucket || st.stone || "")} ${esc(st.sieve || "")} ${
+							cint(st.pcs)}/${(parseFloat(st.ct) || 0).toFixed(3)}`).join("<br>")
+						: `<span class="re-addst">${x.bill ? __("none") : __("add stone")}</span>`}</div></td>
+					<td><div class="re-works">
+						${x.work_types.map((w) =>
+							`<span class="re-chip">${esc(w)}<b data-w="${esc(w)}">&times;</b></span>`).join("")}
+						<input class="re-work" list="re-works-list"
+							placeholder="${x.work_types.length ? __("add another") : __("add")}">
+					</div></td>
+					<td><input class="re-nar" value="${esc(x.narration)}"
+						placeholder="${__("optional")}" ${x.bill ? "disabled" : ""}></td>
+					<td></td>
+				</tr>`).join("");
+			$(dlg.body).find(".re-list").html(
+				`<table class="re-tbl"><thead>${head}</thead><tbody>${body}</tbody></table>`);
 		};
 
 		$(dlg.body).html(`
 			<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-				${__("Taken in {0}. Design type and quantity are what was received and stay as they are.",
-					[esc(r.received_at)])}
+				${__("Taken in {0}", [esc(r.received_at)])}
 			</div>
 			<div class="re-list"></div>
 			<div class="re-add-wrap">
@@ -320,28 +342,27 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 		// repair number through the edit path, which only knows how to update.
 		const fresh = [];
 		const paintFresh = () => {
-			$(dlg.body).find(".re-fresh").remove();
-            const html = fresh.map((f, k) => `
-				<div class="re-row re-fresh" data-f="${k}">
-					<div><div class="lab">${__("Repair")}</div><div class="ro"><i>${__("new")}</i></div></div>
-					<div><div class="lab">${__("Design Type")}</div>
-						<input class="rf-dt" list="re-dt-list" value="${esc(f.design_type)}"
-							placeholder="${__("design type")}"></div>
-					<div><div class="lab">${__("Qty")}</div>
-						<input class="rf-qty" type="number" min="1" step="1" value="${f.qty}"></div>
-					<div><div class="lab">${__("Weight In g")}</div>
-						<input class="rf-wt" type="number" min="0" step="0.001" value="${f.weight}"></div>
-					<div><div class="lab">${__("Karat")}</div>
-						<select class="rf-kt">${["22","18","14","9"].map((k) =>
-							`<option value="${k}" ${f.karat === k ? "selected" : ""}>${k}</option>`).join("")}</select></div>
-					<div><div class="lab">${__("Type of Work")}</div>
-						<input class="rf-work" list="re-works-list" value="${esc(f.work_types)}"
-							placeholder="${__("comma separated")}">
-						<input class="rf-nar" style="margin-top:6px;" value="${esc(f.narration)}"
-							placeholder="${__("narration")}"></div>
-					<div><a class="rf-x" title="${__("Remove")}">&times;</a></div>
-				</div>`).join("");
-			$(dlg.body).find(".re-add-wrap").before(html);
+			// the new pieces are rows of the SAME table as the existing ones, so the
+			// columns line up and the header applies to both
+			$(dlg.body).find("tr.re-fresh").remove();
+			const html = fresh.map((f, k) => `
+				<tr class="re-row re-fresh" data-f="${k}">
+					<td><i>${__("new")}</i></td>
+					<td><input class="rf-dt" list="re-dt-list" value="${esc(f.design_type)}"
+						placeholder="${__("design type")}"></td>
+					<td class="n"><input class="rf-qty" type="number" min="1" step="1" value="${f.qty}"></td>
+					<td class="n"><input class="rf-wt" type="number" min="0" step="0.001" value="${f.weight}"></td>
+					<td class="n">—</td>
+					<td><select class="rf-kt">${["22","18","14","9"].map((k2) =>
+						`<option value="${k2}" ${f.karat === k2 ? "selected" : ""}>${k2}</option>`).join("")}</select></td>
+					<td>—</td>
+					<td><input class="rf-work" list="re-works-list" value="${esc(f.work_types)}"
+						placeholder="${__("comma separated")}"></td>
+					<td><input class="rf-nar" value="${esc(f.narration)}"
+						placeholder="${__("optional")}"></td>
+					<td class="n"><a class="rf-x" title="${__("Remove")}">&times;</a></td>
+				</tr>`).join("");
+			$(dlg.body).find("table.re-tbl tbody").append(html);
 		};
 		$(dlg.body).on("click", ".re-add", () => {
 			fresh.push({ design_type: "", qty: 1, weight: "", karat: "18", work_types: "", narration: "" });

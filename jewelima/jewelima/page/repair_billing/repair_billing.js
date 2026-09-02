@@ -360,10 +360,11 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			<div class="rb-card pieces">
 				<div class="rb-h"><span>${__("Pieces")} — ${esc(D.repair_order)} · ${esc(D.party || "")}</span>
 					<span><a class="rb-all">${__("all")}</a> · <a class="rb-non">${__("none")}</a>
-						· <button class="btn btn-default btn-xs rb-savew">${__("Save weights")}</button></span></div>
+						· <button class="btn btn-default btn-xs rb-copyw">${__("Copy weights")}</button>
+						· <button class="btn btn-default btn-xs rb-savew">${__("Update")}</button></span></div>
 				<table class="rb-t">
 					<thead><tr><th style="width:34px;"></th><th>${__("Piece")}</th><th>${__("Design")}</th>
-						<th style="width:74px;">${__("Karat")}</th>
+						<th style="width:74px;">${__("Purity")}</th>
 						<th class="num">${__("Qty")}</th><th class="num">${__("In (g)")}</th>
 						<th class="num" style="width:104px;">${__("Out (g)")}</th>
 						<th class="num">${__("Added")}</th>
@@ -503,6 +504,22 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		if (row) { row.karat = this.value || ""; drawBatch(); }
 	});
 
+	// Nothing was done to the metal on these pieces, so they leave at the weight
+	// they came in at. Fills the blanks only — a weight somebody already took is
+	// never overwritten — and leaves saving to Update, so it can be looked over
+	// first.
+	$body.on("click", ".rb-copyw", function () {
+		const blanks = openRows().filter((i) => !flt(i.weight_out));
+		if (!blanks.length) {
+			return frappe.show_alert({ message: __("Every piece already has a weight out."),
+				indicator: "orange" }, 4);
+		}
+		blanks.forEach((i) => { i.weight_out = flt(i.weight_in); });
+		drawBatch();
+		frappe.show_alert({ message: __("{0} piece(s) copied in → out. Press Update to save.",
+			[blanks.length]), indicator: "blue" }, 5);
+	});
+
 	$body.on("click", ".rb-savew", function () {
 		const rows = openRows().map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out),
 			karat: i.karat || "" }));
@@ -510,7 +527,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			args: { repair_order: S.D.repair_order, rows: JSON.stringify(rows) } })
 			.then((r) => {
 				S.D = r.message;
-				frappe.show_alert({ message: __("Weights saved"), indicator: "green" });
+				frappe.show_alert({ message: __("Updated — weights and purity saved"),
+					indicator: "green" });
 				drawBatch();
 			});
 	});
@@ -547,8 +565,18 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				title: __("Work on {0}", [id]),
 				fields: [{
 					fieldname: "works", fieldtype: "MultiSelectPills", label: __("Types of Work"),
-					// typing a name that is not on the list adds it, same as the intake
-					get_data: (txt) => all.filter((w) => !txt || w.toLowerCase().includes(txt.toLowerCase())),
+					// A name that is not on the list yet is offered as itself, so it can
+					// be picked and used here and now. The server creates it on save
+					// (_master with create=True) — it always could; the box just had no
+					// way to hand it a word it had never seen.
+					get_data: (txt) => {
+						const q = (txt || "").trim();
+						const hits = all.filter((w) => !q || w.toLowerCase().includes(q.toLowerCase()));
+						const known = hits.some((w) => w.toLowerCase() === q.toLowerCase());
+						return (q && !known)
+							? [{ value: q.toUpperCase(), description: __("new type of work") }, ...hits]
+							: hits;
+					},
 					default: row.work_types || [],
 				}],
 				primary_action_label: __("Save"),

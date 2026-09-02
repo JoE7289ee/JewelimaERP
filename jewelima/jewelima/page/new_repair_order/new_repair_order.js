@@ -75,6 +75,10 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		.nr-del{border:none;background:none;color:#b02a2a;font-size:16px;cursor:pointer;line-height:1;}
 		.nr-works{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
 		.nr-works input{flex:1 1 90px;min-width:80px;}
+		table.nr-t td.nr-no{text-align:center;color:var(--text-muted);background:var(--control-bg);
+			font-variant-numeric:tabular-nums;}
+		table.nr-t td.nr-no.ok{background:#2e7d32;color:#fff;font-weight:800;}
+		table.nr-t td.nr-no.bad{background:#b00020;color:#fff;font-weight:800;}
 		td.nr-st{font-size:11px;line-height:1.45;cursor:pointer;color:#1f618d;font-weight:600;}
 		td.nr-st:hover{background:rgba(31,97,141,.10);}
 		.nr-addst{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
@@ -121,10 +125,11 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			<div class="nr-card nr-c-pieces">
 				<div class="h">${__("The pieces")}</div>
 				<table class="nr-t"><thead><tr>
+					<th style="width:34px;"></th>
 					<th style="width:18%;">${__("Design Type")}</th>
 					<th style="width:6%;">${__("Qty")}</th>
 					<th style="width:9%;">${__("Weight g")}</th>
-					<th style="width:7%;">${__("Karat")}</th>
+					<th style="width:7%;">${__("Purity")}</th>
 					<th style="width:19%;">${__("Type of Work")}</th>
 					<th style="width:12%;">${__("Type")}</th>
 					<th style="width:14%;">${__("Stones")}</th>
@@ -145,7 +150,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		<datalist id="nr-dtypes"></datalist>`);
 	const root = $(page.main);
 
-	const blank = () => ({ design_type: "", repair_type: "", qty: 1, weight: "",
+	const blank = () => ({ design_type: "", repair_type: "", qty: 0, weight: "",
 		// most work in is 18k, so that is what a fresh line starts on
 		karat: "18", work_types: [], stones: [], narration: "" });
 
@@ -153,9 +158,10 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		const o = S.opts;
 		root.find(".nr-body").html(S.rows.length ? S.rows.map((r, i) => `
 			<tr data-i="${i}">
+				<td class="nr-no ${rowState(r)}">${i + 1}</td>
 				<td><input class="nr-dt" list="nr-dtypes" value="${esc(r.design_type)}"
 					placeholder="${__("design type")}"></td>
-				<td class="num"><input class="nr-qty" type="number" min="1" step="1" value="${cint(r.qty) || 1}"></td>
+				<td class="num"><input class="nr-qty" type="number" min="0" step="1" value="${cint(r.qty)}"></td>
 				<td class="num"><input class="nr-wt" type="number" min="0" step="0.001"
 					value="${r.weight === "" || r.weight === undefined ? "" : r.weight}"></td>
 				<td><select class="nr-kt">${["22", "18", "14", "9"].map((k) =>
@@ -174,16 +180,31 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 					: `<span class="nr-addst">${__("add stone")}</span>`}</td>
 				<td><input class="nr-nar" value="${esc(r.narration)}" placeholder="${__("optional")}"></td>
 				<td><button class="nr-del" title="${__("remove")}">&times;</button></td>
-			</tr>`).join("") : `<tr><td colspan="9" class="nr-none">${
+			</tr>`).join("") : `<tr><td colspan="10" class="nr-none">${
 				__("Nothing on the list yet — add a piece.")}</td></tr>`);
 		paintTotals();
 		page.set_primary_action(__("Take it in"), save, "add");
 	}
 
+	// A line is TAKEN IN only when it has both a design type and a quantity —
+	// green. One with something in it but not both is red and is left behind:
+	// half a line is a question, not a piece, and guessing which half was meant
+	// is worse than not taking it.
+	const isReal = (r) => !!(r.design_type || "").trim() && cint(r.qty) > 0;
+	const hasAnything = (r) => !!((r.design_type || "").trim() || cint(r.qty)
+		|| String(r.weight || "").trim() || (r.work_types || []).length
+		|| (r.repair_type || "").trim() || (r.narration || "").trim()
+		|| (r.stones || []).length);
+	const rowState = (r) => (isReal(r) ? "ok" : (hasAnything(r) ? "bad" : ""));
+
+	// Repaint ONE cell, never the table: rebuilding it here would replace the box
+	// being typed in and take the cursor with it.
+	const markRow = ($tr, r) => $tr.find("td.nr-no").removeClass("ok bad").addClass(rowState(r));
+
 	// an empty row is scaffolding, not a piece — it is the design type that makes
 	// a line real, so nothing is counted until one is picked
 	function paintTotals() {
-		const real = S.rows.filter((r) => (r.design_type || "").trim());
+		const real = S.rows.filter(isReal);
 		const grams = real.reduce((a, r) => a + (parseFloat(r.weight) || 0), 0);
 		root.find(".nr-tot").html(real.length
 			? `<span>${__("Lines")} <b>${real.length}</b></span>`
@@ -255,6 +276,34 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		S.rows[cint($(this).closest("tr").data("i"))].karat = this.value || "";
 	});
 
+	// Typing a weight on the LAST line opens the next one: pieces are taken in
+	// one after another, and reaching for "+ another piece" between each was the
+	// only pause in the rhythm.
+	root.on("input", ".nr-wt", function () {
+		const i = cint($(this).closest("tr").data("i"));
+		if (i !== S.rows.length - 1) return;
+		if (!String(this.value || "").trim()) return;
+		S.rows.push(blank());
+		const val = this.value, sel = this.selectionStart;
+		paintRows();
+		// paintRows rebuilds the table, so put the cursor back where it was
+		const $again = root.find(`tr[data-i="${i}"] .nr-wt`);
+		$again.val(val).focus();
+		try { $again[0].setSelectionRange(sel, sel); } catch (e) { /* number inputs refuse */ }
+	});
+
+	// Enter walks to the next box, the way Tab does — a counter fills a row left
+	// to right and should never have to reach for the mouse to get there.
+	root.on("keydown", "table.nr-t input, table.nr-t select", function (e) {
+		if (e.key !== "Enter") return;
+		if ($(this).hasClass("nr-work")) return;   // Enter there adds the chip
+		e.preventDefault();
+		const boxes = root.find("table.nr-t").find("input, select").filter(":visible");
+		const at = boxes.index(this);
+		const next = boxes.eq(at + 1);
+		if (next.length) { next.focus(); if (next.is("input")) next[0].select(); }
+	});
+
 	root.on("input change", ".nr-dt, .nr-type, .nr-qty, .nr-wt, .nr-nar", function () {
 		const i = cint($(this).closest("tr").data("i"));
 		const r = S.rows[i];
@@ -264,6 +313,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		else if ($(this).hasClass("nr-qty")) r.qty = cint(this.value);
 		else if ($(this).hasClass("nr-wt")) r.weight = this.value;
 		else r.narration = this.value;
+		markRow($(this).closest("tr"), r);
 		if ($(this).hasClass("nr-qty") || $(this).hasClass("nr-dt")
 			|| $(this).hasClass("nr-wt")) paintTotals();
 	});
@@ -288,13 +338,22 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 	function save() {
 		const party = (root.find(".nr-party").val() || "").trim();
 		if (!party) return frappe.msgprint(__("Say which party this came from."));
-		const rows = S.rows.filter((r) => (r.design_type || "").trim());
-		if (!rows.length) return frappe.msgprint(__("Every piece needs a design type."));
-		// a line with work or a note but no design type is half-written, not a piece
-		const short = S.rows.filter((r) => !(r.design_type || "").trim() &&
-			((r.work_types || []).length || (r.repair_type || "").trim() || (r.narration || "").trim()));
-		if (short.length) return frappe.msgprint(
-			__("{0} line(s) have no design type — it cannot be left blank.", [short.length]));
+		const rows = S.rows.filter(isReal);
+		if (!rows.length) return frappe.msgprint(
+			__("No line is ready — a piece needs a design type and a quantity."));
+		// the red lines are left behind, but never silently: dropping something
+		// somebody typed without saying so is how a piece goes missing
+		const dropped = S.rows.filter((r) => !isReal(r) && hasAnything(r)).length;
+		const go = () => takeItIn(party, rows, dropped);
+		if (dropped) {
+			return frappe.confirm(
+				__("{0} line(s) are not complete and will not be taken in — they need both a design type and a quantity.<br><br>Take in the {1} that are ready?",
+					[dropped, rows.length]), go);
+		}
+		go();
+	}
+
+	function takeItIn(party, rows, dropped) {
 
 		const when = root.find(".nr-when").val();
 		frappe.dom.freeze(__("Taking it in…"));
