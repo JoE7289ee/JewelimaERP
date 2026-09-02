@@ -123,7 +123,8 @@
   "stages_tab",
   "stages_html",
   "attachments_tab",
-  "attachments"
+  "attachments",
+  "bucket"
  ],
  "fields": [
   {
@@ -859,12 +860,19 @@
    "fieldtype": "Table",
    "label": "Attachments",
    "options": "Order Bag Attachment"
+  },
+  {
+   "fieldname": "bucket",
+   "fieldtype": "Link",
+   "options": "Finished Bucket",
+   "label": "Bucket",
+   "description": "Where the finished piece is filed. Set when the ornament is made."
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-01 14:30:00.000000",
+ "modified": "2026-09-02 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Order Bag",

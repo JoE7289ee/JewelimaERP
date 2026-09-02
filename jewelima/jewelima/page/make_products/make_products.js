@@ -64,6 +64,7 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 				<div class="mp-b"><div class="k">${__("GROSS g")}</div><div class="v mp-gross">0.000</div></div>
 				<div class="mp-b"><div class="k">${__("NETT g")}</div><div class="v mp-nett">0.000</div></div>
 				<div class="mp-b"><div class="k">${__("DMD ct")}</div><div class="v mp-dmd">0.000</div></div>
+				<select class="mp-bucket" style="border:1px solid var(--border-color);border-radius:7px;padding:5px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);margin-right:8px;"><option value="">${__("pick a bucket…")}</option></select>
 				<button class="mp-go" disabled>${__("MAKE PRODUCTS")}</button>
 			</div>
 			<div class="mp-pool">
@@ -75,6 +76,25 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 		</div>
 	`);
 	const root = $(page.main);
+
+	// MAKE needs both a queue and somewhere to put the results
+	const paintGo = () => root.find(".mp-go").prop("disabled", !Q.size || !BUCKET);
+
+	// A finished piece has to be put somewhere, so the bucket is picked before
+	// anything is made — the list is maintained in Delivery Masters, and only
+	// buckets still in use are offered.
+	let BUCKET = "";
+	frappe.call({ method: API + ".get_finished_buckets", freeze: false }).then((r) => {
+		const buckets = r.message || [];
+		root.find(".mp-bucket").append(buckets.map((b) =>
+			`<option value="${frappe.utils.escape_html(b.name)}">${frappe.utils.escape_html(b.name)}`
+			+ (b.pieces ? ` (${b.pieces})` : "") + `</option>`).join(""));
+		if (!buckets.length) {
+			root.find(".mp-bucket").prop("disabled", true)
+				.html(`<option>${__("no buckets set up yet")}</option>`);
+		}
+	});
+	root.on("change", ".mp-bucket", function () { BUCKET = this.value || ""; paintGo(); });
 
 	const scan = frappe.ui.form.make_control({
 		df: { fieldtype: "Data", label: __("Scan Card"), fieldname: "scan", placeholder: __("E0123.4 …") },
@@ -122,7 +142,7 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 		root.find(".mp-gross").text(rows.reduce((a, c) => a + c.gross, 0).toFixed(3));
 		root.find(".mp-nett").text(rows.reduce((a, c) => a + c.nett, 0).toFixed(3));
 		root.find(".mp-dmd").text(rows.reduce((a, c) => a + c.dmd_ct, 0).toFixed(3));
-		root.find(".mp-go").prop("disabled", !rows.length);
+		paintGo();
 		paintPool();   // refresh the "in queue" markers
 	}
 
@@ -135,10 +155,12 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	root.find(".mp-go").on("click", () => {
 		const names = [...Q.keys()];
 		frappe.confirm(
-			__("Make <b>{0}</b> piece(s) into products?<br>Materials are consumed, actual weights frozen, and stock moves In Bags → Finished Goods on each card. This cannot be undone.", [names.length]),
+			__("Make <b>{0}</b> piece(s) into products, filed in <b>{1}</b>?<br>Materials are consumed, actual weights frozen, and stock moves In Bags → Finished Goods on each card. This cannot be undone.",
+				[names.length, frappe.utils.escape_html(BUCKET || "—")]),
 			() => {
 				frappe.dom.freeze(__("Converting..."));
-				frappe.call({ method: API + ".make_products", args: { bags: JSON.stringify(names) } })
+				frappe.call({ method: API + ".make_products",
+					args: { bags: JSON.stringify(names), bucket: BUCKET } })
 					.then((r) => {
 						frappe.dom.unfreeze();
 						const m = r.message || {};

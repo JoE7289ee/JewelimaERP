@@ -230,7 +230,7 @@ JEWELIMA_CAM_TO = ("WAXING", "CAD")
 JEWELIMA_DELIVERY_ROLE = "JW Delivery"
 JEWELIMA_DELIVERY_PAGES = [
 	# Delivery
-	"finished-goods", "transfer-holder", "rework",
+	"finished-goods", "transfer-holder", "transfer-bucket", "rework",
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
 	# Sales — price and park it; closing the sale belongs to someone else.

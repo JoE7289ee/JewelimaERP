@@ -8411,13 +8411,126 @@ def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=
 		"design_types": sorted(all_dts)}
 
 
+# ---------------------------------------------------------------------------
+# Buckets — where a finished piece is filed. A maintained list: a piece cannot
+# be made without one, so the list is set up first and nothing lands loose.
+# ---------------------------------------------------------------------------
 @frappe.whitelist()
-def make_products(bags):
+def get_finished_buckets(include_inactive=0):
+	"""The buckets a piece can be filed in, with how many are in each."""
+	rows = frappe.get_all("Finished Bucket",
+		filters=({} if cint(include_inactive) else {"active": 1}),
+		fields=["name", "bucket_name", "active", "notes"], order_by="bucket_name")
+	counts = {}
+	for r in frappe.db.sql("""SELECT bucket, COUNT(*) n FROM `tabOrder Bag`
+		WHERE IFNULL(bucket,'') != '' AND is_finished = 1 AND stock_status = 'In Stock'
+		GROUP BY bucket""", as_dict=True):
+		counts[r.bucket] = cint(r.n)
+	return [{**r, "pieces": counts.get(r["name"], 0)} for r in rows]
+
+
+@frappe.whitelist()
+def add_finished_bucket(bucket_name, notes=None):
+	frappe.only_for(("System Manager", "JW Manager", "Stock Manager"))
+	name = " ".join((bucket_name or "").split()).upper()
+	if not name:
+		frappe.throw(frappe._("Give the bucket a name."))
+	if frappe.db.exists("Finished Bucket", name):
+		frappe.throw(frappe._("{0} already exists.").format(name))
+	doc = frappe.get_doc({"doctype": "Finished Bucket", "bucket_name": name,
+		"active": 1, "notes": (notes or "").strip() or None}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name}
+
+
+@frappe.whitelist()
+def set_finished_bucket(name, active=None, notes=None):
+	frappe.only_for(("System Manager", "JW Manager", "Stock Manager"))
+	if not frappe.db.exists("Finished Bucket", name):
+		frappe.throw(frappe._("No bucket {0}.").format(name))
+	vals = {}
+	if active is not None:
+		vals["active"] = cint(active)
+	if notes is not None:
+		vals["notes"] = (notes or "").strip() or None
+	if vals:
+		frappe.db.set_value("Finished Bucket", name, vals)
+		frappe.db.commit()
+	return {"name": name}
+
+
+def _require_bucket(bucket):
+	"""The bucket a piece is being filed into, or a refusal saying why not."""
+	b = (bucket or "").strip()
+	if not b:
+		frappe.throw(frappe._("Pick the bucket the piece goes into."))
+	if not frappe.db.exists("Finished Bucket", b):
+		frappe.throw(frappe._("{0} is not a bucket.").format(b))
+	if not cint(frappe.db.get_value("Finished Bucket", b, "active")):
+		frappe.throw(frappe._("{0} is not in use any more — pick another bucket.").format(b))
+	return b
+
+
+@frappe.whitelist()
+def get_bucket_piece(barcode):
+	"""One finished piece, for the Transfer Bucket scanner."""
+	nm = _resolve_bag_code(barcode)
+	row = frappe.db.get_value("Order Bag", nm,
+		["name", "is_finished", "stock_status", "bucket", "held_by", "design", "huid"],
+		as_dict=True)
+	if not row:
+		return {"found": False, "error": frappe._("No piece {0}.").format(barcode or "?")}
+	if not row.is_finished or row.stock_status != "In Stock":
+		return {"found": True, "can_move": False, **row,
+			"error": frappe._("{0} is not finished stock — only a piece in stock sits in a bucket.").format(row.name)}
+	return {"found": True, "can_move": True, **row}
+
+
+@frappe.whitelist()
+def transfer_bucket(bags, to_bucket, remarks=None):
+	"""Move finished pieces into another bucket.
+
+	The move is recorded on the piece and nowhere else: a bucket is where a
+	thing is kept, not a stock location, so nothing about the piece's stock,
+	holder or weights changes by re-filing it."""
+	frappe.only_for(("System Manager", "JW Manager", "Stock Manager", "JW Delivery"))
+	to_bucket = _require_bucket(to_bucket)
+	names = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+	if not names:
+		frappe.throw(frappe._("Scan at least one piece."))
+	moved, errors = [], []
+	for nm in names:
+		row = frappe.db.get_value("Order Bag", nm,
+			["name", "is_finished", "stock_status", "bucket"], as_dict=True)
+		if not row:
+			errors.append({"name": nm, "error": frappe._("Not found")})
+			continue
+		if not row.is_finished or row.stock_status != "In Stock":
+			errors.append({"name": nm, "error": frappe._("Not finished stock")})
+			continue
+		if row.bucket == to_bucket:
+			errors.append({"name": nm, "error": frappe._("Already in {0}").format(to_bucket)})
+			continue
+		frappe.db.set_value("Order Bag", nm, "bucket", to_bucket)
+		frappe.get_doc("Order Bag", nm).add_comment("Comment",
+			frappe._("Bucket {0} \u2192 {1}{2}").format(row.bucket or frappe._("none"), to_bucket,
+				(" \u00b7 " + remarks) if remarks else ""))
+		moved.append({"name": nm, "was": row.bucket or "", "now": to_bucket})
+	frappe.db.commit()
+	return {"moved": moved, "count": len(moved), "errors": errors}
+
+
+@frappe.whitelist()
+def make_products(bags, bucket=None):
 	"""Turn selected qty-1 bags into finished stock products: consume their materials
 	(gold In Bags -> Finished Goods), freeze the actual weights, set held_by (the
-	order's customer, else JD Stock) and stock_status = In Stock."""
+	order's customer, else JD Stock) and stock_status = In Stock.
+
+	A bucket is required. A finished piece is a physical thing that has to be put
+	somewhere, and a piece made without one is a piece nobody can find later."""
 	if isinstance(bags, str):
 		bags = json.loads(bags or "[]")
+	bucket = _require_bucket(bucket)
 	jd = _jd_stock_customer()
 	done, errors = [], []
 	for nm in bags or []:
@@ -8436,6 +8549,7 @@ def make_products(bags):
 			frappe.db.set_value("Order Bag", nm, {
 				"stock_status": "In Stock", "held_by": bag.customer or jd,
 				"in_stock_on": frappe.utils.now_datetime(),
+				"bucket": bucket,
 			})
 			done.append(nm)
 		except Exception as e:
@@ -8485,6 +8599,8 @@ def import_finished_stock(payload):
 	mode = (p.get("mode") or "issue").lower()
 	if mode not in ("issue", "purchase"):
 		frappe.throw(frappe._("Unknown mode: {0}").format(mode))
+	# these arrive already made, so they are filed the same as anything made here
+	bucket = _require_bucket(p.get("bucket"))
 	customer = p.get("customer")
 	if not customer or not frappe.db.exists("Customer", customer):
 		frappe.throw(frappe._("Pick the party holding these pieces (JD Stock = ourselves)."))
@@ -8605,7 +8721,7 @@ def import_finished_stock(payload):
 			            remarks="Import", reference=stock_doc, pcs=cint(s.get("pcs")))
 		convert_to_ornament(bag.name, move_stock=False)  # the batch entry already landed stock in FG
 		frappe.db.set_value("Order Bag", bag.name, {
-			"stock_status": "In Stock", "held_by": customer,
+			"stock_status": "In Stock", "held_by": customer, "bucket": bucket,
 			"in_stock_on": frappe.utils.now_datetime(),
 			"act_gross_weight": gross,  # the physical scale weight wins over the material sum
 		})
