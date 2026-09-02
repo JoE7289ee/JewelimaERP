@@ -46,7 +46,13 @@ body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:11px;}
 // and leave the signatures floating under the table instead of at the foot.
 const JW_BILL_PRINT_CSS = JW_REPAIR_TABLE_CSS + `
 @page { size: A4 portrait; margin: 12mm 10mm; }
-body{font-size:11px;padding:0;display:flex;flex-direction:column;min-height:273mm;}
+/* A4 minus the 12mm top+bottom margin leaves 273mm. The sheet is floored a few
+   millimetres under that: it keeps the signatures at the foot of the page while
+   leaving room for a printer that rounds up, which is what put the last version
+   onto a second, near-empty sheet. */
+html,body{margin:0;padding:0;}
+body{font-size:11px;font-family:Arial,Helvetica,sans-serif;color:#000;
+	display:flex;flex-direction:column;min-height:264mm;}
 .rb-body{flex:1 1 auto;}
 .rb-head{text-align:center;margin:0 0 12px;}
 .rb-party{font-size:17px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;}
@@ -74,15 +80,6 @@ function jwRepairPrint(title, html) {
 		+ `<style>${JW_REPAIR_PRINT_CSS}</style></head><body>${html}</body></html>`);
 	doc.close();
 	setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 250);
-}
-
-// The letterhead payload, fetched once per session — the bill is printed over
-// and over at the counter and this never changes between prints.
-function jwRepairBranding() {
-	if (jewelima._repair_branding) return Promise.resolve(jewelima._repair_branding);
-	return frappe.call({ method: "jewelima.jewelima.api.get_print_branding" })
-		.then((r) => (jewelima._repair_branding = r.message || {}))
-		.catch(() => ({}));       // no letterhead is better than no bill
 }
 
 // ---- what came in ---------------------------------------------------------
@@ -153,8 +150,8 @@ jewelima.printRepairBill = function (b) {
 			${meta ? `<div class="rb-meta">${meta}</div>` : ""}
 		</div>
 		<table><thead><tr><th class="n"></th><th>${__("Piece")}</th><th>${__("Design")}</th>
-			<th class="n">${__("Purity")}</th><th class="n">${__("In g")}</th><th class="n">${__("Out g")}</th>
-			<th class="n">${__("Added")}</th><th class="n">${__("Repair Charge")}</th><th class="n">${__("Metal")}</th>
+			<th class="n">${__("Purity")}</th><th class="n">${__("In Wt")}</th><th class="n">${__("Out Wt")}</th>
+			<th class="n">${__("Added")}</th><th class="n">${__("Repair Charges")}</th><th class="n">${__("Metal")}</th>
 			<th class="n">${__("Stone")}</th><th class="n">${__("Manual")}</th>
 			<th class="n">${__("Amount")}</th></tr></thead><tbody>${rows}</tbody></table>
 
@@ -163,7 +160,7 @@ jewelima.printRepairBill = function (b) {
 			<th class="n">${__("Amount")}</th></tr></thead><tbody>${stones}</tbody></table>` : ""}
 
 		<table class="tot">
-			<tr><td>${__("Repair Charge")}</td><td class="n">${m(b.total_work_amount)}</td></tr>
+			<tr><td>${__("Repair Charges")}</td><td class="n">${m(b.total_work_amount)}</td></tr>
 			<tr><td>${__("Metal")} <span class="muted">(${flt(b.total_metal_added).toFixed(3)} g)</span></td>
 				<td class="n">${m(b.total_metal_amount)}</td></tr>
 			<tr><td>${__("Stones")}</td><td class="n">${m(b.total_stone_amount)}</td></tr>
@@ -176,11 +173,23 @@ jewelima.printRepairBill = function (b) {
 		</div>
 		<div class="sig"><div>${__("Prepared by")}</div><div>${__("Received by")}</div></div>`;
 
-	return jwRepairBranding().then((brand) => {
-		if (window.jewelima && jewelima.print_window) {
-			jewelima.print_window(brand, __("Repair Bill"), body, JW_BILL_PRINT_CSS);
-		} else {
-			jwRepairPrint(b.name || "Repair Bill", body);      // branding bundle missing
-		}
-	});
+	jwBillPrint(b.name || "Repair Bill", body);
 };
+
+// The bill prints ITSELF — no letterhead, no company footer. Going through
+// print_window added a logo block above and a "Crafting for You" strip below,
+// and those two together pushed the signatures onto a second sheet that carried
+// nothing else. A repair bill is one page.
+function jwBillPrint(title, html) {
+	document.getElementById("jw-repair-frame")?.remove();
+	const fr = document.createElement("iframe");
+	fr.id = "jw-repair-frame";
+	fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+	document.body.appendChild(fr);
+	const doc = fr.contentDocument;
+	doc.open();
+	doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>`
+		+ `<style>${JW_BILL_PRINT_CSS}</style></head><body>${html}</body></html>`);
+	doc.close();
+	setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 250);
+}

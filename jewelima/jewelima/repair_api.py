@@ -830,16 +830,13 @@ def list_open_repairs(include_done=0):
 
 
 @frappe.whitelist()
-def save_repair_bill(payload):
-	"""Bill some or all of a batch.
+def _build_repair_bill(p):
+	"""Assemble an UNSAVED Repair Bill from a billing payload.
 
-	Pieces are billed a handful at a time — half a batch goes back to the party
-	while the rest is still on the bench — so a bill covers the pieces named in
-	it and marks exactly those as settled. The rest stay open and get their own
-	bill later. Re-sending a bill's own id edits that bill rather than making a
-	rival copy of it."""
-	_guard()
-	p = frappe.parse_json(payload)
+	Shared by save_repair_bill and preview_repair_bill so a bill previewed at the
+	counter and the bill that is finally saved are computed by the same code —
+	a preview that did its own arithmetic would eventually disagree with the
+	bill the customer is handed, which is the one thing it must never do."""
 	order = p.get("repair_order")
 	if not order or not frappe.db.exists("Repair Order", order):
 		frappe.throw(frappe._("Pick the repair to bill."))
@@ -895,6 +892,38 @@ def save_repair_bill(payload):
 	doc.set("items", items)
 	doc.set("charges", charges)
 	doc.set("stones", stones)
+	return doc, o, items
+
+
+@frappe.whitelist()
+def preview_repair_bill(payload):
+	"""The bill as it WOULD be, without writing anything.
+
+	The counter wants the paper in hand before committing the bill. validate() is
+	where rate_for_karat and the per-piece share-out live, so running it on the
+	unsaved doc gives the preview exactly the figures the saved bill will carry."""
+	_guard()
+	p = frappe.parse_json(payload)
+	doc, _o, _items = _build_repair_bill(p)
+	doc.run_method("validate")
+	out = _bill_dict(doc)
+	out["name"] = doc.name or frappe._("PREVIEW — not yet billed")
+	out["preview"] = 1
+	return out
+
+
+@frappe.whitelist()
+def save_repair_bill(payload):
+	"""Bill some or all of a batch.
+
+	Pieces are billed a handful at a time — half a batch goes back to the party
+	while the rest is still on the bench — so a bill covers the pieces named in
+	it and marks exactly those as settled. The rest stay open and get their own
+	bill later. Re-sending a bill's own id edits that bill rather than making a
+	rival copy of it."""
+	_guard()
+	p = frappe.parse_json(payload)
+	doc, o, items = _build_repair_bill(p)
 	doc.save(ignore_permissions=True)
 
 	# stamp the pieces this bill covers, and release any it no longer does
@@ -914,11 +943,17 @@ def save_repair_bill(payload):
 @frappe.whitelist()
 def get_repair_bill(name):
 	_guard()
-	d = frappe.get_doc("Repair Bill", name)
+	return _bill_dict(frappe.get_doc("Repair Bill", name))
+
+
+def _bill_dict(d):
+	"""One rendering of a bill, saved or not — the preview and the real thing go
+	through the same serializer so the paper cannot differ."""
 	return {
 		"name": d.name, "repair_order": d.repair_order, "party": d.party,
 		"billed_at": str(d.billed_at or "")[:16],
-		"billed_by": frappe.db.get_value("User", d.billed_by, "full_name") or d.billed_by,
+		"billed_by": (frappe.db.get_value("User", d.billed_by, "full_name") or d.billed_by)
+			if d.billed_by else "",
 		"total_weight_in": flt(d.total_weight_in), "total_weight_out": flt(d.total_weight_out),
 		"total_metal_added": flt(d.total_metal_added), "total_charges": flt(d.total_charges),
 		"narration": d.narration or "",

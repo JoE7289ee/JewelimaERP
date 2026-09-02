@@ -424,6 +424,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 					<div class="rb-grand">${__("Total")} <b>${format_currency(grand)}</b></div>
 					<button class="btn btn-default btn-sm rb-gst" style="margin-bottom:8px;">${
 						flt(S.gst) ? __("Remove {0}% GST", [S.gst]) : __("Add 3% GST")}</button>
+					<button class="btn btn-default btn-sm rb-preview" ${picked.length ? "" : "disabled"}
+						style="margin-bottom:8px;margin-right:6px;" title="${__("print the bill before committing it")}">
+						${__("Print")}</button>
 					<button class="btn btn-primary rb-bill" ${picked.length ? "" : "disabled"}>
 						${__("Bill {0} piece(s)", [picked.length])}</button>
 				</div>
@@ -619,30 +622,47 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		drawBatch();
 	});
 
+	// ONE payload, used by Print and by Bill. If the preview built its own the two
+	// would drift, and the paper handed over would stop matching the bill saved.
+	function billPayload(picked) {
+		const tally = {};
+		picked.forEach((i) => (i.work_types || []).forEach((w) => { tally[w] = (tally[w] || 0) + 1; }));
+		return {
+			repair_order: S.D.repair_order,
+			gold_rate: flt(S.gold),
+			gst_percent: flt(S.gst),
+			stone_lines: Object.keys(S.stoneRates).map((k) => ({
+				bucket: k.split("||")[0], sieve: k.split("||")[1] || "",
+				rate: flt(S.stoneRates[k]) })),
+			items: picked.map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out),
+				manual_amount: flt(i.manual_amount) })),
+			charges: Object.keys(tally).map((w) => ({
+				work_type: w, pieces: tally[w], rate: flt(S.rates[w]) })),
+			narration: $body.find(".rb-note").val(),
+		};
+	}
+
+	// print the bill BEFORE committing it — the server runs the same maths on an
+	// unsaved doc, so the sheet is the bill, not an estimate of it
+	$body.on("click", ".rb-preview", function () {
+		const picked = S.D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
+		if (!picked.length) return;
+		frappe.call({ method: API + ".preview_repair_bill",
+			args: { payload: JSON.stringify(billPayload(picked)) },
+			freeze: true, freeze_message: __("Building the bill…") })
+			.then((r) => { if (r.message) jewelima.printRepairBill(r.message); });
+	});
+
 	$body.on("click", ".rb-bill", function () {
 		if (S.saving) return;
 		const picked = S.D.items.filter((i) => S.picked.has(i.repair) && !i.bill);
 		if (!picked.length) return;
 		const missing = picked.filter((i) => !flt(i.weight_out));
 		const go = () => {
-			const tally = {};
-			picked.forEach((i) => (i.work_types || []).forEach((w) => { tally[w] = (tally[w] || 0) + 1; }));
 			S.saving = true;
 			frappe.call({
 				method: API + ".save_repair_bill",
-				args: { payload: JSON.stringify({
-					repair_order: S.D.repair_order,
-					gold_rate: flt(S.gold),
-					gst_percent: flt(S.gst),
-					stone_lines: Object.keys(S.stoneRates).map((k) => ({
-						bucket: k.split("||")[0], sieve: k.split("||")[1] || "",
-						rate: flt(S.stoneRates[k]) })),
-					items: picked.map((i) => ({ repair: i.repair, weight_out: flt(i.weight_out),
-						manual_amount: flt(i.manual_amount) })),
-					charges: Object.keys(tally).map((w) => ({
-						work_type: w, pieces: tally[w], rate: flt(S.rates[w]) })),
-					narration: $body.find(".rb-note").val(),
-				}) },
+				args: { payload: JSON.stringify(billPayload(picked)) },
 			}).then((r) => {
 				S.saving = false;
 				const b = r.message;
