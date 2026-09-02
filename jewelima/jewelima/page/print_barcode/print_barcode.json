@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:14:03.660383",
+ "modified": "2026-09-02 11:25:27.344218",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "print-barcode",
@@ -16,6 +16,9 @@
   },
   {
    "role": "Stock Manager"
+  },
+  {
+   "role": "JW Delivery"
   },
   {
    "role": "JW Manager"

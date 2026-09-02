@@ -15,24 +15,8 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 
 	// Label geometry/typography — exactly as specified.
-	const LABEL_CSS = `
-	.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;
-		justify-content:center;gap:0;
-		padding:0 0.09in;overflow:hidden;
-		font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
-		font-stretch:condensed;font-size:var(--bc-size,8pt);font-weight:400;font-style:normal;
-		line-height:1.05;letter-spacing:-.2px;color:#000;}
-	.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
-	.bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
-	.bc-label .bc-qr{flex:0 0 auto;}
-	.bc-label .bc-qr img{height:var(--bc-qr,0.33in);width:var(--bc-qr,0.33in);display:block;}
-	.bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
-	.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}
-	/* the two halves the label is split into — each nudges on its own, because a
-	   tag's two printable zones rarely line up with one another */
-	.bc-label .bc-half{display:flex;align-items:center;gap:0.045in;flex:0 0 auto;}
-	.bc-label .bc-a{justify-content:flex-end;}
-	.bc-label .bc-b{justify-content:flex-start;}`;
+	// the label itself lives in public/js/barcode_label.js, shared with Multi Print
+	const LABEL_CSS = jewelima.BARCODE_LABEL_CSS;
 
 	const UI_CSS = `
 	.pb-wrap{max-width:780px;}
@@ -100,12 +84,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	const $hist = $(page.main).find(".pb-hist");
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
 
-	function stoneLine(c) {
-		if (c.dmd_no || c.dmd_wt) return `DIA:${c.dmd_no}/${flt(c.dmd_wt).toFixed(2)}ct`;
-		if (c.ps_no || c.ps_wt) return `PS:${c.ps_no}/${flt(c.ps_wt).toFixed(2)}ct`;
-		if (c.cs_no || c.cs_wt) return `CS:${c.cs_no}/${flt(c.cs_wt).toFixed(2)}ct`;
-		return "";
-	}
+	const stoneLine = (c) => jewelima.barcodeStoneLine(c);
 
 	// How far the whole block sits from where the printer thinks the label starts.
 	// Thermal printers rarely agree on that, so this is a per-machine nudge kept in
@@ -154,20 +133,8 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	const offsetStyle = () => "";   // the halves carry their own transform now
 
 	// Build one label's HTML — matches the reference: weights (left) · QR · codes (right)
-	function buildLabel(c) {
-		const stone = stoneLine(c);
-		const left = `<div class="bc-col bc-left"><div>GW:${flt(c.gw).toFixed(3)} gm</div>${stone ? `<div>${stone}</div>` : ""}</div>`;
-		const qr = c.qr
-			? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
-			: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
-		const r1 = c.design_type ? `<div>${esc(c.design_type)}</div>` : "";
-		const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div><div>${esc(c.name)}</div></div>`;
-		// half A is everything up to and including the QR; half B is the rest
-		return `<div class="bc-label" style="${sizeVars()}">`
-			+ `<div class="bc-half bc-a" style="transform:translateX(${offset("a")}in);">${left}${qr}</div>`
-			+ `<div class="bc-half bc-b" style="transform:translateX(${offset("b")}in);">${right}</div>`
-			+ `</div>`;
-	}
+	const buildLabel = (c) => jewelima.buildBarcodeLabel(c,
+		{ sizeVars: sizeVars(), offsetA: offset("a"), offsetB: offset("b") });
 
 	function renderPreview(c) {
 		$prev.html(c ? `${offsetStyle()}<div class="pb-prev">${buildLabel(c)}</div>`
