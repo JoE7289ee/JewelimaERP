@@ -7819,7 +7819,10 @@ def split_bag(order_bag, pieces, employee=None):
 			if nm == order_bag:
 				continue
 			frappe.get_doc({
-				"doctype": dt, "order_bag": nm, "bench": "BAG EXTRACTION",
+				# `bench` carries the DOCTYPE name, the way on_bag_arrival writes it
+				# (benches.py) and the way every existing row reads — not the
+				# upper-case location
+				"doctype": dt, "order_bag": nm, "bench": dt,
 				"status": "Completed", "employee": employee or None,
 				"work_type": "Bag Extraction",
 				"time_in": now, "time_out": now,

@@ -281,7 +281,11 @@ JEWELIMA_WAXING_TO = ("WAXING", "WAX SETTING", "TREE MAKING")
 # Holding ws-bag-extraction is what grants working AT the bench (_may_work_at
 # reads the bench's own page), so the Extract button is live for this role.
 JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
-JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split"]
+# "workstations" is the LAUNCHER, and it is what the sidebar's Workstations entry
+# points at — without it the bench's own page is reachable but the menu item is
+# hidden, which reads as "no access". The launcher only shows tiles for benches
+# whose page the user actually holds, so this role still sees Bag Extraction alone.
+JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split", "workstations"]
 
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
