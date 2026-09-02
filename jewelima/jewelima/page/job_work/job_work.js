@@ -13,7 +13,7 @@
 // Route: /app/job-work
 
 frappe.pages["job-work"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Job Work", single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "JOB WORK", single_column: true });
 	const state = { mode: "issue", rows: [], location: null, history: [], batchEmp: null };
 	// gold moves per card on both sides of this page — small requests, so a
 	// timeout can never strand a long batch half-done
@@ -340,6 +340,15 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				}, 50);
 			}
 		});
+	}
+
+	// arriving from Assign/Collect, which offers the jump when a scanned card
+	// turns out to belong at a weights bench — scan it in rather than making the
+	// operator type the same number twice
+	if (frappe.route_options && frappe.route_options.order_bag) {
+		const pre = frappe.route_options.order_bag;
+		frappe.route_options = null;
+		setTimeout(() => processScan(pre), 250);
 	}
 
 	state.scan.$input.on("keydown", (e) => {

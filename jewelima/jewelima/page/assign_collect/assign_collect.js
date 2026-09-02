@@ -12,7 +12,7 @@
 // Only CAD / WAXING / WAX SETTING are accepted (see api.assign_bench_cards).
 
 frappe.pages["assign-collect"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Assign / Collect", single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "ASSIGN AND COLLECT", single_column: true });
 	const ALLOWED = ["CAD", "WAXING", "WAX SETTING"];
 	const state = { mode: "assign", rows: [], location: null, history: [] };
 	// same chunking as Job Work: long batches go out in small requests so a
@@ -190,6 +190,20 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			if (ALLOWED.indexOf(v.location) === -1) {
 				setMsg(__("<b>{0}</b> is at <b>{1}</b> — Assign/Collect is only for {2}.", [safe, frappe.utils.escape_html(v.location), ALLOWED.join(", ")]), "err");
 				logHistory(code, __("At {0} (not allowed)", [v.location]), "err");
+				// ONLY on the first card of a batch: a card at a weights bench belongs
+				// on Job Work, and the operator has almost certainly opened the wrong
+				// screen. Offering the jump beats making them find it. Once a batch is
+				// under way the wrong scan is a slip, not a wrong screen, so it just
+				// gets the message above.
+				if (!state.rows.length && v.location) {
+					frappe.confirm(
+						__("<b>{0}</b> is at <b>{1}</b>, which is issued on Job Work.<br><br>Go to Job Work to issue it?",
+							[safe, frappe.utils.escape_html(v.location)]),
+						() => {
+							frappe.route_options = { order_bag: code };
+							frappe.set_route("job-work");
+						});
+				}
 				return;
 			}
 			const status = (v.record && v.record.status) || "In Queue";
