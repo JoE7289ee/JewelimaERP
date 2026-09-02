@@ -128,7 +128,7 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 	// The board rolls up whatever is loaded, so a silent truncation would quietly
 	// under-report the bench. It loads a window, always knows the real total, and
 	// says so on screen whenever the two differ.
-	const BPAGE = 1000;
+	const BPAGE = 500;
 
 	function load(more) {
 		const $box = root.find(".bb-body").length ? root.find(".bb-body") : root;

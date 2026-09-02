@@ -72,7 +72,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		.wk-dt .k{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.wk-dt .v{font-size:14px;font-weight:800;display:block;}
 		.wk-dt .s{font-size:9.5px;color:var(--text-muted);display:block;white-space:nowrap;}
-		.wk-day{margin-top:16px;}
+		.wk-day{margin-bottom:16px;}
 		table.wk-dw{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
 		table.wk-dw th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:4px 9px;border:1px solid var(--border-color);text-align:left;}
 		table.wk-dw td{border:1px solid var(--border-color);padding:4px 9px;}
@@ -93,12 +93,12 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 			</div>
 			<div class="wk-bulk-chips" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>
 		</div>
+		<div class="wk-day"><div class="wk-sec wk-day-title"></div><div class="wk-day-body"></div></div>
 		<div class="wk-cols">
 			<div class="wk-q"><div class="wk-sec">${__("Waiting — priority order")}</div>
 				<div class="wk-next" style="display:none;"></div><div class="wk-qbody"></div></div>
 			<div class="wk-w"><div class="wk-sec">${__("Working now")}</div><div class="wk-wbody"></div></div>
 		</div>
-		<div class="wk-day"><div class="wk-sec wk-day-title"></div><div class="wk-day-body"></div></div>
 	`);
 	const root = $(page.main);
 
