@@ -64,7 +64,9 @@ jewelima.viz = {
 	// labelled beside it, a 2px surface gap between fills so neighbours never
 	// bleed together, and the total living in the hole.
 	donut($el, slices, opts) {
-		const o = Object.assign({ unit: "g", size: 260, hole: 0.62, centreLabel: "" }, opts || {});
+		// dp: grams want three decimals, money wants none — the kit was written for
+		// grams, so that stays the default and callers say otherwise
+		const o = Object.assign({ unit: "g", size: 260, hole: 0.62, centreLabel: "", dp: 3 }, opts || {});
 		const esc = frappe.utils.escape_html;
 		const total = slices.reduce((a, s) => a + Math.abs(s.value), 0);
 		if (!total) { $el.html(`<div class="jw-empty">${o.empty || __("Nothing to show yet.")}</div>`); return; }
@@ -92,7 +94,7 @@ jewelima.viz = {
 					${arcs.map((a) => `<path d="${a.d}" fill="${a.colour}"
 						stroke="var(--fg-color)" stroke-width="2"><title>${esc(a.label)} — ${a.value} ${o.unit} (${a.pct.toFixed(1)}%)</title></path>`).join("")}
 					<text x="${R}" y="${R - 4}" text-anchor="middle" style="font-size:22px;font-weight:800;fill:var(--jw-ink);">
-						${total.toFixed(total > 999 ? 0 : 3)}</text>
+						${total.toFixed(o.dp === 0 ? 0 : (total > 999 ? 0 : o.dp))}</text>
 					<text x="${R}" y="${R + 16}" text-anchor="middle" style="font-size:11px;fill:var(--jw-mute);">
 						${esc(o.centreLabel || o.unit)}</text>
 				</svg>
@@ -100,7 +102,7 @@ jewelima.viz = {
 					${arcs.map((a) => `<div class="jw-bar-row" style="grid-template-columns:auto 1fr auto;">
 						<i style="width:11px;height:11px;border-radius:3px;background:${a.colour};display:inline-block;"></i>
 						<span class="jw-bar-lbl">${esc(a.label)}</span>
-						<span class="jw-bar-val">${(+a.value).toFixed(3)} <span style="color:var(--text-muted);font-weight:400;">${a.pct.toFixed(1)}%</span></span>
+						<span class="jw-bar-val">${(+a.value).toFixed(o.dp)} <span style="color:var(--text-muted);font-weight:400;">${a.pct.toFixed(1)}%</span></span>
 					</div>`).join("")}
 				</div>
 			</div>`);

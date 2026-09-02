@@ -24,7 +24,10 @@ frappe.pages["repair-kpi"].on_page_load = function (wrapper) {
 
 	root.append(`
 		<style>
+		${jewelima.viz.css()}
 		#page-repair-kpi .container{max-width:100%;}
+		.kp-charts{display:grid;gap:13px;margin-bottom:6px;
+			grid-template-columns:repeat(auto-fit,minmax(290px,1fr));}
 		.kp-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
 		.kp-pill{border:1px solid var(--border-color);background:var(--fg-color);color:var(--text-muted);
 			border-radius:999px;padding:5px 15px;font-size:11.5px;cursor:pointer;font-weight:600;}
@@ -131,6 +134,25 @@ frappe.pages["repair-kpi"].on_page_load = function (wrapper) {
 				${b.gst ? `<div class="kp-t"><div class="k">${__("GST")}</div><div class="v">${m(b.gst)}</div></div>` : ""}
 			</div>
 
+			<div class="kp-sec">${__("The shape of it")}</div>
+			<div class="kp-charts jw-viz">
+				<div class="jw-card">
+					<div class="jw-h">${__("What the money is")}</div>
+					<div class="jw-sub">${__("every billed rupee in this window, split by what it paid for")}</div>
+					<div class="kp-c-mix"></div>
+				</div>
+				<div class="jw-card">
+					<div class="jw-h">${__("Who is holding the most")}</div>
+					<div class="jw-sub">${__("pieces still with us, by party")}</div>
+					<div class="kp-c-party"></div>
+				</div>
+				<div class="jw-card">
+					<div class="jw-h">${__("What the floor is doing")}</div>
+					<div class="jw-sub">${__("pieces taken in, by type of work")}</div>
+					<div class="kp-c-work"></div>
+				</div>
+			</div>
+
 			<div class="kp-sec">${__("Where it is")}</div>
 			<div class="kp-cols">
 				<div class="kp-card red">
@@ -168,6 +190,46 @@ frappe.pages["repair-kpi"].on_page_load = function (wrapper) {
 				</div>
 			</div>
 		`);
+		drawCharts(d);
+	}
+
+	// The three charts answer three different questions, so they take three forms:
+	// a ring for part-to-whole (the money), bars for magnitude-by-identity (who
+	// holds what, and what is being done). The tables below are the table view —
+	// nothing here is the only way to read a number.
+	function drawCharts(d) {
+		const b = d.billed || {};
+		const mix = [
+			{ label: __("Repair charges"), value: flt(b.work) },
+			{ label: __("Metal"), value: flt(b.metal) },
+			{ label: __("Stones"), value: flt(b.stones) },
+			{ label: __("Manual"), value: flt(b.manual) },
+		].filter((s) => s.value > 0);
+		// The ring holds what the work COST — GST is not a thing the money bought,
+		// and adding it as a fifth slice would cycle the palette, which the four
+		// hues are chosen not to do. So the centre says what it is actually the
+		// total of: with GST on the bill it is the pre-tax figure, and calling it
+		// "billed" would have it disagree with the Billed tile two rows above.
+		jewelima.viz.donut(root.find(".kp-c-mix"), mix, {
+			unit: "", dp: 0, size: 210,
+			centreLabel: flt(b.gst) ? __("before GST") : __("billed"),
+			empty: __("Nothing billed in this window."),
+		});
+
+		// top 8, biggest first — a bar per party past that is a thicket, and the
+		// table underneath still carries every one of them
+		const parties = (d.parties || []).filter((p) => p.open_pieces > 0).slice(0, 8)
+			.map((p) => ({ label: p.party || "—", value: p.open_pieces }));
+		jewelima.viz.bars(root.find(".kp-c-party"), parties, {
+			unit: __("pcs"), dp: 0, colour: 1, label: 150,
+			empty: __("Nothing is with us right now."),
+		});
+
+		const work = (d.work || []).slice(0, 8).map((w) => ({ label: w.work, value: w.pieces }));
+		jewelima.viz.bars(root.find(".kp-c-work"), work, {
+			unit: __("pcs"), dp: 0, colour: 2, label: 150,
+			empty: __("No work recorded in this window."),
+		});
 	}
 
 	function load() {

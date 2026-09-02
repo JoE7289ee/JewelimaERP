@@ -2154,7 +2154,7 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "file-text",
+   "icon": "chart-column-big",
    "indent": 1,
    "keep_closed": 0,
    "label": "KPI",
