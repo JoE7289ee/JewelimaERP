@@ -128,8 +128,10 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		.rb-tile.rate .v input{width:120px;border:1px solid var(--border-color);border-radius:7px;
 			padding:2px 8px;font-size:17px;font-weight:800;text-align:right;background:var(--fg-color);
 			color:var(--text-color);font-variant-numeric:tabular-nums;}
-		.rb-tile.grand{background:var(--control-bg);}
+		.rb-tile.grand{background:rgba(31,97,141,.10);border-color:rgba(31,97,141,.40);}
 		.rb-tile.grand .v{color:#1f618d;}
+		[data-theme="dark"] .rb-tile.grand .v{color:#8fc1e8;}
+		[data-theme="dark"] .rb-tile.money .v{color:#8fc1e8;}
 		.rb-grand{font-size:15px;margin-bottom:8px;}
 		.rb-grand b{font-size:20px;font-variant-numeric:tabular-nums;}
 		table.rb-t select.rb-kt{width:100%;border:1px solid var(--border-color);border-radius:7px;
@@ -142,6 +144,19 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		.rb-h{padding:10px 14px;border-bottom:1px solid var(--border-color);background:var(--control-bg);
 			font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);
 			display:flex;justify-content:space-between;align-items:center;gap:8px;}
+		/* a colour per panel, the same three the intake screen uses: amber for the
+		   pieces, blue for what is being charged for them */
+		.rb-card{border-left:3px solid var(--border-color);}
+		.rb-card.pieces{border-left-color:#8a6d00;}
+		.rb-card.pieces > .rb-h{background:rgba(224,168,0,.13);color:#8a6d00;}
+		.rb-card.work{border-left-color:#1f618d;}
+		.rb-card.work > .rb-h{background:rgba(31,97,141,.09);color:#1f618d;}
+		.rb-card.stones{border-left-color:#1f618d;}
+		.rb-card.stones > .rb-h{background:rgba(31,97,141,.09);color:#1f618d;}
+		[data-theme="dark"] .rb-card.pieces{border-left-color:#d4a72c;}
+		[data-theme="dark"] .rb-card.pieces > .rb-h{color:#e8c66b;}
+		[data-theme="dark"] .rb-card.work,[data-theme="dark"] .rb-card.stones{border-left-color:#5b9bd5;}
+		[data-theme="dark"] .rb-card.work > .rb-h,[data-theme="dark"] .rb-card.stones > .rb-h{color:#8fc1e8;}
 		table.rb-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.rb-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
 			color:var(--text-muted);padding:7px 10px;font-weight:700;border-bottom:1px solid var(--border-color);}
@@ -151,6 +166,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		table.rb-t input[type=number]{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:5px 9px;font-size:12.5px;text-align:right;
 			background:var(--fg-color);color:var(--text-color);font-variant-numeric:tabular-nums;}
+		table.rb-t tbody tr:nth-child(even) td{background:rgba(128,128,128,.055);}
+		table.rb-t tbody tr:hover td{background:rgba(31,97,141,.09);}
 		tr.rb-done{opacity:.55;}
 		tr.rb-on{background:var(--control-bg);}
 		/* Colour here marks what is NOT ready, so the eye lands on the pieces
@@ -162,8 +179,9 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		.rb-flag2{display:inline-block;font-size:9px;font-weight:800;text-transform:uppercase;
 			letter-spacing:.04em;border-radius:8px;padding:0 5px;margin-left:5px;vertical-align:1px;
 			background:#fdecea;color:#b02a2a;border:1px solid #f0b6b2;}
-		.rb-tile.warn{border-color:#e8d18a;background:#fffdf5;}
+		.rb-tile.warn{border-color:rgba(224,168,0,.45);background:rgba(224,168,0,.10);}
 		.rb-tile.warn .v{color:#8a6d00;}
+		[data-theme="dark"] .rb-tile.warn .v{color:#e8c66b;}
 		.rb-tile.rate.unset .v input{border-color:#d9534f;background:rgba(217,83,79,.07);}
 		/* a figure you can ask about */
 		.rb-why{cursor:help;}
@@ -339,7 +357,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 				<div class="rb-tile grand"><div class="k">${__("Total")}</div><div class="v">${format_currency(grand)}</div></div>
 			</div>
 
-			<div class="rb-card">
+			<div class="rb-card pieces">
 				<div class="rb-h"><span>${__("Pieces")} — ${esc(D.repair_order)} · ${esc(D.party || "")}</span>
 					<span><a class="rb-all">${__("all")}</a> · <a class="rb-non">${__("none")}</a>
 						· <button class="btn btn-default btn-xs rb-savew">${__("Save weights")}</button></span></div>
@@ -360,7 +378,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 
 			<div class="rb-cols">
 				<div class="rb-half">
-					<div class="rb-card">
+					<div class="rb-card work">
 						<div class="rb-h">${__("Work Charged")}</div>
 						${charges.length ? `<table class="rb-t">
 							<thead><tr><th>${__("Type")}</th><th class="num">${__("Pcs")}</th>
@@ -377,7 +395,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 					</div>
 				</div>
 				<div class="rb-half">
-					<div class="rb-card">
+					<div class="rb-card stones">
 						<div class="rb-h">${__("Stones Charged")}</div>
 						${stoneKeys.length ? `<table class="rb-t">
 							<thead><tr><th>${__("Bucket")}</th><th>${__("Sieve")}</th>

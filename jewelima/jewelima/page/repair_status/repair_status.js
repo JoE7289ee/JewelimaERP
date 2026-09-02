@@ -36,29 +36,47 @@ frappe.pages["repair-status"].on_page_load = function (wrapper) {
 			padding:9px 16px;min-width:106px;}
 		.rs-tile .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);}
 		.rs-tile .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;}
+		/* the two that say what is outstanding carry the colour */
+		.rs-tile:nth-child(4){border-color:rgba(29,122,51,.40);background:rgba(29,122,51,.07);}
+		.rs-tile:nth-child(4) .v{color:#1d7a33;}
+		.rs-tile:nth-child(3) .v{color:#8a6d00;}
+		[data-theme="dark"] .rs-tile:nth-child(4) .v{color:#7fc98f;}
+		[data-theme="dark"] .rs-tile:nth-child(3) .v{color:#e8c66b;}
 
-		/* the card from the intake screen, kept: green while it is with us,
-		   blue once it has been billed and gone back */
-		.rs-card{border:1px solid #bfe3c6;background:#eaf6ec;color:#1d7a33;border-radius:11px;
+		/* The card from the intake screen, kept: green while it is with us, blue
+		   once it has been billed and gone back.
+		   The tint is rgba over whatever the theme paints, NOT a fixed pale fill.
+		   It used to be #eaf6ec with the table text left on var(--text-color) —
+		   which is near-white on the dark theme, so every row of every batch was
+		   white on pale green and could not be read at all. */
+		.rs-card{border:1px solid rgba(29,122,51,.35);border-left:3px solid #1d7a33;
+			background:rgba(29,122,51,.07);color:#1d7a33;border-radius:11px;
 			padding:12px 15px;margin-bottom:12px;}
-		.rs-card.billed{border-color:#b9d0e6;background:#e9f0f7;color:#1f618d;}
+		.rs-card.billed{border-color:rgba(31,97,141,.35);border-left-color:#1f618d;
+			background:rgba(31,97,141,.07);color:#1f618d;}
+		[data-theme="dark"] .rs-card{color:#7fc98f;border-left-color:#3f9d57;}
+		[data-theme="dark"] .rs-card.billed{color:#8fc1e8;border-left-color:#5b9bd5;}
 		.rs-card .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
 		.rs-card b.id{font-size:15px;}
 		.rs-card .meta{font-size:12px;}
 		.rs-card .tag{margin-left:auto;font-size:10.5px;font-weight:800;text-transform:uppercase;
-			letter-spacing:.05em;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.65);}
+			letter-spacing:.05em;padding:2px 9px;border-radius:999px;
+			background:rgba(128,128,128,.16);border:1px solid currentColor;}
 		.rs-card table{width:100%;margin-top:8px;font-size:12px;color:var(--text-color);}
 		.rs-card th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;
-			padding:3px 6px;color:#4f7a58;border-bottom:1px solid #cfe6d4;}
-		.rs-card.billed th{color:#4a6b8a;border-bottom-color:#cddcea;}
-		.rs-card td{padding:3px 6px;border-bottom:1px solid #cfe6d4;}
-		.rs-card.billed td{border-bottom-color:#cddcea;}
+			padding:4px 6px;color:inherit;opacity:.75;border-bottom:1px solid rgba(29,122,51,.28);}
+		.rs-card.billed th{border-bottom-color:rgba(31,97,141,.28);}
+		.rs-card td{padding:4px 6px;border-bottom:1px solid rgba(128,128,128,.20);}
+		/* banded, so a long batch does not lose your line reading across */
+		.rs-card tbody tr:nth-child(even) td{background:rgba(128,128,128,.06);}
+		.rs-card tbody tr:hover td{background:rgba(29,122,51,.10);}
+		.rs-card.billed tbody tr:hover td{background:rgba(31,97,141,.10);}
 		.rs-card .note{margin-top:6px;font-size:11.5px;font-style:italic;}
 		/* only a batch still with us can be edited — once billed the two records
 		   have to keep agreeing, so the button is not drawn */
-		.rs-edit{border:1px solid currentColor;background:rgba(255,255,255,.55);color:inherit;
+		.rs-edit{border:1px solid currentColor;background:transparent;color:inherit;
 			border-radius:7px;font-size:11px;font-weight:800;padding:2px 11px;cursor:pointer;}
-		.rs-edit:hover{background:#fff;}
+		.rs-edit:hover{background:rgba(128,128,128,.18);}
 		.rs-open{border:none;background:none;color:inherit;font-size:11.5px;font-weight:800;
 			text-decoration:underline;cursor:pointer;padding:0 0 0 6px;font-style:normal;}
 		.re-row{display:grid;grid-template-columns:120px 1fr 60px 110px 1.4fr;gap:8px;
