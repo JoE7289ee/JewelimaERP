@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:14:03.678581",
+ "modified": "2026-09-02 17:11:05.412179",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "make-products",
@@ -19,6 +19,9 @@
   },
   {
    "role": "JW Manager"
+  },
+  {
+   "role": "JW EXTRACTION"
   }
  ],
  "script": null,
