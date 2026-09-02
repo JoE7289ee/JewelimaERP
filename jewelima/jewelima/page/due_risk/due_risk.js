@@ -54,7 +54,7 @@ frappe.pages["due-risk"].on_page_load = function (wrapper) {
 			+ (have < D.total ? " · " + __("{0} loaded", [have]) : ""));
 		root.find(".dr-body").html(D.total ? D.benches.map((b) => `
 			<div class="dr-bench">
-				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.rows.length} ${__("card(s)")}</span>
+				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.total != null && b.total > b.rows.length ? __("{0} of {1}", [b.rows.length, b.total]) : b.rows.length} ${__("card(s)")}</span>
 					<button class="btn btn-xs dr-pall" data-bench="${esc(b.bench)}"
 						style="margin-left:auto;background:#d63031;border-color:#d63031;color:#fff;font-weight:700;">${__("Prioritise all")}</button></div>
 				<table class="dr-t"><thead><tr>

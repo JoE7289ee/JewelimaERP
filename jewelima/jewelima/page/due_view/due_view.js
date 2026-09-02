@@ -72,7 +72,7 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 			+ (have < D.total ? " · " + __("{0} loaded", [have]) : ""));
 		root.find(".dv-body").html(D.total ? D.benches.map((b) => `
 			<div class="dv-bench">
-				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.rows.length} ${__("card(s)")}</span></div>
+				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.total != null && b.total > b.rows.length ? __("{0} of {1}", [b.rows.length, b.total]) : b.rows.length} ${__("card(s)")}</span></div>
 				<table class="dv-t"><thead><tr>
 					<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Qty")}</th><th>${__("Party")}</th>
 					<th>${__("Order Type")}</th><th>${__("Gold g")}</th><th>${__("Stones")}</th><th>${__("Due")}</th><th>${__("Days")}</th>

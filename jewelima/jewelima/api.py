@@ -6443,8 +6443,8 @@ def get_due_risk(days=5, limit=500, offset=0):
 		ORDER BY jo.due_date, b.name
 		LIMIT %s OFFSET %s
 	""", (horizon, limit, offset), as_dict=True)
-	total = cint(frappe.db.sql("""
-		SELECT COUNT(*) FROM `tabOrder Bag` b
+	bench_counts = {(r[0] or "(no bench)"): cint(r[1]) for r in frappe.db.sql("""
+		SELECT b.location, COUNT(*) FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		LEFT JOIN (
 			SELECT l.order_bag, SUM(IF(l.direction='Out', -l.qty, l.qty)) gold_g
@@ -6455,7 +6455,9 @@ def get_due_risk(days=5, limit=500, offset=0):
 		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
 		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
 		  AND COALESCE(g.gold_g, 0) <= 0.0005
-	""", horizon)[0][0])
+		GROUP BY b.location
+	""", horizon)}
+	total = sum(bench_counts.values())
 	listed = set(frappe.get_all("Priority Card", pluck="order_bag"))
 	benches = {}
 	for r in rows:
@@ -6465,7 +6467,13 @@ def get_due_risk(days=5, limit=500, offset=0):
 	return {"days": days, "total": total, "shown": offset + len(rows),
 		"offset": offset, "limit": limit,
 		"has_more": (offset + len(rows)) < total,
-		"benches": [{"bench": k, "rows": v} for k, v in sorted(benches.items())]}
+		"bench_counts": bench_counts,
+		# EVERY bench that has cards in the window of risk, even ones this page of
+		# rows happens not to reach — a bench that vanished until you pressed Load
+		# more would read as a bench with nothing due
+		"benches": [{"bench": k, "rows": benches.get(k, []),
+			"total": bench_counts.get(k, len(benches.get(k, [])))}
+			for k in sorted(set(bench_counts) | set(benches))]}
 
 
 @frappe.whitelist()
@@ -6508,12 +6516,16 @@ def get_due_soon(days=5, limit=500, offset=0):
 		ORDER BY jo.due_date, b.name
 		LIMIT %s OFFSET %s
 	""".format(stone_cols=stone_cols), (horizon, limit, offset), as_dict=True)
-	total = cint(frappe.db.sql("""
-		SELECT COUNT(*) FROM `tabOrder Bag` b
+	# counted over the WHOLE window of risk, per bench — a group heading that
+	# counted only the loaded rows would shrink the bench in front of the user
+	bench_counts = {(r[0] or "(no bench)"): cint(r[1]) for r in frappe.db.sql("""
+		SELECT b.location, COUNT(*) FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
 		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
-	""", horizon)[0][0])
+		GROUP BY b.location
+	""", horizon)}
+	total = sum(bench_counts.values())
 	listed = set(frappe.get_all("Priority Card", pluck="order_bag"))
 	benches = {}
 	for r in rows:
@@ -6534,7 +6546,13 @@ def get_due_soon(days=5, limit=500, offset=0):
 	return {"days": days, "total": total, "shown": offset + len(rows),
 		"offset": offset, "limit": limit,
 		"has_more": (offset + len(rows)) < total,
-		"benches": [{"bench": k, "rows": v} for k, v in sorted(benches.items())]}
+		"bench_counts": bench_counts,
+		# EVERY bench that has cards in the window of risk, even ones this page of
+		# rows happens not to reach — a bench that vanished until you pressed Load
+		# more would read as a bench with nothing due
+		"benches": [{"bench": k, "rows": benches.get(k, []),
+			"total": bench_counts.get(k, len(benches.get(k, [])))}
+			for k in sorted(set(bench_counts) | set(benches))]}
 
 
 @frappe.whitelist()
@@ -6774,7 +6792,7 @@ def get_bench_flow(bench, direction, from_date=None, to_date=None):
 
 
 @frappe.whitelist()
-def get_bench_workstation(bench, limit=1000, offset=0):
+def get_bench_workstation(bench, limit=100, offset=0):
 	"""The bench WORKSTATION: the small live picture a worker glances at.
 	- queue: waiting cards in PRIORITY order (rank, due, reason) — next on top
 	- working: who holds what right now, with the work type and since-when
@@ -6788,7 +6806,7 @@ def get_bench_workstation(bench, limit=1000, offset=0):
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
 	bench = (bench or "").upper()
-	limit = cint(limit) or 1000
+	limit = cint(limit) or 100
 	offset = max(cint(offset), 0)
 	board = get_bench_board(bench)
 	rows = board["rows"]
@@ -6878,6 +6896,23 @@ def get_bench_workstation(bench, limit=1000, offset=0):
 				r["since"] = since.get(r["name"], "")
 		waiting = [r for r in waiting if not r.get("stone_requested")]
 
+	# ANY card this bench touched TODAY is pinned to the head of the queue, so a
+	# hundred-card window can never bury the day's own work. It keeps its priority
+	# rank and its place relative to the other pinned cards — pinning only lifts it
+	# above the cut, it does not reorder the day.
+	touched = set()
+	if names and frappe.db.exists("DocType", dt):
+		today_str = frappe.utils.today()
+		touched = {r[0] for r in frappe.db.sql("""
+			SELECT DISTINCT order_bag FROM `tab{0}`
+			WHERE order_bag IN %(bags)s
+			  AND DATE(COALESCE(issued_at, time_in, creation)) = %(d)s
+		""".format(dt), {"bags": tuple(names), "d": today_str})}
+	for r in waiting:
+		r["touched_today"] = 1 if r["name"] in touched else 0
+	if touched:
+		waiting.sort(key=lambda r: 0 if r.get("touched_today") else 1)
+
 	opts = get_bench_work_options(bench)
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS as _irl, ASSIGN_COLLECT_LOCATIONS as _acl
 	can_act = _may_work_at(bench)
@@ -6892,8 +6927,9 @@ def get_bench_workstation(bench, limit=1000, offset=0):
 		"default_work_type": opts.get("default_work_type"),
 		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
 			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual",
-			"stones_ok", "stones_pending", "stone_requested")}
+			"stones_ok", "stones_pending", "stone_requested", "touched_today")}
 			for r in waiting[offset:offset + limit]],
+		"today_pinned": sum(1 for r in waiting if r.get("touched_today")),
 		"queue_total": len(waiting),
 		"queue_shown": min(offset + limit, len(waiting)),
 		"queue_offset": offset, "queue_limit": limit,
@@ -7059,10 +7095,32 @@ def get_bench_board(bench, limit=0, offset=0):
 			r["prio_rank"] = i
 			r["prio_manual"] = 1 if r["name"] in manual else 0
 	total = len(rows)
+
+	# The KPI tiles are rolled up HERE, over the whole bench, before any window is
+	# taken. Rolling them up in the browser from the loaded rows would have made
+	# every tile shrink to the size of the page — a bench board that reports less
+	# gold than it holds is worse than a slow one.
+	board_totals = {"cards": total, "pieces": 0, "gold_g": 0.0, "pure_g": 0.0,
+		"status": {}, "buckets": {}}
+	for r in rows:
+		board_totals["pieces"] += cint(r.get("qty"))
+		board_totals["gold_g"] += flt(r.get("gold_g"))
+		board_totals["pure_g"] += flt(r.get("pure_g"))
+		stt = r.get("status") or "—"
+		board_totals["status"][stt] = board_totals["status"].get(stt, 0) + 1
+		for k, v in (r.get("buckets") or {}).items():
+			e = board_totals["buckets"].setdefault(k, {"pcs": 0, "ct": 0.0})
+			e["pcs"] += cint(v.get("pcs"))
+			e["ct"] += flt(v.get("ct"))
+	board_totals["gold_g"] = round(board_totals["gold_g"], 3)
+	board_totals["pure_g"] = round(board_totals["pure_g"], 3)
+	for e in board_totals["buckets"].values():
+		e["ct"] = round(e["ct"], 3)
+
 	limit, offset = cint(limit), max(cint(offset), 0)
 	if limit > 0:
 		rows = rows[offset:offset + limit]
-	return {"bench": bench, "rows": rows, "total": total,
+	return {"bench": bench, "rows": rows, "total": total, "totals": board_totals,
 		"shown": offset + len(rows), "offset": offset, "limit": limit,
 		"has_more": (offset + len(rows)) < total}
 

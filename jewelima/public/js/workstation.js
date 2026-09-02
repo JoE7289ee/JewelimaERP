@@ -42,6 +42,13 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		.wk-pr.man{background:#d63031;color:#fff;}
 		.wk-qr{border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;background:#fff6e0;color:#7a5b00;border:1px solid #e0a800;cursor:pointer;}
 		.wk-qr.add{background:transparent;color:var(--text-muted);border:1px dashed var(--border-color);}
+		/* anything this bench touched today is pinned to the head of the queue and
+		   badged, so a 100-card window can never bury the day's own work */
+		tr.wk-today > td{box-shadow:inset 0 -1px 0 #cfd8e3;}
+		tr.wk-today > td:first-child{box-shadow:inset 4px 0 0 #1f618d;}
+		.wk-todaytag{display:inline-block;background:#1f618d;color:#fff;border-radius:9px;
+			padding:0 7px;font-size:9.5px;font-weight:800;letter-spacing:.06em;margin-left:6px;
+			vertical-align:middle;}
 		tr.wk-stok > td{background:#f0f9f1;}
 		tr.wk-stok > td:first-child{box-shadow:inset 3px 0 0 #2e7d32;}
 		tr.wk-stneed > td{background:#fff8e6;}
@@ -121,9 +128,9 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 				${D.ranked ? `<th style="width:40px">P#</th>` : ""}<th>${__("Card")}</th><th>${__("Design")}</th>
 				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${actCol ? `<th style="width:70px"></th>` : ""}
 			</tr></thead><tbody>
-			${D.queue.map((r) => `<tr class="${r.stones_ok == null ? "" : r.stones_ok ? "wk-stok" : "wk-stneed"}"${r.stones_pending ? ` title="${esc(__("Stones short"))}: ${esc(r.stones_pending)}"` : ""}>
+			${D.queue.map((r) => `<tr class="${r.touched_today ? "wk-today " : ""}${r.stones_ok == null ? "" : r.stones_ok ? "wk-stok" : "wk-stneed"}"${r.stones_pending ? ` title="${esc(__("Stones short"))}: ${esc(r.stones_pending)}"` : ""}>
 				${D.ranked ? `<td><span class="wk-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank || ""}</span></td>` : ""}
-				<td><b>${esc(r.name)}</b>${r.status === "On Hold" ? " · " + __("On Hold") : ""}</td>
+				<td><b>${esc(r.name)}</b>${r.touched_today ? ` <span class="wk-todaytag">${__("TODAY")}</span>` : ""}${r.status === "On Hold" ? " · " + __("On Hold") : ""}</td>
 				<td>${esc(r.design || "")}</td>
 				<td>${esc(r.party || "")}</td>
 				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
@@ -144,7 +151,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		// the tile count is the WHOLE queue; this says how much of it is on screen
 		jewelima.moreBar(root.find(".wk-qmore"), (D.queue || []).length,
 			D.queue_total != null ? D.queue_total : (D.queue || []).length,
-			() => load(true), __("Load 1000 more"));
+			() => load(true), __("Load 100 more"));
 
 		root.find(".wk-wbody").html(D.working.length ? D.working.map((g) => `
 			<div class="wk-emp"><div class="h"><span>${esc(g.employee_name)}</span>
@@ -169,7 +176,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 	// The queue arrives a window at a time — a bench can hold thousands of cards
 	// and the worker only ever works the top of it, but the browser still had to
 	// lay out every row before anything appeared.
-	const QPAGE = 1000;
+	const QPAGE = 100;
 
 	function load(more) {
 		const $q = root.find(".wk-qbody");

@@ -52,7 +52,7 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 	}
 	// batch benches (casting/tree making) have no per-card queue law
 	const BB_RANKED = !["CASTING", "TREE MAKING"].includes(bench);
-	const S = { all: [], total: 0, sort: BB_RANKED ? "prio_rank" : "name", dir: 1, cols: loadCols() };
+	const S = { all: [], total: 0, totals: null, sort: BB_RANKED ? "prio_rank" : "name", dir: 1, cols: loadCols() };
 	if (BB_RANKED) S.cols.add("prio_rank");
 
 	const BB_CELL = {
@@ -143,6 +143,7 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 				});
 				S.all = more ? (S.all || []).concat(batch) : batch;
 				S.total = m.total != null ? m.total : S.all.length;
+				S.totals = m.totals || null;
 				recompute();
 			})
 			.always(() => jewelima.busy($box, false));
@@ -151,11 +152,25 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 	function recompute() {
 		const rows = filterBar.apply(S.all);
 
+		// UNFILTERED tiles come from the server and describe the WHOLE bench. Only
+		// once a filter is on do they describe the filtered rows, and then they say
+		// so — a tile that silently counted a page instead of the bench would be a
+		// wrong number, not a slow one.
+		const filtering = filterBar.isActive ? filterBar.isActive() : (rows.length !== (S.all || []).length);
+		const T = S.totals || null;
 		const st = {};
-		rows.forEach((r) => (st[r.status] = (st[r.status] || 0) + 1));
-		const pieces = rows.reduce((s, r) => s + (r.qty || 0), 0);
+		let pieces = 0, cards;
+		if (T && !filtering) {
+			Object.assign(st, T.status || {});
+			pieces = T.pieces || 0;
+			cards = T.cards || 0;
+		} else {
+			rows.forEach((r) => (st[r.status] = (st[r.status] || 0) + 1));
+			pieces = rows.reduce((s, r) => s + (r.qty || 0), 0);
+			cards = rows.length;
+		}
 		root.find(".bb-kpi").html(
-			`<div class="bb-tile gold"><div class="k">${__("Cards")}</div><div class="v">${rows.length}</div></div>
+			`<div class="bb-tile gold"><div class="k">${__("Cards")}</div><div class="v">${cards}</div></div>
 			<div class="bb-tile gold"><div class="k">${__("Pieces")}</div><div class="v">${pieces}</div></div>` +
 			BB_STATUSES.filter((x) => st[x]).map((x) => `
 				<div class="bb-tile"><div class="k">${esc(x)}</div><div class="v">${st[x]}</div></div>`).join(""));
@@ -167,7 +182,9 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 			root.find(".bb-kpi").after(`<div class="bb-partial" style="margin:6px 0;padding:7px 12px;
 				border:1px solid #e0a800;background:rgba(230,168,0,.10);border-radius:7px;
 				font-size:12px;font-weight:600;color:#8a6200;">`
-				+ __("Showing {0} of {1} cards — the tiles above count what is loaded.", [loaded, tot])
+				+ (filtering
+					? __("Filtering {0} loaded of {1} cards — load the rest for a complete filter.", [loaded, tot])
+					: __("Tiles count all {1} cards; the table lists the first {0}.", [loaded, tot]))
 				+ ` <button class="btn btn-xs btn-default bb-more" style="margin-left:8px;">`
 				+ __("Load {0} more", [BPAGE]) + `</button></div>`);
 			root.find(".bb-more").on("click", function () {
@@ -178,14 +195,19 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 
 		let gold = 0, pure = 0;
 		const bk = {};
-		rows.forEach((r) => {
-			gold += r.gold_g || 0;
-			pure += r.pure_g || 0;
-			Object.entries(r.buckets || {}).forEach(([k, v]) => {
-				const e = bk[k] || (bk[k] = { pcs: 0, ct: 0 });
-				e.pcs += v.pcs; e.ct += v.ct;
+		if (T && !filtering) {
+			gold = T.gold_g || 0; pure = T.pure_g || 0;
+			Object.entries(T.buckets || {}).forEach(([k, v]) => (bk[k] = { pcs: v.pcs, ct: v.ct }));
+		} else {
+			rows.forEach((r) => {
+				gold += r.gold_g || 0;
+				pure += r.pure_g || 0;
+				Object.entries(r.buckets || {}).forEach(([k, v]) => {
+					const e = bk[k] || (bk[k] = { pcs: 0, ct: 0 });
+					e.pcs += v.pcs; e.ct += v.ct;
+				});
 			});
-		});
+		}
 		root.find(".bb-stock").html(
 			`<div class="bb-tile gold"><div class="k">${__("Gold")}</div><div class="v">${gold.toFixed(3)} g</div></div>
 			<div class="bb-tile gold"><div class="k">${__("Pure Gold")}</div><div class="v">${pure.toFixed(3)} g</div></div>` +
