@@ -1,0 +1,10 @@
+{
+ "content": null, "creation": "2026-09-03 00:00:00", "docstatus": 0, "doctype": "Page",
+ "idx": 0, "module": "Jewelima", "name": "repair-dispatch", "owner": "Administrator",
+ "page_name": "repair-dispatch",
+ "roles": [
+  {"role": "System Manager"}, {"role": "Stock Manager"},
+  {"role": "JW Manager"}, {"role": "Jewelima Repair"}
+ ],
+ "script": null, "standard": "Yes", "style": null, "system_page": 0, "title": "Dispatch"
+}

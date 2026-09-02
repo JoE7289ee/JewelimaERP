@@ -1,0 +1,17 @@
+{
+ "actions": [], "allow_rename": 1, "creation": "2026-09-03 00:00:00",
+ "doctype": "DocType", "editable_grid": 1, "engine": "InnoDB",
+ "field_order": ["repair", "design_type", "qty", "weight_out", "bill", "narration"],
+ "fields": [
+  {"fieldname": "repair", "fieldtype": "Data", "in_list_view": 1, "label": "Piece", "reqd": 1},
+  {"fieldname": "design_type", "fieldtype": "Data", "in_list_view": 1, "label": "Design Type"},
+  {"default": "1", "fieldname": "qty", "fieldtype": "Int", "in_list_view": 1, "label": "Qty"},
+  {"fieldname": "weight_out", "fieldtype": "Float", "in_list_view": 1, "label": "Weight Out (g)", "precision": "3"},
+  {"fieldname": "bill", "fieldtype": "Link", "in_list_view": 1, "label": "Bill", "options": "Repair Bill"},
+  {"fieldname": "narration", "fieldtype": "Small Text", "label": "Narration"}
+ ],
+ "index_web_pages_for_search": 1, "istable": 1, "links": [],
+ "modified": "2026-09-03 00:00:00", "modified_by": "Administrator",
+ "module": "Jewelima", "name": "Repair Dispatch Item", "owner": "Administrator",
+ "permissions": [], "sort_field": "modified", "sort_order": "DESC", "states": []
+}

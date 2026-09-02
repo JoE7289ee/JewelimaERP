@@ -5,7 +5,6 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "istable": 1,
  "field_order": [
   "repair",
   "design_type",
@@ -18,66 +17,67 @@
   "weight_out",
   "weighed_out_at",
   "bill",
+  "dispatch",
   "karat"
  ],
  "fields": [
   {
+   "description": "This row's own repair number \u2014 the batch ID with the line on the end (REP-00001-3).",
    "fieldname": "repair",
    "fieldtype": "Data",
-   "label": "Repair",
-   "read_only": 1,
    "in_list_view": 1,
-   "description": "This row's own repair number — the batch ID with the line on the end (REP-00001-3)."
+   "label": "Repair",
+   "read_only": 1
   },
   {
    "fieldname": "design_type",
    "fieldtype": "Link",
-   "options": "Design Type",
+   "in_list_view": 1,
    "label": "Design Type",
-   "reqd": 1,
-   "in_list_view": 1
+   "options": "Design Type",
+   "reqd": 1
   },
   {
+   "default": "1",
    "fieldname": "qty",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Qty",
-   "default": "1",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "weight",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Weight (g)",
-   "precision": "3",
-   "in_list_view": 1
+   "precision": "3"
   },
   {
+   "description": "Stamped whenever the weight is set or changed \u2014 the last time this piece went on the scale.",
    "fieldname": "weighed_at",
    "fieldtype": "Datetime",
    "label": "Last Weighed",
-   "read_only": 1,
-   "description": "Stamped whenever the weight is set or changed — the last time this piece went on the scale."
+   "read_only": 1
   },
   {
+   "description": "One or more, comma separated. Frappe has no table inside a table, so the chosen types live on the row and are checked against Repair Work Type on save.",
    "fieldname": "work_types",
    "fieldtype": "Small Text",
-   "label": "Types of Work",
    "in_list_view": 1,
-   "description": "One or more, comma separated. Frappe has no table inside a table, so the chosen types live on the row and are checked against Repair Work Type on save."
+   "label": "Types of Work"
   },
   {
    "fieldname": "repair_type",
    "fieldtype": "Link",
-   "options": "Repair Type",
+   "in_list_view": 1,
    "label": "Type",
-   "in_list_view": 1
+   "options": "Repair Type"
   },
   {
    "fieldname": "narration",
    "fieldtype": "Small Text",
-   "label": "Narration",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "label": "Narration"
   },
   {
    "fieldname": "weight_out",
@@ -94,19 +94,27 @@
   {
    "fieldname": "bill",
    "fieldtype": "Link",
-   "options": "Repair Bill",
    "label": "Billed On",
+   "options": "Repair Bill",
    "read_only": 1
   },
   {
+   "fieldname": "dispatch",
+   "fieldtype": "Link",
+   "label": "Dispatch",
+   "options": "Repair Dispatch Note",
+   "read_only": 1
+  },
+  {
+   "description": "The karat of this piece's gold. Set per piece \u2014 one batch often mixes them.",
    "fieldname": "karat",
    "fieldtype": "Select",
-   "options": "22\n18\n14\n9",
    "label": "Karat",
-   "description": "The karat of this piece's gold. Set per piece — one batch often mixes them."
+   "options": "22\n18\n14\n9"
   }
  ],
  "index_web_pages_for_search": 1,
+ "istable": 1,
  "links": [],
  "modified": "2026-08-31 18:15:00.000000",
  "modified_by": "Administrator",

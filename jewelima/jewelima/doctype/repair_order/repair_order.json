@@ -11,6 +11,8 @@
   "received_at",
   "cb_head",
   "received_by",
+  "receive_mode",
+  "received_from",
   "total_qty",
   "total_weight",
   "total_rows",
@@ -48,6 +50,19 @@
    "label": "Received By",
    "options": "User",
    "read_only": 1
+  },
+  {
+   "default": "In Hand",
+   "fieldname": "receive_mode",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Received As",
+   "options": "In Hand\nParcel"
+  },
+  {
+   "fieldname": "received_from",
+   "fieldtype": "Data",
+   "label": "Received From (person)"
   },
   {
    "fieldname": "total_qty",

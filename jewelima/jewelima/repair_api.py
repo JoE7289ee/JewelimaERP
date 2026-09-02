@@ -288,10 +288,17 @@ def create_repair_order(payload):
 		# so they are held by row index here and stamped once the batch exists
 		stones.append(r.get("stones") or [])
 
+	mode = (p.get("receive_mode") or "In Hand").strip()
+	if mode not in ("In Hand", "Parcel"):
+		frappe.throw(frappe._("{0} is not a way things arrive.").format(mode))
 	doc = frappe.get_doc({
 		"doctype": "Repair Order", "party": party,
 		"received_at": p.get("received_at") or frappe.utils.now_datetime(),
 		"received_by": frappe.session.user,
+		# how it arrived, and who actually walked in with it — received_by is one of
+		# OUR users, which is a different question
+		"receive_mode": mode,
+		"received_from": (p.get("received_from") or "").strip() or None,
 		"narration": (p.get("narration") or "").strip() or None,
 		"items": items,
 	}).insert(ignore_permissions=True)
@@ -328,6 +335,7 @@ def get_repair_order(name):
 	doc = frappe.get_doc("Repair Order", name)
 	return {
 		"name": doc.name, "party": doc.party,
+		"receive_mode": doc.receive_mode or "", "received_from": doc.received_from or "",
 		"received_at": str(doc.received_at or ""),
 		"received_by": doc.received_by,
 		"received_by_name": frappe.db.get_value("User", doc.received_by, "full_name") or doc.received_by,
@@ -977,6 +985,136 @@ def save_repair_bill(payload):
 	o.save(ignore_permissions=True)
 	frappe.db.commit()
 	return get_repair_bill(doc.name)
+
+
+# --- dispatch: the goods physically going back ---------------------------------
+@frappe.whitelist()
+def list_dispatchable(party=None):
+	"""Pieces that are BILLED but have not left the building.
+
+	Billing is done a handful at a time and so is the handover, so this is a list
+	of PIECES, not of bills — a party can collect half of one bill and all of
+	another in the same trip. Unbilled pieces are deliberately absent: the bill is
+	what says the work is finished and priced, and goods go back after that."""
+	_guard()
+	cond, vals = "", {}
+	if party:
+		cond, vals = " AND o.party = %(party)s", {"party": party}
+	rows = frappe.db.sql("""
+		SELECT o.name AS repair_order, o.party, o.received_at, o.receive_mode,
+			o.received_from, i.repair, i.design_type, i.qty, i.weight, i.weight_out,
+			i.bill, i.narration, b.billed_at, b.grand_total
+		FROM `tabRepair Order Item` i
+		JOIN `tabRepair Order` o ON o.name = i.parent
+		LEFT JOIN `tabRepair Bill` b ON b.name = i.bill
+		WHERE IFNULL(i.bill, '') != '' AND IFNULL(i.dispatch, '') = ''
+		{0}
+		ORDER BY o.party, b.billed_at, i.repair
+	""".format(cond), vals, as_dict=True)
+	for r in rows:
+		r["received_at"] = str(r.received_at or "")[:16]
+		r["billed_at"] = str(r.billed_at or "")[:16]
+		r["weight_out"] = flt(r.weight_out)
+		r["weight"] = flt(r.weight)
+	parties = sorted({r.party for r in rows if r.party})
+	return {"rows": rows, "parties": parties, "count": len(rows),
+		"pieces": sum(cint(r.qty) for r in rows),
+		"weight": round(sum(flt(r.weight_out) for r in rows), 3)}
+
+
+@frappe.whitelist()
+def create_repair_dispatch(payload):
+	"""Hand a set of billed pieces back. One note, one party, one carrier.
+
+	A piece may only go out once, and only after it is billed — both are checked
+	per piece rather than trusted from the screen, because the list the operator
+	is looking at may be a minute old."""
+	_guard()
+	p = frappe.parse_json(payload)
+	party = p.get("party")
+	names = [x for x in (p.get("pieces") or []) if x]
+	if not party:
+		frappe.throw(frappe._("Pick the party this is going back to."))
+	if not names:
+		frappe.throw(frappe._("Pick at least one piece to dispatch."))
+	mode = (p.get("dispatch_mode") or "In Hand").strip()
+	if mode not in ("In Hand", "Parcel"):
+		frappe.throw(frappe._("{0} is not a way of sending things out.").format(mode))
+	given_to = (p.get("given_to") or "").strip()
+	if not given_to:
+		frappe.throw(frappe._("Say who is taking it — a handover belongs to a person."))
+
+	rows = frappe.db.sql("""
+		SELECT i.name AS row_name, i.parent AS repair_order, i.repair, i.design_type,
+			i.qty, i.weight_out, i.bill, i.dispatch, i.narration, o.party
+		FROM `tabRepair Order Item` i JOIN `tabRepair Order` o ON o.name = i.parent
+		WHERE i.repair IN %(names)s
+	""", {"names": names}, as_dict=True)
+	found = {r.repair for r in rows}
+	missing = [n for n in names if n not in found]
+	if missing:
+		frappe.throw(frappe._("No such piece: {0}").format(", ".join(missing)))
+
+	items = []
+	for r in rows:
+		if r.party != party:
+			frappe.throw(frappe._("{0} belongs to {1}, not {2} — one note, one party.")
+				.format(r.repair, r.party, party))
+		if not r.bill:
+			frappe.throw(frappe._("{0} is not billed yet — goods go back after the bill.").format(r.repair))
+		if r.dispatch:
+			frappe.throw(frappe._("{0} already went out on {1}.").format(r.repair, r.dispatch))
+		items.append({"repair": r.repair, "design_type": r.design_type,
+			"qty": cint(r.qty), "weight_out": flt(r.weight_out),
+			"bill": r.bill, "narration": r.narration})
+
+	doc = frappe.get_doc({
+		"doctype": "Repair Dispatch Note", "party": party,
+		"dispatch_mode": mode, "given_to": given_to,
+		"dispatched_at": p.get("dispatched_at") or frappe.utils.now_datetime(),
+		"dispatched_by": frappe.session.user,
+		"narration": (p.get("narration") or "").strip() or None,
+		"items": items,
+	}).insert(ignore_permissions=True)
+
+	for r in rows:
+		frappe.db.set_value("Repair Order Item", r.row_name, "dispatch", doc.name,
+			update_modified=False)
+	frappe.db.commit()
+	return get_repair_dispatch(doc.name)
+
+
+@frappe.whitelist()
+def get_repair_dispatch(name):
+	_guard()
+	d = frappe.get_doc("Repair Dispatch Note", name)
+	return {
+		"name": d.name, "party": d.party, "dispatch_mode": d.dispatch_mode,
+		"given_to": d.given_to or "",
+		"dispatched_at": str(d.dispatched_at or "")[:16],
+		"dispatched_by": frappe.db.get_value("User", d.dispatched_by, "full_name") or d.dispatched_by,
+		"total_pieces": cint(d.total_pieces), "total_weight": flt(d.total_weight),
+		"narration": d.narration or "",
+		"items": [{"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
+			"weight_out": flt(r.weight_out), "bill": r.bill or "",
+			"narration": r.narration or ""} for r in d.items],
+	}
+
+
+@frappe.whitelist()
+def list_repair_dispatches(party=None, limit=100):
+	"""Recent handovers, newest first."""
+	_guard()
+	filters = {}
+	if party:
+		filters["party"] = party
+	rows = frappe.get_all("Repair Dispatch Note", filters=filters,
+		fields=["name", "party", "dispatch_mode", "given_to", "dispatched_at",
+			"total_pieces", "total_weight"],
+		order_by="dispatched_at desc", limit_page_length=cint(limit) or 100)
+	for r in rows:
+		r["dispatched_at"] = str(r.dispatched_at or "")[:16]
+	return rows
 
 
 @frappe.whitelist()

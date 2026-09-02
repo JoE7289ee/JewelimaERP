@@ -118,6 +118,13 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 						<div class="nr-hint">${__("a name that is not on the list is added to Repair Parties")}</div></div>
 					<div class="nr-f"><label>${__("Received")}</label>
 						<input type="datetime-local" class="nr-when"></div>
+					<div class="nr-f"><label>${__("Received as")}</label>
+						<select class="nr-mode">
+							<option value="In Hand" selected>${__("In Hand")}</option>
+							<option value="Parcel">${__("Parcel")}</option>
+						</select></div>
+					<div class="nr-f"><label>${__("Received from")}</label>
+						<input class="nr-from" placeholder="${__("who handed it in")}"></div>
 					<div class="nr-f"><label>${__("Received by")}</label>
 						<div class="who nr-who"></div></div>
 				</div>
@@ -359,6 +366,8 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		frappe.dom.freeze(__("Taking it in…"));
 		frappe.call({ method: API + ".create_repair_order", args: { payload: {
 			party, received_at: when ? when.replace("T", " ") + ":00" : null,
+			receive_mode: root.find(".nr-mode").val() || "In Hand",
+			received_from: (root.find(".nr-from").val() || "").trim(),
 			narration: root.find(".nr-note").val() || "",
 			items: rows,
 		} } }).then((r) => {
@@ -367,6 +376,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			showDone(m);
 			S.rows = [blank()];
 			root.find(".nr-party").val("");
+			root.find(".nr-from").val("");          // never carry a name onto the next batch
 			root.find(".nr-note").val("");
 			paintRows();
 			load();          // a newly typed party or work type joins the lists
