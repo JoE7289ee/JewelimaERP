@@ -375,6 +375,123 @@ def list_repair_orders(party=None, from_date=None, to_date=None, limit=200):
 
 
 # --- status ----------------------------------------------------------------
+def _kpi_range(period):
+	"""today / week (Monday on) / month (1st on) / all, as a date pair."""
+	today = frappe.utils.getdate()
+	if period == "today":
+		return today, today
+	if period == "week":
+		return frappe.utils.add_days(today, -today.weekday()), today
+	if period == "month":
+		return today.replace(day=1), today
+	return None, None
+
+
+@frappe.whitelist()
+def get_repair_kpis(period="month"):
+	"""What the repair desk is carrying, in one call.
+
+	Two clocks run here and they are not interchangeable: a batch is TAKEN IN on
+	a date and BILLED on another, so intake figures are counted by received_at
+	and money by billed_at. Mixing them makes a month look like it earned what
+	it received, which is the one number nobody should be guessing at.
+
+	"Still with us" is deliberately NOT period-filtered — a piece from March that
+	is still on the bench is outstanding today, whichever window is being looked
+	at.
+	"""
+	_guard()
+	frm, to = _kpi_range(period)
+	def within(field):
+		if not frm:
+			return "", {}
+		return " AND DATE({0}) BETWEEN %(frm)s AND %(to)s".format(field), {"frm": frm, "to": to}
+
+	w_in, p_in = within("o.received_at")
+	taken = frappe.db.sql("""
+		SELECT COUNT(DISTINCT o.name) batches, IFNULL(SUM(i.qty),0) pieces,
+			IFNULL(SUM(i.weight),0) weight
+		FROM `tabRepair Order` o JOIN `tabRepair Order Item` i ON i.parent = o.name
+		WHERE 1=1 {0}""".format(w_in), p_in, as_dict=True)[0]
+
+	# outstanding is a NOW question, not a window one
+	open_rows = frappe.db.sql("""
+		SELECT COUNT(*) pieces, IFNULL(SUM(i.weight),0) weight,
+			SUM(CASE WHEN IFNULL(i.weight_out,0) = 0 THEN 1 ELSE 0 END) no_weigh_out,
+			SUM(CASE WHEN IFNULL(i.work_types,'') = '' THEN 1 ELSE 0 END) no_work,
+			COUNT(DISTINCT i.parent) batches
+		FROM `tabRepair Order Item` i WHERE IFNULL(i.bill,'') = ''""", as_dict=True)[0]
+
+	w_bill, p_bill = within("b.billed_at")
+	billed = frappe.db.sql("""
+		SELECT COUNT(*) bills, IFNULL(SUM(b.grand_total),0) total,
+			IFNULL(SUM(b.total_work_amount),0) work, IFNULL(SUM(b.total_metal_amount),0) metal,
+			IFNULL(SUM(b.total_stone_amount),0) stones,
+			IFNULL(SUM(b.total_manual_amount),0) manual, IFNULL(SUM(b.gst_amount),0) gst,
+			IFNULL(SUM(b.total_metal_added),0) metal_g
+		FROM `tabRepair Bill` b WHERE 1=1 {0}""".format(w_bill), p_bill, as_dict=True)[0]
+	billed_pcs = frappe.db.sql("""
+		SELECT COUNT(*) n FROM `tabRepair Bill Item` r
+		JOIN `tabRepair Bill` b ON b.name = r.parent WHERE 1=1 {0}""".format(w_bill),
+		p_bill, as_dict=True)[0]
+
+	# by party: what each one has with us now, and what they were billed
+	parties = {}
+	for r in frappe.db.sql("""
+		SELECT o.party, COUNT(*) pieces, IFNULL(SUM(i.weight),0) weight,
+			COUNT(DISTINCT i.parent) batches
+		FROM `tabRepair Order Item` i JOIN `tabRepair Order` o ON o.name = i.parent
+		WHERE IFNULL(i.bill,'') = '' GROUP BY o.party""", as_dict=True):
+		parties.setdefault(r.party, {"party": r.party, "open_pieces": 0, "open_weight": 0,
+			"open_batches": 0, "billed": 0})
+		parties[r.party].update(open_pieces=cint(r.pieces), open_weight=flt(r.weight),
+			open_batches=cint(r.batches))
+	for r in frappe.db.sql("""
+		SELECT b.party, IFNULL(SUM(b.grand_total),0) total FROM `tabRepair Bill` b
+		WHERE 1=1 {0} GROUP BY b.party""".format(w_bill), p_bill, as_dict=True):
+		parties.setdefault(r.party, {"party": r.party, "open_pieces": 0, "open_weight": 0,
+			"open_batches": 0, "billed": 0})
+		parties[r.party]["billed"] = flt(r.total)
+	party_rows = sorted(parties.values(), key=lambda x: (-x["open_pieces"], -x["billed"]))
+
+	# what work the floor is actually doing
+	work = {}
+	for r in frappe.db.sql("""SELECT i.work_types t FROM `tabRepair Order Item` i
+		JOIN `tabRepair Order` o ON o.name = i.parent
+		WHERE IFNULL(i.work_types,'') != '' {0}""".format(w_in), p_in, as_dict=True):
+		for one in [x.strip() for x in (r.t or "").split(",") if x.strip()]:
+			work[one] = work.get(one, 0) + 1
+	work_rows = sorted(({"work": k, "pieces": v} for k, v in work.items()),
+		key=lambda x: -x["pieces"])
+
+	# the oldest thing still here, which is the only list anyone acts on
+	ageing = []
+	for r in frappe.db.sql("""
+		SELECT o.name, o.party, o.received_at, COUNT(*) pieces, IFNULL(SUM(i.weight),0) weight
+		FROM `tabRepair Order Item` i JOIN `tabRepair Order` o ON o.name = i.parent
+		WHERE IFNULL(i.bill,'') = '' GROUP BY o.name, o.party, o.received_at
+		ORDER BY o.received_at ASC LIMIT 15""", as_dict=True):
+		ageing.append({"repair": r.name, "party": r.party,
+			"received_at": str(r.received_at or "")[:16], "pieces": cint(r.pieces),
+			"weight": flt(r.weight),
+			"days": frappe.utils.date_diff(frappe.utils.nowdate(), r.received_at) if r.received_at else 0})
+
+	return {
+		"period": period,
+		"from": str(frm or ""), "to": str(to or ""),
+		"taken": {"batches": cint(taken.batches), "pieces": cint(taken.pieces),
+			"weight": round(flt(taken.weight), 3)},
+		"open": {"batches": cint(open_rows.batches), "pieces": cint(open_rows.pieces),
+			"weight": round(flt(open_rows.weight), 3),
+			"no_weigh_out": cint(open_rows.no_weigh_out), "no_work": cint(open_rows.no_work)},
+		"billed": {"bills": cint(billed.bills), "pieces": cint(billed_pcs.n),
+			"total": flt(billed.total), "work": flt(billed.work), "metal": flt(billed.metal),
+			"stones": flt(billed.stones), "manual": flt(billed.manual), "gst": flt(billed.gst),
+			"metal_g": round(flt(billed.metal_g), 3)},
+		"parties": party_rows, "work": work_rows, "ageing": ageing,
+	}
+
+
 @frappe.whitelist()
 def get_repair_status(party=None, state="all", from_date=None, to_date=None, limit=200):
 	"""Every batch as a card: what came in, what it weighs, and whether it is
