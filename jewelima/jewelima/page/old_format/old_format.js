@@ -203,6 +203,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		return "hsla(" + h + ",60%,50%,.12)";
 	};
 
+	// Two boxes rather than one comma-separated cell: a piece has one HUID or two,
+	// and typing "ABC123, DEF456" into a single box was easy to get subtly wrong
+	// (a missing comma silently became one 12-character code that bills as none).
+	// Storage is unchanged — the row still holds them comma separated.
+	const huidParts = (h) => String(h || "").split(",").map((x) => x.trim()).filter(Boolean);
+	const huidPart = (h, i) => huidParts(h)[i] || "";
+	const huidJoin = (a, b) => [String(a || "").trim(), String(b || "").trim()]
+		.filter(Boolean).join(", ");
+
 	// a HUID cell bills its 6-char codes; PENDING = hallmarked, code not typed
 	const huidCount = (h) => (String(h || "").toUpperCase().match(/[A-Z0-9]+/g) || [])
 		.filter((t) => t.length === 6 || t === "PENDING").length;
@@ -397,7 +406,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		root.find(".of-body").html(`
 			<table class="of-t"><thead><tr>
 				<th><input type="checkbox" class="of-selall"></th>
-				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}</th><th>${__("Item")}</th><th>${__("Design")}</th>
+				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}<span style="font-weight:400;color:var(--text-muted);"> ${__("(two boxes)")}</span></th><th>${__("Item")}</th><th>${__("Design")}</th>
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
@@ -407,7 +416,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td>
 				<td><b>${esc(r.unique_id)}</b>${r.back_chain_wt ? ` <span title="${__("back chain {0} ({1} g) merged in", [esc(r.back_chain_barcode || ""), r.back_chain_wt])}" style="cursor:help;">⛓</span>` : ""}</td>
-				<td><input data-f="huid" value="${esc(r.huid)}" style="width:88px;"></td>
+				<td class="of-huid"><input data-h="0" value="${esc(huidPart(r.huid, 0))}"
+						style="width:74px;" placeholder="${__("HUID")}"><input data-h="1"
+						value="${esc(huidPart(r.huid, 1))}" style="width:74px;" placeholder="${__("2nd")}"></td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
@@ -500,6 +511,19 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		refreshStatus();
 	});
 
+	// the two HUID boxes write back one comma-separated value
+	root.on("change", "table.of-t [data-h]", function () {
+		const $tr = $(this).closest("tr");
+		const i = cint($tr.data("i"));
+		const v = ($(this).val() || "").trim().toUpperCase();
+		this.value = v;
+		const a = ($tr.find('[data-h="0"]').val() || "").trim().toUpperCase();
+		const b = ($tr.find('[data-h="1"]').val() || "").trim().toUpperCase();
+		ROWS[i].huid = huidJoin(a, b);
+		invalidate();
+		refreshStatus();
+	});
+
 	// ---- ONE bulk applier: pick the field, the right control appears ---------
 	const BULK = {
 		colour: { input: "text", list: "of-colors", upper: true, allEmpty: true },
@@ -547,10 +571,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				n++;
 			});
 			if (n) invalidate();
-			SEL.clear();
-			LASTSEL = null;
+			// the ticks stay: the same rows usually need two or three things set,
+			// and re-ticking them between each was the slowest part of the job
 			paint();
-			return frappe.show_alert({ message: __("Added one PENDING to {0} row(s) — each counts as a HUID.", [n]), indicator: "green" }, 4);
+			return frappe.show_alert({ message: __("Added one PENDING to {0} row(s) — each counts as a HUID. Still selected.", [n]), indicator: "green" }, 4);
 		}
 		let v = (root.find(".of-bval").val() || "").trim();
 		if (cfg.upper) v = v.toUpperCase();
@@ -562,12 +586,11 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			if (hit && r[field] !== v) { r[field] = v; n++; }
 		});
 		if (n) invalidate();
-		// every apply hands the selection back for the next batch
-		SEL.clear();
-		LASTSEL = null;
+		// the ticks stay put so the next field can go on the same rows — clear
+		// them with the header tick when the batch really is done
 		paint();
 		renderBulkSlot();
-		frappe.show_alert({ message: __("{0} row(s) set {1}.", [n, v]), indicator: "green" }, 3);
+		frappe.show_alert({ message: __("{0} row(s) set {1}. Still selected.", [n, v]), indicator: "green" }, 3);
 	}
 	root.on("click", ".of-bapply", () => bulkApply(false));
 	root.on("click", ".of-bapply-empty", () => bulkApply(true));
@@ -599,7 +622,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	root.on("click", ".of-sortnum", () => {
 		const noCol = ROWS.filter((r) => !r.colour).length;
 		if (noCol) return frappe.show_alert({ message: __("{0} row(s) still have no COLOR — fill them before numbering.", [noCol]), indicator: "orange" }, 4);
-		ROWS.sort((a, b) => (rankOf(ITEM_RANK, a.item || "") - rankOf(ITEM_RANK, b.item || ""))
+		// A lot that carries shop names is really several shops' work in one file,
+		// so the shops come apart first and the item ladder runs inside each.
+		// Rows with no shop sort last rather than jumbling in among the named ones.
+		const byShop = ROWS.some((r) => (r.shop || "").trim());
+		ROWS.sort((a, b) => (byShop
+				? (((a.shop || "").trim() ? 0 : 1) - ((b.shop || "").trim() ? 0 : 1))
+					|| (a.shop || "").trim().localeCompare((b.shop || "").trim())
+				: 0)
+			|| (rankOf(ITEM_RANK, a.item || "") - rankOf(ITEM_RANK, b.item || ""))
 			|| (a.item || "").localeCompare(b.item || "")
 			|| (rankOf(COLOR_RANK, a.colour || "") - rankOf(COLOR_RANK, b.colour || ""))
 			|| (a.colour || "").localeCompare(b.colour || "")
@@ -609,7 +640,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		SORTED = true;
 		PRICED = null;
 		paint();
-		frappe.show_alert({ message: __("Item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length]), indicator: "green" }, 5);
+		frappe.show_alert({ message: (ROWS.some((r) => (r.shop || "").trim())
+			? __("Shop → item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length])
+			: __("Item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length])),
+			indicator: "green" }, 5);
 	});
 
 	// BACK CHAIN rows are never pieces in the table. They wait in CHAINS and

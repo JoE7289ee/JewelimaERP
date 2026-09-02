@@ -12289,6 +12289,16 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	if any(p.get("cert_no") for p in priced):
 		keys.append("certno")
 	keys += ["uid"]
+	# The HUID CODES, after the unique id. The existing "huid" column is the
+	# hallmarking CHARGE; the bill needs the codes themselves to be read back
+	# against the pieces. One column per HUID the lot actually carries — a lot
+	# where every piece has one gets one column, not two empty-looking ones.
+	def _huid_codes(row):
+		return [t.strip().upper() for t in str(row.get("huid") or "").split(",") if t.strip()]
+
+	huid_cols = max([len(_huid_codes(p)) for p in priced] or [0])
+	for i in range(huid_cols):
+		keys.append("huidc{0}".format(i))
 	C = {k: i + 1 for i, k in enumerate(keys)}
 	NCOLS = len(keys)
 
@@ -12329,6 +12339,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
 		"tp": "pcs", "tc": "cts", "tv": "value", "total": "Total value",
 		"igi": "IGI", "huid": "HUID", "certlab": "CERT", "certno": "CERT NO", "uid": "UNIQUE ID"}
+	for i in range(huid_cols):
+		HEAD["huidc{0}".format(i)] = "HUID CODE" if huid_cols == 1 else "HUID {0}".format(i + 1)
 	for gi in used:
 		HEAD["g{0}p".format(gi)] = "Dpcs"
 		HEAD["g{0}c".format(gi)] = "d.wt/ct"
@@ -12402,6 +12414,10 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		if "certno" in C:
 			ws.cell(row=r, column=C["certno"], value=cint(p.get("cert_no")) or (p.get("cert_no") or None))
 		ws.cell(row=r, column=C["uid"], value=p.get("unique_id"))
+		codes = _huid_codes(p)
+		for i in range(huid_cols):
+			ws.cell(row=r, column=C["huidc{0}".format(i)],
+				value=codes[i] if i < len(codes) else None)
 		r += 1
 
 	# blocks: item type -> colour runs -> weight bands. EVERY band run closes
@@ -12475,6 +12491,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"item_color": 9, "gross": 10, "net": 10, "gold": 13, "mc": 13,
 		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11, "total": 14,
 		"igi": 9, "huid": 9, "certlab": 7, "certno": 9, "uid": 11}
+	for i in range(huid_cols):
+		MINW["huidc{0}".format(i)] = 12
 	for gi in used:
 		MINW["g{0}p".format(gi)] = 6
 		MINW["g{0}c".format(gi)] = 8

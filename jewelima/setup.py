@@ -147,7 +147,7 @@ JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-vie
 	"workstations"]
 
 # every page in the E-SMITH menu — the ESMITH role gets exactly these
-ESMITH_PAGES = ["sell-old", "old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]
+ESMITH_PAGES = ["old-format", "saved-imports", "party-gold", "party-groups", "bag-status", "view-pc"]
 # Desk pages ONLY the Ordering role opens — placing orders is restricted;
 # the wider team files wishes on order-requests instead.
 JEWELIMA_ORDERING_ONLY_PAGES = ["place-order", "edit-order", "print-order-bags", "shop", "basket"]
@@ -352,7 +352,9 @@ RETIRED_PAGES = ["design-transfer",
 	# their doctypes are gone from the app, so their Page docs must go too
 	"repair-intake", "repair-desk", "repair-bills", "repair-setup",
 	# the three master screens folded into one (repair-masters)
-	"repair-parties", "repair-tow", "repair-types"]
+	"repair-parties", "repair-tow", "repair-types",
+	"sell-old",
+]
 
 
 def retag_swarovski():
