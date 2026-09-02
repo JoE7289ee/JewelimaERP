@@ -39,6 +39,12 @@ def _move_cards():
 	if not names:
 		return 0
 	frappe.db.sql("""UPDATE `tabOrder Bag` SET location = %s WHERE location = %s""", (NEW, OLD))
+	# a card at a bench needs that bench's record, or it reads as In Queue and
+	# then refuses to issue — moving the location alone is only half the move
+	from jewelima.jewelima.benches import on_bag_arrival
+	for nm in names:
+		if not frappe.db.exists("Waxing", {"order_bag": nm}):
+			on_bag_arrival(nm, NEW)
 	return len(names)
 
 

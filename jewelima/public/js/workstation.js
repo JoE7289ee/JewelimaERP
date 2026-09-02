@@ -535,7 +535,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		root.find(".wk-asg").slideDown(120);
 		root.find(".wk-asg-scan").trigger("focus");
 	});
-	root.find(".wk-asg-x").on("click", () => root.find(".wk-asg").slideUp(120));
+	root.find(".wk-asg-x").on("click", () => root.find(".wk-asg").slideUp(120, load));
 	root.on("click", ".wk-asg-rm", function () {
 		AS.cards = AS.cards.filter((c) => c !== $(this).data("name"));
 		paintAssign();
@@ -787,7 +787,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		root.find(".wk-bulk").slideDown(120);
 		root.find(".wk-bulk-scan").trigger("focus");
 	});
-	root.find(".wk-bulk-x").on("click", () => root.find(".wk-bulk").slideUp(120));
+	root.find(".wk-bulk-x").on("click", () => root.find(".wk-bulk").slideUp(120, load));
 	root.on("click", ".wk-bulk-rm", function () {
 		BK.cards = BK.cards.filter((c) => c !== $(this).data("name"));
 		paintBulk();
@@ -849,7 +849,14 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 	clearInterval($(wrapper).data("jw-ws-poll"));
 	// a bench board is not a stock ticker: a minute is plenty, and it stops the
 	// queue redrawing under a worker mid-scan
-	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 60000);
+	// A strip open means someone is mid-batch — scanning cards into Bulk Reason
+	// or Assign. Redrawing the board underneath them is disruptive even when it
+	// costs nothing, so the poll holds off until the strip is closed, and the
+	// board catches up the moment it is.
+	const stripOpen = () => root.find(".wk-bulk, .wk-asg").filter(":visible").length > 0;
+	const t = setInterval(() => {
+		if ($(wrapper).is(":visible") && !stripOpen()) load();
+	}, 60000);
 	$(wrapper).data("jw-ws-poll", t);
 	$(wrapper).on("remove", () => clearInterval(t));
 };
