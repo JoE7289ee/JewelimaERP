@@ -99,6 +99,8 @@ def _drop_transfer_rules():
 def _move_role_holders():
 	"""Whoever held JW WAX CLEANING gets JW WAXING — the same wax line, one role
 	fewer. Then the empty role goes."""
+	# a re-run still has to sweep the permission rows, which outlive the role
+	frappe.db.sql("DELETE FROM `tabCustom DocPerm` WHERE role = %s", OLD_ROLE)
 	if not frappe.db.exists("Role", OLD_ROLE):
 		return 0
 	users = frappe.get_all("Has Role", filters={"role": OLD_ROLE, "parenttype": "User"},
@@ -112,5 +114,11 @@ def _move_role_holders():
 			doc.save(ignore_permissions=True)
 	for nm in frappe.get_all("Has Role", filters={"role": OLD_ROLE}, pluck="name"):
 		frappe.db.sql("DELETE FROM `tabHas Role` WHERE name = %s", nm)
+	# The role's DOCTYPE PERMISSIONS have to go with it. setup_roles() walks every
+	# Custom DocPerm row and re-saves it, and a row naming a role that no longer
+	# exists fails link validation — which broke `bench migrate` on every run until
+	# these were cleared, long after the role itself was gone.
+	frappe.db.sql("DELETE FROM `tabCustom DocPerm` WHERE role = %s", OLD_ROLE)
 	frappe.delete_doc("Role", OLD_ROLE, force=1, ignore_permissions=True)
+	frappe.clear_cache()
 	return len(set(users))
