@@ -184,8 +184,15 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// the same @page the single-label roll printer uses. SHEET: the A4 grid,
 		// cut along the dashes.
 		const roll = S.mode === "roll";
+		// Each label gets its own PLAIN BLOCK wrapper carrying the page break.
+		// .bc-label is display:flex, and break properties on a flex box are
+		// unreliable — that is why the first roll attempt still came out on one
+		// sheet. The wrapper also carries the modern `break-after` alongside the
+		// legacy `page-break-after`, because Chrome honours the former.
 		const labels = S.cards
-			.map((c) => jewelima.buildBarcodeLabel(c, { stoneGrams: S.stoneGrams })).join("");
+			.map((c) => `<div class="bc-page">`
+				+ jewelima.buildBarcodeLabel(c, { stoneGrams: S.stoneGrams })
+				+ `</div>`).join("");
 		doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Barcodes</title><style>
 			${roll
 				? `@page{size:3.3in 0.475in;margin:0;}`
@@ -193,8 +200,10 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			html,body{margin:0;padding:0;}
 			${jewelima.BARCODE_LABEL_CSS}
 			${roll
-				? `.bc-label{page-break-after:always;}
-				   .bc-label:last-child{page-break-after:auto;}`
+				? `.bc-page{break-after:page;page-break-after:always;
+				      break-inside:avoid;page-break-inside:avoid;
+				      width:3.3in;height:0.475in;overflow:hidden;}
+				   .bc-page:last-child{break-after:auto;page-break-after:auto;}`
 				: `.bc-grid{display:grid;grid-template-columns:repeat(${S.cols}, 3.3in);gap:0.06in;}
 				   .bc-label{border:1px dashed #ccc;}`}
 			</style></head><body>${roll ? labels : grid()}</body></html>`);

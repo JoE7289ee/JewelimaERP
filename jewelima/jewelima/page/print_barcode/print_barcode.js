@@ -258,15 +258,19 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 
 	function printAll() {
 		if (!state.cards.length) return frappe.msgprint(__("Scan at least one card first."));
-		const body = state.cards.map(buildLabel).join("");
+		// each label in its own plain-block page — break properties on .bc-label
+		// (display:flex) are unreliable, which is how several labels ended up
+		// sharing one sheet
+		const body = state.cards.map((c) => `<div class="bc-page">${buildLabel(c)}</div>`).join("");
 		const w = window.open("", "_blank", "width=600,height=400");
 		w.document.write(`<html><head><title>Barcodes</title><style>
 			@page{size:3.3in 0.475in;margin:0;}
 			html,body{margin:0;padding:0;}
 			${LABEL_CSS}
-			.bc-label{page-break-after:always;}
-
-			.bc-label:last-child{page-break-after:auto;}
+			.bc-page{break-after:page;page-break-after:always;
+				break-inside:avoid;page-break-inside:avoid;
+				width:3.3in;height:0.475in;overflow:hidden;}
+			.bc-page:last-child{break-after:auto;page-break-after:auto;}
 			</style></head><body>${body}</body></html>`);
 		w.document.close();
 		w.focus();
