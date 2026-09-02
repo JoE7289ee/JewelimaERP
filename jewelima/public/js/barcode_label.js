@@ -28,7 +28,12 @@ jewelima.barcodeOpts = function (over) {
 		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;`,
 		offsetA: o.offsetA,
 		offsetB: o.offsetB,
+		// the per-run label choices ride through as well — this helper is the only
+		// way callers build opts, so anything it drops silently never reaches the tag
 		stoneGrams: o.stoneGrams,
+		showFamily: o.showFamily,
+		showColor: o.showColor,
+		freeText: o.freeText,
 	};
 };
 
@@ -66,22 +71,34 @@ jewelima.barcodeStoneLine = function (c, inGrams) {
 	return "";
 };
 
-// opts: { sizeVars, offsetA, offsetB, stoneGrams } — the roll printer passes its
-// tuned values; a sheet needs none of them. stoneGrams prints stone weights in
-// grams rather than carats.
+// opts: { sizeVars, offsetA, offsetB, stoneGrams, showFamily, showColor, freeText }
+// — the roll printer passes its tuned values. stoneGrams prints stone weights in
+// grams rather than carats; showFamily adds the stone family (EF / GH …) beside
+// them; showColor adds the gold colour (YG / WG / PG); freeText is one line the
+// operator types for this print run.
 jewelima.buildBarcodeLabel = function (c, opts) {
 	const o = opts || {};
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const stone = jewelima.barcodeStoneLine(c, o.stoneGrams);
+	// LEFT: what the piece weighs and what is in it. The stone family (EF / GH …)
+	// rides with the diamond line because it describes those stones.
+	const fam = o.showFamily && c.stone_family ? esc(c.stone_family) : "";
 	const left = `<div class="bc-col bc-left"><div>GW:${flt(c.gw).toFixed(3)} gm</div>`
-		+ (stone ? `<div>${stone}</div>` : "") + `</div>`;
+		+ (stone ? `<div>${stone}${fam ? " " + fam : ""}</div>`
+			: (fam ? `<div>${fam}</div>` : "")) + `</div>`;
 	const qr = c.qr
 		? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 		: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
+	// RIGHT: what it IS. Design type, design, the card number, and optionally the
+	// gold colour and a free line the operator types for this run (a shop name,
+	// usually). The free line is deliberately last — it is the least official
+	// thing on the tag.
 	const r1 = c.design_type ? `<div>${esc(c.design_type)}</div>` : "";
+	const col = o.showColor && c.gold_color ? `<div>${esc(c.gold_color)}</div>` : "";
+	const free = o.freeText ? `<div>${esc(o.freeText)}</div>` : "";
 	const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div>`
-		+ `<div>${esc(c.name)}</div></div>`;
+		+ `<div>${esc(c.name)}</div>${col}${free}</div>`;
 	const a = flt(o.offsetA), b = flt(o.offsetB);
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`
 		+ `<div class="bc-half bc-a" style="transform:translateX(${a}in);">${left}${qr}</div>`

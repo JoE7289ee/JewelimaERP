@@ -87,6 +87,10 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	};
 	state.scan = mk(".tob-scan", { fieldtype: "Data", label: "Scan Order Bag", fieldname: "scan", description: "Scan a bag barcode (or type + Enter)." });
 	state.to = mk(".tob-to", { fieldtype: "Select", label: "Transfer all to", fieldname: "to_location", options: TOB_LOCATIONS });
+	// The hardcoded list above is only a placeholder for the first paint. A role
+	// with transfer rules may use a handful of these, and offering the whole
+	// factory before anything is scanned invites a move the server will refuse.
+	setAllowedDestinations("");
 
 	// ---- Transfer Plus: transfer AND put straight to work at the target ------
 	const TP = { allowed: ["Jewelima Transfer Plus", "Stock Manager", "System Manager", "JW Manager", "JW Data Admin"]
@@ -286,7 +290,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		state.rows = [];
 		state.location = null;
 		state.to.set_value("");
-		state.to.df.options = TOB_LOCATIONS; // restore full list until next batch locks a from
+		setAllowedDestinations("");   // back to what THIS user may pick, not everything
 		state.to.refresh();
 		$(page.main).find(".tp-on").prop("checked", false);
 		$(page.main).find(".tp-opts").css("display", "none");

@@ -2717,7 +2717,13 @@ def allowed_to_locations(from_location):
 		return all_locs
 	allowed = set()
 	for r in rules:
-		if r.role in mine and (not r.from_location or r.from_location == from_location):
+		# No FROM yet — nothing has been scanned. Answer with everywhere this user
+		# could ever send to, so the picker opens honest instead of listing the
+		# whole factory to someone who may only use four of it. It narrows to the
+		# real set the moment a card fixes the source.
+		if r.role not in mine:
+			continue
+		if not from_location or not r.from_location or r.from_location == from_location:
 			allowed.update(all_locs if not r.to_location else [r.to_location])
 	return [loc for loc in all_locs if loc in allowed]
 
@@ -15662,6 +15668,29 @@ def _qr_data_uri(text):
 		return None
 
 
+def _variant_tokens(design):
+	"""Pull the stone family and the gold colour back out of a variant name.
+
+	design_variant_name() builds <bank>-<karat><quality>[-<colour letter>], e.g.
+	A13134NP-18EF-Y, and nothing stores the two parts separately. A name that does
+	not fit the shape — an older design, or one made by hand — returns blanks
+	rather than a guess: a wrong colour on a tag is worse than no colour.
+	"""
+	out = {"stone_family": "", "gold_color": ""}
+	if not design:
+		return out
+	parts = str(design).split("-")
+	letter_of = {v: k for k, v in DESIGN_COLOR_LETTER.items()}     # Y -> YG
+	if len(parts) >= 2 and parts[-1] in letter_of:
+		out["gold_color"] = letter_of[parts[-1]]
+		parts = parts[:-1]
+	if len(parts) >= 2:
+		tail = parts[-1].lstrip("0123456789")                      # 18EF -> EF
+		if tail in DESIGN_STONE_TOKENS:
+			out["stone_family"] = tail
+	return out
+
+
 @frappe.whitelist()
 def get_barcode_card(order_bag):
 	"""Label data for the Print Barcode page. Weights come from ACTUAL (never the BOM/plan);
@@ -15687,6 +15716,9 @@ def get_barcode_card(order_bag):
 		"ps_no": int(b.act_ps_no or 0), "ps_wt": flt(b.act_ps_weight),
 		"cs_no": int(b.act_cs_no or 0), "cs_wt": flt(b.act_cs_weight),
 		"actual_empty": not gw,
+		# the tag can carry the stone family (EF / GH / …) and the gold colour
+		# (YG / WG / PG); both live only in the variant name
+		**_variant_tokens(b.design),
 		"qr": _qr_data_uri(b.name),
 	}
 

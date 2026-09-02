@@ -122,7 +122,8 @@ frappe.pages["design-gallery"].on_page_load = function (wrapper) {
 
 	const state = {
 		search: "", tags: new Set(), match: "any",
-		start: 0, limit: 60, total: 0, loading: false, done: false,
+		// 50 a page: each card carries an image, so a bigger page is a slower page
+		start: 0, limit: 50, total: 0, loading: false, done: false,
 		selected: new Map(), tagColor: {},
 	};
 

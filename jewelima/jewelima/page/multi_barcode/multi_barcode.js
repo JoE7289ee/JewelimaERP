@@ -17,23 +17,41 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
-	const S = { cards: [], cols: 2, stoneGrams: false, mode: "sheet" };
+	// Roll only — the A4 sheet is gone. This page exists to feed a label printer,
+	// and a sheet of tiled tags was a second answer to a question nobody asked.
+	const S = { cards: [], stoneGrams: false, showFamily: true, showColor: true, freeText: "" };
 
 	root.append(`
 		<style>
 		#page-multi-barcode .container{max-width:100%;}
-		.mb-top{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px;}
-		.mb-scan{min-width:300px;}
+		.mb-top{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:14px;
+			border:1px solid var(--border-color);border-radius:13px;padding:13px 16px;
+			background:var(--fg-color);}
+		.mb-scan{min-width:290px;}
+		.mb-scan .control-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+			color:var(--text-muted);}
 		.mb-go{background:#1f618d;border:none;color:#fff;font-weight:800;letter-spacing:.4px;
-			padding:9px 26px;border-radius:8px;font-size:13.5px;cursor:pointer;}
+			padding:10px 28px;border-radius:9px;font-size:13.5px;cursor:pointer;
+			box-shadow:0 1px 3px rgba(31,97,141,.28);transition:background .15s;}
+		.mb-go:hover:not(:disabled){background:#18506f;}
 		.mb-go:disabled{opacity:.4;cursor:default;}
 		.mb-btn{background:none;border:1px solid var(--border-color);border-radius:8px;
 			padding:8px 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
-		.mb-cols,.mb-mode{border:1px solid var(--border-color);border-radius:8px;height:33px;padding:2px 10px;
-			font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
-		.mb-gramsbox{display:flex;align-items:center;gap:6px;font-size:12.5px;
-			white-space:nowrap;cursor:pointer;user-select:none;margin:0;}
-		.mb-gramsbox input{width:15px;height:15px;cursor:pointer;margin:0;}
+		/* the option strip: one card, so the choices read as a set that shapes the
+		   tag rather than five loose controls scattered along a toolbar */
+		/* the two buttons travel together — Clear wrapping onto its own line read
+		   as a stray control rather than the quiet partner of Print */
+		.mb-actions{display:flex;gap:9px;align-items:center;margin-left:auto;}
+		.mb-opts{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+			border:1px solid var(--border-color);border-radius:11px;padding:9px 14px;
+			background:var(--fg-color);}
+		.mb-chk{display:flex;align-items:center;gap:7px;font-size:12.5px;margin:0;
+			white-space:nowrap;cursor:pointer;user-select:none;color:var(--text-color);}
+		.mb-chk input{width:15px;height:15px;cursor:pointer;margin:0;}
+		.mb-free{border:1px solid var(--border-color);border-radius:8px;height:30px;
+			padding:2px 10px;font-size:12.5px;width:190px;
+			background:var(--control-bg);color:var(--text-color);}
+		.mb-free:focus{outline:2px solid rgba(31,97,141,.35);outline-offset:1px;}
 		.mb-msg{margin:8px 0;font-size:12.5px;min-height:18px;}
 		.mb-msg.ok{color:#1d7a33;} .mb-msg.err{color:#b02a2a;} .mb-msg.warn{color:#8a6d00;}
 		table.mb-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);
@@ -49,26 +67,31 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		.mb-warn{color:#b02a2a;font-size:10.5px;font-weight:800;}
 		.mb-none{padding:30px;text-align:center;color:var(--text-muted);}
 		/* the sheet as it will print, at a readable size on screen */
-		.mb-sheet{margin-top:16px;border:1px solid var(--border-color);border-radius:10px;
+		/* the preview is the tag as it will come off the roll — one per row, on a
+		   paper-white ground so the label reads the same in either theme */
+		.mb-sheet{margin-top:16px;border:1px solid var(--border-color);border-radius:12px;
 			background:#fff;padding:14px;overflow:auto;}
 		.mb-sheet .bc-grid{display:grid;gap:0.06in;}
-		.mb-sheet .bc-label{border:1px dashed #bbb;}
+		.mb-sheet .bc-label{border:1px dashed #bbb;background:#fff;}
 		.mb-cap{font-size:11px;color:var(--text-muted);margin-bottom:7px;}
 		</style>
 		<div class="mb-top">
 			<div class="mb-scan"></div>
-			<div><div style="font-size:11px;color:var(--text-muted);">${__("Print as")}</div>
-				<select class="mb-mode">
-					<option value="sheet" selected>${__("A4 sheet")}</option>
-					<option value="roll">${__("Label roll — one per label")}</option>
-				</select></div>
-			<div class="mb-acrosswrap"><div style="font-size:11px;color:var(--text-muted);">${__("Across")}</div>
-				<select class="mb-cols"><option value="1">1</option><option value="2" selected>2</option>
-					<option value="3">3</option></select></div>
-			<label class="mb-gramsbox" title="${__("one carat is 0.2 g — the same weight, stated in grams")}">
-				<input type="checkbox" class="mb-grams"> ${__("Stone weight in grams")}</label>
-			<button class="mb-go" disabled>${__("PRINT")}</button>
-			<button class="mb-btn mb-clear">${__("Clear")}</button>
+			<div class="mb-opts">
+				<label class="mb-chk" title="${__("one carat is 0.2 g — the same weight, stated in grams")}">
+					<input type="checkbox" class="mb-grams"> ${__("Stone wt in grams")}</label>
+				<label class="mb-chk" title="${__("EF, GH … — printed beside the diamond line")}">
+					<input type="checkbox" class="mb-fam" checked> ${__("Stone family")}</label>
+				<label class="mb-chk" title="${__("YG, WG, PG — printed under the card number")}">
+					<input type="checkbox" class="mb-col" checked> ${__("Gold colour")}</label>
+				<input type="text" class="mb-free" maxlength="24"
+					placeholder="${__("free line (shop name…)")}" title="${
+						__("one extra line on the right of every tag in this run")}">
+			</div>
+			<span class="mb-actions">
+				<button class="mb-go" disabled>${__("PRINT")}</button>
+				<button class="mb-btn mb-clear">${__("Clear")}</button>
+			</span>
 		</div>
 		<div class="mb-msg"></div>
 		<div class="mb-body"></div>
@@ -106,25 +129,24 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			preview();
 		}
 		root.find(".mb-go").prop("disabled", !S.cards.length)
-			.text(S.cards.length
-				? (S.mode === "roll"
-					? __("PRINT {0} LABEL(S)", [S.cards.length])
-					: __("PRINT SHEET ({0})", [S.cards.length]))
-				: (S.mode === "roll" ? __("PRINT LABELS") : __("PRINT SHEET")));
+			.text(S.cards.length ? __("PRINT {0} LABEL(S)", [S.cards.length]) : __("PRINT LABELS"));
 		page.set_indicator(`${S.cards.length} ${__("label(s)")}`, S.cards.length ? "blue" : "gray");
 	}
 
 	// on a roll the labels come off one under the other, so the preview shows them
 	// that way too rather than in an across-the-page grid that will not happen
-	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(${
-		S.mode === "roll" ? 1 : S.cols}, 3.3in);">`
-		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c, jewelima.barcodeOpts({ stoneGrams: S.stoneGrams }))).join("") + `</div>`;
+	// ONE set of options for the preview and the printer, so what is on screen is
+	// what comes off the roll
+	const labelOpts = () => jewelima.barcodeOpts({
+		stoneGrams: S.stoneGrams, showFamily: S.showFamily,
+		showColor: S.showColor, freeText: S.freeText,
+	});
+	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(1, 3.3in);">`
+		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c, labelOpts())).join("") + `</div>`;
 
 	function preview() {
 		root.find(".mb-preview").html(`<div class="mb-cap">${
-			S.mode === "roll"
-				? __("{0} label(s) — one page each, for the label roll", [S.cards.length])
-				: __("{0} label(s), {1} across", [S.cards.length, S.cols])}</div>`
+			__("{0} label(s) — one page each, for the label roll", [S.cards.length])}</div>`
 			+ `<div class="mb-sheet"><style>${jewelima.BARCODE_LABEL_CSS}</style>${grid()}</div>`);
 	}
 
@@ -134,7 +156,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		if (S.cards.some((c) => c.name.toUpperCase() === code.toUpperCase())) {
 			return msg("warn", __("<b>{0}</b> already on the sheet.", [esc(code)]));
 		}
-		frappe.call({ method: API + ".get_barcode_card", args: { order_bag: code } }).then((r) => {
+		return frappe.call({ method: API + ".get_barcode_card", args: { order_bag: code } }).then((r) => {
 			const c = r.message;
 			if (!c || c.error) return msg("err", esc((c && c.error) || __("No card {0}.", [code])));
 			S.cards.push(c);
@@ -158,13 +180,11 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		S.cards = S.cards.filter((c) => c.name !== $(this).closest("tr").data("n"));
 		paint();
 	});
-	root.on("change", ".mb-cols", function () { S.cols = parseInt(this.value, 10) || 2; paint(); });
-	// on a roll there is no "across" — every label is its own page
-	root.on("change", ".mb-mode", function () {
-		S.mode = this.value;
-		root.find(".mb-acrosswrap").toggle(S.mode === "sheet");
-		paint();
-	});
+	root.on("change", ".mb-fam", function () { S.showFamily = this.checked; paint(); });
+	root.on("change", ".mb-col", function () { S.showColor = this.checked; paint(); });
+	// the free line lands on every tag in this run, so the preview follows it
+	// keystroke by keystroke rather than waiting for a blur
+	root.on("input", ".mb-free", function () { S.freeText = this.value.trim(); paint(); });
 	// repaint on toggle, so the preview shows exactly what will come off the printer
 	root.on("change", ".mb-grams", function () { S.stoneGrams = this.checked; paint(); });
 	root.on("click", ".mb-clear", () => { S.cards = []; msg("", ""); paint(); focusScan(); });
@@ -179,38 +199,44 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		document.body.appendChild(fr);
 		const doc = fr.contentDocument;
 		doc.open();
-		// ROLL: every label is its own PAGE, sized to the label, so a roll printer
-		// is handed as many jobs as there are pieces and feeds them one at a time —
-		// the same @page the single-label roll printer uses. SHEET: the A4 grid,
-		// cut along the dashes.
-		const roll = S.mode === "roll";
-		// Each label gets its own PLAIN BLOCK wrapper carrying the page break.
-		// .bc-label is display:flex, and break properties on a flex box are
-		// unreliable — that is why the first roll attempt still came out on one
-		// sheet. The wrapper also carries the modern `break-after` alongside the
-		// legacy `page-break-after`, because Chrome honours the former.
+		// Every label is its own PAGE, sized to the label, so the printer is handed
+		// as many jobs as there are pieces and feeds them one at a time. Each sits
+		// in a PLAIN BLOCK wrapper carrying the break: .bc-label is display:flex,
+		// and break properties on a flex box are unreliable — that is why the first
+		// attempt at this still came out on one sheet.
 		const labels = S.cards
 			.map((c) => `<div class="bc-page">`
-				+ jewelima.buildBarcodeLabel(c, jewelima.barcodeOpts({ stoneGrams: S.stoneGrams }))
+				+ jewelima.buildBarcodeLabel(c, labelOpts())
 				+ `</div>`).join("");
 		doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Barcodes</title><style>
-			${roll
-				? `@page{size:3.3in 0.475in;margin:0;}`
-				: `@page{size:A4 portrait;margin:8mm;}`}
+			@page{size:3.3in 0.475in;margin:0;}
 			html,body{margin:0;padding:0;}
 			${jewelima.BARCODE_LABEL_CSS}
-			${roll
-				? `.bc-page{break-after:page;page-break-after:always;
-				      break-inside:avoid;page-break-inside:avoid;
-				      width:3.3in;height:0.475in;overflow:hidden;}
-				   .bc-page:last-child{break-after:auto;page-break-after:auto;}`
-				: `.bc-grid{display:grid;grid-template-columns:repeat(${S.cols}, 3.3in);gap:0.06in;}
-				   .bc-label{border:1px dashed #ccc;}`}
-			</style></head><body>${roll ? labels : grid()}</body></html>`);
+			.bc-page{break-after:page;page-break-after:always;
+				break-inside:avoid;page-break-inside:avoid;
+				width:3.3in;height:0.475in;overflow:hidden;}
+			.bc-page:last-child{break-after:auto;page-break-after:auto;}
+			</style></head><body>${labels}</body></html>`);
 		doc.close();
 		setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);
 		msg("ok", __("Sent {0} label(s) to the printer.", [S.cards.length]));
 	});
+
+	// Arriving from Bag Split, which hands over the pieces it has just cut so they
+	// can be looked at before any label stock is spent. Added one at a time
+	// through the same add() every scan uses, so a piece that cannot be labelled
+	// says so here exactly as it would if it had been scanned.
+	if (frappe.route_options && Array.isArray(frappe.route_options.cards)) {
+		const pre = frappe.route_options.cards.slice();
+		frappe.route_options = null;
+		pre.reduce((chain, n) => chain.then(() => add(n)), Promise.resolve())
+			.then(() => {
+				if (S.cards.length) {
+					msg("ok", __("{0} piece(s) from the split — check the tags, then print.",
+						[S.cards.length]));
+				}
+			});
+	}
 
 	paint();
 	focusScan();

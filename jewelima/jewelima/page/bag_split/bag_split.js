@@ -288,10 +288,18 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 	function offerLabels(names) {
 		if (!names.length) return;
 		const dlg = new frappe.ui.Dialog({
-			title: __("Print barcodes for the {0} new piece(s)?", [names.length]),
+			title: __("Label the {0} new piece(s)?", [names.length]),
 			fields: [{ fieldtype: "HTML", fieldname: "list" }],
-			primary_action_label: __("Print {0} label(s)", [names.length]),
-			primary_action: () => { dlg.hide(); printLabels(names); },
+			// Multi Print rather than straight to the printer: the operator gets to
+			// see the tags, add a shop line, and turn the family or colour on or off
+			// before anything is spent on stock. Printing blind from here meant a
+			// wrong option cost a run of labels to find out.
+			primary_action_label: __("Review in Multi Print"),
+			primary_action: () => {
+				dlg.hide();
+				frappe.route_options = { cards: names };
+				frappe.set_route("multi-barcode");
+			},
 			secondary_action_label: __("Not now"),
 		});
 		dlg.fields_dict.list.$wrapper.html(
