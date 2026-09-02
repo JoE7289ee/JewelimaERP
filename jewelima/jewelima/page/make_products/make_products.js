@@ -13,9 +13,11 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Make Products", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
+	const flt = (v) => parseFloat(v) || 0;
 	const Q = new Map();   // name -> queued card
 	let POOL = { rows: [], parties: [], job_orders: [], salesmen: [], design_types: [] };
-	const F = { party: "", job_order: "", design_type: "", salesman: "" };
+	const F = { party: "", job_order: "", design_type: "", salesman: "", purity: "" };
+	const SEL = new Set();          // pool rows ticked for the queue
 
 	$(page.main).append(`
 		<style>
@@ -179,7 +181,7 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	// ---- the Bag Extraction pool -------------------------------------------
 	// the pool arrives a window at a time — the profile read behind each card is
 	// per-card, so an unwindowed page paid for every card on the bench
-	const POOL_PAGE = 100;
+	const POOL_PAGE = 400;
 
 	function loadPool(more) {
 		const $body = root.find(".mp-poolbody");
@@ -187,6 +189,7 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_extraction_cards", freeze: false, args: {
 			party: F.party || null, job_order: F.job_order || null,
 			design_type: F.design_type || null, salesman: F.salesman || null,
+			purity: F.purity || null,
 			limit: POOL_PAGE, offset: more ? ((POOL.rows || []).length) : 0,
 		} }).then((r) => {
 			const m = r.message;
@@ -207,6 +210,7 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	function paintPills() {
 		root.find(".mp-f-party").html(pillRow(__("Party"), POOL.parties, F.party, "party"));
 		root.find(".mp-f-rest").html(
+			pillRow(__("Purity"), (POOL.purities || []).map(String), F.purity, "purity") +
 			pillRow(__("Job Order"), POOL.job_orders, F.job_order, "job_order") +
 			(POOL.design_types.length ? `<span class="lbl" style="margin-left:12px;"></span>` : "") +
 			pillRow(__("Design Type"), POOL.design_types, F.design_type, "design_type") +
@@ -223,23 +227,38 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 				: __("— {0} card(s), {1} ready", [rows.length, rows.filter((r) => r.ready).length]))
 			: "");
 		root.find(".mp-poolbody").html(rows.length ? `<table class="mp-tbl"><thead><tr>
+			<th style="width:32px;"><input type="checkbox" class="mp-selall" title="${
+				__("Select every ready card on screen")}"></th>
 			<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Party")}</th><th>${__("Job Order")}</th>
-			<th>${__("Due")}</th><th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th>
+			<th>${__("Due")}</th><th class="num">${__("Purity")}</th>
+			<th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th>
 			<th>${__("Status")}</th><th></th></tr></thead><tbody>` +
 			rows.map((c) => {
 				const inq = Q.has(c.name);
+				const pickable = c.ready && !inq;
 				return `<tr>
+				<td>${pickable
+					? `<input type="checkbox" class="mp-sel" data-n="${esc(c.name)}" ${
+						SEL.has(c.name) ? "checked" : ""}>`
+					: ""}</td>
 				<td><b>${esc(c.name)}</b></td>
 				<td>${esc(c.design || "—")} <span style="color:var(--text-muted);font-size:11px;">${esc(c.design_type || "")}</span></td>
 				<td>${esc(c.customer || "—")}</td><td>${esc(c.job_order || "—")}</td>
 				<td>${c.due_date ? frappe.datetime.str_to_user(c.due_date) : "—"}</td>
+				<td class="num">${c.purity ? flt(c.purity).toFixed(1) : "—"}</td>
 				<td class="num">${c.gross.toFixed(3)}</td><td class="num">${c.nett.toFixed(3)}</td>
 				<td>${c.ready ? `<span class="mp-ready">${__("READY")}</span>` : `<span class="mp-block">${esc(c.blocker)}</span>`}</td>
 				<td>${inq ? `<span class="mp-inq">${__("in queue")}</span>`
 					: `<button class="mp-add" data-n="${esc(c.name)}" ${c.ready ? "" : "disabled"}>${__("Queue")}</button>`}</td>
 			</tr>`; }).join("") + "</tbody></table>" +
 			(rows.some((r) => r.ready && !Q.has(r.name))
-				? `<div style="margin-top:8px;"><button class="btn btn-sm btn-default mp-addall">${__("Queue all ready")}</button></div>` : "")
+				? `<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+					<button class="btn btn-sm btn-primary mp-addsel" ${SEL.size ? "" : "disabled"}>${
+						SEL.size ? __("Add {0} selected to queue", [SEL.size]) : __("Add selected to queue")}</button>
+					<button class="btn btn-sm btn-default mp-addall">${__("Queue all ready on screen")}</button>
+					${SEL.size ? `<span class="text-muted" style="font-size:12px;">${
+						__("{0} ticked", [SEL.size])} · <a class="mp-selnone" href="#">${__("clear")}</a></span>` : ""}
+				</div>` : "")
 			+ `<div class="mp-more"></div>`
 			: `<div class="mp-empty">${__("No cards at Bag Extraction match.")}</div>`);
 		// "Queue all ready" only ever reaches the loaded window, so say what is behind it
@@ -253,7 +272,34 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	});
 	root.on("click", ".mp-add", function () { addCard($(this).attr("data-n")); });
 	root.on("click", ".mp-addall", () => {
+		// "on screen" is literal — a filtered, windowed pool is what is loaded, and
+		// queueing ten thousand cards nobody has looked at is not a kindness
 		(POOL.rows || []).filter((r) => r.ready && !Q.has(r.name)).forEach((r) => addCard(r.name));
+	});
+
+	// ---- ticking cards for the queue ---------------------------------------
+	root.on("change", ".mp-sel", function () {
+		const n = $(this).attr("data-n");
+		if (this.checked) SEL.add(n); else SEL.delete(n);
+		paintPool();
+	});
+	root.on("change", ".mp-selall", function () {
+		const on = this.checked;
+		(POOL.rows || []).forEach((r) => {
+			if (!r.ready || Q.has(r.name)) return;      // only what can actually be queued
+			if (on) SEL.add(r.name); else SEL.delete(r.name);
+		});
+		paintPool();
+	});
+	root.on("click", ".mp-selnone", function (e) { e.preventDefault(); SEL.clear(); paintPool(); });
+	root.on("click", ".mp-addsel", () => {
+		const picked = [...SEL].filter((n) => !Q.has(n));
+		if (!picked.length) return;
+		picked.forEach(addCard);
+		SEL.clear();
+		paintPool();
+		frappe.show_alert({ message: __("{0} card(s) added to the queue.", [picked.length]),
+			indicator: "green" }, 5);
 	});
 
 	page.add_inner_button(__("Finished Stock"), () => frappe.set_route("finished-stock"));

@@ -18,6 +18,7 @@ def after_install():
 	create_order_types()
 	create_charge_categories()
 	create_igi_description_maps()
+	sync_location_options()
 	create_default_supplier()
 	create_jd_stock_customer()
 	seed_party_masters()
@@ -56,6 +57,30 @@ def after_install():
 		import_bench_rosters()
 	except Exception:
 		pass
+
+
+def sync_location_options():
+	"""Order Bag.location names WHERE THE PIECE IS, and that is three kinds of
+	place: a bench while it is a card, its BUCKET once it is a finished piece, and
+	CERTIFICATION while it is away at a lab. Buckets are a master anyone can add
+	to, so the Select has to be rebuilt from that master rather than hardcoded.
+
+	Retired bench names are KEPT. Historical rows still carry them, and a Select
+	that has forgotten a stored value fails validation the next time that row is
+	saved — which is exactly how the WAX CLEANING removal could have gone wrong."""
+	meta_field = frappe.db.get_value("DocField",
+		{"parent": "Order Bag", "fieldname": "location"}, "name")
+	if not meta_field:
+		return
+	have = [x for x in (frappe.db.get_value("DocField", meta_field, "options") or "").split("\n") if x.strip()]
+	want = list(have)
+	for extra in ["CERTIFICATION"] + sorted(frappe.get_all("Finished Bucket", pluck="name")):
+		if extra not in want:
+			want.append(extra)
+	if want != have:
+		frappe.db.set_value("DocField", meta_field, "options", "\n".join(want),
+			update_modified=False)
+		frappe.clear_cache(doctype="Order Bag")
 
 
 def after_migrate():

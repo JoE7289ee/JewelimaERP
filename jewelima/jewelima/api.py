@@ -2590,6 +2590,12 @@ def get_location_transfers(location, from_date=None, to_date=None, q=None):
 		"from_date": from_date, "to_date": to_date}
 
 
+# Where a piece is while it is away being certified. A finished piece otherwise
+# reads its BUCKET as its location — it is a thing on a shelf, not a card at a
+# bench — and this is the one place that is neither.
+CERT_LOCATION = "CERTIFICATION"
+
+
 def _party_group_name(customer):
 	"""The full name of a party's group. A party is GROUP-ZONE-…, and the Party
 	Group master is named "<code> - <name>", so the name is looked up rather than
@@ -8617,7 +8623,7 @@ def get_make_product_card(order_bag):
 
 @frappe.whitelist()
 def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=None,
-		limit=100, offset=0):
+		purity=None, limit=400, offset=0):
 	"""The Bag Extraction pool for the Make Products page: unfinished cards sitting
 	at BAG EXTRACTION with their actual weights and whether each is READY (qty 1 +
 	actual weight). Filter lists ride along for the pills.
@@ -8636,8 +8642,11 @@ def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=
 		filters["job_order"] = job_order
 	if salesman:
 		filters["salesman"] = salesman
+	if purity not in (None, "", "all"):
+		filters["purity"] = flt(purity)
 	bags = frappe.get_all("Order Bag", filters=filters,
-		fields=["name", "design", "qty", "customer", "salesman", "job_order", "due_date"],
+		fields=["name", "design", "qty", "customer", "salesman", "job_order", "due_date",
+			"purity"],
 		order_by="due_date asc, name asc", limit_page_length=0)
 	dt_of = {}
 	designs = list({b.design for b in bags if b.design})
@@ -8665,7 +8674,7 @@ def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=
 	# the full (unfiltered-by-me) pools for the filter pills
 	pool = frappe.get_all("Order Bag", filters={"location": "BAG EXTRACTION", "is_finished": 0,
 		"stock_status": ["not in", ["Cancelled", "Sold"]]},
-		fields=["customer", "salesman", "job_order", "design"], limit_page_length=0)
+		fields=["customer", "salesman", "job_order", "design", "purity"], limit_page_length=0)
 	all_designs = list({x.design for x in pool if x.design})
 	all_dts = set()
 	if all_designs:
@@ -8674,6 +8683,7 @@ def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=
 	return {"rows": rows,
 		"total": total, "shown": offset + len(rows), "offset": offset, "limit": limit,
 		"has_more": (offset + len(rows)) < total,
+		"purities": sorted({round(flt(x.purity), 2) for x in pool if flt(x.purity) > 0}),
 		"parties": sorted({x.customer for x in pool if x.customer}),
 		"job_orders": sorted({x.job_order for x in pool if x.job_order}),
 		"salesmen": sorted({x.salesman for x in pool if x.salesman}),
@@ -8847,10 +8857,14 @@ def make_products(bags, bucket=None):
 				errors.append({"name": nm, "error": frappe._("Qty must be 1 — extract/split it first")})
 				continue
 			convert_to_ornament(nm)  # consume materials -> product + freeze actuals + is_finished
+			# where the piece IS, now that it is a piece: its bucket. It stopped
+			# being at Bag Extraction the moment it stopped being a card, and
+			# leaving the bench name on it had every board still calling it a
+			# card sitting at extraction.
 			frappe.db.set_value("Order Bag", nm, {
 				"stock_status": "In Stock", "held_by": bag.customer or jd,
 				"in_stock_on": frappe.utils.now_datetime(),
-				"bucket": bucket,
+				"bucket": bucket, "location": bucket,
 			})
 			done.append(nm)
 		except Exception as e:
@@ -14504,7 +14518,10 @@ def collect_certification(name):
 	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
 	now = frappe.utils.now_datetime()
 	for nm in bags:
-		frappe.db.set_value("Order Bag", nm, {"stock_status": "In Stock", "in_stock_on": now})
+		frappe.db.set_value("Order Bag", nm, {
+			"stock_status": "In Stock", "in_stock_on": now,
+			# home to whichever bucket it left from
+			"location": frappe.db.get_value("Order Bag", nm, "bucket") or CERT_LOCATION})
 	d.status = "Collected"
 	d.collected_on = frappe.utils.today()
 	d.save(ignore_permissions=True)
@@ -14606,7 +14623,9 @@ def send_cert_prep(name):
 		d.certification_type = "HALLMARKING" if d.cert_type == "HALL" else None
 	d.save(ignore_permissions=True)
 	for nm in bags:
-		frappe.db.set_value("Order Bag", nm, "stock_status", "At Certification")
+		# it is not in its bucket while it is at the lab
+		frappe.db.set_value("Order Bag", nm,
+			{"stock_status": "At Certification", "location": CERT_LOCATION})
 	frappe.db.commit()
 	return {"name": d.name, "count": len(bags), "stock_entry": se}
 
@@ -14655,7 +14674,9 @@ def send_certification(payload):
 	})
 	doc.insert(ignore_permissions=True)
 	for nm in bags:
-		frappe.db.set_value("Order Bag", nm, "stock_status", "At Certification")
+		# it is not in its bucket while it is at the lab
+		frappe.db.set_value("Order Bag", nm,
+			{"stock_status": "At Certification", "location": CERT_LOCATION})
 	frappe.db.commit()
 	return {"name": doc.name, "count": len(bags), "stock_entry": se}
 
