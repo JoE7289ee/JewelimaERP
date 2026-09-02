@@ -289,7 +289,7 @@ JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
 # pieces, Make Products turns finished pieces into stock. Its four endpoints
 # carry no role guard of their own, so holding the page is the whole grant.
 JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split", "workstations",
-	"make-products"]
+	"make-products", "print-barcode", "multi-barcode"]
 
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
