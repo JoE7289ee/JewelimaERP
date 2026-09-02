@@ -17,9 +17,8 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 	if (opts.onBack) page.set_secondary_action(__("← All workstations"), opts.onBack);
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
-	// ticked cards, per page build — a fresh visit starts with nothing selected
-	const QSEL = new Set();    // queue cards ticked for a bulk assign
-	const WSEL = new Set();    // working cards ticked for a bulk collect
+	// working cards ticked for a bulk collect (assign is scan-driven, not ticked)
+	const WSEL = new Set();
 	let D = null;
 
 	$(page.main).append(`
@@ -100,6 +99,17 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 			</div>
 			<div class="wk-bulk-chips" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>
 		</div>
+		<div class="wk-asg" style="display:none;border:1px solid #1f618d;border-radius:9px;background:var(--fg-color);padding:10px 14px;margin-bottom:12px;">
+			<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;">
+				<b style="font-size:12px;">${__("Assign")}</b>
+				<select class="wk-asg-wt" style="border:1px solid var(--border-color);border-radius:6px;height:28px;font-size:12px;background:var(--fg-color);color:var(--text-color);"></select>
+				<span class="wk-asg-empbox"></span>
+				<input type="text" class="wk-asg-scan" placeholder="${__("scan card…")}" style="border:1px solid var(--border-color);border-radius:6px;height:28px;padding:2px 8px;font-size:12px;width:170px;background:var(--fg-color);color:var(--text-color);">
+				<button class="btn btn-xs wk-asg-go" style="background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;">${__("Issue")}</button>
+				<button class="btn btn-xs btn-default wk-asg-x">${__("Close")}</button>
+			</div>
+			<div class="wk-asg-chips" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;"></div>
+		</div>
 		<div class="wk-day"><div class="wk-sec wk-day-title"></div><div class="wk-day-body"></div></div>
 		<div class="wk-cols">
 			<div class="wk-q"><div class="wk-sec">${__("Waiting — priority order")}</div>
@@ -138,14 +148,10 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 
 		root.find(".wk-qbody").html(D.queue.length ? `
 			<table class="wk-t"><thead><tr>
-				${canIssue ? `<th style="width:30px"><input type="checkbox" class="wk-qall"
-					title="${__("Tick every card in the queue below")}"></th>` : ""}
 				${D.ranked ? `<th style="width:40px">P#</th>` : ""}<th>${__("Card")}</th><th>${__("Design")}</th>
 				<th>${__("Party")}</th><th>${__("Due")}</th><th>${__("Why waiting")}</th>${actCol ? `<th style="width:70px"></th>` : ""}
 			</tr></thead><tbody>
 			${D.queue.map((r) => `<tr class="${r.touched_today ? "wk-today " : ""}${r.stones_ok == null ? "" : r.stones_ok ? "wk-stok" : "wk-stneed"}"${r.stones_pending ? ` title="${esc(__("Stones short"))}: ${esc(r.stones_pending)}"` : ""}>
-				${canIssue ? `<td><input type="checkbox" class="wk-qsel" data-name="${esc(r.name)}" ${
-					QSEL.has(r.name) ? "checked" : ""}></td>` : ""}
 				${D.ranked ? `<td><span class="wk-pr ${r.prio_manual ? "man" : ""}">${r.prio_rank || ""}</span></td>` : ""}
 				<td><b>${esc(r.name)}</b>${r.touched_today ? ` <span class="wk-todaytag">${__("TODAY")}</span>` : ""}${r.status === "On Hold" ? " · " + __("On Hold") : ""}</td>
 				<td>${esc(r.design || "")}</td>
@@ -164,12 +170,6 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 					: canIssue ? `<button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
 						style="background:#1f618d;border-color:#1f618d;color:#fff;">${__("Assign")}</button>` : ""}</td>` : ""}
 			</tr>`).join("")}</tbody></table>
-			${canIssue ? `<div class="wk-qbulk" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-				<button class="btn btn-sm btn-primary wk-qgo" ${QSEL.size ? "" : "disabled"}>${
-					QSEL.size ? __("Assign {0} selected", [QSEL.size]) : __("Assign selected")}</button>
-				<span class="wk-qcount text-muted" style="font-size:12px;${QSEL.size ? "" : "display:none;"}">
-					<a class="wk-qnone" href="#">${__("clear selection")}</a></span>
-			</div>` : ""}
 			<div class="wk-qmore"></div>`
 			: `<div class="wk-none">${__("Nothing waiting — the bench is clear.")}</div>`);
 		// the tile count is the WHOLE queue; this says how much of it is on screen
@@ -498,60 +498,81 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 			load();
 		});
 	}
-	// A tick repaints ONLY the bulk bars. Rebuilding the whole table on every
-	// click threw away the other checkboxes mid-selection (ticking three landed
-	// one), lost scroll position, and re-laid out a hundred rows for nothing.
-	function paintBulkBars() {
-		const $q = root.find(".wk-qgo");
-		if ($q.length) {
-			$q.prop("disabled", !QSEL.size)
-				.text(QSEL.size ? __("Assign {0} selected", [QSEL.size]) : __("Assign selected"));
-		}
-		root.find(".wk-qcount").toggle(!!QSEL.size);
-		const $w = root.find(".wk-wgo");
-		if ($w.length) {
-			$w.prop("disabled", !WSEL.size)
-				.text(WSEL.size ? __("Collect {0} selected", [WSEL.size]) : __("Collect selected"));
-		}
-		root.find(".wk-wcount").toggle(!!WSEL.size);
+	// ---- ASSIGN: scan a batch, then issue — the same shape as Bulk Reason.
+	// The employee is OPTIONAL here: work often starts before anyone records who
+	// picked it up. It is NOT optional on the way back — collect always names the
+	// worker, which is where the anonymous-session hole actually gets closed.
+	const AS = { cards: [], emp: null };
+	function paintAssign() {
+		root.find(".wk-asg-chips").html(AS.cards.length
+			? AS.cards.map((c) => `<span style="border:1px solid var(--border-color);border-radius:12px;padding:2px 10px;font-size:12px;">
+				<b>${esc(c)}</b> <span class="wk-asg-rm" data-name="${esc(c)}" style="cursor:pointer;color:var(--text-muted);">✕</span></span>`).join("")
+			: `<span style="font-size:12px;color:var(--text-muted);">${
+				__("Scan waiting cards — they are all issued together. Employee may be left blank.")}</span>`);
+		root.find(".wk-asg-go").text(AS.cards.length ? __("Issue {0}", [AS.cards.length]) : __("Issue"));
 	}
-
-	// ---- bulk assign: one prompt for a whole batch --------------------------
-	root.on("change", ".wk-qsel", function () {
-		const n = $(this).data("name");
-		if (this.checked) QSEL.add(n); else QSEL.delete(n);
-		paintBulkBars();
-	});
-	root.on("change", ".wk-qall", function () {
-		const on = this.checked;
-		(D.queue || []).forEach((r) => { if (on) QSEL.add(r.name); else QSEL.delete(r.name); });
-		root.find(".wk-qsel").prop("checked", on);
-		paintBulkBars();
-	});
-	root.on("click", ".wk-qnone", function (e) {
-		e.preventDefault(); QSEL.clear();
-		root.find(".wk-qsel, .wk-qall").prop("checked", false); paintBulkBars();
-	});
-	root.on("click", ".wk-qgo", function () {
-		const names = [...QSEL];
-		if (!names.length) return;
-		const flds = [{ fieldname: "emp", fieldtype: "Link", label: __("Employee"), options: "Employee", reqd: 1,
-			get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench } }) }];
-		if ((D.work_types || []).length) {
-			flds.push({ fieldname: "wt", fieldtype: "Select", label: __("Type of work"),
-				options: D.work_types.join("\n"), default: D.default_work_type || D.work_types[0], reqd: 1 });
+	page.add_inner_button(__("Assign Cards"), () => {
+		if (!(D && D.can_act) || D.flow === "weights") {
+			frappe.show_alert({ message: __("Assigning at {0} is done on Job Work.", [bench]), indicator: "orange" }, 5);
+			return;
 		}
-		frappe.prompt(flds, (v) => {
-			// ws_issue_cards already takes a list — one call, one work type, one worker
-			frappe.call({ method: API + ".ws_issue_cards", freeze: true,
-				freeze_message: __("Assigning {0} card(s)…", [names.length]),
-				args: { bench, names: JSON.stringify(names), employee: v.emp, work_type: v.wt || null } })
-				.then(() => {
-					frappe.show_alert({ message: __("{0} card(s) assigned.", [names.length]), indicator: "green" }, 5);
-					QSEL.clear();
-					load();
-				});
-		}, __("{0} — assign {1} card(s)", [bench, names.length]), __("Assign"));
+		const wts = (D.work_types || []);
+		root.find(".wk-asg-wt").html(wts.length
+			? wts.map((o) => `<option ${o === (D.default_work_type || wts[0]) ? "selected" : ""}>${esc(o)}</option>`).join("")
+			: `<option value="">${__("— no work types —")}</option>`);
+		if (!AS.emp) {
+			AS.emp = frappe.ui.form.make_control({
+				df: { fieldtype: "Link", options: "Employee", fieldname: "asg_emp",
+					placeholder: __("employee (optional)"),
+					get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench } }) },
+				parent: root.find(".wk-asg-empbox").get(0), render_input: true,
+			});
+			root.find(".wk-asg-empbox .form-group").css("margin-bottom", 0);
+			root.find(".wk-asg-empbox input").css({ height: "28px", "font-size": "12px", width: "180px" });
+		}
+		AS.cards = [];
+		paintAssign();
+		root.find(".wk-asg").slideDown(120);
+		root.find(".wk-asg-scan").trigger("focus");
+	});
+	root.find(".wk-asg-x").on("click", () => root.find(".wk-asg").slideUp(120));
+	root.on("click", ".wk-asg-rm", function () {
+		AS.cards = AS.cards.filter((c) => c !== $(this).data("name"));
+		paintAssign();
+	});
+	root.find(".wk-asg-scan").on("keydown", function (e) {
+		if (e.key !== "Enter") return;
+		const code = this.value.trim();
+		this.value = "";
+		if (!code) return;
+		if (AS.cards.includes(code)) {
+			frappe.show_alert({ message: __("{0} already scanned.", [code]), indicator: "orange" }, 3);
+			return;
+		}
+		if (!(D.queue || []).some((q) => q.name === code)) {
+			frappe.show_alert({ message: __("{0} is not WAITING at {1}.", [code, bench]), indicator: "red" }, 4);
+			return;
+		}
+		AS.cards.push(code);
+		paintAssign();
+	});
+	root.find(".wk-asg-go").on("click", () => {
+		if (!AS.cards.length) return;
+		const emp = AS.emp ? AS.emp.get_value() : null;
+		frappe.call({ method: API + ".ws_issue_cards", freeze: true,
+			freeze_message: __("Issuing {0} card(s)…", [AS.cards.length]),
+			args: { bench, names: JSON.stringify(AS.cards), employee: emp || null,
+				work_type: root.find(".wk-asg-wt").val() || null } })
+			.then(() => {
+				frappe.show_alert({ message: emp
+					? __("{0} card(s) issued.", [AS.cards.length])
+					: __("{0} card(s) issued — no employee yet; one is required to collect.", [AS.cards.length]),
+					indicator: "green" }, 6);
+				AS.cards = [];
+				paintAssign();
+				root.find(".wk-asg-scan").trigger("focus");
+				load();
+			});
 	});
 
 	// ---- bulk collect: no weights at these benches, so nothing to ask -------
@@ -569,6 +590,9 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 			.map((el) => ({ name: $(el).data("name"), emp: $(el).data("emp") }));
 		if (!picked.length) return;
 		const states = D.collection_states || [];
+		// anything issued without a name needs one before it can be collected —
+		// asked once for the batch rather than card by card
+		const orphans = picked.filter((c) => !c.emp);
 		const run = (state) => {
 			frappe.dom.freeze(__("Collecting {0} card(s)…", [picked.length]));
 			// one at a time, so a card that refuses does not take the batch with it
@@ -592,11 +616,34 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 				load();
 			});
 		};
-		if (!states.length) return run("");
-		frappe.prompt([{ fieldname: "st", fieldtype: "Select", label: __("Collection state"),
-			options: states.join("\n"), default: states[0], reqd: 1 }],
-			(v) => run(v.st), __("Collect {0} card(s)", [picked.length]), __("Collect"));
+		const flds = [];
+		if (states.length) {
+			flds.push({ fieldname: "st", fieldtype: "Select", label: __("Collection state"),
+				options: states.join("\n"), default: states[0], reqd: 1 });
+		}
+		if (orphans.length) {
+			flds.push({ fieldname: "emp", fieldtype: "Link", options: "Employee", reqd: 1,
+				label: __("Who worked the {0} card(s) issued with no employee?", [orphans.length]),
+				get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench } }) });
+		}
+		if (!flds.length) return run("");
+		frappe.prompt(flds, (v) => {
+			if (v.emp) picked.forEach((c) => { if (!c.emp) c.emp = v.emp; });
+			run(v.st || "");
+		}, __("Collect {0} card(s)", [picked.length]), __("Collect"));
 	});
+
+	// A card can be ISSUED with nobody on it, so collecting is where the name is
+	// finally required — ask for it rather than refusing the collect and leaving
+	// the card stranded with a worker who has already finished it.
+	function withEmployee(emp, then) {
+		if (emp) return then(emp);
+		frappe.prompt([{ fieldname: "emp", fieldtype: "Link", options: "Employee", reqd: 1,
+			label: __("Who worked this?"),
+			get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query", filters: { bench } }) }],
+			(v) => then(v.emp),
+			__("This card was issued without an employee"), __("Collect"));
+	}
 
 	root.on("click", ".wk-collect", function () {
 		const $btn = $(this);
@@ -605,7 +652,8 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		const states = D.collection_states || [];
 		const weights = D.flow === "weights";
 		if (!weights && !states.length) {
-			doCollect(nm, emp, "", null);   // nothing to ask — one click collects
+			// nothing to ask about the work itself — but still name the worker
+			withEmployee(emp, (who) => doCollect(nm, who, "", null));
 			return;
 		}
 		if ($btn.next().is(".wk-col-inline")) return;
@@ -627,7 +675,8 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 				grp.find(".ci-w").trigger("focus");
 				return;
 			}
-			doCollect(nm, emp, grp.find(".ci-s").val() || "", weights ? w : null);
+			const st = grp.find(".ci-s").val() || "";
+			withEmployee(emp, (who) => doCollect(nm, who, st, weights ? w : null));
 		};
 		grp.find(".ci-go").on("click", submit);
 		grp.on("keydown", "input, select", (e) => { if (e.key === "Enter") submit(); });
@@ -798,7 +847,9 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 	// bench is opened, and that wrapper is not removed in between, so without
 	// clearing the old timer every visit would leave another poll running.
 	clearInterval($(wrapper).data("jw-ws-poll"));
-	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 30000);
+	// a bench board is not a stock ticker: a minute is plenty, and it stops the
+	// queue redrawing under a worker mid-scan
+	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 60000);
 	$(wrapper).data("jw-ws-poll", t);
 	$(wrapper).on("remove", () => clearInterval(t));
 };

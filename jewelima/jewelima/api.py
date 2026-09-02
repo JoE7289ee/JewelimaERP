@@ -8193,14 +8193,20 @@ def _new_bench_issue(order_bag, bench, dt, visit, employee=None, work_type=None,
 	"""Open a new work session (Bench Issue = Issued) and mirror it onto the Visit.
 
 	Every route into a work session comes through here — issue, assign, reassign —
-	so the two invariants live here rather than being restated (and forgotten) at
-	each call site: a session belongs to somebody, and it carries the bench's work
-	type. Callers that resolved the work type already pass it in; a blank one is
-	resolved here to the bench default, and an invalid one is refused."""
+	so the invariant lives here rather than being restated (and forgotten) at each
+	call site: a session carries the bench's work type. Callers that resolved the
+	work type already pass it in; a blank one is resolved here to the bench
+	default, and an invalid one is refused.
+
+	The EMPLOYEE is optional at this end. Work often starts before anyone has
+	written down who picked the card up, and refusing the issue for that just
+	means the card is worked without a session at all. The name is required on the
+	way BACK instead: collect_bench_cards takes it from the session or from the
+	person collecting, and refuses when neither has one — so no card is ever
+	completed without somebody's name on it, which is the invariant that actually
+	mattered."""
 	loc = (bench or "").upper()
-	if not employee:
-		frappe.throw(frappe._("{0}: pick who is taking the card — a work session has to belong to someone.").format(order_bag))
-	if not frappe.db.exists("Employee", employee):
+	if employee and not frappe.db.exists("Employee", employee):
 		frappe.throw(frappe._("Employee {0} not found.").format(employee))
 	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	if not work_type and _bench_work_types(loc):
@@ -8324,10 +8330,15 @@ def assign_bench_cards(names, location, employee=None, work_type=None):
 	loc = (location or "").upper()
 	if loc not in ASSIGN_COLLECT_LOCATIONS:
 		frappe.throw(frappe._("Assign / Collect is only for {0}.").format(", ".join(sorted(ASSIGN_COLLECT_LOCATIONS))))
-	# every assignment is owned by someone — CAD lands on their Workstation, and
-	# the rest need an owner so the card can be collected back off a named person
-	if not employee:
-		frappe.throw(frappe._("Cards must be assigned TO an employee — pick who takes the work."))
+	# The employee is optional here. Work often starts before anyone has written
+	# down who picked the card up, and refusing the assignment for that only means
+	# the card gets worked with no session at all. The name is required on the way
+	# BACK: collect_bench_cards takes it from the session or from whoever is
+	# collecting, and refuses when neither has one — so nothing is ever completed
+	# without a name against it. (CAD still wants an owner, because the card lands
+	# on that person's own Workstation and an unowned one lands nowhere.)
+	if not employee and loc == "CAD":
+		frappe.throw(frappe._("A CAD card is assigned TO someone — it lands on their Workstation."))
 	work_type = _valid_bench_option(loc, "Work Type", work_type)
 	dt = bench_doctype(loc)
 	done, errors = [], []
