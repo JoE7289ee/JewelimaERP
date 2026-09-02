@@ -65,6 +65,78 @@ $(document).on("keydown", (e) => {
 
 frappe.provide("jewelima");
 
+// ---------------------------------------------------------------------------
+// One loading indicator for every Jewelima page.
+//
+// These pages fetch on show and then paint — between those two moments the page
+// looked EMPTY, which reads as "broken" rather than "working". jewelima.busy()
+// puts a spinner over whatever element is about to be replaced, and takes it
+// away when the data lands. Safe to nest: a second busy() on the same element
+// bumps a counter rather than stacking overlays.
+//
+//   jewelima.busy($el, true, __("Loading cards…"));
+//   frappe.call(...).then(...).always(() => jewelima.busy($el, false));
+// ---------------------------------------------------------------------------
+(() => {
+	const st = document.createElement("style");
+	st.textContent = `
+	.jw-busy-host{position:relative;}
+	.jw-busy{position:absolute;inset:0;z-index:20;display:flex;align-items:center;
+		justify-content:center;gap:10px;background:var(--fg-color,#fff);opacity:.82;
+		font-size:12.5px;color:var(--text-muted,#6b7785);letter-spacing:.02em;}
+	.jw-busy .jw-sp{width:17px;height:17px;border:2px solid var(--border-color,#d8dde3);
+		border-top-color:var(--text-color,#1f272e);border-radius:50%;
+		animation:jw-spin .7s linear infinite;}
+	@keyframes jw-spin{to{transform:rotate(360deg);}}
+	/* the first paint of a page: a calm bar rather than a jumping spinner */
+	.jw-skel{height:44px;border-radius:8px;margin-bottom:8px;
+		background:linear-gradient(90deg,var(--control-bg,#f4f5f6) 25%,
+			var(--fg-color,#fff) 50%,var(--control-bg,#f4f5f6) 75%);
+		background-size:300% 100%;animation:jw-shim 1.3s ease-in-out infinite;}
+	@keyframes jw-shim{0%{background-position:100% 0;}100%{background-position:0 0;}}
+	`;
+	document.head.appendChild(st);
+})();
+
+jewelima.busy = function (el, on, msg) {
+	const $el = el && el.jquery ? el : $(el);
+	if (!$el || !$el.length) return;
+	const node = $el[0];
+	const depth = ($(node).data("jw-busy-n") || 0) + (on ? 1 : -1);
+	$(node).data("jw-busy-n", Math.max(depth, 0));
+	if (on) {
+		if ($(node).children(".jw-busy").length) return;      // already covered
+		$(node).addClass("jw-busy-host").append(
+			`<div class="jw-busy"><div class="jw-sp"></div><span>${
+				frappe.utils.escape_html(msg || __("Loading…"))}</span></div>`);
+	} else if (Math.max(depth, 0) === 0) {
+		$(node).children(".jw-busy").remove();
+		$(node).removeClass("jw-busy-host");
+	}
+};
+
+// A "load more" footer. `shown`/`total` are counts, `onMore` runs on click.
+// Renders nothing at all once everything is on screen.
+jewelima.moreBar = function (el, shown, total, onMore, label) {
+	const $el = el && el.jquery ? el : $(el);
+	if (!$el || !$el.length) return;
+	$el.empty();
+	if (shown >= total) {
+		if (total) $el.html(`<div class="text-muted" style="text-align:center;padding:8px;font-size:11.5px;">`
+			+ __("all {0} shown", [total]) + `</div>`);
+		return;
+	}
+	$el.html(`<div style="text-align:center;padding:10px;">
+		<button class="btn btn-default btn-sm jw-more">${
+			frappe.utils.escape_html(label || __("Load more"))}</button>
+		<div class="text-muted" style="font-size:11.5px;margin-top:5px;">${
+			__("showing {0} of {1}", [shown, total])}</div></div>`);
+	$el.find(".jw-more").on("click", function () {
+		$(this).prop("disabled", true).text(__("Loading…"));
+		onMore();
+	});
+};
+
 // small inline icons (lucide-style) for the contact line
 jewelima._icons = {
 	phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',

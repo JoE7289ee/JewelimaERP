@@ -11,7 +11,7 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
-	const S = { rows: [], users: [], kpi: {}, today: null, owner: "", stage: "", due: "", q: "", sortKey: "due_date", sortDir: 1, sel: new Set() };
+	const S = { rows: [], users: [], kpi: {}, today: null, owner: "", stage: "", due: "", q: "", sortKey: "due_date", sortDir: 1, sel: new Set(), total: 0, totalAll: 0, stages: [], hasMore: false };
 
 	$(page.main).append(`
 		<style>
@@ -74,13 +74,31 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 	`);
 	const root = $(page.main);
 
-	function load() {
-		frappe.call({ method: API + ".get_order_tracker" }).then((r) => {
-			const m = r.message || {};
-			S.rows = m.rows || []; S.users = m.users || []; S.kpi = m.kpi || {}; S.today = m.today;
-			S.sel.clear();
-			paintKpis(); paintUsers(); paintStages(); paint();
-		});
+	// Paged. The board used to ask for every active card at once — 150k of them is
+	// a 79 MB reply, and the page sat blank while the browser chewed through it.
+	// The KPIs and the user tiles still count EVERYTHING (the server totals them
+	// on its side); only the cards on screen arrive a window at a time.
+	const PAGE = 100;
+
+	function load(more) {
+		const $box = root.find("#ot-box");
+		jewelima.busy($box, true, more ? __("Loading more cards…") : __("Loading orders…"));
+		frappe.call({ method: API + ".get_order_tracker", freeze: false,
+			args: { limit: PAGE, offset: more ? S.rows.length : 0,
+				owner: S.owner || "", stage: S.stage || "",
+				due: S.due || "", q: (S.q || "").trim() } })
+			.then((r) => {
+				const m = r.message || {};
+				S.rows = more ? S.rows.concat(m.rows || []) : (m.rows || []);
+				S.users = m.users || []; S.kpi = m.kpi || {}; S.today = m.today;
+				S.total = m.total != null ? m.total : S.rows.length;
+				S.totalAll = m.total_all != null ? m.total_all : S.total;
+				S.stages = m.stages || S.stages || [];
+				S.hasMore = !!m.has_more;
+				if (!more) S.sel.clear();
+				paintKpis(); paintUsers(); paintStages(); paint();
+			})
+			.always(() => jewelima.busy($box, false));
 	}
 
 	function paintKpis() {
@@ -96,28 +114,32 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 	}
 
 	function paintUsers() {
-		const all = S.rows.length;
+		// every tile counts the WHOLE board, not the loaded window — the per-user
+		// tiles come from the server's full count, so "Everyone" must match them
+		const all = S.users.reduce((a, u) => a + (u.count || 0), 0) || S.rows.length;
 		const allOvd = S.users.reduce((a, u) => a + (u.overdue || 0), 0);
 		const tiles = [`<div class="ot-u ${S.owner === "" ? "on" : ""}" data-u=""><span class="un">${__("Everyone")}</span><span class="uc">${all} ${__("orders")}${allOvd ? ` · <span class="ov">${allOvd} ${__("overdue")}</span>` : ""}</span></div>`]
 			.concat(S.users.map((u) =>
 				`<div class="ot-u ${S.owner === u.user ? "on" : ""}" data-u="${esc(u.user)}"><span class="un">${esc(u.name)}</span><span class="uc">${u.count} ${__("orders")}${u.overdue ? ` · <span class="ov">${u.overdue} ${__("overdue")}</span>` : ""}</span></div>`));
 		root.find("#ot-users").html(tiles.join(""));
-		root.find(".ot-u").on("click", function () { S.owner = this.getAttribute("data-u"); paintUsers(); paint(); });
+		root.find(".ot-u").on("click", function () { S.owner = this.getAttribute("data-u"); paintUsers(); load(); });
 	}
 
 	function paintStages() {
-		const stages = [...new Set(S.rows.map((r) => r.stage))].sort();
+		// stages seen so far — the list grows as more windows load, and the
+		// current pick survives even when this window happens not to contain it
+		const stages = (S.stages && S.stages.length)
+			? S.stages.slice()
+			: [...new Set(S.rows.map((r) => r.stage))].sort();
 		root.find(".ot-stage").html(`<option value="">${__("All stages")}</option>` +
 			stages.map((s) => `<option ${s === S.stage ? "selected" : ""}>${esc(s)}</option>`).join(""));
 	}
 
+	// The SERVER applies owner / stage / due / search across the whole board and
+	// returns only matching rows, so filtering here again would be a second, weaker
+	// filter over an already-correct window. Sorting stays local to what is loaded.
 	const visible = () => {
-		const q = (S.q || "").trim().toLowerCase();
-		let rs = S.rows.filter((r) =>
-			(!S.owner || r.owner === S.owner) &&
-			(!S.stage || r.stage === S.stage) &&
-			(!S.due || r.health === S.due) &&
-			(!q || (r.card + " " + r.design + " " + r.customer + " " + r.job_order).toLowerCase().indexOf(q) !== -1));
+		let rs = S.rows.slice();
 		const dir = S.sortDir, key = S.sortKey;
 		rs = rs.slice().sort((a, b) => {
 			let va = a[key], vb = b[key];
@@ -169,7 +191,10 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 		const followable = [...new Set(rs.filter((r) => r.can_follow).map((r) => r.job_order))];
 		const allSel = followable.length > 0 && followable.every((jo) => S.sel.has(jo));
 		const selN = S.sel.size;
-		root.find(".ot-count").text((selN ? __("{0} selected · ", [selN]) : "") + __("{0} of {1} shown", [rs.length, S.rows.length]));
+		root.find(".ot-count").text((selN ? __("{0} selected · ", [selN]) : "")
+			+ __("{0} loaded of {1}", [S.rows.length, S.total])
+			+ (S.filtered || S.owner || S.stage || S.due || (S.q || "").trim()
+				? " " + __("matching") + " · " + __("{0} active", [S.totalAll || S.total]) : ""));
 		refreshFollowBtns();
 		const arrow = (k) => (S.sortKey === k ? (S.sortDir > 0 ? " ▲" : " ▼") : "");
 		const head = `<thead><tr>${COLS.map((c) => {
@@ -188,7 +213,12 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 			<td>${stonesCell(r)}</td>
 			<td class="num">${r.age_days}</td>
 		</tr>`).join("") : `<tr><td colspan="${COLS.length}" class="ot-none">${__("No active orders match.")}</td></tr>`;
-		root.find("#ot-box").html(`<table class="ot-tbl">${head}<tbody>${body}</tbody></table>`);
+		root.find("#ot-box").html(`<table class="ot-tbl">${head}<tbody>${body}</tbody></table>`
+			+ `<div class="ot-more"></div>`);
+		// only the loaded window can be filtered or sorted, so say plainly how
+		// much of the board is in hand before someone reads a filter as a total
+		jewelima.moreBar(root.find(".ot-more"), S.rows.length, S.total || S.rows.length,
+			() => load(true), __("Load 100 more"));
 		root.find("#ot-box th").on("click", function (e) {
 			if ($(e.target).is("input")) return; // the select-all checkbox handles itself
 			const k = this.getAttribute("data-k");
@@ -208,9 +238,15 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 		});
 	}
 
-	root.find(".ot-q").on("input", function () { S.q = this.value; paint(); });
-	root.find(".ot-stage").on("change", function () { S.stage = this.value; paint(); });
-	root.find(".ot-duef").on("change", function () { S.due = this.value; paint(); });
+	// typing re-queries the whole board, so wait for the typing to stop
+	let qTimer = null;
+	root.find(".ot-q").on("input", function () {
+		S.q = this.value;
+		clearTimeout(qTimer);
+		qTimer = setTimeout(() => load(), 350);
+	});
+	root.find(".ot-stage").on("change", function () { S.stage = this.value; load(); });
+	root.find(".ot-duef").on("change", function () { S.due = this.value; load(); });
 
 	// One adaptive action on the ticked orders (placer-only rows carry a checkbox):
 	// "Follow" normally, but "Unfollow" once every ticked order is already followed.

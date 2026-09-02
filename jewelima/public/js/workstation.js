@@ -139,8 +139,12 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 							style="background:#e0a800;border-color:#e0a800;color:#3a2c00;font-weight:700;">${__("Stone Request")}</button>`)
 					: canIssue ? `<button class="btn btn-xs wk-issue" data-name="${esc(r.name)}"
 						style="background:#1f618d;border-color:#1f618d;color:#fff;">${__("Assign")}</button>` : ""}</td>` : ""}
-			</tr>`).join("")}</tbody></table>`
+			</tr>`).join("")}</tbody></table><div class="wk-qmore"></div>`
 			: `<div class="wk-none">${__("Nothing waiting — the bench is clear.")}</div>`);
+		// the tile count is the WHOLE queue; this says how much of it is on screen
+		jewelima.moreBar(root.find(".wk-qmore"), (D.queue || []).length,
+			D.queue_total != null ? D.queue_total : (D.queue || []).length,
+			() => load(true), __("Load 1000 more"));
 
 		root.find(".wk-wbody").html(D.working.length ? D.working.map((g) => `
 			<div class="wk-emp"><div class="h"><span>${esc(g.employee_name)}</span>
@@ -162,12 +166,25 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 		frappe.pages[_route].on_page_show = function () { load(); loadDay(); };
 	}
 
-	function load() {
-		frappe.call({ method: API + ".get_bench_workstation", args: { bench }, freeze: false }).then((r) => {
-			D = r.message;
-			if (D) paint();
-		});
-		loadDay();
+	// The queue arrives a window at a time — a bench can hold thousands of cards
+	// and the worker only ever works the top of it, but the browser still had to
+	// lay out every row before anything appeared.
+	const QPAGE = 1000;
+
+	function load(more) {
+		const $q = root.find(".wk-qbody");
+		jewelima.busy($q, true, more ? __("Loading more cards…") : __("Loading the bench…"));
+		frappe.call({ method: API + ".get_bench_workstation", freeze: false,
+			args: { bench, limit: QPAGE, offset: more && D ? (D.queue || []).length : 0 } })
+			.then((r) => {
+				const m = r.message;
+				if (!m) return;
+				if (more && D) m.queue = (D.queue || []).concat(m.queue || []);
+				D = m;
+				paint();
+			})
+			.always(() => jewelima.busy($q, false));
+		if (!more) loadDay();
 	}
 
 	// ---- the DAY panel: transfers in/out + finished work by worker -------------

@@ -67,7 +67,9 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 	}
 
 	function paint() {
-		root.find(".dv-total").text(__("{0} card(s) at risk", [D.total]));
+		const have = shown();
+		root.find(".dv-total").text(__("{0} card(s) at risk", [D.total])
+			+ (have < D.total ? " · " + __("{0} loaded", [have]) : ""));
 		root.find(".dv-body").html(D.total ? D.benches.map((b) => `
 			<div class="dv-bench">
 				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.rows.length} ${__("card(s)")}</span></div>
@@ -85,15 +87,49 @@ frappe.pages["due-view"].on_page_load = function (wrapper) {
 					<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 					<td>${chip(r.days_left)}</td>
 				</tr>`).join("")}</tbody></table>
-			</div>`).join("")
+			</div>`).join("") + `<div class="dv-more"></div>`
 			: `<div class="dv-none">${__("Nothing due within the window.")}</div>`);
+		jewelima.moreBar(root.find(".dv-more"), have, D.total, () => load(true),
+			__("Load 500 more"));
 	}
 
-	function load() {
-		frappe.call({ method: API + ".get_due_soon", args: { days: root.find(".dv-days-in").val() || 5 } })
-			.then((r) => { D = r.message; if (D) paint(); });
+	// Paged: the board can be tens of thousands of cards wide, and every one of
+	// them used to arrive before anything appeared on screen.
+	const PAGE = 500;
+
+	function load(more) {
+		const $body = root.find(".dv-body");
+		jewelima.busy($body, true, more ? __("Loading more cards…") : __("Loading the board…"));
+		frappe.call({ method: API + ".get_due_soon", freeze: false,
+			args: { days: root.find(".dv-days-in").val() || 5,
+				limit: PAGE, offset: more ? shown() : 0 } })
+			.then((r) => {
+				const m = r.message;
+				if (!m) return;
+				D = more ? mergeBenches(D, m) : m;
+				paint();
+			})
+			.always(() => jewelima.busy($body, false));
 	}
-	root.find(".dv-days-in").on("change", load);
+
+	// how many cards are actually in hand right now
+	function shown() {
+		return (D && D.benches || []).reduce((a, b) => a + (b.rows || []).length, 0);
+	}
+
+	// a later window can land rows in a bench already on screen, so merge by
+	// bench rather than appending a second group with the same heading
+	function mergeBenches(prev, next) {
+		const by = new Map((prev.benches || []).map((b) => [b.bench, b]));
+		(next.benches || []).forEach((b) => {
+			const cur = by.get(b.bench);
+			if (cur) cur.rows = cur.rows.concat(b.rows || []);
+			else by.set(b.bench, b);
+		});
+		return { ...next, benches: [...by.values()].sort((a, b) => a.bench.localeCompare(b.bench)) };
+	}
+
+	root.find(".dv-days-in").on("change", () => load());
 
 	root.on("click", ".dv-card", function () {
 		frappe.route_options = { card: $(this).data("card") };

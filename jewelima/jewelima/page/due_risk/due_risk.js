@@ -49,7 +49,9 @@ frappe.pages["due-risk"].on_page_load = function (wrapper) {
 	}
 
 	function paint() {
-		root.find(".dr-total").text(__("{0} card(s) at risk", [D.total]));
+		const have = shown();
+		root.find(".dr-total").text(__("{0} card(s) at risk", [D.total])
+			+ (have < D.total ? " · " + __("{0} loaded", [have]) : ""));
 		root.find(".dr-body").html(D.total ? D.benches.map((b) => `
 			<div class="dr-bench">
 				<div class="h"><b>${esc(b.bench)}</b><span class="n">${b.rows.length} ${__("card(s)")}</span>
@@ -70,13 +72,44 @@ frappe.pages["due-risk"].on_page_load = function (wrapper) {
 				</tr>`).join("")}</tbody></table>
 			</div>`).join("")
 			: `<div class="dr-none">${__("Nothing at risk — every card due in the window already carries gold.")}</div>`);
+		if (D.total) {
+			root.find(".dr-body").append(`<div class="dr-more"></div>`);
+			jewelima.moreBar(root.find(".dr-more"), shown(), D.total, () => load(true),
+				__("Load 500 more"));
+		}
 	}
 
-	function load() {
-		frappe.call({ method: API + ".get_due_risk", args: { days: root.find(".dr-days-in").val() || 5 } })
-			.then((r) => { D = r.message; if (D) paint(); });
+	const PAGE = 500;
+
+	function shown() {
+		return (D && D.benches || []).reduce((a, b) => a + (b.rows || []).length, 0);
 	}
-	root.find(".dr-days-in").on("change", load);
+	// a later window can add rows to a bench already on screen
+	function mergeBenches(prev, next) {
+		const by = new Map((prev.benches || []).map((b) => [b.bench, b]));
+		(next.benches || []).forEach((b) => {
+			const cur = by.get(b.bench);
+			if (cur) cur.rows = cur.rows.concat(b.rows || []);
+			else by.set(b.bench, b);
+		});
+		return { ...next, benches: [...by.values()].sort((a, b) => a.bench.localeCompare(b.bench)) };
+	}
+
+	function load(more) {
+		const $body = root.find(".dr-body");
+		jewelima.busy($body, true, more ? __("Loading more cards…") : __("Loading the board…"));
+		frappe.call({ method: API + ".get_due_risk", freeze: false,
+			args: { days: root.find(".dr-days-in").val() || 5,
+				limit: PAGE, offset: more ? shown() : 0 } })
+			.then((r) => {
+				const m = r.message;
+				if (!m) return;
+				D = more ? mergeBenches(D, m) : m;
+				paint();
+			})
+			.always(() => jewelima.busy($body, false));
+	}
+	root.find(".dr-days-in").on("change", () => load());
 
 	function addToPriority(bags) {
 		frappe.call({ method: API + ".priority_add_many", args: { bags: JSON.stringify(bags) } }).then((r) => {

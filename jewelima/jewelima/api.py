@@ -6397,13 +6397,18 @@ def get_priority_candidates():
 
 
 @frappe.whitelist()
-def get_due_risk(days=5):
+def get_due_risk(days=5, limit=500, offset=0):
 	"""Due Risk board: cards whose due date is within N days (or already past)
 	that are STILL NOT CAST — zero gold grams in the bag's ledger — grouped by
-	the bench they're sitting at. The factory's 'these will slip' list."""
+	the bench they're sitting at. The factory's 'these will slip' list.
+
+	PAGED like Due Soon — the count is over the whole risk, the rows arrive a
+	window at a time."""
 	days = 5 if days in (None, "") else cint(days)
 	if days < 0:
 		days = 0
+	limit = cint(limit) or 500
+	offset = max(cint(offset), 0)
 	horizon = frappe.utils.add_days(frappe.utils.today(), days)
 	rows = frappe.db.sql("""
 		SELECT b.name, b.design, b.qty, b.location,
@@ -6422,24 +6427,47 @@ def get_due_risk(days=5):
 		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
 		  AND COALESCE(g.gold_g, 0) <= 0.0005
 		ORDER BY jo.due_date, b.name
-	""", horizon, as_dict=True)
+		LIMIT %s OFFSET %s
+	""", (horizon, limit, offset), as_dict=True)
+	total = cint(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		LEFT JOIN (
+			SELECT l.order_bag, SUM(IF(l.direction='Out', -l.qty, l.qty)) gold_g
+			FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+			WHERE IFNULL(i.stone_type, '') = ''
+			GROUP BY l.order_bag
+		) g ON g.order_bag = b.name
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
+		  AND COALESCE(g.gold_g, 0) <= 0.0005
+	""", horizon)[0][0])
 	listed = set(frappe.get_all("Priority Card", pluck="order_bag"))
 	benches = {}
 	for r in rows:
 		r["due"] = str(r.due or "")
 		r["on_priority"] = 1 if r.name in listed else 0
 		benches.setdefault(r.location or "(no bench)", []).append(r)
-	return {"days": days, "total": len(rows),
+	return {"days": days, "total": total, "shown": offset + len(rows),
+		"offset": offset, "limit": limit,
+		"has_more": (offset + len(rows)) < total,
 		"benches": [{"bench": k, "rows": v} for k, v in sorted(benches.items())]}
 
 
 @frappe.whitelist()
-def get_due_soon(days=5):
-	"""Due Soon board: EVERY live card due within N days (or overdue), grouped
-	by bench — cast or not (gold grams shown so the uncast stand out)."""
+def get_due_soon(days=5, limit=500, offset=0):
+	"""Due Soon board: live cards due within N days (or overdue), grouped by
+	bench — cast or not (gold grams shown so the uncast stand out).
+
+	PAGED. A wide window used to return every matching card in one reply (27 MB
+	at 30 days on a 150k board), and the page stayed blank until all of it had
+	been parsed and laid out. The COUNT is still over everything, so the header
+	always states the true size of the risk, however much of it is on screen."""
 	days = 5 if days in (None, "") else cint(days)
 	if days < 0:
 		days = 0
+	limit = cint(limit) or 500
+	offset = max(cint(offset), 0)
 	horizon = frappe.utils.add_days(frappe.utils.today(), days)
 	buckets = [("dmd", "DMD"), ("ps", "PS"), ("cs", "CS"), ("cz", "CZ"),
 		("cvd", "CVD"), ("sw", "SW"), ("pdmd", "PDMD"), ("poth", "POTH")]
@@ -6464,7 +6492,14 @@ def get_due_soon(days=5):
 		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
 		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
 		ORDER BY jo.due_date, b.name
-	""".format(stone_cols=stone_cols), horizon, as_dict=True)
+		LIMIT %s OFFSET %s
+	""".format(stone_cols=stone_cols), (horizon, limit, offset), as_dict=True)
+	total = cint(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabOrder Bag` b
+		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.stock_status = 'In Production' AND b.is_finished = 0
+		  AND jo.due_date IS NOT NULL AND jo.due_date <= %s
+	""", horizon)[0][0])
 	listed = set(frappe.get_all("Priority Card", pluck="order_bag"))
 	benches = {}
 	for r in rows:
@@ -6482,7 +6517,9 @@ def get_due_soon(days=5):
 			r.pop(k + "_an", None); r.pop(k + "_aw", None)
 		r["stones"] = stones
 		benches.setdefault(r.location or "(no bench)", []).append(r)
-	return {"days": days, "total": len(rows),
+	return {"days": days, "total": total, "shown": offset + len(rows),
+		"offset": offset, "limit": limit,
+		"has_more": (offset + len(rows)) < total,
 		"benches": [{"bench": k, "rows": v} for k, v in sorted(benches.items())]}
 
 
@@ -6723,14 +6760,22 @@ def get_bench_flow(bench, direction, from_date=None, to_date=None):
 
 
 @frappe.whitelist()
-def get_bench_workstation(bench):
+def get_bench_workstation(bench, limit=1000, offset=0):
 	"""The bench WORKSTATION: the small live picture a worker glances at.
 	- queue: waiting cards in PRIORITY order (rank, due, reason) — next on top
 	- working: who holds what right now, with the work type and since-when
-	CASTING / TREE MAKING run batches; the queue section stays rank-free there."""
+	CASTING / TREE MAKING run batches; the queue section stays rank-free there.
+
+	The QUEUE is windowed. A bench holding ten thousand cards used to send all of
+	them, and the worker only ever looks at the top of a priority-ordered list —
+	but the browser still had to lay out every row. The window is taken AFTER the
+	sort and after the awaiting-stones split, so the top of the queue is always
+	the real top and every count still counts everything."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
 	bench = (bench or "").upper()
+	limit = cint(limit) or 1000
+	offset = max(cint(offset), 0)
 	board = get_bench_board(bench)
 	rows = board["rows"]
 	ranked = bench not in PRIORITY_EXEMPT_BENCHES
@@ -6833,7 +6878,12 @@ def get_bench_workstation(bench):
 		"default_work_type": opts.get("default_work_type"),
 		"queue": [{k: r.get(k) for k in ("name", "design", "design_type", "qty", "party",
 			"order_type", "due", "status", "queue_reason", "prio_rank", "prio_manual",
-			"stones_ok", "stones_pending", "stone_requested")} for r in waiting],
+			"stones_ok", "stones_pending", "stone_requested")}
+			for r in waiting[offset:offset + limit]],
+		"queue_total": len(waiting),
+		"queue_shown": min(offset + limit, len(waiting)),
+		"queue_offset": offset, "queue_limit": limit,
+		"queue_has_more": (offset + limit) < len(waiting),
 		"working": sorted(working.values(), key=lambda g: g["employee_name"]),
 		"queue_reasons": opts["queue_reasons"],
 		"awaiting_stones": [{k: r.get(k) for k in ("name", "design", "party", "due",
@@ -16281,11 +16331,28 @@ def get_prebagged_for_issue():
 
 # ============================ Ordering > Track ================================
 @frappe.whitelist()
-def get_order_tracker():
+def get_order_tracker(limit=100, offset=0, owner=None, stage=None, due=None, q=None):
 	"""Ordering > Track: every ACTIVE order card (NOT Sold, NOT Cancelled) with the
 	info an order-taker needs so nothing slips — grouped by the user who placed it,
-	plus KPIs. Read-only; anyone with ordering access can view all users' orders."""
+	plus KPIs. Read-only; anyone with ordering access can view all users' orders.
+
+	PAGED. This used to build every active card into one reply — at 150k cards that
+	is a 79 MB payload the browser then has to parse and lay out, which is where the
+	page's five-second stall came from. Now it runs in two passes:
+
+	  1. a LIGHT query (9 columns) over every active card, for the KPIs and the
+	     per-user tiles — those must count everything or they are lies;
+	  2. the FULL row build for one window only.
+
+	Both passes share one ORDER BY and the window is taken from the light pass's
+	own list, so the two can never disagree about which cards are where."""
 	_following_access()
+	limit = cint(limit) or 100
+	offset = max(cint(offset), 0)
+	owner = (owner or "").strip()
+	stage = (stage or "").strip()
+	due = (due or "").strip()
+	q = (q or "").strip()
 	me = frappe.session.user
 	is_admin = "System Manager" in frappe.get_roles()
 	buckets = [("dmd", "DMD"), ("ps", "PS"), ("cs", "CS"), ("cz", "CZ"),
@@ -16294,6 +16361,73 @@ def get_order_tracker():
 		"b.{k}_no AS {k}_pn, b.{k}_weight AS {k}_pw, "
 		"b.act_{k}_no AS {k}_an, b.act_{k}_weight AS {k}_aw".format(k=k)
 		for k, _ in buckets)
+	ORDER_BY = "ORDER BY b.due_date ASC, b.creation ASC"
+	WHERE = "WHERE IFNULL(b.stock_status, '') NOT IN ('Sold', 'Cancelled')"
+
+	# pass 1 — everything, but only the columns the KPIs and tiles need
+	light = frappe.db.sql("""
+		SELECT b.name, b.owner, b.location, b.is_finished, b.stock_status,
+			b.due_date, b.stone_issue, b.stone_oos
+		FROM `tabOrder Bag` b
+		{where} {order}
+	""".format(where=WHERE, order=ORDER_BY), as_dict=True)
+
+	today = frappe.utils.getdate()
+	now = frappe.utils.now_datetime()
+
+	def _stage_health(r):
+		"""One reading of a card's stage and health, used by every pass so the KPI
+		count, the filter and the card the user sees can never tell different
+		stories."""
+		ss = r.stock_status or ""
+		if cint(r.is_finished) or ss == "In Stock":
+			st = "In Stock"
+		elif ss == "At Certification":
+			st = "At Certification"
+		else:
+			st = r.location or "—"
+		d = frappe.utils.getdate(r.due_date) if r.due_date else None
+		dl = (d - today).days if d else None
+		hl = ("overdue" if (dl is not None and dl < 0)
+			else "due_soon" if (dl is not None and dl <= 3)
+			else "ontrack")
+		return st, hl, dl
+
+	# FILTERS RUN ON THE SERVER. With a hundred rows on screen, a filter that only
+	# sifted the loaded window would search a hundred cards and call it the whole
+	# board. The card/design/customer text is not on the light row, so a text search
+	# resolves its matching names first and the window is cut from what survives.
+	match_names = None
+	if q:
+		like = "%" + q + "%"
+		match_names = {r[0] for r in frappe.db.sql("""
+			SELECT b.name FROM `tabOrder Bag` b
+			LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+			WHERE IFNULL(b.stock_status,'') NOT IN ('Sold','Cancelled')
+			  AND (b.name LIKE %(l)s OR b.design LIKE %(l)s
+			       OR b.job_order LIKE %(l)s OR jo.customer LIKE %(l)s)
+		""", {"l": like})}
+
+	def _keep(r):
+		if owner and (r.owner or "") != owner:
+			return False
+		if match_names is not None and r.name not in match_names:
+			return False
+		if stage or due:
+			st, hl, _dl = _stage_health(r)
+			if stage and st != stage:
+				return False
+			if due and hl != due:
+				return False
+		return True
+
+	filtered = [r for r in light if _keep(r)] if (owner or stage or due or q) else light
+	total_all = len(light)
+	total = len(filtered)
+
+	# pass 2 — the wide row build, for this window of the filtered list only
+	window = filtered[offset:offset + limit]
+	names = [r.name for r in window]
 	rows = frappe.db.sql("""
 		SELECT b.name, b.owner, b.job_order, b.design, b.qty, b.size, b.location,
 			b.is_finished, b.stock_status, b.act_gross_weight, b.gross_weight,
@@ -16303,30 +16437,44 @@ def get_order_tracker():
 			{stone_cols}
 		FROM `tabOrder Bag` b
 		LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
-		WHERE IFNULL(b.stock_status, '') NOT IN ('Sold', 'Cancelled')
-		ORDER BY b.due_date ASC, b.creation ASC
-	""".format(stone_cols=stone_cols), as_dict=True)
-	owners = list({r.owner for r in rows if r.owner})
+		WHERE b.name IN %(names)s
+		{order}
+	""".format(stone_cols=stone_cols, order=ORDER_BY),
+		{"names": names or [""]}, as_dict=True) if names else []
+	owners = list({r.owner for r in light if r.owner})
 	unames = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
 		filters={"name": ["in", owners or [""]]}, fields=["name", "full_name"])}
-	today = frappe.utils.getdate()
-	now = frappe.utils.now_datetime()
 	users, out = {}, []
 	kpi = {"total": 0, "overdue": 0, "due_soon": 0, "in_production": 0,
 		"in_stock": 0, "at_cert": 0, "awaiting_stone": 0, "oos": 0}
-	for r in rows:
-		ss = r.stock_status or ""
-		if cint(r.is_finished) or ss == "In Stock":
-			stage = "In Stock"
-		elif ss == "At Certification":
-			stage = "At Certification"
+
+	# pass 1 counts EVERYTHING — a KPI that only counted the visible page would
+	# quietly under-report the moment the board grew past one window
+	for r in light:
+		stage, health, _dl = _stage_health(r)
+		owner_name = unames.get(r.owner, r.owner or "—")
+		u = users.setdefault(r.owner or "?",
+			{"user": r.owner or "?", "name": owner_name, "count": 0, "overdue": 0})
+		u["count"] += 1
+		u["overdue"] += 1 if health == "overdue" else 0
+		kpi["total"] += 1
+		if health == "overdue":
+			kpi["overdue"] += 1
+		elif health == "due_soon":
+			kpi["due_soon"] += 1
+		if stage == "In Stock":
+			kpi["in_stock"] += 1
+		elif stage == "At Certification":
+			kpi["at_cert"] += 1
 		else:
-			stage = r.location or "—"
-		due = frappe.utils.getdate(r.due_date) if r.due_date else None
-		days_left = (due - today).days if due else None
-		health = ("overdue" if (days_left is not None and days_left < 0)
-			else "due_soon" if (days_left is not None and days_left <= 3)
-			else "ontrack")
+			kpi["in_production"] += 1
+		kpi["awaiting_stone"] += cint(r.stone_issue)
+		kpi["oos"] += cint(r.stone_oos)
+
+	# pass 2 builds only the cards on screen
+	for r in rows:
+		stage, health, days_left = _stage_health(r)
+		ss = r.stock_status or ""
 		gross = flt(r.act_gross_weight) or flt(r.gross_weight)
 		owner_name = unames.get(r.owner, r.owner or "—")
 		stones = []
@@ -16350,25 +16498,14 @@ def get_order_tracker():
 			"can_follow": 1 if (is_admin or (r.placer and r.placer == me)) else 0,
 			"stones": stones,
 		})
-		u = users.setdefault(r.owner or "?", {"user": r.owner or "?", "name": owner_name, "count": 0, "overdue": 0})
-		u["count"] += 1
-		u["overdue"] += 1 if health == "overdue" else 0
-		kpi["total"] += 1
-		if health == "overdue":
-			kpi["overdue"] += 1
-		elif health == "due_soon":
-			kpi["due_soon"] += 1
-		if stage == "In Stock":
-			kpi["in_stock"] += 1
-		elif stage == "At Certification":
-			kpi["at_cert"] += 1
-		else:
-			kpi["in_production"] += 1
-		kpi["awaiting_stone"] += cint(r.stone_issue)
-		kpi["oos"] += cint(r.stone_oos)
 	tiles = sorted(users.values(), key=lambda x: (-x["overdue"], -x["count"]))
 	return {"rows": out, "users": tiles, "kpi": kpi, "today": str(today),
-		"me": me, "is_admin": 1 if is_admin else 0}
+		"me": me, "is_admin": 1 if is_admin else 0,
+		"total": total, "total_all": total_all,
+		"shown": offset + len(out), "offset": offset,
+		"limit": limit, "has_more": (offset + len(out)) < total,
+		"filtered": 1 if (owner or stage or due or q) else 0,
+		"stages": sorted({_stage_health(r)[0] for r in light})}
 
 
 def _following_access():
