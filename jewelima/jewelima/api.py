@@ -3569,6 +3569,107 @@ def save_issue_access(rows):
 
 
 @frappe.whitelist()
+def stone_issue_save_plan(order_bag, lines):
+	"""Change a card's planned STONES from the issue station.
+
+	The station shows stone lines only — metals are issued at Casting and never
+	appear here — so this MERGES rather than replaces: every non-stone row on the
+	card is carried through untouched. save_bag_bom() replaces the whole table,
+	and calling it with what this screen can see would silently delete the card's
+	gold.
+
+	A line that has already had stones issued against it cannot be removed, and
+	its plan cannot be set below what went out: the ledger is what physically
+	happened, and a plan that contradicts it makes the card's own reconciliation
+	unreadable. Reduce those through Stone Return, which puts the carats back.
+	"""
+	if not _may_open_page("stone-issue"):
+		frappe.throw(frappe._("You are not allowed to change a card's stones."), frappe.PermissionError)
+	if isinstance(lines, str):
+		lines = json.loads(lines or "[]")
+	nm = _resolve_bag_code(order_bag)
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("Card {0} does not exist.").format(order_bag or "?"))
+	bag = frappe.get_doc("Order Bag", nm)
+	if bag.is_finished:
+		frappe.throw(frappe._("The plan is locked — the ornament for {0} has already been made.").format(nm))
+	if bag.stock_status != "In Production":
+		frappe.throw(frappe._("{0} is {1} — its plan can only change while it is In Production.")
+			.format(nm, bag.stock_status or "?"))
+
+	# what has physically gone out against each item, by the same reckoning the
+	# station itself reports
+	issued = {}
+	for r in frappe.get_all("Bag Material Ledger",
+			filters={"order_bag": nm, "entry_type": "Stone Issue"},
+			fields=["item", "qty", "pcs", "direction"]):
+		sign = 1 if (r.direction or "In") == "In" else -1
+		e = issued.setdefault(r.item, {"ct": 0.0, "pcs": 0})
+		e["ct"] += sign * flt(r.qty)
+		e["pcs"] += sign * cint(r.pcs)
+
+	want = {}
+	for r in lines or []:
+		item = (r.get("item") or "").strip()
+		if not item:
+			continue
+		if not frappe.db.exists("Item", item):
+			frappe.throw(frappe._("{0} is not an item.").format(item))
+		if not frappe.db.get_value("Item", item, "stone_type"):
+			frappe.throw(frappe._("{0} is not a stone — metals are planned at Casting, not here.").format(item))
+		if flt(r.get("qty")) < 0 or flt(r.get("weight")) < 0:
+			frappe.throw(frappe._("{0}: a plan cannot be negative.").format(item))
+		e = want.setdefault(item, {"qty": 0.0, "weight": 0.0})
+		e["qty"] += flt(r.get("qty"))
+		e["weight"] += flt(r.get("weight"))
+
+	# nothing already issued may be planned away
+	for item, out in issued.items():
+		if flt(out["ct"]) <= 0.0005 and cint(out["pcs"]) <= 0:
+			continue
+		keep = want.get(item)
+		if not keep:
+			frappe.throw(frappe._(
+				"{0} already has {1} ct issued to this card — it cannot be taken off the plan. "
+				"Send it back on Stone Return first.").format(item, round(flt(out["ct"]), 3)))
+		if flt(keep["weight"]) + 0.0005 < flt(out["ct"]):
+			frappe.throw(frappe._(
+				"{0}: {1} ct has already gone out, so the plan cannot be set to {2} ct. "
+				"Send the difference back on Stone Return first.").format(
+				item, round(flt(out["ct"]), 3), round(flt(keep["weight"]), 3)))
+
+	before = _bom_snapshot(bag)
+	kept = [r for r in (bag.bag_bom or [])
+		if not frappe.db.get_value("Item", r.item, "stone_type")]      # metals stay
+	rows = [{"item": r.item, "qty": flt(r.qty), "weight": flt(r.weight)} for r in kept]
+	rows += [{"item": it, "qty": v["qty"], "weight": v["weight"]} for it, v in want.items()]
+	bag.set("bag_bom", [])
+	for r in rows:
+		bag.append("bag_bom", r)
+	bag.save(ignore_permissions=True)
+	changed = _log_bom_diff(nm, before, _bom_snapshot(bag), "Stone Issue")
+	frappe.db.commit()
+	return {"ok": 1, "changed": changed, "metals_kept": len(kept),
+		"stone_lines": len(want), **get_stone_issue_card(nm)}
+
+
+@frappe.whitelist()
+def get_stone_items_for_plan(txt=None):
+	"""Every stone item a plan line can point at, for the sieve swap.
+
+	Unlimited on purpose: the page validates a typed name against this list, so a
+	truncated one would reject perfectly good stones once the masters outgrow the
+	cap. NULL stone_type falls out with "" — both mean "not a stone", the same
+	reckoning get_stone_issue_card() uses.
+	"""
+	filters = {"stone_type": ["!=", ""]}
+	if txt:
+		filters["name"] = ["like", "%" + txt + "%"]
+	return frappe.get_all("Item", filters=filters,
+		fields=["name", "stone_type"], order_by="name", limit_page_length=0)
+
+
+@frappe.whitelist()
 def stone_issue_apply(order_bag, lines, issued_by=None):
 	"""Issue several stone lines into one card (pcs + carats each). Per line: a Bag
 	Material Ledger 'Stone Issue' row + real stock Stone Issue -> In Bags, plus one

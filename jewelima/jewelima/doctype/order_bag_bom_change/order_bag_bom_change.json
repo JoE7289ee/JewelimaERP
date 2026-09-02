@@ -23,7 +23,7 @@
  ],
  "fields": [
   {"fieldname": "order_bag", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Order Bag", "options": "Order Bag", "reqd": 1, "search_index": 1},
-  {"fieldname": "source", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Source", "options": "Order placed\nWeight Add\nEdit Order\nCAD design\nPre-bag\nOther"},
+  {"fieldname": "source", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Source", "options": "Order placed\nWeight Add\nEdit Order\nCAD design\nPre-bag\nStone Issue\nOther"},
   {"fieldname": "column_break_1", "fieldtype": "Column Break"},
   {"fieldname": "action", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Action", "options": "Added\nRemoved\nChanged"},
   {"fieldname": "item", "fieldtype": "Data", "in_list_view": 1, "label": "Material"},

@@ -2,17 +2,17 @@
 // For license information, please see license.txt
 //
 // Stone Issue (Manufacturing > Issue) — the stone-issuing control station.
-// LEFT: scan a card, its BOM stone lines (metals never show), edit a line
-// (sieve swap / piece count — plan carats follow the per-piece average), add a
-// brand-new stone (blank plan fills from the actual on issue), enter pcs + ct
-// and Issue (Bag Material Ledger row + stock Stone Issue -> In Bags + a
-// Material Issue record). RIGHT: what the picked issuer handed out today, and
-// the Stone Issue warehouse stock. Route: /app/stone-issue
+// LEFT: scan a card, see its BOM stone lines (metals never show), enter pcs + ct
+// and Issue (Bag Material Ledger row + stock Stone Issue -> In Bags + a Material
+// Issue record). EDIT PLAN makes the plan columns editable — swap a sieve, change
+// the planned pieces/carats, add or drop a stone — and rewrites the card's own
+// material list, keeping its metals untouched. RIGHT: what the picked issuer
+// handed out today, and the Stone Issue warehouse stock. Route: /app/stone-issue
 
 frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Stone Issue", single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { card: null };
+	const S = { card: null, editing: false, stoneItems: [] };
 	const esc = frappe.utils.escape_html;
 
 	$(page.main).append(`
@@ -55,6 +55,16 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		.si-strip .si-go{margin-left:auto;font-size:18px;font-weight:800;letter-spacing:.02em;padding:15px 54px;border-radius:10px;background:#2e7d32;border-color:#2e7d32;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18);}
 		.si-strip .si-go:hover{background:#256628;border-color:#256628;}
 		.si-strip .si-go:focus{outline:3px solid rgba(46,125,50,.5);outline-offset:2px;box-shadow:0 0 0 4px rgba(46,125,50,.18);}
+		table.si-grid.si-editing{outline:2px solid #b35a00;outline-offset:2px;}
+		table.si-grid.si-editing th{background:rgba(230,126,34,.14);color:#b35a00;}
+		table.si-grid td.si-drop{text-align:center;color:#c0392b;font-weight:800;cursor:pointer;width:34px;font-size:16px;}
+		table.si-grid td.si-drop:hover{background:rgba(192,57,43,.12);}
+		table.si-grid input.si-item{width:100%;text-align:left;font-weight:600;}
+		table.si-grid input.si-plan-pcs{width:54px;}
+		table.si-grid input.si-plan-ct{width:78px;margin-left:5px;}
+		.si-foot .si-edit{margin-left:auto;}
+		.si-editbar{display:none;gap:8px;align-items:center;margin-left:auto;}
+		.si-editbar .si-savep{background:#b35a00;border-color:#b35a00;color:#fff;}
 		table.si-grid tr.si-locked{opacity:.5;}
 		table.si-grid tr.si-locked input{background:var(--disabled-control-bg,#eee);cursor:not-allowed;}
 		.si-callout{display:none;border:2px solid;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:14px;font-weight:600;}
@@ -87,12 +97,20 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 					<thead><tr>
 						<th>${__("Stone")}</th><th>${__("Plan (pcs / ct)")}</th><th>${__("Issued (pcs / ct)")}</th>
 						<th>${__("Available (ct)")}</th><th>${__("Issue Pcs")}</th><th>${__("Issue Ct")}</th>
+						<th class="si-th-drop" style="display:none;"></th>
 					</tr></thead><tbody></tbody>
 				</table>
 				<div class="si-foot">
 					<span class="si-sum text-muted"></span>
+					<button class="btn btn-default btn-sm si-edit">${__("Edit Plan")}</button>
+					<span class="si-editbar">
+						<button class="btn btn-default btn-sm si-addrow">${__("+ Stone")}</button>
+						<button class="btn btn-sm si-savep">${__("Save Plan")}</button>
+						<button class="btn btn-default btn-sm si-cancelp">${__("Cancel")}</button>
+					</span>
 				</div>
-				<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. Enter the pieces and carats you are handing out and Issue — this moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger. (Changing the BOM — swapping a sieve or adding a stone — is done upstream, not here.)")}</div>
+				<datalist id="si-stone-items"></datalist>
+				<div class="si-note">${__("Scan a card to start. Only the card's BOM STONES show here — gold is issued at Casting. Enter the pieces and carats you are handing out and Issue — this moves the carats from the Stone Issue warehouse into the In Bags pool and writes the card's ledger. Use EDIT PLAN to change the card's stones.")}</div>
 			</div>
 			<div class="si-side">
 				<div class="si-panel si-hist-panel" style="display:none;">
@@ -149,6 +167,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		}
 		root.find("table.si-grid tbody tr").each(function () {
 			const i = cint(this.getAttribute("data-i"));
+			if (!S.card.lines[i]) return;
 			const b = S.card.lines[i].bucket || "POTH";
 			const ok = bucketOK(b);
 			const $r = $(this);
@@ -272,6 +291,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find(".si-callout").removeClass("warn bad").addClass(kind).html(msg).show();
 	}
 	function hideCard() {
+		S.editing = false;
 		S.card = null;
 		root.find(".si-head, table.si-grid, .si-foot, .si-strip, .si-prebag").hide();
 	}
@@ -321,13 +341,19 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		root.find(".si-loc").text(c.location || "—");
 		root.find(".si-wh").text(c.warehouse);
 		root.find("table.si-grid tbody").html(c.lines.map((l, i) => `
-			<tr data-i="${i}">
-				<td>${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span></td>
-				<td class="mut">${l.plan_pcs} / ${l.plan_ct.toFixed(3)}</td>
+			<tr data-i="${i}" data-item="${esc(l.item)}">
+				<td>${S.editing
+					? `<input class="si-item" list="si-stone-items" value="${esc(l.item)}">`
+					: `${esc(l.item)} <span class="text-muted">(${esc(l.stone_type)})</span>`}</td>
+				<td class="mut">${S.editing
+					? `<input type="number" class="si-plan-pcs" min="0" step="1" value="${l.plan_pcs}">`
+					  + `<input type="number" class="si-plan-ct" min="0" step="0.001" value="${l.plan_ct.toFixed(3)}">`
+					: `${l.plan_pcs} / ${l.plan_ct.toFixed(3)}`}</td>
 				<td class="mut">${l.issued_pcs} / ${l.issued_ct.toFixed(3)}</td>
 				<td class="${l.available_ct <= 0 ? "low" : ""}">${l.available_ct.toFixed(3)}</td>
 				<td><input type="number" class="si-pcs" min="0" step="1" placeholder="0"></td>
 				<td><input type="number" class="si-ct" min="0" step="0.001" placeholder="0.000"></td>
+				${S.editing ? `<td class="si-drop" title="${__("remove this stone")}">&times;</td>` : ""}
 			</tr>`).join(""));
 		const pbi = c.pre_bag || {};
 		const $pb = root.find(".si-prebag");
@@ -337,13 +363,102 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			$pb.hide();
 		}
 		root.find(".si-head").css("display", "flex");
-		root.find("table.si-grid").show();
+		root.find("table.si-grid").show().toggleClass("si-editing", S.editing);
+		root.find(".si-th-drop").toggle(S.editing);
 		root.find(".si-foot").css("display", "flex");
-		root.find(".si-strip").css("display", "flex");
+		root.find(".si-edit").toggle(!S.editing);
+		root.find(".si-editbar").css("display", S.editing ? "flex" : "none");
+		// no issuing while the plan is being rewritten — the two would fight
+		root.find(".si-strip").css("display", S.editing ? "none" : "flex");
+		root.find(".si-pcs,.si-ct").prop("disabled", S.editing);
 		sum();
-		applyBucketLocks();
-		root.find("table.si-grid tbody tr:not(.si-locked):first .si-pcs").focus();
+		if (S.editing) {
+			root.find("table.si-grid tbody tr:first .si-item").focus();
+		} else {
+			applyBucketLocks();
+			root.find("table.si-grid tbody tr:not(.si-locked):first .si-pcs").focus();
+		}
 	}
+
+	// ---- plan editing -----------------------------------------------------
+	function fillStoneList() {
+		if (S.stoneItems.length) return Promise.resolve();
+		return frappe.call("jewelima.jewelima.api.get_stone_items_for_plan").then((r) => {
+			S.stoneItems = r.message || [];
+			root.find("#si-stone-items").html(
+				S.stoneItems.map((i) => `<option value="${esc(i.name)}">${esc(i.stone_type || "")}</option>`).join(""));
+		});
+	}
+	root.on("click", ".si-edit", function () {
+		if (!S.card) return;
+		fillStoneList().then(() => { S.editing = true; paint(); });
+	});
+	root.on("click", ".si-cancelp", function () {
+		S.editing = false;
+		paint();
+	});
+	root.on("click", ".si-addrow", function () {
+		root.find("table.si-grid tbody").append(`
+			<tr data-i="new" data-item="">
+				<td><input class="si-item" list="si-stone-items" placeholder="${__("stone item")}"></td>
+				<td class="mut"><input type="number" class="si-plan-pcs" min="0" step="1" value="0">`
+				+ `<input type="number" class="si-plan-ct" min="0" step="0.001" value="0.000"></td>
+				<td class="mut">0 / 0.000</td>
+				<td class="mut">—</td>
+				<td><input type="number" class="si-pcs" disabled></td>
+				<td><input type="number" class="si-ct" disabled></td>
+				<td class="si-drop" title="${__("remove this stone")}">&times;</td>
+			</tr>`);
+		root.find("table.si-grid tbody tr:last .si-item").focus();
+	});
+	root.on("click", "td.si-drop", function () {
+		const $tr = $(this).closest("tr");
+		const item = $tr.attr("data-item");
+		const i = $tr.attr("data-i");
+		const line = i === "new" ? null : (S.card.lines[cint(i)] || null);
+		// the server refuses this too, but say so before the round trip
+		if (line && (line.issued_ct > 0.0005 || line.issued_pcs > 0)) {
+			frappe.msgprint(__("{0} already has {1} ct issued to this card. Send it back on Stone Return before taking it off the plan.",
+				[item, line.issued_ct.toFixed(3)]));
+			return;
+		}
+		$tr.remove();
+	});
+	root.on("click", ".si-savep", function () {
+		const lines = [];
+		let bad = "";
+		root.find("table.si-grid tbody tr").each(function () {
+			const $r = $(this);
+			const item = ($r.find(".si-item").val() || "").trim();
+			if (!item) return;
+			if (S.stoneItems.length && !S.stoneItems.some((i) => i.name === item)) { bad = item; return false; }
+			lines.push({ item, qty: cint($r.find(".si-plan-pcs").val()), weight: flt($r.find(".si-plan-ct").val()) });
+		});
+		if (bad) { frappe.msgprint(__("{0} is not a stone item — pick one from the list.", [bad])); return; }
+		if (!lines.length && !confirm(__("Save a card with no stones planned?"))) return;
+		frappe.call({
+			method: "jewelima.jewelima.api.stone_issue_save_plan",
+			args: { order_bag: S.card.order_bag, lines: JSON.stringify(lines) },
+			freeze: true,
+			freeze_message: __("Saving plan…"),
+		}).then((r) => {
+			const m = r.message;
+			if (!m) return;
+			S.editing = false;
+			if (m.lines) {
+				S.card = m;
+				paint();
+			} else {
+				loadCard(S.card.order_bag);   // card no longer loadable — say why
+			}
+			refreshStock();
+			frappe.show_alert({
+				message: __("Plan saved — {0} stone line(s){1}.",
+					[m.stone_lines, m.metals_kept ? __(", {0} metal line(s) kept", [m.metals_kept]) : ""]),
+				indicator: "green",
+			});
+		});
+	});
 
 	function readLines() {
 		const out = [];
@@ -351,13 +466,20 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			const i = cint(this.getAttribute("data-i"));
 			const pcs = cint($(this).find(".si-pcs").val());
 			const ct = flt($(this).find(".si-ct").val());
-			if (pcs || ct) out.push({ item: S.card.lines[i].item, pcs, ct });
+			const l = S.card.lines[i];
+			if (l && (pcs || ct)) out.push({ item: l.item, pcs, ct });
 		});
 		return out;
 	}
 
 	const BUCKET_ORDER = ["DMD", "PS", "CS", "CVD", "PDMD", "POTH"];
 	function sum() {
+		if (S.editing) {
+			// rows here may be brand new or dropped — nothing to total, and the
+			// issue strip is hidden anyway
+			root.find(".si-sum").text(__("Editing the plan — issuing is paused."));
+			return;
+		}
 		const ls = readLines();
 		const pcs = ls.reduce((a, l) => a + l.pcs, 0), ct = ls.reduce((a, l) => a + l.ct, 0);
 		root.find(".si-sum").text(ls.length ? __("{0} line(s) — {1} pcs, {2} ct", [ls.length, pcs, ct.toFixed(3)]) : "");
@@ -366,6 +488,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 		const agg = {};
 		root.find("table.si-grid tbody tr").each(function () {
 			const i = cint(this.getAttribute("data-i"));
+			if (!S.card.lines[i]) return;
 			const b = S.card.lines[i].bucket || "POTH";
 			const e = agg[b] || (agg[b] = { pcs: 0, ct: 0 });
 			e.pcs += cint($(this).find(".si-pcs").val());
@@ -387,6 +510,7 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 			if ($(this).hasClass("si-locked")) return;
 			const i = cint(this.getAttribute("data-i"));
 			const l = S.card.lines[i];
+			if (!l) return;
 			const $p = $(this).find(".si-pcs");
 			const p = cint($p.val());
 			const c0 = flt($(this).find(".si-ct").val());
