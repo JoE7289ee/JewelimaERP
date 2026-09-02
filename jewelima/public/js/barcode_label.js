@@ -29,21 +29,29 @@ jewelima.BARCODE_LABEL_CSS = `
 .bc-label .bc-a{justify-content:flex-end;}
 .bc-label .bc-b{justify-content:flex-start;}`;
 
-jewelima.barcodeStoneLine = function (c) {
+// Stone weights print in CARATS by default, which is how the trade quotes them.
+// `inGrams` prints the same weight in grams instead — one carat is exactly 0.2 g,
+// so this is a conversion, not a different number. Grams get three decimals
+// because two would round a small stone away (0.05 ct is 0.010 g).
+jewelima.barcodeStoneLine = function (c, inGrams) {
 	const flt = (v) => parseFloat(v) || 0;
-	if (c.dmd_no || c.dmd_wt) return `DIA:${c.dmd_no}/${flt(c.dmd_wt).toFixed(2)}ct`;
-	if (c.ps_no || c.ps_wt) return `PS:${c.ps_no}/${flt(c.ps_wt).toFixed(2)}ct`;
-	if (c.cs_no || c.cs_wt) return `CS:${c.cs_no}/${flt(c.cs_wt).toFixed(2)}ct`;
+	const w = (ct) => (inGrams
+		? `${(flt(ct) * 0.2).toFixed(3)}g`
+		: `${flt(ct).toFixed(2)}ct`);
+	if (c.dmd_no || c.dmd_wt) return `DIA:${c.dmd_no}/${w(c.dmd_wt)}`;
+	if (c.ps_no || c.ps_wt) return `PS:${c.ps_no}/${w(c.ps_wt)}`;
+	if (c.cs_no || c.cs_wt) return `CS:${c.cs_no}/${w(c.cs_wt)}`;
 	return "";
 };
 
-// opts: { sizeVars, offsetA, offsetB } — the roll printer passes its tuned
-// values; a sheet needs none of them and passes nothing.
+// opts: { sizeVars, offsetA, offsetB, stoneGrams } — the roll printer passes its
+// tuned values; a sheet needs none of them. stoneGrams prints stone weights in
+// grams rather than carats.
 jewelima.buildBarcodeLabel = function (c, opts) {
 	const o = opts || {};
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
-	const stone = jewelima.barcodeStoneLine(c);
+	const stone = jewelima.barcodeStoneLine(c, o.stoneGrams);
 	const left = `<div class="bc-col bc-left"><div>GW:${flt(c.gw).toFixed(3)} gm</div>`
 		+ (stone ? `<div>${stone}</div>` : "") + `</div>`;
 	const qr = c.qr

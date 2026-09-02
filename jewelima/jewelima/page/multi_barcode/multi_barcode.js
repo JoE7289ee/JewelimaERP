@@ -17,7 +17,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
-	const S = { cards: [], cols: 2 };
+	const S = { cards: [], cols: 2, stoneGrams: false };
 
 	root.append(`
 		<style>
@@ -31,6 +31,9 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			padding:8px 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
 		.mb-cols{border:1px solid var(--border-color);border-radius:8px;height:33px;padding:2px 10px;
 			font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+		.mb-gramsbox{display:flex;align-items:center;gap:6px;font-size:12.5px;
+			white-space:nowrap;cursor:pointer;user-select:none;margin:0;}
+		.mb-gramsbox input{width:15px;height:15px;cursor:pointer;margin:0;}
 		.mb-msg{margin:8px 0;font-size:12.5px;min-height:18px;}
 		.mb-msg.ok{color:#1d7a33;} .mb-msg.err{color:#b02a2a;} .mb-msg.warn{color:#8a6d00;}
 		table.mb-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);
@@ -57,6 +60,8 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			<div><div style="font-size:11px;color:var(--text-muted);">${__("Across")}</div>
 				<select class="mb-cols"><option value="1">1</option><option value="2" selected>2</option>
 					<option value="3">3</option></select></div>
+			<label class="mb-gramsbox" title="${__("one carat is 0.2 g — the same weight, stated in grams")}">
+				<input type="checkbox" class="mb-grams"> ${__("Stone weight in grams")}</label>
 			<button class="mb-go" disabled>${__("PRINT SHEET")}</button>
 			<button class="mb-btn mb-clear">${__("Clear")}</button>
 		</div>
@@ -90,7 +95,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 						? ` <span class="mb-warn">${__("no actual weight")}</span>` : ""}</td>
 					<td>${esc(c.design || "")}</td>
 					<td class="num">${flt(c.gw).toFixed(3)}</td>
-					<td>${esc(jewelima.barcodeStoneLine(c) || "")}</td>
+					<td>${esc(jewelima.barcodeStoneLine(c, S.stoneGrams) || "")}</td>
 					<td><span class="mb-x" title="${__("remove")}">&times;</span></td></tr>`).join("")
 				+ `</tbody></table>`);
 			preview();
@@ -101,7 +106,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	}
 
 	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(${S.cols}, 3.3in);">`
-		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c)).join("") + `</div>`;
+		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c, { stoneGrams: S.stoneGrams })).join("") + `</div>`;
 
 	function preview() {
 		root.find(".mb-preview").html(`<div class="mb-cap">${
@@ -140,6 +145,8 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		paint();
 	});
 	root.on("change", ".mb-cols", function () { S.cols = parseInt(this.value, 10) || 2; paint(); });
+	// repaint on toggle, so the preview shows exactly what will come off the printer
+	root.on("change", ".mb-grams", function () { S.stoneGrams = this.checked; paint(); });
 	root.on("click", ".mb-clear", () => { S.cards = []; msg("", ""); paint(); focusScan(); });
 
 	root.on("click", ".mb-go", () => {
