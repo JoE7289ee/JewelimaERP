@@ -39,7 +39,7 @@ frappe.pages["search-design"].on_page_load = function (wrapper) {
 
 	function search(q) {
 		if (q.length < 2) { root.find(".sd-grid").empty(); root.find(".sd-hint").show().text(__("Type at least 2 characters.")); return; }
-		frappe.call({ method: API + ".search_designs", args: { q }, freeze: false }).then((r) => {
+		jewelima.busyCall(root.find(".sd-grid"), __("Searching…"), { method: API + ".search_designs", args: { q }, freeze: false }).then((r) => {
 			const rows = (r.message || {}).rows || [];
 			lastRows = rows;
 			root.find(".sd-hint").toggle(!rows.length).text(rows.length ? "" : __("No design matches {0}.", [q]));

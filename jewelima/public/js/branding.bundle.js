@@ -115,6 +115,22 @@ jewelima.busy = function (el, on, msg) {
 	}
 };
 
+// frappe.call with the spinner attached — the overlay is guaranteed to come off,
+// including when the call fails. Wrapping the call rather than hand-pairing a
+// busy(true) with a busy(false) is the point: an unpaired one leaves a page
+// covered for good.
+jewelima.busyCall = function (el, msg, opts) {
+	jewelima.busy(el, true, msg);
+	const done = () => jewelima.busy(el, false);
+	const p = frappe.call(Object.assign({ freeze: false }, opts));
+	// frappe.call returns a jQuery promise on some paths and a native one on
+	// others; only one of these two exists, so try both.
+	if (p && typeof p.always === "function") p.always(done);
+	else if (p && typeof p.finally === "function") p.finally(done);
+	else if (p && typeof p.then === "function") p.then(done, done);
+	return p;
+};
+
 // A "load more" footer. `shown`/`total` are counts, `onMore` runs on click.
 // Renders nothing at all once everything is on screen.
 jewelima.moreBar = function (el, shown, total, onMore, label) {

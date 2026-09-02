@@ -118,7 +118,7 @@ frappe.pages["finished-goods"].on_page_load = function (wrapper) {
 	}
 
 	function load() {
-		frappe.call({ method: "jewelima.jewelima.api.get_finished_goods", freeze: false }).then((r) => {
+		jewelima.busyCall(root.find(".fg-main"), __("Loading finished goods…"), { method: "jewelima.jewelima.api.get_finished_goods", freeze: false }).then((r) => {
 			S.data = r.message || { rows: [], totals: {} };
 			root.find(".fg-wh").text(S.data.warehouse ? __("held in {0}", [S.data.warehouse.replace(" - JD", "")]) : "");
 			root.find(".fg-holder").html(`<option value="">${__("Every holder")}</option>`

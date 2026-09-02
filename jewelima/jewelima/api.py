@@ -6975,10 +6975,17 @@ def get_bench_overview():
 
 
 @frappe.whitelist()
-def get_bench_board(bench):
-	"""One bench's info board (no actions). Returns every card sitting there with
-	its OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —
-	the page filters + rolls up client-side, so any filter is instant."""
+def get_bench_board(bench, limit=0, offset=0):
+	"""One bench's info board (no actions). Returns the cards sitting there with
+	their OWN stock (gold g, pure g, stone buckets), salesman, party, type, status —
+	the page filters + rolls up client-side, so any filter is instant.
+
+	limit=0 means EVERY row, which is what internal callers want
+	(get_bench_workstation counts the whole queue off this). The desk page passes a
+	limit: a bench holding ten thousand cards was a 3.7 MB reply, and the page ships
+	to every user in the building through the Info role. `total` is always the whole
+	bench, so the page can say how much of it is in hand rather than quietly rolling
+	up a fraction."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
 	bench = (bench or "").upper()
@@ -7051,7 +7058,13 @@ def get_bench_board(bench):
 		for i, r in enumerate(sorted(rows, key=lambda x: _priority_sort_key(x, manual)), 1):
 			r["prio_rank"] = i
 			r["prio_manual"] = 1 if r["name"] in manual else 0
-	return {"bench": bench, "rows": rows}
+	total = len(rows)
+	limit, offset = cint(limit), max(cint(offset), 0)
+	if limit > 0:
+		rows = rows[offset:offset + limit]
+	return {"bench": bench, "rows": rows, "total": total,
+		"shown": offset + len(rows), "offset": offset, "limit": limit,
+		"has_more": (offset + len(rows)) < total}
 
 
 @frappe.whitelist()

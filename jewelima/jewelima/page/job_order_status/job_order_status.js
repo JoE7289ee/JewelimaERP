@@ -156,7 +156,7 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 		code = (code || "").trim();
 		if (!code) return;
 		if (/^\d+$/.test(code)) code = "E" + code;   // bare digits -> E-prefixed order (0008 -> E0008)
-		frappe.call({ method: "jewelima.jewelima.api.get_job_order_status", args: { job_order: code } }).then((r) => {
+		jewelima.busyCall($out, __("Loading the job order…"), { method: "jewelima.jewelima.api.get_job_order_status", args: { job_order: code } }).then((r) => {
 			const d = r.message || {};
 			if (d.error) {
 				$out.html(`<div class="jo-empty">${esc(d.error)}</div>`);

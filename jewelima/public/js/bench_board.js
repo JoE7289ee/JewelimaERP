@@ -52,7 +52,7 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 	}
 	// batch benches (casting/tree making) have no per-card queue law
 	const BB_RANKED = !["CASTING", "TREE MAKING"].includes(bench);
-	const S = { all: [], sort: BB_RANKED ? "prio_rank" : "name", dir: 1, cols: loadCols() };
+	const S = { all: [], total: 0, sort: BB_RANKED ? "prio_rank" : "name", dir: 1, cols: loadCols() };
 	if (BB_RANKED) S.cols.add("prio_rank");
 
 	const BB_CELL = {
@@ -125,14 +125,27 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 		onChange: recompute,
 	});
 
-	function load() {
-		frappe.call({ method: API + ".get_bench_board", args: { bench } }).then((r) => {
-			S.all = ((r.message || {}).rows || []).map((row) => {
-				BB_BUCKETS.forEach((b) => { row[b.toLowerCase()] = ((row.buckets || {})[b] || {}).ct || 0; });
-				return row;
-			});
-			recompute();
-		});
+	// The board rolls up whatever is loaded, so a silent truncation would quietly
+	// under-report the bench. It loads a window, always knows the real total, and
+	// says so on screen whenever the two differ.
+	const BPAGE = 1000;
+
+	function load(more) {
+		const $box = root.find(".bb-body").length ? root.find(".bb-body") : root;
+		jewelima.busy($box, true, more ? __("Loading more cards…") : __("Loading the bench…"));
+		frappe.call({ method: API + ".get_bench_board", freeze: false,
+			args: { bench, limit: BPAGE, offset: more ? (S.all || []).length : 0 } })
+			.then((r) => {
+				const m = r.message || {};
+				const batch = (m.rows || []).map((row) => {
+					BB_BUCKETS.forEach((b) => { row[b.toLowerCase()] = ((row.buckets || {})[b] || {}).ct || 0; });
+					return row;
+				});
+				S.all = more ? (S.all || []).concat(batch) : batch;
+				S.total = m.total != null ? m.total : S.all.length;
+				recompute();
+			})
+			.always(() => jewelima.busy($box, false));
 	}
 
 	function recompute() {
@@ -146,6 +159,22 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 			<div class="bb-tile gold"><div class="k">${__("Pieces")}</div><div class="v">${pieces}</div></div>` +
 			BB_STATUSES.filter((x) => st[x]).map((x) => `
 				<div class="bb-tile"><div class="k">${esc(x)}</div><div class="v">${st[x]}</div></div>`).join(""));
+
+		// never let a rolled-up fraction read as the whole bench
+		const loaded = (S.all || []).length, tot = S.total || loaded;
+		root.find(".bb-partial").remove();
+		if (loaded < tot) {
+			root.find(".bb-kpi").after(`<div class="bb-partial" style="margin:6px 0;padding:7px 12px;
+				border:1px solid #e0a800;background:rgba(230,168,0,.10);border-radius:7px;
+				font-size:12px;font-weight:600;color:#8a6200;">`
+				+ __("Showing {0} of {1} cards — the tiles above count what is loaded.", [loaded, tot])
+				+ ` <button class="btn btn-xs btn-default bb-more" style="margin-left:8px;">`
+				+ __("Load {0} more", [BPAGE]) + `</button></div>`);
+			root.find(".bb-more").on("click", function () {
+				$(this).prop("disabled", true).text(__("Loading…"));
+				load(true);
+			});
+		}
 
 		let gold = 0, pure = 0;
 		const bk = {};

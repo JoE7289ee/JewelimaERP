@@ -402,7 +402,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			const p = code.split(".");
 			code = "E" + p[0].padStart(4, "0") + (p.length > 1 ? "." + p.slice(1).join(".") : "");
 		}
-		frappe.call({ method: "jewelima.jewelima.api.get_card_passport", args: { order_bag: code } }).then((r) => {
+		jewelima.busyCall($out, __("Loading the card…"), { method: "jewelima.jewelima.api.get_card_passport", args: { order_bag: code } }).then((r) => {
 			const d = r.message || {};
 			if (!d.bag) {
 				$out.html(`<div class="ci-sec ci-empty">No Order Bag <b>${esc(code)}</b>.</div>`);

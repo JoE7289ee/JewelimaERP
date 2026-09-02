@@ -185,7 +185,7 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 
 	function load(name) {
 		if (!name) return;
-		frappe.call({ method: API + ".get_design_info", args: { design: name } }).then((r) => {
+		jewelima.busyCall(root.find(".di-body"), __("Loading the design…"), { method: API + ".get_design_info", args: { design: name } }).then((r) => {
 			if (r.message) paint(r.message);
 		});
 	}

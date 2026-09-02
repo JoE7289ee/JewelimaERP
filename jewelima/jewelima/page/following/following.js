@@ -72,7 +72,7 @@ frappe.pages["following"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 
 	function load() {
-		frappe.call({ method: API + ".get_following" }).then((r) => {
+		jewelima.busyCall(root.find(".fw-box"), __("Loading followed orders…"), { method: API + ".get_following" }).then((r) => {
 			const m = r.message || {};
 			S.rows = m.rows || []; S.users = m.users || []; S.kpi = m.kpi || {}; S.me = m.me || "";
 			paintKpis(); paintUsers(); paint();
