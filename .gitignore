@@ -56,3 +56,4 @@ jspm_packages/
 
 # dev-only demo scaffolding — never ships
 jewelima/jewelima/_demoloss.py
+jewelima/jewelima/loadtest.py
