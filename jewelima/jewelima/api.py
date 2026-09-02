@@ -2593,11 +2593,25 @@ def get_location_transfers(location, from_date=None, to_date=None, q=None):
 def _party_group_name(customer):
 	"""The full name of a party's group. A party is GROUP-ZONE-…, and the Party
 	Group master is named "<code> - <name>", so the name is looked up rather than
-	parsed out of the party code — a renamed group stays right."""
+	parsed out of the party code — a renamed group stays right.
+
+	The whole master is read ONCE per request and held on frappe.local. This is
+	called once per card, and a bench board carries ten thousand of them: as a
+	bare get_value that was ten thousand round trips, 2.5s of the 2.8s it took to
+	open one card on Card Info. Per-request means a renamed group is still right
+	on the very next page load."""
 	code = (customer or "").split("-")[0].strip()
 	if not code:
 		return ""
-	return frappe.db.get_value("Party Group", {"code": code}, "group_name") or ""
+	cache = getattr(frappe.local, "_jw_party_groups", None)
+	if cache is None:
+		cache = {}
+		for r in frappe.get_all("Party Group", fields=["code", "group_name"]):
+			key = (r.code or "").strip()
+			if key and key not in cache:          # first wins, as get_value did
+				cache[key] = r.group_name or ""
+		frappe.local._jw_party_groups = cache
+	return cache.get(code) or ""
 
 
 @frappe.whitelist()
