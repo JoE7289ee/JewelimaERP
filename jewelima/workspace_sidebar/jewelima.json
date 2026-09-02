@@ -1335,6 +1335,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Buckets",
+   "link_to": "buckets",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "undo-2",
    "indent": 1,
    "keep_closed": 0,
@@ -2555,7 +2568,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-02 11:25:18.613067",
+ "modified": "2026-09-02 11:35:18.630165",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

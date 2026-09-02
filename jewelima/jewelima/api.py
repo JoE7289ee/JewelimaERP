@@ -8430,6 +8430,38 @@ def get_finished_buckets(include_inactive=0):
 
 
 @frappe.whitelist()
+def get_bucket_overview():
+	"""The buckets, plus what is sitting outside them.
+
+	Unfiled pieces are counted separately and deliberately: a piece made before
+	buckets existed has none, and it will not appear in any bucket's tally, so
+	without this number it is invisible."""
+	rows = get_finished_buckets(include_inactive=1)
+	unfiled = frappe.db.count("Order Bag", {
+		"is_finished": 1, "stock_status": "In Stock", "bucket": ["in", [None, ""]]})
+	return {
+		"buckets": rows,
+		"filed": sum(cint(r["pieces"]) for r in rows),
+		"unfiled": cint(unfiled),
+		"active": sum(1 for r in rows if cint(r["active"])),
+	}
+
+
+@frappe.whitelist()
+def get_bucket_pieces(bucket):
+	"""What is in one bucket, for the drill-down."""
+	if bucket == "__none__":
+		filters = {"is_finished": 1, "stock_status": "In Stock", "bucket": ["in", [None, ""]]}
+	else:
+		if not frappe.db.exists("Finished Bucket", bucket):
+			frappe.throw(frappe._("No bucket {0}.").format(bucket))
+		filters = {"is_finished": 1, "stock_status": "In Stock", "bucket": bucket}
+	return frappe.get_all("Order Bag", filters=filters,
+		fields=["name", "design", "huid", "held_by", "in_stock_on"],
+		order_by="in_stock_on desc", limit_page_length=500)
+
+
+@frappe.whitelist()
 def add_finished_bucket(bucket_name, notes=None):
 	frappe.only_for(("System Manager", "JW Manager", "Stock Manager"))
 	name = " ".join((bucket_name or "").split()).upper()

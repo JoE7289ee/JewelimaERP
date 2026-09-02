@@ -230,7 +230,7 @@ JEWELIMA_CAM_TO = ("WAXING", "CAD")
 JEWELIMA_DELIVERY_ROLE = "JW Delivery"
 JEWELIMA_DELIVERY_PAGES = [
 	# Delivery
-	"finished-goods", "transfer-holder", "transfer-bucket", "rework",
+	"finished-goods", "transfer-holder", "transfer-bucket", "buckets", "rework",
 	# Barcode: the roll printer and the sheet printer
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again

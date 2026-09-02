@@ -43,55 +43,11 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 			</div>
 			<div class="pm-cust"><div class="ch"><span class="pm-cust-t"></span><span class="x">&times;</span></div><div class="cb"></div></div>
 		</div>
-		<div class="pm-card">
-			<div class="h"><span class="t">${__("Buckets")}</span><span class="s">${
-				__("the box, tray or drawer a finished piece is filed in — a piece cannot be made without one")}</span></div>
-			<table class="pm-tbl"><tbody class="bk-body"></tbody></table>
-			<div class="pm-addrow">
-				<input class="label bk-name" placeholder="${__("bucket name + Enter")}"
-					style="text-transform:uppercase;">
-				<button class="btn btn-sm btn-default bk-add">${__("Add")}</button>
-			</div>
 		</div></div>
 	`);
 	const root = $(page.main);
 
-	// ---- Buckets: where finished pieces are filed --------------------------
-	function loadBuckets() {
-		frappe.call({ method: API + ".get_finished_buckets", args: { include_inactive: 1 } })
-			.then((r) => {
-				const rows = r.message || [];
-				root.find(".bk-body").html(rows.length ? rows.map((b) => `
-					<tr data-n="${esc(b.name)}" ${b.active ? "" : 'style="opacity:.5;"'}>
-						<td class="c">${esc(b.name)}</td>
-						<td>${b.active ? "" : `<span style="font-size:11px;">${__("retired")}</span>`}</td>
-						<td class="u">${b.pieces || 0} ${__("pc")}
-							<a class="bk-t" style="margin-left:10px;cursor:pointer;">${
-								b.active ? __("retire") : __("use again")}</a></td>
-					</tr>`).join("")
-					: `<tr><td class="empty" colspan="3" style="padding:12px 14px;color:var(--text-muted);">${
-						__("No buckets yet — add the first one below.")}</td></tr>`);
-			});
-	}
-	function addBucket() {
-		const v = (root.find(".bk-name").val() || "").trim().toUpperCase();
-		if (!v) return;
-		frappe.call({ method: API + ".add_finished_bucket", args: { bucket_name: v } })
-			.then(() => { root.find(".bk-name").val(""); loadBuckets(); });
-	}
-	root.on("click", ".bk-add", addBucket);
-	root.on("keydown", ".bk-name", (e) => { if (e.key === "Enter") { e.preventDefault(); addBucket(); } });
-	// a bucket with pieces in it is retired, never deleted — the history stays
-	root.on("click", ".bk-t", function (e) {
-		e.stopPropagation();
-		const $tr = $(this).closest("tr");
-		const on = /retire/.test($(this).text()) ? 0 : 1;
-		frappe.call({ method: API + ".set_finished_bucket",
-			args: { name: $tr.data("n"), active: on } }).then(loadBuckets);
-	});
-
 	function load() {
-		loadBuckets();
 		frappe.call({ method: API + ".get_party_masters" }).then((r) => {
 			rows = ((r.message || {})["cert"]) || [];
 			root.find(".pm-body").html(rows.map((x) => `
