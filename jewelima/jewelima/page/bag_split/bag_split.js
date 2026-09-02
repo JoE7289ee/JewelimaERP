@@ -271,7 +271,77 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		if (t.over) return frappe.msgprint(__("Too much {0} assigned — more than the bag holds.", [t.over]));
 		frappe.dom.freeze(__("Splitting…"));
 		frappe.call({ method: "jewelima.jewelima.api.split_bag", args: { order_bag: state.data.bag.name, pieces: JSON.stringify(buildPieces()) } })
-			.then((r) => { frappe.dom.unfreeze(); frappe.show_alert({ message: __("Split into {0} bags.", [(r.message || {}).count]), indicator: "green" }, 8); resetView(); })
+			.then((r) => {
+				frappe.dom.unfreeze();
+				const m = r.message || {};
+				frappe.show_alert({ message: __("Split into {0} bags.", [m.count]), indicator: "green" }, 8);
+				// the pieces are new cards and each needs its own label — offer it
+				// here, while they are in the operator's hand, rather than sending
+				// them to Print Barcode to be scanned back in one at a time
+				offerLabels(m.created || []);
+				resetView();
+			})
+			.catch(() => frappe.dom.unfreeze());
+	}
+
+	// ---- barcodes for the pieces just cut ---------------------------------
+	function offerLabels(names) {
+		if (!names.length) return;
+		const dlg = new frappe.ui.Dialog({
+			title: __("Print barcodes for the {0} new piece(s)?", [names.length]),
+			fields: [{ fieldtype: "HTML", fieldname: "list" }],
+			primary_action_label: __("Print {0} label(s)", [names.length]),
+			primary_action: () => { dlg.hide(); printLabels(names); },
+			secondary_action_label: __("Not now"),
+		});
+		dlg.fields_dict.list.$wrapper.html(
+			`<div style="font-size:13px;line-height:1.9;">`
+			+ names.map((n) => `<b>${frappe.utils.escape_html(n)}</b>`).join(" &nbsp;·&nbsp; ")
+			+ `</div>`);
+		dlg.show();
+	}
+
+	function printLabels(names) {
+		frappe.dom.freeze(__("Building labels…"));
+		// one fetch per piece — get_barcode_card is the single-card label source the
+		// roll printer uses, so a label off this page is the same label as any other
+		Promise.all(names.map((n) => frappe.call({
+			method: "jewelima.jewelima.api.get_barcode_card",
+			args: { order_bag: n }, freeze: false,
+		}).then((r) => r.message).catch(() => null)))
+			.then((cards) => {
+				frappe.dom.unfreeze();
+				const ok = (cards || []).filter((c) => c && !c.error);
+				const bad = (cards || []).length - ok.length;
+				if (!ok.length) {
+					frappe.msgprint(__("Could not build a label for any of the new pieces."));
+					return;
+				}
+				document.getElementById("jw-bs-frame")?.remove();
+				const fr = document.createElement("iframe");
+				fr.id = "jw-bs-frame";
+				fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+				document.body.appendChild(fr);
+				const doc = fr.contentDocument;
+				doc.open();
+				doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Barcodes</title><style>
+					@page{size:A4 portrait;margin:8mm;}
+					html,body{margin:0;padding:0;}
+					${jewelima.BARCODE_LABEL_CSS}
+					.bc-grid{display:grid;grid-template-columns:repeat(2, 3.3in);gap:0.06in;}
+					.bc-label{border:1px dashed #ccc;}
+					</style></head><body><div class="bc-grid">`
+					+ ok.map((c) => jewelima.buildBarcodeLabel(c)).join("")
+					+ `</div></body></html>`);
+				doc.close();
+				setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);
+				frappe.show_alert({
+					message: bad
+						? __("Sent {0} label(s); {1} could not be built.", [ok.length, bad])
+						: __("Sent {0} label(s) to the printer.", [ok.length]),
+					indicator: bad ? "orange" : "green",
+				}, 7);
+			})
 			.catch(() => frappe.dom.unfreeze());
 	}
 

@@ -270,6 +270,19 @@ JEWELIMA_WAXING_TO = ("WAXING", "WAX SETTING", "TREE MAKING")
 # at WAXING, so the bench, its page and the JW WAX CLEANING role are all gone and
 # the patch moves its cards, its work options and its two users onto WAXING.
 
+# ---- JW EXTRACTION: the bag-extraction desk ------------------------------------
+# The bench that cuts one card into its pieces. Two screens: the workstation, to
+# see what is waiting and press Extract, and Bag Split itself, which does the
+# cutting and prints the new pieces' barcodes.
+#
+# No transfer rules: this role extracts, it does not move work on. Give it
+# transfer-order-bag as well if the same person is to send the pieces onward.
+#
+# Holding ws-bag-extraction is what grants working AT the bench (_may_work_at
+# reads the bench's own page), so the Extract button is live for this role.
+JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
+JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split"]
+
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
 	"WAX SETTING": "ws-wax-setting",
@@ -782,6 +795,8 @@ def setup_roles():
 
 	bench_role(JEWELIMA_CAM_ROLE, JEWELIMA_CAM_PAGES,
 		(JEWELIMA_CAM_FROM,), JEWELIMA_CAM_TO)
+	# extraction: its two screens, and no transfer rules — it does not move work on
+	bench_role(JEWELIMA_EXTRACTION_ROLE, JEWELIMA_EXTRACTION_PAGES, (), ())
 	bench_role(JEWELIMA_WAXING_ROLE, JEWELIMA_WAXING_PAGES,
 		JEWELIMA_WAXING_FROM, JEWELIMA_WAXING_TO)
 

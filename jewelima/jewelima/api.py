@@ -7800,15 +7800,31 @@ def split_bag(order_bag, pieces, employee=None):
 		if out > 0:
 			_bag_ledger(order_bag, code, "Out", out, "Split Out", pcs=sum(counts[code][1:]))
 
-	# close the Bag Extraction record
+	# close the Bag Extraction record — for the parent AND for every piece cut out
+	# of it. A card with no record at this bench reads as "In Queue" (see
+	# get_bench_board), so the pieces born from a split were landing straight back
+	# in the extraction queue asking to be extracted again, moments after being
+	# extracted. They are done: they carry a Completed record and sit in the
+	# bench's completed-not-yet-transferred list, waiting to move on.
 	dt = bench_doctype("BAG EXTRACTION")
 	if dt and frappe.db.exists("DocType", dt):
+		now = frappe.utils.now_datetime()
 		rec = frappe.get_all(dt, filters={"order_bag": order_bag}, order_by="creation desc", limit=1, pluck="name")
 		if rec:
-			vals = {"status": "Completed", "time_out": frappe.utils.now_datetime()}
+			vals = {"status": "Completed", "time_out": now}
 			if employee:
 				vals["employee"] = employee
 			frappe.db.set_value(dt, rec[0], vals)
+		for nm in created:
+			if nm == order_bag:
+				continue
+			frappe.get_doc({
+				"doctype": dt, "order_bag": nm, "bench": "BAG EXTRACTION",
+				"status": "Completed", "employee": employee or None,
+				"work_type": "Bag Extraction",
+				"time_in": now, "time_out": now,
+				"remarks": frappe._("Cut from {0}").format(order_bag),
+			}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"created": created, "count": len(created)}
 
