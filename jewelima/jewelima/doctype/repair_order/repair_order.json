@@ -19,23 +19,24 @@
   "sec_note",
   "narration",
   "sec_stones",
+  "work_lines",
   "stones"
  ],
  "fields": [
   {
    "fieldname": "party",
    "fieldtype": "Link",
-   "options": "Repair Party",
+   "in_list_view": 1,
    "label": "Party",
-   "reqd": 1,
-   "in_list_view": 1
+   "options": "Repair Party",
+   "reqd": 1
   },
   {
    "fieldname": "received_at",
    "fieldtype": "Datetime",
+   "in_list_view": 1,
    "label": "Received",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "cb_head",
@@ -44,24 +45,24 @@
   {
    "fieldname": "received_by",
    "fieldtype": "Link",
-   "options": "User",
    "label": "Received By",
+   "options": "User",
    "read_only": 1
   },
   {
    "fieldname": "total_qty",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Total Qty",
-   "read_only": 1,
-   "in_list_view": 1
+   "read_only": 1
   },
   {
    "fieldname": "total_weight",
    "fieldtype": "Float",
+   "in_list_view": 1,
    "label": "Total Weight (g)",
    "precision": "3",
-   "read_only": 1,
-   "in_list_view": 1
+   "read_only": 1
   },
   {
    "fieldname": "total_rows",
@@ -77,8 +78,8 @@
   {
    "fieldname": "items",
    "fieldtype": "Table",
-   "options": "Repair Order Item",
    "label": "Pieces",
+   "options": "Repair Order Item",
    "reqd": 1
   },
   {
@@ -96,10 +97,16 @@
    "label": "Stones"
   },
   {
+   "fieldname": "work_lines",
+   "fieldtype": "Table",
+   "label": "Work Lines",
+   "options": "Repair Work Line"
+  },
+  {
    "fieldname": "stones",
    "fieldtype": "Table",
-   "options": "Repair Stone",
-   "label": "Stones"
+   "label": "Stones",
+   "options": "Repair Stone"
   }
  ],
  "index_web_pages_for_search": 1,

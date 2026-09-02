@@ -50,7 +50,8 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	const sKey = (st) => `${st.bucket || ""}||${st.sieve || ""}`;
 
 	function priceRow(i) {
-		const work = (i.work_types || []).reduce((a, w) => a + flt(S.rates[w]), 0);
+		const work = (i.work_types || []).reduce(
+			(a, w) => a + flt(S.rates[w]) * (cint((i.work_counts || {})[w]) || 1), 0);
 		const added = flt(i.weight_out) ? flt(i.weight_out) - flt(i.weight_in) : 0;
 		const rate = rateForKarat(S.gold, i.karat);
 		const metal = added * rate;
@@ -268,7 +269,10 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 			const done = !!i.bill;
 			const on = S.picked.has(i.repair);
 			const P = priceRow(i);
-			const work = (i.work_types || []).join(", ");
+			const work = (i.work_types || []).map((w) => {
+				const q = cint((i.work_counts || {})[w]) || 1;
+				return q > 1 ? `${w} \u00d7${q}` : w;
+			}).join(", ");
 			const stones = (i.stones || []);
 			const noOut = !done && !flt(i.weight_out);
 			const noWork = !done && !(i.work_types || []).length;
@@ -319,7 +323,10 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 
 		// work on the ticked pieces, priced by type
 		const tally = {};
-		picked.forEach((i) => (i.work_types || []).forEach((w) => { tally[w] = (tally[w] || 0) + 1; }));
+		// a piece can carry several of the same work — count the work, not the piece
+		picked.forEach((i) => (i.work_types || []).forEach((w) => {
+			tally[w] = (tally[w] || 0) + (cint((i.work_counts || {})[w]) || 1);
+		}));
 		const charges = Object.keys(tally).sort((a, b) => tally[b] - tally[a] || a.localeCompare(b));
 
 		// stones on the ticked pieces, priced by quality + sieve
@@ -581,18 +588,47 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 							: hits;
 					},
 					default: row.work_types || [],
+					// how many of each — a piece of five can carry fifteen solderings,
+					// and it is the count that is billed, not the piece
+					onchange: () => paintQty(),
+				}, {
+					fieldname: "qty_html", fieldtype: "HTML", label: __("How many of each"),
 				}],
 				primary_action_label: __("Save"),
-				primary_action: (v) => {
+				primary_action: () => {
+					const works = d.get_value("works") || [];
+					const out = works.map((w) => ({
+						work_type: w,
+						qty: Math.max(cint($(d.fields_dict.qty_html.wrapper).find(`input[data-w="${escAttr(w)}"]`).val()) || 1, 1),
+					}));
 					d.hide();
 					frappe.call({ method: API + ".set_piece_work_types",
 						args: { repair_order: S.D.repair_order, repair: id,
-							work_types: JSON.stringify(v.works || []) } })
+							work_types: JSON.stringify(out) } })
 						.then((res) => { S.D = res.message; drawBatch(); });
 				},
 			});
+			// the qty boxes follow whatever is picked, keeping any number already typed
+			function escAttr(v) { return String(v).replace(/"/g, "&quot;"); }
+			function paintQty() {
+				const works = d.get_value("works") || [];
+				const $w = $(d.fields_dict.qty_html.wrapper);
+				const had = {};
+				$w.find("input[data-w]").each(function () { had[$(this).data("w")] = this.value; });
+				$w.html(works.length ? `<div style="display:flex;flex-direction:column;gap:6px;">`
+					+ works.map((w) => `<div style="display:flex;align-items:center;gap:9px;">
+						<span style="flex:1;font-size:13px;">${frappe.utils.escape_html(w)}</span>
+						<input type="number" min="1" step="1" data-w="${escAttr(w)}"
+							value="${had[w] != null ? had[w] : (row.work_counts && row.work_counts[w]) || 1}"
+							style="width:88px;text-align:right;border:1px solid var(--border-color);
+								border-radius:6px;padding:3px 8px;background:var(--control-bg);color:var(--text-color);">
+					</div>`).join("") + `</div>`
+					: `<div style="font-size:12px;color:var(--text-muted);">${
+						__("Pick the work above, then say how many of each.")}</div>`);
+			}
 			d.show();
 			d.fields_dict.works.set_value(row.work_types || []);
+			paintQty();
 		});
 	});
 
@@ -626,7 +662,10 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	// would drift, and the paper handed over would stop matching the bill saved.
 	function billPayload(picked) {
 		const tally = {};
-		picked.forEach((i) => (i.work_types || []).forEach((w) => { tally[w] = (tally[w] || 0) + 1; }));
+		// a piece can carry several of the same work — count the work, not the piece
+		picked.forEach((i) => (i.work_types || []).forEach((w) => {
+			tally[w] = (tally[w] || 0) + (cint((i.work_counts || {})[w]) || 1);
+		}));
 		return {
 			repair_order: S.D.repair_order,
 			gold_rate: flt(S.gold),

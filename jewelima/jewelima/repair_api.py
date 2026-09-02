@@ -573,12 +573,21 @@ def get_repair_for_billing(repair_order):
 	out_of = {r.repair: r for r in (bill.items if bill else [])}
 	rate_of = {c.work_type: flt(c.rate) for c in (bill.charges if bill else [])}
 
+	# how much of each kind of work each piece carries. work_lines is where the
+	# COUNT lives; a piece with no line falls back to one per named work type, so
+	# batches taken in before counts existed still bill exactly as they did.
+	qty_of = {}
+	for l in (o.work_lines or []):
+		if l.work_type:
+			qty_of.setdefault(l.repair, {})[l.work_type] = cint(l.qty) or 1
+
 	items, tally = [], {}
 	for r in o.items:
 		works = [w.strip() for w in (r.work_types or "").split(",") if w.strip()]
+		counts = qty_of.get(r.repair) or {w: 1 for w in works}
 		if not r.bill:                      # pieces already billed are not charged again
 			for w in works:
-				tally[w] = tally.get(w, 0) + 1
+				tally[w] = tally.get(w, 0) + cint(counts.get(w, 1))
 		prior = out_of.get(r.repair)
 		items.append({
 			"repair": r.repair, "design_type": r.design_type, "qty": cint(r.qty),
@@ -588,6 +597,7 @@ def get_repair_for_billing(repair_order):
 			"weight_out": flt(r.weight_out) or (flt(prior.weight_out) if prior else 0),
 			"weighed_out_at": str(r.weighed_out_at or "")[:16],
 			"work_types": works, "repair_type": r.repair_type or "",
+			"work_counts": {w: cint(counts.get(w, 1)) for w in works},
 			"narration": r.narration or "",
 			"karat": r.karat or "",
 			"stones": [{"bucket": st.bucket or "", "stone": st.stone or "",
@@ -675,8 +685,37 @@ def set_piece_work_types(repair_order, repair, work_types):
 		frappe.throw(frappe._("No piece {0}.").format(repair))
 	if row.bill:
 		frappe.throw(frappe._("{0} is billed on {1} — its work cannot change.").format(repair, row.bill))
-	names = frappe.parse_json(work_types) if isinstance(work_types, str) else work_types
-	row.work_types = ", ".join(_clean_types(names)) or None
+	raw = frappe.parse_json(work_types) if isinstance(work_types, str) else work_types
+	# Accepts either shape: ["SOLDERING", ...] as before, or the one that carries
+	# the count, [{"work_type": "SOLDERING", "qty": 15}, ...]. A piece of five can
+	# need fifteen solderings, and the count — not the piece — is what is billed.
+	lines = []
+	for w in (raw or []):
+		if isinstance(w, dict):
+			nm, q = w.get("work_type") or w.get("work"), cint(w.get("qty"))
+		else:
+			nm, q = w, 1
+		nm = _master("Repair Work Type", "work_name", nm)
+		if not nm:
+			continue
+		if q <= 0:
+			q = 1
+		hit = next((l for l in lines if l["work_type"] == nm), None)
+		if hit:
+			hit["qty"] += q
+		else:
+			lines.append({"repair": repair, "work_type": nm, "qty": q})
+
+	# work_lines is authoritative; work_types stays as the readable summary so the
+	# intake slip, the status board, the KPI tally and the "no work set" check all
+	# keep reading what they always read
+	keep = [l for l in (o.work_lines or []) if l.repair != repair]
+	o.set("work_lines", [])
+	for l in keep:
+		o.append("work_lines", {"repair": l.repair, "work_type": l.work_type, "qty": cint(l.qty)})
+	for l in lines:
+		o.append("work_lines", l)
+	row.work_types = ", ".join(l["work_type"] for l in lines) or None
 	o.save(ignore_permissions=True)
 	frappe.db.commit()
 	return get_repair_for_billing(repair_order)
