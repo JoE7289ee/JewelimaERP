@@ -16,9 +16,9 @@ window.jewelima = window.jewelima || {};
 // printer takes them as-is, so a label off Multi Print or off a Bag Split is the
 // same label as one off the roll.
 //
-// qr is capped by the tag height: the label is 0.475in tall, so a code square
-// much past 0.44 has nowhere to sit.
-jewelima.BARCODE_DEFAULTS = { pt: 9.0, offsetA: 0.06, offsetB: 0.22, qr: 0.43 };
+// qr is capped by the tag itself: the label is 0.475in tall, so 0.46 is as large
+// as a code square can be and still sit on it — there is nowhere further to go.
+jewelima.BARCODE_DEFAULTS = { pt: 9.0, offsetA: 0.04, offsetB: 0.22, qr: 0.46 };
 
 // Ready-made opts for buildBarcodeLabel. Pass overrides (e.g. stoneGrams) and
 // the tuned defaults fill in the rest.
@@ -42,7 +42,7 @@ jewelima.BARCODE_LABEL_CSS = `
 .bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
 .bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
 .bc-label .bc-qr{flex:0 0 auto;}
-.bc-label .bc-qr img{height:var(--bc-qr,0.43in);width:var(--bc-qr,0.43in);display:block;}
+.bc-label .bc-qr img{height:var(--bc-qr,0.46in);width:var(--bc-qr,0.46in);display:block;}
 .bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
 .bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}
 /* the two halves the label is split into — each nudges on its own, because a
