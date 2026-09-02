@@ -177,15 +177,25 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 	});
 
 	// ---- the Bag Extraction pool -------------------------------------------
-	function loadPool() {
-		frappe.call({ method: API + ".get_extraction_cards", args: {
+	// the pool arrives a window at a time — the profile read behind each card is
+	// per-card, so an unwindowed page paid for every card on the bench
+	const POOL_PAGE = 100;
+
+	function loadPool(more) {
+		const $body = root.find(".mp-poolbody");
+		jewelima.busy($body, true, more ? __("Loading more cards…") : __("Loading the pool…"));
+		frappe.call({ method: API + ".get_extraction_cards", freeze: false, args: {
 			party: F.party || null, job_order: F.job_order || null,
 			design_type: F.design_type || null, salesman: F.salesman || null,
+			limit: POOL_PAGE, offset: more ? ((POOL.rows || []).length) : 0,
 		} }).then((r) => {
-			POOL = r.message || POOL;
+			const m = r.message;
+			if (!m) return;
+			if (more) m.rows = (POOL.rows || []).concat(m.rows || []);
+			POOL = m;
 			paintPills();
 			paintPool();
-		});
+		}).always(() => jewelima.busy($body, false));
 	}
 
 	const pillRow = (lbl, list, cur, key) => (list.length
@@ -206,7 +216,12 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 
 	function paintPool() {
 		const rows = POOL.rows || [];
-		root.find(".mp-poolcount").text(rows.length ? __("— {0} card(s), {1} ready", [rows.length, rows.filter((r) => r.ready).length]) : "");
+		const total = POOL.total != null ? POOL.total : rows.length;
+		root.find(".mp-poolcount").text(rows.length
+			? (total > rows.length
+				? __("— {0} of {1} card(s), {2} ready here", [rows.length, total, rows.filter((r) => r.ready).length])
+				: __("— {0} card(s), {1} ready", [rows.length, rows.filter((r) => r.ready).length]))
+			: "");
 		root.find(".mp-poolbody").html(rows.length ? `<table class="mp-tbl"><thead><tr>
 			<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Party")}</th><th>${__("Job Order")}</th>
 			<th>${__("Due")}</th><th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th>
@@ -225,7 +240,11 @@ frappe.pages["make-products"].on_page_load = function (wrapper) {
 			</tr>`; }).join("") + "</tbody></table>" +
 			(rows.some((r) => r.ready && !Q.has(r.name))
 				? `<div style="margin-top:8px;"><button class="btn btn-sm btn-default mp-addall">${__("Queue all ready")}</button></div>` : "")
+			+ `<div class="mp-more"></div>`
 			: `<div class="mp-empty">${__("No cards at Bag Extraction match.")}</div>`);
+		// "Queue all ready" only ever reaches the loaded window, so say what is behind it
+		jewelima.moreBar(root.find(".mp-more"), rows.length, total,
+			() => loadPool(true), __("Load {0} more", [POOL_PAGE]));
 	}
 
 	root.on("click", ".mp-pill", function () {

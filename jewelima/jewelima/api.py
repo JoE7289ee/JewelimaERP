@@ -8616,10 +8616,18 @@ def get_make_product_card(order_bag):
 
 
 @frappe.whitelist()
-def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=None):
-	"""The Bag Extraction pool for the Make Products page: every unfinished card
-	sitting at BAG EXTRACTION with its actual weights and whether it's READY
-	(qty 1 + actual weight). Filter lists ride along for the pills."""
+def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=None,
+		limit=100, offset=0):
+	"""The Bag Extraction pool for the Make Products page: unfinished cards sitting
+	at BAG EXTRACTION with their actual weights and whether each is READY (qty 1 +
+	actual weight). Filter lists ride along for the pills.
+
+	WINDOWED. _actual_profile() is a per-card read, so an unwindowed page ran it
+	once for every card on the bench — 2,036 ms and 2.9 MB at ten thousand. The
+	design-type filter is applied BEFORE the window (it is judged in Python off the
+	design, not in SQL), so a filtered page still counts and pages the whole match,
+	and the profile read now happens only for the cards actually on screen. The
+	filter pills still come from the full pool. limit=0 returns everything."""
 	filters = {"location": "BAG EXTRACTION", "is_finished": 0,
 		"stock_status": ["not in", ["Cancelled", "Sold"]]}
 	if party:
@@ -8636,11 +8644,15 @@ def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=
 	if designs:
 		for d in frappe.get_all("Design", filters={"name": ["in", designs]}, fields=["name", "design_type"]):
 			dt_of[d.name] = d.design_type
-	rows = []
 	for b in bags:
 		b["design_type"] = dt_of.get(b.design) or ""
-		if design_type and b["design_type"] != design_type:
-			continue
+	# the design-type filter decides membership, so it runs before the window
+	matched = [b for b in bags if not design_type or b["design_type"] == design_type]
+	total = len(matched)
+	limit, offset = cint(limit), max(cint(offset), 0)
+	window = matched[offset:offset + limit] if limit > 0 else matched[offset:]
+	rows = []
+	for b in window:
 		prof = _actual_profile(b.name)
 		b["gross"] = flt(prof["gross"])
 		b["nett"] = flt(prof["nett"])
@@ -8660,6 +8672,8 @@ def get_extraction_cards(party=None, job_order=None, design_type=None, salesman=
 		all_dts = {d.design_type for d in frappe.get_all("Design",
 			filters={"name": ["in", all_designs]}, fields=["design_type"]) if d.design_type}
 	return {"rows": rows,
+		"total": total, "shown": offset + len(rows), "offset": offset, "limit": limit,
+		"has_more": (offset + len(rows)) < total,
 		"parties": sorted({x.customer for x in pool if x.customer}),
 		"job_orders": sorted({x.job_order for x in pool if x.job_order}),
 		"salesmen": sorted({x.salesman for x in pool if x.salesman}),
