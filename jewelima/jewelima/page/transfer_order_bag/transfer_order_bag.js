@@ -9,7 +9,7 @@
 // Route: /app/transfer-order-bag
 
 const TOB_LOCATIONS =
-	"\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nBAG EXTRACTION";
+	"\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nBAG EXTRACTION\nREWORK";
 
 frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Transfer Order Bag", single_column: true });

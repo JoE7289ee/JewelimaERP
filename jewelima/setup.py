@@ -314,7 +314,14 @@ JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
 # pieces, Make Products turns finished pieces into stock. Its four endpoints
 # carry no role guard of their own, so holding the page is the whole grant.
 JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split", "workstations",
-	"make-products", "print-barcode", "multi-barcode", "tag-canvas"]
+	"make-products", "print-barcode", "multi-barcode", "tag-canvas",
+	"transfer-order-bag"]
+# Where a piece may go once it has been cut out: on to the finishing benches, or
+# to REWORK when it has to be done again. Transfer Rules match the FROM as well
+# as the TO, so a bag scanned anywhere but Bag Extraction has no matching rule
+# and the page refuses it by name.
+JEWELIMA_EXTRACTION_FROM = ("BAG EXTRACTION",)
+JEWELIMA_EXTRACTION_TO = ("SETTING", "FINAL POLISH", "PRE POLISH", "REWORK")
 
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
@@ -829,7 +836,8 @@ def setup_roles():
 	bench_role(JEWELIMA_CAM_ROLE, JEWELIMA_CAM_PAGES,
 		(JEWELIMA_CAM_FROM,), JEWELIMA_CAM_TO)
 	# extraction: its two screens, and no transfer rules — it does not move work on
-	bench_role(JEWELIMA_EXTRACTION_ROLE, JEWELIMA_EXTRACTION_PAGES, (), ())
+	bench_role(JEWELIMA_EXTRACTION_ROLE, JEWELIMA_EXTRACTION_PAGES,
+		JEWELIMA_EXTRACTION_FROM, JEWELIMA_EXTRACTION_TO)
 	bench_role(JEWELIMA_WAXING_ROLE, JEWELIMA_WAXING_PAGES,
 		JEWELIMA_WAXING_FROM, JEWELIMA_WAXING_TO)
 

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:18:33.115314",
+ "modified": "2026-09-03 04:01:09.038106",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "transfer-order-bag",
@@ -34,6 +34,9 @@
   },
   {
    "role": "JW WAXING"
+  },
+  {
+   "role": "JW EXTRACTION"
   }
  ],
  "script": null,
