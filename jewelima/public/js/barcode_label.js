@@ -10,17 +10,39 @@
 // sent it is worse than having only one of them.
 window.jewelima = window.jewelima || {};
 
+// The calibration the tag printer is tuned to, in ONE place. Print Barcode can
+// still nudge these per browser (it keeps its own values in localStorage, and a
+// browser that has already been calibrated keeps what it has); every other label
+// printer takes them as-is, so a label off Multi Print or off a Bag Split is the
+// same label as one off the roll.
+//
+// qr is capped by the tag height: the label is 0.475in tall, so a code square
+// much past 0.44 has nowhere to sit.
+jewelima.BARCODE_DEFAULTS = { pt: 9.0, offsetA: 0.06, offsetB: 0.22, qr: 0.43 };
+
+// Ready-made opts for buildBarcodeLabel. Pass overrides (e.g. stoneGrams) and
+// the tuned defaults fill in the rest.
+jewelima.barcodeOpts = function (over) {
+	const o = Object.assign({}, jewelima.BARCODE_DEFAULTS, over || {});
+	return {
+		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;`,
+		offsetA: o.offsetA,
+		offsetB: o.offsetB,
+		stoneGrams: o.stoneGrams,
+	};
+};
+
 jewelima.BARCODE_LABEL_CSS = `
 .bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;
 	justify-content:center;gap:0;
 	padding:0 0.09in;overflow:hidden;
 	font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
-	font-stretch:condensed;font-size:var(--bc-size,8pt);font-weight:400;font-style:normal;
+	font-stretch:condensed;font-size:var(--bc-size,9pt);font-weight:400;font-style:normal;
 	line-height:1.05;letter-spacing:-.2px;color:#000;}
 .bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
 .bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
 .bc-label .bc-qr{flex:0 0 auto;}
-.bc-label .bc-qr img{height:var(--bc-qr,0.33in);width:var(--bc-qr,0.33in);display:block;}
+.bc-label .bc-qr img{height:var(--bc-qr,0.43in);width:var(--bc-qr,0.43in);display:block;}
 .bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
 .bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}
 /* the two halves the label is split into — each nudges on its own, because a

@@ -331,7 +331,7 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 					.bc-grid{display:grid;grid-template-columns:repeat(2, 3.3in);gap:0.06in;}
 					.bc-label{border:1px dashed #ccc;}
 					</style></head><body><div class="bc-grid">`
-					+ ok.map((c) => jewelima.buildBarcodeLabel(c)).join("")
+					+ ok.map((c) => jewelima.buildBarcodeLabel(c, jewelima.barcodeOpts())).join("")
 					+ `</div></body></html>`);
 				doc.close();
 				setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);

@@ -94,9 +94,18 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	// moves on its own. Kept in the browser — it describes this machine, not the
 	// label everyone shares.
 	const OFF_KEY = { a: "jw_barcode_offset_a_in", b: "jw_barcode_offset_b_in" };
+	// the tuned defaults live with the label, so every printer starts from the
+	// same calibration; a browser already nudged keeps its own stored value
+	const BD = (window.jewelima && jewelima.BARCODE_DEFAULTS) || { pt: 9, offsetA: 0.06, offsetB: 0.22, qr: 0.43 };
+	const OFF_DEF = { a: BD.offsetA, b: BD.offsetB };
+
 	function offset(side) {
 		let v = 0;
-		try { v = parseFloat(localStorage.getItem(OFF_KEY[side]) || "0") || 0; } catch (e) { v = 0; }
+		const d = OFF_DEF[side] || 0;
+		try {
+			const raw = localStorage.getItem(OFF_KEY[side]);
+			v = raw === null ? d : (parseFloat(raw) || 0);
+		} catch (e) { v = d; }
 		return Math.max(-0.35, Math.min(0.35, v));
 	}
 	function setOffset(side, v) {
@@ -109,7 +118,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	// so far before three lines stop fitting — the preview says when that happens
 	// rather than letting it clip on the tag.
 	const SIZE_KEY = "jw_barcode_pt";
-	const SIZE_MIN = 7, SIZE_MAX = 13, SIZE_DEF = 8;
+	const SIZE_MIN = 7, SIZE_MAX = 13, SIZE_DEF = BD.pt;
 	function ptSize() {
 		let v = SIZE_DEF;
 		try { v = parseFloat(localStorage.getItem(SIZE_KEY) || "") || SIZE_DEF; } catch (e) { v = SIZE_DEF; }
@@ -122,7 +131,8 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		renderPreview(state.cards[state.cards.length - 1] || null);
 	}
 	// the code square grows with the type, but never past what the label can hold
-	const qrSize = () => Math.min(0.42, Math.round((0.33 * ptSize() / SIZE_DEF) * 100) / 100);
+	// the code square grows with the print size, capped by the tag height (0.475in)
+	const qrSize = () => Math.min(0.45, Math.round((BD.qr * ptSize() / SIZE_DEF) * 100) / 100);
 	const sizeVars = () => `--bc-size:${ptSize()}pt;--bc-qr:${qrSize()}in;`;
 
 	function showOffsets() {
@@ -172,7 +182,9 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	$(page.main).on("click", ".pb-sz0", () => setPtSize(SIZE_DEF));
 	$(page.main).on("click", ".pb-l", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) - 0.02); });
 	$(page.main).on("click", ".pb-r", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) + 0.02); });
-	$(page.main).on("click", ".pb-0", function () { setOffset(this.dataset.s, 0); });
+	// reset goes back to the tuned default, not to zero — zero was never the
+	// setting anyone wanted, it was just the value before the tag was calibrated
+	$(page.main).on("click", ".pb-0", function () { setOffset(this.dataset.s, OFF_DEF[this.dataset.s] || 0); });
 	showOffsets();
 
 	function renderHistory() {

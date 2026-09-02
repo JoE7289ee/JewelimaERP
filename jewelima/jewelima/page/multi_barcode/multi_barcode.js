@@ -118,7 +118,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	// that way too rather than in an across-the-page grid that will not happen
 	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(${
 		S.mode === "roll" ? 1 : S.cols}, 3.3in);">`
-		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c, { stoneGrams: S.stoneGrams })).join("") + `</div>`;
+		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c, jewelima.barcodeOpts({ stoneGrams: S.stoneGrams }))).join("") + `</div>`;
 
 	function preview() {
 		root.find(".mb-preview").html(`<div class="mb-cap">${
@@ -191,7 +191,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// legacy `page-break-after`, because Chrome honours the former.
 		const labels = S.cards
 			.map((c) => `<div class="bc-page">`
-				+ jewelima.buildBarcodeLabel(c, { stoneGrams: S.stoneGrams })
+				+ jewelima.buildBarcodeLabel(c, jewelima.barcodeOpts({ stoneGrams: S.stoneGrams }))
 				+ `</div>`).join("");
 		doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Barcodes</title><style>
 			${roll
