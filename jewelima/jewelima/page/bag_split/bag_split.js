@@ -363,6 +363,24 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 	scan.$input.on("keydown", (e) => {
 		if (e.which === 13 || e.key === "Enter") { e.preventDefault(); const c = scan.$input.val(); scan.set_value(""); load(c); }
 	});
+
+	// Enter walks to the next box, the way Tab does — the operator fills a piece
+	// left to right and should never reach for the mouse to get to the next one.
+	// The scan box above keeps its own Enter (it loads the card), and the last
+	// box hands focus to Split, so one more Enter commits the split.
+	$(page.main).on("keydown", ".bs-pieces input", function (e) {
+		if (e.key !== "Enter" && e.which !== 13) return;
+		e.preventDefault();
+		const boxes = $(page.main).find(".bs-pieces input").filter(":visible:not(:disabled)");
+		const next = boxes.eq(boxes.index(this) + 1);
+		if (next.length) {
+			next.focus();
+			if (next.is("input")) next[0].select();
+			return;
+		}
+		const $go = $(page.main).find(".bs-splitbtn:visible:not(:disabled)");
+		if ($go.length) $go.focus();
+	});
 	page.add_inner_button(__("Reset"), () => { setMsg(""); resetView(); });
 	focusScan();
 };
