@@ -3346,11 +3346,17 @@ def export_daily_orders_xlsx(date=None):
 
 
 @frappe.whitelist()
-def get_ordering_workstation(date=None):
+def get_ordering_workstation(date=None, limit=300, offset=0):
 	"""The ORDERING desk (standalone — not the bench engine):
 	- top: the day's placement KPIs — orders placed, pieces, and BY WHOM
-	- bottom: every card still sitting in ORDERING (the un-dispatched backlog)"""
+	- bottom: the cards still sitting in ORDERING (the un-dispatched backlog)
+
+	WINDOWED. The backlog used to come back whole — 3,748 KB at ten thousand
+	cards, with a File count and a full-name lookup per row on top — and the page
+	simply never finished loading. The COUNT is over the whole backlog, so the
+	page still states its true size."""
 	date = date or frappe.utils.nowdate()
+	limit, offset = cint(limit), max(cint(offset), 0)
 	placed = frappe.get_all("Job Order", filters={"order_date": date},
 		fields=["name", "owner", "customer"])
 	bag_counts = {}
@@ -3371,7 +3377,12 @@ def get_ordering_workstation(date=None):
 		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
 		WHERE b.location = 'ORDERING' AND b.is_finished = 0
 		ORDER BY b.creation ASC
-	""", as_dict=True)
+		{lim}
+	""".format(lim=("LIMIT %(lim)s OFFSET %(off)s" if limit > 0 else "")),
+		{"lim": limit, "off": offset}, as_dict=True)
+	backlog_total = cint(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabOrder Bag`
+		WHERE location = 'ORDERING' AND is_finished = 0""")[0][0])
 	today = frappe.utils.nowdate()
 	# owner -> readable name, resolved once per distinct user
 	fullname = {u: frappe.db.get_value("User", u, "full_name") or u
@@ -3390,8 +3401,13 @@ def get_ordering_workstation(date=None):
 		r["photos"] = cint(photo_counts.get(r.name))
 		r["placed_by"] = fullname.get(r.placed_by, r.placed_by or "")
 	return {"date": date,
+		"total": backlog_total, "shown": offset + len(rows),
+		"offset": offset, "limit": limit,
+		"has_more": (offset + len(rows)) < backlog_total,
 		"kpis": {"orders": len(placed), "bags": sum(cint(v) for v in bag_counts.values()),
-			"in_ordering": len(rows)},
+			# the WHOLE backlog, not the window — a KPI that counted the loaded
+			# page would shrink the desk every time it was paged
+			"in_ordering": backlog_total},
 		"by": sorted(by.values(), key=lambda x: -x["orders"]),
 		"rows": rows}
 
@@ -6797,6 +6813,14 @@ def get_bench_flow(bench, direction, from_date=None, to_date=None):
 		"count": len(rows), "rows": rows}
 
 
+def _tally(values):
+	"""Count each distinct value. Used for the bench's work-type split."""
+	out = {}
+	for v in values:
+		out[v] = out.get(v, 0) + 1
+	return out
+
+
 @frappe.whitelist()
 def get_bench_workstation(bench, limit=100, offset=0):
 	"""The bench WORKSTATION: the small live picture a worker glances at.
@@ -6949,7 +6973,14 @@ def get_bench_workstation(bench, limit=100, offset=0):
 		"counts": {"waiting": len(waiting),
 			"working": sum(len(g["cards"]) for g in working.values()),
 			"completed": len(completed),
-			"total": len(rows)}}
+			"total": len(rows)},
+		# WHAT is being worked, not just how many — a bench running three kinds of
+		# job wants to see the split, and "12 working" never said which twelve
+		"working_by_work_type": sorted(
+			[{"work_type": k or frappe._("(not set)"), "count": v}
+				for k, v in _tally(c.get("work_type") for g in working.values()
+					for c in g["cards"]).items()],
+			key=lambda x: (-x["count"], x["work_type"]))}
 
 
 @frappe.whitelist()

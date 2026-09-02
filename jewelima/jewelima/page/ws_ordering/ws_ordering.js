@@ -117,7 +117,13 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 
 	function paintTable() {
 		const rows = filtered();
-		root.find(".od-count").text(`— ${rows.length} / ${(D.rows || []).length} ${__("card(s)")}`);
+		// filters only ever reach the loaded window, so say how deep the backlog is
+		setTimeout(() => jewelima.moreBar(root.find(".od-more"),
+			(D.rows || []).length, D.total != null ? D.total : (D.rows || []).length,
+			() => load(true), __("Load {0} more", [OD_PAGE])), 0);
+		const loaded = (D.rows || []).length, tot = D.total != null ? D.total : loaded;
+		root.find(".od-count").text(`— ${rows.length} / ${loaded} ${__("card(s)")}`
+			+ (tot > loaded ? ` ${__("of {0} waiting", [tot])}` : ""));
 		root.find(".od-body").html(rows.length ? `
 			<table class="od-t"><thead><tr>
 				<th style="width:30px;cursor:default;"><input type="checkbox" class="od-all"
@@ -138,7 +144,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				<td>${r.due ? frappe.datetime.str_to_user(r.due) : ""}</td>
 				<td>${ageChip(r.waiting_days)}</td>
 				<td><button class="btn btn-xs ${r.photos ? "od-hasph" : "btn-default"} od-photos" data-name="${esc(r.name)}">📷${r.photos ? " " + r.photos : ""}</button></td>
-			</tr>`).join("")}</tbody></table>`
+			</tr>`).join("")}</tbody></table><div class="od-more"></div>`
 			: `<div class="od-none">${__("Nothing sits in Ordering — everything has been dispatched.")}</div>`);
 	}
 
@@ -158,15 +164,25 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 			types.map((t) => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join(""));
 	}
 
-	function load() {
-		frappe.call({ method: API + ".get_ordering_workstation",
-			args: { date: root.find(".od-date").val() }, freeze: false })
+	// the ORDERING backlog can be thousands of cards deep; it arrives a window at
+	// a time so the desk actually opens
+	const OD_PAGE = 300;
+
+	function load(more) {
+		const $body = root.find(".od-body");
+		jewelima.busy($body, true, more ? __("Loading more cards…") : __("Loading the desk…"));
+		frappe.call({ method: API + ".get_ordering_workstation", freeze: false,
+			args: { date: root.find(".od-date").val(),
+				limit: OD_PAGE, offset: more && D ? (D.rows || []).length : 0 } })
 			.then((r) => {
-				D = r.message;
-				if (!D) return;
+				const m = r.message;
+				if (!m) return;
+				if (more && D) m.rows = (D.rows || []).concat(m.rows || []);
+				D = m;
 				paintTop();
 				paintTable();
-			});
+			})
+			.always(() => jewelima.busy($body, false));
 	}
 
 	// scan-and-transfer: ORDERING is ALWAYS the source, and only the stations a
