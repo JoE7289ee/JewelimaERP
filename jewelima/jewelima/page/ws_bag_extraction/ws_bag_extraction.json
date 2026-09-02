@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-24 03:30:57.242421",
+ "modified": "2026-09-02 16:59:12.416948",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-bag-extraction",
@@ -19,6 +19,9 @@
   },
   {
    "role": "JW Manager"
+  },
+  {
+   "role": "JW EXTRACTION"
   }
  ],
  "script": null,

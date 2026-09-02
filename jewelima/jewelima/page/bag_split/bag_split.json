@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:14:03.687680",
+ "modified": "2026-09-02 16:59:12.460964",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "bag-split",
@@ -16,6 +16,9 @@
   },
   {
    "role": "Stock Manager"
+  },
+  {
+   "role": "JW EXTRACTION"
   },
   {
    "role": "JW Manager"
