@@ -1398,6 +1398,19 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "printer",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Tag Canvas",
+   "link_to": "tag-canvas",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "award",
