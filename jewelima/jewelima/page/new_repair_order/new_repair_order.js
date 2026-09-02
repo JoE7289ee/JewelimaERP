@@ -20,10 +20,35 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		<style>
 		#page-new-repair-order .container{max-width:100%;}
 		.nr-wrap{max-width:100%;}
+		/* Colour here is structure, not decoration: the three cards are three
+		   different jobs — who brought it, what they brought, anything else — and
+		   a band of colour tells them apart at a glance on a counter screen.
+		   Everything is an rgba tint over the theme's own background, so it reads
+		   the same in light and dark rather than being a light-mode-only skin. */
 		.nr-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
-			padding:14px 16px;margin-bottom:14px;}
+			padding:0 0 14px;margin-bottom:14px;overflow:hidden;}
 		.nr-card .h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
-			color:var(--text-muted);margin-bottom:10px;}
+			color:var(--text-muted);margin:0 0 12px;padding:9px 16px;
+			background:var(--control-bg);border-bottom:1px solid var(--border-color);}
+		.nr-card > *:not(.h){margin-left:16px;margin-right:16px;}
+		/* a colour per card, carried on the header strip and a spine down the side */
+		.nr-c-from{border-left:3px solid #1f618d;}
+		.nr-c-from .h{background:rgba(31,97,141,.09);color:#1f618d;}
+		.nr-c-pieces{border-left:3px solid #8a6d00;}
+		.nr-c-pieces .h{background:rgba(224,168,0,.13);color:#8a6d00;}
+		.nr-c-note{border-left:3px solid var(--border-color);}
+		/* The same accents at full strength are too dark to read on the dark theme,
+		   where the card behind them is nearly black. The tints carry over as they
+		   are — they are alpha over whatever the theme paints — only the text and
+		   the spines need lifting. */
+		[data-theme="dark"] .nr-c-from{border-left-color:#5b9bd5;}
+		[data-theme="dark"] .nr-c-from .h{color:#8fc1e8;}
+		[data-theme="dark"] .nr-c-pieces{border-left-color:#d4a72c;}
+		[data-theme="dark"] .nr-c-pieces .h{color:#e8c66b;}
+		[data-theme="dark"] table.nr-t td select.nr-kt{color:#e8c66b;}
+		[data-theme="dark"] .nr-tot b{color:#e8c66b;}
+		[data-theme="dark"] td.nr-st{color:#8fc1e8;}
+		[data-theme="dark"] .nr-add.btn-default{color:#e8c66b;}
 		.nr-head{display:flex;gap:14px;flex-wrap:wrap;}
 		.nr-f{flex:1 1 220px;min-width:190px;}
 		.nr-f label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
@@ -35,15 +60,23 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 
 		table.nr-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.nr-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
-			color:var(--text-muted);padding:7px 8px;font-weight:700;border-bottom:1px solid var(--border-color);}
+			color:var(--text-muted);padding:8px;font-weight:700;
+			border-bottom:1.5px solid var(--border-color);background:var(--control-bg);}
 		table.nr-t td{padding:5px 8px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
+		/* banded rows: this is a list read across, and a plain grid loses your line */
+		table.nr-t tbody tr:nth-child(even) td{background:rgba(128,128,128,.055);}
+		table.nr-t tbody tr:hover td{background:rgba(224,168,0,.10);}
+		/* the two numbers that decide the money are worth finding fast */
+		table.nr-t td.num input,table.nr-t td select.nr-kt{font-weight:700;}
+		table.nr-t td select.nr-kt{color:#8a6d00;}
 		table.nr-t td input,table.nr-t td select{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:6px 9px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		table.nr-t td.num input{text-align:right;font-variant-numeric:tabular-nums;}
 		.nr-del{border:none;background:none;color:#b02a2a;font-size:16px;cursor:pointer;line-height:1;}
 		.nr-works{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
 		.nr-works input{flex:1 1 90px;min-width:80px;}
-		td.nr-st{font-size:11px;line-height:1.45;cursor:pointer;}
+		td.nr-st{font-size:11px;line-height:1.45;cursor:pointer;color:#1f618d;font-weight:600;}
+		td.nr-st:hover{background:rgba(31,97,141,.10);}
 		.nr-addst{color:var(--text-muted);font-style:italic;border-bottom:1px dashed var(--border-color);}
 		table.nr-t td select.nr-kt{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:5px 6px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
@@ -52,9 +85,14 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 			border:1px solid #b9d0e6;white-space:nowrap;}
 		.nr-chip b{cursor:pointer;font-size:13px;line-height:1;opacity:.65;}
 		.nr-chip b:hover{opacity:1;}
-		.nr-add{margin-top:9px;}
-		.nr-tot{display:flex;gap:18px;margin-top:10px;font-size:12.5px;color:var(--text-muted);}
-		.nr-tot b{color:var(--text-color);font-variant-numeric:tabular-nums;}
+		.nr-add{margin-top:11px;}
+		.nr-add.btn-default{border-color:rgba(224,168,0,.55);color:#8a6d00;font-weight:700;}
+		.nr-add.btn-default:hover{background:rgba(224,168,0,.12);}
+		.nr-tot{display:flex;gap:18px;margin-top:12px;font-size:12.5px;color:var(--text-muted);
+			background:rgba(224,168,0,.10);border:1px solid rgba(224,168,0,.30);border-radius:9px;
+			padding:8px 13px;}
+		.nr-tot:empty{display:none;}
+		.nr-tot b{color:#8a6d00;font-variant-numeric:tabular-nums;font-size:14px;}
 		.nr-none{padding:20px;text-align:center;color:var(--text-muted);font-size:12.5px;}
 		.nr-done{border:1px solid #bfe3c6;background:#eaf6ec;color:#1d7a33;border-radius:11px;
 			padding:12px 15px;margin-bottom:14px;}
@@ -67,7 +105,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 		</style>
 		<div class="nr-wrap">
 			<div class="nr-doneslot"></div>
-			<div class="nr-card">
+			<div class="nr-card nr-c-from">
 				<div class="h">${__("Where it came from")}</div>
 				<div class="nr-head">
 					<div class="nr-f"><label>${__("Party")}</label>
@@ -80,7 +118,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 						<div class="who nr-who"></div></div>
 				</div>
 			</div>
-			<div class="nr-card">
+			<div class="nr-card nr-c-pieces">
 				<div class="h">${__("The pieces")}</div>
 				<table class="nr-t"><thead><tr>
 					<th style="width:18%;">${__("Design Type")}</th>
@@ -96,7 +134,7 @@ frappe.pages["new-repair-order"].on_page_load = function (wrapper) {
 				<button class="btn btn-xs btn-default nr-add">+ ${__("another piece")}</button>
 				<div class="nr-tot"></div>
 			</div>
-			<div class="nr-card">
+			<div class="nr-card nr-c-note">
 				<div class="h">${__("Anything else")}</div>
 				<div class="nr-f"><textarea class="nr-note" rows="2"
 					placeholder="${__("a note about the whole batch")}"></textarea></div>
