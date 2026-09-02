@@ -9,7 +9,7 @@
 // Route: /app/transfer-order-bag
 
 const TOB_LOCATIONS =
-	"\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION";
+	"\nORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nBAG EXTRACTION";
 
 frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Transfer Order Bag", single_column: true });
@@ -112,7 +112,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 	// only destinations with an issue/assign flow get the strip — the rest
 	// (ORDERING, CAM, TREE MAKING, CASTING, BAG EXTRACTION) just transfer
 	const TOB_ISSUABLE = ["GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL POLISH",
-		"CAD", "WAXING", "WAX SETTING", "WAX CLEANING"];
+		"CAD", "WAXING", "WAX SETTING"];
 	function loadTargetOptions() {
 		// the "issue right after" strip only exists once an ISSUABLE destination is picked
 		const to = state.to.get_value();
@@ -556,13 +556,21 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		function paint() {
 			const rows = visible();
 			const body = $b.find(".tc-body")[0];
+			const moreRow = () => {
+				if (!S.hasMore) return "";
+				const cols = $b.find("table.tc-tbl thead th").length || 7;
+				return `<tr class="tc-morerow"><td colspan="${cols}" style="text-align:center;padding:9px;">`
+				+ `<button class="btn btn-xs btn-default tc-more">${__("Load 60 more")}</button>`
+				+ `<span class="text-muted" style="margin-left:9px;font-size:11.5px;">`
+				+ __("{0} of {1} at this bench", [S.rows.length, S.total]) + `</span></td></tr>`;
+				};
 			body.innerHTML = rows.length
 				? rows.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
 					<td><input type="checkbox" data-nm="${esc(r.name)}" ${S.sel.has(r.name) ? "checked" : ""} ${state.rows.find((x) => x.name === r.name) ? "disabled title='Already in the batch'" : ""}></td>
 					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${esc(r.job_order || "")}</td><td>${r.qty || ""}</td>
-					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td><td>${esc(r.employee_name || "")}</td></tr>`).join("")
+					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td><td>${esc(r.employee_name || "")}</td></tr>`).join("") + moreRow()
 				: `<tr><td colspan="8" class="tc-empty">${S.location ? (S.selOnly ? __("Nothing selected yet.") : __("No cards here.")) : __("Pick a location.")}</td></tr>`;
-			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.rows.length} at location`);
+			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.total || S.rows.length} at location`);
 			// click one, shift-click another: everything between follows
 			jewelima.shiftSelect($b, ".tc-body input");
 			$b.find(".tc-body input").on("change", function () {
@@ -576,14 +584,31 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			if (hcb) { hcb.checked = selectable.length > 0 && selHit === selectable.length; hcb.indeterminate = selHit > 0 && selHit < selectable.length; }
 			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to batch", [S.sel.size]) : __("Add to batch"));
 		}
-		function loadLoc() {
-			if (!S.location) { S.rows = []; fillJO(); paint(); return; }
-			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
-				// a card out with a worker cannot be transferred, so it is not offered.
-				// `locked` is read from the open work session itself — the status
-				// string is the visit's mirror of it and misses "Ongoing".
-				.then((r) => { S.rows = (r.message || []).filter((x) => !x.locked); fillJO(); paint(); });
+		const CARD_PAGE = 60;
+		function loadLoc(more) {
+			if (!S.location) { S.rows = []; S.loaded = 0; S.total = 0; fillJO(); paint(); return; }
+			jewelima.busy($b.find("table.tc-tbl"), true, __("Loading cards…"));
+			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", freeze: false,
+				args: { location: S.location, limit: CARD_PAGE, offset: more ? S.loaded : 0 } })
+				// a busy bench holds thousands of cards; the picker takes them a
+				// window at a time and says how many are behind the one on screen
+				.then((r) => {
+					const m = r.message || {};
+					const batch = (r.message.rows || []).filter((x) => !x.locked);
+					S.rows = more ? S.rows.concat(batch) : batch;
+					S.loaded = m.shown != null ? m.shown : S.rows.length;
+					S.total = m.total != null ? m.total : S.rows.length;
+					S.hasMore = !!m.has_more;
+					fillJO(); paint();
+				})
+				.always(() => jewelima.busy($b.find("table.tc-tbl"), false));
 		}
+		// the button is inside the table body, which paint() rewrites — so bind it
+		// on the dialog once by delegation rather than after every repaint
+		$b.on("click", ".tc-more", function () {
+			$(this).prop("disabled", true).text(__("Loading…"));
+			loadLoc(true);
+		});
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;
 			S.sel.clear(); // one location -> one transfer: changing location deselects everything

@@ -590,6 +590,14 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			let activeEmp = null;
 			for (const r of S.rows) if (S.sel.has(r.name)) { activeEmp = r.employee || ""; break; }
 			const body = $b.find(".tc-body")[0];
+			const moreRow = () => {
+				if (!S.hasMore) return "";
+				const cols = $b.find("table.tc-tbl thead th").length || 7;
+				return `<tr class="tc-morerow"><td colspan="${cols}" style="text-align:center;padding:9px;">`
+				+ `<button class="btn btn-xs btn-default tc-more">${__("Load 60 more")}</button>`
+				+ `<span class="text-muted" style="margin-left:9px;font-size:11.5px;">`
+				+ __("{0} of {1} at this bench", [S.rows.length, S.total]) + `</span></td></tr>`;
+				};
 			body.innerHTML = rows.length
 				? rows.map((r) => {
 					const inBatch = state.rows.find((x) => x.name === r.name);
@@ -601,9 +609,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 						<td><b>${escC(r.name)}</b></td><td>${escC(r.design || "")}</td><td>${r.qty || ""}</td>
 						<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${escC(r.status || "")}</td>
 						<td>${escC(r.employee_name || "—")}</td></tr>`;
-				}).join("")
+				}).join("") + moreRow()
 				: `<tr><td colspan="7" class="tc-empty">${S.location ? __("No cards match.") : __("Pick a bench.")}</td></tr>`;
-			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.rows.length} at bench`);
+			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.total || S.rows.length} at bench`);
 			// click one, shift-click another: everything between follows
 			jewelima.shiftSelect($b, ".tc-body input");
 			$b.find(".tc-body input").on("change", function () {
@@ -612,11 +620,31 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			});
 			dlg.get_primary_btn().text(S.sel.size ? __("Add {0} to batch", [S.sel.size]) : __("Add to batch"));
 		}
-		function loadLoc() {
-			if (!S.location) { S.rows = []; fillJO(); paint(); return; }
-			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", args: { location: S.location } })
-				.then((r) => { S.rows = r.message || []; fillJO(); paint(); });
+		const CARD_PAGE = 60;
+		function loadLoc(more) {
+			if (!S.location) { S.rows = []; S.loaded = 0; S.total = 0; fillJO(); paint(); return; }
+			jewelima.busy($b.find("table.tc-tbl"), true, __("Loading cards…"));
+			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", freeze: false,
+				args: { location: S.location, limit: CARD_PAGE, offset: more ? S.loaded : 0 } })
+				// a busy bench holds thousands of cards; the picker takes them a
+				// window at a time and says how many are behind the one on screen
+				.then((r) => {
+					const m = r.message || {};
+					const batch = (r.message.rows || []);
+					S.rows = more ? S.rows.concat(batch) : batch;
+					S.loaded = m.shown != null ? m.shown : S.rows.length;
+					S.total = m.total != null ? m.total : S.rows.length;
+					S.hasMore = !!m.has_more;
+					fillJO(); paint();
+				})
+				.always(() => jewelima.busy($b.find("table.tc-tbl"), false));
 		}
+		// the button is inside the table body, which paint() rewrites — so bind it
+		// on the dialog once by delegation rather than after every repaint
+		$b.on("click", ".tc-more", function () {
+			$(this).prop("disabled", true).text(__("Loading…"));
+			loadLoc(true);
+		});
 		$b.find(".tc-loc").on("change", function () {
 			S.location = this.value;
 			S.sel.clear();

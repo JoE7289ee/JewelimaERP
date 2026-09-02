@@ -248,7 +248,7 @@ JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "
 	"Certification Center", "Price Chart", "Holder Transfer", "Certification Type",
 	"Design Type"]
 
-# ---- JW WAXING / JW WAX CLEANING: the wax line --------------------------------
+# ---- JW WAXING: the wax line --------------------------------------------------
 # Same shape as JW CAM: the benches they run, plus Transfer Order Bag narrowed
 # to the moves that leave those benches. Transfer Rules match on the FROM as
 # well as the to, so a bag scanned anywhere else has no matching rule and the
@@ -261,19 +261,18 @@ JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "
 # _require_ws_access, and holding a bench's own page is what grants working at
 # that bench.
 JEWELIMA_WAXING_ROLE = "JW WAXING"
-JEWELIMA_WAXING_PAGES = ["ws-waxing", "ws-wax-setting", "ws-wax-cleaning", "workstations",
+JEWELIMA_WAXING_PAGES = ["ws-waxing", "ws-wax-setting", "workstations",
 	"transfer-order-bag"]
-JEWELIMA_WAXING_FROM = ("WAXING", "WAX SETTING", "WAX CLEANING")
-JEWELIMA_WAXING_TO = ("WAXING", "WAX SETTING", "WAX CLEANING", "TREE MAKING")
+JEWELIMA_WAXING_FROM = ("WAXING", "WAX SETTING")
+JEWELIMA_WAXING_TO = ("WAXING", "WAX SETTING", "TREE MAKING")
 
-JEWELIMA_WAXCLEAN_ROLE = "JW WAX CLEANING"
-JEWELIMA_WAXCLEAN_PAGES = ["ws-wax-cleaning", "transfer-order-bag"]
-JEWELIMA_WAXCLEAN_FROM = ("WAX CLEANING",)
-JEWELIMA_WAXCLEAN_TO = ("WAX SETTING", "WAXING")
+# WAX CLEANING was its own bench until 2026-09-02. It is now a TYPE OF WORK done
+# at WAXING, so the bench, its page and the JW WAX CLEANING role are all gone and
+# the patch moves its cards, its work options and its two users onto WAXING.
 
 JEWELIMA_WS_PAGES = {
 	"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
-	"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
+	"WAX SETTING": "ws-wax-setting",
 	"REWORK": "ws-rework",
 	"GRINDING": "ws-grinding", "FILING": "ws-filing", "SETTING": "ws-setting",
 	"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
@@ -350,7 +349,7 @@ JEWELIMA_REPAIR_DOCTYPES = ["Repair Order", "Repair Order Item", "Repair Party",
 # the sheet's polish IF-formula, as editable master rows
 # Pages the app no longer ships — migrate does not remove deleted Page docs,
 # so stale rows would keep serving a dead route on every site.
-RETIRED_PAGES = ["design-transfer",
+RETIRED_PAGES = ["ws-wax-cleaning", "design-transfer",
 	# the repair module was rebuilt from scratch (2026-08-31) — these four and
 	# their doctypes are gone from the app, so their Page docs must go too
 	"repair-intake", "repair-desk", "repair-bills", "repair-setup",
@@ -785,8 +784,6 @@ def setup_roles():
 		(JEWELIMA_CAM_FROM,), JEWELIMA_CAM_TO)
 	bench_role(JEWELIMA_WAXING_ROLE, JEWELIMA_WAXING_PAGES,
 		JEWELIMA_WAXING_FROM, JEWELIMA_WAXING_TO)
-	bench_role(JEWELIMA_WAXCLEAN_ROLE, JEWELIMA_WAXCLEAN_PAGES,
-		JEWELIMA_WAXCLEAN_FROM, JEWELIMA_WAXCLEAN_TO)
 
 	# ---- JW Delivery: goods out, certification, and a bill it may only prepare --
 	ensure_role(JEWELIMA_DELIVERY_ROLE)
@@ -989,9 +986,8 @@ def seed_benches():
 # ---------------------------------------------------------------------------
 BENCH_WORK_TYPES = {   # first entry is the DEFAULT (used when none is picked)
 	"CAD": ["CAD", "Rework", "Sizing"],
-	"WAXING": ["Wax Injecting", "Dye Cutting"],
+	"WAXING": ["Wax Injecting", "Dye Cutting", "Wax Cleaning", "Sizing"],
 	"WAX SETTING": ["Wax Setting"],
-	"WAX CLEANING": ["Wax Cleaning", "Sizing"],
 	"GRINDING": ["Grinding"],
 	"FILING": ["Filing"],
 	"SETTING": ["Setting", "Cupping", "Hand Setting"],

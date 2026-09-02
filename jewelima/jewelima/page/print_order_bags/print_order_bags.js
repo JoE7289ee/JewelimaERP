@@ -7,7 +7,7 @@
 
 const POB_LOCATIONS = [
 	"ORDERING", "CAD", "CAM", "WAXING", "TREE MAKING", "CASTING", "GRINDING",
-	"FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH", "WAX CLEANING", "BAG EXTRACTION",
+	"FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH", "BAG EXTRACTION",
 ];
 
 frappe.pages["print-order-bags"].on_page_load = function (wrapper) {

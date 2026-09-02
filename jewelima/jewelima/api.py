@@ -15474,18 +15474,29 @@ def transfer_and_issue(names, to_location, employee=None, work_type=None, remark
 
 
 @frappe.whitelist()
-def get_cards_at_location(location):
-	"""All ACTIVE production cards currently at a location, with each card's current bench
-	status (In Queue / Issued / Completed …) — the Transfer page's Cards picker."""
+def get_cards_at_location(location, limit=60, offset=0):
+	"""ACTIVE production cards currently at a location, with each card's current bench
+	status (In Queue / Issued / Completed …) — the Cards picker behind Transfer,
+	Assign/Collect and Job Work.
+
+	WINDOWED. A busy bench holds thousands of cards and all three pickers open with
+	the whole list; the per-card status, employee and open-session lookups below all
+	run over whatever this returns, so the window keeps those cheap too. Pass
+	limit=0 for the whole location. The count is always the whole location, so the
+	picker can say how much of it is showing."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 
 	loc = (location or "").strip().upper()
 	if not loc:
-		return []
+		return {"rows": [], "total": 0, "shown": 0, "has_more": False}
+	limit, offset = cint(limit), max(cint(offset), 0)
+	where = {"location": loc, "is_finished": 0,
+		"stock_status": ["not in", ["Cancelled", "Sold"]]}
+	total = frappe.db.count("Order Bag", where)
 	bags = frappe.get_all(
-		"Order Bag",
-		filters={"location": loc, "is_finished": 0, "stock_status": ["not in", ["Cancelled", "Sold"]]},
+		"Order Bag", filters=where,
 		fields=["name", "design", "qty", "due_date", "job_order"], order_by="name",
+		limit_start=offset, limit_page_length=(limit or 0),
 	)
 	dt = BENCH_DOCTYPE.get(loc)
 	smap, emap = {}, {}
@@ -15523,7 +15534,9 @@ def get_cards_at_location(location):
 			b["status"] = op.status
 		else:
 			b["locked_reason"] = ""
-	return bags
+	return {"rows": bags, "total": total, "shown": offset + len(bags),
+		"offset": offset, "limit": limit,
+		"has_more": (offset + len(bags)) < total}
 
 
 @frappe.whitelist()

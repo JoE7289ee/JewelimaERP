@@ -14,3 +14,4 @@ jewelima.patches.backfill_bench_issues
 jewelima.patches.rename_wax_injecting_to_waxing
 jewelima.patches.split_selection_gold_by_karat
 jewelima.patches.selection_stone_fields
+jewelima.patches.retire_wax_cleaning_bench

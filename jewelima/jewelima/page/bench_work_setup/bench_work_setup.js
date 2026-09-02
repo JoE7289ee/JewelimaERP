@@ -12,7 +12,7 @@ frappe.pages["bench-work-setup"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	const BENCHES = ["ORDERING", "CAD", "CAM", "WAXING", "TREE MAKING", "CASTING", "GRINDING",
-		"FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH", "WAX CLEANING", "BAG EXTRACTION"];
+		"FILING", "SETTING", "PRE POLISH", "WAX SETTING", "FINAL POLISH", "BAG EXTRACTION"];
 	let bench = null;
 	let options = [];   // [{name, kind, value, in_use}]
 

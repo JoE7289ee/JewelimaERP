@@ -207,7 +207,7 @@ jewelima.buildWorkstation = function (wrapper, bench, opts) {
 			const chips = (st) => Object.entries(st || {})
 				.map(([k, v]) => `${k} ${v.pcs}/${v.ct.toFixed(3)}ct`).join(" · ");
 			// weight columns only where the bench books metal; the no-gold benches
-			// (CAD, Waxing, Wax Setting, Wax Cleaning) show cards · qty, not grams.
+			// (CAD, Waxing, Wax Setting) show cards · qty, not grams.
 			const wcols = D && D.flow === "weights";
 			const noGold = D && D.no_gold;
 			const tile = (label, dir, x) => `<span class="wk-dt wk-flow" data-dir="${dir}" title="${__("Click to see the cards — with a date filter")}">

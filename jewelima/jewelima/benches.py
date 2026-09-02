@@ -37,7 +37,6 @@ BENCH_DOCTYPE = {
 	"PRE POLISH": "Pre Polish",
 	"WAX SETTING": "Wax Setting",
 	"FINAL POLISH": "Final Polish",
-	"WAX CLEANING": "Wax Cleaning",
 	"BAG EXTRACTION": "Bag Extraction",
 	# a holding queue: cards wait here to go back into the line. No employee is
 	# issued the work and no work type is recorded, so it appears in neither of
@@ -52,7 +51,7 @@ ISSUE_RECEIPT_LOCATIONS = {"GRINDING", "FILING", "SETTING", "PRE POLISH", "FINAL
 
 
 # Transfer benches that use the lighter Assign / Collect flow (times only — no weight/loss).
-ASSIGN_COLLECT_LOCATIONS = {"CAD", "WAXING", "WAX SETTING", "WAX CLEANING"}
+ASSIGN_COLLECT_LOCATIONS = {"CAD", "WAXING", "WAX SETTING"}
 
 
 def bench_doctype(location):

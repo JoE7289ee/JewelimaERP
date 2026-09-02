@@ -14,7 +14,7 @@ frappe.pages["workstations"].on_page_load = function (wrapper) {
 	// bench -> its ws page, mirroring JEWELIMA_WS_PAGES in setup.py
 	const WS = {
 		"CAD": "ws-cad-ws", "CAM": "ws-cam", "WAXING": "ws-waxing",
-		"WAX SETTING": "ws-wax-setting", "WAX CLEANING": "ws-wax-cleaning",
+		"WAX SETTING": "ws-wax-setting",
 		"GRINDING": "ws-grinding", "FILING": "ws-filing", "SETTING": "ws-setting",
 		"PRE POLISH": "ws-pre-polish", "FINAL POLISH": "ws-final-polish",
 		"BAG EXTRACTION": "ws-bag-extraction",
