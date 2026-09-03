@@ -8888,7 +8888,12 @@ def transfer_bucket(bags, to_bucket, remarks=None):
 		if row.bucket == to_bucket:
 			errors.append({"name": nm, "error": frappe._("Already in {0}").format(to_bucket)})
 			continue
-		frappe.db.set_value("Order Bag", nm, "bucket", to_bucket)
+		# location follows the bucket. make_products sets BOTH when a piece is
+		# filed, so updating only one here left a moved piece saying it was still
+		# kept in the bucket it came from. Anything away at a lab or a centre is
+		# already refused above (stock_status must be In Stock), so a transferable
+		# piece is always sitting in its own bucket.
+		frappe.db.set_value("Order Bag", nm, {"bucket": to_bucket, "location": to_bucket})
 		frappe.get_doc("Order Bag", nm).add_comment("Comment",
 			frappe._("Bucket {0} \u2192 {1}{2}").format(row.bucket or frappe._("none"), to_bucket,
 				(" \u00b7 " + remarks) if remarks else ""))
