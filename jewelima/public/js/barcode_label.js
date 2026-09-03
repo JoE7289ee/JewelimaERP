@@ -62,6 +62,8 @@ jewelima.BARCODE_LABEL_CSS = `
 .bc-label .bc-qr{flex:0 0 auto;}
 .bc-label .bc-qr img{height:var(--bc-qr,0.41in);width:var(--bc-qr,0.41in);display:block;}
 .bc-label .bc-right{white-space:nowrap;text-align:left;}
+/* a free line makes four; they only fit if the leading gives way */
+.bc-label .bc-b.tight{line-height:.82;}
 .bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
 
 // Stone weights print in CARATS by default, which is how the trade quotes them.
@@ -105,15 +107,20 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 		? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 		: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
 
-	// B — what it IS: type, design, card number, gold colour, the free line last
-	const r1 = c.design_type ? `<div>${esc(c.design_type)}</div>` : "";
-	const col = o.showColor && c.gold_color ? `<div>${esc(c.gold_color)}</div>` : "";
+	// B — what it IS: type + colour, design, card number, then the free line.
+	// The colour rides ON the type line rather than taking one of its own: box B
+	// is 0.43in and fits THREE lines at 9pt, so a fourth shaved the top off the
+	// type and the bottom off the colour on every tag that carried it.
+	const col = o.showColor && c.gold_color ? esc(c.gold_color) : "";
+	const r1 = (c.design_type || col)
+		? `<div>${[esc(c.design_type || ""), col].filter(Boolean).join(" ")}</div>` : "";
 	const free = o.freeText ? `<div>${esc(o.freeText)}</div>` : "";
+	// a free line IS a fourth, so the column tightens to keep it on the tag
 	const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div>`
-		+ `<div>${esc(c.name)}</div>${col}${free}</div>`;
+		+ `<div>${esc(c.name)}</div>${free}</div>`;
 
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`
 		+ `<div class="bc-half bc-a" style="${box(a, o.offsetA)}">${left}${qr}</div>`
-		+ `<div class="bc-half bc-b" style="${box(b, o.offsetB)}">${right}</div>`
+		+ `<div class="bc-half bc-b${o.freeText ? " tight" : ""}" style="${box(b, o.offsetB)}">${right}</div>`
 		+ `</div>`;
 };
