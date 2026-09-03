@@ -18978,82 +18978,148 @@ def rework_piece(order_bag, to_location=None, remarks=None):
 # read when someone asks "what have we got?".
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
-def get_finished_goods(held_by=None, design_type=None):
-	"""Every finished piece In Stock, with what it holds and who holds it."""
+def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
+		has_huid=None, certified=None, search=None, limit=300):
+	"""Every finished piece In Stock — the list you read when someone asks what we
+	have, and the numbers that answer "how much".
+
+	The page shows at most `limit` rows, because a floor with tens of thousands
+	of finished pieces should not send them all to a browser to be filtered
+	there. The TOTALS are computed over everything that matches the filters, and
+	the bucket counts over the whole stock, so the numbers never describe just
+	the page you happen to be looking at."""
 	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin",
 			"Jewelima Stock", "Jewelima Info"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Finished Goods is for the desk."), frappe.PermissionError)
 
-	filters = {"is_finished": 1, "stock_status": "In Stock"}
+	limit = max(1, min(cint(limit) or 300, 1000))
+	# every filter as a WHERE fragment, so the row page, the totals and the
+	# breakdowns all describe exactly the same set
+	where = ["b.is_finished = 1", "b.stock_status = 'In Stock'"]
+	vals = {}
+	if bucket:
+		where.append("b.bucket = %(bucket)s"); vals["bucket"] = bucket
 	if held_by:
-		filters["held_by"] = held_by
-	bags = frappe.get_all("Order Bag", filters=filters,
-		fields=["name", "design", "held_by", "huid", "certifications", "size",
-			"act_gross_weight", "act_dmd_weight", "act_dmd_no", "in_stock_on", "customer"],
-		order_by="in_stock_on desc, name", limit_page_length=0)
-	if not bags:
-		return {"rows": [], "totals": {"pieces": 0, "gross": 0, "gold": 0, "pure": 0, "stones": 0},
-			"holders": [], "types": [], "warehouse": _wh("Finished Goods")}
+		where.append("b.held_by = %(held_by)s"); vals["held_by"] = held_by
+	if design_type:
+		where.append("d.design_type = %(dt)s"); vals["dt"] = design_type
+	if has_huid in ("1", 1, True, "yes"):
+		where.append("IFNULL(b.huid, '') != ''")
+	elif has_huid in ("0", 0, "no"):
+		where.append("IFNULL(b.huid, '') = ''")
+	if certified in ("1", 1, True, "yes"):
+		where.append("IFNULL(b.certifications, '') != ''")
+	elif certified in ("0", 0, "no"):
+		where.append("IFNULL(b.certifications, '') = ''")
+	if search:
+		where.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s OR b.huid LIKE %(q)s"
+			" OR b.certifications LIKE %(q)s)")
+		vals["q"] = "%" + search + "%"
+	if karat:
+		# karat lives on the piece's gold item, not on the bag
+		where.append("""EXISTS (SELECT 1 FROM `tabBag Material Ledger` l
+			JOIN `tabItem` i ON i.name = l.item
+			WHERE l.order_bag = b.name AND l.entry_type = 'Convert' AND l.direction = 'Out'
+			  AND IFNULL(i.stone_type, '') = '' AND i.metal_purity = %(karat)s)""")
+		vals["karat"] = karat
+	W = " AND ".join(where)
+	FROM = "FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design"
+
+	# ---- the numbers, over EVERYTHING that matches (not just the page)
+	head = frappe.db.sql("""SELECT COUNT(*) n, IFNULL(SUM(b.act_gross_weight), 0) gross,
+			IFNULL(SUM(b.act_dmd_weight), 0) dmd_ct, IFNULL(SUM(b.act_dmd_no), 0) dmd_no
+		{0} WHERE {1}""".format(FROM, W), vals, as_dict=True)[0]
+	# gold and pure come off the pieces' own Convert rows
+	mat = frappe.db.sql("""SELECT IFNULL(i.stone_type, '') AS st,
+			SUM(l.qty) qty, SUM(l.qty * IFNULL(i.purity_percentage, 0) / 100) pure
+		FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+		WHERE l.entry_type = 'Convert' AND l.direction = 'Out' AND l.order_bag IN (
+			SELECT b.name {0} WHERE {1})
+		GROUP BY IFNULL(i.stone_type, '')""".format(FROM, W), vals, as_dict=True)
+	gold = round(sum(flt(m.qty) for m in mat if not m.st), 3)
+	pure = round(sum(flt(m.pure) for m in mat if not m.st), 3)
+	stones = round(sum(flt(m.qty) for m in mat if m.st), 3)
+	totals = {"pieces": cint(head.n), "gross": round(flt(head.gross), 3), "gold": gold,
+		"pure": pure, "stones": stones, "dmd_ct": round(flt(head.dmd_ct), 3),
+		"dmd_no": cint(head.dmd_no)}
+
+	# ---- the bucket tiles: the WHOLE stock, so the tops never move as you filter
+	buckets = frappe.db.sql("""SELECT IFNULL(b.bucket, '') bucket, COUNT(*) n,
+			IFNULL(SUM(b.act_gross_weight), 0) gross
+		FROM `tabOrder Bag` b WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
+		GROUP BY IFNULL(b.bucket, '') ORDER BY n DESC""", as_dict=True)
+	grand = frappe.db.sql("""SELECT COUNT(*) n, IFNULL(SUM(b.act_gross_weight), 0) gross
+		FROM `tabOrder Bag` b WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
+		""", as_dict=True)[0]
+
+	# ---- the page of rows
+	bags = frappe.db.sql("""SELECT b.name, b.design, d.design_type, b.bucket, b.held_by,
+			b.huid, b.certifications, b.size, b.customer,
+			b.act_gross_weight AS gross, b.act_dmd_weight AS dmd_ct, b.act_dmd_no AS dmd_no,
+			b.in_stock_on
+		{0} WHERE {1}
+		ORDER BY b.in_stock_on DESC, b.name
+		LIMIT %(lim)s""".format(FROM, W), dict(vals, lim=limit), as_dict=True)
 
 	names = [b.name for b in bags]
 	mats = {}
-	for bag, item, qty in frappe.db.sql(
-		"""select l.order_bag, l.item, sum(l.qty) from `tabBag Material Ledger` l
-		   where l.order_bag in %(n)s and l.entry_type = 'Convert' and l.direction = 'Out'
-		   group by l.order_bag, l.item""", {"n": names}):
-		mats.setdefault(bag, {})[item] = flt(qty)
-
-	# the design's type, and each item's stone-ness / purity, fetched once
-	designs = list({b.design for b in bags if b.design})
-	dtype = {d.name: (d.design_type or "") for d in frappe.get_all(
-		"Design", filters={"name": ["in", designs or [""]]},
-		fields=["name", "design_type"])} if designs else {}
+	if names:
+		for bag, item, qty in frappe.db.sql(
+			"""SELECT l.order_bag, l.item, SUM(l.qty) FROM `tabBag Material Ledger` l
+			   WHERE l.order_bag IN %(n)s AND l.entry_type = 'Convert' AND l.direction = 'Out'
+			   GROUP BY l.order_bag, l.item""", {"n": names}):
+			mats.setdefault(bag, {})[item] = flt(qty)
 	items = list({it for m in mats.values() for it in m})
-	meta = {i.name: i for i in frappe.get_all("Item",
-		filters={"name": ["in", items or [""]]},
+	meta = {i.name: i for i in frappe.get_all("Item", filters={"name": ["in", items or [""]]},
 		fields=["name", "stone_type", "purity_percentage", "metal_purity"])} if items else {}
 
 	rows, item_totals = [], {}
 	for b in bags:
-		gold = stones = pure = 0.0
-		karat = ""
+		g = st = pu = 0.0
+		karat_of = ""
 		for it, q in (mats.get(b.name) or {}).items():
 			m = meta.get(it)
 			if m and m.stone_type:
-				stones += q
+				st += q
 			else:
-				gold += q
+				g += q
 				if m:
-					pure += q * flt(m.purity_percentage) / 100.0
-					karat = karat or (m.metal_purity or "")
-			e = item_totals.setdefault(it, {"item": it, "qty": 0.0,
-				"stone": bool(m and m.stone_type)})
+					pu += q * flt(m.purity_percentage) / 100.0
+					karat_of = karat_of or (m.metal_purity or "")
+			e = item_totals.setdefault(it, {"item": it, "qty": 0.0, "stone": bool(m and m.stone_type)})
 			e["qty"] += q
 		rows.append({
-			"order_bag": b.name, "design": b.design or "",
-			"design_type": dtype.get(b.design, ""), "karat": karat,
-			"held_by": b.held_by or "", "customer": b.customer or "",
-			"huid": b.huid or "", "certifications": b.certifications or "",
-			"size": b.size or "", "gross": flt(b.act_gross_weight),
-			"gold": round(gold, 3), "pure": round(pure, 3), "stones": round(stones, 3),
-			"dmd_ct": flt(b.act_dmd_weight), "dmd_no": cint(b.act_dmd_no),
+			"order_bag": b.name, "design": b.design or "", "design_type": b.design_type or "",
+			"karat": karat_of, "bucket": b.bucket or "", "held_by": b.held_by or "",
+			"customer": b.customer or "", "huid": b.huid or "",
+			"certifications": b.certifications or "", "size": b.size or "",
+			"gross": flt(b.gross), "gold": round(g, 3), "pure": round(pu, 3),
+			"stones": round(st, 3), "dmd_ct": flt(b.dmd_ct), "dmd_no": cint(b.dmd_no),
 			"since": str(b.in_stock_on or "")[:10],
 		})
-	if design_type:
-		rows = [r for r in rows if r["design_type"] == design_type]
+
 	return {
 		"rows": rows,
+		"shown": len(rows),
+		"limit": limit,
+		"truncated": totals["pieces"] > len(rows),
 		"warehouse": _wh("Finished Goods"),
-		"holders": sorted({r["held_by"] for r in rows if r["held_by"]}),
-		"types": sorted({r["design_type"] for r in rows if r["design_type"]}),
+		"totals": totals,
+		"grand": {"pieces": cint(grand.n), "gross": round(flt(grand.gross), 3)},
+		"buckets": [{"bucket": b.bucket or "", "pieces": cint(b.n),
+			"gross": round(flt(b.gross), 3)} for b in buckets],
+		"holders": frappe.db.sql_list("""SELECT DISTINCT b.held_by FROM `tabOrder Bag` b
+			WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
+			  AND IFNULL(b.held_by, '') != '' ORDER BY b.held_by"""),
+		"types": frappe.db.sql_list("""SELECT DISTINCT d.design_type FROM `tabOrder Bag` b
+			JOIN `tabDesign` d ON d.name = b.design
+			WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
+			  AND IFNULL(d.design_type, '') != '' ORDER BY d.design_type"""),
+		"karats": frappe.db.sql_list("""SELECT DISTINCT i.metal_purity FROM `tabItem` i
+			WHERE IFNULL(i.stone_type, '') = '' AND IFNULL(i.metal_purity, '') != ''
+			ORDER BY i.metal_purity"""),
+		"all_buckets": frappe.get_all("Finished Bucket", filters={"active": 1},
+			pluck="name", order_by="name"),
 		"materials": sorted(({"item": v["item"], "qty": round(v["qty"], 3), "stone": v["stone"]}
 			for v in item_totals.values()), key=lambda x: -x["qty"]),
-		"totals": {
-			"pieces": len(rows),
-			"gross": round(sum(r["gross"] for r in rows), 3),
-			"gold": round(sum(r["gold"] for r in rows), 3),
-			"pure": round(sum(r["pure"] for r in rows), 3),
-			"stones": round(sum(r["stones"] for r in rows), 3),
-			"dmd_ct": round(sum(r["dmd_ct"] for r in rows), 3),
-		},
 	}
