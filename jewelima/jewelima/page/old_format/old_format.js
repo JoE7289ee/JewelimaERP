@@ -37,53 +37,79 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		#page-old-format .container{max-width:100%;}
-		.of-bar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:10px;}
+		/* one accent, one neutral — the old page had eight button colours and
+		   nothing about them said which action was the forward one */
+		#page-old-format{--of-accent:#1f618d;--of-accent-2:#174e71;--of-danger:#a33a3a;}
+		html[data-theme="dark"] #page-old-format{--of-accent:#3d86bd;--of-accent-2:#2f6d9c;--of-danger:#c96a6a;}
+		.of-bar{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px;}
 		.of-bar .frappe-control{margin:0;min-width:140px;}
-		.of-bar .control-label{font-size:11px;color:var(--text-muted);}
-		.of-file{border:2px dashed var(--border-color);border-radius:9px;padding:9px 16px;cursor:pointer;font-size:12.5px;color:var(--text-muted);}
-		.of-file.has{border-color:#2e7d32;color:#1d7a33;font-weight:700;}
-		.of-btn{border:none;color:#fff;font-weight:800;padding:9px 20px;border-radius:8px;cursor:pointer;}
-		.of-btn:disabled{opacity:.45;cursor:not-allowed;}
-		.of-sortnum{background:#5b3a8e;}
-		.of-goexport{background:#1f618d;}
-		.of-back{background:#6b7280;}
-		.of-price{background:#1f618d;}
-		.of-jos{background:#9a6b1f;}
-		.of-dl{background:#6b7280;}
+		.of-bar .control-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:600;}
+		.of-file{border:1px dashed var(--gray-400,#aeb6bf);border-radius:8px;padding:8px 16px;cursor:pointer;
+			font-size:12.5px;color:var(--text-muted);background:var(--fg-color);transition:border-color .15s,color .15s;}
+		.of-file:hover{border-color:var(--of-accent);color:var(--of-accent);}
+		.of-file.has{border-style:solid;border-color:var(--of-accent);color:var(--of-accent);font-weight:600;}
+		.of-btn{border:1px solid var(--border-color);background:var(--fg-color);color:var(--text-color);
+			font-weight:600;font-size:12.5px;padding:8px 16px;border-radius:8px;cursor:pointer;
+			transition:background .15s,border-color .15s,color .15s;}
+		.of-btn:hover{border-color:var(--of-accent);color:var(--of-accent);}
+		.of-btn:disabled{opacity:.4;cursor:not-allowed;}
+		.of-btn:disabled:hover{border-color:var(--border-color);color:var(--text-color);}
+		/* the one forward action on each screen carries the fill */
+		.of-btn.go{background:var(--of-accent);border-color:var(--of-accent);color:#fff;font-weight:700;}
+		.of-btn.go:hover{background:var(--of-accent-2);border-color:var(--of-accent-2);color:#fff;}
 		.of-bulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--control-bg);
-			border:1px solid var(--border-color);border-radius:10px;padding:8px 14px;margin-bottom:10px;}
+			border:1px solid var(--border-color);border-radius:10px;padding:8px 14px;margin-bottom:12px;}
 		.of-bulk .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);font-weight:700;}
-		.of-bulk input{border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;
+		.of-bulk input,.of-bulk select{border:1px solid var(--border-color);border-radius:6px;padding:3px 8px;font-size:12px;
 			text-transform:uppercase;width:96px;background:var(--fg-color);color:var(--text-color);}
-		.of-bulk .bapply{border:none;border-radius:6px;padding:4px 12px;font-size:11.5px;font-weight:700;color:#fff;background:#1f618d;cursor:pointer;}
-		.of-bulk .bapply.alt{background:#5b3a8e;}
+		.of-bulk .bapply{border:1px solid var(--border-color);border-radius:6px;padding:4px 12px;font-size:11.5px;
+			font-weight:600;color:var(--text-color);background:var(--fg-color);cursor:pointer;transition:border-color .15s,color .15s;}
+		.of-bulk .bapply:hover{border-color:var(--of-accent);color:var(--of-accent);}
+		.of-bulk .bapply.alt:hover{border-color:var(--of-accent);color:var(--of-accent);}
+		.of-bulk .bapply.of-bclear:hover,.of-bulk .bapply.of-selclear:hover{border-color:var(--of-danger);color:var(--of-danger);}
 		.of-bulk .sep{width:1px;height:22px;background:var(--border-color);}
 		.of-selcount{font-size:12px;font-weight:800;}
 		.of-status{font-size:11.5px;color:var(--text-muted);margin-left:auto;}
 		.of-status b{color:#a15c00;}
 		.of-cover{font-size:12.5px;color:var(--text-muted);margin-bottom:10px;}
 		.of-cover b{color:var(--text-color);}
-		.of-body{overflow-x:auto;}
-		table.of-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
+		/* overflow-x:auto makes this a scroll container on BOTH axes, so the
+		   sticky header only follows if the pane itself is what scrolls */
+		.of-body{overflow:auto;max-height:calc(100vh - 300px);min-height:200px;
+			border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);}
+		table.of-t{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.of-t.prep{min-width:1360px;}
-		table.of-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 8px;border:1px solid var(--border-color);text-align:left;white-space:nowrap;}
-		table.of-t td{border:1px solid var(--border-color);padding:3px 6px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+		/* the header follows you down a 200-row sheet */
+		table.of-t th{position:sticky;top:0;z-index:2;background:var(--control-bg);font-size:10px;text-transform:uppercase;
+			letter-spacing:.04em;color:var(--text-muted);padding:8px 8px;border-bottom:1px solid var(--gray-400,#aeb6bf);
+			text-align:left;white-space:nowrap;font-weight:700;}
+		/* rules run one way only — a full grid on 21 columns reads as graph paper */
+		table.of-t td{border-bottom:1px solid var(--border-color);padding:4px 8px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+		table.of-t tbody tr:last-child td{border-bottom:none;}
+		table.of-t tbody tr:hover td{background:var(--control-bg);}
 		table.of-t td.num{text-align:right;}
 		table.of-t td[title]:not([title=""]){cursor:help;}
-		table.of-t input:not([type=checkbox]), table.of-t select{border:1px solid var(--border-color);border-radius:5px;padding:1px 5px;font-size:11.5px;background:var(--fg-color);color:var(--text-color);}
+		table.of-t input:not([type=checkbox]), table.of-t select{border:1px solid transparent;border-radius:5px;padding:2px 6px;
+			font-size:11.5px;background:var(--control-bg);color:var(--text-color);transition:border-color .12s,background .12s;}
+		table.of-t input:not([type=checkbox]):hover, table.of-t select:hover{border-color:var(--border-color);}
+		table.of-t input:not([type=checkbox]):focus, table.of-t select:focus{outline:none;border-color:var(--of-accent);background:var(--fg-color);}
 		table.of-t input:not([type=checkbox]){text-transform:uppercase;}
-		table.of-t input[type=checkbox]{width:14px;height:14px;accent-color:#1f618d;cursor:pointer;}
-		tr.of-rowsel td{background:#eef4fb;}
-		html[data-theme="dark"] tr.of-rowsel td{background:#1d2a3a;}
-		tr.of-flagged td{background:#fff8e6;}
+		table.of-t input[type=checkbox]{width:14px;height:14px;accent-color:var(--of-accent);cursor:pointer;}
+		tr.of-rowsel td, table.of-t tbody tr.of-rowsel:hover td{background:#eef4fb;}
+		html[data-theme="dark"] tr.of-rowsel td,
+		html[data-theme="dark"] table.of-t tbody tr.of-rowsel:hover td{background:#1d2a3a;}
+		tr.of-flagged td, table.of-t tbody tr.of-flagged:hover td{background:#fff8e6;}
+		html[data-theme="dark"] tr.of-flagged td,
+		html[data-theme="dark"] table.of-t tbody tr.of-flagged:hover td{background:#2b2617;}
 		.of-flag{font-size:10.5px;color:#8a6d00;white-space:normal;}
-		.of-tot{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;}
-		.of-tile{border:1px solid var(--border-color);border-radius:9px;padding:7px 16px;background:var(--control-bg);}
-		.of-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
-		.of-tile .v{font-size:16px;font-weight:800;}
-		.of-tile.grand{border-width:2px;background:var(--fg-color);}
-		.of-tile.grand .v{color:#1f618d;}
-		.of-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
+		html[data-theme="dark"] .of-flag{color:#d4ab4a;}
+		.of-tot{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+		.of-tile{border:1px solid var(--border-color);border-radius:10px;padding:9px 16px;background:var(--fg-color);}
+		.of-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+		.of-tile .v{font-size:17px;font-weight:700;letter-spacing:-.01em;margin-top:2px;}
+		.of-tile.grand{border-color:var(--of-accent);}
+		.of-tile.grand .v{color:var(--of-accent);}
+		.of-none{padding:40px;text-align:center;color:var(--text-muted);}
 		.of-info{display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;margin-bottom:10px;}
 		.of-info .of-tile .v{font-size:15px;}
 		.of-info .sub{font-size:10.5px;color:var(--text-muted);}
@@ -98,19 +124,16 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-sess"></div>
 			<div class="of-qual"></div>
 			<div class="of-party"></div>
-			<button class="of-btn of-save" style="display:none;background:#2e7d32;">${__("Save as…")}</button>
+			<button class="of-btn of-save" style="display:none;">${__("Save as…")}</button>
 			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
-			<button class="of-btn of-find" style="display:none;background:#0e7490;">${__("Find #")}</button>
-			<button class="of-btn of-goexport" style="display:none;">${__("Continue to Export →")}</button>
+			<button class="of-btn of-find" style="display:none;">${__("Find #")}</button>
+			<button class="of-btn go of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 			<span style="flex:1;"></span>
-			<button class="of-btn of-tmpl" style="background:#6b7280;" title="${__("blank Excel with the OLD FORMAT columns")}">${__("Template ⤓")}</button>
-			<button class="of-btn of-xlimport" style="background:#0e7490;">${__("Import Excel")}</button>
-			<input type="file" class="of-ximp-input" accept=".xlsx" style="display:none;">
-			<button class="of-btn of-xlexport" style="display:none;background:#2e7d32;">${__("Export Excel")}</button>
+			<button class="of-btn of-xlexport" style="display:none;">${__("Export Excel ⤓")}</button>
 		</div>
 		<div class="of-bulk" style="display:none;">
 			<span class="of-selcount">0 ${__("selected")}</span>
-			<button class="bapply alt of-selclear" style="background:#8a2f2f;">${__("Clear")}</button>
+			<button class="bapply of-selclear">${__("Clear")}</button>
 			<span class="sep"></span>
 			<span class="lbl">${__("Set")}</span>
 			<select class="of-bfield" style="border:1px solid var(--border-color);border-radius:6px;padding:3px 6px;font-size:12px;font-weight:700;background:var(--fg-color);color:var(--text-color);">
@@ -132,8 +155,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<div class="of-rate"></div>
 			<div class="of-cq"></div>
 			<div class="of-gst"></div>
-			<button class="of-btn of-price">${__("Price it")}</button>
-			<button class="of-btn of-rules" style="display:none;background:#0e7490;">${__("Pricing Rules")}</button>
+			<button class="of-btn go of-price">${__("Price it")}</button>
+			<button class="of-btn of-rules" style="display:none;">${__("Pricing Rules")}</button>
 			<button class="of-btn of-jos" style="display:none;">${__("JOS Billing ⤓")}</button>
 			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
 		</div>
@@ -355,53 +378,13 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		rd.readAsDataURL(file);
 	});
 
-	// ---- Excel round-trip: Template / Export / Import -----------------------
-	root.on("click", ".of-tmpl", () => {
-		open_url_post("/api/method/jewelima.jewelima.api.download_old_format_template", {});
-	});
+	// ---- Excel: the session out as a working copy ---------------------------
 	root.on("click", ".of-xlexport", () => {
 		if (!ROWS.length && !CHAINS.length) return frappe.show_alert({ message: __("Nothing to export yet."), indicator: "orange" }, 3);
 		open_url_post("/api/method/jewelima.jewelima.api.export_old_format_session_xlsx", {
 			rows: JSON.stringify(ROWS), chains: JSON.stringify(CHAINS),
 			filename: (TITLE || (FILE && FILE.name) || "OLD FORMAT SESSION").replace(/\.xlsx$/i, ""),
 		});
-	});
-	root.on("click", ".of-xlimport", () => root.find(".of-ximp-input").get(0).click());
-	root.find(".of-ximp-input").on("change", function () {
-		const file = this.files[0];
-		if (!file) return;
-		const rd = new FileReader();
-		rd.onload = () => {
-			frappe.call({ method: API + ".import_old_format_session_xlsx", args: { filedata: rd.result } }).then((r) => {
-				const m = r.message || {};
-				const apply = (session, title) => {
-					splitChains(m.rows || []);          // pieces vs raw BACK CHAIN rows
-					COVER = {};
-					SESSION = session || null;
-					TITLE = title || "";
-					LOADING = true; fSess.set_value(session || ""); LOADING = false;
-					refreshSaveBtn();
-					SEL.clear(); LASTSEL = null;
-					invalidate();
-					FILE = { name: file.name };
-					root.find(".of-file").addClass("has").text("📄 " + file.name);
-					root.find(".of-cover").html(__("Imported <b>{0}</b> row(s) from Excel", [m.count || 0]));
-					root.find(".of-save, .of-sortnum, .of-find, .of-goexport, .of-xlexport").show();
-					setState("prep");
-				};
-				if (m.match) {
-					frappe.confirm(
-						__("This shares {0}% of its pieces with saved session <b>{1}</b>. Update that session?", [Math.round(m.match.overlap * 100), esc(m.match.title || m.match.session)]),
-						() => apply(m.match.session, m.match.title),   // yes -> load onto that session (Save updates it)
-						() => apply(null, ""));                        // no  -> load as a brand-new unsaved set
-				} else {
-					apply(null, "");
-					frappe.show_alert({ message: __("Loaded {0} row(s) — new session (not saved).", [m.count || 0]), indicator: "blue" }, 4);
-				}
-			});
-			root.find(".of-ximp-input").val("");
-		};
-		rd.readAsDataURL(file);
 	});
 
 	// ------------------------------------------------------------- painting
@@ -570,7 +553,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		}
 		html += `<button class="bapply of-bapply">${__("→ selected")}</button>`;
 		if (cfg.allEmpty) html += `<button class="bapply alt of-bapply-empty">${__("→ all empty")}</button>`;
-		html += `<button class="bapply of-bclear" style="background:#8a2f2f;">${__("→ clear selected")}</button>`;
+		html += `<button class="bapply of-bclear">${__("→ clear selected")}</button>`;
 		root.find(".of-bslot").html(html);
 	}
 	root.on("change", ".of-bfield", renderBulkSlot);
