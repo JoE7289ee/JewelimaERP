@@ -158,29 +158,16 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	// sieve averages per GROUP (DMD / CVD / CZ / SW — one chart, four columns).
 	// Entering CARATS on any sized stone row judges the piece COUNT = carats /
 	// that group's avg (editable after).
-	// Item Group is a tree: DIAMOND VVS-EF sits under DIAMOND, while CZ / CVD /
-	// SWAROVSKI sit directly under a generic STONE. Read it once so the tiles can
-	// bracket a stone by the level that means something.
-	const GPARENT = {};
-	frappe.call({ method: "frappe.client.get_list", args: {
-		doctype: "Item Group", fields: ["name", "parent_item_group"],
-		limit_page_length: 0, parent: "Item Group",
-	} }).then((r) => {
-		(r.message || []).forEach((g) => { GPARENT[g.name] = g.parent_item_group || ""; });
-		recalc();
-	});
-
 	// What a row counts towards on the tile strip.
 	function bracketOf(group, isStone) {
 		if (!group) return "";
 		if (/finding/i.test(group)) return __("GOLD FINDINGS");
 		if (!isStone) return group;                     // GOLD STANDARD, GOLD 14K …
-		const parent = GPARENT[group] || "";
-		// STONE is the catch-all above CZ / CVD / SWAROVSKI — rolling those three
-		// together would hide the only thing that distinguishes them, so a stone
-		// keeps its own name unless its parent is a real family (DIAMOND).
-		return (!parent || /^stone$/i.test(parent) || /^all item groups$/i.test(parent))
-			? group : parent;
+		// A stone counts under its OWN group, never its parent. For diamonds that
+		// parent is just "DIAMOND", and rolling VVS-EF in with SI-IJ would hide the
+		// distinction the whole trade is priced on. The redundant "DIAMOND " prefix
+		// comes off the label — the tile says VVS-EF, which is what it is called.
+		return group.replace(/^DIAMOND\s+/i, "").trim() || group;
 	}
 
 	let SIEVE = {};
@@ -395,6 +382,29 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	// weighing, while it can still be changed. It prints exactly the lines that
 	// would post — the red ones are left off, because they are not part of the
 	// purchase and putting them on the paper would say otherwise.
+	// Reset: a fresh sheet without reloading the page. The warehouse decision is
+	// released too, so the next first item picks it again — a reset that kept the
+	// old warehouse would quietly send the next purchase to the wrong place.
+	function resetSheet() {
+		$body.empty();
+		state.rows = [];
+		state.whTouched = false;
+		state.whDecided = false;
+		state.header.warehouse.set_value("");
+		state.header.voucher.set_value("SIN");
+		state.postingDate = frappe.datetime.get_today();
+		$(page.main).find(".pr-warn").removeClass("on").empty();
+		addRow();
+		recalc();
+		frappe.show_alert({ message: __("Sheet cleared."), indicator: "blue" }, 3);
+	}
+	page.add_inner_button(__("Reset"), () => {
+		const typed = state.rows.some((r) => r.f.item.get()
+			|| flt(r.f.gram.get()) || flt(r.f.carat.get()));
+		if (!typed) return resetSheet();
+		// there is work on the sheet — ask, because this cannot be undone
+		frappe.confirm(__("Clear the whole sheet? Nothing here has been posted."), resetSheet);
+	});
 	page.add_inner_button(__("Print"), () => printSheet(page, state));
 	page.set_primary_action(__("Post Purchase"), () => postPurchase(page, state, $body), "add");
 };
@@ -428,6 +438,7 @@ function postPurchase(page, state, $body) {
 		$body.empty();
 		state.rows = [];
 		state.whDecided = false;      // a new sheet decides its warehouse again
+		state.whTouched = false;
 		state.addRow();
 	}).catch(() => frappe.dom.unfreeze());
 }
