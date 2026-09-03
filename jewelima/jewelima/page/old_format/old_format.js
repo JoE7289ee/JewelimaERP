@@ -80,6 +80,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		.of-bulk .bapply:hover{border-color:var(--of-accent);color:var(--of-accent);}
 		.of-bulk .bapply.alt:hover{border-color:var(--of-accent);color:var(--of-accent);}
 		.of-bulk .bapply.of-bclear:hover,.of-bulk .bapply.of-selclear:hover{border-color:var(--of-danger);color:var(--of-danger);}
+		.of-bulk .bapply.danger{border-color:var(--of-danger);color:var(--of-danger);}
+		.of-bulk .bapply.danger:hover{background:var(--of-danger);border-color:var(--of-danger);color:#fff;}
+		.of-bulk .bapply.danger:disabled{opacity:.4;cursor:not-allowed;background:var(--fg-color);
+			border-color:var(--border-color);color:var(--text-muted);}
 		.of-bulk .sep{width:1px;height:22px;background:var(--border-color);}
 		.of-selcount{font-size:12px;font-weight:800;}
 		.of-status{font-size:11.5px;color:var(--text-muted);margin-left:auto;}
@@ -169,6 +173,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<option value="pending">${__("HUID PENDING")}</option>
 			</select>
 			<span class="of-bslot" style="display:inline-flex;gap:8px;align-items:center;"></span>
+			<span class="sep"></span>
+			<button class="bapply danger of-remove">${__("Remove")}</button>
 			<span class="of-status"></span>
 		</div>
 		<div class="of-bar of-bar-export" style="display:none;">
@@ -286,10 +292,17 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const huidCount = (h) => (String(h || "").toUpperCase().match(/[A-Z0-9]+/g) || [])
 		.filter((t) => t.length === 6 || t === "PENDING").length;
 
+	function refreshRemoveBtn() {
+		root.find(".of-remove")
+			.prop("disabled", !SEL.size)
+			.text(SEL.size ? __("Remove {0}", [SEL.size]) : __("Remove"));
+	}
+
 	function refreshStatus() {
 		const noCol = ROWS.filter((r) => !r.colour).length;
 		const certs = ROWS.filter((r) => r.cert).length;
 		root.find(".of-selcount").text(__("{0} selected", [SEL.size]));
+		refreshRemoveBtn();
 		root.find(".of-status").html(
 			(noCol ? "<b>" + __("{0} uncoloured", [noCol]) + "</b> · " : __("all coloured") + " · ")
 			+ __("{0} cert-tagged", [certs])
@@ -687,6 +700,32 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("Cleared {0} on {1} row(s).", [String(target).toUpperCase(), n]), indicator: "blue" }, 3);
 	}
 	root.on("click", ".of-bclear", bulkClear);
+
+	// Pieces that are not in the lot after all. Removing is a sheet edit like any
+	// other, so it goes through invalidate(): the pricing is void and the serials
+	// have to be re-run, because Sort & Number is what put them on the pieces.
+	root.on("click", ".of-remove", () => {
+		if (!SEL.size) return frappe.show_alert({ message: __("Tick the pieces to remove."), indicator: "orange" }, 3);
+		const going = ROWS.filter((r) => SEL.has(r.unique_id));
+		const ids = going.map((r) => r.unique_id);
+		// a back chain is merged INTO a piece and its own row is gone by then, so
+		// removing the piece takes the chain with it and it cannot be handed back
+		const chained = going.filter((r) => r.back_chain_wt);
+		const list = ids.slice(0, 12).map(esc).join(", ") + (ids.length > 12 ? __(" and {0} more", [ids.length - 12]) : "");
+		frappe.confirm(
+			__("Remove {0} piece(s) from this sheet?", [ids.length]) + "<br><br>" + list
+				+ (chained.length ? "<br><br><b>" + __("{0} of them carry a back chain, which goes too and cannot be put back.",
+					[chained.length]) + "</b>" : "")
+				+ "<br><br>" + __("The sheet will need Sort & Number again."),
+			() => {
+				ROWS = ROWS.filter((r) => !SEL.has(r.unique_id));
+				SEL.clear(); LASTSEL = null;
+				invalidate();
+				paint();
+				frappe.show_alert({ message: __("{0} piece(s) removed — {1} left on the sheet.",
+					[ids.length, ROWS.length]), indicator: "blue" }, 5);
+			});
+	});
 
 	// the agreed physical order: the item ladder -> YELLOW/ROSE/WHITE ->
 	// below-1g band first -> GW ascending inside the band
