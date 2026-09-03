@@ -1,60 +1,68 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// The jewellery barcode label — one definition, used by both printers.
+// The jewellery barcode label — one definition, used by every printer.
 //
-// Print Barcode sends labels to a roll: one label per label-sized page, with
-// per-machine nudge offsets because a tag's two printable zones rarely line up.
-// Multi Print tiles the same labels onto a sheet. The MARKUP has to be the same
-// or the two drift, and a label that prints differently depending on which page
-// sent it is worse than having only one of them.
+// A tag has two printable zones that never quite line up with one another, so
+// the label is TWO BOXES placed in inches on a tag-sized canvas: A carries the
+// weights and the code square, B the design and the card number. The boxes were
+// measured on the Tag Canvas page against the real stock and are locked in here;
+// the roll printer may still nudge them per machine, everything else prints them
+// exactly as they are, so a tag off Multi Print, off a Bag Split or off the roll
+// is the same tag.
 window.jewelima = window.jewelima || {};
 
-// The calibration the tag printer is tuned to, in ONE place. Print Barcode can
-// still nudge these per browser (it keeps its own values in localStorage, and a
-// browser that has already been calibrated keeps what it has); every other label
-// printer takes them as-is, so a label off Multi Print or off a Bag Split is the
-// same label as one off the roll.
-//
-// qr is capped by the tag itself: the label is 0.475in tall, so 0.46 is as large
-// as a code square can be and still sit on it — there is nowhere further to go.
-jewelima.BARCODE_DEFAULTS = { pt: 9.0, offsetA: 0.04, offsetB: 0.22, qr: 0.46 };
+// Inches throughout, never pixels. qr is bounded by A's height — there is nowhere
+// further to go on a 0.43in box.
+jewelima.BARCODE_DEFAULTS = {
+	pt: 9.0, qr: 0.41,
+	tag: { w: 3.3, h: 0.475 },
+	a: { x: 0.94, y: 0.03, w: 0.96, h: 0.43 },
+	b: { x: 1.95, y: 0.03, w: 1.02, h: 0.43 },
+	// per-machine nudges the roll printer adds to the box lefts; zero for everyone else
+	offsetA: 0, offsetB: 0,
+	// everything on by default, so a tag reads the same whichever page printed it;
+	// Multi Print's checkboxes are the per-run way to leave something off
+	showFamily: true, showColor: true,
+	// the two lines the operator may reword for a run. {gw} is the gross weight.
+	gwLine: "GW:{gw} gm",
+	familyText: "",
+};
 
-// Ready-made opts for buildBarcodeLabel. Pass overrides (e.g. stoneGrams) and
-// the tuned defaults fill in the rest.
+// Ready-made opts for buildBarcodeLabel. Pass overrides and the locked defaults
+// fill in the rest. This is the ONLY way callers build opts, so anything it
+// dropped would silently never reach the tag — every per-run choice is listed.
 jewelima.barcodeOpts = function (over) {
 	const o = Object.assign({}, jewelima.BARCODE_DEFAULTS, over || {});
 	return {
-		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;`,
-		offsetA: o.offsetA,
-		offsetB: o.offsetB,
-		// the per-run label choices ride through as well — this helper is the only
-		// way callers build opts, so anything it drops silently never reaches the tag
+		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;--bc-w:${o.tag.w}in;--bc-h:${o.tag.h}in;`,
+		tag: o.tag, a: o.a, b: o.b,
+		offsetA: o.offsetA, offsetB: o.offsetB,
 		stoneGrams: o.stoneGrams,
 		showFamily: o.showFamily,
 		showColor: o.showColor,
 		freeText: o.freeText,
+		gwLine: o.gwLine,
+		familyText: o.familyText,
 	};
 };
 
 jewelima.BARCODE_LABEL_CSS = `
-.bc-label{width:3.3in;height:0.475in;box-sizing:border-box;display:flex;align-items:center;
-	justify-content:center;gap:0;
-	padding:0 0.09in;overflow:hidden;
+.bc-label{position:relative;width:var(--bc-w,3.3in);height:var(--bc-h,0.475in);box-sizing:border-box;
+	overflow:hidden;
 	font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
 	font-stretch:condensed;font-size:var(--bc-size,9pt);font-weight:400;font-style:normal;
 	line-height:1.05;letter-spacing:-.2px;color:#000;}
-.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;}
-.bc-label .bc-left{flex:0 0 auto;white-space:nowrap;}
+/* the two boxes, placed in inches; everything inside is aligned to its own box */
+.bc-label .bc-half{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:hidden;}
+.bc-label .bc-a{justify-content:space-between;gap:0.04in;}
+.bc-label .bc-b{flex-direction:column;justify-content:center;align-items:flex-start;}
+.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;min-width:0;}
+.bc-label .bc-left{flex:1 1 auto;white-space:nowrap;}
 .bc-label .bc-qr{flex:0 0 auto;}
-.bc-label .bc-qr img{height:var(--bc-qr,0.46in);width:var(--bc-qr,0.46in);display:block;}
-.bc-label .bc-right{flex:0 0 auto;white-space:nowrap;text-align:left;}
-.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}
-/* the two halves the label is split into — each nudges on its own, because a
-   tag's two printable zones rarely line up with one another */
-.bc-label .bc-half{display:flex;align-items:center;gap:0.045in;flex:0 0 auto;}
-.bc-label .bc-a{justify-content:flex-end;}
-.bc-label .bc-b{justify-content:flex-start;}`;
+.bc-label .bc-qr img{height:var(--bc-qr,0.41in);width:var(--bc-qr,0.41in);display:block;}
+.bc-label .bc-right{white-space:nowrap;text-align:left;}
+.bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
 
 // Stone weights print in CARATS by default, which is how the trade quotes them.
 // `inGrams` prints the same weight in grams instead — one carat is exactly 0.2 g,
@@ -71,37 +79,41 @@ jewelima.barcodeStoneLine = function (c, inGrams) {
 	return "";
 };
 
-// opts: { sizeVars, offsetA, offsetB, stoneGrams, showFamily, showColor, freeText }
-// — the roll printer passes its tuned values. stoneGrams prints stone weights in
-// grams rather than carats; showFamily adds the stone family (EF / GH …) beside
-// them; showColor adds the gold colour (YG / WG / PG); freeText is one line the
-// operator types for this print run.
+// opts come from barcodeOpts. stoneGrams prints stone weights in grams; showFamily
+// prints the stone family (EF / GH …) beside them, and familyText replaces the
+// card's own family for this run; gwLine rewords the weight line ({gw} = grams);
+// showColor adds the gold colour (YG / WG / PG); freeText is one line the
+// operator types for this run.
 jewelima.buildBarcodeLabel = function (c, opts) {
-	const o = opts || {};
+	const o = opts || jewelima.barcodeOpts();
+	const D = jewelima.BARCODE_DEFAULTS;
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
+	const box = (r, nudge) => `left:${(flt(r.x) + flt(nudge)).toFixed(3)}in;top:${flt(r.y).toFixed(3)}in;`
+		+ `width:${flt(r.w).toFixed(3)}in;height:${flt(r.h).toFixed(3)}in;`;
+	const a = o.a || D.a, b = o.b || D.b;
+
+	// A — what the piece weighs and what is in it, then the code square
+	const gwText = (o.gwLine || D.gwLine).replace("{gw}", flt(c.gw).toFixed(3));
 	const stone = jewelima.barcodeStoneLine(c, o.stoneGrams);
-	// LEFT: what the piece weighs and what is in it. The stone family (EF / GH …)
-	// rides with the diamond line because it describes those stones.
-	const fam = o.showFamily && c.stone_family ? esc(c.stone_family) : "";
-	const left = `<div class="bc-col bc-left"><div>GW:${flt(c.gw).toFixed(3)} gm</div>`
+	const famRaw = (o.familyText || "").trim() || c.stone_family || "";
+	const fam = o.showFamily && famRaw ? esc(famRaw) : "";
+	const left = `<div class="bc-col bc-left"><div>${esc(gwText)}</div>`
 		+ (stone ? `<div>${stone}${fam ? " " + fam : ""}</div>`
 			: (fam ? `<div>${fam}</div>` : "")) + `</div>`;
 	const qr = c.qr
 		? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 		: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
-	// RIGHT: what it IS. Design type, design, the card number, and optionally the
-	// gold colour and a free line the operator types for this run (a shop name,
-	// usually). The free line is deliberately last — it is the least official
-	// thing on the tag.
+
+	// B — what it IS: type, design, card number, gold colour, the free line last
 	const r1 = c.design_type ? `<div>${esc(c.design_type)}</div>` : "";
 	const col = o.showColor && c.gold_color ? `<div>${esc(c.gold_color)}</div>` : "";
 	const free = o.freeText ? `<div>${esc(o.freeText)}</div>` : "";
 	const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div>`
 		+ `<div>${esc(c.name)}</div>${col}${free}</div>`;
-	const a = flt(o.offsetA), b = flt(o.offsetB);
+
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`
-		+ `<div class="bc-half bc-a" style="transform:translateX(${a}in);">${left}${qr}</div>`
-		+ `<div class="bc-half bc-b" style="transform:translateX(${b}in);">${right}</div>`
+		+ `<div class="bc-half bc-a" style="${box(a, o.offsetA)}">${left}${qr}</div>`
+		+ `<div class="bc-half bc-b" style="${box(b, o.offsetB)}">${right}</div>`
 		+ `</div>`;
 };

@@ -19,7 +19,9 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 	// Roll only — the A4 sheet is gone. This page exists to feed a label printer,
 	// and a sheet of tiled tags was a second answer to a question nobody asked.
-	const S = { cards: [], stoneGrams: false, showFamily: true, showColor: true, freeText: "" };
+	const D = jewelima.BARCODE_DEFAULTS;
+	const S = { cards: [], stoneGrams: false, showFamily: true, showColor: true, freeText: "",
+		familyText: "", gwLine: D.gwLine };
 
 	root.append(`
 		<style>
@@ -84,6 +86,12 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 					<input type="checkbox" class="mb-fam" checked> ${__("Stone family")}</label>
 				<label class="mb-chk" title="${__("YG, WG, PG — printed under the card number")}">
 					<input type="checkbox" class="mb-col" checked> ${__("Gold colour")}</label>
+				<input type="text" class="mb-free mb-famtext" maxlength="8" style="width:92px;"
+					placeholder="${__("family")}" title="${
+						__("replaces the stone family on every tag in this run — e.g. EF, GH, SI; blank = the card's own")}">
+				<input type="text" class="mb-free mb-gwline" maxlength="18" style="width:130px;"
+					value="${esc(D.gwLine)}" title="${
+						__("the weight line; {gw} is the grams — e.g. GW:{gw} gm, G.WT {gw}")}">
 				<input type="text" class="mb-free" maxlength="24"
 					placeholder="${__("free line (shop name…)")}" title="${
 						__("one extra line on the right of every tag in this run")}">
@@ -140,8 +148,9 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	const labelOpts = () => jewelima.barcodeOpts({
 		stoneGrams: S.stoneGrams, showFamily: S.showFamily,
 		showColor: S.showColor, freeText: S.freeText,
+		familyText: S.familyText, gwLine: S.gwLine || D.gwLine,
 	});
-	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(1, 3.3in);">`
+	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(1, ${D.tag.w}in);">`
 		+ S.cards.map((c) => jewelima.buildBarcodeLabel(c, labelOpts())).join("") + `</div>`;
 
 	function preview() {
@@ -184,7 +193,10 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	root.on("change", ".mb-col", function () { S.showColor = this.checked; paint(); });
 	// the free line lands on every tag in this run, so the preview follows it
 	// keystroke by keystroke rather than waiting for a blur
-	root.on("input", ".mb-free", function () { S.freeText = this.value.trim(); paint(); });
+	root.on("input", ".mb-free:not(.mb-famtext):not(.mb-gwline)", function () { S.freeText = this.value.trim(); paint(); });
+	// the family and the weight line are reworded for the run, and the preview follows
+	root.on("input", ".mb-famtext", function () { S.familyText = this.value.trim().toUpperCase(); this.value = S.familyText; paint(); });
+	root.on("input", ".mb-gwline", function () { S.gwLine = this.value; paint(); });
 	// repaint on toggle, so the preview shows exactly what will come off the printer
 	root.on("change", ".mb-grams", function () { S.stoneGrams = this.checked; paint(); });
 	root.on("click", ".mb-clear", () => { S.cards = []; msg("", ""); paint(); focusScan(); });
@@ -209,12 +221,12 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 				+ jewelima.buildBarcodeLabel(c, labelOpts())
 				+ `</div>`).join("");
 		doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Barcodes</title><style>
-			@page{size:3.3in 0.475in;margin:0;}
+			@page{size:${D.tag.w}in ${D.tag.h}in;margin:0;}
 			html,body{margin:0;padding:0;}
 			${jewelima.BARCODE_LABEL_CSS}
 			.bc-page{break-after:page;page-break-after:always;
 				break-inside:avoid;page-break-inside:avoid;
-				width:3.3in;height:0.475in;overflow:hidden;}
+				width:${D.tag.w}in;height:${D.tag.h}in;overflow:hidden;}
 			.bc-page:last-child{break-after:auto;page-break-after:auto;}
 			</style></head><body>${labels}</body></html>`);
 		doc.close();

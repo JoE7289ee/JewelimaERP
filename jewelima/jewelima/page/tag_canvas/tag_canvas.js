@@ -17,14 +17,15 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		parent: wrapper, title: __("Tag Canvas"), single_column: true,
 	});
 	const IN = 96;                       // CSS pixels per inch, at 100% zoom
-	const KEY = "jw_tag_canvas_v1";
+	const KEY = "jw_tag_canvas_v2";      // v1 held the pre-lock guesses
 	const D = () => (window.jewelima && jewelima.BARCODE_DEFAULTS) || {};
 
-	// the tag, and the two blocks on it — inches throughout, never pixels
+	// the tag, and the two blocks on it — inches throughout, never pixels. Starts
+	// from what is LOCKED IN, so the canvas shows the real label's boxes.
 	const FRESH = () => ({
-		tagW: 3.3, tagH: 0.475,
-		a: { x: +(D().offsetA ?? 0.04), y: 0.01, w: 1.55, h: 0.45 },
-		b: { x: +(D().offsetB ?? 0.22) + 1.6, y: 0.01, w: 1.55, h: 0.45 },
+		tagW: D().tag ? D().tag.w : 3.3, tagH: D().tag ? D().tag.h : 0.475,
+		a: Object.assign({ x: 0.94, y: 0.03, w: 0.96, h: 0.43 }, D().a || {}),
+		b: Object.assign({ x: 1.95, y: 0.03, w: 1.02, h: 0.43 }, D().b || {}),
 	});
 	let S = FRESH();
 	try {
@@ -127,15 +128,11 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 			if (document.activeElement === this) return;   // never fight the typist
 			this.value = (+get(this.dataset.f)).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 		});
-		// A's left IS offsetA; B's offset is measured from where the second half starts
-		const offA = S.a.x;
-		const offB = +(S.b.x - 1.6).toFixed(3);
+		// exactly the shape BARCODE_DEFAULTS carries, so it can be pasted straight in
 		root.find(".tc-out").text(
-			`tag        ${S.tagW}in x ${S.tagH}in\n`
-			+ `A (weights & QR)  left ${S.a.x}in  top ${S.a.y}in  ${S.a.w} x ${S.a.h}in\n`
-			+ `B (design & codes) left ${S.b.x}in  top ${S.b.y}in  ${S.b.w} x ${S.b.h}in\n`
-			+ `\n`
-			+ `BARCODE_DEFAULTS: offsetA ${offA}in   offsetB ${offB}in`);
+			`tag: { w: ${S.tagW}, h: ${S.tagH} },\n`
+			+ `a: { x: ${S.a.x}, y: ${S.a.y}, w: ${S.a.w}, h: ${S.a.h} },\n`
+			+ `b: { x: ${S.b.x}, y: ${S.b.y}, w: ${S.b.w}, h: ${S.b.h} },`);
 		save();
 	}
 

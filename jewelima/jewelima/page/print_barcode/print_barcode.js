@@ -93,10 +93,11 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	// A tag's two printable zones rarely line up with each other, so each side
 	// moves on its own. Kept in the browser — it describes this machine, not the
 	// label everyone shares.
-	const OFF_KEY = { a: "jw_barcode_offset_a_in", b: "jw_barcode_offset_b_in" };
+	const OFF_KEY = { a: "jw_barcode_nudge_a_v2", b: "jw_barcode_nudge_b_v2" };   // v1 keys held translate offsets
 	// the tuned defaults live with the label, so every printer starts from the
 	// same calibration; a browser already nudged keeps its own stored value
-	const BD = (window.jewelima && jewelima.BARCODE_DEFAULTS) || { pt: 9, offsetA: 0.04, offsetB: 0.22, qr: 0.46 };
+	const BD = (window.jewelima && jewelima.BARCODE_DEFAULTS)
+		|| { pt: 9, offsetA: 0, offsetB: 0, qr: 0.41, a: { h: 0.43 }, tag: { w: 3.3, h: 0.475 } };
 	const OFF_DEF = { a: BD.offsetA, b: BD.offsetB };
 
 	function offset(side) {
@@ -132,8 +133,8 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	}
 	// the code square grows with the type, but never past what the label can hold
 	// the code square grows with the print size, capped by the tag height (0.475in)
-	const qrSize = () => Math.min(0.47, Math.round((BD.qr * ptSize() / SIZE_DEF) * 100) / 100);
-	const sizeVars = () => `--bc-size:${ptSize()}pt;--bc-qr:${qrSize()}in;`;
+	const qrMax = () => Math.max(0.2, (BD.a && BD.a.h ? BD.a.h : 0.43) - 0.02);
+	const qrSize = () => Math.min(qrMax(), Math.round((BD.qr * ptSize() / SIZE_DEF) * 100) / 100);
 
 	function showOffsets() {
 		$(page.main).find(".pb-off-a").text(offset("a").toFixed(2) + " in");
@@ -143,8 +144,10 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	const offsetStyle = () => "";   // the halves carry their own transform now
 
 	// Build one label's HTML — matches the reference: weights (left) · QR · codes (right)
+	// through barcodeOpts, so the roll printer draws the SAME boxes as everyone and
+	// only adds its per-machine nudge on top
 	const buildLabel = (c) => jewelima.buildBarcodeLabel(c,
-		{ sizeVars: sizeVars(), offsetA: offset("a"), offsetB: offset("b") });
+		jewelima.barcodeOpts({ pt: ptSize(), qr: qrSize(), offsetA: offset("a"), offsetB: offset("b") }));
 
 	function renderPreview(c) {
 		$prev.html(c ? `${offsetStyle()}<div class="pb-prev">${buildLabel(c)}</div>`
