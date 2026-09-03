@@ -42,11 +42,23 @@ def execute():
 
 	# ---- then the batches, oldest first so the HALL-#### series reads in order
 	moved = 0
+	# cert_type is the real key. The legacy Select only counts where cert_type is
+	# empty, because HALLMARKING is that field's FIRST option and lands on records
+	# that were never hallmarking at all — the rest of the codebase reads
+	# `cert_type or certification_type` for the same reason.
 	olds = frappe.db.sql("""select name, center, status, prepared_on, sent_on, collected_on,
 			stock_entry, remarks from `tabCertification`
-		where cert_type = 'HALL' or certification_type = 'HALLMARKING'
+		where cert_type = 'HALL'
+		   or (coalesce(cert_type, '') = '' and certification_type = 'HALLMARKING')
 		order by creation asc""", as_dict=True)
+	stuck = []
 	for c in olds:
+		# a packet still at the centre keeps its old record until it comes back —
+		# far better than aborting a migration and leaving the site half-upgraded
+		if frappe.db.sql("""select 1 from `tabCertification Item`
+				where parent = %s and received = 0 and rejected = 0 limit 1""", c.name):
+			stuck.append(c.name)
+			continue
 		# the old centre name was "HALL-GOLD MARK"; the new master drops the prefix
 		center = (c.center or "").split("-", 1)[-1] if c.center else None
 		if center and not frappe.db.exists("Hallmarking Center", center):
@@ -68,11 +80,17 @@ def execute():
 		frappe.delete_doc("Certification", c.name, force=True, ignore_permissions=True)
 		moved += 1
 
-	# ---- and HALL leaves the certification masters
-	for cc in frappe.get_all("Certification Center", filters={"certification_type": "HALL"}, pluck="name"):
-		frappe.delete_doc("Certification Center", cc, force=True, ignore_permissions=True)
-	if frappe.db.exists("Certification Type", "HALL"):
-		frappe.delete_doc("Certification Type", "HALL", force=True, ignore_permissions=True)
+	# ---- and HALL leaves the certification masters, but only once nothing points
+	#      at it: a batch left behind still needs its type and centre to read.
+	if stuck:
+		print("hallmarking: HALL stays in the certification masters until those come back")
+	else:
+		for cc in frappe.get_all("Certification Center", filters={"certification_type": "HALL"}, pluck="name"):
+			frappe.delete_doc("Certification Center", cc, force=True, ignore_permissions=True)
+		if frappe.db.exists("Certification Type", "HALL"):
+			frappe.delete_doc("Certification Type", "HALL", force=True, ignore_permissions=True)
 
 	frappe.db.commit()
 	print("hallmarking: moved {0} batch(es) out of certification".format(moved))
+	if stuck:
+		print("hallmarking: left behind (pieces still out at the centre): {0}".format(", ".join(stuck)))
