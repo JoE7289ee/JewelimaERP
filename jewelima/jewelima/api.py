@@ -11307,7 +11307,10 @@ def parse_old_format_excel(filedata):
 			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
 			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
 			"nt": flt(g("nt")), "pure": flt(g("pure")),
-			"colour": "", "size": "", "style": "", "shape": "", "cert": "", "cert_no": "",
+			# ps_stone is the one thing the old sheet cannot give: it has PS carats
+			# but never WHICH stone, and the chart prices precious stones by name.
+			# The operator fills it on the page; without it PS stays unpriceable.
+			"colour": "", "size": "", "style": "", "shape": "", "cert": "", "cert_no": "", "ps_stone": "",
 		})
 	cover = {}
 	if "SALES QUOTATION" in wb.sheetnames:
@@ -11691,7 +11694,7 @@ OLD_FORMAT_COLS = [
 	("SL#", "sl", "i"), ("UNIQUE ID", "unique_id", "s"), ("HUID", "huid", "s"),
 	("ITEM", "item", "s"), ("DESIGN", "design", "s"),
 	("GS WT (GM)", "gs", "f"), ("NT WT (GM)", "nt", "f"),
-	("PS PCS", "ps_pcs", "i"), ("PS (CT)", "ps_ct", "f"),
+	("PS PCS", "ps_pcs", "i"), ("PS (CT)", "ps_ct", "f"), ("PS STONE", "ps_stone", "s"),
 	("DMD PCS", "dmd_pcs", "i"), ("DMD CLARITY", "clarity", "s"), ("DMD (CT)", "dmd_ct", "f"),
 	("STN PCS", "stn_pcs", "i"), ("STN (CT)", "stn_ct", "f"),
 	("COLOUR", "colour", "s"), ("STYLE", "style", "s"), ("SIZE", "size", "s"),
@@ -11729,7 +11732,7 @@ def _of_xlsx_to_row(cells, colmap):
 		else:
 			row[key] = ("" if v is None else str(v)).strip()
 	# clarity/item/colour/style/shape/cert stay upper as the page keeps them
-	for k in ("item", "colour", "style", "shape", "cert"):
+	for k in ("item", "colour", "style", "shape", "cert", "ps_stone"):
 		row[k] = (row.get(k) or "").upper()
 	return row
 
@@ -12206,6 +12209,14 @@ def save_old_format_session(payload, name=None):
 
 
 @frappe.whitelist()
+def list_precious_stones():
+	"""The precious stones a PS line may be named as — the OLD FORMAT prep
+	screen offers these, because the chart prices PS by this exact name."""
+	return frappe.get_all("Item", filters={"stone_type": "Precious Stone", "disabled": 0},
+		pluck="name", order_by="name")
+
+
+@frappe.whitelist()
 def list_old_format_sessions():
 	return frappe.get_all("Old Format Import",
 		fields=["name", "title", "party", "status", "piece_count", "modified"],
@@ -12388,6 +12399,10 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	dmd_rows = [r for r in chart.diamond_rates if (r.quality or "") in ((quality or ""), "")]
 	dmd_exact = [r for r in dmd_rows if (r.quality or "") == (quality or "")] or dmd_rows
 	cs_rows = list(chart.get("cs_rates") or [])
+	# precious stones price by STONE NAME, in carat brackets under that name
+	ps_by_stone = {}
+	for _r in (chart.get("precious_stone_rates") or []):
+		ps_by_stone.setdefault((_r.stone or "").strip().upper(), []).append(_r)
 	out = []
 	for r in rows:
 		flags = []
@@ -12456,10 +12471,29 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 				bracket = "{0}-{1}".format(flt(row.from_ct), flt(row.to_ct) or "∞")
 				notes["dmd"] = "{0} ct / {1} pcs = {2}/st -> bracket {3} @ {4}/ct; {0} ct x {4} = {5}".format(
 					flt(r.get("dmd_ct")), pcs or "?", round(stone_ct, 4), bracket, dmd_rt, _inr(dmd_va))
-		# precious stones: the chart prices by STONE NAME — the old file has none
-		ps_va = 0.0
+		# precious stones: the chart prices by STONE NAME, which the old file does
+		# not carry — the operator names it on the prep screen. Un-named PS still
+		# falls through as a manual flag rather than being silently priced at zero.
+		ps_va = ps_rt = 0.0
 		if flt(r.get("ps_ct")) > 0:
-			flags.append("PS {0} ct — manual (no stone name in the old file)".format(r.get("ps_ct")))
+			stone = str(r.get("ps_stone") or "").strip().upper()
+			ps_ct = flt(r.get("ps_ct"))
+			if not stone:
+				flags.append("PS {0} ct — name the stone to price it".format(ps_ct))
+			elif not ps_by_stone:
+				flags.append("PS {0} — the chart has no precious stone rates".format(stone))
+			elif stone not in ps_by_stone:
+				flags.append("PS {0} is not on the chart".format(stone))
+			else:
+				brackets = sorted(ps_by_stone[stone], key=lambda x: flt(x.from_ct))
+				row_ps = next((x for x in brackets if flt(x.from_ct) <= ps_ct
+					and (not flt(x.to_ct) or ps_ct <= flt(x.to_ct))), None)
+				if row_ps is None:
+					flags.append("PS {0} {1} ct is outside every bracket on the chart".format(stone, ps_ct))
+				else:
+					ps_rt = flt(row_ps.rate)
+					ps_va = round(ps_ct * ps_rt, 2)
+					notes["ps"] = "{0} {1} ct x {2}/ct = {3}".format(stone, ps_ct, ps_rt, _inr(ps_va))
 		# STN = the CS bucket brackets (total ct; Per Piece rows use pcs)
 		stn_va = 0.0
 		if flt(r.get("stn_ct")) > 0:
@@ -12533,7 +12567,7 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
 			wt_band="below" if flt(r.get("nt")) < band_gm else "above",
 			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
-			ps_rt=0, ps_va=ps_va, stn_va=stn_va,
+			ps_rt=ps_rt, ps_va=ps_va, stn_va=stn_va,
 			huid_count=len(huids), huid_va=huid_va, cert_on=cert_on, cert_va=cert_va,
 			total=total, flags=flags, notes=notes))
 	before = round(sum(x["total"] for x in out), 2)

@@ -63,7 +63,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		.of-status b{color:#a15c00;}
 		.of-cover{font-size:12.5px;color:var(--text-muted);margin-bottom:10px;}
 		.of-cover b{color:var(--text-color);}
+		.of-body{overflow-x:auto;}
 		table.of-t{width:100%;border-collapse:collapse;font-size:12px;background:var(--fg-color);}
+		table.of-t.prep{min-width:1360px;}
 		table.of-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:5px 8px;border:1px solid var(--border-color);text-align:left;white-space:nowrap;}
 		table.of-t td{border:1px solid var(--border-color);padding:3px 6px;font-variant-numeric:tabular-nums;white-space:nowrap;}
 		table.of-t td.num{text-align:right;}
@@ -115,6 +117,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<option value="colour">${__("Color")}</option>
 				<option value="style">${__("G/L")}</option>
 				<option value="cert">${__("Cert lab")}</option>
+				<option value="ps_stone">${__("PS stone")}</option>
 				<option value="size">${__("Size")}</option>
 				<option value="shape">${__("Shape")}</option>
 				<option value="shop">${__("Shop Name")}</option>
@@ -140,6 +143,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		<datalist id="of-colors"><option>YELLOW</option><option>ROSE</option><option>WHITE</option></datalist>
 		<datalist id="of-labs"><option>IGI</option><option>SGL</option><option>DHC</option><option>GIA</option></datalist>
 		<datalist id="of-shapes"><option>OVAL</option><option>CHAIN</option></datalist>
+		<datalist id="of-pstones"></datalist>
 	`);
 	const root = $(page.main);
 	const mk = (sel, df) => { const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true }); c.refresh(); return c; };
@@ -155,6 +159,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const fCq = mk(".of-cq", { fieldtype: "Select", label: __("Chart quality"), fieldname: "cq", options: "" });
 	const fGst = mk(".of-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3 });
 	fGst.set_value(3);
+
+	// the PS stone box offers the real precious stones — a name the chart does
+	// not carry cannot be priced, so guessing at spelling is worth preventing
+	frappe.call({ method: API + ".list_precious_stones", freeze: false }).then((r) => {
+		root.find("#of-pstones").html(((r.message) || []).map((n) => `<option>${esc(n)}</option>`).join(""));
+	});
 
 	function loadQualities() {
 		const ch = fChart.get_value();
@@ -404,11 +414,13 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 
 	function paintPrep() {
 		root.find(".of-body").html(`
-			<table class="of-t"><thead><tr>
+			<table class="of-t prep"><thead><tr>
 				<th><input type="checkbox" class="of-selall"></th>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}<span style="font-weight:400;color:var(--text-muted);"> ${__("(two boxes)")}</span></th><th>${__("Item")}</th><th>${__("Design")}</th>
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
+				<th class="num">${__("PS pcs")}</th><th class="num">${__("PS ct")}</th><th>${__("PS stone")}</th>
+				<th class="num">${__("CS pcs")}</th><th class="num">${__("CS ct")}</th>
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
 				<th>${__("Cert")}</th><th>${__("Shop Name")}</th>
 			</tr></thead><tbody>
@@ -422,6 +434,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
+				<td class="num">${r.ps_pcs || ""}</td><td class="num">${r.ps_ct || ""}</td>
+				<td>${r.ps_ct ? `<input data-f="ps_stone" list="of-pstones" value="${esc(r.ps_stone || "")}"
+					style="width:104px;text-transform:uppercase;" placeholder="${__("name it")}"
+					title="${__("The chart prices precious stones by name — without it this PS cannot be priced")}">`
+					: `<span style="color:var(--text-muted);">&mdash;</span>`}</td>
+				<td class="num">${r.stn_pcs || ""}</td><td class="num">${r.stn_ct || ""}</td>
 				<td><input data-f="colour" list="of-colors" value="${esc(r.colour)}" style="width:76px;"></td>
 				<td><input data-f="size" value="${esc(r.size)}" style="width:48px;"></td>
 				<td><select data-f="style"><option value=""></option>
@@ -529,6 +547,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		colour: { input: "text", list: "of-colors", upper: true, allEmpty: true },
 		style: { input: "select", options: ["GENTS", "LADIES", "GENTS / LADIES"] },
 		cert: { input: "text", list: "of-labs", upper: true },
+		ps_stone: { input: "text", list: "of-pstones", upper: true },
 		size: { input: "text", upper: false },
 		shape: { input: "select", options: ["OVAL", "CHAIN"] },
 		shop: { input: "text", upper: true, allEmpty: true },
@@ -580,17 +599,22 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		if (cfg.upper) v = v.toUpperCase();
 		if (!v) return frappe.show_alert({ message: __("Type or pick the value first."), indicator: "orange" }, 3);
 		if (!onlyEmpty && !SEL.size) return frappe.show_alert({ message: __("Tick some rows first."), indicator: "orange" }, 3);
-		let n = 0;
+		let n = 0, skipped = 0;
 		ROWS.forEach((r) => {
 			const hit = onlyEmpty ? !r[field] : SEL.has(r.unique_id);
-			if (hit && r[field] !== v) { r[field] = v; n++; }
+			if (!hit) return;
+			// naming a stone on a row carrying no PS would be data about nothing
+			if (field === "ps_stone" && !flt(r.ps_ct)) { skipped++; return; }
+			if (r[field] !== v) { r[field] = v; n++; }
 		});
 		if (n) invalidate();
 		// the ticks stay put so the next field can go on the same rows — clear
 		// them with the header tick when the batch really is done
 		paint();
 		renderBulkSlot();
-		frappe.show_alert({ message: __("{0} row(s) set {1}. Still selected.", [n, v]), indicator: "green" }, 3);
+		frappe.show_alert({ message: skipped
+			? __("{0} row(s) set {1}. {2} skipped — no PS on them. Still selected.", [n, v, skipped])
+			: __("{0} row(s) set {1}. Still selected.", [n, v]), indicator: "green" }, 3);
 	}
 	root.on("click", ".of-bapply", () => bulkApply(false));
 	root.on("click", ".of-bapply-empty", () => bulkApply(true));
