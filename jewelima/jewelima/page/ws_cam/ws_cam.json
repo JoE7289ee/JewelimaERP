@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 01:15:21.897812",
+ "modified": "2026-09-03 11:04:47.843494",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-cam",
@@ -22,6 +22,9 @@
   },
   {
    "role": "JW CAM"
+  },
+  {
+   "role": "JW Data Admin"
   }
  ],
  "script": null,

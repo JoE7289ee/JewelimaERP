@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:18:32.457994",
+ "modified": "2026-09-03 11:04:47.964857",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-waxing",
@@ -22,6 +22,9 @@
   },
   {
    "role": "JW WAXING"
+  },
+  {
+   "role": "JW Data Admin"
   }
  ],
  "script": null,

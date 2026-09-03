@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-08-24 03:30:57.821120",
+ "modified": "2026-09-03 11:04:47.892513",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-grinding",
@@ -19,6 +19,9 @@
   },
   {
    "role": "JW Manager"
+  },
+  {
+   "role": "JW Data Admin"
   }
  ],
  "script": null,

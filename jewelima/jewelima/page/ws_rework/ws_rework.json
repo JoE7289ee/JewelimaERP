@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 14:00:00.000000",
+ "modified": "2026-09-03 11:04:47.923245",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "ws-rework",
@@ -19,11 +19,14 @@
   },
   {
    "role": "JW Manager"
+  },
+  {
+   "role": "JW Data Admin"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Workstation — Rework"
+ "title": "Workstation \u2014 Rework"
 }

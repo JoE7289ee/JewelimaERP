@@ -336,8 +336,14 @@ JEWELIMA_WS_PAGES = {
 # those four pages, nothing else. The page APIs write under ignore_permissions, so
 # read on what the pages paint from is all the role needs.
 JEWELIMA_DATA_ADMIN_ROLE = "JW Data Admin"
+# Every workstation, plus the launcher. Holding a bench's own page IS the grant to
+# work at it (see _may_work_at), so listing them here is what lets this role issue
+# and collect AT a bench rather than only through the global pages. The bench list
+# is JEWELIMA_WS_PAGES so the two can never drift; ws-ordering is added by name
+# because the ordering desk is not a bench and is not in that map.
 JEWELIMA_DATA_ADMIN_PAGES = ["assign-collect", "job-work", "casting-queue", "make-tree",
-	"print-order-bags", "transfer-order-bag", "casting-weigh", "rework", "edit-tree"]
+	"print-order-bags", "transfer-order-bag", "casting-weigh", "rework", "edit-tree",
+	"workstations", "ws-ordering"] + sorted(JEWELIMA_WS_PAGES.values())
 JEWELIMA_DATA_ADMIN_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee", "Bench",
 	"Bench Employee", "Bench Work Option", "Bench Issue", "Bench Visit", "Priority Card",
 	"Bag Material Ledger", "Wax Tree", "Wax Tree Card", "Tree Making", "Casting",
