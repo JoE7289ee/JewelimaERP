@@ -357,6 +357,10 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		$rm.find("button").on("click", () => {
 			state.rows = state.rows.filter((r) => r !== row);
 			$tr.remove();
+			// There is no Add Row button any more — a line appears when the one
+			// above it gets a weight. Delete the trailing blank and the sheet has
+			// nowhere left to type, so the sheet always keeps one empty line.
+			ensureBlankRow();
 			renumber();
 			recalc();
 		});
@@ -367,6 +371,14 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		return row;
 	}
 	state.addRow = addRow;
+
+	// the sheet is never left with nothing to type into
+	function ensureBlankRow() {
+		const last = state.rows[state.rows.length - 1];
+		const empty = last && !last.f.item.get()
+			&& !flt(last.f.gram.get()) && !flt(last.f.carat.get());
+		if (!empty) addRow();
+	}
 
 	// auto-append a fresh line once the last row gets a weight (gram or carat)
 	function maybeAddRow(row) {
