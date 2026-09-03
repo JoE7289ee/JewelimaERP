@@ -12821,7 +12821,18 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		if gi == 1:
 			keys.append("g1rate")
 		keys.append("g{0}v".format(gi))
-	keys += ["tp", "tc", "tv", "total", "igi", "huid"]
+	keys += ["tp", "tc", "tv"]
+	# PS and CS value, immediately before Total value. Laid out only when the lot
+	# carries the stone at all — a zero column on a plain diamond bill is noise —
+	# but on CARATS, not value, so a stone that went unpriced shows as 0 rather
+	# than disappearing off the bill entirely.
+	jos_ps = any(flt(p.get("ps_ct")) or flt(p.get("ps_va")) for p in priced)
+	jos_cs = any(flt(p.get("stn_ct")) or flt(p.get("stn_va")) for p in priced)
+	if jos_ps:
+		keys.append("psv")
+	if jos_cs:
+		keys.append("csv")
+	keys += ["total", "igi", "huid"]
 	# certification columns only when the lot actually carries them
 	if any(p.get("cert") for p in priced):
 		keys.append("certlab")
@@ -12876,7 +12887,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"colour": "Colour", "pcs1": "NO OF PCS", "item_color": "ITEM COLOR",
 		"gross": "Gross Qty (Gm)", "net": "Net Qty (Gm)", "gold": "Gold\nValue",
 		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
-		"tp": "pcs", "tc": "cts", "tv": "value", "total": "Total value",
+		"tp": "pcs", "tc": "cts", "tv": "value",
+		"psv": "PS value", "csv": "CS value", "total": "Total value",
 		"igi": "IGI", "huid": "HUID", "certlab": "CERT", "certno": "CERT NO", "uid": "UNIQUE ID"}
 	for i in range(huid_cols):
 		HEAD["huidc{0}".format(i)] = "HUID CODE" if huid_cols == 1 else "HUID {0}".format(i + 1)
@@ -12897,7 +12909,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	SUMCOLS = [C["pcs1"], C["gross"], C["net"], C["gold"], C["mc"]]
 	for gi in used:
 		SUMCOLS += [C["g{0}p".format(gi)], C["g{0}c".format(gi)], C["g{0}v".format(gi)]]
-	SUMCOLS += [C["tp"], C["tc"], C["tv"], C["total"], C["igi"], C["huid"]]
+	SUMCOLS += [C["tp"], C["tc"], C["tv"]]
+	if jos_ps:
+		SUMCOLS.append(C["psv"])
+	if jos_cs:
+		SUMCOLS.append(C["csv"])
+	SUMCOLS += [C["total"], C["igi"], C["huid"]]
 	r0 = 5
 	r = r0
 	gross_terms = []  # ("cell", row) / ("range", (a, b)) pieces the grand total adds
@@ -12945,7 +12962,18 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			ws.cell(row=r, column=C["tp"], value=0)
 			ws.cell(row=r, column=C["tc"], value=0)
 			ws.cell(row=r, column=C["tv"], value=0)
-		ws.cell(row=r, column=C["total"], value="={g}{r}+{m}{r}+{v}{r}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r))
+		stone_terms = []
+		if jos_ps:
+			ws.cell(row=r, column=C["psv"], value=flt(p.get("ps_va")) or 0)
+			stone_terms.append("{0}{1}".format(Lc("psv"), r))
+		if jos_cs:
+			ws.cell(row=r, column=C["csv"], value=flt(p.get("stn_va")) or 0)
+			stone_terms.append("{0}{1}".format(Lc("csv"), r))
+		# the row total had been gold + making + diamond only, so any piece
+		# carrying a stone was under-billed by exactly its stone value
+		ws.cell(row=r, column=C["total"],
+			value="={g}{r}+{m}{r}+{v}{r}{s}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r,
+				s="".join("+" + t for t in stone_terms)))
 		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs) if (not lot_tagged or p.get("cert")) else 0)
 		ws.cell(row=r, column=C["huid"], value=flt(p.get("huid_va")) or 0)
 		if "certlab" in C:
@@ -13002,8 +13030,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		("Grand Total", None),
 	]
 	fr = tr + 1
+	# the label sits in the column immediately LEFT of Total value and spills
+	# further left over the empty ones. Pinning it to "cts" left a three-column
+	# gap once PS and CS were laid out between them.
+	label_key = keys[keys.index("total") - 1]
 	for j, (label, val) in enumerate(rows):
-		lc = ws.cell(row=fr + j, column=C["tc"], value=label)
+		lc = ws.cell(row=fr + j, column=C[label_key], value=label)
 		lc.font = bold
 		# long labels spill LEFT over the empty total-diamond columns
 		lc.alignment = Alignment(horizontal="right")
@@ -13028,7 +13060,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 				cell.font = base
 	MINW = {"sl": 5, "item": 11, "size": 6, "style": 6, "colour": 8, "pcs1": 5,
 		"item_color": 9, "gross": 10, "net": 10, "gold": 13, "mc": 13,
-		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11, "total": 14,
+		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11,
+		"psv": 11, "csv": 11, "total": 14,
 		"igi": 9, "huid": 9, "certlab": 7, "certno": 9, "uid": 11}
 	for i in range(huid_cols):
 		MINW["huidc{0}".format(i)] = 12
