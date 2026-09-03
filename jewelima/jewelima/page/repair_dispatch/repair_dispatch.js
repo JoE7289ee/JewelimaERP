@@ -21,7 +21,7 @@ frappe.pages["repair-dispatch"].on_page_load = function (wrapper) {
 	const cint = (v) => parseInt(v, 10) || 0;
 	const g3 = (v) => flt(v).toFixed(3);
 
-	const S = { rows: [], parties: [], party: "", sel: new Set(), recent: [] };
+	const S = { rows: [], parties: [], party: "", order: "", sel: new Set(), recent: [] };
 	const root = $(page.main);
 
 	root.append(`
@@ -52,13 +52,14 @@ frappe.pages["repair-dispatch"].on_page_load = function (wrapper) {
 		</style>
 		<div class="dp-bar">
 			<div class="dp-f"><label>${__("Party")}</label><select class="dp-party"></select></div>
+			<div class="dp-f"><label>${__("Repair Order")}</label><select class="dp-order"></select></div>
 			<div class="dp-f"><label>${__("Mode")}</label>
 				<select class="dp-modesel">
 					<option value="In Hand" selected>${__("In Hand")}</option>
 					<option value="Parcel">${__("Parcel")}</option>
 				</select></div>
 			<div class="dp-f"><label>${__("Given to")}</label>
-				<input class="dp-given" placeholder="${__("who is taking it")}" style="width:200px;"></div>
+				<input class="dp-given" placeholder="${__("optional")}" style="width:200px;"></div>
 			<button class="btn btn-sm dp-go" disabled>${__("Dispatch")}</button>
 			<span class="dp-count"></span>
 		</div>
@@ -67,11 +68,24 @@ frappe.pages["repair-dispatch"].on_page_load = function (wrapper) {
 		<div class="dp-recentbody"></div>
 	`);
 
+	// a piece is REP-00007-3 — its batch is everything before the last dash
+	const batchOf = (repair) => String(repair || "").replace(/-[^-]*$/, "");
+
 	function visible() {
-		return S.rows.filter((r) => !S.party || r.party === S.party);
+		return S.rows.filter((r) => (!S.party || r.party === S.party)
+			&& (!S.order || batchOf(r.repair) === S.order));
+	}
+
+	function paintOrderFilter() {
+		const pool = S.rows.filter((r) => !S.party || r.party === S.party);
+		const orders = [...new Set(pool.map((r) => batchOf(r.repair)))].sort();
+		if (S.order && !orders.includes(S.order)) S.order = "";
+		root.find(".dp-order").html(`<option value="">${__("— every order —")}</option>`
+			+ orders.map((o) => `<option ${o === S.order ? "selected" : ""}>${esc(o)}</option>`).join(""));
 	}
 
 	function paint() {
+		paintOrderFilter();
 		const rows = visible();
 		const picked = rows.filter((r) => S.sel.has(r.repair));
 		root.find(".dp-count").text(rows.length
@@ -101,9 +115,11 @@ frappe.pages["repair-dispatch"].on_page_load = function (wrapper) {
 				<td>${esc(r.received_at || "")}${r.received_from
 					? ` · <span style="color:var(--text-muted);">${esc(r.received_from)}</span>` : ""}</td>
 			</tr>`).join("")}</tbody></table>`
-			: `<div class="dp-none">${S.party
-				? __("Nothing billed and waiting for {0}.", [S.party])
-				: __("Nothing is billed and waiting to go back.")}</div>`);
+			: `<div class="dp-none">${S.order
+				? __("Nothing billed and waiting on {0}.", [S.order])
+				: S.party
+					? __("Nothing billed and waiting for {0}.", [S.party])
+					: __("Nothing is billed and waiting to go back.")}</div>`);
 
 		root.find(".dp-recentbody").html(S.recent.length ? `
 			<table class="dp-t dp-recent"><thead><tr>
@@ -144,7 +160,8 @@ frappe.pages["repair-dispatch"].on_page_load = function (wrapper) {
 			.then((r) => { S.recent = r.message || []; paint(); });
 	}
 
-	root.on("change", ".dp-party", function () { S.party = this.value; S.sel.clear(); paint(); });
+	root.on("change", ".dp-party", function () { S.party = this.value; S.order = ""; S.sel.clear(); paint(); });
+	root.on("change", ".dp-order", function () { S.order = this.value; S.sel.clear(); paint(); });
 	root.on("change", ".dp-sel", function () {
 		const n = $(this).data("n");
 		if (this.checked) S.sel.add(n); else S.sel.delete(n);
@@ -167,17 +184,17 @@ frappe.pages["repair-dispatch"].on_page_load = function (wrapper) {
 				[parties.length]));
 			return;
 		}
+		// a name is worth having but not worth blocking a handover for
 		const given = (root.find(".dp-given").val() || "").trim();
-		if (!given) {
-			frappe.msgprint(__("Say who is taking it — a handover belongs to a person."));
-			root.find(".dp-given").trigger("focus");
-			return;
-		}
 		frappe.confirm(
-			__("Send {0} piece(s) back to <b>{1}</b>, {2}, with <b>{3}</b>?",
-				[picked.length, esc(parties[0]),
-				 root.find(".dp-modesel").val() === "Parcel" ? __("by parcel") : __("in hand"),
-				 esc(given)]),
+			given
+				? __("Send {0} piece(s) back to <b>{1}</b>, {2}, with <b>{3}</b>?",
+					[picked.length, esc(parties[0]),
+					 root.find(".dp-modesel").val() === "Parcel" ? __("by parcel") : __("in hand"),
+					 esc(given)])
+				: __("Send {0} piece(s) back to <b>{1}</b>, {2}? No one is named as taking it.",
+					[picked.length, esc(parties[0]),
+					 root.find(".dp-modesel").val() === "Parcel" ? __("by parcel") : __("in hand")]),
 			() => {
 				frappe.call({
 					method: API + ".create_repair_dispatch", freeze: true,

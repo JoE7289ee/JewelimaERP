@@ -37,7 +37,7 @@ jewelima.repairStoneDialog = function (stones, sieves, onSave) {
 			`<option value="${esc(x.sieve)}" ${(st.sieve || "") === x.sieve ? "selected" : ""}>${
 				esc(x.sieve)}</option>`).join("")}</select></td>
 		<td><input class="sd-p" type="number" min="0" step="1" value="${cint(st.pcs) || ""}" placeholder="0"></td>
-		<td><input class="sd-c" type="number" min="0" step="0.001" value="${
+		<td><input class="sd-c" type="number" min="0" step="0.001" data-auto="1" value="${
 			flt(st.ct) ? flt(st.ct).toFixed(3) : ""}" placeholder="0.000"></td>
 		<td><input class="sd-q" value="${esc(st.stone || "")}" placeholder="${__("optional")}"></td>
 		<td><a class="sd-x" title="${__("Remove")}">&times;</a></td></tr>`).join("");
@@ -110,8 +110,9 @@ jewelima.repairStoneDialog = function (stones, sieves, onSave) {
 	});
 
 	// A count with no carats is the common case — the chart knows the weight.
-	// What the chart filled in is marked as such, so correcting the count updates
-	// it while a carat somebody typed is never touched.
+	// Rows arrive marked as the chart's (see draw), so correcting a count updates
+	// them; a carat typed in this dialog is never touched afterwards.
+	// typing in the box is what makes a carat yours; until then it follows the chart
 	$t.on("input", ".sd-c", function () { this.dataset.auto = ""; });
 	const markRow = ($tr) => {
 		const avg = avgFor($tr.find(".sd-b").val(), $tr.find(".sd-s").val());

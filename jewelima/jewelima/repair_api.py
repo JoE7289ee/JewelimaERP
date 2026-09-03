@@ -1040,9 +1040,9 @@ def create_repair_dispatch(payload):
 	mode = (p.get("dispatch_mode") or "In Hand").strip()
 	if mode not in ("In Hand", "Parcel"):
 		frappe.throw(frappe._("{0} is not a way of sending things out.").format(mode))
+	# worth recording, not worth refusing a handover over: the doctype has never
+	# marked it required, and a parcel often goes out before the courier is named
 	given_to = (p.get("given_to") or "").strip()
-	if not given_to:
-		frappe.throw(frappe._("Say who is taking it — a handover belongs to a person."))
 
 	rows = frappe.db.sql("""
 		SELECT i.name AS row_name, i.parent AS repair_order, i.repair, i.design_type,

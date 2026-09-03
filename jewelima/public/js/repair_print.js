@@ -33,10 +33,14 @@ tr{page-break-inside:avoid;}
 .muted{color:#666;}
 `;
 
-const JW_REPAIR_PRINT_CSS = `
+const JW_REPAIR_PRINT_CSS = JW_REPAIR_TABLE_CSS + `
 @page { size: A4 portrait; margin: 12mm 10mm; }
-body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#000;font-size:11px;}
-` + JW_REPAIR_TABLE_CSS;
+html,body{margin:0;padding:0;}
+body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:11px;
+	display:flex;flex-direction:column;min-height:264mm;}
+/* margin-top:auto sinks the signatures to the foot — it has to come AFTER the
+   shared .sig rule to beat its margin-top:22px. */
+.sig{margin-top:auto;padding-top:30px;}`;
 
 // The bill: letterhead font stays, the signature block is pinned to the foot of
 // the page (the counter signs at the bottom, not wherever the table happens to
@@ -76,6 +80,7 @@ function jwRepairPrint(title, html) {
 	document.body.appendChild(fr);
 	const doc = fr.contentDocument;
 	doc.open();
+	// the body is a flex column: content grows, signatures sink to the foot
 	doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>`
 		+ `<style>${JW_REPAIR_PRINT_CSS}</style></head><body>${html}</body></html>`);
 	doc.close();
