@@ -79,6 +79,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);}
 		table.of-t{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.of-t.prep{min-width:1360px;}
+		table.of-t.priced th:last-child,table.of-t.priced td:last-child{position:sticky;right:0;
+			background:var(--fg-color);box-shadow:-7px 0 7px -7px rgba(0,0,0,.22);}
+		table.of-t.priced th:last-child{background:var(--control-bg);z-index:3;}
+		table.of-t.priced tbody tr:hover td:last-child{background:var(--control-bg);}
+		table.of-t.priced tr.of-flagged td:last-child{background:#fff8e6;}
+		html[data-theme="dark"] table.of-t.priced tr.of-flagged td:last-child{background:#2b2617;}
 		/* the header follows you down a 200-row sheet */
 		table.of-t th{position:sticky;top:0;z-index:2;background:var(--control-bg);font-size:10px;text-transform:uppercase;
 			letter-spacing:.04em;color:var(--text-muted);padding:8px 8px;border-bottom:1px solid var(--gray-400,#aeb6bf);
@@ -435,17 +441,38 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			</tr>`).join("")}</tbody></table>`);
 	}
 
+	// a flag belongs on the cell it is about — dumping every one of them on
+	// Cert/HUID meant "name the stone to price it" hid behind certification
+	function flagBucket(f) {
+		const t = String(f || "");
+		if (/^PS\b/.test(t)) return "ps";
+		if (/^STN\b/.test(t)) return "cs";
+		if (/diamond|dmd/i.test(t)) return "dmd";
+		if (/gold rate/i.test(t)) return "gold";
+		if (/making/i.test(t)) return "mc";
+		if (/HUID|priced on the chart/i.test(t)) return "cert";
+		return "total";
+	}
+	const cellTitle = (p, kind, note) => esc([note || ""].concat(
+		(p.flags || []).filter((f) => flagBucket(f) === kind)).filter(Boolean).join(" · "));
+
 	function paintExport() {
 		const priced = !!PRICED;
 		const P = {};
 		if (priced) PRICED.rows.forEach((x) => { P[x.unique_id] = x; });
+		// PS and CS earn their columns only when the sheet actually carries them —
+		// every PS/STN flag is raised inside a >0 check, so none can be orphaned
+		const hasPS = ROWS.some((r) => flt(r.ps_ct) > 0);
+		const hasCS = ROWS.some((r) => flt(r.stn_ct) > 0);
 		root.find(".of-body").html(`
-			<table class="of-t"><thead><tr>
+			<table class="of-t${priced ? " priced" : ""}"><thead><tr>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("COLOR")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
+				${hasPS ? `<th class="num">${__("PS ct")}</th>` : ""}${hasCS ? `<th class="num">${__("CS ct")}</th>` : ""}
 				<th>${__("HUID")}</th><th>${__("Cert")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
-				<th class="num">${__("DMD")}</th><th class="num">${__("Cert/HUID")}</th>
+				<th class="num">${__("DMD")}</th>${hasPS ? `<th class="num">${__("PS")}</th>` : ""}${hasCS ? `<th class="num">${__("CS")}</th>` : ""}
+				<th class="num">${__("Cert/HUID")}</th>
 				<th class="num">${__("TOTAL")}</th>` : ""}
 			</tr></thead><tbody>
 			${ROWS.map((r) => {
@@ -454,12 +481,16 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				return `<tr class="${fl ? "of-flagged" : ""}" style="background:${tintOf(r.colour)}">
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
 				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
+				${hasPS ? `<td class="num">${r.ps_ct || ""}${r.ps_stone ? `<div class="of-flag">${esc(r.ps_stone)}</div>` : ""}</td>` : ""}
+				${hasCS ? `<td class="num">${r.stn_ct || ""}</td>` : ""}
 				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td>
-				${priced ? `<td class="num" title="${esc((p.notes || {}).gold || "")}">₹ ${money(p.gold_va)}</td>
-				<td class="num" title="${esc((p.notes || {}).mc || "")}">₹ ${money(p.mc)}</td>
-				<td class="num" title="${esc((p.notes || {}).dmd || "")}">₹ ${money(p.dmd_va)}${p.dmd_rt ? `<div class="of-flag">${p.stone_ct}/st @ ${esc(p.dmd_bracket)}</div>` : ""}</td>
-				<td class="num" title="${esc([(p.notes || {}).cert || ""].concat(p.flags || []).filter(Boolean).join(" · "))}">₹ ${money(p.cert_va || 0)}</td>
-				<td class="num" title="${esc((p.notes || {}).total || "")}"><b>₹ ${money(p.total)}</b></td>` : ""}
+				${priced ? `<td class="num" title="${cellTitle(p, "gold", (p.notes || {}).gold)}">₹ ${money(p.gold_va)}</td>
+				<td class="num" title="${cellTitle(p, "mc", (p.notes || {}).mc)}">₹ ${money(p.mc)}</td>
+				<td class="num" title="${cellTitle(p, "dmd", (p.notes || {}).dmd)}">₹ ${money(p.dmd_va)}${p.dmd_rt ? `<div class="of-flag">${p.stone_ct}/st @ ${esc(p.dmd_bracket)}</div>` : ""}</td>
+				${hasPS ? `<td class="num" title="${cellTitle(p, "ps", (p.notes || {}).ps)}">₹ ${money(p.ps_va || 0)}${p.ps_rt ? `<div class="of-flag">@ ${money(p.ps_rt)}/ct</div>` : ""}</td>` : ""}
+				${hasCS ? `<td class="num" title="${cellTitle(p, "cs", (p.notes || {}).stn)}">₹ ${money(p.stn_va || 0)}</td>` : ""}
+				<td class="num" title="${cellTitle(p, "cert", (p.notes || {}).cert)}">₹ ${money(p.cert_va || 0)}</td>
+				<td class="num" title="${cellTitle(p, "total", (p.notes || {}).total)}"><b>₹ ${money(p.total)}</b></td>` : ""}
 			</tr>`; }).join("")}</tbody></table>
 			${priced ? `<div class="of-tot">
 				<div class="of-tile"><div class="k">${__("Before tax")}</div><div class="v">₹ ${money(PRICED.totals.before_tax)}</div></div>
@@ -530,7 +561,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		colour: { input: "text", list: "of-colors", upper: true, allEmpty: true },
 		style: { input: "select", options: ["GENTS", "LADIES", "GENTS / LADIES"] },
 		cert: { input: "text", list: "of-labs", upper: true },
-		ps_stone: { input: "text", list: "of-pstones", upper: true },
+		// allEmpty is safe here: the applier skips any row carrying no PS
+		ps_stone: { input: "text", list: "of-pstones", upper: true, allEmpty: true },
 		size: { input: "text", upper: false },
 		shape: { input: "select", options: ["OVAL", "CHAIN"] },
 		shop: { input: "text", upper: true, allEmpty: true },
