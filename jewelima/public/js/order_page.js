@@ -414,8 +414,12 @@ const PO_COLUMNS = [
 							const v = r.message || {};
 							if (!v.name || row._lastBank) return;
 							if ((ctrl.$input.val() || "").trim() !== txt) return;   // moved on
-							ctrl.set_value(v.design_bank);
-							setTimeout(() => onBankPicked(row), 60);
+							// set_value on a Link validates over the NETWORK. Handing off on a
+							// fixed timer meant onBankPicked read the box before the round trip
+							// came back — the typed text, not the bank — and the variant query
+							// found nothing. Fine on a LAN, never over a slow link. Chain on the
+							// promise, and pass the resolved bank across rather than re-reading it.
+							Promise.resolve(ctrl.set_value(v.design_bank)).then(() => onBankPicked(row, v.design_bank));
 						});
 					}, 450));
 				}
@@ -683,8 +687,10 @@ const PO_COLUMNS = [
 		}
 	}
 
-	function onBankPicked(row) {
-		const bank = row.f.bank.get();
+	function onBankPicked(row, known) {
+		// `known` is the bank a caller has already resolved; the box is only read
+		// when nobody has, because a Link's get_value() is its TEXT mid-validation
+		const bank = known || row.f.bank.get();
 		syncDesignDep(row);
 		if (!bank) { row._lastBank = ""; return; }
 		// the bank field fires BOTH change + awesomplete-selectcomplete on one pick —
