@@ -184,11 +184,24 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const fParty = mk(".of-party", { fieldtype: "Data", label: __("Shop / party"), fieldname: "party" });
 	const fSess = mk(".of-sess", { fieldtype: "Link", label: __("Saved import"), fieldname: "sess",
 		options: "Old Format Import", only_select: 1, onchange: () => { if (!LOADING) loadSession(fSess.get_value()); } });
+	// Editing any of the four pricing inputs makes what is on screen a quote at a
+	// rate nobody asked for: the table and all five tiles paint from PRICED, so a
+	// corrected gold rate left the old money showing with the new rate in the box
+	// and nothing saying it was stale. NOT invalidate() — that also clears SORTED,
+	// which gates Find # and Continue to Export, and a rate edit does not unsort
+	// anything. The PRICED guard keeps the programmatic set_value calls below
+	// (fGst default, fCq from loadQualities/applyToken) from firing it.
+	const unprice = () => {
+		if (!PRICED) return;
+		PRICED = null;
+		root.find(".of-jos, .of-rules").hide();
+		paint();
+	};
 	const fChart = mk(".of-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
-		get_query: () => ({ filters: { status: "Active" } }), onchange: () => loadQualities() });
-	const fRate = mk(".of-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate" });
-	const fCq = mk(".of-cq", { fieldtype: "Select", label: __("Chart quality"), fieldname: "cq", options: "" });
-	const fGst = mk(".of-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3 });
+		get_query: () => ({ filters: { status: "Active" } }), onchange: () => { unprice(); loadQualities(); } });
+	const fRate = mk(".of-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate", onchange: () => unprice() });
+	const fCq = mk(".of-cq", { fieldtype: "Select", label: __("Chart quality"), fieldname: "cq", options: "", onchange: () => unprice() });
+	const fGst = mk(".of-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3, onchange: () => unprice() });
 	fGst.set_value(3);
 
 	// the PS stone box offers the real precious stones — a name the chart does
