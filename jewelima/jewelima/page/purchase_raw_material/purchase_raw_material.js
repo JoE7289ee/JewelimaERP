@@ -19,13 +19,34 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.pr-wrap{display:flex;flex-direction:column;height:calc(100vh - 95px);}
-		.pr-head{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 10px;margin:2px 0 6px;}
+		.pr-wrap{display:flex;flex-direction:column;height:calc(100vh - 95px);gap:12px;}
+		/* the header is a card: three things to set, then the grid does the work */
+		.pr-head{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin:0;
+			border:1px solid var(--border-color);border-radius:13px;padding:13px 16px;
+			background:var(--fg-color);}
+		/* up to five, sized so five fit a laptop without wrapping to a second line */
+		.pr-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+		.pr-tile{border:1px solid var(--border-color);border-radius:12px;padding:10px 14px;
+			background:var(--fg-color);}
+		.pr-tile .k{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+			color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+		.pr-tile .v{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;
+			color:var(--text-color);line-height:1.25;}
+		.pr-tile .v .s{font-size:11px;font-weight:600;color:var(--text-muted);}
+		/* the pure-gold tile is the headline number on this page */
+		.pr-tile.gold{background:rgba(218,165,32,.10);border-color:rgba(218,165,32,.45);}
+		.pr-tile.gold .k{color:#8a6200;}
+		.pr-tile.empty .v{color:var(--text-muted);font-weight:400;}
+		/* a row says whether it will actually post: green will, red will not */
+		table.pr-grid tr.pr-ok > td:first-child{box-shadow:inset 3px 0 0 #1d7a33;}
+		table.pr-grid tr.pr-bad > td:first-child{box-shadow:inset 3px 0 0 #b02a2a;}
+		table.pr-grid tr.pr-bad > td{background:rgba(176,42,43,.055);}
+		table.pr-grid tr.pr-ok > td{background:rgba(29,122,51,.045);}
 		.pr-head .frappe-control{margin:0;}
 		.pr-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.pr-head .control-input-wrapper .control-input,.pr-head .control-input input,.pr-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
 		.pr-head .help-box,.pr-head .description{display:none !important;}
-		.pr-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:8px;}
+		.pr-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:13px;}
 		table.pr-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.pr-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
 			border-right:1px solid var(--border-color);border-bottom:1px solid var(--gray-400, #aeb6bf);padding:3px 6px;text-align:left;white-space:nowrap;font-weight:700;}
@@ -46,12 +67,13 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		</style>
 		<div class="pr-wrap">
 			<div class="pr-head">
-				<div class="pr-h-voucher"></div><div class="pr-h-supplier"></div><div class="pr-h-date"></div><div class="pr-h-wh"></div>
+				<div class="pr-h-voucher"></div><div class="pr-h-supplier"></div><div class="pr-h-wh"></div>
 			</div>
+			<div class="pr-tiles"></div>
 			<div class="pr-gridbox">
 				<table class="pr-grid"><thead><tr class="pr-headrow"></tr></thead><tbody class="pr-body"></tbody><tfoot><tr class="pr-footrow"></tr></tfoot></table>
 			</div>
-			<div class="pr-foot"><span class="pr-count">0</span> line(s). Pick an item first — metals fill <b>Gram</b>, stones fill <b>Qty</b> + <b>Carat</b>. A new row appears as you enter a weight. Posts a submitted Purchase Receipt.</div>
+			<div class="pr-foot"><span class="pr-count">0</span> line(s). Pick an item first — metals fill <b>Gram</b>, stones fill <b>Qty</b> + <b>Carat</b>. A new row appears as you enter a weight. <b style="color:#1d7a33;">Green</b> lines will post; <b style="color:#b02a2a;">red</b> ones are missing something and would be dropped. Posts a submitted Purchase Receipt.</div>
 		</div>
 	`);
 
@@ -63,18 +85,30 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	state.header.voucher = mk(".pr-h-voucher", { fieldtype: "Link", label: "Voucher Type", fieldname: "voucher_type", options: "Voucher Type", reqd: 1 });
 	state.header.voucher.set_value("SIN"); // Stock Import unless the buyer says otherwise
 	state.header.supplier = mk(".pr-h-supplier", { fieldtype: "Link", label: "Supplier", fieldname: "supplier", options: "Supplier" });
-	state.header.posting_date = mk(".pr-h-date", { fieldtype: "Date", label: "Date", fieldname: "posting_date", read_only: 1 });
 	state.header.warehouse = mk(".pr-h-wh", { fieldtype: "Link", label: "Warehouse", fieldname: "warehouse", options: "Warehouse", get_query: () => ({ filters: { is_group: 0, custom_is_purchase_location: 1 } }) });
-	state.header.posting_date.set_value(frappe.datetime.get_today());
+	// posted today, always — a read-only box showing today's date is a field that
+	// asks a question with one answer
+	state.postingDate = frappe.datetime.get_today();
 
-	// defaults: JD Stock supplier, Gold Issue warehouse (a purchase location; switch to
-	// Stone Issue when buying stones)
+	// Supplier defaults; the WAREHOUSE deliberately does not. Defaulting to Gold
+	// Issue meant a stone purchase started out pointed at the wrong warehouse and
+	// only the server's own rule caught it. It is set from the first item picked
+	// instead — gold to Gold Issue, stones to Stone Issue — and never overwritten
+	// once a buyer has chosen for themselves.
 	frappe.db.get_value("Supplier", "JD Stock", "name").then((r) => {
 		if (r.message && r.message.name) state.header.supplier.set_value("JD Stock");
 	});
-	frappe.db.get_value("Warehouse", { warehouse_name: "Gold Issue" }, "name").then((r) => {
-		if (r.message && r.message.name) state.header.warehouse.set_value(r.message.name);
-	});
+	state.header.warehouse.$input.on("change", () => { state.whTouched = true; });
+
+	function warehouseFor(isStone) {
+		if (state.whTouched || state.header.warehouse.get_value()) return;
+		const want = isStone ? "Stone Issue" : "Gold Issue";
+		frappe.db.get_value("Warehouse", { warehouse_name: want }, "name").then((r) => {
+			if (r.message && r.message.name && !state.whTouched) {
+				state.header.warehouse.set_value(r.message.name);
+			}
+		});
+	}
 
 	const $hr = $(page.main).find(".pr-headrow");
 	$hr.append('<th class="pr-num">#</th>');
@@ -109,17 +143,76 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		return (G[grp] || {})[size] || 0;
 	}
 
+	// A row COUNTS only if the server would accept it: an item, a weight, and for a
+	// sized stone a piece count. Anything else is either still being typed (the
+	// blank trailing line) or will be silently dropped — and silently dropped is
+	// what the colours exist to stop.
+	function rowState(r) {
+		const item = r.f.item.get();
+		const wt = flt(r.isStone ? r.f.carat.get() : r.f.gram.get());
+		const cnt = cint(r.f.count.get());
+		if (!item && !wt && !cnt) return "";                     // the next line, untouched
+		if (!item) return "bad";                                  // a weight with nothing to weigh
+		if (wt <= 0) return "bad";                                // an item nobody said how much of
+		if (r.isStone && r._avg && cnt <= 0) return "bad";        // sized stones need a count
+		return "ok";
+	}
+
 	function recalc() {
-		let csum = 0, gsum = 0, ctsum = 0;
+		let csum = 0, gsum = 0, ctsum = 0, pure = 0, live = 0;
+		const byGroup = {};
 		state.rows.forEach((r) => {
+			const st = rowState(r);
+			r.$tr.removeClass("pr-ok pr-bad");
+			if (st) r.$tr.addClass(st === "ok" ? "pr-ok" : "pr-bad");
 			csum += cint(r.f.count.get());
 			gsum += flt(r.f.gram.get());
 			ctsum += flt(r.f.carat.get());
+			if (st !== "ok") return;                 // tiles count only what will post
+			live++;
+			if (!r.isStone) {
+				const g = flt(r.f.gram.get());
+				// PURE gold is the weight through its own purity — 300 g of 995 is
+				// 298.5 g of gold, and that is the number the vault cares about
+				pure += g * (flt(r.purityPct) / 100);
+				// Findings come in a group per karat and colour (18 KYG Findings,
+				// 22 KYG Findings, 18K Common Findings …). Five tiles cannot hold
+				// them one by one, and the buyer thinks in one number anyway, so
+				// they roll up to GOLD FINDINGS. Everything else keeps its own name.
+				const grp = /finding/i.test(r.group) ? __("GOLD FINDINGS") : r.group;
+				if (grp) byGroup[grp] = (byGroup[grp] || 0) + g;
+			}
 		});
 		if (totals.count) totals.count.text(csum || "");
 		if (totals.gram) totals.gram.text(gsum ? gsum.toFixed(3) : "");
 		if (totals.carat) totals.carat.text(ctsum ? ctsum.toFixed(3) : "");
 		$(page.main).find(".pr-count").text(state.rows.length);
+		paintTiles({ pure, byGroup, carats: ctsum, pieces: csum, live });
+	}
+
+	// At most five, and only the ones that have something to say — an empty tile
+	// is a number the reader has to rule out.
+	function paintTiles(t) {
+		const g3 = (v) => flt(v).toFixed(3);
+		const tiles = [];
+		if (t.pure > 0) {
+			tiles.push({ k: __("Pure gold in"), v: g3(t.pure), s: "g", cls: "gold" });
+		}
+		// a fixed reading order, so the strip does not reshuffle as rows are typed
+		const rank = (g) => (/standard/i.test(g) ? 0 : /finding/i.test(g) ? 1 : 2);
+		Object.keys(t.byGroup).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+			.forEach((grp) => {
+				if (tiles.length < 4) tiles.push({ k: grp, v: g3(t.byGroup[grp]), s: "g" });
+			});
+		if (t.carats > 0) tiles.push({ k: __("Stones"), v: g3(t.carats), s: "ct" });
+		if (t.pieces > 0 && tiles.length < 5) tiles.push({ k: __("Pieces"), v: t.pieces, s: "" });
+		$(page.main).find(".pr-tiles").html(tiles.slice(0, 5).map((x) => `
+			<div class="pr-tile ${x.cls || ""}">
+				<div class="k">${frappe.utils.escape_html(x.k)}</div>
+				<div class="v">${x.v}${x.s ? ` <span class="s">${x.s}</span>` : ""}</div>
+			</div>`).join("")
+			|| `<div class="pr-tile empty"><div class="k">${__("Nothing entered yet")}</div>
+				<div class="v">—</div></div>`);
 	}
 	function renumber() {
 		$body.find("tr").each((i, tr) => $(tr).find(".pr-num").text(i + 1));
@@ -129,10 +222,14 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		const item = row.f.item.get();
 		if (!item || row._last === item) return;
 		row._last = item;
-		frappe.db.get_value("Item", item, ["weight_unit", "purity_percentage", "stone_type"]).then((r) => {
+		frappe.db.get_value("Item", item, ["weight_unit", "purity_percentage", "stone_type",
+				"item_group"]).then((r) => {
 			const v = r.message || {};
 			if (row.setUom) row.setUom(v.weight_unit);
 			row.isStone = !!v.stone_type;
+			row.group = v.item_group || "";
+			row.purityPct = flt(v.purity_percentage);
+			warehouseFor(row.isStone);      // first item decides where it lands
 			const $c = row.inputs.count, $g = row.inputs.gram, $ct = row.inputs.carat, $p = row.inputs.purity;
 			if (row.isStone) {
 				row._avg = sieveAvg(item, v.stone_type); // per-group chart: DMD/CVD/CZ/SW
@@ -209,8 +306,6 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 
 	$body.on("input change", "input", () => recalc());
 
-	page.add_inner_button(__("Add Row"), () => addRow());
-	page.add_inner_button(__("Add 5 Rows"), () => { for (let i = 0; i < 5; i++) addRow(); });
 	addRow();
 
 	page.set_primary_action(__("Post Purchase"), () => postPurchase(page, state, $body), "add");
@@ -219,7 +314,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 function postPurchase(page, state, $body) {
 	const supplier = state.header.supplier.get_value();
 	const warehouse = state.header.warehouse.get_value();
-	const posting_date = state.header.posting_date.get_value();
+	const posting_date = state.postingDate;
 	const items = state.rows
 		.map((r) => ({ item: r.f.item.get() || undefined, weight: flt(r.isStone ? r.f.carat.get() : r.f.gram.get()) || 0, count: cint(r.f.count.get()) || 0, purity: flt(r.f.purity.get()) || 0, isStone: !!r.isStone, hasSieve: !!r._avg }))
 		.filter((l) => l.item && l.weight > 0);
