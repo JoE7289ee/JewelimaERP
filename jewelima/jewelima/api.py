@@ -10052,6 +10052,27 @@ def get_price_chart_list():
 
 
 @frappe.whitelist()
+def current_price_chart(name):
+	"""Resolve a chart name to the version that is Active TODAY.
+
+	Saving a chart supersedes it and mints a new one, so any screen holding an
+	old name goes on quoting rates nobody charges any more — and a Link's Active
+	filter only screens what you search, never a value already in the box. This
+	is the cheap check for callers that only need the name, not the rate tables.
+	"""
+	d = frappe.db.get_value("Price Chart", name, ["name", "chart_name", "status"], as_dict=True)
+	if not d:
+		return {"name": name, "status": None, "resolved": name, "moved": False}
+	if d.status == "Active":
+		return {"name": d.name, "chart_name": d.chart_name, "status": d.status,
+			"resolved": d.name, "moved": False}
+	live = frappe.db.get_value("Price Chart",
+		{"chart_name": d.chart_name, "status": "Active"}, "name") if d.chart_name else None
+	return {"name": d.name, "chart_name": d.chart_name, "status": d.status,
+		"resolved": live or d.name, "moved": bool(live and live != d.name)}
+
+
+@frappe.whitelist()
 def get_price_chart(name):
 	"""One chart, every block — feeds the editor and the PDF preview."""
 	d = frappe.get_doc("Price Chart", name)

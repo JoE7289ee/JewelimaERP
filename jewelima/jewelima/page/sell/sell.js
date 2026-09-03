@@ -103,9 +103,31 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	};
 	const buyer = mk(".sl-buyer", { fieldtype: "Link", label: __("Selling To"), fieldname: "buyer", options: "Customer",
 		only_select: 1, onchange: () => paint() });
+	// A chart is superseded the moment it is edited and a new version takes its
+	// place. The Active filter above only screens what you SEARCH — a name that
+	// arrives another way (a restored prepared sale, a link, a stale tab) is never
+	// re-checked, and a bill would be priced off rates nobody charges any more.
+	let CHART_SYNC = false;
+	function useCurrentChart(then) {
+		const nm = chart.get_value();
+		if (!nm || CHART_SYNC) { if (then) then(); return; }
+		frappe.call({ method: API + ".current_price_chart", args: { name: nm }, freeze: false })
+			.then((r) => {
+				const m = r.message || {};
+				if (m.moved) {
+					CHART_SYNC = true; chart.set_value(m.resolved); CHART_SYNC = false;
+					frappe.show_alert({ message: __("{0} was superseded — pricing on {1}, the current {2}.",
+						[nm, m.resolved, m.chart_name || ""]), indicator: "blue" }, 8);
+				} else if (m.status && m.status !== "Active") {
+					frappe.show_alert({ message: __("{0} is {1}, not Active — check the rates before you sell on it.",
+						[nm, String(m.status).toLowerCase()]), indicator: "orange" }, 9);
+				}
+				if (then) then();
+			});
+	}
 	const chart = mk(".sl-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart",
 		only_select: 1, get_query: () => ({ filters: { status: "Active" } }),
-		onchange: () => repriceAll() });
+		onchange: () => useCurrentChart(repriceAll) });
 	// our own arrow: opens the Price Charts EDITOR with this chart loaded —
 	// seated INSIDE the field, top-right beside the label
 	$(root).find(".sl-chart").css("position", "relative");
