@@ -345,13 +345,11 @@ def post_raw_material_purchase(supplier, warehouse, posting_date=None, items=Non
 	def _has_sieve(it):
 		return (it or "").rsplit(" ", 1)[-1] in sieve_sizes
 
-	# warehouse rule: stones only into Stone Issue, metal only into Gold Issue
-	if warehouse:
-		wh_name = frappe.db.get_value("Warehouse", warehouse, "warehouse_name") or ""
-		if wh_name == "Gold Issue" and any(stype.get(i.get("item")) for i in items):
-			frappe.throw(frappe._("Stones can't go into Gold Issue — receive them into Stone Issue."))
-		if wh_name == "Stone Issue" and any(i.get("item") and not stype.get(i.get("item")) for i in items):
-			frappe.throw(frappe._("Metal can't go into Stone Issue — receive it into Gold Issue."))
+	# Stones normally go to Stone Issue and metal to Gold Issue, but the mix is
+	# ALLOWED — a buyer sometimes has a real reason to take stones in against the
+	# gold warehouse, and refusing it left them with no way to record what actually
+	# happened. The page warns before posting so the choice is a deliberate one;
+	# this is not the place to overrule it.
 
 	rows = []
 	for i in items:

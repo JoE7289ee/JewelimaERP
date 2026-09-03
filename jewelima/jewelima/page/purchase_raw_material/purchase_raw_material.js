@@ -246,11 +246,14 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 				.filter((x) => rowState(x) === "ok" && !!x.isStone === stone)
 				.map((x) => x.f.item.get());
 			let msg = "";
+			// A heads-up, not a barrier: the mix is allowed, and the buyer may well
+			// mean it. The wording says where things usually go and leaves the
+			// decision where it belongs.
 			if (name === "Gold Issue" && named(true).length) {
-				msg = __("<b>{0}</b> {1} a stone — stones are received into <b>Stone Issue</b>, not Gold Issue. Posting will be refused.",
+				msg = __("Heads up — <b>{0}</b> {1} a stone, and stones usually go into <b>Stone Issue</b>. Post it here if that is what you mean.",
 					[named(true).join(", "), named(true).length > 1 ? __("are") : __("is")]);
 			} else if (name === "Stone Issue" && named(false).length) {
-				msg = __("<b>{0}</b> {1} metal — metal is received into <b>Gold Issue</b>, not Stone Issue. Posting will be refused.",
+				msg = __("Heads up — <b>{0}</b> {1} metal, and metal usually goes into <b>Gold Issue</b>. Post it here if that is what you mean.",
 					[named(false).join(", "), named(false).length > 1 ? __("are") : __("is")]);
 			}
 			$w.html(msg).toggleClass("on", !!msg);
