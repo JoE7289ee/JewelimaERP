@@ -183,82 +183,156 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	// Everything picked still goes through the same per-piece validation as a scan.
 	root.on("click", ".hm-pick", function () {
 		if (!S.center) { msg("warn", __("Pick the centre first.")); return focusScan(); }
+		showPicker();
+	});
+
+	// The same picker the transfer desk has: filter, tick, shift-click a range,
+	// page through the rest. Scanning is right for a handful; hallmarking is
+	// nearly every piece, so the desk has to be able to say "every RING in FEMI"
+	// and take eighty of them.
+	function showPicker() {
+		const P = { bucket: "", design_type: "", karat: "", held_by: "", q: "",
+			rows: [], sel: new Set(), total: 0, loaded: 0, hasMore: false, selOnly: false };
+		const PAGE = 60;
+		const dlg = new frappe.ui.Dialog({
+			title: __("Pieces to hallmark"), size: "extra-large",
+			primary_action_label: __("Add to batch"),
+			primary_action() {
+				if (!P.sel.size) return frappe.msgprint(__("Tick at least one piece."));
+				const picked = [...P.sel];
+				dlg.hide();
+				// through the SAME guard a scan uses, so a piece that cannot go is
+				// refused here too and says why in the history
+				frappe.dom.freeze(__("Adding {0}…", [picked.length]));
+				picked.reduce((chain, n) => chain.then(() => add(n)), Promise.resolve())
+					.then(() => {
+						frappe.dom.unfreeze();
+						msg("ok", __("{0} on the batch.", [S.rows.length]));
+						focusScan();
+					}).catch(() => frappe.dom.unfreeze());
+			},
+		});
+		const $b = dlg.$wrapper.find(".modal-body");
+		$b.html(`
+			<style>
+			.hp-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+			.hp-top select,.hp-q{border:1px solid var(--border-color);border-radius:7px;height:30px;
+				padding:2px 9px;font-size:12.5px;background:var(--control-bg);color:var(--text-color);}
+			.hp-q{width:200px;}
+			.hp-pill{border:1px solid var(--border-color);border-radius:11px;padding:2px 11px;
+				font-size:11.5px;cursor:pointer;user-select:none;}
+			.hp-pill.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
+			.hp-count{margin-left:auto;font-size:12px;color:var(--text-muted);}
+			.hp-box{max-height:52vh;overflow:auto;border:1px solid var(--border-color);border-radius:9px;}
+			table.hp-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+			table.hp-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;
+				text-transform:uppercase;color:var(--text-muted);padding:6px 9px;text-align:left;
+				border-bottom:2px solid var(--border-color);}
+			table.hp-t td{padding:5px 9px;border-bottom:1px solid var(--border-color);}
+			table.hp-t tr.on td{background:rgba(31,97,141,.10);}
+			table.hp-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+			.hp-empty{padding:26px;text-align:center;color:var(--text-muted);}
+			</style>
+			<div class="hp-top">
+				<select class="hp-f" data-f="bucket"><option value="">${__("— bucket —")}</option></select>
+				<select class="hp-f" data-f="design_type"><option value="">${__("— type —")}</option></select>
+				<select class="hp-f" data-f="karat"><option value="">${__("— karat —")}</option></select>
+				<select class="hp-f" data-f="held_by"><option value="">${__("— held by —")}</option></select>
+				<input type="text" class="hp-q" placeholder="${__("Search card / design / holder")}">
+				<span class="hp-pill hp-selonly">${__("Selected only")}</span>
+				<button class="btn btn-xs btn-default hp-reset">${__("Reset")}</button>
+				<span class="hp-count"></span>
+			</div>
+			<div class="hp-box"><table class="hp-t">
+				<thead><tr><th style="width:34px;"><input type="checkbox" class="hp-head-cb"
+						title="${__("Select / clear all shown")}"></th>
+					<th>${__("Piece")}</th><th>${__("Design")}</th><th>${__("Type")}</th>
+					<th>${__("Bucket")}</th><th>${__("Held by")}</th>
+					<th class="num">${__("Gross g")}</th></tr></thead>
+				<tbody class="hp-body"></tbody></table></div>`);
+
+		const onBatch = (n) => S.rows.some((r) => r.order_bag === n);
+		const visible = () => (P.selOnly ? P.rows.filter((r) => P.sel.has(r.name)) : P.rows);
+
+		function paint() {
+			const rows = visible();
+			const more = (!P.selOnly && P.hasMore)
+				? `<tr><td colspan="7" style="text-align:center;padding:9px;">
+					<button class="btn btn-xs btn-default hp-more">${__("Load {0} more", [PAGE])}</button>
+					<span style="margin-left:9px;font-size:11.5px;color:var(--text-muted);">${
+						__("{0} of {1}", [P.rows.length, P.total])}</span></td></tr>` : "";
+			$b.find(".hp-body").html(rows.length
+				? rows.map((r) => `<tr class="${P.sel.has(r.name) ? "on" : ""}">
+					<td><input type="checkbox" data-nm="${esc(r.name)}" ${P.sel.has(r.name) ? "checked" : ""}
+						${onBatch(r.name) ? "disabled title='" + __("Already on the batch") + "'" : ""}></td>
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td>
+					<td>${esc(r.design_type || "")}</td><td>${esc(r.bucket || "")}</td>
+					<td>${esc(r.held_by || "")}</td>
+					<td class="num">${flt(r.gross).toFixed(3)}</td></tr>`).join("") + more
+				: `<tr><td colspan="7" class="hp-empty">${P.selOnly
+					? __("Nothing ticked yet.")
+					: __("Nothing matches — or everything that does is already spoken for.")}</td></tr>`);
+			$b.find(".hp-count").text(__("{0} ticked · {1} shown · {2} available",
+				[P.sel.size, rows.length, P.total]));
+			jewelima.shiftSelect($b, ".hp-body input");
+			$b.find(".hp-body input").on("change", function () {
+				this.checked ? P.sel.add(this.dataset.nm) : P.sel.delete(this.dataset.nm);
+				paint();
+			});
+			const pick = rows.filter((r) => !onBatch(r.name));
+			const hit = pick.filter((r) => P.sel.has(r.name)).length;
+			const h = $b.find(".hp-head-cb")[0];
+			if (h) { h.checked = pick.length > 0 && hit === pick.length; h.indeterminate = hit > 0 && hit < pick.length; }
+			dlg.get_primary_btn().text(P.sel.size ? __("Add {0} to batch", [P.sel.size]) : __("Add to batch"));
+		}
+
+		function load(more) {
+			jewelima.busy($b.find("table.hp-t"), true, __("Looking…"));
+			frappe.call({ method: API + ".get_hallmarkable", freeze: false,
+				args: { bucket: P.bucket, design_type: P.design_type, karat: P.karat,
+					held_by: P.held_by, search: P.q, limit: PAGE, offset: more ? P.rows.length : 0 } })
+				.then((r) => {
+					const m = r.message || {};
+					P.rows = more ? P.rows.concat(m.rows || []) : (m.rows || []);
+					P.total = m.total || 0;
+					P.hasMore = !!m.has_more;
+					paint();
+				}).always(() => jewelima.busy($b.find("table.hp-t"), false));
+		}
+
+		$b.on("change", ".hp-f", function () { P[this.dataset.f] = this.value; load(); });
+		$b.on("input", ".hp-q", frappe.utils.debounce(function () { P.q = this.value || ""; load(); }, 300));
+		$b.on("click", ".hp-more", () => load(true));
+		$b.on("click", ".hp-selonly", function () {
+			P.selOnly = !P.selOnly; $(this).toggleClass("on", P.selOnly); paint();
+		});
+		$b.on("click", ".hp-reset", function () {
+			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
+			P.selOnly = false;
+			$b.find(".hp-f").val(""); $b.find(".hp-q").val("");
+			$b.find(".hp-selonly").removeClass("on");
+			load();
+		});
+		$b.on("change", ".hp-head-cb", function () {
+			const on = this.checked;
+			visible().filter((r) => !onBatch(r.name))
+				.forEach((r) => (on ? P.sel.add(r.name) : P.sel.delete(r.name)));
+			paint();
+		});
+
 		frappe.call({ method: API + ".get_hallmark_filter_options" }).then((r) => {
 			const o = r.message || {};
-			const d = new frappe.ui.Dialog({
-				title: __("Add pieces by filter"), size: "large",
-				fields: [
-					{ fieldname: "design_type", fieldtype: "Select", label: __("Design type"),
-						options: [""].concat(o.design_types || []).join("\n") },
-					{ fieldname: "cb1", fieldtype: "Column Break" },
-					{ fieldname: "bucket", fieldtype: "Select", label: __("Bucket"),
-						options: [""].concat(o.buckets || []).join("\n") },
-					{ fieldname: "cb2", fieldtype: "Column Break" },
-					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"),
-						options: [""].concat(o.karats || []).join("\n") },
-					{ fieldname: "sb", fieldtype: "Section Break" },
-					{ fieldname: "search", fieldtype: "Data", label: __("Card or design contains") },
-					{ fieldname: "res", fieldtype: "HTML" },
-				],
-				primary_action_label: __("Add ticked"),
-				primary_action() {
-					const picked = d.fields_dict.res.$wrapper.find(".hp-cb:checked")
-						.map(function () { return $(this).data("n"); }).get();
-					if (!picked.length) {
-						return frappe.show_alert({ message: __("Tick something first."), indicator: "orange" }, 3);
-					}
-					d.hide();
-					// one at a time through the SAME guard a scan uses, so a piece that
-					// cannot go is refused here too and lands in the history with why
-					frappe.dom.freeze(__("Adding {0}…", [picked.length]));
-					picked.reduce((chain, n) => chain.then(() => add(n)), Promise.resolve())
-						.then(() => {
-							frappe.dom.unfreeze();
-							msg("ok", __("{0} on the batch.", [S.rows.length]));
-							focusScan();
-						}).catch(() => frappe.dom.unfreeze());
-				},
-			});
-			const $res = d.fields_dict.res.$wrapper;
-			const look = frappe.utils.debounce(() => {
-				const v = d.get_values(true) || {};
-				$res.html(`<div style="padding:12px;color:var(--text-muted);">${__("Looking…")}</div>`);
-				frappe.call({ method: API + ".get_hallmarkable", freeze: false,
-					args: { design_type: v.design_type, bucket: v.bucket, karat: v.karat, search: v.search } })
-					.then((rr) => {
-						const rows = (rr.message || {}).rows || [];
-						$res.html(rows.length ? `
-							<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-								<b>${__("{0} piece(s)", [rows.length])}</b>
-								<button class="btn btn-xs btn-default hp-all">${__("Tick all")}</button></div>
-							<div style="max-height:340px;overflow:auto;border:1px solid var(--border-color);border-radius:8px;">
-							<table class="table table-sm" style="margin:0;font-size:12.5px;">
-							<thead><tr><th style="width:34px;"></th><th>${__("Card")}</th><th>${__("Design")}</th>
-								<th>${__("Type")}</th><th class="text-right">${__("Gross g")}</th>
-								<th>${__("Bucket")}</th></tr></thead><tbody>
-							${rows.map((x) => `<tr>
-								<td><input type="checkbox" class="hp-cb" data-n="${frappe.utils.escape_html(x.name)}"></td>
-								<td><b>${frappe.utils.escape_html(x.name)}</b></td>
-								<td>${frappe.utils.escape_html(x.design || "")}</td>
-								<td>${frappe.utils.escape_html(x.design_type || "")}</td>
-								<td class="text-right">${(parseFloat(x.gross) || 0).toFixed(3)}</td>
-								<td>${frappe.utils.escape_html(x.bucket || "")}</td></tr>`).join("")}
-							</tbody></table></div>`
-							: `<div style="padding:22px;text-align:center;color:var(--text-muted);">${
-								__("Nothing matches — or everything that does is already spoken for.")}</div>`);
-					});
-			}, 350);
-			["design_type", "bucket", "karat", "search"].forEach((f) => {
-				d.fields_dict[f].$input.on("change input", look);
-			});
-			$res.on("click", ".hp-all", function () {
-				const any = $res.find(".hp-cb:not(:checked)").length > 0;
-				$res.find(".hp-cb").prop("checked", any);
-			});
-			d.show();
-			look();
+			const fill = (f, blank, list) => $b.find(`.hp-f[data-f="${f}"]`).html(
+				`<option value="">${blank}</option>`
+				+ (list || []).map((v) => `<option>${esc(v)}</option>`).join(""));
+			fill("bucket", __("— bucket —"), o.buckets);
+			fill("design_type", __("— type —"), o.design_types);
+			fill("karat", __("— karat —"), o.karats);
+			fill("held_by", __("— held by —"), o.holders);
+			load();
 		});
-	});
+		dlg.show();
+	}
 
 	root.on("click", ".hm-go", function () {
 		if (!S.rows.length || !S.center) return;

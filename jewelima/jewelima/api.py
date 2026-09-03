@@ -15120,7 +15120,7 @@ def hall_prep_create(center, bags=None):
 
 @frappe.whitelist()
 def get_hallmarkable(design_type=None, bucket=None, held_by=None, karat=None,
-		search=None, limit=400):
+		search=None, limit=60, offset=0):
 	"""The Hallmark desk's picker: finished pieces that could go for hallmarking,
 	narrowed by the handful of things an operator actually sorts by.
 
@@ -15135,6 +15135,12 @@ def get_hallmarkable(design_type=None, bucket=None, held_by=None, karat=None,
 	cond = ["b.is_finished = 1", "b.stock_status = 'In Stock'",
 		"IFNULL(b.huid, '') = ''"]
 	vals = {}
+	if karat:
+		cond.append("""EXISTS (SELECT 1 FROM `tabBag Material Ledger` l
+			JOIN `tabItem` i ON i.name = l.item
+			WHERE l.order_bag = b.name AND l.entry_type = 'Convert' AND l.direction = 'Out'
+			  AND IFNULL(i.stone_type, '') = '' AND i.metal_purity = %(karat)s)""")
+		vals["karat"] = karat
 	if design_type:
 		cond.append("d.design_type = %(dt)s"); vals["dt"] = design_type
 	if bucket:
@@ -15142,34 +15148,28 @@ def get_hallmarkable(design_type=None, bucket=None, held_by=None, karat=None,
 	if held_by:
 		cond.append("b.held_by = %(hb)s"); vals["hb"] = held_by
 	if search:
-		cond.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s)"); vals["q"] = "%" + search + "%"
-	vals["lim"] = cint(limit) or 400
+		cond.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s OR b.held_by LIKE %(q)s)")
+		vals["q"] = "%" + search + "%"
+	# a piece already on an open batch is never on offer — done in SQL so the
+	# count and the page agree, rather than filtering a page after the fact
+	cond.append("""NOT EXISTS (SELECT 1 FROM `tabHallmarking Item` hi
+		JOIN `tabHallmarking Batch` hb ON hb.name = hi.parent
+		WHERE hi.order_bag = b.name
+		  AND hb.status IN ('Prepared', 'Sent', 'Collected', 'Partially Received'))""")
+	W = " AND ".join(cond)
+	FROM = "FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design"
+	vals["lim"] = max(1, min(cint(limit) or 60, 500))
+	vals["off"] = max(0, cint(offset))
+	total = frappe.db.sql("SELECT COUNT(*) {0} WHERE {1}".format(FROM, W), vals)[0][0]
 	rows = frappe.db.sql("""
 		SELECT b.name, b.design, d.design_type, b.act_gross_weight AS gross,
-			b.act_dmd_weight AS dmd_ct, b.bucket, b.held_by
-		FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design
-		WHERE {0}
+			b.act_dmd_weight AS dmd_ct, b.bucket, b.held_by, b.size
+		{0}
+		WHERE {1}
 		ORDER BY d.design_type, b.design, b.name
-		LIMIT %(lim)s""".format(" AND ".join(cond)), vals, as_dict=True)
-	# karat is not a column — it comes off the piece's own gold item
-	if karat:
-		want = (karat or "").upper()
-		mats = _bag_convert_materials([r.name for r in rows])
-		keep = []
-		for r in rows:
-			for it in (mats.get(r.name) or {}):
-				if frappe.db.get_value("Item", it, "stone_type"):
-					continue
-				if want in (it or "").upper():
-					keep.append(r)
-					break
-		rows = keep
-	# and never offer something already spoken for
-	taken = {x[0] for x in frappe.db.sql("""select i.order_bag from `tabHallmarking Item` i
-		join `tabHallmarking Batch` h on h.name = i.parent
-		where h.status in ('Prepared', 'Sent', 'Collected', 'Partially Received')""")}
-	rows = [r for r in rows if r.name not in taken]
-	return {"rows": rows, "count": len(rows)}
+		LIMIT %(lim)s OFFSET %(off)s""".format(FROM, W), vals, as_dict=True)
+	return {"rows": rows, "count": len(rows), "total": cint(total),
+		"offset": vals["off"], "has_more": vals["off"] + len(rows) < cint(total)}
 
 
 @frappe.whitelist()
@@ -15178,7 +15178,11 @@ def get_hallmark_filter_options():
 	_require_stock(("JW Delivery",))
 	return {
 		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
-		"buckets": frappe.get_all("Finished Bucket", pluck="name", order_by="name"),
+		"buckets": frappe.get_all("Finished Bucket", filters={"active": 1},
+			pluck="name", order_by="name"),
+		"holders": frappe.db.sql_list("""SELECT DISTINCT b.held_by FROM `tabOrder Bag` b
+			WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
+			  AND IFNULL(b.held_by, '') != '' ORDER BY b.held_by"""),
 		"karats": sorted({(k or "").upper() for k in frappe.get_all("Item",
 			filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="metal_purity") if k}),
 	}
