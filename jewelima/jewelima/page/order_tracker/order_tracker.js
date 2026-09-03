@@ -180,7 +180,8 @@ frappe.pages["order-tracker"].on_page_load = function (wrapper) {
 		return `<span class="ot-due ${cls}">${txt}${tag}</span>`;
 	}
 	function stageBadge(r) {
-		const cls = r.stage === "In Stock" ? "stock" : r.stage === "At Certification" ? "cert" : "prod";
+		const cls = r.stage === "In Stock" ? "stock"
+			: (r.stage === "At Certification" || r.stage === "At Hallmarking") ? "cert" : "prod";
 		return `<span class="ot-badge ${cls}">${esc(r.stage)}</span>` +
 			(r.awaiting_stone ? `<span class="ot-flag stn" title="${__("Awaiting stone issue")}">STN</span>` : "") +
 			(r.oos ? `<span class="ot-flag oos" title="${__("Out of stock")}">OOS</span>` : "");

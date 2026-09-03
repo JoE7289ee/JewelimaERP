@@ -99,7 +99,8 @@ frappe.pages["design-info"].on_page_load = function (wrapper) {
 	});
 
 	function paint(D) {
-		const SCLASS = { "In Production": "ip", "In Stock": "is", "Sold": "so", "Cancelled": "cn", "At Certification": "is" };
+		const SCLASS = { "In Production": "ip", "In Stock": "is", "Sold": "so", "Cancelled": "cn",
+			"At Certification": "is", "At Hallmarking": "is" };
 		const bagChips = (D.bags || []).map((b) =>
 			`<a class="jw-card-link di-chip" data-card="${esc(b.name)}">${esc(b.name)}${b.location ? `<span style="font-family:var(--font-family);font-weight:600;color:var(--text-muted);"> · ${esc(b.location)}</span>` : ""}</a>`).join(" ");
 		const sibRows = (D.siblings || []).map((s) => `<tr class="${s.name === D.name ? "" : "di-sib"}" ${s.name === D.name ? "" : `data-design="${esc(s.name)}" style="cursor:pointer;"`}>

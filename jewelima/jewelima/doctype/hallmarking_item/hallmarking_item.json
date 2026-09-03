@@ -56,8 +56,7 @@
    "fieldtype": "Data",
    "label": "HUID",
    "in_list_view": 1,
-   "length": 6,
-   "description": "The six-character code stamped on the piece."
+   "description": "The code(s) stamped on the piece \u2014 two if it was stamped twice, PENDING while one is awaited."
   },
   {
    "fieldname": "received",

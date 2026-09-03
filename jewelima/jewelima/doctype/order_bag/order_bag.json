@@ -152,7 +152,7 @@
    "options": "Design"
   },
   {
-   "description": "The catalog card this piece sells under — selling and reports key on this code.",
+   "description": "The catalog card this piece sells under \u2014 selling and reports key on this code.",
    "fieldname": "design_bank",
    "fieldtype": "Link",
    "label": "Design Bank",
@@ -173,7 +173,7 @@
    "label": "Qty"
   },
   {
-   "description": "Options come from the design type's size list (Setup → Design Types).",
+   "description": "Options come from the design type's size list (Setup \u2192 Design Types).",
    "fieldname": "size",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -191,7 +191,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Location",
-   "options": "ORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION\nREWORK",
+   "options": "ORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION\nREWORK\nCERTIFICATION\nHALLMARKING",
    "read_only": 1
   },
   {
@@ -239,7 +239,7 @@
   },
   {
    "default": "0",
-   "description": "Set when the ornament is made — locks the BOM (Plan).",
+   "description": "Set when the ornament is made \u2014 locks the BOM (Plan).",
    "fieldname": "is_finished",
    "fieldtype": "Check",
    "label": "Ornament Made",
@@ -277,7 +277,7 @@
   },
   {
    "default": "0",
-   "description": "Awaiting a CAD design — must go to CAD first; can't be collected there until a real design is assigned (the flag then clears).",
+   "description": "Awaiting a CAD design \u2014 must go to CAD first; can't be collected there until a real design is assigned (the flag then clears).",
    "fieldname": "is_cad",
    "fieldtype": "Check",
    "in_standard_filter": 1,
@@ -292,7 +292,7 @@
    "read_only": 1
   },
   {
-   "description": "Target karat gold (22KYG, 18KPG, …).",
+   "description": "Target karat gold (22KYG, 18KPG, \u2026).",
    "fieldname": "cad_karat",
    "fieldtype": "Link",
    "label": "CAD Purity",
@@ -304,7 +304,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Gold weight target — free text, e.g. '8.5' or 'MINIMUM 8' or 'RANGE 8 to 9'.",
+   "description": "Gold weight target \u2014 free text, e.g. '8.5' or 'MINIMUM 8' or 'RANGE 8 to 9'.",
    "fieldname": "cad_gold_weight",
    "fieldtype": "Data",
    "label": "CAD Gold Weight",
@@ -325,7 +325,7 @@
    "read_only": 1
   },
   {
-   "description": "Free-text reference (a catalog code, a customer's photo ref, …).",
+   "description": "Free-text reference (a catalog code, a customer's photo ref, \u2026).",
    "fieldname": "cad_reference",
    "fieldtype": "Data",
    "label": "CAD Reference",
@@ -350,11 +350,11 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Stock Status",
-   "options": "In Production\nIn Stock\nAt Certification\nSold\nCancelled",
+   "options": "In Production\nIn Stock\nAt Certification\nAt Hallmarking\nSold\nCancelled",
    "read_only": 1
   },
   {
-   "description": "Who holds this piece — the order's party, or JD Stock if it has none.",
+   "description": "Who holds this piece \u2014 the order's party, or JD Stock if it has none.",
    "fieldname": "held_by",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -367,7 +367,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "BIS Hallmark Unique ID — filled when the piece returns from hallmarking (certification flow).",
+   "description": "BIS Hallmark Unique ID \u2014 filled when the piece returns from hallmarking (certification flow).",
    "fieldname": "huid",
    "fieldtype": "Data",
    "label": "HUID"
@@ -387,14 +387,14 @@
    "read_only": 1
   },
   {
-   "description": "When the piece (re)entered stock — set at Make Product / Import, refreshed when certification brings it back.",
+   "description": "When the piece (re)entered stock \u2014 set at Make Product / Import, refreshed when certification brings it back.",
    "fieldname": "in_stock_on",
    "fieldtype": "Datetime",
    "label": "In Stock Since",
    "read_only": 1
   },
   {
-   "description": "Extra price-chart categories that apply to this piece (Back Chain, Navaratna, Plain Gold / CZ, ...). The design type covers the normal case — tag only the odd ones. Extendable: add new Charge Category records as new charges appear (e.g. CAD Rate).",
+   "description": "Extra price-chart categories that apply to this piece (Back Chain, Navaratna, Plain Gold / CZ, ...). The design type covers the normal case \u2014 tag only the odd ones. Extendable: add new Charge Category records as new charges appear (e.g. CAD Rate).",
    "fieldname": "charge_categories",
    "fieldtype": "Table MultiSelect",
    "label": "Charge Categories",
@@ -406,7 +406,7 @@
    "label": "BOM (Plan)"
   },
   {
-   "description": "Working BOM for this bag — seeded from the design, editable until the ornament is made (then locked). This is the PLAN; the weights below are derived from it.",
+   "description": "Working BOM for this bag \u2014 seeded from the design, editable until the ornament is made (then locked). This is the PLAN; the weights below are derived from it.",
    "fieldname": "bag_bom",
    "fieldtype": "Table",
    "label": "Bill of Materials",
@@ -415,7 +415,7 @@
   {
    "fieldname": "weights_section",
    "fieldtype": "Section Break",
-   "label": "Plan — Weights & Purity"
+   "label": "Plan \u2014 Weights & Purity"
   },
   {
    "description": "Derived from the BOM x qty.",
@@ -446,7 +446,7 @@
   {
    "fieldname": "stones_section",
    "fieldtype": "Section Break",
-   "label": "Plan — Stones"
+   "label": "Plan \u2014 Stones"
   },
   {
    "fieldname": "dmd_no",
@@ -584,7 +584,7 @@
   {
    "fieldname": "act_weights_section",
    "fieldtype": "Section Break",
-   "label": "Actual — Weights & Purity"
+   "label": "Actual \u2014 Weights & Purity"
   },
   {
    "description": "Derived live from the materials actually in the bag (Current Contents).",
@@ -623,7 +623,7 @@
   {
    "fieldname": "act_stones_section",
    "fieldtype": "Section Break",
-   "label": "Actual — Stones"
+   "label": "Actual \u2014 Stones"
   },
   {
    "fieldname": "act_dmd_no",
@@ -855,7 +855,7 @@
    "label": "Attachments"
   },
   {
-   "description": "Product photos and any other files for this bag — add as many as you like.",
+   "description": "Product photos and any other files for this bag \u2014 add as many as you like.",
    "fieldname": "attachments",
    "fieldtype": "Table",
    "label": "Attachments",

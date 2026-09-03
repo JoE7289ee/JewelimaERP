@@ -74,6 +74,7 @@ frappe.pages["job-order-status"].on_page_load = function (wrapper) {
 
 	function statusBadge(b) {
 		if (b.stock_status === "Cancelled") return `<span class="jo-badge canc">CANCELLED</span>`;
+		if (b.stock_status === "At Hallmarking") return `<span class="jo-badge pre">AT HALLMARKING</span>`;
 		if (b.stock_status === "At Certification") return `<span class="jo-badge pre">AT CERTIFICATION</span>`;
 		if (b.is_finished) return `<span class="jo-badge ${b.stock_status === "Sold" ? "sold" : "prod"}">PRODUCT${b.stock_status ? " — " + esc(b.stock_status) : ""}</span>`;
 		const s = b.status || "";

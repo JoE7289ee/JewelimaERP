@@ -8,7 +8,10 @@
 //
 // This is the one real difference from confirming a lab certificate: a trip to
 // the hallmarking centre exists FOR the code, so confirming without one is
-// refused rather than quietly recorded. Each scan is one lightweight race-safe
+// refused rather than quietly recorded. A piece can come back stamped TWICE —
+// two parts, two codes — and both go on the bag, because the bill counts each.
+// PENDING is accepted for a code that is still to come; the billing already
+// understands it, so one missing slip does not hold up a batch. Each scan is one lightweight race-safe
 // call, so several people can work a batch at once and a card someone else just
 // took answers "already confirmed by X".
 // Route: /app/confirm-huid
@@ -62,10 +65,12 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 			<div class="ch-f ch-card"><label>${__("Scan card")}</label>
 				<input type="text" placeholder="${__("card no.")}"></div>
 			<div class="ch-f ch-huid"><label>${__("HUID")}</label>
-				<input type="text" maxlength="6" placeholder="${__("6 chars")}"></div>
+				<input type="text" class="ch-h1" maxlength="7" placeholder="${__("6 chars")}"></div>
+			<div class="ch-f ch-huid ch-huid2"><label>${__("2nd HUID")}</label>
+				<input type="text" class="ch-h2" maxlength="7" placeholder="${__("if stamped twice")}"></div>
 			<button class="ch-mode">${__("CONFIRMING")}</button>
 			<span style="font-size:12px;color:var(--text-muted);">${
-				__("card, then HUID, then Enter")}</span>
+				__("card, HUID, Enter · PENDING if the code is still to come")}</span>
 		</div>
 		<div class="ch-msg"></div>
 		<div class="ch-cols">
@@ -75,7 +80,8 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 	`);
 
 	const $card = root.find(".ch-card input");
-	const $huid = root.find(".ch-huid input");
+	const $huid = root.find(".ch-h1");
+	const $huid2 = root.find(".ch-h2");
 	const msg = (k, h) => root.find(".ch-msg").removeClass("ok err").addClass(k).html(h);
 	const focusCard = () => setTimeout(() => $card.focus(), 30);
 
@@ -98,7 +104,8 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 				</div>
 				<div class="ch-chips">${b.pieces.map((p) => `
 					<span class="ch-chip ${p.state}" title="${esc(p.design || "")}${p.by ? " · " + esc(p.by) : ""}">
-						${esc(p.order_bag)}${p.huid ? `<span class="code">${esc(p.huid)}</span>` : ""}</span>`).join("")}</div>
+						${esc(p.order_bag)}${p.huid ? p.huid.split(",").map((h) =>
+							`<span class="code">${esc(h.trim())}</span>`).join("") : ""}</span>`).join("")}</div>
 			</div>`).join("") : `<div class="ch-empty">${__("Nothing collected and waiting. Collect a batch on Hallmark Out first.")}</div>`);
 		const pend = S.batches.reduce((a, b) => a + b.pieces.filter((p) => p.state === "pending").length, 0);
 		page.set_indicator(`${pend} ${__("to confirm")}`, pend ? "orange" : "green");
@@ -113,10 +120,11 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 
 	function submit() {
 		const code = ($card.val() || "").trim();
-		const huid = ($huid.val() || "").trim().toUpperCase();
+		const both = [($huid.val() || "").trim(), ($huid2.val() || "").trim()]
+			.filter(Boolean).join(", ").toUpperCase();
 		if (!code) return focusCard();
 		frappe.call({ method: API + ".huid_scan", freeze: false,
-			args: { barcode: code, huid: huid, mode: S.mode } })
+			args: { barcode: code, huid: both, mode: S.mode } })
 			.then((r) => {
 				const m = r.message || {};
 				if (m.rejected_scan) {
@@ -129,7 +137,7 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 					S.hist.unshift({ code, kind: "ok", tag: __("HUID"), why: m.huid });
 					msg("ok", __("<b>{0}</b> → HUID <b>{1}</b>{2}",
 						[esc(code), esc(m.huid), m.batch_done ? " · " + __("batch {0} complete", [m.batch]) : ""]));
-					$huid.val("");
+					$huid.val(""); $huid2.val("");
 				}
 				$card.val("");
 				paintHist();
@@ -146,7 +154,15 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		if (S.mode === "reject") return submit();
 		$huid.focus();
 	});
+	// Enter on the first code submits when nothing is typed in the second, so the
+	// common one-code piece is still card, code, Enter
 	$huid.on("keydown", (e) => {
+		if (e.which !== 13 && e.key !== "Enter") return;
+		e.preventDefault();
+		if (($huid2.val() || "").trim()) return $huid2.focus();
+		submit();
+	});
+	$huid2.on("keydown", (e) => {
 		if (e.which !== 13 && e.key !== "Enter") return;
 		e.preventDefault();
 		submit();
@@ -156,6 +172,7 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		$(this).toggleClass("reject", S.mode === "reject")
 			.text(S.mode === "reject" ? __("REJECTING") : __("CONFIRMING"));
 		root.find(".ch-huid").toggle(S.mode === "accept");
+		if (S.mode === "reject") { $huid.val(""); $huid2.val(""); }
 		focusCard();
 	});
 

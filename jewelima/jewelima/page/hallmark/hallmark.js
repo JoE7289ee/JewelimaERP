@@ -65,8 +65,11 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			<div class="hm-f"><label>${__("Centre")}</label><select class="hm-center"></select></div>
 			<div class="hm-f hm-scan"><label>${__("Scan piece")}</label>
 				<input type="text" placeholder="${__("scan / type card no. + Enter")}"></div>
+			<button class="hm-btn hm-pick">${__("Add by filter…")}</button>
 			<span class="hm-actions">
 				<button class="hm-go" disabled>${__("PREP")}</button>
+				<button class="hm-go hm-gosend" disabled
+					style="background:#2e7d32;">${__("PREP & SEND")}</button>
 				<button class="hm-btn hm-clear">${__("Clear")}</button>
 			</span>
 		</div>
@@ -120,8 +123,10 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				+ `<span><b>${g.toFixed(3)}</b> g ${__("gross")}</span>`
 				+ `<span><b>${d.toFixed(3)}</b> ct ${__("diamond")}</span>`);
 		}
-		root.find(".hm-go").prop("disabled", !(S.rows.length && S.center))
-			.text(S.rows.length ? __("PREP {0} PIECE(S)", [S.rows.length]) : __("PREP"));
+		const ready = !!(S.rows.length && S.center);
+		root.find(".hm-go").prop("disabled", !ready);
+		root.find(".hm-go").not(".hm-gosend")
+			.text(S.rows.length ? __("PREP {0}", [S.rows.length]) : __("PREP"));
 		page.set_indicator(`${S.rows.length} ${__("piece(s)")}`, S.rows.length ? "blue" : "gray");
 	}
 
@@ -173,20 +178,112 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	});
 	root.on("click", ".hm-clear", () => { S.rows = []; msg("", ""); paint(); focusScan(); });
 
+	// Scanning is right for a few pieces; hallmarking is nearly every piece, so the
+	// desk can also pull a whole slice in — "every RING in the JEWELIMA bucket".
+	// Everything picked still goes through the same per-piece validation as a scan.
+	root.on("click", ".hm-pick", function () {
+		if (!S.center) { msg("warn", __("Pick the centre first.")); return focusScan(); }
+		frappe.call({ method: API + ".get_hallmark_filter_options" }).then((r) => {
+			const o = r.message || {};
+			const d = new frappe.ui.Dialog({
+				title: __("Add pieces by filter"), size: "large",
+				fields: [
+					{ fieldname: "design_type", fieldtype: "Select", label: __("Design type"),
+						options: [""].concat(o.design_types || []).join("\n") },
+					{ fieldname: "cb1", fieldtype: "Column Break" },
+					{ fieldname: "bucket", fieldtype: "Select", label: __("Bucket"),
+						options: [""].concat(o.buckets || []).join("\n") },
+					{ fieldname: "cb2", fieldtype: "Column Break" },
+					{ fieldname: "karat", fieldtype: "Select", label: __("Karat"),
+						options: [""].concat(o.karats || []).join("\n") },
+					{ fieldname: "sb", fieldtype: "Section Break" },
+					{ fieldname: "search", fieldtype: "Data", label: __("Card or design contains") },
+					{ fieldname: "res", fieldtype: "HTML" },
+				],
+				primary_action_label: __("Add ticked"),
+				primary_action() {
+					const picked = d.fields_dict.res.$wrapper.find(".hp-cb:checked")
+						.map(function () { return $(this).data("n"); }).get();
+					if (!picked.length) {
+						return frappe.show_alert({ message: __("Tick something first."), indicator: "orange" }, 3);
+					}
+					d.hide();
+					// one at a time through the SAME guard a scan uses, so a piece that
+					// cannot go is refused here too and lands in the history with why
+					frappe.dom.freeze(__("Adding {0}…", [picked.length]));
+					picked.reduce((chain, n) => chain.then(() => add(n)), Promise.resolve())
+						.then(() => {
+							frappe.dom.unfreeze();
+							msg("ok", __("{0} on the batch.", [S.rows.length]));
+							focusScan();
+						}).catch(() => frappe.dom.unfreeze());
+				},
+			});
+			const $res = d.fields_dict.res.$wrapper;
+			const look = frappe.utils.debounce(() => {
+				const v = d.get_values(true) || {};
+				$res.html(`<div style="padding:12px;color:var(--text-muted);">${__("Looking…")}</div>`);
+				frappe.call({ method: API + ".get_hallmarkable", freeze: false,
+					args: { design_type: v.design_type, bucket: v.bucket, karat: v.karat, search: v.search } })
+					.then((rr) => {
+						const rows = (rr.message || {}).rows || [];
+						$res.html(rows.length ? `
+							<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+								<b>${__("{0} piece(s)", [rows.length])}</b>
+								<button class="btn btn-xs btn-default hp-all">${__("Tick all")}</button></div>
+							<div style="max-height:340px;overflow:auto;border:1px solid var(--border-color);border-radius:8px;">
+							<table class="table table-sm" style="margin:0;font-size:12.5px;">
+							<thead><tr><th style="width:34px;"></th><th>${__("Card")}</th><th>${__("Design")}</th>
+								<th>${__("Type")}</th><th class="text-right">${__("Gross g")}</th>
+								<th>${__("Bucket")}</th></tr></thead><tbody>
+							${rows.map((x) => `<tr>
+								<td><input type="checkbox" class="hp-cb" data-n="${frappe.utils.escape_html(x.name)}"></td>
+								<td><b>${frappe.utils.escape_html(x.name)}</b></td>
+								<td>${frappe.utils.escape_html(x.design || "")}</td>
+								<td>${frappe.utils.escape_html(x.design_type || "")}</td>
+								<td class="text-right">${(parseFloat(x.gross) || 0).toFixed(3)}</td>
+								<td>${frappe.utils.escape_html(x.bucket || "")}</td></tr>`).join("")}
+							</tbody></table></div>`
+							: `<div style="padding:22px;text-align:center;color:var(--text-muted);">${
+								__("Nothing matches — or everything that does is already spoken for.")}</div>`);
+					});
+			}, 350);
+			["design_type", "bucket", "karat", "search"].forEach((f) => {
+				d.fields_dict[f].$input.on("change input", look);
+			});
+			$res.on("click", ".hp-all", function () {
+				const any = $res.find(".hp-cb:not(:checked)").length > 0;
+				$res.find(".hp-cb").prop("checked", any);
+			});
+			d.show();
+			look();
+		});
+	});
+
 	root.on("click", ".hm-go", function () {
 		if (!S.rows.length || !S.center) return;
-		frappe.dom.freeze(__("Prepping…"));
+		const alsoSend = $(this).hasClass("hm-gosend");
+		frappe.dom.freeze(alsoSend ? __("Prepping and sending…") : __("Prepping…"));
 		frappe.call({ method: API + ".hall_prep_create",
 			args: { center: S.center, bags: JSON.stringify(S.rows.map((r) => r.order_bag)) } })
 			.then((r) => {
-				frappe.dom.unfreeze();
 				const m = r.message || {};
-				frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Send it from Send Hallmarking.",
-					[m.name, m.count]), indicator: "green" }, 7);
-				S.rows = [];
-				msg("ok", __("Batch <b>{0}</b> is ready to send.", [esc(m.name)]));
-				paint();
-				focusScan();
+				if (!alsoSend) {
+					frappe.dom.unfreeze();
+					frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Send it from Send Hallmarking.",
+						[m.name, m.count]), indicator: "green" }, 7);
+					msg("ok", __("Batch <b>{0}</b> is ready to send.", [esc(m.name)]));
+					S.rows = []; paint(); focusScan();
+					return;
+				}
+				return frappe.call({ method: API + ".send_hall_prep", args: { name: m.name } })
+					.then((rr) => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({ message: __("{0} sent — {1} piece(s) out to {2}.",
+							[m.name, (rr.message || {}).count, S.center]), indicator: "green" }, 7);
+						msg("ok", __("Batch <b>{0}</b> is on its way.", [esc(m.name)]));
+						S.rows = []; paint(); focusScan();
+					});
 			}).catch(() => frappe.dom.unfreeze());
 	});
 

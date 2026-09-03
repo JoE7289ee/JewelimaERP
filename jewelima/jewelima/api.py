@@ -2592,6 +2592,12 @@ def get_location_transfers(location, from_date=None, to_date=None, q=None):
 # reads its BUCKET as its location — it is a thing on a shelf, not a card at a
 # bench — and this is the one place that is neither.
 CERT_LOCATION = "CERTIFICATION"
+# A piece is AWAY when it has left the building for a lab or a hallmarking
+# centre. Every "you cannot touch it yet" guard and every board that buckets a
+# card asks this, so the two statuses can never drift apart in one place and not
+# another — which is exactly how a hallmarked piece would have become
+# cancellable the day hallmarking got its own status.
+AWAY_STATUSES = ("At Certification", "At Hallmarking")
 
 
 def _party_group_name(customer):
@@ -3821,8 +3827,9 @@ def _cancel_guard(bag):
 		return frappe._("{0} is already cancelled.").format(bag.name)
 	if bag.stock_status == "Sold":
 		return frappe._("{0} is SOLD — sold pieces don't cancel.").format(bag.name)
-	if bag.stock_status == "At Certification":
-		return frappe._("{0} is at certification — bring it back first.").format(bag.name)
+	if bag.stock_status in AWAY_STATUSES:
+		return frappe._("{0} is away at {1} — bring it back first.").format(
+			bag.name, "hallmarking" if bag.stock_status == "At Hallmarking" else "certification")
 	if bag.is_finished or bag.stock_status == "In Stock":
 		return frappe._("{0} is a finished product — handle it through stock/sale, not cancellation.").format(bag.name)
 	return None
@@ -7542,10 +7549,11 @@ def get_finished_stock_matrix(status="In Stock"):
 	"""One slice of the finished pool, grouped by DESIGN TYPE: rows = design types,
 	columns = the customer holding the pieces (held_by, JD Stock first), cells =
 	piece counts (+ gold/stones/barcodes for the tooltip). status "In Stock"
-	feeds the Finished Stock page, "At Certification" the At Certification page.
+	feeds the Finished Stock page, "At Certification" the At Certification page
+	and "At Hallmarking" the At Hallmarking one.
 	Piece weights come from the finished bags' Convert rows — raw materials are
 	never shown loose here."""
-	if status not in ("In Stock", "At Certification"):
+	if status not in ("In Stock", "At Certification", "At Hallmarking"):
 		frappe.throw(frappe._("Unknown status: {0}").format(status))
 	bags = frappe.get_all(
 		"Order Bag",
@@ -14941,8 +14949,8 @@ def export_igi_xlsx(bags, metal_type=None):
 		b = frappe.db.get_value("Order Bag", nm, [
 			"is_finished", "stock_status", "design", "huid", "act_gross_weight",
 			"act_dmd_weight", "act_dmd_no", "act_pdmd_weight", "act_pdmd_no"], as_dict=True)
-		if not b or not b.is_finished or b.stock_status not in ("In Stock", "At Certification"):
-			frappe.throw(frappe._("{0} is not a finished piece In Stock / At Certification.").format(nm))
+		if not b or not b.is_finished or b.stock_status not in ("In Stock", "At Certification", "At Hallmarking"):
+			frappe.throw(frappe._("{0} is not a finished piece In Stock / At Certification / At Hallmarking.").format(nm))
 		dtype = frappe.db.get_value("Design", b.design, "design_type") if b.design else ""
 		desc = frappe.db.get_value("IGI Description Map", dtype, "igi_description") if dtype else None
 		if not desc:
@@ -15017,12 +15025,13 @@ def export_igi_xlsx(bags, metal_type=None):
 # already knows: Hallmark (prepare) -> Send Hallmarking -> Hallmark Out
 # (collect) -> Confirm HUID (stamp the codes).
 #
-# The physical stock state is deliberately SHARED with certification: a piece
-# away at a hallmarking centre is "At Certification" in the same warehouse, so
-# the At Certification report and every bucket board keep telling the truth
-# without a second parallel stock world.
+# A piece away at a hallmarking centre sits in its OWN warehouse and carries its
+# own stock status. Sharing certification's made the At Certification report
+# count hallmarked pieces as lab work, which is a lie the floor would have had
+# to know about to read the board.
 
-HALL_LOCATION = CERT_LOCATION
+HALL_LOCATION = "HALLMARKING"
+HALL_STATUS = "At Hallmarking"
 
 
 def _hall_validate_piece(nm, taken=None):
@@ -15105,6 +15114,71 @@ def hall_prep_create(center, bags=None):
 
 
 @frappe.whitelist()
+def get_hallmarkable(design_type=None, bucket=None, held_by=None, karat=None,
+		search=None, limit=400):
+	"""The Hallmark desk's picker: finished pieces that could go for hallmarking,
+	narrowed by the handful of things an operator actually sorts by.
+
+	Scanning is right for a few pieces. Hallmarking is 'nearly every piece', so
+	the desk also has to be able to say "every RING in the JEWELIMA bucket" and
+	get 80 of them. The filters are the ones the floor already thinks in.
+
+	A piece already carrying a HUID is EXCLUDED — it has been hallmarked — as is
+	anything already on an open batch, so the list only ever offers work that can
+	actually be done."""
+	_require_stock(("JW Delivery",))
+	cond = ["b.is_finished = 1", "b.stock_status = 'In Stock'",
+		"IFNULL(b.huid, '') = ''"]
+	vals = {}
+	if design_type:
+		cond.append("d.design_type = %(dt)s"); vals["dt"] = design_type
+	if bucket:
+		cond.append("b.bucket = %(bk)s"); vals["bk"] = bucket
+	if held_by:
+		cond.append("b.held_by = %(hb)s"); vals["hb"] = held_by
+	if search:
+		cond.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s)"); vals["q"] = "%" + search + "%"
+	vals["lim"] = cint(limit) or 400
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, d.design_type, b.act_gross_weight AS gross,
+			b.act_dmd_weight AS dmd_ct, b.bucket, b.held_by
+		FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design
+		WHERE {0}
+		ORDER BY d.design_type, b.design, b.name
+		LIMIT %(lim)s""".format(" AND ".join(cond)), vals, as_dict=True)
+	# karat is not a column — it comes off the piece's own gold item
+	if karat:
+		want = (karat or "").upper()
+		mats = _bag_convert_materials([r.name for r in rows])
+		keep = []
+		for r in rows:
+			for it in (mats.get(r.name) or {}):
+				if frappe.db.get_value("Item", it, "stone_type"):
+					continue
+				if want in (it or "").upper():
+					keep.append(r)
+					break
+		rows = keep
+	# and never offer something already spoken for
+	taken = {x[0] for x in frappe.db.sql("""select i.order_bag from `tabHallmarking Item` i
+		join `tabHallmarking Batch` h on h.name = i.parent
+		where h.status in ('Prepared', 'Sent', 'Collected', 'Partially Received')""")}
+	rows = [r for r in rows if r.name not in taken]
+	return {"rows": rows, "count": len(rows)}
+
+
+@frappe.whitelist()
+def get_hallmark_filter_options():
+	"""What the picker can filter by, from what is actually there to hallmark."""
+	_require_stock(("JW Delivery",))
+	return {
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
+		"buckets": frappe.get_all("Finished Bucket", pluck="name", order_by="name"),
+		"karats": sorted({(k or "").upper() for k in frappe.get_all("Item",
+			filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="metal_purity") if k}),
+	}
+
+@frappe.whitelist()
 def get_hall_preps():
 	"""Send Hallmarking: every Prepared batch with its summary, plus recent."""
 	out = {"prepared": [], "recent": []}
@@ -15162,9 +15236,9 @@ def hall_prep_cancel(name):
 
 @frappe.whitelist()
 def send_hall_prep(name):
-	"""The SEND: one stock move Finished Goods -> At Certification for everything
-	the pieces hold, the bags flip At Certification, status -> Sent."""
-	from jewelima.setup import CERTIFICATION_WAREHOUSE
+	"""The SEND: one stock move Finished Goods -> At Hallmarking for everything the
+	pieces hold, the bags flip At Hallmarking, status -> Sent."""
+	from jewelima.setup import HALLMARKING_WAREHOUSE
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only Prepared batches send.").format(name, d.status))
@@ -15179,7 +15253,7 @@ def send_hall_prep(name):
 	for mats in _bag_convert_materials(bags).values():
 		for it, q in mats.items():
 			totals[it] = totals.get(it, 0) + q
-	se = _stock_move_many(totals, _wh("Finished Goods"), _wh(CERTIFICATION_WAREHOUSE))
+	se = _stock_move_many(totals, _wh("Finished Goods"), _wh(HALLMARKING_WAREHOUSE))
 	d.stock_entry = se
 	d.status = "Sent"
 	d.sent_on = frappe.utils.today()
@@ -15187,7 +15261,7 @@ def send_hall_prep(name):
 	for nm in bags:
 		# not in its bucket while it is away at the centre
 		frappe.db.set_value("Order Bag", nm,
-			{"stock_status": "At Certification", "location": HALL_LOCATION})
+			{"stock_status": HALL_STATUS, "location": HALL_LOCATION})
 	frappe.db.commit()
 	return {"name": d.name, "count": len(bags), "stock_entry": se}
 
@@ -15216,10 +15290,10 @@ def get_hallmarking_out():
 
 @frappe.whitelist()
 def collect_hallmarking(name):
-	"""The packet came back: COLLECT the whole batch — stock At Certification ->
+	"""The packet came back: COLLECT the whole batch — stock At Hallmarking ->
 	Finished Goods, bags back In Stock, status -> Collected. NOT confirmed: the
 	HUIDs get stamped piece by piece on Confirm HUID."""
-	from jewelima.setup import CERTIFICATION_WAREHOUSE
+	from jewelima.setup import HALLMARKING_WAREHOUSE
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Sent":
 		frappe.throw(frappe._("{0} is {1} — only Sent batches collect.").format(name, d.status))
@@ -15228,7 +15302,7 @@ def collect_hallmarking(name):
 	for mats in _bag_convert_materials(bags).values():
 		for it, q in mats.items():
 			totals[it] = totals.get(it, 0) + q
-	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
+	se = _stock_move_many(totals, _wh(HALLMARKING_WAREHOUSE), _wh("Finished Goods"))
 	now = frappe.utils.now_datetime()
 	for nm in bags:
 		frappe.db.set_value("Order Bag", nm, {
@@ -15268,13 +15342,19 @@ def huid_scan(barcode, huid=None, mode="accept"):
 	guarded UPDATE wins for exactly one scanner, so several people can work the
 	same batch. Every failure comes back as data for the scan history."""
 	nm = (barcode or "").strip()
-	code = (huid or "").strip().upper()
+	# a piece can come back with TWO codes — two stamped parts, two HUIDs — and the
+	# bag stores them comma-separated, which is what the bill counts and the tag
+	# prints. PENDING means hallmarked with the code still to come; the billing
+	# already understands it, so the batch is not held up for a slip of paper.
+	codes = [c.strip().upper() for c in re.split(r"[,/\s]+", huid or "") if c.strip()]
+	code = ", ".join(codes)
 	if mode not in ("accept", "reject"):
 		mode = "accept"
-	if mode == "accept" and not code:
+	if mode == "accept" and not codes:
 		return {"rejected_scan": frappe._("Type the HUID — that is what the piece went for")}
-	if mode == "accept" and len(code) != 6:
-		return {"rejected_scan": frappe._("A HUID is six characters — {0} is {1}").format(code, len(code))}
+	for one in codes:
+		if one != "PENDING" and len(one) != 6:
+			return {"rejected_scan": frappe._("A HUID is six characters — {0} is {1}").format(one, len(one))}
 	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
 		from `tabHallmarking Item` i join `tabHallmarking Batch` h on h.name = i.parent
 		where i.order_bag = %s and h.status in ('Collected', 'Partially Received')
@@ -15289,9 +15369,14 @@ def huid_scan(barcode, huid=None, mode="accept"):
 	if r.rejected:
 		return {"rejected_scan": frappe._("Already in the reject queue")}
 	if mode == "accept":
-		clash = frappe.db.get_value("Order Bag", {"huid": code, "name": ["!=", nm]}, "name")
-		if clash:
-			return {"rejected_scan": frappe._("HUID {0} is already on {1}").format(code, clash)}
+		for one in codes:
+			if one == "PENDING":
+				continue
+			clash = frappe.db.sql("""select name from `tabOrder Bag`
+				where name != %s and concat(', ', upper(huid), ',') like %s limit 1""",
+				(nm, "%, " + one + ",%"))
+			if clash:
+				return {"rejected_scan": frappe._("HUID {0} is already on {1}").format(one, clash[0][0])}
 	now = frappe.utils.now_datetime()
 	user = frappe.session.user
 	field = "received" if mode == "accept" else "rejected"
@@ -15303,8 +15388,14 @@ def huid_scan(barcode, huid=None, mode="accept"):
 	if claimed != user:
 		return {"rejected_scan": frappe._("Already confirmed by {0}").format(claimed or "?")}
 	if mode == "accept":
-		# the code goes onto the PIECE — this is the record everything else reads
-		frappe.db.set_value("Order Bag", nm, "huid", code, update_modified=False)
+		# the codes go onto the PIECE — this is the record the bill, the tag and the
+		# sale all read. Appended, never replaced: a second trip for a second part
+		# must not wipe the first part's code.
+		have = [c.strip().upper() for c in (frappe.db.get_value("Order Bag", nm, "huid") or "").split(",") if c.strip()]
+		for one in codes:
+			if one not in have:
+				have.append(one)
+		frappe.db.set_value("Order Bag", nm, "huid", ", ".join(have), update_modified=False)
 		# and HALLMARKING stays on the certifications trail. Hallmarking has its own
 		# doctype now, but a card's costing reads the hallmark charge off this trail
 		# (get_card_costing, is_hall) — drop the stamp and every hallmarked piece
@@ -16239,7 +16330,7 @@ def get_job_order_status(job_order):
 			return "cancelled"
 		if ss == "Sold":
 			return "sold"
-		if ss == "At Certification":
+		if ss in AWAY_STATUSES:
 			return "cert"
 		if x["is_finished"] or ss == "In Stock":
 			return "instock"
@@ -17050,8 +17141,8 @@ def get_order_tracker(limit=100, offset=0, owner=None, stage=None, due=None, q=N
 		ss = r.stock_status or ""
 		if cint(r.is_finished) or ss == "In Stock":
 			st = "In Stock"
-		elif ss == "At Certification":
-			st = "At Certification"
+		elif ss in AWAY_STATUSES:
+			st = ss
 		else:
 			st = r.location or "—"
 		d = frappe.utils.getdate(r.due_date) if r.due_date else None
@@ -17132,7 +17223,7 @@ def get_order_tracker(limit=100, offset=0, owner=None, stage=None, due=None, q=N
 			kpi["due_soon"] += 1
 		if stage == "In Stock":
 			kpi["in_stock"] += 1
-		elif stage == "At Certification":
+		elif stage in AWAY_STATUSES:
 			kpi["at_cert"] += 1
 		else:
 			kpi["in_production"] += 1
@@ -17212,8 +17303,8 @@ def get_following():
 		ss = r.stock_status or ""
 		if cint(r.is_finished) or ss == "In Stock":
 			stage = "In Stock"
-		elif ss == "At Certification":
-			stage = "At Certification"
+		elif ss in AWAY_STATUSES:
+			stage = ss
 		else:
 			stage = r.location or "—"
 		j = jos.get(r.job_order)
@@ -17240,7 +17331,7 @@ def get_following():
 		j["_stages"][stage] = j["_stages"].get(stage, 0) + (cint(r.qty) or 1)
 
 	def _cls(stage):
-		return "stock" if stage == "In Stock" else "cert" if stage == "At Certification" else "prod"
+		return "stock" if stage == "In Stock" else "cert" if stage in AWAY_STATUSES else "prod"
 
 	users, out = {}, []
 	kpi = {"total": 0, "cards": 0, "overdue": 0, "due_soon": 0, "in_production": 0,
@@ -17251,7 +17342,7 @@ def get_following():
 		j["where"] = [{"stage": s, "n": n, "cls": _cls(s)}
 			for s, n in sorted(stages.items(), key=lambda kv: (-kv[1], kv[0]))]
 		any_prod = any(_cls(s) == "prod" for s in stages)
-		any_cert = any(s == "At Certification" for s in stages)
+		any_cert = any(s in AWAY_STATUSES for s in stages)
 		all_stock = all(s == "In Stock" for s in stages)
 		out.append(j)
 		u = users.setdefault(j["owner"], {"user": j["owner"], "name": j["owner_name"], "count": 0, "overdue": 0})
@@ -18687,6 +18778,7 @@ def get_total_gold():
 	named = [
 		(_wh("Finished Goods"), "Finished Products"),
 		(_wh("At Certification"), "At Certification"),
+		(_wh("At Hallmarking"), "At Hallmarking"),
 		(_wh(IN_PRODUCTION_WAREHOUSE), "In Bags"),
 		(_wh(GOLD_ISSUE_WAREHOUSE), "Gold Issue"),
 		(_wh(PRODUCTION_WAREHOUSE), "Production"),
@@ -18717,7 +18809,7 @@ def get_total_gold():
 		it["weight"] += qty
 		it["pure"] += pure
 
-	order = ["In Bags", "Finished Products", "At Certification", "Gold Issue",
+	order = ["In Bags", "Finished Products", "At Certification", "At Hallmarking", "Gold Issue",
 		"Casting", "Production", "Loss buckets", "Elsewhere"]
 	rows = sorted(({"bucket": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3),
 		"items": v["items"]} for k, v in buckets.items()),
@@ -18792,8 +18884,9 @@ def get_rework_piece(barcode):
 		why = frappe._("{0} is sold. A sold piece comes back through a sales return, not a rework.").format(nm)
 	elif b.stock_status == "Cancelled":
 		why = frappe._("{0} is cancelled.").format(nm)
-	elif b.stock_status == "At Certification":
-		why = frappe._("{0} is away at certification — bring it back in first.").format(nm)
+	elif b.stock_status in AWAY_STATUSES:
+		why = frappe._("{0} is away at {1} — bring it back in first.").format(
+			nm, "hallmarking" if b.stock_status == "At Hallmarking" else "certification")
 	elif b.stock_status != "In Stock":
 		why = frappe._("{0} is {1} — only a piece In Stock can be reworked.").format(nm, b.stock_status)
 	elif not mats:

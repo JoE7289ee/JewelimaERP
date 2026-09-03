@@ -263,7 +263,7 @@ JEWELIMA_DELIVERY_PAGES = [
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
 	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
-	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid",
+	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid", "at-hallmarking",
 	# Sales — price and park it; closing the sale belongs to someone else.
 	# sales-records and price-charts are VIEW ONLY: the records page only ever
 	# reads, and save_price_chart refuses this role, so the chart can be looked
@@ -2357,6 +2357,9 @@ PRODUCTION_WAREHOUSE = "Production"
 MAX_RECEIPT_GAIN_G = 0.100
 # Finished pieces sent out for certification sit here (still own stock).
 CERTIFICATION_WAREHOUSE = "At Certification"
+# ...and pieces away at a hallmarking centre sit HERE. Its own warehouse, so the
+# At Certification report stops counting hallmarked pieces as lab work.
+HALLMARKING_WAREHOUSE = "At Hallmarking"
 
 
 def create_store_warehouses():
@@ -2369,6 +2372,7 @@ def create_store_warehouses():
 		return
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(HALLMARKING_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	# The bench flow issues gold/loss as real stock moves; gold isn't always
 	# pre-stocked in the Store, so allow negative stock (a negative balance just

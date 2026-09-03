@@ -971,6 +971,19 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "stamp",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "At Hallmarking",
+   "link_to": "at-hallmarking",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
    "icon": "shopping-bag",
    "indent": 0,
    "keep_closed": 0,
