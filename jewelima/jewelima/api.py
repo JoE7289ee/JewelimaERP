@@ -12507,14 +12507,11 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 					and (not flt(c.to_ct) or flt(r.get("stn_ct")) < flt(c.to_ct))), None)
 				if not row:
 					flags.append("STN outside every CS bracket — ignored")
-				elif (row.basis or "Per Ct") == "Per Piece":
-					stn_va = round(cint(r.get("stn_pcs")) * flt(row.rate), 2)
-					notes["stn"] = "{0} pcs x {1}/pc = {2}".format(cint(r.get("stn_pcs")), flt(row.rate), _inr(stn_va))
-					if not cint(r.get("stn_pcs")):
-						flags.append("STN priced per piece but count is 0")
 				else:
-					stn_va = round(flt(r.get("stn_ct")) * flt(row.rate), 2)
-					notes["stn"] = "{0} ct x {1}/ct = {2}".format(flt(r.get("stn_ct")), flt(row.rate), _inr(stn_va))
+					stn_va, qty, unit = _bucket_rate_amount(row, flt(r.get("stn_ct")), r.get("stn_pcs"))
+					notes["stn"] = "{0} {1} x {2}/{1} = {3}".format(qty, unit, flt(row.rate), _inr(stn_va))
+					if unit == "pc" and not cint(r.get("stn_pcs")):
+						flags.append("STN priced per piece but count is 0")
 		# certification: USER-entered (nothing to read from bag or excel) —
 		# HUID rate x the number of HUIDs in the cell; cert rate per piece,
 		# all rows or only the picked ones
@@ -13705,17 +13702,13 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		if not row:
 			comp(key, label, 0.0, note="outside every bracket — ignored")
 			return
-		if (row.basis or "Per Ct") == "Per Piece":
-			if not cint(pcs):
-				comp(key, label, needs=True, note="priced per piece but the piece count is 0")
-				return
-			comp(key, label, cint(pcs) * flt(row.rate),
-				note="{0} pcs x {1} = {2}".format(cint(pcs), flt(row.rate), _inr(cint(pcs) * flt(row.rate))),
-				rate=flt(row.rate), qty=cint(pcs), unit="pc")
-		else:
-			comp(key, label, ct * flt(row.rate),
-				note="{0} ct x {1} = {2}".format(round(ct, 3), flt(row.rate), _inr(ct * flt(row.rate))),
-				rate=flt(row.rate), qty=ct, unit="ct")
+		if (row.basis or "Per Ct") == "Per Piece" and not cint(pcs):
+			comp(key, label, needs=True, note="priced per piece but the piece count is 0")
+			return
+		amount, qty, unit = _bucket_rate_amount(row, ct, pcs)
+		comp(key, label, amount,
+			note="{0} {1} x {2} = {3}".format(qty, unit, flt(row.rate), _inr(amount)),
+			rate=flt(row.rate), qty=qty, unit=unit)
 
 	bucket("cs", "CS", "cs_rates", b.act_cs_weight, b.act_cs_no)
 	bucket("cz", "CZ", "cz_rates", b.act_cz_weight, b.act_cz_no)
@@ -17840,6 +17833,27 @@ def _finding_groups():
 def _is_finding(item):
 	g = frappe.db.get_value("Item", item, "item_group")
 	return bool(g) and g in set(_finding_groups())
+
+
+# A stone bucket may be priced by carat, by gram or by piece. Carats are what
+# every sheet and every sieve chart carries, so grams are derived here rather
+# than stored: 1 ct = 0.2 g, the same factor the gross-weight maths uses.
+CARAT_GRAMS = 0.2
+
+
+def _bucket_rate_amount(row, ct, pcs):
+	"""What a Price Chart Bucket Rate row charges for `ct` carats / `pcs` pieces.
+
+	Returns (amount, qty, unit) so the two callers can write their own note in
+	their own shape while the arithmetic stays in one place."""
+	basis = (row.basis or "Per Ct")
+	rate = flt(row.rate)
+	if basis == "Per Piece":
+		return round(cint(pcs) * rate, 2), cint(pcs), "pc"
+	if basis == "Per Gram":
+		g = flt(ct) * CARAT_GRAMS
+		return round(g * rate, 2), round(g, 3), "g"
+	return round(flt(ct) * rate, 2), flt(ct), "ct"
 
 
 def _finding_gold_item(item, colour=None):

@@ -35,14 +35,14 @@
    "fieldname": "basis",
    "fieldtype": "Select",
    "label": "Basis",
-   "options": "Per Ct\nPer Piece",
+   "options": "Per Ct\nPer Gram\nPer Piece",
    "default": "Per Ct",
    "in_list_view": 1
   },
   {
    "fieldname": "rate",
    "fieldtype": "Float",
-   "label": "Rate / ct",
+   "label": "Rate",
    "in_list_view": 1
   }
  ],

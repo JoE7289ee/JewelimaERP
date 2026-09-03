@@ -178,7 +178,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		if (["csr", "czr", "cvr", "swr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
 			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
-			<td><select data-f="basis">${["Per Ct", "Per Piece"].map((b) =>
+			<td><select data-f="basis">${["Per Ct", "Per Gram", "Per Piece"].map((b) =>
 				`<option ${(r.basis || "Per Ct") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");

@@ -28,6 +28,16 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	let CHART = null;   // picked chart's full data
 	let PRICED = null;  // {rows, totals}
 	let STATE = "prep"; // "prep" | "export"
+	// Colour stone comes off the sheet in carats and is bracketed in carats on the
+	// chart, so grams are a VIEW: 1 ct = 0.2 g, converted for the eye only. The
+	// choice sticks per browser — a counter that works in grams should not have to
+	// say so again every morning.
+	const CS_G_KEY = "jw_of_cs_grams";
+	let CSG = false;
+	try { CSG = localStorage.getItem(CS_G_KEY) === "1"; } catch (e) { CSG = false; }
+	const CT_TO_G = 0.2;
+	const csShow = (ct) => (flt(ct) ? (CSG ? (flt(ct) * CT_TO_G).toFixed(3) : flt(ct)) : "");
+	const csUnit = () => (CSG ? __("CS g") : __("CS ct"));
 	let SESSION = null; // Old Format Import name when saved/loaded
 	let TITLE = "";     // the saved session's name-as-shown (Save as… sets it)
 	let LOADING = false; // guards the session picker's onchange during set_value
@@ -137,6 +147,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="of-btn of-find" style="display:none;">${__("Find #")}</button>
 			<button class="of-btn go of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 			<span style="flex:1;"></span>
+			<button class="of-btn of-units"></button>
 			<button class="of-btn of-xlexport" style="display:none;">${__("Export Excel ⤓")}</button>
 		</div>
 		<div class="of-bulk" style="display:none;">
@@ -167,6 +178,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="of-btn of-rules" style="display:none;">${__("Pricing Rules")}</button>
 			<button class="of-btn of-jos" style="display:none;">${__("JOS Billing ⤓")}</button>
 			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
+			<span style="flex:1;"></span>
+			<button class="of-btn of-units"></button>
 		</div>
 		<div class="of-cover"></div>
 		<div class="of-info"></div>
@@ -424,7 +437,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
 				<th class="num">${__("PS pcs")}</th><th class="num">${__("PS ct")}</th><th>${__("PS stone")}</th>
-				<th class="num">${__("CS pcs")}</th><th class="num">${__("CS ct")}</th>
+				<th class="num">${__("CS pcs")}</th><th class="num">${csUnit()}</th>
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
 				<th>${__("Cert")}</th><th>${__("Shop Name")}</th>
 			</tr></thead><tbody>
@@ -443,7 +456,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					style="width:104px;text-transform:uppercase;" placeholder="${__("name it")}"
 					title="${__("The chart prices precious stones by name — without it this PS cannot be priced")}">`
 					: `<span style="color:var(--text-muted);">&mdash;</span>`}</td>
-				<td class="num">${r.stn_pcs || ""}</td><td class="num">${r.stn_ct || ""}</td>
+				<td class="num">${r.stn_pcs || ""}</td><td class="num">${csShow(r.stn_ct)}</td>
 				<td><input data-f="colour" list="of-colors" value="${esc(r.colour)}" style="width:76px;"></td>
 				<td><input data-f="size" value="${esc(r.size)}" style="width:48px;"></td>
 				<td><select data-f="style"><option value=""></option>
@@ -487,7 +500,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<table class="of-t${priced ? " priced" : ""}"><thead><tr>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("COLOR")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
-				${hasPS ? `<th class="num">${__("PS ct")}</th>` : ""}${hasCS ? `<th class="num">${__("CS ct")}</th>` : ""}
+				${hasPS ? `<th class="num">${__("PS ct")}</th>` : ""}${hasCS ? `<th class="num">${csUnit()}</th>` : ""}
 				<th>${__("HUID")}</th><th>${__("Cert")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
 				<th class="num">${__("DMD")}</th>${hasPS ? `<th class="num">${__("PS")}</th>` : ""}${hasCS ? `<th class="num">${__("CS")}</th>` : ""}
@@ -502,7 +515,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
 				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
 				${hasPS ? `<td class="num">${r.ps_ct || ""}${r.ps_stone ? `<div class="of-flag">${esc(r.ps_stone)}</div>` : ""}</td>` : ""}
-				${hasCS ? `<td class="num">${r.stn_ct || ""}</td>` : ""}
+				${hasCS ? `<td class="num">${csShow(r.stn_ct)}</td>` : ""}
 				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td>
 				${priced ? `<td class="num" title="${cellTitle(p, "gold", (p.notes || {}).gold)}">₹ ${money(p.gold_va)}</td>
 				<td class="num" title="${cellTitle(p, "mc", (p.notes || {}).mc)}">₹ ${money(p.mc)}</td>
@@ -844,6 +857,22 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		setState("export");
 	});
 	root.on("click", ".of-back", () => setState("prep"));
+
+	// carats <-> grams is a lens on the same number; nothing stored changes, so the
+	// sheet still round-trips in carats and the chart brackets still match
+	function paintUnits() {
+		root.find(".of-units").text(CSG ? __("CS in grams") : __("CS in carats"));
+	}
+	root.on("click", ".of-units", () => {
+		CSG = !CSG;
+		try { localStorage.setItem(CS_G_KEY, CSG ? "1" : "0"); } catch (e) { /* private window */ }
+		paintUnits();
+		paint();
+		frappe.show_alert({ message: CSG
+			? __("Colour stone now shows in grams — 1 ct = 0.2 g. Kept for next time.")
+			: __("Colour stone now shows in carats. Kept for next time."), indicator: "blue" }, 4);
+	});
+	paintUnits();
 
 	// ---------------------------------------------------- export interactions
 	function payloadRows() {
