@@ -12486,8 +12486,11 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 				flags.append("PS {0} is not on the chart".format(stone))
 			else:
 				brackets = sorted(ps_by_stone[stone], key=lambda x: flt(x.from_ct))
+				# to_ct is labelled "Below ct" and the CS path treats it that way, so
+				# an inclusive upper edge here put a 1.00 ct stone on contiguous
+				# 0-1.00 / 1.00-2.00 rows into the CHEAPER bracket, silently.
 				row_ps = next((x for x in brackets if flt(x.from_ct) <= ps_ct
-					and (not flt(x.to_ct) or ps_ct <= flt(x.to_ct))), None)
+					and (not flt(x.to_ct) or ps_ct < flt(x.to_ct))), None)
 				if row_ps is None:
 					flags.append("PS {0} {1} ct is outside every bracket on the chart".format(stone, ps_ct))
 				else:

@@ -80,7 +80,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		table.of-t{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
 		table.of-t.prep{min-width:1360px;}
 		table.of-t.priced th:last-child,table.of-t.priced td:last-child{position:sticky;right:0;
-			background:var(--fg-color);box-shadow:-7px 0 7px -7px rgba(0,0,0,.22);}
+			background-color:var(--fg-color);
+			background-image:linear-gradient(var(--of-tint,transparent),var(--of-tint,transparent));
+			box-shadow:-7px 0 7px -7px rgba(0,0,0,.22);}
 		table.of-t.priced th:last-child{background:var(--control-bg);z-index:3;}
 		table.of-t.priced tbody tr:hover td:last-child{background:var(--control-bg);}
 		table.of-t.priced tr.of-flagged td:last-child{background:#fff8e6;}
@@ -443,14 +445,18 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 
 	// a flag belongs on the cell it is about — dumping every one of them on
 	// Cert/HUID meant "name the stone to price it" hid behind certification
+	// anchored on each flag's own fixed wording: the loose /dmd/ test used to scan
+	// the interpolated item and lab names too, so "no making rule for DMD RING"
+	// landed on the diamond cell
 	function flagBucket(f) {
 		const t = String(f || "");
 		if (/^PS\b/.test(t)) return "ps";
 		if (/^STN\b/.test(t)) return "cs";
-		if (/diamond|dmd/i.test(t)) return "dmd";
-		if (/gold rate/i.test(t)) return "gold";
-		if (/making/i.test(t)) return "mc";
-		if (/HUID|priced on the chart/i.test(t)) return "cert";
+		if (/^no gold rate/.test(t)) return "gold";
+		if (/^no making rule/.test(t)) return "mc";
+		if (/^(no diamond rows|dmd avg|no dmd)/.test(t)) return "dmd";
+		if (/but priced at/.test(t)) return "dmd";
+		if (/^HUID present/.test(t) || /is not priced on the chart$/.test(t)) return "cert";
 		return "total";
 	}
 	const cellTitle = (p, kind, note) => esc([note || ""].concat(
@@ -478,7 +484,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			${ROWS.map((r) => {
 				const p = P[r.unique_id] || {};
 				const fl = (p.flags || []).length;
-				return `<tr class="${fl ? "of-flagged" : ""}" style="background:${tintOf(r.colour)}">
+				const tint = tintOf(r.colour) || "transparent";
+				return `<tr class="${fl ? "of-flagged" : ""}" style="--of-tint:${tint};background:${tint};">
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
 				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
 				${hasPS ? `<td class="num">${r.ps_ct || ""}${r.ps_stone ? `<div class="of-flag">${esc(r.ps_stone)}</div>` : ""}</td>` : ""}
@@ -561,8 +568,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		colour: { input: "text", list: "of-colors", upper: true, allEmpty: true },
 		style: { input: "select", options: ["GENTS", "LADIES", "GENTS / LADIES"] },
 		cert: { input: "text", list: "of-labs", upper: true },
-		// allEmpty is safe here: the applier skips any row carrying no PS
-		ps_stone: { input: "text", list: "of-pstones", upper: true, allEmpty: true },
+		// deliberately no allEmpty: this is the one bulk field that moves money, and
+		// a sheet can hold several different stones. Tick the rows it applies to.
+		ps_stone: { input: "text", list: "of-pstones", upper: true },
 		size: { input: "text", upper: false },
 		shape: { input: "select", options: ["OVAL", "CHAIN"] },
 		shop: { input: "text", upper: true, allEmpty: true },
