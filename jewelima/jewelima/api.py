@@ -15007,6 +15007,334 @@ def export_igi_xlsx(bags, metal_type=None):
 	frappe.local.response.type = "binary"
 
 
+# ---------------------------------------------------------------------------
+# HALLMARKING — its own pipeline, mirroring certification's four steps.
+# ---------------------------------------------------------------------------
+# Hallmarking used to ride the Certification doctype. It is not a certification:
+# no lab format, nothing to lock a batch to, nearly every piece goes, and the
+# trip exists to bring back a six-character HUID per piece. So it has its own
+# batch (HALL-0001), its own centre master, and the four desk pages the floor
+# already knows: Hallmark (prepare) -> Send Hallmarking -> Hallmark Out
+# (collect) -> Confirm HUID (stamp the codes).
+#
+# The physical stock state is deliberately SHARED with certification: a piece
+# away at a hallmarking centre is "At Certification" in the same warehouse, so
+# the At Certification report and every bucket board keep telling the truth
+# without a second parallel stock world.
+
+HALL_LOCATION = CERT_LOCATION
+
+
+def _hall_validate_piece(nm, taken=None):
+	"""Every scan guard for a hallmarking prep, writing nothing."""
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("{0} does not exist.").format(nm or "?"))
+	b = frappe.db.get_value("Order Bag", nm,
+		["is_finished", "stock_status", "design", "act_gross_weight", "act_dmd_weight", "huid"], as_dict=True)
+	if not b.is_finished:
+		frappe.throw(frappe._("{0} is not a product yet — MAKE IT A PRODUCT first (Make Products).").format(nm))
+	if b.stock_status != "In Stock":
+		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can go out.").format(nm, b.stock_status))
+	if taken and nm in taken:
+		frappe.throw(frappe._("{0} is already on this list.").format(nm))
+	if (b.huid or "").strip():
+		frappe.throw(frappe._("{0} already carries HUID {1} — it has been hallmarked.").format(nm, b.huid))
+	open_batch = frappe.db.sql("""select i.parent from `tabHallmarking Item` i
+		join `tabHallmarking Batch` h on h.name = i.parent
+		where i.order_bag = %s and h.status in ('Prepared', 'Sent', 'Collected', 'Partially Received')
+		limit 1""", (nm,))
+	if open_batch:
+		frappe.throw(frappe._("{0} is already on hallmarking batch {1}.").format(nm, open_batch[0][0]))
+	out_at_lab = frappe.db.sql("""select i.parent from `tabCertification Item` i
+		join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and c.status = 'Prepared' limit 1""", (nm,))
+	if out_at_lab:
+		frappe.throw(frappe._("{0} is on prepared certification batch {1}.").format(nm, out_at_lab[0][0]))
+	return b
+
+
+def _hall_row(nm, b):
+	return {"order_bag": nm, "design": b.design or "",
+		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+		"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight)}
+
+
+@frappe.whitelist()
+def get_hall_prep_context():
+	"""The Hallmark desk's setup: the centres it can send to."""
+	return {"centers": frappe.get_all("Hallmarking Center",
+		filters={"disabled": 0}, fields=["name", "center_name", "location"], order_by="center_name")}
+
+
+@frappe.whitelist()
+def hall_draft_scan(barcode, existing=None):
+	"""Validate ONE scan for the local (unsaved) draft — nothing is written.
+	A rejection comes back as data so the page can log WHY in its history."""
+	if isinstance(existing, str):
+		existing = json.loads(existing or "[]")
+	nm = (barcode or "").strip()
+	try:
+		b = _hall_validate_piece(nm, set(existing or []))
+	except frappe.ValidationError as e:
+		frappe.local.message_log = []          # no modal — the page shows it in history
+		return {"rejected": str(e)}
+	return _hall_row(nm, b)
+
+
+@frappe.whitelist()
+def hall_prep_create(center, bags=None):
+	"""PREP: the draft becomes the batch in one shot, re-validated piece by
+	piece, named HALL-0001."""
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	bags = [b for b in (bags or []) if b]
+	if not bags:
+		frappe.throw(frappe._("Scan at least one piece before prepping."))
+	if not center or not frappe.db.exists("Hallmarking Center", center):
+		frappe.throw(frappe._("Pick the hallmarking centre."))
+	rows, seen = [], set()
+	for nm in bags:
+		b = _hall_validate_piece(nm, seen)
+		seen.add(nm)
+		rows.append(_hall_row(nm, b))
+	d = frappe.get_doc({"doctype": "Hallmarking Batch", "center": center, "status": "Prepared",
+		"prepared_on": frappe.utils.today(), "items": rows})
+	d.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": d.name, "count": len(rows)}
+
+
+@frappe.whitelist()
+def get_hall_preps():
+	"""Send Hallmarking: every Prepared batch with its summary, plus recent."""
+	out = {"prepared": [], "recent": []}
+	for r in frappe.get_all("Hallmarking Batch",
+			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]]},
+			fields=["name", "center", "status", "prepared_on", "sent_on"],
+			order_by="creation desc", limit=40):
+		items = frappe.get_all("Hallmarking Item", filters={"parent": r.name}, fields=["gross", "dmd_ct"])
+		r["pieces"] = len(items)
+		r["gross"] = round(sum(flt(i.gross) for i in items), 3)
+		r["dmd_ct"] = round(sum(flt(i.dmd_ct) for i in items), 3)
+		(out["prepared"] if r.status == "Prepared" else out["recent"]).append(r)
+	return out
+
+
+@frappe.whitelist()
+def get_hall_prep(name):
+	"""One batch with its pieces — the prep detail and the send summary."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	items = [{"row": r.name, "order_bag": r.order_bag, "design": r.design or "",
+		"design_type": r.design_type or "", "gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct),
+		"huid": r.huid or "", "received": cint(r.received), "rejected": cint(r.rejected),
+		"confirmed_by": r.confirmed_by or ""} for r in d.items]
+	return {"name": d.name, "center": d.center or "", "status": d.status,
+		"prepared_on": str(d.prepared_on or ""), "sent_on": str(d.sent_on or ""),
+		"collected_on": str(d.collected_on or ""), "remarks": d.remarks or "",
+		"items": items, "pieces": len(items),
+		"gross": round(sum(i["gross"] for i in items), 3),
+		"dmd_ct": round(sum(i["dmd_ct"] for i in items), 3)}
+
+
+@frappe.whitelist()
+def hall_prep_remove(name, row):
+	"""Drop one piece off a Prepared batch."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only a Prepared batch can be edited.").format(name, d.status))
+	d.set("items", [r for r in d.items if r.name != row])
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_hall_prep(name)
+
+
+@frappe.whitelist()
+def hall_prep_cancel(name):
+	"""Abandon a prep. The record stays, marked Cancelled — nothing moved."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only a Prepared batch cancels.").format(name, d.status))
+	d.status = "Cancelled"
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def send_hall_prep(name):
+	"""The SEND: one stock move Finished Goods -> At Certification for everything
+	the pieces hold, the bags flip At Certification, status -> Sent."""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only Prepared batches send.").format(name, d.status))
+	if not d.items:
+		frappe.throw(frappe._("Nothing on the batch."))
+	bags = [r.order_bag for r in d.items]
+	for nm in bags:
+		b = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status"], as_dict=True)
+		if not b or not b.is_finished or b.stock_status != "In Stock":
+			frappe.throw(frappe._("{0} is no longer In Stock — remove it from the batch.").format(nm))
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh("Finished Goods"), _wh(CERTIFICATION_WAREHOUSE))
+	d.stock_entry = se
+	d.status = "Sent"
+	d.sent_on = frappe.utils.today()
+	d.save(ignore_permissions=True)
+	for nm in bags:
+		# not in its bucket while it is away at the centre
+		frappe.db.set_value("Order Bag", nm,
+			{"stock_status": "At Certification", "location": HALL_LOCATION})
+	frappe.db.commit()
+	return {"name": d.name, "count": len(bags), "stock_entry": se}
+
+
+@frappe.whitelist()
+def get_hallmarking_out():
+	"""Hallmark Out board: every SENT batch — days out, pieces by design type,
+	weights. Collection is whole-batch, exactly as it is for a lab packet."""
+	out = []
+	for c in frappe.get_all("Hallmarking Batch", filters={"status": "Sent"},
+			fields=["name", "center", "sent_on"], order_by="sent_on asc, creation asc"):
+		items = frappe.get_all("Hallmarking Item", filters={"parent": c.name},
+			fields=["design_type", "gross", "dmd_ct"])
+		by_type = {}
+		for r in items:
+			t = r.design_type or "UNTYPED"
+			by_type[t] = by_type.get(t, 0) + 1
+		out.append({"name": c.name, "center": c.center or "", "sent_on": str(c.sent_on or ""),
+			"days_out": frappe.utils.date_diff(frappe.utils.today(), c.sent_on) if c.sent_on else 0,
+			"pieces": len(items),
+			"by_type": [{"design_type": t, "count": n} for t, n in sorted(by_type.items())],
+			"gross": round(sum(flt(r.gross) for r in items), 3),
+			"dmd_ct": round(sum(flt(r.dmd_ct) for r in items), 3)})
+	return {"batches": out, "total_pieces": sum(b["pieces"] for b in out)}
+
+
+@frappe.whitelist()
+def collect_hallmarking(name):
+	"""The packet came back: COLLECT the whole batch — stock At Certification ->
+	Finished Goods, bags back In Stock, status -> Collected. NOT confirmed: the
+	HUIDs get stamped piece by piece on Confirm HUID."""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Sent":
+		frappe.throw(frappe._("{0} is {1} — only Sent batches collect.").format(name, d.status))
+	bags = [r.order_bag for r in d.items]
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
+	now = frappe.utils.now_datetime()
+	for nm in bags:
+		frappe.db.set_value("Order Bag", nm, {
+			"stock_status": "In Stock", "in_stock_on": now,
+			"location": frappe.db.get_value("Order Bag", nm, "bucket") or HALL_LOCATION})
+	d.status = "Collected"
+	d.collected_on = frappe.utils.today()
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "pieces": len(bags), "stock_entry": se}
+
+
+@frappe.whitelist()
+def get_huid_pool():
+	"""Confirm HUID: every piece on a COLLECTED batch and where it stands."""
+	batches = []
+	for c in frappe.get_all("Hallmarking Batch",
+			filters={"status": ["in", ["Collected", "Partially Received"]]},
+			fields=["name", "center", "collected_on"], order_by="collected_on asc, creation asc"):
+		items = frappe.get_all("Hallmarking Item", filters={"parent": c.name},
+			fields=["name", "order_bag", "design", "design_type", "huid", "received", "rejected", "confirmed_by"],
+			order_by="idx")
+		batches.append({"name": c.name, "center": c.center or "",
+			"collected_on": str(c.collected_on or ""),
+			"pieces": [{"row": i.name, "order_bag": i.order_bag, "design": i.design or "",
+				"design_type": i.design_type or "", "huid": i.huid or "",
+				"state": "confirmed" if i.received else ("rejected" if i.rejected else "pending"),
+				"by": i.confirmed_by or ""} for i in items]})
+	pend = sum(1 for b in batches for p in b["pieces"] if p["state"] == "pending")
+	return {"batches": batches, "pending": pend}
+
+
+@frappe.whitelist()
+def huid_scan(barcode, huid=None, mode="accept"):
+	"""ONE piece confirmed on Confirm HUID. Unlike a lab certificate, the trip
+	exists FOR the code, so accepting without one is refused. Race-safe: the
+	guarded UPDATE wins for exactly one scanner, so several people can work the
+	same batch. Every failure comes back as data for the scan history."""
+	nm = (barcode or "").strip()
+	code = (huid or "").strip().upper()
+	if mode not in ("accept", "reject"):
+		mode = "accept"
+	if mode == "accept" and not code:
+		return {"rejected_scan": frappe._("Type the HUID — that is what the piece went for")}
+	if mode == "accept" and len(code) != 6:
+		return {"rejected_scan": frappe._("A HUID is six characters — {0} is {1}").format(code, len(code))}
+	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
+		from `tabHallmarking Item` i join `tabHallmarking Batch` h on h.name = i.parent
+		where i.order_bag = %s and h.status in ('Collected', 'Partially Received')
+		order by h.creation desc limit 1""", nm, as_dict=True)
+	if not row:
+		if not frappe.db.exists("Order Bag", nm):
+			return {"rejected_scan": frappe._("This card doesn't exist")}
+		return {"rejected_scan": frappe._("Not on any collected hallmarking batch")}
+	r = row[0]
+	if r.received:
+		return {"rejected_scan": frappe._("Already confirmed by {0}").format(r.confirmed_by or "?")}
+	if r.rejected:
+		return {"rejected_scan": frappe._("Already in the reject queue")}
+	if mode == "accept":
+		clash = frappe.db.get_value("Order Bag", {"huid": code, "name": ["!=", nm]}, "name")
+		if clash:
+			return {"rejected_scan": frappe._("HUID {0} is already on {1}").format(code, clash)}
+	now = frappe.utils.now_datetime()
+	user = frappe.session.user
+	field = "received" if mode == "accept" else "rejected"
+	frappe.db.sql("""update `tabHallmarking Item`
+		set {0} = 1, huid = %s, received_on = %s, confirmed_by = %s
+		where name = %s and received = 0 and rejected = 0""".format(field),
+		(code or None, now, user, r.name))
+	claimed = frappe.db.sql("select confirmed_by from `tabHallmarking Item` where name = %s", r.name)[0][0]
+	if claimed != user:
+		return {"rejected_scan": frappe._("Already confirmed by {0}").format(claimed or "?")}
+	if mode == "accept":
+		# the code goes onto the PIECE — this is the record everything else reads
+		frappe.db.set_value("Order Bag", nm, "huid", code, update_modified=False)
+		# and HALLMARKING stays on the certifications trail. Hallmarking has its own
+		# doctype now, but a card's costing reads the hallmark charge off this trail
+		# (get_card_costing, is_hall) — drop the stamp and every hallmarked piece
+		# silently stops being charged for it.
+		frappe.db.set_value("Order Bag", nm, "certifications",
+			_stamp_certification(nm, "HALLMARKING"), update_modified=False)
+	left = frappe.db.sql("""select count(*) from `tabHallmarking Item`
+		where parent = %s and received = 0 and rejected = 0""", r.parent)[0][0]
+	frappe.db.set_value("Hallmarking Batch", r.parent, "status",
+		"Received" if left == 0 else "Partially Received", update_modified=False)
+	frappe.db.commit()
+	return {"ok": 1, "mode": mode, "huid": code, "batch": r.parent, "batch_done": left == 0}
+
+
+@frappe.whitelist()
+def get_hallmarking_batches():
+	"""Every batch, newest first — the module's own history view."""
+	out = []
+	for c in frappe.get_all("Hallmarking Batch",
+			fields=["name", "center", "status", "prepared_on", "sent_on", "collected_on"],
+			order_by="creation desc", limit=200):
+		items = frappe.get_all("Hallmarking Item", filters={"parent": c.name},
+			fields=["gross", "received", "huid"])
+		c["pieces"] = len(items)
+		c["confirmed"] = sum(1 for i in items if cint(i.received))
+		c["huids"] = sum(1 for i in items if (i.huid or "").strip())
+		c["gross"] = round(sum(flt(i.gross) for i in items), 3)
+		out.append(c)
+	return out
+
 @frappe.whitelist()
 def get_certification_batches():
 	"""Open batches (plus the freshest few received) for the Certification Out

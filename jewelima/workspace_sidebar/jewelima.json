@@ -1554,6 +1554,68 @@
    "url": ""
   },
   {
+   "collapsible": 1,
+   "icon": "stamp",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Hallmarking",
+   "show_arrow": 0,
+   "type": "Section Break",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "tag",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Hallmark",
+   "link_to": "hallmark",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "send",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Send Hallmarking",
+   "link_to": "send-hallmarking",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "clock",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Hallmark Out",
+   "link_to": "hallmark-out",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "icon": "circle-check",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Confirm HUID",
+   "link_to": "confirm-huid",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link",
+   "url": ""
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "credit-card",

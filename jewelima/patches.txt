@@ -17,3 +17,4 @@ jewelima.patches.selection_stone_fields
 jewelima.patches.retire_wax_cleaning_bench
 jewelima.patches.finished_location_is_bucket
 jewelima.patches.backfill_missing_bench_records
+jewelima.patches.hallmarking_out_of_certification

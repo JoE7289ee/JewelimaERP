@@ -25,6 +25,7 @@ def after_install():
 	seed_quality_map()
 	seed_voucher_types()
 	seed_certifications()
+	seed_hallmarking()
 	seed_diversion_types()
 	seed_design_type_bank_codes()
 	create_manufacturing_warehouses()
@@ -104,6 +105,7 @@ def after_migrate():
 	seed_quality_map()
 	seed_voucher_types()
 	seed_certifications()
+	seed_hallmarking()
 	seed_diversion_types()
 	seed_design_type_bank_codes()
 	create_manufacturing_warehouses()
@@ -260,6 +262,8 @@ JEWELIMA_DELIVERY_PAGES = [
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
+	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
+	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid",
 	# Sales — price and park it; closing the sale belongs to someone else.
 	# sales-records and price-charts are VIEW ONLY: the records page only ever
 	# reads, and save_price_chart refuses this role, so the chart can be looked
@@ -1621,6 +1625,9 @@ def seed_voucher_types():
 
 # Certification masters — from the client's certification_masters.xlsx (2026-07-22).
 # Emails were "pending" in the sheet; fill them on the Certification Center records.
+# HALLMARKING is deliberately NOT here. It has its own doctype, its own centre
+# master and its own four desk pages (see HALLMARKING_CENTERS / seed_hallmarking):
+# no lab format, nothing to lock a batch to, and the trip exists for the HUID.
 CERTIFICATIONS = {
 	# code: (title, excel requirements, [(center, location), ...])
 	"IGI": ("IGI",
@@ -1634,11 +1641,30 @@ CERTIFICATIONS = {
 		[("SGL Labs", "2nd Floor, Holy Space Complex, 10/815/16/48-51, NC Road, Erinjery Angady, Pallikkulam, Thrissur 680001")]),
 	"IDT": ("IDT", "General excel — format pending.",
 		[("IDT Gemological Laboratories Worldwide", "2nd Floor, Centre Point, MG Road, Poothole, Thrissur 680004")]),
-	"HALL": ("HALLMARKING", "General excel — format pending. HUID per piece on receive.",
-		[("KERALA", ""), ("GLOBAL", ""), ("NEW POOVATHATHINGAL", ""), ("GOLD MARK", "")]),
 	"GIG": ("GIG", "General excel — format pending.",
 		[("Global Institute of Gemology", "2nd Floor, East End Plaza Building, Rice Bazar Rd, Erinjery Angady, Pallikkulam, Thrissur 680005")]),
 }
+
+
+# The hallmarking centres, carried over from the certification centres they used
+# to be. Order is how the floor lists them.
+HALLMARKING_CENTERS = [
+	("KERALA", ""),
+	("GLOBAL", ""),
+	("NEW POOVATHATHINGAL", ""),
+	("GOLD MARK", ""),
+]
+
+
+def seed_hallmarking():
+	"""The hallmarking centres (idempotent; ships with the app)."""
+	if not frappe.db.exists("DocType", "Hallmarking Center"):
+		return
+	for cname, loc in HALLMARKING_CENTERS:
+		if not frappe.db.exists("Hallmarking Center", cname):
+			frappe.get_doc({"doctype": "Hallmarking Center", "center_name": cname,
+				"location": loc}).insert(ignore_permissions=True)
+	frappe.db.commit()
 
 
 def seed_certifications():

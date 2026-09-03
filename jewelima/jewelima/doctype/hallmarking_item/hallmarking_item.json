@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-03 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "order_bag",
+  "design",
+  "design_type",
+  "gross",
+  "dmd_ct",
+  "huid",
+  "received",
+  "rejected",
+  "received_on",
+  "confirmed_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_bag",
+   "fieldtype": "Link",
+   "label": "Card",
+   "options": "Order Bag",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "design",
+   "fieldtype": "Link",
+   "label": "Design",
+   "options": "Design",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "design_type",
+   "fieldtype": "Data",
+   "label": "Type",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "gross",
+   "fieldtype": "Float",
+   "label": "Gross g",
+   "precision": "3",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "dmd_ct",
+   "fieldtype": "Float",
+   "label": "DMD ct",
+   "precision": "3"
+  },
+  {
+   "fieldname": "huid",
+   "fieldtype": "Data",
+   "label": "HUID",
+   "in_list_view": 1,
+   "length": 6,
+   "description": "The six-character code stamped on the piece."
+  },
+  {
+   "fieldname": "received",
+   "fieldtype": "Check",
+   "label": "Confirmed"
+  },
+  {
+   "fieldname": "rejected",
+   "fieldtype": "Check",
+   "label": "Rejected"
+  },
+  {
+   "fieldname": "received_on",
+   "fieldtype": "Datetime",
+   "label": "Confirmed On"
+  },
+  {
+   "fieldname": "confirmed_by",
+   "fieldtype": "Data",
+   "label": "Confirmed By",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Hallmarking Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-09-03 00:00:00",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-09-03 00:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "hallmark-out",
+ "owner": "Administrator",
+ "page_name": "hallmark-out",
+ "roles": [
+  { "role": "System Manager" },
+  { "role": "JW Manager" },
+  { "role": "JW Delivery" }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "system_page": 0,
+ "title": "Hallmark Out"
+}

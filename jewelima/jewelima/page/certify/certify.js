@@ -178,7 +178,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		// every lab except HALL gets a submission excel (IGI = its template,
 		// the rest = the generic bracket sheet)
 		const ct = ((prep || draft || {}).cert_type || "").toUpperCase();
-		const hasXlsx = src.count > 0 && ct && !["HALL", "HALLMARKING"].includes(ct);
+		// HALLMARKING has its own desk now — every certification here has a format
+		const hasXlsx = src.count > 0 && !!ct;
 		root.find(".cf-xlsx").toggle(hasXlsx).text(__("Export {0} Excel", [ct]));
 		root.find(".cf-mail").toggle(!!prep && src.count > 0 && prep.status !== "Cancelled");
 		root.find(".cf-cancel").toggle(!locked);
