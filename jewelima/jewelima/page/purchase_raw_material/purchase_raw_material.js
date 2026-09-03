@@ -41,6 +41,12 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		.pr-tile.gold{background:rgba(218,165,32,.10);border-color:rgba(218,165,32,.45);}
 		.pr-tile.gold .k{color:#8a6200;}
 		.pr-tile.empty .v{color:var(--text-muted);font-weight:400;}
+		/* the server REFUSES a mismatched warehouse — this says so while there is
+		   still a sheet to fix, rather than after Post Purchase is pressed */
+		.pr-warn{display:none;border:1px solid #e0a800;background:rgba(230,168,0,.10);
+			border-radius:11px;padding:10px 14px;font-size:12.5px;font-weight:600;color:#8a6200;}
+		.pr-warn.on{display:block;}
+		.pr-warn b{color:#6b4c00;}
 		/* a row says whether it will actually post: green will, red will not */
 		table.pr-grid tr.pr-ok > td:first-child{box-shadow:inset 3px 0 0 #1d7a33;}
 		table.pr-grid tr.pr-bad > td:first-child{box-shadow:inset 3px 0 0 #b02a2a;}
@@ -86,6 +92,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 				<div class="pr-h-voucher"></div><div class="pr-h-supplier"></div><div class="pr-h-wh"></div>
 			</div>
 			<div class="pr-tiles"></div>
+			<div class="pr-warn"></div>
 			<div class="pr-gridbox">
 				<table class="pr-grid"><thead><tr class="pr-headrow"></tr></thead><tbody class="pr-body"></tbody><tfoot><tr class="pr-footrow"></tr></tfoot></table>
 			</div>
@@ -114,7 +121,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	frappe.db.get_value("Supplier", "JD Stock", "name").then((r) => {
 		if (r.message && r.message.name) state.header.supplier.set_value("JD Stock");
 	});
-	state.header.warehouse.$input.on("change", () => { state.whTouched = true; });
+	state.header.warehouse.$input.on("change", () => { state.whTouched = true; paintWarning(); });
 
 	// ONE shot, on the FIRST item of the sheet. The flag is set before the lookup
 	// returns, not after, so a second item picked while the first is still in
@@ -236,6 +243,31 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		if (totals.carat) totals.carat.text(ctsum ? ctsum.toFixed(3) : "");
 		$(page.main).find(".pr-count").text(state.rows.length);
 		paintTiles({ pure, byGroup, byStone, carats: ctsum, pieces: csum, live });
+		paintWarning();
+	}
+
+	// Gold belongs in Gold Issue and stones in Stone Issue — the server throws on
+	// the mix, so the whole sheet fails on Post. Saying it here costs nothing and
+	// saves the buyer finding out after they have filled it in.
+	function paintWarning() {
+		const wh = state.header.warehouse.get_value() || "";
+		const $w = $(page.main).find(".pr-warn");
+		if (!wh) { $w.removeClass("on").empty(); return; }
+		frappe.db.get_value("Warehouse", wh, "warehouse_name").then((r) => {
+			const name = ((r.message || {}).warehouse_name) || "";
+			const named = (stone) => state.rows
+				.filter((x) => rowState(x) === "ok" && !!x.isStone === stone)
+				.map((x) => x.f.item.get());
+			let msg = "";
+			if (name === "Gold Issue" && named(true).length) {
+				msg = __("<b>{0}</b> {1} a stone — stones are received into <b>Stone Issue</b>, not Gold Issue. Posting will be refused.",
+					[named(true).join(", "), named(true).length > 1 ? __("are") : __("is")]);
+			} else if (name === "Stone Issue" && named(false).length) {
+				msg = __("<b>{0}</b> {1} metal — metal is received into <b>Gold Issue</b>, not Stone Issue. Posting will be refused.",
+					[named(false).join(", "), named(false).length > 1 ? __("are") : __("is")]);
+			}
+			$w.html(msg).toggleClass("on", !!msg);
+		});
 	}
 
 	// At most five, and only the ones that have something to say — an empty tile
@@ -359,6 +391,11 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 
 	addRow();
 
+	// Print BEFORE posting: the sheet is checked on paper, or handed to whoever is
+	// weighing, while it can still be changed. It prints exactly the lines that
+	// would post — the red ones are left off, because they are not part of the
+	// purchase and putting them on the paper would say otherwise.
+	page.add_inner_button(__("Print"), () => printSheet(page, state));
 	page.set_primary_action(__("Post Purchase"), () => postPurchase(page, state, $body), "add");
 };
 
@@ -393,4 +430,75 @@ function postPurchase(page, state, $body) {
 		state.whDecided = false;      // a new sheet decides its warehouse again
 		state.addRow();
 	}).catch(() => frappe.dom.unfreeze());
+}
+
+
+function printSheet(page, state) {
+	const esc = frappe.utils.escape_html;
+	const g3 = (v) => (parseFloat(v) || 0).toFixed(3);
+	const lines = state.rows
+		.map((r) => ({
+			item: r.f.item.get(), isStone: !!r.isStone,
+			purity: r.f.purity.get(), uom: r.f.uom.get(),
+			count: parseInt(r.f.count.get(), 10) || 0,
+			gram: parseFloat(r.f.gram.get()) || 0,
+			carat: parseFloat(r.f.carat.get()) || 0,
+		}))
+		.filter((l) => l.item && (l.gram > 0 || l.carat > 0));
+	if (!lines.length) {
+		return frappe.msgprint(__("Nothing to print yet — add an item and a weight."));
+	}
+	const gsum = lines.reduce((a, l) => a + l.gram, 0);
+	const ctsum = lines.reduce((a, l) => a + l.carat, 0);
+	const csum = lines.reduce((a, l) => a + l.count, 0);
+	const pure = lines.filter((l) => !l.isStone)
+		.reduce((a, l) => a + l.gram * ((parseFloat(l.purity) || 0) / 100), 0);
+
+	const rows = lines.map((l, i) => `<tr>
+		<td class="n">${i + 1}</td>
+		<td><b>${esc(l.item)}</b></td>
+		<td>${esc(l.uom || "")}</td>
+		<td class="n">${l.isStone ? "" : (l.purity || "")}</td>
+		<td class="n">${l.count || ""}</td>
+		<td class="n">${l.gram ? g3(l.gram) : ""}</td>
+		<td class="n">${l.carat ? g3(l.carat) : ""}</td></tr>`).join("");
+
+	const body = `
+		<div class="ps-head">
+			<div><span class="k">${__("Voucher")}</span> <b>${esc(state.header.voucher.get_value() || "")}</b></div>
+			<div><span class="k">${__("Supplier")}</span> <b>${esc(state.header.supplier.get_value() || "")}</b></div>
+			<div><span class="k">${__("Warehouse")}</span> <b>${esc(state.header.warehouse.get_value() || "")}</b></div>
+			<div><span class="k">${__("Date")}</span> <b>${frappe.datetime.str_to_user(state.postingDate)}</b></div>
+		</div>
+		<table class="ps-t"><thead><tr>
+			<th class="n"></th><th>${__("Item")}</th><th>${__("UOM")}</th>
+			<th class="n">${__("Purity %")}</th><th class="n">${__("Qty")}</th>
+			<th class="n">${__("Gram")}</th><th class="n">${__("Carat")}</th>
+		</tr></thead><tbody>${rows}</tbody>
+		<tfoot><tr><td></td><td>${__("Total")}</td><td></td><td></td>
+			<td class="n">${csum || ""}</td>
+			<td class="n">${gsum ? g3(gsum) : ""}</td>
+			<td class="n">${ctsum ? g3(ctsum) : ""}</td></tr></tfoot></table>
+		${pure > 0 ? `<div class="ps-pure">${__("Pure gold in")}: <b>${g3(pure)} g</b></div>` : ""}
+		<div class="ps-note">${__("NOT YET POSTED — this is the sheet as entered.")}</div>
+		<div class="ps-sig"><div>${__("Weighed by")}</div><div>${__("Checked by")}</div></div>`;
+
+	const CSS = `
+		@page{size:A4 portrait;margin:14mm 12mm;}
+		.ps-head{display:flex;gap:26px;flex-wrap:wrap;font-size:12px;margin:0 0 12px;}
+		.ps-head .k{color:#666;text-transform:uppercase;font-size:9.5px;letter-spacing:.05em;}
+		table.ps-t{width:100%;border-collapse:collapse;font-size:11.5px;}
+		table.ps-t th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em;
+			border-bottom:1.2px solid #000;padding:5px 6px;}
+		table.ps-t td{padding:4px 6px;border-bottom:1px solid #ccc;}
+		table.ps-t .n{text-align:right;white-space:nowrap;}
+		table.ps-t tfoot td{border-top:1.2px solid #000;border-bottom:none;font-weight:800;padding-top:6px;}
+		.ps-pure{margin-top:10px;font-size:13px;}
+		.ps-note{margin-top:14px;font-size:10.5px;color:#8a6200;font-weight:700;letter-spacing:.04em;}
+		.ps-sig{margin-top:30px;display:flex;justify-content:space-between;font-size:10px;color:#333;}
+		.ps-sig div{border-top:1px solid #000;padding-top:3px;width:38%;text-align:center;}`;
+
+	frappe.call({ method: "jewelima.jewelima.api.get_print_branding" }).then((r) => {
+		jewelima.print_window(r.message || {}, __("Purchase Raw Material"), body, CSS);
+	});
 }
