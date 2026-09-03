@@ -12743,7 +12743,7 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 @frappe.whitelist()
 def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18 KT",
 		gst_percent=3, igi_flat=80, igi_per_ct=325, igi_threshold=0.10,
-		huid_rate=0, party="", item_colour="", filename=None):
+		huid_rate=0, party="", item_colour="", filename=None, cs_grams=0):
 	"""The JOS BILLING workbook with LIVE formulas: gold = net x the rate cell,
 	diamonds split into the chart's bracket GROUPS (one group per piece), IGI
 	slab (chart-held when present), footer Total -> Hall Marking (HUID) ->
@@ -12829,9 +12829,13 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	jos_ps = any(flt(p.get("ps_ct")) or flt(p.get("ps_va")) for p in priced)
 	jos_cs = any(flt(p.get("stn_ct")) or flt(p.get("stn_va")) for p in priced)
 	if jos_ps:
-		keys += ["pspcs", "psv"]
+		keys += ["pspcs", "pswt", "psv"]
 	if jos_cs:
-		keys += ["cspcs", "csv"]
+		keys += ["cspcs", "cswt", "csv"]
+	# CS weight is shown in whatever unit the OLD FORMAT screen is set to, so the
+	# bill reads the same as the sheet it came off. PS has no such switch and
+	# stays in carats — the header on each column says which it is either way.
+	cs_in_g = cint(cs_grams)
 	keys += ["total", "igi", "huid"]
 	# certification columns only when the lot actually carries them
 	if any(p.get("cert") for p in priced):
@@ -12888,8 +12892,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"gross": "Gross Qty (Gm)", "net": "Net Qty (Gm)", "gold": "Gold\nValue",
 		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
 		"tp": "pcs", "tc": "cts", "tv": "value",
-		"pspcs": "PS pcs", "psv": "PS value",
-		"cspcs": "CS pcs", "csv": "CS value", "total": "Total value",
+		"pspcs": "PS pcs", "pswt": "PS ct", "psv": "PS value",
+		"cspcs": "CS pcs", "cswt": "CS g" if cs_in_g else "CS ct",
+		"csv": "CS value", "total": "Total value",
 		"igi": "IGI", "huid": "HUID", "certlab": "CERT", "certno": "CERT NO", "uid": "UNIQUE ID"}
 	for i in range(huid_cols):
 		HEAD["huidc{0}".format(i)] = "HUID CODE" if huid_cols == 1 else "HUID {0}".format(i + 1)
@@ -12912,9 +12917,9 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		SUMCOLS += [C["g{0}p".format(gi)], C["g{0}c".format(gi)], C["g{0}v".format(gi)]]
 	SUMCOLS += [C["tp"], C["tc"], C["tv"]]
 	if jos_ps:
-		SUMCOLS += [C["pspcs"], C["psv"]]
+		SUMCOLS += [C["pspcs"], C["pswt"], C["psv"]]
 	if jos_cs:
-		SUMCOLS += [C["cspcs"], C["csv"]]
+		SUMCOLS += [C["cspcs"], C["cswt"], C["csv"]]
 	SUMCOLS += [C["total"], C["igi"], C["huid"]]
 	r0 = 5
 	r = r0
@@ -12966,10 +12971,14 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		stone_terms = []
 		if jos_ps:
 			ws.cell(row=r, column=C["pspcs"], value=cint(p.get("ps_pcs")) or 0)
+			ws.cell(row=r, column=C["pswt"], value=round(flt(p.get("ps_ct")), 3) or 0)
 			ws.cell(row=r, column=C["psv"], value=flt(p.get("ps_va")) or 0)
 			stone_terms.append("{0}{1}".format(Lc("psv"), r))
 		if jos_cs:
+			cs_ct = flt(p.get("stn_ct"))
 			ws.cell(row=r, column=C["cspcs"], value=cint(p.get("stn_pcs")) or 0)
+			ws.cell(row=r, column=C["cswt"],
+				value=round(cs_ct * CARAT_GRAMS, 3) if cs_in_g else round(cs_ct, 3))
 			ws.cell(row=r, column=C["csv"], value=flt(p.get("stn_va")) or 0)
 			stone_terms.append("{0}{1}".format(Lc("csv"), r))
 		# the row total had been gold + making + diamond only, so any piece
@@ -13064,7 +13073,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	MINW = {"sl": 5, "item": 11, "size": 6, "style": 6, "colour": 8, "pcs1": 5,
 		"item_color": 9, "gross": 10, "net": 10, "gold": 13, "mc": 13,
 		"g0avg": 9, "g1rate": 9, "tp": 6, "tc": 8, "tv": 11,
-		"pspcs": 7, "psv": 11, "cspcs": 7, "csv": 11, "total": 14,
+		"pspcs": 7, "pswt": 8, "psv": 11,
+		"cspcs": 7, "cswt": 8, "csv": 11, "total": 14,
 		"igi": 9, "huid": 9, "certlab": 7, "certno": 9, "uid": 11}
 	for i in range(huid_cols):
 		MINW["huidc{0}".format(i)] = 12

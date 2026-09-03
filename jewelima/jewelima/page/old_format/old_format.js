@@ -1065,6 +1065,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					gst_percent: fGst.get_value() || 0,
 					igi_flat: v.igi_flat || 80, igi_per_ct: v.igi_per_ct || 325, igi_threshold: v.igi_threshold || 0.10,
 					party: v.party || "", filename: v.fname,
+					// the bill reads in whatever unit the sheet is showing
+					cs_grams: CSG ? 1 : 0,
 				});
 			},
 		});
