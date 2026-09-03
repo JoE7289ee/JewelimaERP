@@ -4,11 +4,14 @@
 // Melting — blend gold sources (999, 995, scrap…) + alloy into a karat gold.
 //   • "Gold Issue" warehouse picker is limited to is_melt_warehouse warehouses.
 //   • Enter the grams you NEED (output); pick the karat to create (its purity = target).
-//   • The materials table starts empty; tick stock rows on the right to add them as sources.
+//   • The materials table starts empty; tick stock rows on the right to add them as sources,
+//     or pick a standard gold / alloy in "Add material" and type the grams by hand.
 //   • Each gold source is sized by an EVEN split to hit the required grams at the target
 //     purity; alloy balances. Edit any weight to override — the rest re-solve.
 //   • "Strict out" locks the required grams (output = required). Unticked, the output floats:
-//     add more of a source and it shows what you can actually get. "No loss" as before.
+//     add more of a source and it shows what you can actually get. It only appears once a
+//     required weight is entered — with no required grams there is nothing to lock to, and the
+//     mix is whatever you hand-build. "No loss" as before.
 // MELT posts a Repack Stock Entry. Route: /app/melt-gold
 
 frappe.pages["melt-gold"].on_page_load = function (wrapper) {
@@ -40,6 +43,10 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		.ml-warn.err{color:#b00020;}
 		.ml-full{padding:0 9px;}
 		.ml-empty{color:var(--text-muted);text-align:center;padding:18px 8px !important;}
+		.ml-add{display:flex;align-items:center;gap:8px;margin:10px 2px 0;}
+		.ml-add .frappe-control{margin:0;width:270px;}
+		.ml-add .help-box,.ml-add .description,.ml-add .control-label{display:none !important;}
+		.ml-add .ml-add-btn{height:28px;}
 		.ml-rm{padding:0 7px;}
 		.ml-sum{display:flex;gap:22px;flex-wrap:wrap;margin:14px 2px 4px;font-size:13px;color:var(--text-muted);}
 		.ml-sum b{color:var(--text-color);font-variant-numeric:tabular-nums;}
@@ -71,7 +78,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 					<div class="ml-req"></div>
 				</div>
 				<div class="ml-opts">
-					<label><input type="checkbox" class="ml-strict" checked> Strict out <span class="ml-help">lock the required grams</span></label>
+					<label class="ml-strictwrap" style="display:none"><input type="checkbox" class="ml-strict" checked> Strict out <span class="ml-help">lock the required grams</span></label>
 					<label><input type="checkbox" class="ml-noloss" checked> No loss</label>
 				</div>
 				<div class="ml-manual" style="display:none;margin:-6px 2px 10px;color:#9a6700;font-size:12px;">
@@ -80,8 +87,12 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 				<div class="ml-card">
 					<table class="ml-tbl">
 						<thead><tr><th style="width:40%">Material</th><th class="num" style="width:18%">Purity %</th><th class="num" style="width:24%">Weight (g)</th><th class="num" style="width:16%">Available</th><th style="width:30px"></th></tr></thead>
-						<tbody class="ml-body"><tr><td colspan="5" class="ml-empty">Tick stock on the right to add materials.</td></tr></tbody>
+						<tbody class="ml-body"><tr><td colspan="5" class="ml-empty">Add a material below, or tick stock on the right.</td></tr></tbody>
 					</table>
+					<div class="ml-add">
+						<div class="ml-add-ctl"></div>
+						<button class="btn btn-xs btn-default ml-add-btn">Add</button>
+					</div>
 					<div class="ml-sum">
 						<span>Total in <b class="ml-tin">0.000 g</b></span>
 						<span>Current purity <b class="ml-cur">—</b></span>
@@ -94,7 +105,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 						<span class="ml-warn"></span>
 					</div>
 				</div>
-				<div class="ml-hint">Pick the karat to create (its purity is the target), enter the grams you need, then tick gold + alloy from the stock below — or hit “Full” to use all of an item (capped at what's needed). Edit any weight to override; the rest re-balance. You can't melt more than the available stock.</div>
+				<div class="ml-hint">Pick the karat to create (its purity is the target). Enter the grams you need and tick gold + alloy from the stock below — or hit “Full” to use all of an item (capped at what's needed). Working without a required weight? Add standard gold / alloy by hand and type the grams; the untouched rows balance to the target purity. You can't melt more than the available stock.</div>
 			</div>
 			<div class="ml-right">
 				<div class="ml-stock-head">Stock <span class="ml-stock-wh"></span></div>
@@ -116,7 +127,20 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	const whCtl = mk(".ml-wh", { fieldtype: "Link", label: "Gold Issue", fieldname: "warehouse", options: "Warehouse", reqd: 1, get_query: () => ({ filters: { is_melt_warehouse: 1, is_group: 0 } }) });
 	const outCtl = mk(".ml-out", { fieldtype: "Link", label: "Create (karat gold)", fieldname: "out", options: "Item", reqd: 1, get_query: () => ({ filters: { material_group: "GOLD", metal_purity: ["!=", ""] } }) });
 	const reqCtl = mk(".ml-req", { fieldtype: "Float", label: "Required (g)", fieldname: "required", precision: "3" });
-	const strict = q(".ml-strict"), noLoss = q(".ml-noloss"), outWt = q(".ml-outwt");
+	const strict = q(".ml-strict"), strictWrap = q(".ml-strictwrap"), noLoss = q(".ml-noloss"), outWt = q(".ml-outwt");
+	const addCtl = mk(".ml-add-ctl", { fieldtype: "Link", label: "Add material", fieldname: "add_item", options: "Item",
+		placeholder: __("Add standard gold or alloy"),
+		get_query: () => ({ filters: { item_group: ["in", ["GOLD STANDARD", "ALLOY"]], disabled: 0 } }) });
+
+	// the required grams is what "Strict out" locks to — with none entered there is nothing to
+	// lock, so the switch stays hidden and the blend simply floats on what you type.
+	const reqG = () => flt(reqCtl.get_value());
+	const isStrict = () => strict.checked && reqG() > 0;
+	function syncStrict() {
+		const on = reqG() > 0;
+		strictWrap.style.display = on ? "" : "none";
+		if (!on) q(".ml-manual").style.display = "none";   // no required grams = hand-built by design
+	}
 
 	// default to the first melt warehouse so the stock panel isn't empty
 	frappe.db.get_value("Warehouse", { is_melt_warehouse: 1, is_group: 0 }, "name").then((r) => {
@@ -134,7 +158,9 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	// alloy balances. Strict: alloy fills weight to the required grams (output = required).
 	// Non-strict: alloy fills to the target purity (output floats with the inputs).
 	function solve() {
-		const T = S.out.purity, Tf = T / 100, W = flt(reqCtl.get_value());
+		syncStrict();
+		const ST = isStrict();
+		const T = S.out.purity, Tf = T / 100, W = reqG();
 		const golds = S.rows.filter((r) => r.purity > 0.001);
 		const alloys = S.rows.filter((r) => r.purity <= 0.001);
 		const pureNeeded = W * Tf;
@@ -148,7 +174,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 
 		// STRICT honours the required grams: if locked/Full'd golds carry MORE pure than the
 		// target needs, scale them down so the blend can still come out at exactly the required.
-		if (strict.checked && W > 0 && lockedGoldPure > pureNeeded + 0.0005) {
+		if (ST && W > 0 && lockedGoldPure > pureNeeded + 0.0005) {
 			const f = pureNeeded / lockedGoldPure;
 			golds.filter((r) => r.locked).forEach((r) => (r.weight = flt(r.weight) * f));
 			scaled = true;
@@ -157,14 +183,14 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		const totalGold = golds.reduce((s, r) => s + flt(r.weight), 0);
 		const totalGoldPure = golds.reduce((s, r) => s + flt(r.weight) * r.purity / 100, 0);
 		const lockedAlloyWt = alloys.filter((r) => r.locked).reduce((s, r) => s + flt(r.weight), 0);
-		const want = strict.checked ? W : (Tf > 0 ? totalGoldPure / Tf : totalGold);
+		const want = ST ? W : (Tf > 0 ? totalGoldPure / Tf : totalGold);
 		let alloyTot = Math.max(want - totalGold - lockedAlloyWt, 0);
 		const freeAlloys = alloys.filter((r) => !r.locked);
 		if (freeAlloys.length) { const a = alloyTot / freeAlloys.length; freeAlloys.forEach((r) => (r.weight = a)); }
 
 		// STRICT guarantee: the total input is exactly the required grams. If anything still
 		// pushes it over (e.g. a locked alloy), scale the whole blend down so output can't exceed it.
-		if (strict.checked && W > 0) {
+		if (ST && W > 0) {
 			const total = S.rows.reduce((s, r) => s + flt(r.weight), 0);
 			if (total > W + 0.0005) {
 				const k = W / total;
@@ -208,7 +234,7 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 	// ---- materials table ------------------------------------------------------
 	function renderMaterials() {
 		const body = q(".ml-body");
-		if (!S.rows.length) { body.innerHTML = '<tr><td colspan="5" class="ml-empty">Tick stock on the right to add materials.</td></tr>'; return; }
+		if (!S.rows.length) { body.innerHTML = '<tr><td colspan="5" class="ml-empty">Add a material below, or tick stock on the right.</td></tr>'; return; }
 		body.innerHTML = "";
 		S.rows.forEach((r) => {
 			const tr = document.createElement("tr");
@@ -226,8 +252,10 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 			r.$wt.addEventListener("input", () => {
 				r.locked = true; r.weight = flt(r.$wt.value); tr.classList.add("locked");
 				// hand input = the user is driving — stop forcing the required grams
-				if (strict.checked) strict.checked = false;
-				q(".ml-manual").style.display = "";
+				if (reqG() > 0) {
+					if (strict.checked) strict.checked = false;
+					q(".ml-manual").style.display = "";
+				}
 				solve();
 			});
 			tr.querySelector(".ml-bal").addEventListener("click", () => balanceAround(r));
@@ -241,6 +269,31 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		renderMaterials(); solve();
 		markStockRow(x.item, true);
 	}
+	// Hand-add a source. If it's on the stock list we reuse that row (same as ticking it);
+	// otherwise we read its purity and whatever this warehouse actually holds, so the
+	// over-stock flag stays honest.
+	function addManual(item) {
+		if (!item) return;
+		if (S.rows.some((r) => r.item === item)) {
+			addCtl.set_value("");
+			return frappe.show_alert({ message: __("{0} is already in the mix", [item]), indicator: "orange" });
+		}
+		const known = S.stock.find((x) => x.item === item);
+		if (known) { addSource(known); addCtl.set_value(""); return; }
+		const wh = whCtl.get_value();
+		frappe.db.get_value("Item", item, ["purity_percentage", "item_group", "stock_uom"]).then((r) => {
+			const d = r.message || {};
+			const bin = wh
+				? frappe.db.get_value("Bin", { item_code: item, warehouse: wh }, "actual_qty").then((b) => flt((b.message || {}).actual_qty))
+				: Promise.resolve(0);
+			bin.then((avail) => {
+				addSource({ item, purity: flt(d.purity_percentage), item_group: d.item_group || "", weight: avail, uom: d.stock_uom || "Gram" });
+				addCtl.set_value("");
+				if (avail <= 0) frappe.show_alert({ message: __("{0} has no stock in {1} — the melt will be refused until it does.", [item, wh || __("this warehouse")]), indicator: "orange" }, 7);
+			});
+		});
+	}
+
 	function removeSource(item) {
 		S.rows = S.rows.filter((r) => r.item !== item);
 		renderMaterials(); solve();
@@ -305,6 +358,8 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 		pur(outCtl.get_value(), (p) => { S.out.purity = p; solve(); });
 	}, 60));
 	reqCtl.$input.on("input", solve);
+	addCtl.$input && addCtl.$input.on("awesomplete-selectcomplete", () => setTimeout(() => addManual(addCtl.get_value()), 60));
+	q(".ml-add-btn").addEventListener("click", () => addManual(addCtl.get_value()));
 	strict.addEventListener("change", solve);
 	noLoss.addEventListener("change", updateSummary);
 	outWt.addEventListener("input", updateSummary);
@@ -322,23 +377,19 @@ frappe.pages["melt-gold"].on_page_load = function (wrapper) {
 
 	// anchor one row: keep ITS weight, unlock everything else and re-solve to the
 	// required grams at the target purity
-	function balanceAround(row) {
-		S.rows.forEach((r) => { r.locked = r === row; });
+	function relax(anchor) {
+		const handMix = reqG() <= 0;
+		S.rows.forEach((r) => { r.locked = (anchor && r === anchor) || (handMix && r.purity > 0.001); });
 		strict.checked = true;
 		q(".ml-manual").style.display = "none";
 		renderMaterials();
 		solve();
 	}
+	function balanceAround(row) { relax(row); }
 
-	page.add_inner_button(__("Re-balance"), () => {
-		S.rows.forEach((r) => { r.locked = false; });
-		strict.checked = true;
-		q(".ml-manual").style.display = "none";
-		renderMaterials();
-		solve();
-	});
+	page.add_inner_button(__("Re-balance"), () => relax(null));
 	page.add_inner_button(__("Reset"), () => {
-		S.rows = []; S.out.purity = 0; outCtl.set_value(""); reqCtl.set_value(0); strict.checked = true; noLoss.checked = true;
+		S.rows = []; S.out.purity = 0; outCtl.set_value(""); reqCtl.set_value(0); addCtl.set_value(""); strict.checked = true; noLoss.checked = true;
 		q(".ml-manual").style.display = "none";
 		renderMaterials(); solve(); loadStock();
 	});
