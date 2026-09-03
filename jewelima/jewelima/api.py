@@ -10055,9 +10055,16 @@ def get_price_chart_list():
 def get_price_chart(name):
 	"""One chart, every block — feeds the editor and the PDF preview."""
 	d = frappe.get_doc("Price Chart", name)
+	# Saving a chart supersedes the old one and mints a new version, so a screen
+	# holding the old name goes on quoting rates nobody uses any more. Hand back
+	# the version that IS current so the caller can move itself across.
+	active = None
+	if d.status != "Active" and d.chart_name:
+		active = frappe.db.get_value("Price Chart",
+			{"chart_name": d.chart_name, "status": "Active"}, "name")
 	return {
 		"name": d.name, "chart_name": d.chart_name, "chart_date": str(d.chart_date or ""),
-		"status": d.status,
+		"status": d.status, "active_version": active,
 		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
 			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
 		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",

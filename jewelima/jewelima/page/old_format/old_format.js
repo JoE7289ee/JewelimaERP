@@ -236,8 +236,24 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		const ch = fChart.get_value();
 		if (!ch) return;
 		frappe.call({ method: API + ".get_price_chart", args: { name: ch }, freeze: false }).then((r) => {
-			CHART = r.message || null;
-			const quals = [...new Set(((r.message || {}).diamond_rates || []).map((d) => d.quality).filter(Boolean))].sort();
+			const m = r.message || {};
+			// Editing a chart supersedes it and mints a new version, and the Link's
+			// Active filter only screens what you SEARCH — a name already in the box
+			// is never re-checked. So a page left open kept quoting the old version's
+			// rates: a CS row priced at 0 because last week's chart had no CS block.
+			if (m.status && m.status !== "Active") {
+				if (m.active_version) {
+					LOADING = true; fChart.set_value(m.active_version); LOADING = false;
+					unprice();
+					frappe.show_alert({ message: __("{0} was superseded — using {1}, the current version of {2}.",
+						[ch, m.active_version, esc(m.chart_name || "")]), indicator: "blue" }, 7);
+					return loadQualities();
+				}
+				frappe.show_alert({ message: __("{0} is {1}, not Active — its rates may not be what you charge now.",
+					[ch, (m.status || "").toLowerCase()]), indicator: "orange" }, 8);
+			}
+			CHART = m;
+			const quals = [...new Set((m.diamond_rates || []).map((d) => d.quality).filter(Boolean))].sort();
 			fCq.df.options = [""].concat(quals).join("\n");
 			fCq.refresh();
 			if (quals.length === 1) fCq.set_value(quals[0]);
