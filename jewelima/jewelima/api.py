@@ -15276,6 +15276,62 @@ def send_hall_prep(name):
 
 
 @frappe.whitelist()
+def export_hallmarking_xlsx(name):
+	"""The sheet that goes to the centre with the packet.
+
+	Karat matters here where diamond quality does not: a hallmarking centre
+	marks the metal, so the sheet leads on purity and gross weight and carries
+	a blank HUID column for the codes to be written back into."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font, PatternFill, Alignment
+
+	d = frappe.get_doc("Hallmarking Batch", name)
+	bags = [r.order_bag for r in d.items]
+	mats = _bag_convert_materials(bags) if bags else {}
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Hallmarking"
+	ws.append(["{0} — {1}".format(d.name, d.center or "")])
+	ws["A1"].font = Font(bold=True, size=14)
+	ws.append(["Prepared", str(d.prepared_on or ""), "", "Sent", str(d.sent_on or "")])
+	ws.append([])
+	head = ["Sl", "Barcode", "Design", "Type", "Size", "Karat", "Gross (g)",
+		"Stones (ct)", "HUID"]
+	ws.append(head)
+	for c in ws[ws.max_row]:
+		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+		c.alignment = Alignment(horizontal="center")
+	tg = ts = 0.0
+	for i, r in enumerate(d.items, 1):
+		karat = ""
+		for it in (mats.get(r.order_bag) or {}):
+			m = frappe.db.get_value("Item", it, ["stone_type", "metal_purity"], as_dict=True) or {}
+			if not m.get("stone_type") and m.get("metal_purity"):
+				karat = m["metal_purity"]
+				break
+		size = frappe.db.get_value("Order Bag", r.order_bag, "size") or ""
+		stones = round(sum(q for it, q in (mats.get(r.order_bag) or {}).items()
+			if frappe.db.get_value("Item", it, "stone_type")), 3)
+		# HUID left EMPTY on purpose — the centre writes the codes in and the
+		# sheet comes back as the slip the Confirm HUID desk is typed from
+		ws.append([i, r.order_bag, r.design or "", r.design_type or "", size, karat,
+			flt(r.gross), stones or None, r.huid or ""])
+		tg += flt(r.gross)
+		ts += stones
+	ws.append(["", "TOTAL", "", "", "", "", round(tg, 3), round(ts, 3) or None, ""])
+	for c in ws[ws.max_row]:
+		c.font = Font(bold=True)
+	for i, w in enumerate([5, 16, 20, 12, 8, 8, 11, 12, 16], 1):
+		ws.column_dimensions[ws.cell(row=4, column=i).column_letter].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "{0}-{1}.xlsx".format(d.name, d.center or "hallmarking")
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "binary"
+
+@frappe.whitelist()
 def get_hallmarking_out():
 	"""Hallmark Out board: every SENT batch — days out, pieces by design type,
 	weights. Collection is whole-batch, exactly as it is for a lab packet."""

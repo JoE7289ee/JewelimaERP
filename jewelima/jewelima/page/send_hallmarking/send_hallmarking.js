@@ -48,6 +48,7 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					</div>
 					<div class="sh-actions">
 						<button class="btn btn-primary btn-sm sh-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>
+						<button class="btn btn-default btn-sm sh-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-sm sh-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>
 					</div>
 				</div>`).join("") || `<div class="sh-empty">${__("Nothing prepared — build a batch on the Hallmark desk.")}</div>`);
@@ -67,6 +68,12 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			frappe.show_alert({ message: __("{0} cancelled — its pieces are free again.", [nm]), indicator: "orange" }, 4);
 			load();
 		});
+	});
+	// the sheet that travels with the packet — its HUID column is blank, so it
+	// comes back as the slip Confirm HUID is typed from
+	root.on("click", ".sh-xls", function () {
+		const nm = $(this).closest(".sh-card").data("name");
+		open_url_post("/api/method/jewelima.jewelima.api.export_hallmarking_xlsx", { name: nm });
 	});
 	root.on("click", ".sh-send", function () {
 		const nm = $(this).closest(".sh-card").data("name");
