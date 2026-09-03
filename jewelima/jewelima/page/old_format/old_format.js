@@ -32,6 +32,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	// chart, so grams are a VIEW: 1 ct = 0.2 g, converted for the eye only. The
 	// choice sticks per browser — a counter that works in grams should not have to
 	// say so again every morning.
+	const hasPS = () => ROWS.some((r) => flt(r.ps_ct) > 0 || cint(r.ps_pcs) > 0);
+	const hasCS = () => ROWS.some((r) => flt(r.stn_ct) > 0 || cint(r.stn_pcs) > 0);
+
 	const CS_G_KEY = "jw_of_cs_grams";
 	let CSG = false;
 	try { CSG = localStorage.getItem(CS_G_KEY) === "1"; } catch (e) { CSG = false; }
@@ -430,14 +433,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	}
 
 	function paintPrep() {
+		const ps = hasPS(), cs = hasCS();
 		root.find(".of-body").html(`
 			<table class="of-t prep"><thead><tr>
 				<th><input type="checkbox" class="of-selall"></th>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("HUID")}<span style="font-weight:400;color:var(--text-muted);"> ${__("(two boxes)")}</span></th><th>${__("Item")}</th><th>${__("Design")}</th>
 				<th class="num">${__("GS g")}</th><th class="num">${__("NT g")}</th>
 				<th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
-				<th class="num">${__("PS pcs")}</th><th class="num">${__("PS ct")}</th><th>${__("PS stone")}</th>
-				<th class="num">${__("CS pcs")}</th><th class="num">${csUnit()}</th>
+				${ps ? `<th class="num">${__("PS pcs")}</th><th class="num">${__("PS ct")}</th><th>${__("PS stone")}</th>` : ""}
+				${cs ? `<th class="num">${__("CS pcs")}</th><th class="num">${csUnit()}</th>` : ""}
 				<th>${__("COLOR")}</th><th>${__("Size")}</th><th>${__("G/L")}</th><th>${__("Shape")}</th>
 				<th>${__("Cert")}</th><th>${__("Shop Name")}</th>
 			</tr></thead><tbody>
@@ -451,12 +455,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
 				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
 				<td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
-				<td class="num">${r.ps_pcs || ""}</td><td class="num">${r.ps_ct || ""}</td>
+				${ps ? `<td class="num">${r.ps_pcs || ""}</td><td class="num">${r.ps_ct || ""}</td>
 				<td>${r.ps_ct ? `<input data-f="ps_stone" list="of-pstones" value="${esc(r.ps_stone || "")}"
 					style="width:104px;text-transform:uppercase;" placeholder="${__("name it")}"
 					title="${__("The chart prices precious stones by name — without it this PS cannot be priced")}">`
-					: `<span style="color:var(--text-muted);">&mdash;</span>`}</td>
-				<td class="num">${r.stn_pcs || ""}</td><td class="num">${csShow(r.stn_ct)}</td>
+					: `<span style="color:var(--text-muted);">&mdash;</span>`}</td>` : ""}
+				${cs ? `<td class="num">${r.stn_pcs || ""}</td><td class="num">${csShow(r.stn_ct)}</td>` : ""}
 				<td><input data-f="colour" list="of-colors" value="${esc(r.colour)}" style="width:76px;"></td>
 				<td><input data-f="size" value="${esc(r.size)}" style="width:48px;"></td>
 				<td><select data-f="style"><option value=""></option>
@@ -494,16 +498,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		if (priced) PRICED.rows.forEach((x) => { P[x.unique_id] = x; });
 		// PS and CS earn their columns only when the sheet actually carries them —
 		// every PS/STN flag is raised inside a >0 check, so none can be orphaned
-		const hasPS = ROWS.some((r) => flt(r.ps_ct) > 0);
-		const hasCS = ROWS.some((r) => flt(r.stn_ct) > 0);
+		const ps = hasPS(), cs = hasCS();
 		root.find(".of-body").html(`
 			<table class="of-t${priced ? " priced" : ""}"><thead><tr>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("COLOR")}</th>
 				<th class="num">${__("NT g")}</th><th class="num">${__("DMD pcs")}</th><th class="num">${__("DMD ct")}</th>
-				${hasPS ? `<th class="num">${__("PS ct")}</th>` : ""}${hasCS ? `<th class="num">${csUnit()}</th>` : ""}
+				${ps ? `<th class="num">${__("PS ct")}</th>` : ""}${cs ? `<th class="num">${csUnit()}</th>` : ""}
 				<th>${__("HUID")}</th><th>${__("Cert")}</th>
 				${priced ? `<th class="num">${__("Gold")}</th><th class="num">${__("Making")}</th>
-				<th class="num">${__("DMD")}</th>${hasPS ? `<th class="num">${__("PS")}</th>` : ""}${hasCS ? `<th class="num">${__("CS")}</th>` : ""}
+				<th class="num">${__("DMD")}</th>${ps ? `<th class="num">${__("PS")}</th>` : ""}${cs ? `<th class="num">${__("CS")}</th>` : ""}
 				<th class="num">${__("Cert/HUID")}</th>
 				<th class="num">${__("TOTAL")}</th>` : ""}
 			</tr></thead><tbody>
@@ -514,14 +517,14 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				return `<tr class="${fl ? "of-flagged" : ""}" style="--of-tint:${tint};background:${tint};">
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
 				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
-				${hasPS ? `<td class="num">${r.ps_ct || ""}${r.ps_stone ? `<div class="of-flag">${esc(r.ps_stone)}</div>` : ""}</td>` : ""}
-				${hasCS ? `<td class="num">${csShow(r.stn_ct)}</td>` : ""}
+				${ps ? `<td class="num">${r.ps_ct || ""}${r.ps_stone ? `<div class="of-flag">${esc(r.ps_stone)}</div>` : ""}</td>` : ""}
+				${cs ? `<td class="num">${csShow(r.stn_ct)}</td>` : ""}
 				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td>
 				${priced ? `<td class="num" title="${cellTitle(p, "gold", (p.notes || {}).gold)}">₹ ${money(p.gold_va)}</td>
 				<td class="num" title="${cellTitle(p, "mc", (p.notes || {}).mc)}">₹ ${money(p.mc)}</td>
 				<td class="num" title="${cellTitle(p, "dmd", (p.notes || {}).dmd)}">₹ ${money(p.dmd_va)}${p.dmd_rt ? `<div class="of-flag">${p.stone_ct}/st @ ${esc(p.dmd_bracket)}</div>` : ""}</td>
-				${hasPS ? `<td class="num" title="${cellTitle(p, "ps", (p.notes || {}).ps)}">₹ ${money(p.ps_va || 0)}${p.ps_rt ? `<div class="of-flag">@ ${money(p.ps_rt)}/ct</div>` : ""}</td>` : ""}
-				${hasCS ? `<td class="num" title="${cellTitle(p, "cs", (p.notes || {}).stn)}">₹ ${money(p.stn_va || 0)}</td>` : ""}
+				${ps ? `<td class="num" title="${cellTitle(p, "ps", (p.notes || {}).ps)}">₹ ${money(p.ps_va || 0)}${p.ps_rt ? `<div class="of-flag">@ ${money(p.ps_rt)}/ct</div>` : ""}</td>` : ""}
+				${cs ? `<td class="num" title="${cellTitle(p, "cs", (p.notes || {}).stn)}">₹ ${money(p.stn_va || 0)}</td>` : ""}
 				<td class="num" title="${cellTitle(p, "cert", (p.notes || {}).cert)}">₹ ${money(p.cert_va || 0)}</td>
 				<td class="num" title="${cellTitle(p, "total", (p.notes || {}).total)}"><b>₹ ${money(p.total)}</b></td>` : ""}
 			</tr>`; }).join("")}</tbody></table>
