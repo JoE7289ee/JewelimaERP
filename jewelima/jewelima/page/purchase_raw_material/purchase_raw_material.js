@@ -25,6 +25,10 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			border:1px solid var(--border-color);border-radius:13px;padding:13px 16px;
 			background:var(--fg-color);}
 		/* up to five, sized so five fit a laptop without wrapping to a second line */
+		.pr-title{font-size:15px;font-weight:800;letter-spacing:.07em;color:var(--text-color);
+			display:flex;align-items:baseline;gap:10px;}
+		.pr-title .pr-sub{font-size:11.5px;font-weight:400;letter-spacing:0;color:var(--text-muted);
+			text-transform:none;}
 		.pr-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
 		.pr-tile{border:1px solid var(--border-color);border-radius:12px;padding:10px 14px;
 			background:var(--fg-color);}
@@ -42,14 +46,24 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		table.pr-grid tr.pr-bad > td:first-child{box-shadow:inset 3px 0 0 #b02a2a;}
 		table.pr-grid tr.pr-bad > td{background:rgba(176,42,43,.055);}
 		table.pr-grid tr.pr-ok > td{background:rgba(29,122,51,.045);}
+		/* the row number carries the line's nature: gold warm, stone cool — so a
+		   sheet of mixed lines reads as two kinds of thing at a glance */
+		table.pr-grid td.pr-num{font-weight:800;}
+		table.pr-grid tr.pr-metal td.pr-num{background:rgba(218,165,32,.20);color:#7a5a00;}
+		table.pr-grid tr.pr-stone td.pr-num{background:rgba(31,97,141,.16);color:#1f618d;}
+		table.pr-grid tbody tr:hover > td{background:rgba(31,97,141,.06);}
+		table.pr-grid tfoot td{font-variant-numeric:tabular-nums;}
 		.pr-head .frappe-control{margin:0;}
 		.pr-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.pr-head .control-input-wrapper .control-input,.pr-head .control-input input,.pr-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
 		.pr-head .help-box,.pr-head .description{display:none !important;}
 		.pr-gridbox{flex:1 1 auto;overflow:auto;border:1px solid var(--border-color);border-radius:13px;}
 		table.pr-grid{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
-		table.pr-grid th{position:sticky;top:0;z-index:2;background:var(--control-bg, var(--fg-color));
-			border-right:1px solid var(--border-color);border-bottom:1px solid var(--gray-400, #aeb6bf);padding:3px 6px;text-align:left;white-space:nowrap;font-weight:700;}
+		table.pr-grid th{position:sticky;top:0;z-index:2;
+			background:linear-gradient(var(--control-bg,#f4f5f6),var(--fg-color));
+			border-right:1px solid var(--border-color);border-bottom:2px solid var(--gray-400, #aeb6bf);
+			padding:6px 8px;text-align:left;white-space:nowrap;font-weight:800;
+			font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);}
 		table.pr-grid td{border-right:1px solid var(--border-color);border-bottom:1px solid var(--border-color);padding:0 2px;vertical-align:middle;background:var(--fg-color);height:30px;}
 		table.pr-grid td.pr-num{color:var(--text-muted);text-align:center;width:30px;background:var(--control-bg);}
 		table.pr-grid input,table.pr-grid select{width:100%;border:1px solid var(--gray-400, #aeb6bf);background:var(--fg-color);
@@ -66,6 +80,8 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		.pr-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="pr-wrap">
+			<div class="pr-title">${__("PURCHASE RAW MATERIAL")}
+				<span class="pr-sub">${__("gold and stones into stock")}</span></div>
 			<div class="pr-head">
 				<div class="pr-h-voucher"></div><div class="pr-h-supplier"></div><div class="pr-h-wh"></div>
 			</div>
@@ -100,8 +116,14 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	});
 	state.header.warehouse.$input.on("change", () => { state.whTouched = true; });
 
+	// ONE shot, on the FIRST item of the sheet. The flag is set before the lookup
+	// returns, not after, so a second item picked while the first is still in
+	// flight cannot start a second write — that race is how a stone added after
+	// three gold lines moved the warehouse out from under the buyer.
 	function warehouseFor(isStone) {
-		if (state.whTouched || state.header.warehouse.get_value()) return;
+		if (state.whDecided || state.whTouched) return;
+		state.whDecided = true;
+		if (state.header.warehouse.get_value()) return;   // buyer already chose
 		const want = isStone ? "Stone Issue" : "Gold Issue";
 		frappe.db.get_value("Warehouse", { warehouse_name: want }, "name").then((r) => {
 			if (r.message && r.message.name && !state.whTouched) {
@@ -129,6 +151,31 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 	// sieve averages per GROUP (DMD / CVD / CZ / SW — one chart, four columns).
 	// Entering CARATS on any sized stone row judges the piece COUNT = carats /
 	// that group's avg (editable after).
+	// Item Group is a tree: DIAMOND VVS-EF sits under DIAMOND, while CZ / CVD /
+	// SWAROVSKI sit directly under a generic STONE. Read it once so the tiles can
+	// bracket a stone by the level that means something.
+	const GPARENT = {};
+	frappe.call({ method: "frappe.client.get_list", args: {
+		doctype: "Item Group", fields: ["name", "parent_item_group"],
+		limit_page_length: 0, parent: "Item Group",
+	} }).then((r) => {
+		(r.message || []).forEach((g) => { GPARENT[g.name] = g.parent_item_group || ""; });
+		recalc();
+	});
+
+	// What a row counts towards on the tile strip.
+	function bracketOf(group, isStone) {
+		if (!group) return "";
+		if (/finding/i.test(group)) return __("GOLD FINDINGS");
+		if (!isStone) return group;                     // GOLD STANDARD, GOLD 14K …
+		const parent = GPARENT[group] || "";
+		// STONE is the catch-all above CZ / CVD / SWAROVSKI — rolling those three
+		// together would hide the only thing that distinguishes them, so a stone
+		// keeps its own name unless its parent is a real family (DIAMOND).
+		return (!parent || /^stone$/i.test(parent) || /^all item groups$/i.test(parent))
+			? group : parent;
+	}
+
 	let SIEVE = {};
 	frappe.call({ method: "jewelima.jewelima.api.get_sieve_map" }).then((r) => { SIEVE = r.message || {}; });
 	function sieveAvg(item, stone_type) {
@@ -160,7 +207,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 
 	function recalc() {
 		let csum = 0, gsum = 0, ctsum = 0, pure = 0, live = 0;
-		const byGroup = {};
+		const byGroup = {}, byStone = {};
 		state.rows.forEach((r) => {
 			const st = rowState(r);
 			r.$tr.removeClass("pr-ok pr-bad");
@@ -170,24 +217,25 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			ctsum += flt(r.f.carat.get());
 			if (st !== "ok") return;                 // tiles count only what will post
 			live++;
-			if (!r.isStone) {
+			const bracket = bracketOf(r.group, r.isStone);
+			if (r.isStone) {
+				// stones are bracketed the same way but measured in carats, so they
+				// are kept apart from the gram totals rather than added to them
+				const ct = flt(r.f.carat.get());
+				if (bracket) byStone[bracket] = (byStone[bracket] || 0) + ct;
+			} else {
 				const g = flt(r.f.gram.get());
 				// PURE gold is the weight through its own purity — 300 g of 995 is
 				// 298.5 g of gold, and that is the number the vault cares about
 				pure += g * (flt(r.purityPct) / 100);
-				// Findings come in a group per karat and colour (18 KYG Findings,
-				// 22 KYG Findings, 18K Common Findings …). Five tiles cannot hold
-				// them one by one, and the buyer thinks in one number anyway, so
-				// they roll up to GOLD FINDINGS. Everything else keeps its own name.
-				const grp = /finding/i.test(r.group) ? __("GOLD FINDINGS") : r.group;
-				if (grp) byGroup[grp] = (byGroup[grp] || 0) + g;
+				if (bracket) byGroup[bracket] = (byGroup[bracket] || 0) + g;
 			}
 		});
 		if (totals.count) totals.count.text(csum || "");
 		if (totals.gram) totals.gram.text(gsum ? gsum.toFixed(3) : "");
 		if (totals.carat) totals.carat.text(ctsum ? ctsum.toFixed(3) : "");
 		$(page.main).find(".pr-count").text(state.rows.length);
-		paintTiles({ pure, byGroup, carats: ctsum, pieces: csum, live });
+		paintTiles({ pure, byGroup, byStone, carats: ctsum, pieces: csum, live });
 	}
 
 	// At most five, and only the ones that have something to say — an empty tile
@@ -204,7 +252,9 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			.forEach((grp) => {
 				if (tiles.length < 4) tiles.push({ k: grp, v: g3(t.byGroup[grp]), s: "g" });
 			});
-		if (t.carats > 0) tiles.push({ k: __("Stones"), v: g3(t.carats), s: "ct" });
+		Object.keys(t.byStone).sort().forEach((grp) => {
+			if (tiles.length < 5) tiles.push({ k: grp, v: g3(t.byStone[grp]), s: "ct", cls: "stone" });
+		});
 		if (t.pieces > 0 && tiles.length < 5) tiles.push({ k: __("Pieces"), v: t.pieces, s: "" });
 		$(page.main).find(".pr-tiles").html(tiles.slice(0, 5).map((x) => `
 			<div class="pr-tile ${x.cls || ""}">
@@ -227,6 +277,7 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 			const v = r.message || {};
 			if (row.setUom) row.setUom(v.weight_unit);
 			row.isStone = !!v.stone_type;
+			row.$tr.removeClass("pr-metal pr-stone").addClass(row.isStone ? "pr-stone" : "pr-metal");
 			row.group = v.item_group || "";
 			row.purityPct = flt(v.purity_percentage);
 			warehouseFor(row.isStone);      // first item decides where it lands
@@ -339,6 +390,7 @@ function postPurchase(page, state, $body) {
 		frappe.show_alert({ message: __("Posted {0} · {1} (₹ {2})", [res.name, res.record, res.total]), indicator: "green" }, 6);
 		$body.empty();
 		state.rows = [];
+		state.whDecided = false;      // a new sheet decides its warehouse again
 		state.addRow();
 	}).catch(() => frappe.dom.unfreeze());
 }
