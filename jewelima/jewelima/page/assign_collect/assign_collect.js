@@ -252,9 +252,22 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		}
 	});
 
+	// ONE Assign button. With an employee picked it assigns to them; with the box
+	// empty it asks first, because an unowned card has no one to collect it back
+	// from until somebody is named at collection.
+	function assignClicked() {
+		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
+		if (empVal()) return doAssign(true);
+		frappe.confirm(
+			__("These {0} card(s) will be assigned at {1} with <b>no employee</b>.",
+				[state.rows.length, state.location])
+			+ "<br><br>" + __("Nobody owns them until someone is named when they are collected back."),
+			() => doAssign(false));
+	}
+
 	function doAssign(withEmployee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
-		if (!empVal()) return frappe.msgprint(__("Select who is taking the work."));
+		if (withEmployee && !empVal()) return frappe.msgprint(__("Select who is taking the work."));
 		const parts = chunk(state.rows.map((r) => r.name), AC_CHUNK);
 		const tot = { count: 0, errors: [] };
 		const run = (i) => {
@@ -335,9 +348,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	function renderActions() {
 		$actions.empty();
 		if (state.mode === "assign") {
-			// every assignment is owned by someone: the card has to be collectable
-			// back off a named person, and the anonymous assign made that impossible
-			$(`<button class="btn btn-primary btn-sm">${__("Assign")}</button>`).appendTo($actions).on("click", () => doAssign(true));
+			$(`<button class="btn btn-primary btn-sm">${__("Assign")}</button>`).appendTo($actions).on("click", assignClicked);
 		} else {
 			$(`<button class="btn btn-primary btn-sm">${__("Collect")}</button>`).appendTo($actions).on("click", doCollect);
 		}

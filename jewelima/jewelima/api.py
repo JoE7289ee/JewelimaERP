@@ -8296,8 +8296,14 @@ def issue_bench_cards(names, location, employee=None, work_type=None):
 	if (location or "").upper() not in ISSUE_RECEIPT_LOCATIONS:
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	loc = (location or "").upper()
-	if not employee:
-		frappe.throw(frappe._("Pick who the gold is being issued to."))
+	# The employee is optional on the way OUT, the same way it is for assign: gold
+	# often moves before anyone has written down who took it, and refusing the
+	# issue for that only means the card gets worked with no session at all — and
+	# no weight_out snapshot, which is worse. The name is required on the way
+	# BACK, where the loss is booked: receipt_bench_cards refuses a card that has
+	# no employee on its issue and none named at receipt. Nothing is ever closed
+	# without a name against it. A nameless issue simply bumps no held-weight
+	# balance, and receipt unwinds none — the two already agree.
 	work_type = _valid_bench_option(location, "Work Type", work_type)
 	dt = bench_doctype(location)
 	done, errors = [], []
@@ -8453,6 +8459,12 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 				).format(round(gain, 3), round(wout, 3), round(win, 3), MAX_RECEIPT_GAIN_G)})
 				continue
 			issue_emp = issue.employee
+			# the mirror of the optional issue: a card that went out unnamed cannot
+			# also come back unnamed, or its loss is booked against nobody
+			if not issue_emp and not employee:
+				errors.append({"name": nm, "error": frappe._(
+					"This card was issued without an employee — say who did the work.")})
+				continue
 			# STRICT: a card issued to someone comes back under THEIR name only —
 			# a different employee at receipt means a wrong scan, not a handover
 			if issue_emp and employee and employee != issue_emp:

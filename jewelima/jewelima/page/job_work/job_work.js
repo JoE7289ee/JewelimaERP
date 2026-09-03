@@ -362,9 +362,23 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	});
 
 	// ---- actions ---------------------------------------------------------
+	// ONE Issue button. With an employee picked the gold goes onto their held
+	// balance; with the box empty it asks first — the gold still leaves with a
+	// weight_out snapshot, and Receipt then refuses to close the card until
+	// somebody is named, so the loss is never booked against nobody.
+	function issueClicked() {
+		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
+		if (empVal()) return doIssue(true);
+		frappe.confirm(
+			__("These {0} card(s) will be issued at {1} with <b>no employee</b>.",
+				[state.rows.length, state.location])
+			+ "<br><br>" + __("The gold goes out against nobody's balance, and Receipt will ask who did the work before it can be taken back in."),
+			() => doIssue(false));
+	}
+
 	function doIssue(withEmployee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one card first."));
-		if (!empVal()) return frappe.msgprint(__("Select who the gold is being issued to."));
+		if (withEmployee && !empVal()) return frappe.msgprint(__("Select who the gold is being issued to."));
 		// Issue in CHUNKS. Each card is a stock snapshot plus an employee-balance
 		// bump, so a long batch is a lot of work in one request — and a gateway
 		// timeout mid-way would leave the bench half-issued with nothing said.
@@ -476,7 +490,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		if (state.mode === "issue") {
 			// gold never leaves the bench anonymously — the loss on receipt has to
 			// answer to somebody, so there is no employee-less issue
-			$(`<button class="btn btn-primary btn-sm">${__("Issue")}</button>`).appendTo($actions).on("click", () => doIssue(true));
+			$(`<button class="btn btn-primary btn-sm">${__("Issue")}</button>`).appendTo($actions).on("click", issueClicked);
 		} else {
 			$(`<button class="btn btn-primary btn-sm">${__("Receipt")}</button>`).appendTo($actions).on("click", doReceipt);
 		}
