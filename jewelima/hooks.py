@@ -90,6 +90,11 @@ doctype_js = {"Employee": "public/js/employee.js"}
 # ------------
 
 # before_install = "jewelima.install.before_install"
+# A sidebar row pointing at a page that no longer ships ABORTS the whole migrate:
+# the page fixtures are removed first, then the sidebar is saved and its link
+# validation fails on the stale row. Sweeping those before the sync means
+# retiring a page is a matter of deleting it, not of remembering this.
+before_migrate = "jewelima.setup.before_migrate"
 after_install = "jewelima.setup.after_install"
 after_migrate = "jewelima.setup.after_migrate"
 

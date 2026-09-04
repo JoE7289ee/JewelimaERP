@@ -84,6 +84,27 @@ def sync_location_options():
 		frappe.clear_cache(doctype="Order Bag")
 
 
+def before_migrate():
+	"""Drop sidebar links whose Page has gone.
+
+	Migrate removes a retired page's fixture, then saves the Workspace Sidebar —
+	and a child row still pointing at that page fails link validation and takes
+	the whole migrate down with it. Nothing else can fix it at that point,
+	because patches run afterwards. So the sweep happens first, and retiring a
+	page stays a matter of deleting the page."""
+	if not frappe.db.exists("DocType", "Workspace Sidebar Item"):
+		return
+	rows = frappe.db.sql("""SELECT si.name, si.parent, si.label, si.link_to
+		FROM `tabWorkspace Sidebar Item` si
+		WHERE si.link_type = 'Page' AND IFNULL(si.link_to, '') != ''
+		  AND NOT EXISTS (SELECT 1 FROM `tabPage` p WHERE p.name = si.link_to)""", as_dict=True)
+	for r in rows:
+		frappe.db.delete("Workspace Sidebar Item", {"name": r.name})
+		print("sidebar: dropped '{0}' -> missing page {1}".format(r.label or "?", r.link_to))
+	if rows:
+		frappe.db.commit()
+
+
 def after_migrate():
 	# All seeders are idempotent. Items + warehouses need a Company / item groups
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
@@ -257,7 +278,9 @@ JEWELIMA_CAM_TO = ("WAXING", "CAD")
 JEWELIMA_DELIVERY_ROLE = "JW Delivery"
 JEWELIMA_DELIVERY_PAGES = [
 	# Delivery
-	"finished-goods", "transfer-holder", "transfer-bucket", "buckets", "rework",
+	# buckets moved into Delivery Masters under Delivery Settings — settings are
+	# set up once and belong to the manager, not the counter
+	"finished-goods", "transfer-holder", "transfer-bucket", "rework",
 	# Barcode: the roll printer and the sheet printer
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again
