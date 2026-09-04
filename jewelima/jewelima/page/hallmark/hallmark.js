@@ -264,6 +264,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				<input type="text" class="hp-q" placeholder="${__("Search card / design / holder")}">
 				<span class="hp-pill hp-selonly">${__("Selected only")}</span>
 				<button class="btn btn-xs btn-default hp-reset">${__("Reset")}</button>
+				<button class="btn btn-xs btn-default hp-clear" style="display:none;">${__("Clear selection")}</button>
 				<span class="hp-count"></span>
 			</div>
 			<div class="hp-box"><table class="hp-t">
@@ -309,6 +310,8 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			const h = $b.find(".hp-head-cb")[0];
 			if (h) { h.checked = pick.length > 0 && hit === pick.length; h.indeterminate = hit > 0 && hit < pick.length; }
 			dlg.get_primary_btn().text(P.sel.size ? __("Add {0} to batch", [P.sel.size]) : __("Add to batch"));
+			$b.find(".hp-clear").toggle(P.sel.size > 0)
+				.text(__("Clear selection ({0})", [P.sel.size]));
 		}
 
 		function load(more, all) {
@@ -331,6 +334,14 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		$b.on("input", ".hp-q", frappe.utils.debounce(function () { P.q = this.value || ""; load(); }, 300));
 		$b.on("click", ".hp-more", () => load(true));
 		$b.on("click", ".hp-all", () => load(true, true));
+		$b.on("click", ".hp-clear", function () {
+			P.sel.clear();
+			// "Selected only" with nothing selected reads as an empty picker, so
+			// clearing the ticks drops that view too
+			P.selOnly = false;
+			$b.find(".hp-selonly").removeClass("on");
+			paint();
+		});
 		$b.on("click", ".hp-selonly", function () {
 			P.selOnly = !P.selOnly; $(this).toggleClass("on", P.selOnly); paint();
 		});
