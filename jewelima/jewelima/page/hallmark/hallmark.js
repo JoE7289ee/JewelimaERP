@@ -59,7 +59,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		.hm-hist table{width:100%;border-collapse:collapse;font-size:12px;}
 		.hm-hist td{padding:5px 9px;border-bottom:1px solid var(--border-color);vertical-align:top;}
 		.hb{display:inline-block;border-radius:9px;padding:0 7px;font-size:10px;font-weight:800;color:#fff;}
-		.hb.ok{background:#1d7a33;} .hb.no{background:#b02a2a;}
+		.hb.ok{background:#1d7a33;} .hb.no{background:#b02a2a;} .hb.by{background:#4a5a6a;}
 		</style>
 		<div class="hm-bar">
 			<div class="hm-f"><label>${__("Centre")}</label><select class="hm-center"></select></div>
@@ -93,7 +93,8 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		root.find(".hm-hist").html(S.hist.length
 			? `<table>${S.hist.map((h) => `<tr>
 				<td style="white-space:nowrap;">${esc(h.code)}</td>
-				<td><span class="hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("NO")}</span></td>
+				<td style="white-space:nowrap;"><span class="hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("NO")}</span>${
+					h.by ? ` <span class="hb by">${__("BY FILTER")}</span>` : ""}</td>
 				<td>${esc(h.why || "")}</td></tr>`).join("")}</table>`
 			: `<div class="hm-none">${__("Every scan lands here, good or refused.")}</div>`);
 	}
@@ -149,6 +150,32 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			});
 	}
 
+	// The picker hands over a whole tick-list. One call validates the lot — a
+	// scan at a time meant 60 round trips for a slice anyone would pull in.
+	function addMany(codes) {
+		if (!codes.length) return Promise.resolve();
+		return frappe.call({ method: API + ".hall_draft_scan_many", freeze: false,
+			args: { barcodes: JSON.stringify(codes),
+				existing: JSON.stringify(S.rows.map((r) => r.order_bag)) } })
+			.then((r) => {
+				let ok = 0, no = 0;
+				for (const x of (r.message || {}).results || []) {
+					if (x.rejected) {
+						no++;
+						S.hist.unshift({ code: x.code, ok: 0, by: 1, why: x.rejected });
+					} else {
+						ok++;
+						S.rows.push(x.row);
+						S.hist.unshift({ code: x.row.order_bag, ok: 1, by: 1,
+							why: `${x.row.design || ""} ${flt(x.row.gross).toFixed(3)} g` });
+					}
+				}
+				paintHist();
+				paint();
+				return { ok, no };
+			});
+	}
+
 	function loadCenters() {
 		frappe.call({ method: API + ".get_hall_prep_context" }).then((r) => {
 			const cs = ((r.message || {}).centers || []);
@@ -197,10 +224,13 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				// through the SAME guard a scan uses, so a piece that cannot go is
 				// refused here too and says why in the history
 				frappe.dom.freeze(__("Adding {0}…", [picked.length]));
-				picked.reduce((chain, n) => chain.then(() => add(n)), Promise.resolve())
-					.then(() => {
+				addMany(picked)
+					.then((c) => {
 						frappe.dom.unfreeze();
-						msg("ok", __("{0} on the batch.", [S.rows.length]));
+						msg(c && c.no ? "warn" : "ok", c && c.no
+							? __("{0} added by filter, {1} refused · {2} on the batch.",
+								[c.ok, c.no, S.rows.length])
+							: __("{0} added by filter · {1} on the batch.", [(c || {}).ok || 0, S.rows.length]));
 						focusScan();
 					}).catch(() => frappe.dom.unfreeze());
 			},

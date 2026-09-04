@@ -15166,6 +15166,32 @@ def hall_draft_scan(barcode, existing=None):
 
 
 @frappe.whitelist()
+def hall_draft_scan_many(barcodes, existing=None):
+	"""The picker's whole tick-list in ONE round trip. Same guard as a single
+	scan, applied piece by piece against a growing set, so a duplicate inside
+	the selection is refused exactly as it would be if it were scanned twice."""
+	if isinstance(barcodes, str):
+		barcodes = json.loads(barcodes or "[]")
+	if isinstance(existing, str):
+		existing = json.loads(existing or "[]")
+	seen = set(existing or [])
+	out = []
+	for code in barcodes or []:
+		nm = (code or "").strip()
+		if not nm:
+			continue
+		try:
+			b = _hall_validate_piece(nm, seen)
+		except frappe.ValidationError as e:
+			frappe.local.message_log = []      # no modal — the page logs it in history
+			out.append({"code": nm, "rejected": str(e)})
+			continue
+		seen.add(nm)
+		out.append({"code": nm, "row": _hall_row(nm, b)})
+	return {"results": out}
+
+
+@frappe.whitelist()
 def hall_prep_create(center, bags=None):
 	"""PREP: the draft becomes the batch in one shot, re-validated piece by
 	piece, named HALL-0001."""
