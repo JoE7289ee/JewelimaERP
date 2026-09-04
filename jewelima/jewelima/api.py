@@ -19216,21 +19216,32 @@ def get_out_summary():
 	today = frappe.utils.today()
 	out = {"batches": [], "pools": []}
 
+	# every stone bucket out of the building, kept per pool AND overall — "0.7 ct
+	# of stones" is not something anyone can act on; which bucket it is decides
+	# what the packet is worth and who has to be told if it goes missing
+	all_stone = {}
+
 	def pool(kind, label, status, rows):
 		bags = [b for r in rows for b in r["bags"]]
 		gold = stones = pure = 0.0
+		by_stone = {}
 		for mats in (_bag_convert_materials(bags) if bags else {}).values():
 			for it, q in mats.items():
 				m = frappe.db.get_value("Item", it, ["stone_type", "purity_percentage"], as_dict=True) or {}
-				if m.get("stone_type"):
+				st = m.get("stone_type")
+				if st:
 					stones += flt(q)
+					by_stone[st] = round(by_stone.get(st, 0) + flt(q), 3)
+					all_stone[st] = round(all_stone.get(st, 0) + flt(q), 3)
 				else:
 					gold += flt(q)
 					pure += flt(q) * flt(m.get("purity_percentage")) / 100.0
 		out["pools"].append({"kind": kind, "label": label, "status": status,
 			"batches": len(rows), "pieces": len(bags),
 			"gross": round(sum(flt(r["gross"]) for r in rows), 3),
-			"gold": round(gold, 3), "pure": round(pure, 3), "stones": round(stones, 3)})
+			"gold": round(gold, 3), "pure": round(pure, 3), "stones": round(stones, 3),
+			"by_stone": [{"stone_type": k, "ct": v} for k, v in
+				sorted(by_stone.items(), key=lambda kv: -kv[1])]})
 		out["batches"].extend(rows)
 
 	# ---- away at a lab
@@ -19273,6 +19284,8 @@ def get_out_summary():
 		"stones": round(sum(p["stones"] for p in out["pools"]), 3),
 		"oldest": max([b["days_out"] for b in out["batches"]] or [0]),
 	}
+	out["by_stone"] = [{"stone_type": k, "ct": v} for k, v in
+		sorted(all_stone.items(), key=lambda kv: -kv[1])]
 	return out
 
 @frappe.whitelist()

@@ -45,6 +45,11 @@ frappe.pages["out-of-house"].on_page_load = function (wrapper) {
 		.oh-tile .v{font-size:22px;font-weight:800;}
 		.oh-tile.pure .v{color:#1f618d;}
 		.oh-tile.old .v{color:#b02a2a;}
+		.oh-tile.stone{border-left:3px solid #7a4fb5;}
+		.oh-tile.stone .v{color:#7a4fb5;}
+		[data-theme="dark"] .oh-tile.stone .v{color:#bfa3e8;}
+		.oh-sec{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+			color:var(--text-muted);margin:2px 0 8px;}
 		.oh-box{border:1px solid var(--border-color);border-radius:12px;overflow:auto;background:var(--fg-color);}
 		table.oh-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.oh-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;text-transform:uppercase;
@@ -62,6 +67,8 @@ frappe.pages["out-of-house"].on_page_load = function (wrapper) {
 		</style>
 		<div class="oh-pools"></div>
 		<div class="oh-tiles"></div>
+		<div class="oh-stonesec"></div>
+		<div class="oh-stones oh-tiles"></div>
 		<div class="oh-box"><table class="oh-t"><thead><tr>
 			<th>${__("Batch")}</th><th>${__("For")}</th><th>${__("Where")}</th>
 			<th>${__("Sent")}</th><th class="num">${__("Days out")}</th>
@@ -88,6 +95,19 @@ frappe.pages["out-of-house"].on_page_load = function (wrapper) {
 			<div class="oh-tile ${t.oldest > 14 ? "old" : ""}"><div class="k">${__("Longest out")}</div>
 				<div class="v">${t.oldest || 0}<span style="font-size:12px;"> ${__("day(s)")}</span></div></div>
 			${S.kind ? `<button class="oh-clear">${__("show both")}</button>` : ""}`);
+
+		// stones out of the building, per bucket. Filtered to a pool when one is
+		// picked, so the tiles always describe the same set as the list below.
+		const stones = S.kind
+			? ((d.pools || []).find((p) => p.kind === S.kind) || {}).by_stone || []
+			: (d.by_stone || []);
+		root.find(".oh-stonesec").html(stones.length
+			? `<div class="oh-sec">${S.kind
+				? __("Stones out — {0}", [((d.pools || []).find((p) => p.kind === S.kind) || {}).label || ""])
+				: __("Stones out of the building")}</div>` : "");
+		root.find(".oh-stones").html(stones.map((x) => `
+			<div class="oh-tile stone"><div class="k">${esc(x.stone_type)}</div>
+				<div class="v">${f3(x.ct)}<span style="font-size:12px;"> ct</span></div></div>`).join(""));
 
 		root.find(".oh-body").html(rows.map((b) => `
 			<tr>
