@@ -1426,19 +1426,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "users",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Buckets",
-   "link_to": "buckets",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "undo-2",
    "indent": 1,
    "keep_closed": 0,
@@ -1567,11 +1554,13 @@
    "url": ""
   },
   {
+   "child": 0,
    "collapsible": 1,
    "icon": "stamp",
    "indent": 1,
    "keep_closed": 1,
    "label": "Hallmarking",
+   "link_type": "DocType",
    "show_arrow": 0,
    "type": "Section Break",
    "url": ""
@@ -1627,6 +1616,29 @@
    "show_arrow": 0,
    "type": "Link",
    "url": ""
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "setting",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Delivery Settings",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "setting",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Delivery Masters",
+   "link_to": "delivery-masters",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
   },
   {
    "child": 0,
@@ -2500,19 +2512,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "truck",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Delivery Masters",
-   "link_to": "delivery-masters",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "log-out",
@@ -2682,7 +2681,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-03 10:03:13.826958",
+ "modified": "2026-09-04 10:12:30.197524",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
