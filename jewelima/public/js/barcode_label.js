@@ -28,9 +28,11 @@ jewelima.BARCODE_DEFAULTS = {
 	gwLine: "GW:{gw} gm",
 	familyText: "",
 	// the stone line is "DIA:12/0.11ct EF" as one string. splitStone breaks the
-	// WEIGHT off onto its own line so it can be placed on its own — off by
-	// default, because splitting it makes box A three lines instead of two.
+	// WEIGHT off onto its own line, splitFamily breaks the family (EF, GH …) off
+	// onto its own — both off by default, because each split adds a line to box A
+	// and box A is 0.43in.
 	splitStone: false,
+	splitFamily: false,
 	// EVERY line on the tag, placed on its own. The tag has two zones, but inside
 	// them the lines do not want the same treatment — a card number reads better
 	// hard right while the design sits left, and a stone line often wants a hair
@@ -40,6 +42,7 @@ jewelima.BARCODE_DEFAULTS = {
 		gw:     { align: "left", pt: 0, dx: 0, dy: 0 },
 		stone:  { align: "left", pt: 0, dx: 0, dy: 0 },
 		dia:    { align: "left", pt: 0, dx: 0, dy: 0 },
+		family: { align: "left", pt: 0, dx: 0, dy: 0 },
 		type:   { align: "left", pt: 0, dx: 0, dy: 0 },
 		design: { align: "left", pt: 0, dx: 0, dy: 0 },
 		card:   { align: "left", pt: 0, dx: 0, dy: 0 },
@@ -51,8 +54,29 @@ jewelima.BARCODE_DEFAULTS = {
 // Ready-made opts for buildBarcodeLabel. Pass overrides and the locked defaults
 // fill in the rest. This is the ONLY way callers build opts, so anything it
 // dropped would silently never reach the tag — every per-run choice is listed.
+// The layout the floor has agreed on, saved from Tag Canvas. It sits between
+// the shipped defaults and a caller's per-run overrides, so a tag printed from
+// any page picks up the same geometry without anyone editing code.
+jewelima.BARCODE_LAYOUT = null;
+jewelima.loadBarcodeLayout = function () {
+	if (jewelima._layoutLoad) return jewelima._layoutLoad;
+	jewelima._layoutLoad = frappe.call({
+		method: "jewelima.jewelima.api.get_barcode_layout", freeze: false,
+	}).then((r) => {
+		const L = (r.message || {}).layout;
+		if (L && typeof L === "object") jewelima.BARCODE_LAYOUT = L;
+		return jewelima.BARCODE_LAYOUT;
+	}).catch(() => null);
+	return jewelima._layoutLoad;
+};
+
 jewelima.barcodeOpts = function (over) {
-	const o = Object.assign({}, jewelima.BARCODE_DEFAULTS, over || {});
+	const saved = jewelima.BARCODE_LAYOUT || {};
+	const o = Object.assign({}, jewelima.BARCODE_DEFAULTS, saved, over || {});
+	// `lines` is a map, so a shallow assign would drop every line the saved
+	// layout did not mention
+	o.lines = Object.assign({}, jewelima.BARCODE_DEFAULTS.lines,
+		saved.lines || {}, (over || {}).lines || {});
 	return {
 		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;--bc-w:${o.tag.w}in;--bc-h:${o.tag.h}in;`,
 		tag: o.tag, a: o.a, b: o.b,
@@ -63,6 +87,7 @@ jewelima.barcodeOpts = function (over) {
 		freeText: o.freeText,
 		freeText2: o.freeText2,
 		splitStone: o.splitStone,
+		splitFamily: o.splitFamily,
 		gwLine: o.gwLine,
 		familyText: o.familyText,
 		lines: Object.assign({}, jewelima.BARCODE_DEFAULTS.lines, o.lines || {}),
@@ -143,14 +168,17 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	const fam = o.showFamily && famRaw ? esc(famRaw) : "";
 	// split: what the stones are on one line, what they weigh on the next, each
 	// placeable on its own. Joined: the single line every tag has carried.
+	const famInline = fam && !o.splitFamily ? " " + fam : "";
 	let stoneRows = "";
-	if (o.splitStone && sp.head) {
-		stoneRows = `<div ${ln("stone")}>${sp.head}${fam ? " " + fam : ""}</div>`
+	if (sp.head && o.splitStone) {
+		stoneRows = `<div ${ln("stone")}>${sp.head}${famInline}</div>`
 			+ `<div ${ln("dia")}>${sp.wt}</div>`;
 	} else if (sp.head) {
-		stoneRows = `<div ${ln("stone")}>${sp.head}/${sp.wt}${fam ? " " + fam : ""}</div>`;
-	} else if (fam) {
-		stoneRows = `<div ${ln("stone")}>${fam}</div>`;
+		stoneRows = `<div ${ln("stone")}>${sp.head}/${sp.wt}${famInline}</div>`;
+	}
+	// the family on its own line, or standing in for a stone line there is none of
+	if (fam && (o.splitFamily || !sp.head)) {
+		stoneRows += `<div ${ln("family")}>${fam}</div>`;
 	}
 	const left = `<div class="bc-col bc-left"><div ${ln("gw")}>${esc(gwText)}</div>`
 		+ stoneRows + `</div>`;

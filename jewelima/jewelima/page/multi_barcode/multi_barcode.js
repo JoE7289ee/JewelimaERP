@@ -262,4 +262,8 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	paint();
 	focusScan();
 	frappe.pages["multi-barcode"].on_page_show = focusScan;
+	// the layout Tag Canvas locked in — read before the first preview, so what
+	// is on screen is what comes off the printer
+	Promise.resolve(jewelima.loadBarcodeLayout()).then(() => paint());
+
 };

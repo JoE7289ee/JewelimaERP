@@ -22,7 +22,8 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	});
 	const IN = 96;                       // CSS pixels per inch, at 100% zoom
 	const KEY = "jw_tag_canvas_v3";      // v2 predates per-line placement
-	const D = () => (window.jewelima && jewelima.BARCODE_DEFAULTS) || {};
+	const D = () => Object.assign({}, (window.jewelima && jewelima.BARCODE_DEFAULTS) || {},
+		(window.jewelima && jewelima.BARCODE_LAYOUT) || {});
 
 	// the tag, and the two blocks on it — inches throughout, never pixels. Starts
 	// from what is LOCKED IN, so the canvas shows the real label's boxes.
@@ -40,6 +41,7 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		{ k: "gw", box: "A", label: __("GW line") },
 		{ k: "stone", box: "A", label: __("Stone line") },
 		{ k: "dia", box: "A", label: __("Stone weight") },
+		{ k: "family", box: "A", label: __("Stone family") },
 		{ k: "type", box: "B", label: __("Type + colour") },
 		{ k: "design", box: "B", label: __("Design") },
 		{ k: "card", box: "B", label: __("Card number") },
@@ -76,7 +78,11 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 
 	$(page.main).append(`
 		<style>
-		.tc-wrap{max-width:1040px;}
+		#page-tag-canvas .container{max-width:100%;}
+		.tc-wrap{max-width:100%;}
+		.tc-cols{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:18px;align-items:start;}
+		.tc-right{position:sticky;top:12px;}
+		@media (max-width:1200px){ .tc-cols{grid-template-columns:1fr;} .tc-right{position:static;} }
 		.tc-note{font-size:12.5px;color:var(--text-muted);margin:0 0 14px;}
 		.tc-stage{background:var(--fg-color);border:1px solid var(--border-color);
 			border-radius:10px;padding:26px;overflow:auto;}
@@ -138,17 +144,14 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 					title="${__("its own weights and code square render on the tag")}">
 				<button class="btn btn-default btn-sm tc-sample">${__("Sample")}</button>
 				<button class="btn btn-primary btn-sm tc-print">${__("Print test tag")}</button>
+				<button class="btn btn-primary btn-sm tc-save">${__("Save layout")}</button>
 				<button class="btn btn-default btn-sm tc-copy">${__("Copy values")}</button>
 				<button class="btn btn-default btn-sm tc-reset">${__("Reset")}</button>
 				<span class="tc-note" style="margin:0 0 0 6px;">${
 					__("Drag a box, or type exact inches. Nothing is written to the card.")}</span>
 			</div>
-			<div class="tc-stage"><div class="tc-tag">
-				<div class="tc-live"></div>
-				<div class="tc-rect a" data-k="a"><span class="tag-l">A</span><div class="hd"></div></div>
-				<div class="tc-rect b" data-k="b"><span class="tag-l">B</span><div class="hd"></div></div>
-			</div></div>
-			<div class="tc-clipmsg"></div>
+			<div class="tc-cols">
+			<div class="tc-left">
 			<div class="tc-panel">
 				<div class="tc-card"><h4>${__("Tag & type")}</h4>
 					<div class="tc-row"><label>${__("Width")}</label>
@@ -178,6 +181,8 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 				<div class="tc-freerow">
 					<label><input type="checkbox" class="tc-split">
 						${__("stone weight on its own line")}</label>
+					<label><input type="checkbox" class="tc-splitfam">
+						${__("family on its own line")}</label>
 					<label>${__("FREE TEXT")}
 						<input type="text" class="tc-ft" maxlength="24" placeholder="${__("shop name…")}"></label>
 					<label>${__("FREE TEXT 2")}
@@ -197,9 +202,19 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 					<td><input type="number" step="0.005" data-l="dy"> <span class="u">in</span></td>
 				</tr>`).join("")}</tbody></table>
 			</div>
-			<div class="tc-card" style="margin-top:14px;">
-				<h4>${__("What to lock in")}</h4>
-				<div class="tc-out"></div>
+			</div>
+			<div class="tc-right">
+				<div class="tc-stage"><div class="tc-tag">
+					<div class="tc-live"></div>
+					<div class="tc-rect a" data-k="a"><span class="tag-l">A</span><div class="hd"></div></div>
+					<div class="tc-rect b" data-k="b"><span class="tag-l">B</span><div class="hd"></div></div>
+				</div></div>
+				<div class="tc-clipmsg"></div>
+				<div class="tc-card" style="margin-top:14px;">
+					<h4>${__("What is saved")}</h4>
+					<div class="tc-out"></div>
+				</div>
+			</div>
 			</div>
 		</div>
 	`);
@@ -216,7 +231,7 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	const opts = () => jewelima.barcodeOpts({
 		pt: S.pt, qr: S.qr, tag: { w: S.tagW, h: S.tagH },
 		a: S.a, b: S.b, offsetA: 0, offsetB: 0, lines: S.lines,
-		splitStone: !!S.splitStone,
+		splitStone: !!S.splitStone, splitFamily: !!S.splitFamily,
 		// a line only exists when there is text for it, so the canvas types some
 		// in — otherwise its controls would do nothing visible
 		freeText: S.freeText || "",
@@ -267,6 +282,7 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 			});
 		});
 		root.find(".tc-split").prop("checked", !!S.splitStone);
+		root.find(".tc-splitfam").prop("checked", !!S.splitFamily);
 		[["tc-ft", "freeText"], ["tc-ft2", "freeText2"]].forEach(([cls, key]) => {
 			const el = root.find("." + cls)[0];
 			if (el && document.activeElement !== el) el.value = S[key] || "";
@@ -277,7 +293,7 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 			+ `tag: { w: ${S.tagW}, h: ${S.tagH} },\n`
 			+ `a: { x: ${S.a.x}, y: ${S.a.y}, w: ${S.a.w}, h: ${S.a.h} },\n`
 			+ `b: { x: ${S.b.x}, y: ${S.b.y}, w: ${S.b.w}, h: ${S.b.h} },\n`
-			+ `splitStone: ${!!S.splitStone},\n`
+			+ `splitStone: ${!!S.splitStone}, splitFamily: ${!!S.splitFamily},\n`
 			+ `lines: {\n`
 			+ LINES.map((l) => {
 				const v = S.lines[l.k] || {};
@@ -328,6 +344,7 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		paint();
 	});
 	root.on("change", ".tc-split", function () { S.splitStone = this.checked; paint(); });
+	root.on("change", ".tc-splitfam", function () { S.splitFamily = this.checked; paint(); });
 	root.on("input", ".tc-ft", function () { S.freeText = this.value; paint(); });
 	root.on("input", ".tc-ft2", function () {
 		S.freeText2 = (this.value || "").toUpperCase().slice(0, 2);
@@ -399,6 +416,22 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		paint();
 	});
 
+	root.on("click", ".tc-save", function () {
+		const payload = {
+			pt: S.pt, qr: S.qr, tag: { w: S.tagW, h: S.tagH }, a: S.a, b: S.b,
+			lines: S.lines, splitStone: !!S.splitStone, splitFamily: !!S.splitFamily,
+		};
+		frappe.confirm(__("Save this layout? Every page that prints a tag will use it."), () => {
+			frappe.call({ method: "jewelima.jewelima.api.save_barcode_layout",
+				args: { layout: JSON.stringify(payload) } })
+				.then(() => {
+					jewelima.BARCODE_LAYOUT = payload;
+					frappe.show_alert({ indicator: "green", message:
+						__("Layout saved — Multi Print and the roll printer use it from now on.") }, 6);
+				});
+		});
+	});
+
 	root.on("click", ".tc-copy", function () {
 		const txt = root.find(".tc-out").text();
 		frappe.utils.copy_to_clipboard(txt);
@@ -411,5 +444,11 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("Back to the locked-in values."), indicator: "blue" }, 4);
 	});
 
+	// the saved layout decides what this page opens with, so load it before the
+	// first paint rather than drawing the shipped numbers and then jumping
+	Promise.resolve(jewelima.loadBarcodeLayout()).then(() => {
+		if (!localStorage.getItem(KEY)) S = FRESH();
+		paint();
+	});
 	paint();
 };

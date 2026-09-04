@@ -313,4 +313,8 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	renderHistory();
 	renderPreview(null);
 	focusScan();
+	// the layout Tag Canvas locked in — read before the first preview, so what
+	// is on screen is what comes off the printer
+	Promise.resolve(jewelima.loadBarcodeLayout()).then(() => renderPreview(null));
+
 };

@@ -15776,6 +15776,48 @@ def huid_confirm_batch(changes):
 	return {"results": out, "saved": saved, "failed": failed}
 
 
+# ---------------------------------------------------------------------------
+# The tag layout the floor agreed on. Tag Canvas measures it against the real
+# stock and saves it here; every page that prints a tag reads it, so a tag off
+# Multi Print, off a Bag Split or off the roll is the same tag — and getting it
+# right no longer means editing code and deploying.
+# ---------------------------------------------------------------------------
+BARCODE_LAYOUT_ROLES = ("System Manager", "Stock Manager", "JW Manager")
+
+
+@frappe.whitelist()
+def get_barcode_layout():
+	"""The saved tag layout, or nothing — in which case the shipped defaults stand."""
+	raw = frappe.db.get_single_value("Barcode Layout", "layout")
+	if not raw:
+		return {"layout": None}
+	try:
+		return {"layout": json.loads(raw)}
+	except Exception:
+		# a layout that will not parse must not take every tag down with it
+		return {"layout": None, "error": frappe._("The saved layout is not readable.")}
+
+
+@frappe.whitelist()
+def save_barcode_layout(layout):
+	"""Lock in what Tag Canvas measured. Geometry only — the per-run wording
+	(free text, family override, the GW line) is never saved, because that is a
+	choice made for one run, not for the tag."""
+	frappe.only_for(list(BARCODE_LAYOUT_ROLES))
+	data = frappe.parse_json(layout) if isinstance(layout, str) else (layout or {})
+	if not isinstance(data, dict):
+		frappe.throw(frappe._("The layout must be an object."))
+	keep = ("pt", "qr", "tag", "a", "b", "lines", "splitStone", "splitFamily")
+	clean = {k: data[k] for k in keep if k in data}
+	if not clean.get("tag") or not clean.get("a") or not clean.get("b"):
+		frappe.throw(frappe._("A layout needs the tag and both boxes."))
+	doc = frappe.get_single("Barcode Layout")
+	doc.layout = json.dumps(clean, indent=1, sort_keys=True)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"ok": 1, "saved": sorted(clean.keys())}
+
+
 @frappe.whitelist()
 def get_hallmark_removal(barcode):
 	"""Remove Hallmarking: what one piece's hallmarking looks like right now.
