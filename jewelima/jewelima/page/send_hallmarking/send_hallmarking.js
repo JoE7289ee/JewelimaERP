@@ -108,6 +108,10 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	});
 	// A packet is made up before anyone decides where it goes, so the centre is
 	// asked for HERE — the moment the gold actually leaves the building.
+	let CENTERS = [];
+	frappe.call({ method: API + ".get_hall_prep_context" })
+		.then((r) => (CENTERS = ((r.message || {}).centers) || []));
+
 	root.on("click", ".sh-send", function () {
 		const $c = $(this).closest(".sh-card");
 		const nm = $c.data("name");
@@ -115,9 +119,11 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		const d = new frappe.ui.Dialog({
 			title: __("Send {0}", [nm]),
 			fields: [
-				{ fieldtype: "Link", fieldname: "center", label: __("Hallmarking centre"),
-					options: "Hallmarking Center", reqd: 1, default: cur,
-					get_query: () => ({ filters: { disabled: 0 } }) },
+				// a Select off the app's own context call, not a Link: a Link makes
+				// the browser search and validate the doctype, which the delivery
+				// desk has no business being able to do to open the dialog
+				{ fieldtype: "Select", fieldname: "center", label: __("Hallmarking centre"),
+					reqd: 1, options: [""].concat(CENTERS.map((c) => c.name)), default: cur },
 				{ fieldtype: "HTML", fieldname: "note" },
 			],
 			primary_action_label: __("SEND — move stock"),
@@ -137,6 +143,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		d.fields_dict.note.$wrapper.html(
 			`<div style="font-size:12.5px;color:var(--text-muted);">${
 				__("Stock moves out to At Hallmarking and the batch locks.")}</div>`);
+		if (!CENTERS.length) {
+			return frappe.msgprint(__("No hallmarking centre is set up — add one in Delivery Settings."));
+		}
 		d.show();
 		if (cur) d.set_value("center", cur);
 	});

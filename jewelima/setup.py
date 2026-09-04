@@ -302,7 +302,11 @@ JEWELIMA_DELIVERY_PAGES = [
 JEWELIMA_DELIVERY_READ = ["Order Bag", "Order Bag Transfer", "Design", "Item", "Customer",
 	"Job Order", "Employee", "Product Sale", "Sale Prep Board", "Certification",
 	"Certification Center", "Price Chart", "Holder Transfer", "Certification Type",
-	"Design Type"]
+	"Design Type",
+	# hallmarking was split out of certification and this list was not followed:
+	# the desk runs all four hallmarking pages but could not read the centre it
+	# was being asked to send to, so the send dialog refused to open
+	"Hallmarking Center", "Hallmarking Batch"]
 
 # ---- JW WAXING: the wax line --------------------------------------------------
 # Same shape as JW CAM: the benches they run, plus Transfer Order Bag narrowed

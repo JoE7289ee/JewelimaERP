@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "field:center_name",
  "creation": "2026-09-03 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -17,9 +18,9 @@
   {
    "fieldname": "center_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Centre",
-   "reqd": 1,
-   "in_list_view": 1
+   "reqd": 1
   },
   {
    "fieldname": "location",
@@ -38,10 +39,10 @@
    "label": "Submission mail"
   },
   {
+   "description": "Placeholders: {batch} {count} {date} {gross}",
    "fieldname": "mail_subject",
    "fieldtype": "Data",
-   "label": "Subject",
-   "description": "Placeholders: {batch} {count} {date} {gross}"
+   "label": "Subject"
   },
   {
    "fieldname": "mail_body",
@@ -97,11 +98,19 @@
    "role": "JW Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Delivery",
+   "share": 1
   }
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "autoname": "field:center_name",
  "title_field": "center_name"
 }
