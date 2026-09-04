@@ -15604,8 +15604,15 @@ def huid_scan(barcode, huid=None, mode="accept"):
 	if mode == "accept" and not codes:
 		return {"rejected_scan": frappe._("Type the HUID — that is what the piece went for")}
 	for one in codes:
-		if one != "PENDING" and not (4 <= len(one) <= 12 and one.isalnum()):
-			return {"rejected_scan": frappe._("{0} does not look like a HUID").format(one)}
+		if one == "PENDING":
+			continue
+		# a card number carries dots (E7549.19.1) and a HUID never does, so a card
+		# scanned into the code box is named for what it is rather than refused
+		# as a bad code
+		if "." in one:
+			return {"rejected_scan": frappe._("{0} is a card number, not a HUID").format(one)}
+		if not (4 <= len(one) <= 12 and one.isalnum()):
+			return {"rejected_scan": frappe._("A HUID is 4-12 letters and digits — {0} is not").format(one)}
 	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
 		from `tabHallmarking Item` i join `tabHallmarking Batch` h on h.name = i.parent
 		where i.order_bag = %s and h.status in ('Collected', 'Partially Received')

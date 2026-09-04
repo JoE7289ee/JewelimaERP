@@ -102,6 +102,7 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 			padding:2px 8px;font-size:12.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
 			background:var(--control-bg);color:var(--text-color);}
 		.ch-h.filled{border-color:#1d7a33;}
+		.ch-h.bad{border-color:#b02a2a;background:rgba(176,42,42,.10);}
 		.ch-h[disabled]{opacity:.35;}
 		.ch-was{font-size:11px;font-weight:800;letter-spacing:.1em;color:#1d7a33;}
 		.ch-rej{color:#b02a2a;cursor:pointer;font-weight:800;}
@@ -118,6 +119,8 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		<div class="ch-bar">
 			<div class="ch-f ch-card"><label>${__("Scan card")}</label>
 				<input type="text" placeholder="${__("scan a card to jump to its row")}"></div>
+			<span style="font-size:12px;color:var(--text-muted);">${
+				__("card, then its code — the cursor comes back here after every code.")}</span>
 			<button class="ch-btn ch-dbl">${__("DOUBLE STUD")}</button>
 			<span class="ch-actions">
 				<button class="ch-btn danger ch-undo" style="display:none;">${__("Reset unsaved")}</button>
@@ -134,6 +137,10 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 	const msg = (k, h) => root.find(".ch-msg").removeClass("ok err warn").addClass(k).html(h);
 	const focusScan = () => setTimeout(() => $scan.focus(), 30);
 	const isStud = (p) => /STUD/i.test(p.design_type || "");
+	// a card number carries dots (E7549.19.1); a HUID is letters and digits only,
+	// so the two can never be mistaken for one another
+	const looksLikeCard = (v) => /\./.test(v || "");
+	const badCode = (v) => v && !/^[A-Z0-9]+$/.test(v);
 	const edit = (bag) => S.edits[bag] || (S.edits[bag] = { codes: [], reject: false });
 	const dirty = () => Object.values(S.edits).filter((e) => e.reject || e.codes.some((c) => c)).length;
 	const batchOf = (bag) => S.batches.find((b) => b.pieces.some((p) => p.order_bag.toUpperCase() === bag));
@@ -290,8 +297,28 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		const bag = $(this).closest("tr").data("bag");
 		const i = +this.dataset.i;
 		const e = edit(bag);
-		e.codes[i] = (this.value || "").trim().toUpperCase();
-		$(this).toggleClass("filled", !!e.codes[i]);
+		const v = (this.value || "").trim().toUpperCase();
+		// a card scanned into a code box is the one mistake that would write
+		// nonsense onto a piece, so it never lands — and since we know what it
+		// is, it does what scanning it in the card box would have done
+		if (looksLikeCard(v)) {
+			this.value = "";
+			e.codes[i] = "";
+			const b = batchOf(v);
+			if (b) {
+				const p = b.pieces.find((x) => x.order_bag.toUpperCase() === v);
+				msg("warn", __("<b>{0}</b> is a card, not a HUID — moved to its row.", [esc(v)]));
+				S.open = b.name;
+				paint();
+				if (p && p.state === "pending") return focusRow(p.order_bag, 0);
+				return;
+			}
+			msg("err", __("<b>{0}</b> is a card number, not a HUID.", [esc(v)]));
+			paint();
+			return;
+		}
+		e.codes[i] = v;
+		$(this).toggleClass("filled", !!e.codes[i]).toggleClass("bad", badCode(e.codes[i]));
 		// repaint the tiles and the score only — repainting the table would eat
 		// the keystroke the operator is in the middle of
 		paintTiles();
@@ -308,15 +335,13 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		ev.preventDefault();
 		const $tr = $(this).closest("tr");
 		const $second = $tr.find('.ch-h[data-i="1"]');
+		// a stud's second code belongs to the same piece, so that one stays here
 		if (this.dataset.i === "0" && $second.length && !$second.val()) return $second.trigger("focus");
-		const $next = $tr.nextAll("tr").find('.ch-h[data-i="0"]').first();
-		if ($next.length) {
-			S.hot = $next.closest("tr").data("bag");
-			paintRows();
-			focusRow(S.hot, 0);
-		} else {
-			focusScan();
-		}
+		// otherwise the piece is done: the next scan is a CARD, so the cursor goes
+		// back to the card box rather than down the sheet
+		S.hot = null;
+		paintRows();
+		focusScan();
 	});
 
 	root.on("click", ".ch-rej", function () {
