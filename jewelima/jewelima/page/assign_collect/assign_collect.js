@@ -235,7 +235,12 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 				logHistory(code, __("At {0}, not {1}", [v.location, state.location]), "err");
 				return;
 			}
-			state.rows.push({ name: code, design: v.design || (v.is_cad ? "CAD: " + (v.cad_design_type || "?") : ""), qty: v.qty, status });
+			// the bench record came back with the scan; keeping the employee off it
+			// left the Employee column showing "—" for every row and the
+			// one-worker-per-batch check comparing undefined to undefined
+			const rec = v.record || {};
+			state.rows.push({ name: code, design: v.design || (v.is_cad ? "CAD: " + (v.cad_design_type || "?") : ""),
+				qty: v.qty, status, employee: rec.employee || "", employee_name: rec.employee_name || "" });
 			renderRows();
 			setMsg(__("Added <b>{0}</b>  ·  {1} in batch.", [safe, state.rows.length]), "ok");
 			logHistory(code, __("Added ({0})", [v.location]), "ok");
@@ -297,7 +302,26 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			clearBatch();
 		}).catch(() => frappe.dom.unfreeze());
 	}
-	function doCollect() {
+	// A card can be ASSIGNED with nobody on it, so collecting is where the name is
+	// finally required. The page used to hide the Employee field in collect mode
+	// and send no employee at all, so such a card could not be collected here —
+	// the server asked for a name and there was nowhere to give it. Ask for it,
+	// the same way the workstation does, and only when a card actually needs it.
+	function collectClicked() {
+		if (!state.rows.length) return frappe.msgprint(__("Scan at least one assigned card first."));
+		const nameless = state.rows.filter((r) => !r.employee);
+		if (!nameless.length) return doCollect(null);
+		frappe.prompt([{ fieldname: "emp", fieldtype: "Link", options: "Employee", reqd: 1,
+			label: __("Who worked {0}?", [nameless.length === state.rows.length
+				? __("these") : __("the {0} unnamed one(s)", [nameless.length])]),
+			get_query: () => ({ query: "jewelima.jewelima.api.bench_employee_query",
+				filters: { bench: state.location || "" } }) }],
+			(v) => doCollect(v.emp),
+			__("{0} card(s) were assigned without an employee", [nameless.length]),
+			__("Collect"));
+	}
+
+	function doCollect(employee) {
 		if (!state.rows.length) return frappe.msgprint(__("Scan at least one assigned card first."));
 		const tpxTo = tpxDest();
 		if (tpxTo === "MISSING") return;
@@ -312,7 +336,8 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 			return frappe.call({
 				method: withTransfer ? "jewelima.jewelima.api.collect_and_transfer" : "jewelima.jewelima.api.collect_bench_cards",
 				args: Object.assign({ names: JSON.stringify(parts[i]), location: state.location,
-					collection_state: state.state.get_value() || null },
+					collection_state: state.state.get_value() || null,
+					employee: employee || null },
 					withTransfer ? { to_location: tpxTo } : {}),
 			}).then((r) => {
 				const res = r.message || {};
@@ -350,7 +375,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		if (state.mode === "assign") {
 			$(`<button class="btn btn-primary btn-sm">${__("Assign")}</button>`).appendTo($actions).on("click", assignClicked);
 		} else {
-			$(`<button class="btn btn-primary btn-sm">${__("Collect")}</button>`).appendTo($actions).on("click", doCollect);
+			$(`<button class="btn btn-primary btn-sm">${__("Collect")}</button>`).appendTo($actions).on("click", collectClicked);
 		}
 	}
 
