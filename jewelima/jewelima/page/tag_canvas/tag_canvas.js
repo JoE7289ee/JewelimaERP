@@ -39,10 +39,12 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	const LINES = [
 		{ k: "gw", box: "A", label: __("GW line") },
 		{ k: "stone", box: "A", label: __("Stone line") },
+		{ k: "dia", box: "A", label: __("Stone weight") },
 		{ k: "type", box: "B", label: __("Type + colour") },
 		{ k: "design", box: "B", label: __("Design") },
 		{ k: "card", box: "B", label: __("Card number") },
-		{ k: "free", box: "B", label: __("Free line") },
+		{ k: "free", box: "B", label: __("Free text") },
+		{ k: "free2", box: "B", label: __("Free text 2") },
 	];
 	// A stand-in card so the page is useful before anything is scanned — and on a
 	// site with no products at all. The code square is a plain black frame at the
@@ -55,7 +57,8 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		+ '<rect x="24" y="6" width="10" height="10" fill="#000"/>'
 		+ '<rect x="6" y="24" width="10" height="10" fill="#000"/>'
 		+ '<rect x="24" y="26" width="6" height="6" fill="#000"/></svg>');
-	const SAMPLE = { name: "E0001.1.1", design: "A13010NP-18EF-Y", design_type: "NOSEPIN",
+	const SAMPLE = { name: "E0001.1.1", design: "A13010NP-18EF-Y", design_no: "A 13010",
+		design_type: "NOSEPIN",
 		gw: 2.487, dmd_no: 12, dmd_wt: 0.108, stone_family: "EF", gold_color: "YG", qr: QR_STUB };
 	let CARD = SAMPLE;
 	let S = FRESH();
@@ -109,7 +112,11 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		.tc-scan{border:2px solid var(--primary);border-radius:7px;height:32px;padding:2px 10px;
 			font-size:13px;font-weight:600;width:190px;background:var(--control-bg);color:var(--text-color);}
 		.tc-clipmsg{font-size:12.5px;font-weight:700;color:#b02a2a;margin-top:9px;min-height:18px;}
-		.tc-freechk{display:block;font-size:12.5px;color:var(--text-muted);margin:-3px 0 9px;}
+		.tc-freerow{display:flex;gap:18px;align-items:center;flex-wrap:wrap;
+			font-size:12.5px;color:var(--text-muted);margin:-3px 0 11px;}
+		.tc-freerow input[type=text]{border:1px solid var(--border-color);border-radius:6px;
+			padding:3px 8px;background:var(--control-bg);color:var(--text-color);margin-left:5px;}
+		.tc-ft{width:150px;} .tc-ft2{width:46px;text-align:center;text-transform:uppercase;}
 		table.tc-lines{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.tc-lines th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
 			color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border-color);}
@@ -168,8 +175,14 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 			</div>
 			<div class="tc-card" style="margin-top:14px;">
 				<h4>${__("Text lines — each one placed on its own")}</h4>
-				<label class="tc-freechk"><input type="checkbox" class="tc-free">
-					${__("show the free line")}</label>
+				<div class="tc-freerow">
+					<label><input type="checkbox" class="tc-split">
+						${__("stone weight on its own line")}</label>
+					<label>${__("FREE TEXT")}
+						<input type="text" class="tc-ft" maxlength="24" placeholder="${__("shop name…")}"></label>
+					<label>${__("FREE TEXT 2")}
+						<input type="text" class="tc-ft2" maxlength="2" placeholder="${__("2")}"></label>
+				</div>
 				<table class="tc-lines"><thead><tr>
 					<th>${__("Line")}</th><th>${__("Box")}</th><th>${__("Align")}</th>
 					<th>${__("Size")}</th><th>${__("Nudge X")}</th><th>${__("Nudge Y")}</th>
@@ -203,9 +216,11 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	const opts = () => jewelima.barcodeOpts({
 		pt: S.pt, qr: S.qr, tag: { w: S.tagW, h: S.tagH },
 		a: S.a, b: S.b, offsetA: 0, offsetB: 0, lines: S.lines,
-		// the free line only exists when there is text for it, so the canvas
-		// gives it some — otherwise its controls would do nothing visible
-		freeText: S.showFree ? __("free line") : "",
+		splitStone: !!S.splitStone,
+		// a line only exists when there is text for it, so the canvas types some
+		// in — otherwise its controls would do nothing visible
+		freeText: S.freeText || "",
+		freeText2: S.freeText2 || "",
 	});
 
 	function paint() {
@@ -251,13 +266,18 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 				this.value = v ? String(+v.toFixed(3)) : "";
 			});
 		});
-		root.find(".tc-free").prop("checked", !!S.showFree);
+		root.find(".tc-split").prop("checked", !!S.splitStone);
+		[["tc-ft", "freeText"], ["tc-ft2", "freeText2"]].forEach(([cls, key]) => {
+			const el = root.find("." + cls)[0];
+			if (el && document.activeElement !== el) el.value = S[key] || "";
+		});
 		// exactly the shape BARCODE_DEFAULTS carries, so it can be pasted straight in
 		root.find(".tc-out").text(
 			`pt: ${(+S.pt).toFixed(1)}, qr: ${S.qr},\n`
 			+ `tag: { w: ${S.tagW}, h: ${S.tagH} },\n`
 			+ `a: { x: ${S.a.x}, y: ${S.a.y}, w: ${S.a.w}, h: ${S.a.h} },\n`
 			+ `b: { x: ${S.b.x}, y: ${S.b.y}, w: ${S.b.w}, h: ${S.b.h} },\n`
+			+ `splitStone: ${!!S.splitStone},\n`
 			+ `lines: {\n`
 			+ LINES.map((l) => {
 				const v = S.lines[l.k] || {};
@@ -307,7 +327,13 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		(S.lines[k] = S.lines[k] || {})[this.dataset.l] = parseFloat(this.value) || 0;
 		paint();
 	});
-	root.on("change", ".tc-free", function () { S.showFree = this.checked; paint(); });
+	root.on("change", ".tc-split", function () { S.splitStone = this.checked; paint(); });
+	root.on("input", ".tc-ft", function () { S.freeText = this.value; paint(); });
+	root.on("input", ".tc-ft2", function () {
+		S.freeText2 = (this.value || "").toUpperCase().slice(0, 2);
+		this.value = S.freeText2;
+		paint();
+	});
 
 	root.on("input", "input[data-f]", function () {
 		const v = parseFloat(this.value);

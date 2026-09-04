@@ -21,7 +21,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	// and a sheet of tiled tags was a second answer to a question nobody asked.
 	const D = jewelima.BARCODE_DEFAULTS;
 	const S = { cards: [], stoneGrams: false, showFamily: true, showColor: true, freeText: "",
-		familyText: "", gwLine: D.gwLine };
+		freeText2: "", familyText: "", gwLine: D.gwLine };
 
 	root.append(`
 		<style>
@@ -95,6 +95,9 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 				<input type="text" class="mb-free" maxlength="24"
 					placeholder="${__("free line (shop name…)")}" title="${
 						__("one extra line on the right of every tag in this run")}">
+				<input type="text" class="mb-free mb-free2" maxlength="2" style="width:52px;text-align:center;"
+					placeholder="${__("2")}" title="${
+						__("a two-character mark on every tag in this run — a counter, a tray, a batch. Place it on Tag Canvas.")}">
 			</div>
 			<span class="mb-actions">
 				<button class="mb-go" disabled>${__("PRINT")}</button>
@@ -147,7 +150,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	// what comes off the roll
 	const labelOpts = () => jewelima.barcodeOpts({
 		stoneGrams: S.stoneGrams, showFamily: S.showFamily,
-		showColor: S.showColor, freeText: S.freeText,
+		showColor: S.showColor, freeText: S.freeText, freeText2: S.freeText2,
 		familyText: S.familyText, gwLine: S.gwLine || D.gwLine,
 	});
 	const grid = () => `<div class="bc-grid" style="grid-template-columns:repeat(1, ${D.tag.w}in);">`
@@ -193,7 +196,13 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	root.on("change", ".mb-col", function () { S.showColor = this.checked; paint(); });
 	// the free line lands on every tag in this run, so the preview follows it
 	// keystroke by keystroke rather than waiting for a blur
-	root.on("input", ".mb-free:not(.mb-famtext):not(.mb-gwline)", function () { S.freeText = this.value.trim(); paint(); });
+	root.on("input", ".mb-free:not(.mb-famtext):not(.mb-gwline):not(.mb-free2)", function () { S.freeText = this.value.trim(); paint(); });
+	// two characters, upper case: it is a mark, not a sentence
+	root.on("input", ".mb-free2", function () {
+		S.freeText2 = (this.value || "").trim().toUpperCase().slice(0, 2);
+		this.value = S.freeText2;
+		paint();
+	});
 	// the family and the weight line are reworded for the run, and the preview follows
 	root.on("input", ".mb-famtext", function () { S.familyText = this.value.trim().toUpperCase(); this.value = S.familyText; paint(); });
 	root.on("input", ".mb-gwline", function () { S.gwLine = this.value; paint(); });

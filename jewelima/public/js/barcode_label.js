@@ -27,6 +27,10 @@ jewelima.BARCODE_DEFAULTS = {
 	// the two lines the operator may reword for a run. {gw} is the gross weight.
 	gwLine: "GW:{gw} gm",
 	familyText: "",
+	// the stone line is "DIA:12/0.11ct EF" as one string. splitStone breaks the
+	// WEIGHT off onto its own line so it can be placed on its own — off by
+	// default, because splitting it makes box A three lines instead of two.
+	splitStone: false,
 	// EVERY line on the tag, placed on its own. The tag has two zones, but inside
 	// them the lines do not want the same treatment — a card number reads better
 	// hard right while the design sits left, and a stone line often wants a hair
@@ -35,10 +39,12 @@ jewelima.BARCODE_DEFAULTS = {
 	lines: {
 		gw:     { align: "left", pt: 0, dx: 0, dy: 0 },
 		stone:  { align: "left", pt: 0, dx: 0, dy: 0 },
+		dia:    { align: "left", pt: 0, dx: 0, dy: 0 },
 		type:   { align: "left", pt: 0, dx: 0, dy: 0 },
 		design: { align: "left", pt: 0, dx: 0, dy: 0 },
 		card:   { align: "left", pt: 0, dx: 0, dy: 0 },
 		free:   { align: "left", pt: 0, dx: 0, dy: 0 },
+		free2:  { align: "left", pt: 0, dx: 0, dy: 0 },
 	},
 };
 
@@ -55,6 +61,8 @@ jewelima.barcodeOpts = function (over) {
 		showFamily: o.showFamily,
 		showColor: o.showColor,
 		freeText: o.freeText,
+		freeText2: o.freeText2,
+		splitStone: o.splitStone,
 		gwLine: o.gwLine,
 		familyText: o.familyText,
 		lines: Object.assign({}, jewelima.BARCODE_DEFAULTS.lines, o.lines || {}),
@@ -86,15 +94,21 @@ jewelima.BARCODE_LABEL_CSS = `
 // `inGrams` prints the same weight in grams instead — one carat is exactly 0.2 g,
 // so this is a conversion, not a different number. Grams get three decimals
 // because two would round a small stone away (0.05 ct is 0.010 g).
-jewelima.barcodeStoneLine = function (c, inGrams) {
+jewelima.barcodeStoneParts = function (c, inGrams) {
 	const flt = (v) => parseFloat(v) || 0;
 	const w = (ct) => (inGrams
 		? `${(flt(ct) * 0.2).toFixed(3)}g`
 		: `${flt(ct).toFixed(2)}ct`);
-	if (c.dmd_no || c.dmd_wt) return `DIA:${c.dmd_no}/${w(c.dmd_wt)}`;
-	if (c.ps_no || c.ps_wt) return `PS:${c.ps_no}/${w(c.ps_wt)}`;
-	if (c.cs_no || c.cs_wt) return `CS:${c.cs_no}/${w(c.cs_wt)}`;
-	return "";
+	if (c.dmd_no || c.dmd_wt) return { head: `DIA:${c.dmd_no}`, wt: w(c.dmd_wt) };
+	if (c.ps_no || c.ps_wt) return { head: `PS:${c.ps_no}`, wt: w(c.ps_wt) };
+	if (c.cs_no || c.cs_wt) return { head: `CS:${c.cs_no}`, wt: w(c.cs_wt) };
+	return { head: "", wt: "" };
+};
+
+// the one-line form every tag has printed until now: DIA:12/0.11ct
+jewelima.barcodeStoneLine = function (c, inGrams) {
+	const p = jewelima.barcodeStoneParts(c, inGrams);
+	return p.head ? `${p.head}/${p.wt}` : "";
 };
 
 // opts come from barcodeOpts. stoneGrams prints stone weights in grams; showFamily
@@ -124,12 +138,22 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 
 	// A — what the piece weighs and what is in it, then the code square
 	const gwText = (o.gwLine || D.gwLine).replace("{gw}", flt(c.gw).toFixed(3));
-	const stone = jewelima.barcodeStoneLine(c, o.stoneGrams);
+	const sp = jewelima.barcodeStoneParts(c, o.stoneGrams);
 	const famRaw = (o.familyText || "").trim() || c.stone_family || "";
 	const fam = o.showFamily && famRaw ? esc(famRaw) : "";
+	// split: what the stones are on one line, what they weigh on the next, each
+	// placeable on its own. Joined: the single line every tag has carried.
+	let stoneRows = "";
+	if (o.splitStone && sp.head) {
+		stoneRows = `<div ${ln("stone")}>${sp.head}${fam ? " " + fam : ""}</div>`
+			+ `<div ${ln("dia")}>${sp.wt}</div>`;
+	} else if (sp.head) {
+		stoneRows = `<div ${ln("stone")}>${sp.head}/${sp.wt}${fam ? " " + fam : ""}</div>`;
+	} else if (fam) {
+		stoneRows = `<div ${ln("stone")}>${fam}</div>`;
+	}
 	const left = `<div class="bc-col bc-left"><div ${ln("gw")}>${esc(gwText)}</div>`
-		+ (stone ? `<div ${ln("stone")}>${stone}${fam ? " " + fam : ""}</div>`
-			: (fam ? `<div ${ln("stone")}>${fam}</div>` : "")) + `</div>`;
+		+ stoneRows + `</div>`;
 	const qr = c.qr
 		? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 		: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
@@ -142,14 +166,16 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	const r1 = (c.design_type || col)
 		? `<div ${ln("type")}>${[esc(c.design_type || ""), col].filter(Boolean).join(" ")}</div>` : "";
 	const free = o.freeText ? `<div ${ln("free")}>${esc(o.freeText)}</div>` : "";
+	// a two-character code the run is stamped with — a counter, a tray, a batch
+	const free2 = o.freeText2 ? `<div ${ln("free2")}>${esc(o.freeText2)}</div>` : "";
 	// a free line IS a fourth, so the column tightens to keep it on the tag
 	// the DESIGN, not the variant — a tag is read by whoever holds the piece
 	const right = `<div class="bc-col bc-right">${r1}`
 		+ `<div ${ln("design")}>${esc(c.design_no || c.design || "")}</div>`
-		+ `<div ${ln("card")}>${esc(c.name)}</div>${free}</div>`;
+		+ `<div ${ln("card")}>${esc(c.name)}</div>${free}${free2}</div>`;
 
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`
 		+ `<div class="bc-half bc-a" style="${box(a, o.offsetA)}">${left}${qr}</div>`
-		+ `<div class="bc-half bc-b${o.freeText ? " tight" : ""}" style="${box(b, o.offsetB)}">${right}</div>`
+		+ `<div class="bc-half bc-b${o.freeText || o.freeText2 ? " tight" : ""}" style="${box(b, o.offsetB)}">${right}</div>`
 		+ `</div>`;
 };
