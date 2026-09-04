@@ -43,6 +43,12 @@ frappe.pages["stone-request"].on_page_load = function (wrapper) {
 	scan.refresh();
 	const focusScan = () => setTimeout(() => scan.$input.focus(), 50);
 
+	let CAN_ISSUE = false;
+	frappe.call({ method: API + ".can_issue_stones", freeze: false }).then((r) => {
+		CAN_ISSUE = !!((r.message || {}).issue);
+		paint();
+	});
+
 	function paint() {
 		root.find(".sq-body").html(rows.length ? `
 			<table class="sq-t"><thead><tr><th style="width:36px">#</th><th>${__("Card")}</th>
@@ -55,7 +61,9 @@ frappe.pages["stone-request"].on_page_load = function (wrapper) {
 			: `<div class="sq-empty">${__("Scan the first card.")}</div>`);
 		root.find(".sq-go").toggle(!!rows.length).text(__("MARK {0} card(s) for Stone Issue", [rows.length]));
 		// Immediate issue is a single-card shortcut — mark it, then jump to the station.
-		root.find(".sq-now").toggle(rows.length === 1).text(__("Issue stones now →"));
+		// the shortcut lands on the Stone Issue station, so it only shows for
+		// someone who could actually issue there — the data desk requests and stops
+		root.find(".sq-now").toggle(rows.length === 1 && CAN_ISSUE).text(__("Issue stones now →"));
 	}
 
 	scan.$input.on("keydown", (e) => {

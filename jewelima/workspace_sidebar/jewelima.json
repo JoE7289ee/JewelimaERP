@@ -1398,6 +1398,17 @@
    "url": ""
   },
   {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "arrow-right-left",
+   "indent": 1,
+   "keep_closed": 1,
+   "label": "Product Transfer",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
    "child": 1,
    "collapsible": 0,
    "icon": "users",
@@ -2681,7 +2692,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 10:15:43.869188",
+ "modified": "2026-09-04 10:25:41.313563",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

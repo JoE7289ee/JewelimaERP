@@ -32,6 +32,14 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.he-x{margin-left:auto;cursor:pointer;color:#b02a2a;font-weight:800;}
 		.he-x.undo{color:#1d7a33;}
 		.he-sum{font-size:12.5px;font-weight:700;margin:9px 0;}
+		/* which way a scan will go, said plainly and coloured to match the rows */
+		.he-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;padding:7px 9px;
+			border-radius:9px;border:1px solid var(--border-color);}
+		.he-bar.removing{border-color:#b02a2a;background:rgba(176,42,42,.07);}
+		.he-mode{border:none;border-radius:8px;padding:6px 16px;font-weight:800;font-size:12px;
+			letter-spacing:.5px;color:#fff;background:#1d7a33;cursor:pointer;}
+		.he-mode.removing{background:#b02a2a;}
+		.he-bar.removing .he-scan{border-color:#b02a2a;}
 		.sh-card .meta{font-size:12px;color:var(--text-muted);margin:4px 0 10px;}
 		.sh-nums{display:flex;gap:16px;font-size:13px;margin-bottom:12px;}
 		.sh-nums b{font-size:16px;}
@@ -60,7 +68,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					<div class="sh-nums">
 						<span><b>${p.pieces}</b> ${__("piece(s)")}</span>
 						<span class="pure"><b>${flt(p.pure).toFixed(3)}</b> g ${__("pure")}</span>
-						<span><b>${flt(p.stones).toFixed(3)}</b> ct ${__("stones")}</span>
+						${(p.by_stone || []).length
+							? (p.by_stone || []).map((x) => `<span><b>${flt(x.ct).toFixed(3)}</b> ct ${esc(x.stone_type)}</span>`).join("")
+							: `<span><b>${flt(p.stones).toFixed(3)}</b> ct ${__("stones")}</span>`}
 					</div>
 					<div class="meta">${(p.buckets || []).length
 						? (p.buckets || []).map((b) => `<span class="sh-bk">${esc(b)}</span>`).join("")
@@ -121,7 +131,7 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			const m = r.message || {};
 			// original = what is saved; keep = what will be saved; extra = new lines
 			const orig = (m.items || []).map((i) => i.order_bag);
-			const E = { keep: new Set(orig), extra: [] };
+			const E = { keep: new Set(orig), extra: [], mode: "add" };
 			const meta = {};
 			(m.items || []).forEach((i) => { meta[i.order_bag] = i; });
 
@@ -177,9 +187,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			}
 
 			$b.html(`
-				<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-					<input type="text" class="he-scan form-control" style="max-width:240px;"
-						placeholder="${__("scan a card to add + Enter")}">
+				<div class="he-bar">
+					<input type="text" class="he-scan form-control" style="max-width:240px;">
+					<button class="he-mode">${__("ADDING")}</button>
 					<span style="font-size:12px;color:var(--text-muted);">${
 						__("✕ takes a line off · ↺ puts it back")}</span>
 				</div>
@@ -193,12 +203,38 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 				else E.keep.add(b);
 				paintEd();
 			});
+			function setMode(m) {
+				E.mode = m;
+				const rm = m === "remove";
+				$b.find(".he-bar").toggleClass("removing", rm);
+				$b.find(".he-mode").toggleClass("removing", rm).text(rm ? __("REMOVING") : __("ADDING"));
+				$b.find(".he-scan").attr("placeholder", rm
+					? __("scan a card to take it OFF + Enter")
+					: __("scan a card to add + Enter"));
+				$b.find(".he-scan").focus();
+			}
+			$b.on("click", ".he-mode", () => setMode(E.mode === "add" ? "remove" : "add"));
+
 			$b.on("keydown", ".he-scan", function (e) {
 				if (e.key !== "Enter") return;
 				e.preventDefault();
 				const code = ($(this).val() || "").trim();
 				$(this).val("");
 				if (!code) return;
+
+				// REMOVING: a scan takes a line off, and only ever a line that is there
+				if (E.mode === "remove") {
+					if (E.extra.includes(code)) {
+						E.extra = E.extra.filter((x) => x !== code);   // one just added: forget it
+					} else if (orig.includes(code)) {
+						E.keep.delete(code);
+					} else {
+						return frappe.show_alert({ message: __("{0} is not on this batch.", [code]), indicator: "orange" }, 4);
+					}
+					paintEd();
+					return;
+				}
+
 				if (orig.includes(code)) {
 					E.keep.add(code);   // scanning one back is the same as undoing it
 					paintEd();
@@ -222,6 +258,7 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					});
 			});
 			paintEd();
+			setMode("add");
 			dlg.show();
 			setTimeout(() => $b.find(".he-scan").focus(), 200);
 		});

@@ -2983,7 +2983,11 @@ STONE_QUEUE_REASON = "Awaiting Stone"
 def mark_stone_issue(bags):
 	"""Flag cards for stone issue: ONLY flagged cards can be pulled at the
 	Stone Issue station, and each card's bench record gets the system
-	In-Queue reason 'Awaiting Stone' (visible on every board/workstation)."""
+	In-Queue reason 'Awaiting Stone' (visible on every board/workstation).
+
+	Asking for stones is not issuing them — the floor's data desk may do this
+	and still be refused at the station."""
+	_require_stone_request()
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 	bags = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
 	done, errors = [], []
@@ -3086,6 +3090,7 @@ def mark_stone_oos(order_bag, note=None):
 	"""Manual OUT OF STOCK — any stone, any card, your judgment beats the
 	numbers (a CS with weight on the shelf can still lack the pink 3mm).
 	Stamps the note + the 'Out of Stock' reason on the bench record."""
+	_require_stone_issue()
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 	if not frappe.db.exists("Order Bag", order_bag):
 		frappe.throw(frappe._("{0} not found.").format(order_bag))
@@ -3524,6 +3529,37 @@ STONE_BUCKET_CODES = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
 STONE_ISSUE_ROLE = "Jewelima Stone Issue"
 
 
+# The stone room. Issuing moves real stock and bills a card, so it is the stone
+# room's own work; REQUESTING one is just saying "this card needs stones", which
+# the floor's data desk does all day. Page roles alone were the only thing
+# stopping either — they hide a screen, not an API call — so the two calls that
+# matter now say so themselves.
+STONE_ISSUE_ROLES = {"System Manager", "Stock Manager", "JW Manager",
+	"JW Stone Admin", "Jewelima Stone Issue"}
+STONE_REQUEST_ROLES = STONE_ISSUE_ROLES | {"JW Data Admin"}
+
+
+def _require_stone_issue():
+	if not (STONE_ISSUE_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Issuing stones is the stone room's — you can request them instead."),
+			frappe.PermissionError)
+
+
+def _require_stone_request():
+	if not (STONE_REQUEST_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Not permitted to request stones."), frappe.PermissionError)
+
+
+def _may_issue_stones():
+	return bool(STONE_ISSUE_ROLES & set(frappe.get_roles()))
+
+
+@frappe.whitelist()
+def can_issue_stones():
+	"""So a page can hide a shortcut it would only be refused for."""
+	return {"issue": _may_issue_stones(), "request": bool(STONE_REQUEST_ROLES & set(frappe.get_roles()))}
+
+
 def _stone_issue_admin():
 	"""Only an admin (System Manager) may hand-pick who is issuing; everyone else
 	is locked to their own linked Employee."""
@@ -3630,6 +3666,7 @@ def stone_issue_save_plan(order_bag, lines):
 	happened, and a plan that contradicts it makes the card's own reconciliation
 	unreadable. Reduce those through Stone Return, which puts the carats back.
 	"""
+	_require_stone_issue()
 	if not _may_open_page("stone-issue"):
 		frappe.throw(frappe._("You are not allowed to change a card's stones."), frappe.PermissionError)
 	if isinstance(lines, str):
@@ -3722,6 +3759,7 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	Material Ledger 'Stone Issue' row + real stock Stone Issue -> In Bags, plus one
 	Material Issue record (the who/what/when paper trail). Only items on the card's
 	BOM that ARE stones; availability checked up front."""
+	_require_stone_issue()
 	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, STONE_ISSUE_WAREHOUSE
 
 	if isinstance(lines, str):
@@ -15236,15 +15274,23 @@ def get_hall_preps():
 		# what the centre is actually being handed: fine gold and stones, off the
 		# pieces' own frozen materials rather than the plan
 		pure = stones = 0.0
+		by_stone = {}
 		for mats in (_bag_convert_materials(bags) if bags else {}).values():
 			for it, q in mats.items():
 				m = frappe.db.get_value("Item", it, ["stone_type", "purity_percentage"], as_dict=True) or {}
-				if m.get("stone_type"):
+				st = m.get("stone_type")
+				if st:
 					stones += flt(q)
+					# "0.636 ct of stones" says nothing a packing slip can use — the
+					# centre is handed diamonds or CZ or colour stone, and which it is
+					# changes what the piece is worth
+					by_stone[st] = round(by_stone.get(st, 0) + flt(q), 3)
 				else:
 					pure += flt(q) * flt(m.get("purity_percentage")) / 100.0
 		r["pure"] = round(pure, 3)
 		r["stones"] = round(stones, 3)
+		r["by_stone"] = [{"stone_type": k, "ct": v} for k, v in
+			sorted(by_stone.items(), key=lambda kv: -kv[1])]
 		# and where those pieces are kept, so a packet can be traced to a bucket
 		r["buckets"] = sorted({b for b in frappe.get_all("Order Bag",
 			filters={"name": ["in", bags or [""]]}, pluck="bucket") if b})

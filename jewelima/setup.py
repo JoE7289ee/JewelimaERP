@@ -370,7 +370,10 @@ JEWELIMA_DATA_ADMIN_ROLE = "JW Data Admin"
 # because the ordering desk is not a bench and is not in that map.
 JEWELIMA_DATA_ADMIN_PAGES = ["assign-collect", "job-work", "casting-queue", "make-tree",
 	"print-order-bags", "transfer-order-bag", "casting-weigh", "rework", "edit-tree",
-	"workstations", "ws-ordering"] + sorted(JEWELIMA_WS_PAGES.values())
+	"workstations", "ws-ordering",
+	# asking the stone room for stones is floor work; ISSUING them is not, and
+	# stone_issue_apply refuses this role outright
+	"stone-request"] + sorted(JEWELIMA_WS_PAGES.values())
 JEWELIMA_DATA_ADMIN_READ = ["Order Bag", "Job Order", "Design", "Item", "Employee", "Bench",
 	"Bench Employee", "Bench Work Option", "Bench Issue", "Bench Visit", "Priority Card",
 	"Bag Material Ledger", "Wax Tree", "Wax Tree Card", "Tree Making", "Casting",

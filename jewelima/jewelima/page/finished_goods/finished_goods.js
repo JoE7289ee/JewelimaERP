@@ -205,7 +205,6 @@ frappe.pages["finished-goods"].on_page_load = function (wrapper) {
 		frappe.route_options = { card: $(this).data("n") };
 		frappe.set_route("card-info");
 	});
-	page.add_inner_button(__("Finished Stock report"), () => frappe.set_route("finished-stock"));
 	page.add_inner_button(__("Refresh"), load);
 	frappe.pages["finished-goods"].on_page_show = load;
 	load();
