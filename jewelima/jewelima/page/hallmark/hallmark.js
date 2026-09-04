@@ -286,6 +286,8 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 
 		const onBatch = (n) => S.rows.some((r) => r.order_bag === n);
 		const visible = () => (P.selOnly ? P.rows.filter((r) => P.sel.has(r.name)) : P.rows);
+		// unticking inside Selected only should drop the row, not leave a ghost
+		const repaintSel = () => (P.selOnly ? load() : paint());
 
 		function paint() {
 			const rows = visible();
@@ -330,11 +332,15 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 
 		function load(more, all) {
 			jewelima.busy($b.find("table.hp-t"), true, all ? __("Loading all…") : __("Looking…"));
-			frappe.call({ method: API + ".get_hallmarkable", freeze: false,
-				args: { bucket: P.bucket, design_type: P.design_type, karat: P.karat,
+			// Selected only means the tick list, whole — not the ticks that happen
+			// to survive the filters, which is how 7 ticked came out as 2 shown
+			const args = P.selOnly
+				? { names: JSON.stringify([...P.sel]), limit: Math.max(P.sel.size, PAGE) }
+				: { bucket: P.bucket, design_type: P.design_type, karat: P.karat,
 					held_by: P.held_by, search: P.q,
 					limit: all ? Math.max(P.total, PAGE) : PAGE,
-					offset: all || !more ? 0 : P.rows.length } })
+					offset: all || !more ? 0 : P.rows.length };
+			frappe.call({ method: API + ".get_hallmarkable", freeze: false, args })
 				.then((r) => {
 					const m = r.message || {};
 					P.rows = more && !all ? P.rows.concat(m.rows || []) : (m.rows || []);
@@ -352,16 +358,22 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			P.sel.clear();
 			// "Selected only" with nothing selected reads as an empty picker, so
 			// clearing the ticks drops that view too
+			const was = P.selOnly;
 			P.selOnly = false;
 			$b.find(".hp-selonly").removeClass("on");
-			paint();
+			was ? load() : paint();
 		});
 		$b.on("click", ".hp-selonly", function () {
-			P.selOnly = !P.selOnly; $(this).toggleClass("on", P.selOnly); paint();
+			P.selOnly = !P.selOnly;
+			$(this).toggleClass("on", P.selOnly);
+			// a filter left standing behind this view only hides ticks, so drop it
+			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
+			$b.find(".hp-f").val(""); $b.find(".hp-q").val("");
+			load();
 		});
 		$b.on("click", ".hp-reset", function () {
 			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
-			P.selOnly = false;
+			P.selOnly = false;   // Reset drops the filters, never the ticks
 			$b.find(".hp-f").val(""); $b.find(".hp-q").val("");
 			$b.find(".hp-selonly").removeClass("on");
 			load();
@@ -370,7 +382,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			const on = this.checked;
 			visible().filter((r) => !onBatch(r.name))
 				.forEach((r) => (on ? P.sel.add(r.name) : P.sel.delete(r.name)));
-			paint();
+			repaintSel();
 		});
 
 		frappe.call({ method: API + ".get_hallmark_filter_options" }).then((r) => {

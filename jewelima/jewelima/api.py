@@ -15216,7 +15216,7 @@ def hall_prep_create(center, bags=None):
 
 @frappe.whitelist()
 def get_hallmarkable(design_type=None, bucket=None, held_by=None, karat=None,
-		search=None, limit=60, offset=0):
+		search=None, limit=60, offset=0, names=None):
 	"""The Hallmark desk's picker: finished pieces that could go for hallmarking,
 	narrowed by the handful of things an operator actually sorts by.
 
@@ -15231,6 +15231,16 @@ def get_hallmarkable(design_type=None, bucket=None, held_by=None, karat=None,
 	cond = ["b.is_finished = 1", "b.stock_status = 'In Stock'",
 		"IFNULL(b.huid, '') = ''"]
 	vals = {}
+	# an explicit list answers "show me exactly what I ticked" — the picker's
+	# Selected-only view, where a filter would hide half the tick list
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	if names is not None:
+		names = [n for n in names if n]
+		if not names:
+			return {"rows": [], "count": 0, "total": 0, "offset": 0, "has_more": False}
+		cond.append("b.name IN %(names)s")
+		vals["names"] = names
 	if karat:
 		cond.append("""EXISTS (SELECT 1 FROM `tabBag Material Ledger` l
 			JOIN `tabItem` i ON i.name = l.item
