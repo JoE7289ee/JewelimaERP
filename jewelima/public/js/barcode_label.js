@@ -74,11 +74,17 @@ jewelima.barcodeOpts = function (over) {
 	const saved = jewelima.BARCODE_LAYOUT || {};
 	const o = Object.assign({}, jewelima.BARCODE_DEFAULTS, saved, over || {});
 	// `lines` is a map, so a shallow assign would drop every line the saved
-	// layout did not mention
-	o.lines = Object.assign({}, jewelima.BARCODE_DEFAULTS.lines,
+	// layout did not mention — and each line is COPIED, because a shared
+	// reference here lets a caller's edit write straight into the saved layout
+	const merged = Object.assign({}, jewelima.BARCODE_DEFAULTS.lines,
 		saved.lines || {}, (over || {}).lines || {});
+	o.lines = {};
+	for (const k in merged) o.lines[k] = Object.assign({}, merged[k]);
 	return {
 		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;--bc-w:${o.tag.w}in;--bc-h:${o.tag.h}in;`,
+		// the numbers themselves, not only the CSS they were baked into — the
+		// layout editor needs to read them back without parsing a style string
+		pt: o.pt, qr: o.qr,
 		tag: o.tag, a: o.a, b: o.b,
 		offsetA: o.offsetA, offsetB: o.offsetB,
 		stoneGrams: o.stoneGrams,

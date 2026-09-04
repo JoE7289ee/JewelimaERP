@@ -119,10 +119,14 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	// so far before three lines stop fitting — the preview says when that happens
 	// rather than letting it clip on the tag.
 	const SIZE_KEY = "jw_barcode_pt";
-	const SIZE_MIN = 7, SIZE_MAX = 13, SIZE_DEF = BD.pt;
+	const SIZE_MIN = 7, SIZE_MAX = 13;
+	// the layout the floor measured, falling back to what shipped — read through
+	// barcodeOpts so this page cannot drift from Multi Print's Tag layout dialog
+	const LAY = () => jewelima.barcodeOpts();
+	const SIZE_DEF = () => flt(LAY().pt) || BD.pt;
 	function ptSize() {
-		let v = SIZE_DEF;
-		try { v = parseFloat(localStorage.getItem(SIZE_KEY) || "") || SIZE_DEF; } catch (e) { v = SIZE_DEF; }
+		let v = SIZE_DEF();
+		try { v = parseFloat(localStorage.getItem(SIZE_KEY) || "") || SIZE_DEF(); } catch (e) { v = SIZE_DEF(); }
 		return Math.max(SIZE_MIN, Math.min(SIZE_MAX, v));
 	}
 	function setPtSize(v) {
@@ -133,8 +137,9 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 	}
 	// the code square grows with the type, but never past what the label can hold
 	// the code square grows with the print size, capped by the tag height (0.475in)
-	const qrMax = () => Math.max(0.2, (BD.a && BD.a.h ? BD.a.h : 0.43) - 0.02);
-	const qrSize = () => Math.min(qrMax(), Math.round((BD.qr * ptSize() / SIZE_DEF) * 100) / 100);
+	const qrMax = () => { const a = LAY().a || BD.a; return Math.max(0.2, (a && a.h ? a.h : 0.43) - 0.02); };
+	const qrSize = () => Math.min(qrMax(),
+		Math.round((flt(LAY().qr) || BD.qr) * ptSize() / SIZE_DEF() * 100) / 100);
 
 	function showOffsets() {
 		$(page.main).find(".pb-off-a").text(offset("a").toFixed(2) + " in");
@@ -182,7 +187,7 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 
 	$(page.main).on("click", ".pb-sm", () => setPtSize(ptSize() - 0.5));
 	$(page.main).on("click", ".pb-bg", () => setPtSize(ptSize() + 0.5));
-	$(page.main).on("click", ".pb-sz0", () => setPtSize(SIZE_DEF));
+	$(page.main).on("click", ".pb-sz0", () => setPtSize(SIZE_DEF()));
 	$(page.main).on("click", ".pb-l", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) - 0.02); });
 	$(page.main).on("click", ".pb-r", function () { const sd = this.dataset.s; setOffset(sd, offset(sd) + 0.02); });
 	// reset goes back to the tuned default, not to zero — zero was never the
@@ -278,13 +283,14 @@ frappe.pages["print-barcode"].on_page_load = function (wrapper) {
 		// sharing one sheet
 		const body = state.cards.map((c) => `<div class="bc-page">${buildLabel(c)}</div>`).join("");
 		const w = window.open("", "_blank", "width=600,height=400");
+		const tag = LAY().tag || BD.tag;
 		w.document.write(`<html><head><title>Barcodes</title><style>
-			@page{size:3.3in 0.475in;margin:0;}
+			@page{size:${tag.w}in ${tag.h}in;margin:0;}
 			html,body{margin:0;padding:0;}
 			${LABEL_CSS}
 			.bc-page{break-after:page;page-break-after:always;
 				break-inside:avoid;page-break-inside:avoid;
-				width:3.3in;height:0.475in;overflow:hidden;}
+				width:${tag.w}in;height:${tag.h}in;overflow:hidden;}
 			.bc-page:last-child{break-after:auto;page-break-after:auto;}
 			</style></head><body>${body}</body></html>`);
 		w.document.close();

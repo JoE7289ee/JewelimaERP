@@ -1557,19 +1557,6 @@
    "url": ""
   },
   {
-   "child": 1,
-   "collapsible": 0,
-   "icon": "printer",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Tag Canvas",
-   "link_to": "tag-canvas",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "award",
@@ -2709,7 +2696,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 16:10:14.037370",
+ "modified": "2026-09-04 16:51:12.978982",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

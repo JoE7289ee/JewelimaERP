@@ -15782,7 +15782,7 @@ def huid_confirm_batch(changes):
 # Multi Print, off a Bag Split or off the roll is the same tag — and getting it
 # right no longer means editing code and deploying.
 # ---------------------------------------------------------------------------
-BARCODE_LAYOUT_ROLES = ("System Manager", "Stock Manager", "JW Manager")
+BARCODE_LAYOUT_ROLES = ("System Manager", "JW Manager")
 
 
 @frappe.whitelist()
@@ -15800,7 +15800,7 @@ def get_barcode_layout():
 
 @frappe.whitelist()
 def save_barcode_layout(layout):
-	"""Lock in what Tag Canvas measured. Geometry only — the per-run wording
+	"""Lock in what the Tag layout dialog measured. Geometry only — the per-run wording
 	(free text, family override, the GW line) is never saved, because that is a
 	choice made for one run, not for the tag."""
 	frappe.only_for(list(BARCODE_LAYOUT_ROLES))

@@ -354,7 +354,7 @@ JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
 # pieces, Make Products turns finished pieces into stock. Its four endpoints
 # carry no role guard of their own, so holding the page is the whole grant.
 JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split", "workstations",
-	"make-products", "print-barcode", "multi-barcode", "tag-canvas",
+	"make-products", "print-barcode", "multi-barcode",
 	"transfer-order-bag"]
 # Where a piece may go once it has been cut out: on to the finishing benches, or
 # to REWORK when it has to be done again. Transfer Rules match the FROM as well
