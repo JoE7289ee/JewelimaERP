@@ -1,177 +1,169 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Party Stock — intake for CUSTOMER-GIVEN stones (the PDMD/POTH buckets).
-// Rule engine: a stone can only exist under a Stone Party. Step 1 creates the
-// party (full name stored on the master; a 3-letter code — user-entered or
-// generated from the name — becomes the prefix of every item). Step 2 adds
-// stones ON DEMAND: pick the bracket (Party Diamond / Party Other), type the
-// stone name, and the backend builds the item (<CODE>-<STONE>, party group,
-// stone type, Carat) — no sieve runs, only what actually arrives.
+// Stock by Party (Delivery) — whose pieces are these, and how many.
+//
+// A party's name IS its classification: GROUP-ZONE-DISTRICT-STATE, optionally a
+// SPECIAL, and it may still answer to an OLD NAME from before the codes existed.
+// Each of those is how somebody actually asks — "how much is out with the TJ
+// group", "what is sitting in Thrissur", "what does the old WHOLESALE account
+// hold" — so each of them is a filter here, and they combine.
+//
+// The groups run across the top because that is the question asked most; the
+// table below is every party the filters leave standing.
 // Route: /app/party-stock
 
 frappe.pages["party-stock"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Party Stone", single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Stock by Party"), single_column: true });
 	const API = "jewelima.jewelima.api";
-	const S = { parties: [], party: "", stones: [] };
+	const esc = frappe.utils.escape_html;
+	const flt = (v) => parseFloat(v) || 0;
+	const f3 = (n) => flt(n).toFixed(3);
+	const root = $(page.main);
+	const S = { data: null, f: { group: "", zone: "", district: "", state: "", special: "",
+		old_name: "", party: "", search: "", status: "In Stock" } };
 
-	$(page.main).append(`
+	root.append(`
 		<style>
-		.pst-wrap{display:flex;gap:14px;align-items:flex-start;}
-		.pst-col{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);}
-		.pst-parties{flex:0 0 340px;}
-		.pst-main{flex:1 1 auto;}
-		.pst-colhead{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border-color);font-weight:700;}
-		.pst-colhead .btn{margin-left:auto;}
-		.pst-list{max-height:calc(100vh - 260px);overflow:auto;}
-		.pst-party{display:flex;align-items:center;gap:10px;padding:7px 12px;border-bottom:1px solid var(--border-color);cursor:pointer;font-size:13px;}
-		.pst-party:hover{background:var(--control-bg);}
-		.pst-party.sel{background:var(--control-bg);box-shadow:inset 3px 0 0 var(--primary);}
-		.pst-party .code{font-weight:800;letter-spacing:.5px;min-width:44px;}
-		.pst-party .cnt{margin-left:auto;background:var(--control-bg);border:1px solid var(--border-color);border-radius:10px;padding:0 8px;font-size:11px;color:var(--text-muted);}
-		.pst-empty{padding:16px;text-align:center;color:var(--text-muted);font-size:13px;}
-		.pst-form{padding:12px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--border-color);}
-		.pst-formrow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
-		.pst-f label{display:block;font-size:11px;color:var(--text-muted);margin:0 0 2px;}
-		.pst-f input,.pst-f select{border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}
-		.pst-stone-in{width:220px;text-transform:uppercase;}
-		.pst-preview{font-size:13px;padding:4px 10px;height:30px;line-height:22px;border-radius:5px;background:var(--control-bg);font-weight:700;letter-spacing:.3px;min-width:150px;}
-		.pst-preview.ok{color:var(--green-600,#2e7d32);}
-		.pst-preview.bad{color:#b52a2a;}
-		.pst-add{height:30px;}
-		.pst-stones{max-height:calc(100vh - 360px);overflow:auto;}
-		.pst-stone{display:flex;align-items:center;gap:10px;padding:6px 12px;border-bottom:1px solid var(--border-color);font-size:13px;}
-		.pst-stone a{color:var(--text-color);}
-		.pst-stone.dis a{text-decoration:line-through;color:var(--text-muted);}
-		.pst-chip{background:var(--control-bg);border-radius:4px;padding:1px 7px;font-size:11px;color:var(--text-muted);margin-left:auto;}
-		.pst-chip.pdmd{background:#e8f2fd;color:#1c5da8;font-weight:700;}
-		.pst-chip.poth{background:#f3e8fd;color:#6b2fa8;font-weight:700;}
-		.pst-hint{margin:10px 2px 0;color:var(--text-muted);font-size:12px;}
+		#page-party-stock .container{max-width:100%;}
+		.ps-groups{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:13px;}
+		.ps-g{border:1px solid var(--border-color);border-radius:11px;padding:8px 15px;background:var(--fg-color);
+			cursor:pointer;min-width:104px;transition:border-color .12s;}
+		.ps-g:hover{border-color:#1f618d;}
+		.ps-g.on{border-color:#1f618d;box-shadow:inset 0 0 0 1px #1f618d;background:rgba(31,97,141,.07);}
+		.ps-g .n{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);}
+		.ps-g .p{font-size:19px;font-weight:800;line-height:1.15;}
+		.ps-g .s{font-size:10.5px;color:var(--text-muted);}
+		.ps-tiles{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+		.ps-tile{border:1px solid var(--border-color);border-radius:12px;padding:10px 20px;
+			background:var(--fg-color);min-width:118px;}
+		.ps-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
+		.ps-tile .v{font-size:22px;font-weight:800;}
+		.ps-tile.pure .v{color:#1f618d;}
+		.ps-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+		.ps-bar select,.ps-q{border:1px solid var(--border-color);border-radius:8px;height:31px;
+			padding:2px 10px;background:var(--fg-color);color:var(--text-color);font-size:12.5px;max-width:190px;}
+		.ps-q{width:200px;}
+		.ps-clear{border:none;background:none;color:#1f618d;cursor:pointer;font-size:12px;text-decoration:underline;}
+		.ps-box{border:1px solid var(--border-color);border-radius:12px;overflow:auto;background:var(--fg-color);
+			max-height:calc(100vh - 340px);}
+		table.ps-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+		table.ps-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;text-transform:uppercase;
+			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);white-space:nowrap;}
+		table.ps-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
+		table.ps-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.ps-t tr:hover td{background:var(--control-bg);}
+		.ps-party{font-weight:700;color:#1f618d;cursor:pointer;}
+		.ps-sub{font-size:10.5px;color:var(--text-muted);}
+		.ps-none{padding:34px;text-align:center;color:var(--text-muted);}
 		</style>
-		<div class="pst-wrap">
-			<div class="pst-col pst-parties">
-				<div class="pst-colhead">${__("Party groups")}</div>
-				<div class="pst-list pst-partylist"></div>
-			</div>
-			<div class="pst-col pst-main">
-				<div class="pst-colhead pst-mainhead">${__("Select a party")}</div>
-				<div class="pst-form" style="display:none">
-					<div class="pst-formrow">
-						<div class="pst-f"><label>${__("Bracket")}</label>
-							<select class="pst-bracket">
-								<option value="Party Diamond">PDMD — ${__("Party Diamond")}</option>
-								<option value="Party Other">POTH — ${__("Party Other")}</option>
-							</select></div>
-						<div class="pst-f"><label>${__("Stone")}</label><input class="pst-stone-in" type="text" placeholder="VS1 / RUBY …"></div>
-						<div class="pst-f"><label>${__("Item Code")}</label><div class="pst-preview">—</div></div>
-						<button class="btn btn-primary btn-sm pst-add" disabled>${__("Add Stone")}</button>
-					</div>
-				</div>
-				<div class="pst-list pst-stones"></div>
-			</div>
+		<div class="ps-bar">
+			<select class="ps-f" data-f="status">
+				<option value="In Stock">${__("In stock")}</option>
+				<option value="At Certification">${__("At certification")}</option>
+				<option value="At Hallmarking">${__("At hallmarking")}</option>
+				<option value="Sold">${__("Sold")}</option>
+			</select>
+			<select class="ps-f" data-f="group"><option value="">${__("— group —")}</option></select>
+			<select class="ps-f" data-f="zone"><option value="">${__("— zone —")}</option></select>
+			<select class="ps-f" data-f="district"><option value="">${__("— district —")}</option></select>
+			<select class="ps-f" data-f="state"><option value="">${__("— state —")}</option></select>
+			<select class="ps-f" data-f="special"><option value="">${__("— special —")}</option></select>
+			<select class="ps-f" data-f="old_name"><option value="">${__("— old name —")}</option></select>
+			<input type="text" class="ps-q" placeholder="${__("search party…")}">
+			<button class="ps-clear" style="display:none;">${__("clear filters")}</button>
 		</div>
-		<div class="pst-hint">${__("Party-given stones only — created on demand, never in sieve runs. Weights land in the PDMD/POTH columns of the bag; party gold goes through Party Metal Add.")}</div>
+		<div class="ps-groups"></div>
+		<div class="ps-tiles"></div>
+		<div class="ps-box"><table class="ps-t"><thead><tr>
+			<th>${__("Party")}</th><th>${__("Group")}</th><th>${__("Zone")}</th>
+			<th>${__("District")}</th><th>${__("State")}</th>
+			<th class="num">${__("Pieces")}</th><th class="num">${__("Gross g")}</th>
+			<th class="num">${__("Diamond ct")}</th>
+		</tr></thead><tbody class="ps-body"></tbody></table></div>
 	`);
 
-	const root = $(page.main)[0];
-	const esc = frappe.utils.escape_html;
-	const $stoneIn = root.querySelector(".pst-stone-in");
-	const $bracket = root.querySelector(".pst-bracket");
-	const $preview = root.querySelector(".pst-preview");
-	const $add = root.querySelector(".pst-add");
+	const anyFilter = () => Object.entries(S.f).some(([k, v]) => v && k !== "status");
+	// the masters read "TCR - Thrissur"; the code alone is what the name is built from
+	const short = (v) => String(v || "").split(" - ")[0];
 
-	function loadParties(selectCode) {
-		frappe.call({ method: API + ".get_stone_parties" }).then((r) => {
-			S.parties = r.message || [];
-			if (selectCode) S.party = selectCode;
-			renderParties();
-			if (S.party) loadStones();
-		});
+	function paint() {
+		const d = S.data || { rows: [], groups: [], totals: {} };
+		const t = d.totals || {};
+		root.find(".ps-groups").html((d.groups || []).map((g) => `
+			<div class="ps-g ${S.f.group === g.group ? "on" : ""}" data-g="${esc(g.group)}">
+				<div class="n">${esc(g.group)}</div>
+				<div class="p">${g.pieces}</div>
+				<div class="s">${g.parties} ${__("part(ies)")} · ${f3(g.gross)} g</div>
+			</div>`).join("") || `<span class="ps-sub">${__("nothing to group")}</span>`);
+
+		root.find(".ps-tiles").html(`
+			<div class="ps-tile"><div class="k">${__("Pieces")}</div><div class="v">${t.pieces || 0}</div></div>
+			<div class="ps-tile"><div class="k">${__("Parties")}</div><div class="v">${t.parties || 0}</div></div>
+			<div class="ps-tile"><div class="k">${__("Gross")}</div><div class="v">${f3(t.gross)}<span style="font-size:12px;"> g</span></div></div>
+			<div class="ps-tile pure"><div class="k">${__("Pure gold")}</div><div class="v">${f3(t.pure)}<span style="font-size:12px;"> g</span></div></div>
+			<div class="ps-tile"><div class="k">${__("Diamond")}</div><div class="v">${f3(t.dmd_ct)}<span style="font-size:12px;"> ct</span></div></div>`);
+
+		root.find(".ps-body").html((d.rows || []).map((r) => `
+			<tr>
+				<td><span class="ps-party" data-p="${esc(r.party)}">${esc(r.party)}</span>
+					${r.special ? `<div class="ps-sub">${esc(r.special)}</div>` : ""}</td>
+				<td>${esc(r.group || "—")}</td>
+				<td>${esc(short(r.zone) || "—")}<div class="ps-sub">${esc((r.zone || "").split(" - ")[1] || "")}</div></td>
+				<td>${esc(short(r.district) || "—")}<div class="ps-sub">${esc((r.district || "").split(" - ")[1] || "")}</div></td>
+				<td>${esc(short(r.state) || "—")}</td>
+				<td class="num">${r.pieces}</td>
+				<td class="num">${f3(r.gross)}</td>
+				<td class="num">${r.dmd_ct ? f3(r.dmd_ct) : "—"}</td>
+			</tr>`).join("") || `<tr><td colspan="8" class="ps-none">${
+				anyFilter() ? __("No party matches these filters.")
+					: __("Nobody is holding {0} pieces.", [String(S.f.status).toLowerCase()])}</td></tr>`);
+		root.find(".ps-clear").toggle(anyFilter());
 	}
 
-	function renderParties() {
-		const box = root.querySelector(".pst-partylist");
-		if (!S.parties.length) {
-			box.innerHTML = `<div class="pst-empty">${__("No parties yet — stones can only come in under a party.")}</div>`;
-			return;
-		}
-		box.innerHTML = S.parties.map((p) =>
-			`<div class="pst-party${p.code === S.party ? " sel" : ""}" data-code="${esc(p.code)}">
-				<span class="code">${esc(p.code)}</span><span>${esc(p.party_name)}</span>
-				<span class="cnt">${p.items} ${__("stones")}</span>
-			</div>`
-		).join("");
-		box.querySelectorAll(".pst-party").forEach((el) =>
-			el.addEventListener("click", function () {
-				S.party = this.getAttribute("data-code");
-				renderParties();
-				loadStones();
-			})
-		);
+	function fill(f, blank, list) {
+		root.find(`.ps-f[data-f="${f}"]`).html(`<option value="">${blank}</option>`
+			+ (list || []).map((v) => `<option ${v === S.f[f] ? "selected" : ""}>${esc(v)}</option>`).join(""));
 	}
 
-	function loadStones() {
-		const p = S.parties.find((x) => x.code === S.party);
-		root.querySelector(".pst-mainhead").textContent = p ? `${p.code} — ${p.party_name}` : __("Select a party");
-		root.querySelector(".pst-form").style.display = S.party ? "" : "none";
-		if (!S.party) { root.querySelector(".pst-stones").innerHTML = ""; return; }
-		frappe.call({ method: API + ".get_party_stones", args: { party: S.party } }).then((r) => {
-			S.stones = r.message || [];
-			renderStones();
-			checkPreview();
-		});
-	}
-
-	function renderStones() {
-		const box = root.querySelector(".pst-stones");
-		if (!S.stones.length) {
-			box.innerHTML = `<div class="pst-empty">${__("No stones yet for this party.")}</div>`;
-			return;
-		}
-		box.innerHTML = S.stones.map((s) =>
-			`<div class="pst-stone${s.disabled ? " dis" : ""}">
-				<a href="/app/item/${encodeURIComponent(s.name)}">${esc(s.name)}</a>
-				<span class="pst-chip ${s.bracket.toLowerCase()}">${esc(s.bracket)}</span>
-			</div>`
-		).join("");
-	}
-
-	const checkPreview = frappe.utils.debounce(() => {
-		const stone = ($stoneIn.value || "").trim();
-		if (!S.party || !stone) {
-			$preview.textContent = "—";
-			$preview.className = "pst-preview";
-			$add.disabled = true;
-			return;
-		}
-		frappe.call({ method: API + ".check_party_stone", args: { party: S.party, stone } })
+	function load() {
+		jewelima.busyCall(root.find(".ps-box"), __("Counting…"),
+			{ method: API + ".get_party_stock", freeze: false, args: Object.assign({}, S.f) })
 			.then((r) => {
-				const m = r.message || {};
-				$preview.textContent = m.item_code + (m.exists ? " — " + __("exists") : "");
-				$preview.className = "pst-preview " + (m.exists ? "bad" : "ok");
-				$add.disabled = !!m.exists;
-			})
-			.catch(() => {
-				$preview.textContent = __("invalid name");
-				$preview.className = "pst-preview bad";
-				$add.disabled = true;
+				S.data = r.message || {};
+				const o = S.data.options || {};
+				fill("group", __("— group —"), o.group);
+				fill("zone", __("— zone —"), o.zone);
+				fill("district", __("— district —"), o.district);
+				fill("state", __("— state —"), o.state);
+				fill("special", __("— special —"), o.special);
+				fill("old_name", __("— old name —"), o.old_names);
+				root.find(`.ps-f[data-f="status"]`).val(S.f.status);
+				paint();
 			});
-	}, 250);
-	$stoneIn.addEventListener("input", checkPreview);
+	}
 
-	$add.addEventListener("click", () => {
-		const stone = ($stoneIn.value || "").trim();
-		if (!S.party || !stone) return;
-		$add.disabled = true;
-		frappe.call({ method: API + ".create_party_stone", args: { party: S.party, bracket: $bracket.value, stone } })
-			.then((r) => {
-				frappe.show_alert({ message: __("{0} created", [r.message]), indicator: "green" }, 4);
-				$stoneIn.value = "";
-				checkPreview();
-				loadParties(S.party); // refresh counts + stone list
-			})
-			.catch(() => { $add.disabled = false; });
+	root.on("change", ".ps-f", function () { S.f[this.dataset.f] = this.value; load(); });
+	root.find(".ps-q").on("input", frappe.utils.debounce(function () {
+		S.f.search = this.value || ""; load();
+	}, 350));
+	root.on("click", ".ps-g", function () {
+		const g = $(this).data("g") || "";
+		S.f.group = (S.f.group === g) ? "" : g;   // clicking the live one clears it
+		load();
+	});
+	root.on("click", ".ps-clear", function () {
+		Object.keys(S.f).forEach((k) => { if (k !== "status") S.f[k] = ""; });
+		root.find(".ps-q").val("");
+		load();
+	});
+	// a party name is a link to the party itself
+	root.on("click", ".ps-party", function () {
+		frappe.route_options = { party: $(this).data("p") };
+		frappe.set_route("parties");
 	});
 
-	loadParties();
+	page.set_primary_action(__("Refresh"), load, "refresh");
+	frappe.pages["party-stock"].on_page_show = load;
+	load();
 };

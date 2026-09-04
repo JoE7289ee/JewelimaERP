@@ -1398,6 +1398,18 @@
    "url": ""
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "users",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Stock by Party",
+   "link_to": "party-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "arrow-right-left",
@@ -2421,19 +2433,6 @@
   {
    "child": 1,
    "collapsible": 0,
-   "icon": "package",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Party Stone",
-   "link_to": "party-stock",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link",
-   "url": ""
-  },
-  {
-   "child": 1,
-   "collapsible": 0,
    "icon": "circle",
    "indent": 1,
    "keep_closed": 0,
@@ -2692,7 +2691,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 10:25:41.313563",
+ "modified": "2026-09-04 10:42:27.141397",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -19182,6 +19182,117 @@ def rework_piece(order_bag, to_location=None, remarks=None):
 # to. The Finished Stock report counts pieces by type; this is the list you
 # read when someone asks "what have we got?".
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Stock by Party (Delivery) — whose pieces are these, and how many.
+# ---------------------------------------------------------------------------
+# A party's name IS its classification: GROUP-ZONE-DISTRICT-STATE, optionally a
+# SPECIAL, and it may answer to one or more OLD NAMES from before the codes
+# existed. Every one of those is a way somebody asks the question — "how much is
+# out with the TJ group", "what is sitting in Thrissur", "what does the old
+# WHOLESALE account hold" — so every one of them filters here.
+
+PARTY_LEVELS = (
+	("group", "party_group", "Party Group"),
+	("zone", "party_zone", "Party Zone"),
+	("district", "party_district", "Party District"),
+	("state", "party_state", "Party State"),
+	("special", "party_special", "Party Special"),
+)
+
+
+@frappe.whitelist()
+def get_party_stock(group=None, zone=None, district=None, state=None, special=None,
+		old_name=None, party=None, status="In Stock", search=None, limit=400):
+	"""Piece counts by party, sliced any way the party name can be read."""
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Delivery",
+			"JW Stock Admin", "Jewelima Stock", "Jewelima Info"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Stock by Party is for the desk."), frappe.PermissionError)
+
+	status = status if status in ("In Stock", "At Certification", "At Hallmarking", "Sold") else "In Stock"
+	picked = {"group": group, "zone": zone, "district": district,
+		"state": state, "special": special}
+
+	# the parties the filters leave standing — the piece query then joins to these
+	pf, pv = [], {}
+	for key, field, _dt in PARTY_LEVELS:
+		if picked.get(key):
+			pf.append("c.{0} = %({1})s".format(field, key)); pv[key] = picked[key]
+	if party:
+		pf.append("c.name = %(party)s"); pv["party"] = party
+	if search:
+		pf.append("c.name LIKE %(q)s"); pv["q"] = "%" + search + "%"
+	if old_name:
+		# an old name points AT parties, so it narrows the same set from the side
+		pf.append("""c.name IN (SELECT p.party FROM `tabParty Old Name Party` p
+			WHERE p.parent = %(old)s)""")
+		pv["old"] = old_name
+	PW = " AND ".join(pf) if pf else "1=1"
+
+	rows = frappe.db.sql("""
+		SELECT c.name party, c.party_group `group`, c.party_zone zone,
+			c.party_district district, c.party_state state, c.party_special special,
+			COUNT(b.name) pieces,
+			IFNULL(SUM(b.act_gross_weight), 0) gross,
+			IFNULL(SUM(b.act_dmd_weight), 0) dmd_ct
+		FROM `tabCustomer` c
+		JOIN `tabOrder Bag` b ON b.held_by = c.name
+			AND b.is_finished = 1 AND b.stock_status = %(st)s
+		WHERE {0}
+		GROUP BY c.name
+		ORDER BY pieces DESC, c.name
+		LIMIT %(lim)s""".format(PW),
+		dict(pv, st=status, lim=max(1, min(cint(limit) or 400, 2000))), as_dict=True)
+
+	# the roll-up the page leads with: how much each GROUP is holding
+	by_group = {}
+	for r in rows:
+		g = r["group"] or "—"
+		e = by_group.setdefault(g, {"group": g, "parties": 0, "pieces": 0, "gross": 0.0})
+		e["parties"] += 1
+		e["pieces"] += cint(r["pieces"])
+		e["gross"] += flt(r["gross"])
+	groups = sorted(by_group.values(), key=lambda x: -x["pieces"])
+	for g in groups:
+		g["gross"] = round(g["gross"], 3)
+
+	# pure gold across the same set, off the pieces' own frozen materials
+	pure = 0.0
+	if rows:
+		pure = flt(frappe.db.sql("""
+			SELECT IFNULL(SUM(l.qty * IFNULL(i.purity_percentage, 0) / 100), 0)
+			FROM `tabBag Material Ledger` l JOIN `tabItem` i ON i.name = l.item
+			WHERE l.entry_type = 'Convert' AND l.direction = 'Out'
+			  AND IFNULL(i.stone_type, '') = ''
+			  AND l.order_bag IN (SELECT b.name FROM `tabOrder Bag` b
+				JOIN `tabCustomer` c ON c.name = b.held_by
+				WHERE b.is_finished = 1 AND b.stock_status = %(st)s AND {0})
+			""".format(PW), dict(pv, st=status))[0][0])
+
+	return {
+		"rows": rows,
+		"groups": groups,
+		"totals": {
+			"pieces": sum(cint(r["pieces"]) for r in rows),
+			"parties": len(rows),
+			"gross": round(sum(flt(r["gross"]) for r in rows), 3),
+			"pure": round(pure, 3),
+			"dmd_ct": round(sum(flt(r["dmd_ct"]) for r in rows), 3),
+		},
+		"status": status,
+		"options": get_party_stock_options(),
+	}
+
+
+@frappe.whitelist()
+def get_party_stock_options():
+	"""Every way a party name can be read, for the filter bar."""
+	out = {}
+	for key, _field, dt in PARTY_LEVELS:
+		out[key] = frappe.get_all(dt, pluck="name", order_by="name") if frappe.db.exists("DocType", dt) else []
+	out["old_names"] = frappe.get_all("Party Old Name", pluck="name", order_by="name") \
+		if frappe.db.exists("DocType", "Party Old Name") else []
+	return out
+
 @frappe.whitelist()
 def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
 		has_huid=None, certified=None, search=None, limit=300):
