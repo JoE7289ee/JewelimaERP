@@ -1655,6 +1655,18 @@
   {
    "child": 0,
    "collapsible": 1,
+   "icon": "delete",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Remove Hallmarking",
+   "link_to": "remove-hallmarking",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "cog",
    "indent": 1,
    "keep_closed": 1,
@@ -2703,7 +2715,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 11:36:46.220328",
+ "modified": "2026-09-04 15:17:33.853825",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

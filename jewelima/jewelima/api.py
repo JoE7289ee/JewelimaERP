@@ -10049,7 +10049,14 @@ def assign_old_name(old_name, party):
 
 @frappe.whitelist()
 def update_party_defaults(customer, salesman=None, price_chart=None):
-	"""The per-party defaults the sale/order flow prefills from."""
+	"""The per-party defaults the sale/order flow prefills from.
+
+	The delivery desk looks parties up all day and now holds the page for it,
+	but a party's default salesman and price chart decide what a bill says —
+	that is a manager's call, so the page shows them and this refuses to change
+	them for anyone else."""
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "JW Party Admin",
+		"Jewelima Ordering"])
 	if not frappe.db.exists("Customer", customer):
 		frappe.throw(frappe._("{0} not found.").format(customer))
 	if salesman and not frappe.db.exists("Sales Person", salesman):
@@ -15115,7 +15122,9 @@ def _hall_validate_piece(nm, taken=None):
 	if taken and nm in taken:
 		frappe.throw(frappe._("{0} is already on this list.").format(nm))
 	if (b.huid or "").strip():
-		frappe.throw(frappe._("{0} already carries HUID {1} — it has been hallmarked.").format(nm, b.huid))
+		frappe.throw(frappe._("{0} already carries HUID {1} — it has been hallmarked. "
+			"If the stamp did not come out, take the HUID off on Remove Hallmarking "
+			"and send it again, or ask a manager.").format(nm, b.huid))
 	open_batch = frappe.db.sql("""select i.parent from `tabHallmarking Item` i
 		join `tabHallmarking Batch` h on h.name = i.parent
 		where i.order_bag = %s and h.status in ('Prepared', 'Sent', 'Collected', 'Partially Received')
@@ -15148,6 +15157,68 @@ def get_hall_prep_context():
 	"""The Hallmark desk's setup: the centres it can send to."""
 	return {"centers": frappe.get_all("Hallmarking Center",
 		filters={"disabled": 0}, fields=["name", "center_name", "location"], order_by="center_name")}
+
+
+# A prep is a packet somebody made up and is answerable for. Anyone on the
+# delivery desk can SEE every batch — you cannot hand over a tray you are not
+# allowed to look at — but adding, removing, sending and cancelling belong to
+# whoever prepped it. A manager overrides, because someone has to when that
+# person is not in today.
+HALL_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
+
+
+def _user_label(user):
+	return frappe.db.get_value("User", user, "full_name") or user or "?"
+
+
+def _hall_can_manage(d):
+	return bool(set(frappe.get_roles()) & HALL_OVERRIDE_ROLES) or d.owner == frappe.session.user
+
+
+def _require_hall_owner(d, what):
+	if _hall_can_manage(d):
+		return
+	frappe.throw(frappe._("{0} was prepped by {1} — only they or a manager can {2} it.")
+		.format(d.name, _user_label(d.owner), what))
+
+
+@frappe.whitelist()
+def get_hall_managers():
+	"""Who can send a batch that is not yours — the people the desk asks when
+	whoever prepped it is not in."""
+	users = frappe.get_all("Has Role", filters={"role": "JW Manager", "parenttype": "User"},
+		pluck="parent")
+	rows = frappe.get_all("User", filters={"name": ["in", users], "enabled": 1},
+		fields=["name", "full_name"], order_by="full_name") if users else []
+	return {"managers": [{"user": r.name, "label": r.full_name or r.name} for r in rows]}
+
+
+@frappe.whitelist()
+def request_hall_send(name, to_user, note=None):
+	"""Ask a manager to send a batch. Nothing moves — this puts the request in
+	front of them with the batch named, so a tray is not stuck behind whoever
+	happens to be off."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only a Prepared batch is waiting to go.").format(name, d.status))
+	if not frappe.db.exists("User", to_user):
+		frappe.throw(frappe._("{0} is not a user.").format(to_user))
+	who = _user_label(frappe.session.user)
+	body = frappe._("{0} is asking you to send hallmarking batch {1} ({2} piece(s)).").format(
+		who, name, len(d.items))
+	if (note or "").strip():
+		body += "<br>" + frappe.utils.escape_html(note.strip())
+	frappe.get_doc({
+		"doctype": "Notification Log", "for_user": to_user, "from_user": frappe.session.user,
+		"type": "Alert", "subject": frappe._("Send {0}?").format(name),
+		"email_content": body, "document_type": "Hallmarking Batch", "document_name": name,
+	}).insert(ignore_permissions=True)
+	# and a note ON the batch, so the ask is part of its record rather than only
+	# a notification someone may clear
+	d.add_comment("Comment", frappe._("{0} asked {1} to send this batch.").format(
+		who, _user_label(to_user)))
+	frappe.db.commit()
+	return {"ok": 1, "to": _user_label(to_user)}
 
 
 @frappe.whitelist()
@@ -15308,6 +15379,10 @@ def get_hall_preps():
 		r["pieces"] = len(items)
 		r["gross"] = round(sum(flt(i.gross) for i in items), 3)
 		r["dmd_ct"] = round(sum(flt(i.dmd_ct) for i in items), 3)
+		owner = frappe.db.get_value("Hallmarking Batch", r.name, "owner")
+		r["owner"] = owner
+		r["owner_label"] = _user_label(owner)
+		r["can_manage"] = bool(set(frappe.get_roles()) & HALL_OVERRIDE_ROLES) or owner == frappe.session.user
 		# what the centre is actually being handed: fine gold and stones, off the
 		# pieces' own frozen materials rather than the plan
 		pure = stones = 0.0
@@ -15351,7 +15426,9 @@ def get_hall_prep(name):
 		"collected_on": str(d.collected_on or ""), "remarks": d.remarks or "",
 		"items": items, "pieces": len(items),
 		"gross": round(sum(i["gross"] for i in items), 3),
-		"dmd_ct": round(sum(i["dmd_ct"] for i in items), 3)}
+		"dmd_ct": round(sum(i["dmd_ct"] for i in items), 3),
+		"owner": d.owner, "owner_label": _user_label(d.owner),
+		"can_manage": _hall_can_manage(d)}
 
 
 @frappe.whitelist()
@@ -15360,6 +15437,7 @@ def hall_prep_remove(name, row):
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only a Prepared batch can be edited.").format(name, d.status))
+	_require_hall_owner(d, frappe._("change"))
 	d.set("items", [r for r in d.items if r.name != row])
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -15379,6 +15457,7 @@ def hall_prep_set_items(name, bags):
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only a Prepared batch can be edited.").format(name, d.status))
+	_require_hall_owner(d, frappe._("change"))
 	wanted = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
 	wanted = [b for b in wanted if b]
 	if not wanted:
@@ -15410,6 +15489,7 @@ def hall_prep_cancel(name):
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only a Prepared batch cancels.").format(name, d.status))
+	_require_hall_owner(d, frappe._("cancel"))
 	d.status = "Cancelled"
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -15427,6 +15507,7 @@ def send_hall_prep(name, center=None):
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only Prepared batches send.").format(name, d.status))
+	_require_hall_owner(d, frappe._("send"))
 	if not d.items:
 		frappe.throw(frappe._("Nothing on the batch."))
 	center = (center or d.center or "").strip()
@@ -15689,6 +15770,71 @@ def huid_confirm_batch(changes):
 			saved += 1
 		out.append(r)
 	return {"results": out, "saved": saved, "failed": failed}
+
+
+@frappe.whitelist()
+def get_hallmark_removal(barcode):
+	"""Remove Hallmarking: what one piece's hallmarking looks like right now.
+	Reads only — nothing is undone until remove_hallmark is called."""
+	frappe.only_for(list(HALL_OVERRIDE_ROLES))
+	nm = (barcode or "").strip()
+	if not frappe.db.exists("Order Bag", nm):
+		return {"rejected": frappe._("This card doesn't exist")}
+	b = frappe.db.get_value("Order Bag", nm,
+		["design", "huid", "stock_status", "bucket", "held_by", "act_gross_weight",
+		 "certifications", "is_finished"], as_dict=True)
+	if not cint(b.is_finished):
+		return {"rejected": frappe._("{0} is not a finished product.").format(nm)}
+	if not (b.huid or "").strip():
+		return {"rejected": frappe._("{0} carries no HUID — there is nothing to remove.").format(nm)}
+	trips = frappe.db.sql("""select h.name, h.center, h.status, h.collected_on, i.huid, i.confirmed_by
+		from `tabHallmarking Item` i join `tabHallmarking Batch` h on h.name = i.parent
+		where i.order_bag = %s order by h.creation desc""", nm, as_dict=True)
+	return {"order_bag": nm, "design": b.design or "", "design_no": design_no_of(b.design),
+		"huid": b.huid, "stock_status": b.stock_status, "bucket": b.bucket or "",
+		"held_by": b.held_by or "", "gross": flt(b.act_gross_weight),
+		"certifications": b.certifications or "",
+		"batches": [{"name": t.name, "center": t.center or "", "status": t.status,
+			"collected_on": str(t.collected_on or ""), "huid": t.huid or "",
+			"by": _user_label(t.confirmed_by) if t.confirmed_by else ""} for t in trips]}
+
+
+@frappe.whitelist()
+def remove_hallmark(barcode, reason=None):
+	"""Take the hallmarking off a piece so it can go again — the stamp did not
+	come out, or the wrong code was written down.
+
+	The HUID leaves the PIECE and the HALLMARKING stamp leaves its trail, which
+	together are what stop it being prepped again. The BATCH is history and is
+	never rewritten: its item keeps the code that was recorded, and the removal
+	is written onto the piece as a comment, so what happened stays readable."""
+	frappe.only_for(list(HALL_OVERRIDE_ROLES))
+	nm = (barcode or "").strip()
+	why = (reason or "").strip()
+	if not why:
+		frappe.throw(frappe._("Say why the hallmarking is coming off."))
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("This card doesn't exist"))
+	had = (frappe.db.get_value("Order Bag", nm, "huid") or "").strip()
+	if not had:
+		frappe.throw(frappe._("{0} carries no HUID — there is nothing to remove.").format(nm))
+	open_batch = frappe.db.sql("""select i.parent from `tabHallmarking Item` i
+		join `tabHallmarking Batch` h on h.name = i.parent
+		where i.order_bag = %s and h.status in ('Prepared', 'Sent', 'Collected', 'Partially Received')
+		limit 1""", (nm,))
+	if open_batch:
+		frappe.throw(frappe._("{0} is on open batch {1} — finish or cancel that first.")
+			.format(nm, open_batch[0][0]))
+	trail = [t for t in (frappe.db.get_value("Order Bag", nm, "certifications") or "").split(",")
+		if t.strip() and t.strip().upper() != "HALLMARKING"]
+	frappe.db.set_value("Order Bag", nm, {
+		"huid": "", "certifications": ", ".join(t.strip() for t in trail)},
+		update_modified=False)
+	frappe.get_doc("Order Bag", nm).add_comment("Comment",
+		frappe._("Hallmarking removed by {0}. HUID was {1}. Reason: {2}").format(
+			_user_label(frappe.session.user), had, frappe.utils.escape_html(why)))
+	frappe.db.commit()
+	return {"ok": 1, "order_bag": nm, "was": had}
 
 
 @frappe.whitelist()

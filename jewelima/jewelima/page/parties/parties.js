@@ -11,6 +11,10 @@
 // Route: /app/parties
 
 frappe.pages["parties"].on_page_load = function (wrapper) {
+	// who may change a party's defaults — update_party_defaults refuses everyone
+	// else, so the page must not offer a button that cannot work
+	const CAN_EDIT = ["System Manager", "Stock Manager", "JW Manager", "JW Party Admin",
+		"Jewelima Ordering"].some((r) => frappe.user_roles.includes(r));
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Parties", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
@@ -165,7 +169,8 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 				</div>
 				<div class="pt-sec">${__("Defaults")}</div>
 				<div class="pt-defs"><div class="pt-dsm"></div><div class="pt-dpc"></div>
-					<button class="btn btn-sm btn-default pt-savedef">${__("Save Defaults")}</button></div>
+					${CAN_EDIT ? `<button class="btn btn-sm btn-default pt-savedef">${__("Save Defaults")}</button>`
+						: `<span class="ex">${__("read only")}</span>`}</div>
 				<div class="pt-sec">${__("Recent Orders")}</div>
 				${(d.recent_orders || []).length ? `<table class="pt-ro">${d.recent_orders.map((o) =>
 					`<tr><td><a href="/app/job-order/${encodeURIComponent(o.name)}">${esc(o.name)}</a></td>
@@ -176,6 +181,7 @@ frappe.pages["parties"].on_page_load = function (wrapper) {
 			const dpc = mk(".pt-dpc", { fieldtype: "Link", label: __("Default Price Chart"), fieldname: "dpc", options: "Price Chart" });
 			if (d.default_salesman) dsm.set_value(d.default_salesman);
 			if (d.default_price_chart) dpc.set_value(d.default_price_chart);
+			if (!CAN_EDIT) $d.find(".pt-defs input").prop("readonly", true);
 			$d.find(".pt-savedef").on("click", () => {
 				frappe.call({ method: API + ".update_party_defaults", args: {
 					customer: d.name, salesman: dsm.get_value() || null, price_chart: dpc.get_value() || null,

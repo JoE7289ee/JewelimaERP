@@ -287,7 +287,11 @@ JEWELIMA_DELIVERY_PAGES = [
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
 	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
+	# (remove-hallmarking is NOT here: taking a HUID off is a manager's call)
 	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid",
+	# the party directory: looked up all day at this desk. update_party_defaults
+	# refuses this role, so the page is a reader for them
+	"parties",
 	# the stock reports are JW Stock Admin's set; the delivery desk gets the
 	# combined "what is out" view instead of one half of the pair
 	"out-of-house",

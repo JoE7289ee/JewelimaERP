@@ -34,6 +34,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.he-sum{font-size:12.5px;font-weight:700;margin:9px 0;}
 		/* which way a scan will go, said plainly and coloured to match the rows */
 		.sh-nocenter{color:#8a6d00;font-weight:700;}
+		.sh-lock{background:#4a5a6a;color:#fff;border-radius:7px;padding:0 6px;
+			font-size:9.5px;font-weight:800;letter-spacing:.04em;}
+		.sh-card.theirs{opacity:.92;}
 		.he-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;padding:7px 9px;
 			border-radius:9px;border:1px solid var(--border-color);}
 		.he-bar.removing{border-color:#b02a2a;background:rgba(176,42,42,.07);}
@@ -63,10 +66,13 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_hall_preps" }).then((r) => {
 			const m = r.message || { prepared: [], recent: [] };
 			root.find(".sh-prep").html(m.prepared.map((p) => `
-				<div class="sh-card" data-name="${esc(p.name)}" data-center="${esc(p.center || "")}">
+				<div class="sh-card ${p.can_manage ? "" : "theirs"}" data-name="${esc(p.name)}"
+						data-center="${esc(p.center || "")}" data-mine="${p.can_manage ? 1 : 0}">
 					<div class="nm">${esc(p.name)}</div>
 					<div class="meta">${p.center ? esc(p.center)
 						: `<span class="sh-nocenter">${__("centre not set")}</span>`} · ${esc(p.prepared_on || "")}</div>
+					<div class="meta">${__("prepped by")} <b>${esc(p.owner_label || "")}</b>${
+						p.can_manage ? "" : ` <span class="sh-lock">${__("not yours")}</span>`}</div>
 					<div class="sh-nums">
 						<span><b>${p.pieces}</b> ${__("piece(s)")}</span>
 						<span class="pure"><b>${flt(p.pure).toFixed(3)}</b> g ${__("pure")}</span>
@@ -78,7 +84,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 						? (p.buckets || []).map((b) => `<span class="sh-bk">${esc(b)}</span>`).join("")
 						: ""} ${__("gross")} ${flt(p.gross).toFixed(3)} g</div>
 					<div class="sh-actions">
-						<button class="btn btn-primary btn-sm sh-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>
+						${p.can_manage
+							? `<button class="btn btn-primary btn-sm sh-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
+							: `<button class="btn btn-default btn-sm sh-ask">${__("ASK A MANAGER TO SEND")}</button>`}
 						<button class="btn btn-default btn-sm sh-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-sm sh-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>
 					</div>
@@ -108,6 +116,36 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	});
 	// A packet is made up before anyone decides where it goes, so the centre is
 	// asked for HERE — the moment the gold actually leaves the building.
+	// a batch you did not prep is still yours to look at — but sending it is an
+	// ask, not a click, and the ask goes to a named person
+	root.on("click", ".sh-ask", function () {
+		const $c = $(this).closest(".sh-card");
+		const nm = $c.data("name");
+		frappe.call({ method: API + ".get_hall_managers" }).then((r) => {
+			const men = ((r.message || {}).managers) || [];
+			if (!men.length) {
+				return frappe.msgprint(__("Nobody holds JW Manager — ask an administrator to send {0}.", [nm]));
+			}
+			const d = new frappe.ui.Dialog({
+				title: __("Ask someone to send {0}", [nm]),
+				fields: [
+					{ fieldtype: "Select", fieldname: "to", reqd: 1, label: __("Manager"),
+						options: men.map((m) => ({ label: m.label, value: m.user })) },
+					{ fieldtype: "Small Text", fieldname: "note", label: __("Anything to add") },
+				],
+				primary_action_label: __("Send the request"),
+				primary_action(v) {
+					d.hide();
+					frappe.call({ method: API + ".request_hall_send",
+						args: { name: nm, to_user: v.to, note: v.note || "" } })
+						.then((rr) => frappe.show_alert({ indicator: "green", message:
+							__("Asked {0} to send {1}.", [(rr.message || {}).to, nm]) }, 6));
+				},
+			});
+			d.show();
+		});
+	});
+
 	let CENTERS = [];
 	frappe.call({ method: API + ".get_hall_prep_context" })
 		.then((r) => (CENTERS = ((r.message || {}).centers) || []));
@@ -168,13 +206,15 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			const meta = {};
 			(m.items || []).forEach((i) => { meta[i.order_bag] = i; });
 
+			const mine = !!m.can_manage;
 			const dlg = new frappe.ui.Dialog({
 				title: m.center
 					? __("{0} — {1} at {2}", [m.name, __("{0} piece(s)", [m.pieces]), m.center])
 					: __("{0} — {1}", [m.name, __("{0} piece(s)", [m.pieces])]),
 				size: "large",
-				primary_action_label: __("Save"),
+				primary_action_label: mine ? __("Save") : __("Close"),
 				primary_action() {
+					if (!mine) return dlg.hide();
 					const bags = orig.filter((b) => E.keep.has(b)).concat(E.extra);
 					if (!bags.length) {
 						return frappe.msgprint(__("A batch cannot be emptied — use Cancel on the card instead."));
@@ -222,16 +262,21 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			}
 
 			$b.html(`
-				<div class="he-bar">
+				${mine ? `<div class="he-bar">
 					<input type="text" class="he-scan form-control" style="max-width:240px;">
 					<button class="he-mode">${__("ADDING")}</button>
 					<span style="font-size:12px;color:var(--text-muted);">${
 						__("✕ takes a line off · ↺ puts it back")}</span>
-				</div>
+				</div>` : `<div class="he-bar" style="border-color:#4a5a6a;">
+					<span style="font-size:12.5px;font-weight:700;">${
+						__("Prepped by {0} — you can look, but only they or a manager can change it.",
+							[m.owner_label || ""])}</span>
+				</div>`}
 				<div class="he-sum"></div>
 				<div class="he-list" style="max-height:46vh;overflow:auto;border:1px solid var(--border-color);border-radius:9px;"></div>`);
 
 			$b.on("click", ".he-x", function () {
+				if (!mine) return;
 				const b = $(this).closest(".he-row").data("b");
 				if (E.extra.includes(b)) E.extra = E.extra.filter((x) => x !== b);
 				else if (E.keep.has(b)) E.keep.delete(b);
