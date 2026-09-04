@@ -48,6 +48,30 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 			padding:9px 22px;border-radius:9px;font-size:13.5px;cursor:pointer;}
 		.ch-save:disabled{opacity:.35;cursor:default;}
 		.ch-actions{display:flex;gap:9px;align-items:center;margin-left:auto;}
+		.ch-btn.danger{border-color:#b02a2a;color:#b02a2a;}
+
+		/* the scoreboard: how much of the tray is done, without counting chips */
+		.ch-score{display:flex;align-items:center;gap:20px;border:1px solid var(--border-color);
+			border-radius:13px;padding:13px 18px;background:var(--fg-color);margin-bottom:12px;}
+		.ch-score .big{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;}
+		.ch-score .big small{font-size:13px;font-weight:700;color:var(--text-muted);
+			display:block;text-transform:uppercase;letter-spacing:.06em;margin-top:3px;}
+		.ch-score .big.left{color:#b45309;}
+		.ch-score .big.done{color:#1d7a33;}
+		.ch-score .big.stage{color:#1f618d;}
+		.ch-grow{flex:1 1 auto;min-width:160px;}
+		.ch-pct{display:flex;justify-content:space-between;font-size:11.5px;
+			color:var(--text-muted);margin-bottom:5px;font-weight:700;}
+		.ch-track{height:14px;border-radius:9px;background:var(--control-bg);
+			border:1px solid var(--border-color);overflow:hidden;display:flex;}
+		.ch-fill{background:#1d7a33;transition:width .35s ease;}
+		.ch-fill.stage{background:#1f618d;}
+		.ch-allin{font-size:13px;font-weight:800;color:#1d7a33;}
+		.ch-tile .bar{height:6px;border-radius:5px;background:var(--control-bg);
+			border:1px solid var(--border-color);overflow:hidden;display:flex;margin-top:8px;}
+		.ch-tile .bar i{display:block;background:#1d7a33;}
+		.ch-tile .bar i.stage{background:#1f618d;}
+		.ch-tile.full{border:2px solid #1d7a33;background:rgba(29,122,51,.07);}
 		.ch-msg{margin:6px 0 10px;font-size:13px;min-height:20px;font-weight:600;}
 		.ch-msg.ok{color:#1d7a33;} .ch-msg.err{color:#b02a2a;} .ch-msg.warn{color:#8a6d00;}
 
@@ -96,9 +120,11 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 				<input type="text" placeholder="${__("scan a card to jump to its row")}"></div>
 			<button class="ch-btn ch-dbl">${__("DOUBLE STUD")}</button>
 			<span class="ch-actions">
+				<button class="ch-btn danger ch-undo" style="display:none;">${__("Reset unsaved")}</button>
 				<button class="ch-save" disabled>${__("SAVE")}</button>
 			</span>
 		</div>
+		<div class="ch-score"></div>
 		<div class="ch-msg"></div>
 		<div class="ch-tiles"></div>
 		<div class="ch-rows"></div>
@@ -139,14 +165,20 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 			// the number moves as the operator works rather than only at save time
 			const staged = b.pieces.filter((p) => p.state === "pending"
 				&& (S.edits[p.order_bag] || {}).codes?.some((c) => c)).length;
-			return `<div class="ch-tile ${b.name === S.open ? "on" : ""}" data-name="${esc(b.name)}">
+			const pctDone = b.total ? (b.with_huid / b.total) * 100 : 0;
+			const pctStage = b.total ? (staged / b.total) * 100 : 0;
+			return `<div class="ch-tile ${b.name === S.open ? "on" : ""} ${
+					b.left - staged <= 0 ? "full" : ""}" data-name="${esc(b.name)}">
 				<div class="nm">${esc(b.name)}</div>
 				<div class="meta">${esc(b.center || "")} · ${__("collected")} ${esc(b.collected_on || "")}</div>
 				<div class="ch-kpi">
 					<div>${__("Collected")}<b>${b.total}</b></div>
 					<div class="done">${__("HUID in")}<b>${b.with_huid}${staged ? ` +${staged}` : ""}</b></div>
 					<div class="left">${__("Left")}<b>${b.left - staged}</b></div>
-				</div></div>`;
+				</div>
+				<div class="bar"><i style="width:${pctDone.toFixed(1)}%"></i>
+					<i class="stage" style="width:${pctStage.toFixed(1)}%"></i></div>
+			</div>`;
 		}).join("") : `<div class="ch-empty">${__("Nothing collected and waiting. Collect a batch on Hallmark Out first.")}</div>`);
 	}
 
@@ -191,12 +223,36 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 			}).join("")}</tbody></table>`);
 	}
 
+	// the tray at a glance: what is left, what is done, what is typed but unsent
+	function paintScore() {
+		const tot = S.batches.reduce((a, b) => a + b.total, 0);
+		const done = S.batches.reduce((a, b) => a + b.with_huid, 0);
+		const stage = dirty();
+		const left = Math.max(tot - done - stage, 0);
+		const pd = tot ? (done / tot) * 100 : 0;
+		const ps = tot ? (stage / tot) * 100 : 0;
+		root.find(".ch-score").html(!tot ? "" : `
+			<div class="big left">${left}<small>${__("still to confirm")}</small></div>
+			<div class="big done">${done}<small>${__("confirmed")}</small></div>
+			${stage ? `<div class="big stage">${stage}<small>${__("typed, unsaved")}</small></div>` : ""}
+			<div class="ch-grow">
+				<div class="ch-pct"><span>${__("{0} of {1} pieces", [done + stage, tot])}</span>
+					<span>${Math.round(pd + ps)}%</span></div>
+				<div class="ch-track"><div class="ch-fill" style="width:${pd.toFixed(1)}%"></div>
+					<div class="ch-fill stage" style="width:${ps.toFixed(1)}%"></div></div>
+			</div>
+			${left === 0 && tot ? `<div class="ch-allin">${
+				stage ? __("all typed — hit save") : __("tray clear")}</div>` : ""}`);
+	}
+
 	function paint() {
+		paintScore();
 		paintTiles();
 		paintRows();
 		const n = dirty();
 		root.find(".ch-save").prop("disabled", !n)
 			.text(n ? __("SAVE {0} CHANGE(S)", [n]) : __("SAVE"));
+		root.find(".ch-undo").toggle(!!n);
 		if ($histBtn) $histBtn.text(S.hist.length ? __("History ({0})", [S.hist.length]) : __("History"));
 		const pend = S.batches.reduce((a, b) => a + b.left, 0);
 		page.set_indicator(n ? __("{0} unsaved", [n]) : `${pend} ${__("to confirm")}`,
@@ -236,11 +292,14 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		const e = edit(bag);
 		e.codes[i] = (this.value || "").trim().toUpperCase();
 		$(this).toggleClass("filled", !!e.codes[i]);
-		// repaint the tiles only — repainting the table would eat the keystroke
+		// repaint the tiles and the score only — repainting the table would eat
+		// the keystroke the operator is in the middle of
 		paintTiles();
+		paintScore();
 		const n = dirty();
 		root.find(".ch-save").prop("disabled", !n)
 			.text(n ? __("SAVE {0} CHANGE(S)", [n]) : __("SAVE"));
+		root.find(".ch-undo").toggle(!!n);
 	});
 
 	// Enter walks the sheet: second box of a stud, else the next unfinished row
@@ -267,6 +326,18 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		e.reject = !e.reject;
 		if (e.reject) e.codes = [];
 		paint();
+	});
+
+	// throw away what is typed but not sent — never anything already saved
+	root.on("click", ".ch-undo", function () {
+		const n = dirty();
+		if (!n) return;
+		frappe.confirm(__("Throw away {0} typed change(s)? Nothing already saved is touched.", [n]), () => {
+			S.edits = {};
+			paint();
+			msg("ok", __("{0} unsaved change(s) cleared.", [n]));
+			focusScan();
+		});
 	});
 
 	root.on("click", ".ch-dbl", function () {
