@@ -16354,7 +16354,7 @@ def transfer_and_issue(names, to_location, employee=None, work_type=None, remark
 
 
 @frappe.whitelist()
-def get_cards_at_location(location, limit=60, offset=0):
+def get_cards_at_location(location, limit=60, offset=0, search=None, job_order=None):
 	"""ACTIVE production cards currently at a location, with each card's current bench
 	status (In Queue / Issued / Completed …) — the Cards picker behind Transfer,
 	Assign/Collect and Job Work.
@@ -16372,9 +16372,20 @@ def get_cards_at_location(location, limit=60, offset=0):
 	limit, offset = cint(limit), max(cint(offset), 0)
 	where = {"location": loc, "is_finished": 0,
 		"stock_status": ["not in", ["Cancelled", "Sold"]]}
-	total = frappe.db.count("Order Bag", where)
+	if job_order:
+		where["job_order"] = job_order
+	# the search runs HERE, not over the window: a bench holding 2,000 cards was
+	# searching the 60 that happened to be loaded and reporting nothing found
+	orf = None
+	q = (search or "").strip()
+	if q:
+		like = "%" + q + "%"
+		orf = {"name": ["like", like], "design": ["like", like], "job_order": ["like", like]}
+	cnt = frappe.get_all("Order Bag", filters=where, or_filters=orf,
+		fields=[{"COUNT": "*"}])
+	total = cint(list(cnt[0].values())[0]) if cnt else 0
 	bags = frappe.get_all(
-		"Order Bag", filters=where,
+		"Order Bag", filters=where, or_filters=orf,
 		fields=["name", "design", "qty", "due_date", "job_order"], order_by="name",
 		limit_start=offset, limit_page_length=(limit or 0),
 	)
@@ -16414,7 +16425,13 @@ def get_cards_at_location(location, limit=60, offset=0):
 			b["status"] = op.status
 		else:
 			b["locked_reason"] = ""
-	return {"rows": bags, "total": total, "shown": offset + len(bags),
+	# the job-order dropdown covers the whole location, not the loaded window,
+	# so picking one narrows the search instead of listing what happens to be up
+	jos = sorted({j for j in frappe.get_all("Order Bag",
+		filters={"location": loc, "is_finished": 0,
+			"stock_status": ["not in", ["Cancelled", "Sold"]]},
+		pluck="job_order", distinct=True) if j})
+	return {"rows": bags, "total": total, "shown": offset + len(bags), "job_orders": jos,
 		"offset": offset, "limit": limit,
 		"has_more": (offset + len(bags)) < total}
 

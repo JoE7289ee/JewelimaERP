@@ -546,16 +546,11 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 
 		const visible = () => {
 			if (S.selOnly) return S.rows.filter((r) => S.sel.has(r.name));
-			const q = (S.q || "").trim().toLowerCase();
-			return S.rows.filter((r) =>
-				(S.status === "All" || r.status === S.status) &&
-				(!S.jo || r.job_order === S.jo) &&
-				(!q || (r.name + " " + (r.design || "") + " " + (r.job_order || "")).toLowerCase().indexOf(q) !== -1));
+			return S.rows.filter((r) => S.status === "All" || r.status === S.status);
 		};
-		function fillJO() {
-			const jos = [...new Set(S.rows.map((r) => r.job_order).filter(Boolean))].sort();
+		function fillJO(jos) {
 			$b.find(".tc-jo").html(`<option value="">${__("— job order —")}</option>` +
-				jos.map((j) => `<option ${j === S.jo ? "selected" : ""}>${esc(j)}</option>`).join(""));
+				(jos || []).map((j) => `<option ${j === S.jo ? "selected" : ""}>${esc(j)}</option>`).join(""));
 		}
 		function paint() {
 			const rows = visible();
@@ -566,7 +561,9 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 				return `<tr class="tc-morerow"><td colspan="${cols}" style="text-align:center;padding:9px;">`
 				+ `<button class="btn btn-xs btn-default tc-more">${__("Load 60 more")}</button>`
 				+ `<span class="text-muted" style="margin-left:9px;font-size:11.5px;">`
-				+ __("{0} of {1} at this bench", [S.rows.length, S.total]) + `</span></td></tr>`;
+				+ ((S.q || S.jo)
+					? __("{0} of {1} matching", [S.rows.length, S.total])
+					: __("{0} of {1} at this bench", [S.rows.length, S.total])) + `</span></td></tr>`;
 				};
 			body.innerHTML = rows.length
 				? rows.map((r) => `<tr class="${S.sel.has(r.name) ? "on" : ""}">
@@ -574,7 +571,9 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td><td>${esc(r.job_order || "")}</td><td>${r.qty || ""}</td>
 					<td>${r.due_date ? frappe.datetime.str_to_user(r.due_date) : ""}</td><td>${esc(r.status || "")}</td><td>${esc(r.employee_name || "")}</td></tr>`).join("") + moreRow()
 				: `<tr><td colspan="8" class="tc-empty">${S.location ? (S.selOnly ? __("Nothing selected yet.") : __("No cards here.")) : __("Pick a location.")}</td></tr>`;
-			$b.find(".tc-count").text(`${S.sel.size} selected · ${rows.length} shown · ${S.total || S.rows.length} at location`);
+			$b.find(".tc-count").text(__("{0} selected · {1} shown · {2} {3}",
+				[S.sel.size, rows.length, S.total || S.rows.length,
+					(S.q || S.jo) ? __("matching") : __("at location")]));
 			// click one, shift-click another: everything between follows
 			jewelima.shiftSelect($b, ".tc-body input");
 			$b.find(".tc-body input").on("change", function () {
@@ -593,7 +592,8 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			if (!S.location) { S.rows = []; S.loaded = 0; S.total = 0; fillJO(); paint(); return; }
 			jewelima.busy($b.find("table.tc-tbl"), true, __("Loading cards…"));
 			frappe.call({ method: "jewelima.jewelima.api.get_cards_at_location", freeze: false,
-				args: { location: S.location, limit: CARD_PAGE, offset: more ? S.loaded : 0 } })
+				args: { location: S.location, limit: CARD_PAGE, offset: more ? S.loaded : 0,
+					search: S.q || "", job_order: S.jo || "" } })
 				// a busy bench holds thousands of cards; the picker takes them a
 				// window at a time and says how many are behind the one on screen
 				.then((r) => {
@@ -603,7 +603,8 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 					S.loaded = m.shown != null ? m.shown : S.rows.length;
 					S.total = m.total != null ? m.total : S.rows.length;
 					S.hasMore = !!m.has_more;
-					fillJO(); paint();
+					if (m.job_orders) fillJO(m.job_orders);
+					paint();
 				})
 				.always(() => jewelima.busy($b.find("table.tc-tbl"), false));
 		}
@@ -620,8 +621,11 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			$b.find(".tc-q").val(""); dlg.set_secondary_action_label(__("Show selected"));
 			loadLoc();
 		});
-		$b.find(".tc-jo").on("change", function () { S.jo = this.value; paint(); });
-		$b.find(".tc-q").on("input", function () { S.q = this.value; paint(); });
+		$b.find(".tc-jo").on("change", function () { S.jo = this.value; loadLoc(); });
+		// a round trip per keystroke helps nobody; a round trip per pause does
+		$b.find(".tc-q").on("input", frappe.utils.debounce(function () {
+			S.q = this.value; loadLoc();
+		}, 300));
 		$b.find(".tc-pill").on("click", function () {
 			$b.find(".tc-pill").removeClass("on");
 			this.classList.add("on");
@@ -635,7 +639,13 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 			vis.forEach((r) => (this.checked ? S.sel.add(r.name) : S.sel.delete(r.name)));
 			paint();
 		});
-		$b.find(".tc-none").on("click", () => { S.sel.clear(); S.selOnly = false; dlg.set_secondary_action_label(__("Show selected")); paint(); });
+		$b.find(".tc-none").on("click", () => {
+			S.sel.clear(); S.selOnly = false; S.q = ""; S.jo = ""; S.status = "All";
+			$b.find(".tc-q").val("");
+			$b.find(".tc-pill").removeClass("on").filter('[data-s="All"]').addClass("on");
+			dlg.set_secondary_action_label(__("Show selected"));
+			loadLoc();
+		});
 
 		// "Show selected" (left of Add to batch): flip the list to only what's ticked
 		dlg.set_secondary_action_label(__("Show selected"));
