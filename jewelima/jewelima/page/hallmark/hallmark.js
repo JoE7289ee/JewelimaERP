@@ -282,6 +282,8 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			const more = (!P.selOnly && P.hasMore)
 				? `<tr><td colspan="7" style="text-align:center;padding:9px;">
 					<button class="btn btn-xs btn-default hp-more">${__("Load {0} more", [PAGE])}</button>
+					<button class="btn btn-xs btn-default hp-all" style="margin-left:6px;">${
+						__("Load all {0}", [P.total])}</button>
 					<span style="margin-left:9px;font-size:11.5px;color:var(--text-muted);">${
 						__("{0} of {1}", [P.rows.length, P.total])}</span></td></tr>` : "";
 			$b.find(".hp-body").html(rows.length
@@ -309,14 +311,16 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			dlg.get_primary_btn().text(P.sel.size ? __("Add {0} to batch", [P.sel.size]) : __("Add to batch"));
 		}
 
-		function load(more) {
-			jewelima.busy($b.find("table.hp-t"), true, __("Looking…"));
+		function load(more, all) {
+			jewelima.busy($b.find("table.hp-t"), true, all ? __("Loading all…") : __("Looking…"));
 			frappe.call({ method: API + ".get_hallmarkable", freeze: false,
 				args: { bucket: P.bucket, design_type: P.design_type, karat: P.karat,
-					held_by: P.held_by, search: P.q, limit: PAGE, offset: more ? P.rows.length : 0 } })
+					held_by: P.held_by, search: P.q,
+					limit: all ? Math.max(P.total, PAGE) : PAGE,
+					offset: all || !more ? 0 : P.rows.length } })
 				.then((r) => {
 					const m = r.message || {};
-					P.rows = more ? P.rows.concat(m.rows || []) : (m.rows || []);
+					P.rows = more && !all ? P.rows.concat(m.rows || []) : (m.rows || []);
 					P.total = m.total || 0;
 					P.hasMore = !!m.has_more;
 					paint();
@@ -326,6 +330,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		$b.on("change", ".hp-f", function () { P[this.dataset.f] = this.value; load(); });
 		$b.on("input", ".hp-q", frappe.utils.debounce(function () { P.q = this.value || ""; load(); }, 300));
 		$b.on("click", ".hp-more", () => load(true));
+		$b.on("click", ".hp-all", () => load(true, true));
 		$b.on("click", ".hp-selonly", function () {
 			P.selOnly = !P.selOnly; $(this).toggleClass("on", P.selOnly); paint();
 		});
