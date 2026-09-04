@@ -246,6 +246,11 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				font-size:11.5px;cursor:pointer;user-select:none;}
 			.hp-pill.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
 			.hp-count{margin-left:auto;font-size:12px;color:var(--text-muted);}
+			.hp-short{display:none;align-items:center;gap:10px;margin-bottom:9px;padding:7px 11px;
+				border:1px solid #b02a2a;border-left:4px solid #b02a2a;border-radius:7px;
+				background:rgba(176,42,42,.09);color:#b02a2a;font-size:12.5px;font-weight:700;}
+			[data-theme="dark"] .hp-short{color:#f0a0a0;background:rgba(176,42,42,.20);}
+			.hp-short .btn{font-weight:700;}
 			.hp-box{max-height:52vh;overflow:auto;border:1px solid var(--border-color);border-radius:9px;}
 			table.hp-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 			table.hp-t th{position:sticky;top:0;background:var(--control-bg);font-size:10px;
@@ -267,6 +272,10 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				<button class="btn btn-xs btn-default hp-clear" style="display:none;">${__("Clear selection")}</button>
 				<span class="hp-count"></span>
 			</div>
+			<div class="hp-short">
+				<span class="hp-short-t"></span>
+				<button class="btn btn-xs btn-danger hp-all">${__("Load all")}</button>
+			</div>
 			<div class="hp-box"><table class="hp-t">
 				<thead><tr><th style="width:34px;"><input type="checkbox" class="hp-head-cb"
 						title="${__("Select / clear all shown")}"></th>
@@ -283,8 +292,6 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			const more = (!P.selOnly && P.hasMore)
 				? `<tr><td colspan="7" style="text-align:center;padding:9px;">
 					<button class="btn btn-xs btn-default hp-more">${__("Load {0} more", [PAGE])}</button>
-					<button class="btn btn-xs btn-default hp-all" style="margin-left:6px;">${
-						__("Load all {0}", [P.total])}</button>
 					<span style="margin-left:9px;font-size:11.5px;color:var(--text-muted);">${
 						__("{0} of {1}", [P.rows.length, P.total])}</span></td></tr>` : "";
 			$b.find(".hp-body").html(rows.length
@@ -312,6 +319,13 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			dlg.get_primary_btn().text(P.sel.size ? __("Add {0} to batch", [P.sel.size]) : __("Add to batch"));
 			$b.find(".hp-clear").toggle(P.sel.size > 0)
 				.text(__("Clear selection ({0})", [P.sel.size]));
+			const short = !P.selOnly && P.hasMore;
+			$b.find(".hp-short").css("display", short ? "flex" : "none");
+			if (short) {
+				$b.find(".hp-short-t").text(__("Showing {0} of {1} — {2} more match this filter.",
+					[P.rows.length, P.total, P.total - P.rows.length]));
+				$b.find(".hp-short .hp-all").text(__("Load all {0}", [P.total]));
+			}
 		}
 
 		function load(more, all) {
