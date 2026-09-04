@@ -20,3 +20,4 @@ jewelima.patches.backfill_missing_bench_records
 jewelima.patches.hallmarking_out_of_certification
 jewelima.patches.at_hallmarking_warehouse
 jewelima.patches.buckets_femi_sumi_jismy
+jewelima.patches.buckets_into_delivery_masters

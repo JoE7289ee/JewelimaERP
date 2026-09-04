@@ -8802,9 +8802,12 @@ def get_bucket_pieces(bucket):
 		if not frappe.db.exists("Finished Bucket", bucket):
 			frappe.throw(frappe._("No bucket {0}.").format(bucket))
 		filters = {"is_finished": 1, "stock_status": "In Stock", "bucket": bucket}
-	return frappe.get_all("Order Bag", filters=filters,
+	rows = frappe.get_all("Order Bag", filters=filters,
 		fields=["name", "design", "huid", "held_by", "in_stock_on"],
 		order_by="in_stock_on desc", limit_page_length=500)
+	for r in rows:
+		r["design_no"] = design_no_of(r.get("design"))
+	return rows
 
 
 @frappe.whitelist()

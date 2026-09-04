@@ -1620,7 +1620,7 @@
   {
    "child": 0,
    "collapsible": 1,
-   "icon": "setting",
+   "icon": "cog",
    "indent": 1,
    "keep_closed": 1,
    "label": "Delivery Settings",
@@ -1631,7 +1631,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "setting",
+   "icon": "boxes",
    "indent": 1,
    "keep_closed": 0,
    "label": "Delivery Masters",
@@ -2681,7 +2681,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 10:12:30.197524",
+ "modified": "2026-09-04 10:15:43.869188",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

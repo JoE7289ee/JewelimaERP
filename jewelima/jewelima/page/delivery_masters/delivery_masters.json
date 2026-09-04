@@ -13,6 +13,9 @@
  "roles": [
   {
    "role": "System Manager"
+  },
+  {
+   "role": "JW Manager"
   }
  ],
  "standard": "Yes",
