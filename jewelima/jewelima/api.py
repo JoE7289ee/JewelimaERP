@@ -15570,12 +15570,18 @@ def get_huid_pool():
 		items = frappe.get_all("Hallmarking Item", filters={"parent": c.name},
 			fields=["name", "order_bag", "design", "design_type", "huid", "received", "rejected", "confirmed_by"],
 			order_by="idx")
+		pieces = [{"row": i.name, "order_bag": i.order_bag, "design": i.design or "",
+			"design_type": i.design_type or "", "huid": i.huid or "",
+			"state": "confirmed" if i.received else ("rejected" if i.rejected else "pending"),
+			"by": i.confirmed_by or ""} for i in items]
 		batches.append({"name": c.name, "center": c.center or "",
 			"collected_on": str(c.collected_on or ""),
-			"pieces": [{"row": i.name, "order_bag": i.order_bag, "design": i.design or "",
-				"design_type": i.design_type or "", "huid": i.huid or "",
-				"state": "confirmed" if i.received else ("rejected" if i.rejected else "pending"),
-				"by": i.confirmed_by or ""} for i in items]})
+			"pieces": pieces,
+			"total": len(pieces),
+			"confirmed": sum(1 for p in pieces if p["state"] == "confirmed"),
+			"rejected": sum(1 for p in pieces if p["state"] == "rejected"),
+			"with_huid": sum(1 for p in pieces if (p["huid"] or "").strip()),
+			"left": sum(1 for p in pieces if p["state"] == "pending")})
 	pend = sum(1 for b in batches for p in b["pieces"] if p["state"] == "pending")
 	return {"batches": batches, "pending": pend}
 
@@ -15598,8 +15604,8 @@ def huid_scan(barcode, huid=None, mode="accept"):
 	if mode == "accept" and not codes:
 		return {"rejected_scan": frappe._("Type the HUID — that is what the piece went for")}
 	for one in codes:
-		if one != "PENDING" and len(one) != 6:
-			return {"rejected_scan": frappe._("A HUID is six characters — {0} is {1}").format(one, len(one))}
+		if one != "PENDING" and not (4 <= len(one) <= 12 and one.isalnum()):
+			return {"rejected_scan": frappe._("{0} does not look like a HUID").format(one)}
 	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
 		from `tabHallmarking Item` i join `tabHallmarking Batch` h on h.name = i.parent
 		where i.order_bag = %s and h.status in ('Collected', 'Partially Received')
@@ -15653,6 +15659,29 @@ def huid_scan(barcode, huid=None, mode="accept"):
 		"Received" if left == 0 else "Partially Received", update_modified=False)
 	frappe.db.commit()
 	return {"ok": 1, "mode": mode, "huid": code, "batch": r.parent, "batch_done": left == 0}
+
+
+@frappe.whitelist()
+def huid_confirm_batch(changes):
+	"""Confirm HUID saves a whole screenful at once: the operator works down the
+	batch filling codes, then sends the lot. Each row goes through the same
+	guarded per-piece path a single scan does, so a piece someone else confirmed
+	in the meantime is refused on its own without losing the other rows."""
+	if isinstance(changes, str):
+		changes = json.loads(changes or "[]")
+	out, saved, failed = [], 0, 0
+	for ch in changes or []:
+		nm = (ch.get("order_bag") or "").strip()
+		if not nm:
+			continue
+		r = huid_scan(nm, ch.get("huid") or "", ch.get("mode") or "accept")
+		r["order_bag"] = nm
+		if r.get("rejected_scan"):
+			failed += 1
+		else:
+			saved += 1
+		out.append(r)
+	return {"results": out, "saved": saved, "failed": failed}
 
 
 @frappe.whitelist()
