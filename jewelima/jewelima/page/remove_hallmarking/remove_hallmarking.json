@@ -4,16 +4,25 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-04 09:40:00",
+ "modified": "2026-09-04 15:27:19.177465",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "remove-hallmarking",
  "owner": "Administrator",
  "page_name": "remove-hallmarking",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "Stock Manager"},
-  {"role": "JW Manager"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Delivery"
+  }
  ],
  "script": null,
  "standard": "Yes",

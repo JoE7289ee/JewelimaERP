@@ -15165,6 +15165,10 @@ def get_hall_prep_context():
 # whoever prepped it. A manager overrides, because someone has to when that
 # person is not in today.
 HALL_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
+# Taking a HUID off is the delivery desk's own job — they are the ones holding
+# the piece when the stamp turns out unreadable. Every removal names who did it
+# and why on the piece itself, which is what makes that safe to hand over.
+HALL_REMOVE_ROLES = HALL_OVERRIDE_ROLES | {"JW Delivery"}
 
 
 def _user_label(user):
@@ -15776,7 +15780,7 @@ def huid_confirm_batch(changes):
 def get_hallmark_removal(barcode):
 	"""Remove Hallmarking: what one piece's hallmarking looks like right now.
 	Reads only — nothing is undone until remove_hallmark is called."""
-	frappe.only_for(list(HALL_OVERRIDE_ROLES))
+	frappe.only_for(list(HALL_REMOVE_ROLES))
 	nm = (barcode or "").strip()
 	if not frappe.db.exists("Order Bag", nm):
 		return {"rejected": frappe._("This card doesn't exist")}
@@ -15808,7 +15812,7 @@ def remove_hallmark(barcode, reason=None):
 	together are what stop it being prepped again. The BATCH is history and is
 	never rewritten: its item keeps the code that was recorded, and the removal
 	is written onto the piece as a comment, so what happened stays readable."""
-	frappe.only_for(list(HALL_OVERRIDE_ROLES))
+	frappe.only_for(list(HALL_REMOVE_ROLES))
 	nm = (barcode or "").strip()
 	why = (reason or "").strip()
 	if not why:

@@ -287,8 +287,9 @@ JEWELIMA_DELIVERY_PAGES = [
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
 	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
-	# (remove-hallmarking is NOT here: taking a HUID off is a manager's call)
-	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid",
+	# remove-hallmarking belongs here too: the desk holding the piece is the one
+	# that finds the stamp unreadable, and every removal is signed on the piece
+	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid", "remove-hallmarking",
 	# the party directory: looked up all day at this desk. update_party_defaults
 	# refuses this role, so the page is a reader for them
 	"parties",
