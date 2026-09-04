@@ -15192,16 +15192,17 @@ def hall_draft_scan_many(barcodes, existing=None):
 
 
 @frappe.whitelist()
-def hall_prep_create(center, bags=None):
+def hall_prep_create(center=None, bags=None):
 	"""PREP: the draft becomes the batch in one shot, re-validated piece by
-	piece, named HALL-0001."""
+	piece, named HALL-0001. The centre is optional here — a packet is made up
+	before anyone decides who it goes to — and required at SEND."""
 	if isinstance(bags, str):
 		bags = json.loads(bags or "[]")
 	bags = [b for b in (bags or []) if b]
 	if not bags:
 		frappe.throw(frappe._("Scan at least one piece before prepping."))
-	if not center or not frappe.db.exists("Hallmarking Center", center):
-		frappe.throw(frappe._("Pick the hallmarking centre."))
+	if center and not frappe.db.exists("Hallmarking Center", center):
+		frappe.throw(frappe._("{0} is not a hallmarking centre.").format(center))
 	rows, seen = [], set()
 	for nm in bags:
 		b = _hall_validate_piece(nm, seen)
@@ -15416,15 +15417,22 @@ def hall_prep_cancel(name):
 
 
 @frappe.whitelist()
-def send_hall_prep(name):
+def send_hall_prep(name, center=None):
 	"""The SEND: one stock move Finished Goods -> At Hallmarking for everything the
-	pieces hold, the bags flip At Hallmarking, status -> Sent."""
+	pieces hold, the bags flip At Hallmarking, status -> Sent.
+
+	The centre is settled HERE — this is the moment the packet leaves the
+	building, so this is the moment it has to have somewhere to go."""
 	from jewelima.setup import HALLMARKING_WAREHOUSE
 	d = frappe.get_doc("Hallmarking Batch", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only Prepared batches send.").format(name, d.status))
 	if not d.items:
 		frappe.throw(frappe._("Nothing on the batch."))
+	center = (center or d.center or "").strip()
+	if not center or not frappe.db.exists("Hallmarking Center", center):
+		frappe.throw(frappe._("Pick the hallmarking centre this batch is going to."))
+	d.center = center
 	bags = [r.order_bag for r in d.items]
 	for nm in bags:
 		b = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status"], as_dict=True)

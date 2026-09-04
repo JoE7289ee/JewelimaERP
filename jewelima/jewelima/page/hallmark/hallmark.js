@@ -65,7 +65,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		.hb.ok{background:#1d7a33;} .hb.no{background:#b02a2a;} .hb.by{background:#4a5a6a;}
 		</style>
 		<div class="hm-bar">
-			<div class="hm-f"><label>${__("Centre")}</label><select class="hm-center"></select></div>
+			<div class="hm-f"><label>${__("Centre (optional)")}</label><select class="hm-center"></select></div>
 			<div class="hm-f hm-scan"><label>${__("Scan piece")}</label>
 				<input type="text" placeholder="${__("scan / type card no. + Enter")}"></div>
 			<button class="hm-btn hm-pick">${__("Add by filter…")}</button>
@@ -140,8 +140,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				<div class="v">${d.toFixed(3)}<span style="font-size:12px;"> ct</span></div></div>
 			<div class="hm-tile"><div class="k">${__("Scans")}</div>
 				<div class="v">${S.hist.length}</div></div>`);
-		root.find(".hm-go").prop("disabled", !(S.rows.length && S.center))
-			.attr("title", S.rows.length && !S.center ? __("Pick the centre to prep this batch.") : "")
+		root.find(".hm-go").prop("disabled", !S.rows.length).attr("title", "")
 			.text(S.rows.length ? __("PREP {0} PIECE(S)", [S.rows.length]) : __("PREP"));
 		page.set_indicator(`${S.rows.length} ${__("piece(s)")}`, S.rows.length ? "blue" : "gray");
 	}
@@ -197,7 +196,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	function loadCenters() {
 		frappe.call({ method: API + ".get_hall_prep_context" }).then((r) => {
 			const cs = ((r.message || {}).centers || []);
-			root.find(".hm-center").html(`<option value="">${__("— pick —")}</option>`
+			root.find(".hm-center").html(`<option value="">${__("— decide at send —")}</option>`
 				+ cs.map((c) => `<option value="${esc(c.name)}">${esc(c.center_name)}</option>`).join(""));
 			if (cs.length === 1) { S.center = cs[0].name; root.find(".hm-center").val(S.center); }
 			paint();
@@ -418,14 +417,14 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	}
 
 	root.on("click", ".hm-go", function () {
-		if (!S.rows.length || !S.center) return;
+		if (!S.rows.length) return;
 		frappe.dom.freeze(__("Prepping…"));
 		frappe.call({ method: API + ".hall_prep_create",
 			args: { center: S.center, bags: JSON.stringify(S.rows.map((r) => r.order_bag)) } })
 			.then((r) => {
 				frappe.dom.unfreeze();
 				const m = r.message || {};
-				frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Send it from Send Hallmarking.",
+				frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Pick the centre and send it from Send Hallmarking.",
 					[m.name, m.count]), indicator: "green" }, 7);
 				msg("ok", __("Batch <b>{0}</b> is ready to send.", [esc(m.name)]));
 				S.rows = []; paint(); focusScan();

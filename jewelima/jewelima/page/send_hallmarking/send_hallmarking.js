@@ -33,6 +33,7 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.he-x.undo{color:#1d7a33;}
 		.he-sum{font-size:12.5px;font-weight:700;margin:9px 0;}
 		/* which way a scan will go, said plainly and coloured to match the rows */
+		.sh-nocenter{color:#8a6d00;font-weight:700;}
 		.he-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;padding:7px 9px;
 			border-radius:9px;border:1px solid var(--border-color);}
 		.he-bar.removing{border-color:#b02a2a;background:rgba(176,42,42,.07);}
@@ -62,9 +63,10 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_hall_preps" }).then((r) => {
 			const m = r.message || { prepared: [], recent: [] };
 			root.find(".sh-prep").html(m.prepared.map((p) => `
-				<div class="sh-card" data-name="${esc(p.name)}">
+				<div class="sh-card" data-name="${esc(p.name)}" data-center="${esc(p.center || "")}">
 					<div class="nm">${esc(p.name)}</div>
-					<div class="meta">${esc(p.center || "")} · ${esc(p.prepared_on || "")}</div>
+					<div class="meta">${p.center ? esc(p.center)
+						: `<span class="sh-nocenter">${__("centre not set")}</span>`} · ${esc(p.prepared_on || "")}</div>
 					<div class="sh-nums">
 						<span><b>${p.pieces}</b> ${__("piece(s)")}</span>
 						<span class="pure"><b>${flt(p.pure).toFixed(3)}</b> g ${__("pure")}</span>
@@ -104,17 +106,39 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		const nm = $(this).closest(".sh-card").data("name");
 		open_url_post("/api/method/jewelima.jewelima.api.export_hallmarking_xlsx", { name: nm });
 	});
+	// A packet is made up before anyone decides where it goes, so the centre is
+	// asked for HERE — the moment the gold actually leaves the building.
 	root.on("click", ".sh-send", function () {
-		const nm = $(this).closest(".sh-card").data("name");
-		frappe.confirm(__("Send <b>{0}</b>? Stock moves out and the batch locks.", [esc(nm)]), () => {
-			frappe.dom.freeze(__("Sending…"));
-			frappe.call({ method: API + ".send_hall_prep", args: { name: nm } })
-				.then((r) => {
-					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("{0} sent — {1} piece(s) out.", [nm, (r.message || {}).count]), indicator: "green" }, 5);
-					load();
-				}).catch(() => frappe.dom.unfreeze());
+		const $c = $(this).closest(".sh-card");
+		const nm = $c.data("name");
+		const cur = $c.data("center") || "";
+		const d = new frappe.ui.Dialog({
+			title: __("Send {0}", [nm]),
+			fields: [
+				{ fieldtype: "Link", fieldname: "center", label: __("Hallmarking centre"),
+					options: "Hallmarking Center", reqd: 1, default: cur,
+					get_query: () => ({ filters: { disabled: 0 } }) },
+				{ fieldtype: "HTML", fieldname: "note" },
+			],
+			primary_action_label: __("SEND — move stock"),
+			primary_action(v) {
+				if (!v.center) return frappe.msgprint(__("Pick the centre this batch is going to."));
+				d.hide();
+				frappe.dom.freeze(__("Sending…"));
+				frappe.call({ method: API + ".send_hall_prep", args: { name: nm, center: v.center } })
+					.then((r) => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({ message: __("{0} sent to {1} — {2} piece(s) out.",
+							[nm, v.center, (r.message || {}).count]), indicator: "green" }, 5);
+						load();
+					}).catch(() => frappe.dom.unfreeze());
+			},
 		});
+		d.fields_dict.note.$wrapper.html(
+			`<div style="font-size:12.5px;color:var(--text-muted);">${
+				__("Stock moves out to At Hallmarking and the batch locks.")}</div>`);
+		d.show();
+		if (cur) d.set_value("center", cur);
 	});
 
 	// Click the card to see what is actually on the batch, and change it. Nothing
@@ -136,7 +160,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			(m.items || []).forEach((i) => { meta[i.order_bag] = i; });
 
 			const dlg = new frappe.ui.Dialog({
-				title: __("{0} — {1} at {2}", [m.name, __("{0} piece(s)", [m.pieces]), m.center || ""]),
+				title: m.center
+					? __("{0} — {1} at {2}", [m.name, __("{0} piece(s)", [m.pieces]), m.center])
+					: __("{0} — {1}", [m.name, __("{0} piece(s)", [m.pieces])]),
 				size: "large",
 				primary_action_label: __("Save"),
 				primary_action() {
