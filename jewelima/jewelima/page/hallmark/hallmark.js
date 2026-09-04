@@ -39,7 +39,14 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		.hm-actions{display:flex;gap:9px;align-items:center;margin-left:auto;}
 		.hm-msg{margin:8px 0;font-size:12.5px;min-height:18px;}
 		.hm-msg.ok{color:#1d7a33;} .hm-msg.err{color:#b02a2a;} .hm-msg.warn{color:#8a6d00;}
-		.hm-cols{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start;}
+		.hm-tiles{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px;}
+		.hm-tile{flex:1 1 150px;border:1px solid var(--border-color);border-radius:11px;
+			padding:9px 13px;background:var(--fg-color);}
+		.hm-tile .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+		.hm-tile .v{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.25;}
+		.hm-tile.gold .v{color:#1f618d;}
+		.hm-tile.dmd .v{color:#7a4fb5;}
+		[data-theme="dark"] .hm-tile.dmd .v{color:#bfa3e8;}
 		table.hm-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);
 			border:1px solid var(--border-color);border-radius:10px;overflow:hidden;}
 		table.hm-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
@@ -50,14 +57,10 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		table.hm-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
 		.hm-x{color:#b02a2a;cursor:pointer;font-weight:800;}
 		.hm-none{padding:26px;text-align:center;color:var(--text-muted);font-size:13px;}
-		.hm-tot{display:flex;gap:18px;margin-top:10px;font-size:13px;}
-		.hm-tot b{font-size:16px;}
 		.hm-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
 			color:var(--text-muted);margin:0 0 8px;}
-		.hm-hist{border:1px solid var(--border-color);border-radius:10px;background:var(--fg-color);
-			max-height:520px;overflow:auto;}
-		.hm-hist table{width:100%;border-collapse:collapse;font-size:12px;}
-		.hm-hist td{padding:5px 9px;border-bottom:1px solid var(--border-color);vertical-align:top;}
+		table.hm-histt{width:100%;border-collapse:collapse;font-size:12px;}
+		table.hm-histt td{padding:5px 9px;border-bottom:1px solid var(--border-color);vertical-align:top;}
 		.hb{display:inline-block;border-radius:9px;padding:0 7px;font-size:10px;font-weight:800;color:#fff;}
 		.hb.ok{background:#1d7a33;} .hb.no{background:#b02a2a;} .hb.by{background:#4a5a6a;}
 		</style>
@@ -72,26 +75,22 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			</span>
 		</div>
 		<div class="hm-msg"></div>
-		<div class="hm-cols">
-			<div>
-				<div class="hm-sec">${__("On this batch")}</div>
-				<div class="hm-body"></div>
-				<div class="hm-tot"></div>
-			</div>
-			<div>
-				<div class="hm-sec">${__("Scan history")}</div>
-				<div class="hm-hist"></div>
-			</div>
-		</div>
+		<div class="hm-tiles"></div>
+		<div class="hm-sec">${__("On this batch")}</div>
+		<div class="hm-body"></div>
 	`);
 
 	const $scan = root.find(".hm-scan input");
 	const focusScan = () => setTimeout(() => $scan.focus(), 30);
 	const msg = (k, h) => root.find(".hm-msg").removeClass("ok err warn").addClass(k).html(h);
 
+	// the log is worth keeping and not worth a column: it lives behind History,
+	// the way the transfer desk does it
 	function paintHist() {
-		root.find(".hm-hist").html(S.hist.length
-			? `<table>${S.hist.map((h) => `<tr>
+		if (!$hist) return;
+		$hist.html(S.hist.length
+			? `<table class="hm-histt">${S.hist.map((h, i) => `<tr>
+				<td style="width:38px;color:var(--text-muted);">${S.hist.length - i}</td>
 				<td style="white-space:nowrap;">${esc(h.code)}</td>
 				<td style="white-space:nowrap;"><span class="hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("NO")}</span>${
 					h.by ? ` <span class="hb by">${__("BY FILTER")}</span>` : ""}</td>
@@ -99,11 +98,23 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			: `<div class="hm-none">${__("Every scan lands here, good or refused.")}</div>`);
 	}
 
+	let $hist = null;
+	function showHistory() {
+		const d = new frappe.ui.Dialog({
+			title: __("Scan history ({0})", [S.hist.length]), size: "large",
+			fields: [{ fieldtype: "HTML", fieldname: "h" }],
+		});
+		$hist = d.fields_dict.h.$wrapper;
+		paintHist();
+		d.onhide = () => ($hist = null);
+		d.show();
+	}
+	const $histBtn = page.add_inner_button(__("History"), showHistory);
+
 	function paint() {
 		const b = root.find(".hm-body");
 		if (!S.rows.length) {
 			b.html(`<div class="hm-none">${__("Scan the pieces, or add them by filter.")}</div>`);
-			root.find(".hm-tot").html("");
 		} else {
 			b.html(`<table class="hm-t"><thead><tr>
 				<th style="width:40px;">#</th><th>${__("Card")}</th><th>${__("Design")}</th>
@@ -116,12 +127,19 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 					<td class="num">${flt(r.dmd_ct).toFixed(3)}</td>
 					<td><span class="hm-x" title="${__("remove")}">&times;</span></td></tr>`).join("")
 				+ `</tbody></table>`);
-			const g = S.rows.reduce((a, r) => a + flt(r.gross), 0);
-			const d = S.rows.reduce((a, r) => a + flt(r.dmd_ct), 0);
-			root.find(".hm-tot").html(`<span><b>${S.rows.length}</b> ${__("piece(s)")}</span>`
-				+ `<span><b>${g.toFixed(3)}</b> g ${__("gross")}</span>`
-				+ `<span><b>${d.toFixed(3)}</b> ct ${__("diamond")}</span>`);
 		}
+		const g = S.rows.reduce((a, r) => a + flt(r.gross), 0);
+		const d = S.rows.reduce((a, r) => a + flt(r.dmd_ct), 0);
+		if ($histBtn) $histBtn.text(S.hist.length ? __("History ({0})", [S.hist.length]) : __("History"));
+		root.find(".hm-tiles").html(`
+			<div class="hm-tile"><div class="k">${__("Pieces")}</div>
+				<div class="v">${S.rows.length}</div></div>
+			<div class="hm-tile gold"><div class="k">${__("Gross")}</div>
+				<div class="v">${g.toFixed(3)}<span style="font-size:12px;"> g</span></div></div>
+			<div class="hm-tile dmd"><div class="k">${__("Diamond")}</div>
+				<div class="v">${d.toFixed(3)}<span style="font-size:12px;"> ct</span></div></div>
+			<div class="hm-tile"><div class="k">${__("Scans")}</div>
+				<div class="v">${S.hist.length}</div></div>`);
 		root.find(".hm-go").prop("disabled", !(S.rows.length && S.center))
 			.attr("title", S.rows.length && !S.center ? __("Pick the centre to prep this batch.") : "")
 			.text(S.rows.length ? __("PREP {0} PIECE(S)", [S.rows.length]) : __("PREP"));
