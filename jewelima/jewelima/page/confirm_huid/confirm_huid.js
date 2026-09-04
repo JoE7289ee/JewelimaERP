@@ -24,6 +24,10 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
 	const root = $(page.main);
+	// Rejection is OFF for now — the floor says a piece never comes back rejected.
+	// The path is intact end to end (edit.reject -> huid_confirm_batch mode
+	// "reject" -> the reject queue); flip this to true to put the column back.
+	const ALLOW_REJECT = false;
 	// edits: bag -> {codes:[], reject:bool} — held here, never on the server until SAVE
 	const S = { batches: [], open: null, edits: {}, dbl: false, hist: [], hot: null };
 
@@ -155,7 +159,8 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 				<th style="width:44px;">#</th><th>${__("Card")}</th><th>${__("Design")}</th>
 				<th>${__("Type")}</th><th style="width:150px;">${__("HUID")}</th>
 				<th style="width:150px;">${S.dbl ? __("HUID 2") : ""}</th>
-				<th style="width:120px;">${__("State")}</th><th style="width:40px;"></th>
+				<th style="width:120px;">${__("State")}</th>${
+					ALLOW_REJECT ? `<th style="width:40px;"></th>` : ""}
 			</tr></thead><tbody>${b.pieces.map((p, i) => {
 				const e = S.edits[p.order_bag] || { codes: [], reject: false };
 				const done = p.state !== "pending";
@@ -179,7 +184,9 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 						? `<span class="hb ${p.state === "confirmed" ? "ok" : "rej"}">${
 							p.state === "confirmed" ? __("CONFIRMED") : __("REJECTED")}</span>`
 						: (e.reject ? `<span class="hb no">${__("TO REJECT")}</span>` : "")}</td>
-					<td>${done ? "" : `<span class="ch-rej" title="${__("mark rejected")}">&times;</span>`}</td>
+					${ALLOW_REJECT
+						? `<td>${done ? "" : `<span class="ch-rej" title="${__("mark rejected")}">&times;</span>`}</td>`
+						: ""}
 				</tr>`;
 			}).join("")}</tbody></table>`);
 	}
@@ -254,6 +261,7 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 	});
 
 	root.on("click", ".ch-rej", function () {
+		if (!ALLOW_REJECT) return;
 		const bag = $(this).closest("tr").data("bag");
 		const e = edit(bag);
 		e.reject = !e.reject;
