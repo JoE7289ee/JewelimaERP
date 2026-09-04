@@ -101,7 +101,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	function paint() {
 		const b = root.find(".hm-body");
 		if (!S.rows.length) {
-			b.html(`<div class="hm-none">${__("Pick the centre, then scan the pieces.")}</div>`);
+			b.html(`<div class="hm-none">${__("Scan the pieces, or add them by filter.")}</div>`);
 			root.find(".hm-tot").html("");
 		} else {
 			b.html(`<table class="hm-t"><thead><tr>
@@ -122,6 +122,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				+ `<span><b>${d.toFixed(3)}</b> ct ${__("diamond")}</span>`);
 		}
 		root.find(".hm-go").prop("disabled", !(S.rows.length && S.center))
+			.attr("title", S.rows.length && !S.center ? __("Pick the centre to prep this batch.") : "")
 			.text(S.rows.length ? __("PREP {0} PIECE(S)", [S.rows.length]) : __("PREP"));
 		page.set_indicator(`${S.rows.length} ${__("piece(s)")}`, S.rows.length ? "blue" : "gray");
 	}
@@ -131,7 +132,6 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	function add(code) {
 		code = (code || "").trim();
 		if (!code) return;
-		if (!S.center) { msg("warn", __("Pick the centre first.")); return focusScan(); }
 		return frappe.call({ method: API + ".hall_draft_scan", freeze: false,
 			args: { barcode: code, existing: JSON.stringify(S.rows.map((r) => r.order_bag)) } })
 			.then((r) => {
@@ -177,10 +177,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	// Scanning is right for a few pieces; hallmarking is nearly every piece, so the
 	// desk can also pull a whole slice in — "every RING in the JEWELIMA bucket".
 	// Everything picked still goes through the same per-piece validation as a scan.
-	root.on("click", ".hm-pick", function () {
-		if (!S.center) { msg("warn", __("Pick the centre first.")); return focusScan(); }
-		showPicker();
-	});
+	root.on("click", ".hm-pick", function () { showPicker(); });
 
 	// The same picker the transfer desk has: filter, tick, shift-click a range,
 	// page through the rest. Scanning is right for a handful; hallmarking is
