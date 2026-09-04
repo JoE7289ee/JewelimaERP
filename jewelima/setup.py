@@ -228,7 +228,8 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	"issue-findings", "recover-findings", "findings-stock", "findings-report", "add-findings",
 	"findings-history",
 	# Stock Reports — the whole sub-menu
-	"finished-stock", "finished-goods", "at-certification", "in-bags", "location-stock",
+	"finished-stock", "finished-goods", "at-certification", "at-hallmarking",
+	"out-of-house", "in-bags", "location-stock",
 	"stock-analysis",
 	"total-gold",
 	# Stock Setup — the shelves themselves
@@ -286,7 +287,10 @@ JEWELIMA_DELIVERY_PAGES = [
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications",
 	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
-	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid", "at-hallmarking",
+	"hallmark", "send-hallmarking", "hallmark-out", "confirm-huid",
+	# the stock reports are JW Stock Admin's set; the delivery desk gets the
+	# combined "what is out" view instead of one half of the pair
+	"out-of-house",
 	# Sales — price and park it; closing the sale belongs to someone else.
 	# sales-records and price-charts are VIEW ONLY: the records page only ever
 	# reads, and save_price_chart refuses this role, so the chart can be looked

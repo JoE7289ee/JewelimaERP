@@ -1410,6 +1410,18 @@
    "type": "Link"
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "truck",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Out of House",
+   "link_to": "out-of-house",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "arrow-right-left",
@@ -2691,7 +2703,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 10:42:27.141397",
+ "modified": "2026-09-04 11:36:46.220328",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

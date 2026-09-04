@@ -19201,6 +19201,81 @@ PARTY_LEVELS = (
 
 
 @frappe.whitelist()
+def get_out_summary():
+	"""Everything away from the building, both reasons in one answer.
+
+	Splitting hallmarking out of certification gave each its own report, which is
+	right — they are different trips to different places. But the delivery desk's
+	question is usually neither of those on its own: it is "what is out, and how
+	long has it been out". So this is the pair, side by side, with the batches
+	underneath in one list ordered by how long they have been gone."""
+	if not {"System Manager", "Stock Manager", "JW Manager", "JW Delivery",
+			"JW Stock Admin", "Jewelima Info"} & set(frappe.get_roles()):
+		frappe.throw(frappe._("Out of House is for the desk."), frappe.PermissionError)
+
+	today = frappe.utils.today()
+	out = {"batches": [], "pools": []}
+
+	def pool(kind, label, status, rows):
+		bags = [b for r in rows for b in r["bags"]]
+		gold = stones = pure = 0.0
+		for mats in (_bag_convert_materials(bags) if bags else {}).values():
+			for it, q in mats.items():
+				m = frappe.db.get_value("Item", it, ["stone_type", "purity_percentage"], as_dict=True) or {}
+				if m.get("stone_type"):
+					stones += flt(q)
+				else:
+					gold += flt(q)
+					pure += flt(q) * flt(m.get("purity_percentage")) / 100.0
+		out["pools"].append({"kind": kind, "label": label, "status": status,
+			"batches": len(rows), "pieces": len(bags),
+			"gross": round(sum(flt(r["gross"]) for r in rows), 3),
+			"gold": round(gold, 3), "pure": round(pure, 3), "stones": round(stones, 3)})
+		out["batches"].extend(rows)
+
+	# ---- away at a lab
+	cert = []
+	for c in frappe.get_all("Certification", filters={"status": "Sent"},
+			fields=["name", "cert_type", "certification_type", "center", "quality", "sent_on"],
+			order_by="sent_on asc"):
+		items = frappe.get_all("Certification Item", filters={"parent": c.name},
+			fields=["order_bag", "gross"])
+		cert.append({"kind": "certification", "name": c.name,
+			"what": c.cert_type or c.certification_type or "?",
+			"where": (c.center or "").split("-", 1)[-1] if c.center else "",
+			"note": c.quality or "", "sent_on": str(c.sent_on or ""),
+			"days_out": frappe.utils.date_diff(today, c.sent_on) if c.sent_on else 0,
+			"pieces": len(items), "gross": round(sum(flt(i.gross) for i in items), 3),
+			"bags": [i.order_bag for i in items]})
+	pool("certification", frappe._("At certification"), "At Certification", cert)
+
+	# ---- away at a hallmarking centre
+	hall = []
+	for h in frappe.get_all("Hallmarking Batch", filters={"status": "Sent"},
+			fields=["name", "center", "sent_on"], order_by="sent_on asc"):
+		items = frappe.get_all("Hallmarking Item", filters={"parent": h.name},
+			fields=["order_bag", "gross"])
+		hall.append({"kind": "hallmarking", "name": h.name,
+			"what": frappe._("Hallmarking"), "where": h.center or "", "note": "",
+			"sent_on": str(h.sent_on or ""),
+			"days_out": frappe.utils.date_diff(today, h.sent_on) if h.sent_on else 0,
+			"pieces": len(items), "gross": round(sum(flt(i.gross) for i in items), 3),
+			"bags": [i.order_bag for i in items]})
+	pool("hallmarking", frappe._("At hallmarking"), "At Hallmarking", hall)
+
+	# longest gone first — that is the one somebody has to chase
+	out["batches"].sort(key=lambda b: -b["days_out"])
+	out["totals"] = {
+		"batches": sum(p["batches"] for p in out["pools"]),
+		"pieces": sum(p["pieces"] for p in out["pools"]),
+		"gross": round(sum(p["gross"] for p in out["pools"]), 3),
+		"pure": round(sum(p["pure"] for p in out["pools"]), 3),
+		"stones": round(sum(p["stones"] for p in out["pools"]), 3),
+		"oldest": max([b["days_out"] for b in out["batches"]] or [0]),
+	}
+	return out
+
+@frappe.whitelist()
 def get_party_stock(group=None, zone=None, district=None, state=None, special=None,
 		old_name=None, party=None, status="In Stock", search=None, limit=400):
 	"""Piece counts by party, sliced any way the party name can be read."""

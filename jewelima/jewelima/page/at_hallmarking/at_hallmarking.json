@@ -4,17 +4,25 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-03 00:00:00",
+ "modified": "2026-09-04 11:36:34.974036",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "at-hallmarking",
  "owner": "Administrator",
  "page_name": "at-hallmarking",
  "roles": [
-  { "role": "System Manager" },
-  { "role": "Stock Manager" },
-  { "role": "JW Manager" },
-  { "role": "JW Delivery" }
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Stock Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stock Admin"
+  }
  ],
  "script": null,
  "standard": "Yes",
