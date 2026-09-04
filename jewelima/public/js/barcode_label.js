@@ -27,6 +27,19 @@ jewelima.BARCODE_DEFAULTS = {
 	// the two lines the operator may reword for a run. {gw} is the gross weight.
 	gwLine: "GW:{gw} gm",
 	familyText: "",
+	// EVERY line on the tag, placed on its own. The tag has two zones, but inside
+	// them the lines do not want the same treatment — a card number reads better
+	// hard right while the design sits left, and a stone line often wants a hair
+	// of nudging that the whole box must not follow. align is left/center/right,
+	// pt 0 means "inherit the tag's type size", dx/dy nudge in INCHES.
+	lines: {
+		gw:     { align: "left", pt: 0, dx: 0, dy: 0 },
+		stone:  { align: "left", pt: 0, dx: 0, dy: 0 },
+		type:   { align: "left", pt: 0, dx: 0, dy: 0 },
+		design: { align: "left", pt: 0, dx: 0, dy: 0 },
+		card:   { align: "left", pt: 0, dx: 0, dy: 0 },
+		free:   { align: "left", pt: 0, dx: 0, dy: 0 },
+	},
 };
 
 // Ready-made opts for buildBarcodeLabel. Pass overrides and the locked defaults
@@ -44,6 +57,7 @@ jewelima.barcodeOpts = function (over) {
 		freeText: o.freeText,
 		gwLine: o.gwLine,
 		familyText: o.familyText,
+		lines: Object.assign({}, jewelima.BARCODE_DEFAULTS.lines, o.lines || {}),
 	};
 };
 
@@ -53,15 +67,17 @@ jewelima.BARCODE_LABEL_CSS = `
 	font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
 	font-stretch:condensed;font-size:var(--bc-size,9pt);font-weight:400;font-style:normal;
 	line-height:1.05;letter-spacing:-.2px;color:#000;}
-/* the two boxes, placed in inches; everything inside is aligned to its own box */
+/* a line can be placed on its own inside its box, so the columns give it the
+   full width to be aligned in — without that, text-align has nothing to move in */
 .bc-label .bc-half{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:hidden;}
 .bc-label .bc-a{justify-content:space-between;gap:0.04in;}
-.bc-label .bc-b{flex-direction:column;justify-content:center;align-items:flex-start;}
+.bc-label .bc-b{flex-direction:column;justify-content:center;align-items:stretch;}
 .bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;min-width:0;}
 .bc-label .bc-left{flex:1 1 auto;white-space:nowrap;}
 .bc-label .bc-qr{flex:0 0 auto;}
 .bc-label .bc-qr img{height:var(--bc-qr,0.41in);width:var(--bc-qr,0.41in);display:block;}
-.bc-label .bc-right{white-space:nowrap;text-align:left;}
+.bc-label .bc-right{white-space:nowrap;text-align:left;width:100%;}
+.bc-label .bc-ln{position:relative;}
 /* a free line makes four; they only fit if the leading gives way */
 .bc-label .bc-b.tight{line-height:.82;}
 .bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
@@ -94,15 +110,26 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	const box = (r, nudge) => `left:${(flt(r.x) + flt(nudge)).toFixed(3)}in;top:${flt(r.y).toFixed(3)}in;`
 		+ `width:${flt(r.w).toFixed(3)}in;height:${flt(r.h).toFixed(3)}in;`;
 	const a = o.a || D.a, b = o.b || D.b;
+	// one line's own placement: alignment inside its box, its own type size if it
+	// was given one, and a nudge that moves it without moving the box
+	const L = Object.assign({}, D.lines, o.lines || {});
+	const ln = (k) => {
+		const s = L[k] || {};
+		return `class="bc-ln" style="text-align:${s.align || "left"};`
+			+ (flt(s.pt) ? `font-size:${flt(s.pt)}pt;` : "")
+			+ (flt(s.dx) ? `left:${flt(s.dx).toFixed(3)}in;` : "")
+			+ (flt(s.dy) ? `top:${flt(s.dy).toFixed(3)}in;` : "")
+			+ `"`;
+	};
 
 	// A — what the piece weighs and what is in it, then the code square
 	const gwText = (o.gwLine || D.gwLine).replace("{gw}", flt(c.gw).toFixed(3));
 	const stone = jewelima.barcodeStoneLine(c, o.stoneGrams);
 	const famRaw = (o.familyText || "").trim() || c.stone_family || "";
 	const fam = o.showFamily && famRaw ? esc(famRaw) : "";
-	const left = `<div class="bc-col bc-left"><div>${esc(gwText)}</div>`
-		+ (stone ? `<div>${stone}${fam ? " " + fam : ""}</div>`
-			: (fam ? `<div>${fam}</div>` : "")) + `</div>`;
+	const left = `<div class="bc-col bc-left"><div ${ln("gw")}>${esc(gwText)}</div>`
+		+ (stone ? `<div ${ln("stone")}>${stone}${fam ? " " + fam : ""}</div>`
+			: (fam ? `<div ${ln("stone")}>${fam}</div>` : "")) + `</div>`;
 	const qr = c.qr
 		? `<div class="bc-col bc-qr"><img src="${c.qr}"></div>`
 		: `<div class="bc-col bc-qr bc-fallback">${esc(c.name)}</div>`;
@@ -113,12 +140,13 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// type and the bottom off the colour on every tag that carried it.
 	const col = o.showColor && c.gold_color ? esc(c.gold_color) : "";
 	const r1 = (c.design_type || col)
-		? `<div>${[esc(c.design_type || ""), col].filter(Boolean).join(" ")}</div>` : "";
-	const free = o.freeText ? `<div>${esc(o.freeText)}</div>` : "";
+		? `<div ${ln("type")}>${[esc(c.design_type || ""), col].filter(Boolean).join(" ")}</div>` : "";
+	const free = o.freeText ? `<div ${ln("free")}>${esc(o.freeText)}</div>` : "";
 	// a free line IS a fourth, so the column tightens to keep it on the tag
 	// the DESIGN, not the variant — a tag is read by whoever holds the piece
-	const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design_no || c.design || "")}</div>`
-		+ `<div>${esc(c.name)}</div>${free}</div>`;
+	const right = `<div class="bc-col bc-right">${r1}`
+		+ `<div ${ln("design")}>${esc(c.design_no || c.design || "")}</div>`
+		+ `<div ${ln("card")}>${esc(c.name)}</div>${free}</div>`;
 
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`
 		+ `<div class="bc-half bc-a" style="${box(a, o.offsetA)}">${left}${qr}</div>`

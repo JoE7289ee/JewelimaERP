@@ -21,7 +21,7 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		parent: wrapper, title: __("Tag Canvas"), single_column: true,
 	});
 	const IN = 96;                       // CSS pixels per inch, at 100% zoom
-	const KEY = "jw_tag_canvas_v2";      // v1 held the pre-lock guesses
+	const KEY = "jw_tag_canvas_v3";      // v2 predates per-line placement
 	const D = () => (window.jewelima && jewelima.BARCODE_DEFAULTS) || {};
 
 	// the tag, and the two blocks on it — inches throughout, never pixels. Starts
@@ -31,7 +31,19 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		a: Object.assign({ x: 0.94, y: 0.03, w: 0.96, h: 0.43 }, D().a || {}),
 		b: Object.assign({ x: 1.95, y: 0.03, w: 1.02, h: 0.43 }, D().b || {}),
 		pt: +(D().pt || 9), qr: +(D().qr || 0.41),
+		// every line's own placement, deep-copied so editing one never writes
+		// through to the locked defaults
+		lines: JSON.parse(JSON.stringify(D().lines || {})),
 	});
+	// the lines the tag actually has, in the order they print
+	const LINES = [
+		{ k: "gw", box: "A", label: __("GW line") },
+		{ k: "stone", box: "A", label: __("Stone line") },
+		{ k: "type", box: "B", label: __("Type + colour") },
+		{ k: "design", box: "B", label: __("Design") },
+		{ k: "card", box: "B", label: __("Card number") },
+		{ k: "free", box: "B", label: __("Free line") },
+	];
 	// A stand-in card so the page is useful before anything is scanned — and on a
 	// site with no products at all. The code square is a plain black frame at the
 	// real size: a truthful placeholder, because the square is the biggest thing
@@ -49,7 +61,13 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	let S = FRESH();
 	try {
 		const raw = localStorage.getItem(KEY);
-		if (raw) S = Object.assign(FRESH(), JSON.parse(raw));
+		if (raw) {
+			const was = JSON.parse(raw);
+			S = Object.assign(FRESH(), was);
+			// merge, never replace: a stored file from before a line existed must
+			// not leave that line without its defaults
+			S.lines = Object.assign(FRESH().lines, was.lines || {});
+		}
 	} catch (e) { /* private window — defaults are fine */ }
 	const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -91,6 +109,18 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 		.tc-scan{border:2px solid var(--primary);border-radius:7px;height:32px;padding:2px 10px;
 			font-size:13px;font-weight:600;width:190px;background:var(--control-bg);color:var(--text-color);}
 		.tc-clipmsg{font-size:12.5px;font-weight:700;color:#b02a2a;margin-top:9px;min-height:18px;}
+		.tc-freechk{display:block;font-size:12.5px;color:var(--text-muted);margin:-3px 0 9px;}
+		table.tc-lines{width:100%;border-collapse:collapse;font-size:12.5px;}
+		table.tc-lines th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+			color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--border-color);}
+		table.tc-lines td{padding:4px 8px;border-bottom:1px solid var(--border-color);}
+		table.tc-lines td.bx{font-weight:800;color:var(--text-muted);}
+		table.tc-lines input{width:74px;border:1px solid var(--border-color);border-radius:6px;
+			padding:3px 7px;text-align:right;background:var(--control-bg);color:var(--text-color);}
+		.tc-al{border:1px solid var(--border-color);background:var(--control-bg);color:var(--text-color);
+			border-radius:6px;width:30px;height:26px;cursor:pointer;font-size:13px;line-height:1;}
+		.tc-al + .tc-al{margin-left:4px;}
+		.tc-al.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:800;}
 		.tc-out{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
 			background:var(--control-bg);border:1px solid var(--border-color);border-radius:7px;
 			padding:9px 11px;white-space:pre;overflow:auto;}
@@ -137,6 +167,24 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 				</div>
 			</div>
 			<div class="tc-card" style="margin-top:14px;">
+				<h4>${__("Text lines — each one placed on its own")}</h4>
+				<label class="tc-freechk"><input type="checkbox" class="tc-free">
+					${__("show the free line")}</label>
+				<table class="tc-lines"><thead><tr>
+					<th>${__("Line")}</th><th>${__("Box")}</th><th>${__("Align")}</th>
+					<th>${__("Size")}</th><th>${__("Nudge X")}</th><th>${__("Nudge Y")}</th>
+				</tr></thead><tbody>${LINES.map((l) => `<tr data-k="${l.k}">
+					<td>${l.label}</td><td class="bx">${l.box}</td>
+					<td class="al">${["left", "center", "right"].map((a) =>
+						`<button class="tc-al" data-a="${a}">${
+							{ left: "\u2190", center: "\u2194", right: "\u2192" }[a]}</button>`).join("")}</td>
+					<td><input type="number" step="0.5" min="0" max="16" data-l="pt" placeholder="${__("auto")}">
+						<span class="u">pt</span></td>
+					<td><input type="number" step="0.005" data-l="dx"> <span class="u">in</span></td>
+					<td><input type="number" step="0.005" data-l="dy"> <span class="u">in</span></td>
+				</tr>`).join("")}</tbody></table>
+			</div>
+			<div class="tc-card" style="margin-top:14px;">
 				<h4>${__("What to lock in")}</h4>
 				<div class="tc-out"></div>
 			</div>
@@ -154,7 +202,10 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	// the canvas's numbers, in the shape barcodeOpts hands to the label
 	const opts = () => jewelima.barcodeOpts({
 		pt: S.pt, qr: S.qr, tag: { w: S.tagW, h: S.tagH },
-		a: S.a, b: S.b, offsetA: 0, offsetB: 0,
+		a: S.a, b: S.b, offsetA: 0, offsetB: 0, lines: S.lines,
+		// the free line only exists when there is text for it, so the canvas
+		// gives it some — otherwise its controls would do nothing visible
+		freeText: S.showFree ? __("free line") : "",
 	});
 
 	function paint() {
@@ -189,12 +240,30 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 			if (document.activeElement === this) return;   // never fight the typist
 			this.value = (+get(this.dataset.f)).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 		});
+		root.find(".tc-lines tr[data-k]").each(function () {
+			const L = S.lines[this.dataset.k] || {};
+			$(this).find(".tc-al").each(function () {
+				$(this).toggleClass("on", (L.align || "left") === this.dataset.a);
+			});
+			$(this).find("input[data-l]").each(function () {
+				if (document.activeElement === this) return;
+				const v = +L[this.dataset.l] || 0;
+				this.value = v ? String(+v.toFixed(3)) : "";
+			});
+		});
+		root.find(".tc-free").prop("checked", !!S.showFree);
 		// exactly the shape BARCODE_DEFAULTS carries, so it can be pasted straight in
 		root.find(".tc-out").text(
 			`pt: ${(+S.pt).toFixed(1)}, qr: ${S.qr},\n`
 			+ `tag: { w: ${S.tagW}, h: ${S.tagH} },\n`
 			+ `a: { x: ${S.a.x}, y: ${S.a.y}, w: ${S.a.w}, h: ${S.a.h} },\n`
-			+ `b: { x: ${S.b.x}, y: ${S.b.y}, w: ${S.b.w}, h: ${S.b.h} },`);
+			+ `b: { x: ${S.b.x}, y: ${S.b.y}, w: ${S.b.w}, h: ${S.b.h} },\n`
+			+ `lines: {\n`
+			+ LINES.map((l) => {
+				const v = S.lines[l.k] || {};
+				return `\t${l.k}:`.padEnd(10) + ` { align: "${v.align || "left"}", pt: ${+v.pt || 0}`
+					+ `, dx: ${+v.dx || 0}, dy: ${+v.dy || 0} },`;
+			}).join("\n") + `\n},`);
 		save();
 	}
 
@@ -226,6 +295,19 @@ frappe.pages["tag-canvas"].on_page_load = function (wrapper) {
 	$(document).on("mouseup.tagcanvas", () => { drag = null; });
 	// the page is rebuilt on revisit, so the document handlers must not pile up
 	$(wrapper).on("remove", () => $(document).off(".tagcanvas"));
+
+	// per-line placement: alignment is a click, size and nudge are typed
+	root.on("click", ".tc-al", function () {
+		const k = $(this).closest("tr").data("k");
+		(S.lines[k] = S.lines[k] || {}).align = this.dataset.a;
+		paint();
+	});
+	root.on("input", ".tc-lines input[data-l]", function () {
+		const k = $(this).closest("tr").data("k");
+		(S.lines[k] = S.lines[k] || {})[this.dataset.l] = parseFloat(this.value) || 0;
+		paint();
+	});
+	root.on("change", ".tc-free", function () { S.showFree = this.checked; paint(); });
 
 	root.on("input", "input[data-f]", function () {
 		const v = parseFloat(this.value);
