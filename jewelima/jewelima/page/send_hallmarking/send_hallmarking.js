@@ -16,7 +16,22 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		<style>
 		.sh-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
 		.sh-card{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);padding:14px 18px;}
+		.sh-card{cursor:pointer;transition:border-color .12s;}
+		.sh-card:hover{border-color:#1f618d;}
 		.sh-card .nm{font-size:17px;font-weight:800;}
+		.sh-bk{display:inline-block;border-radius:9px;padding:0 8px;font-size:10.5px;font-weight:700;
+			background:var(--control-bg);color:var(--text-muted);margin-right:4px;}
+		.sh-nums b{font-size:16px;}
+		.sh-nums .pure{color:#1f618d;}
+		/* the edit dialog: what is going, what is coming, before anything is saved */
+		.he-row{display:flex;align-items:center;gap:9px;padding:5px 8px;border-bottom:1px solid var(--border-color);font-size:12.5px;}
+		.he-row.add{background:rgba(29,122,51,.10);}
+		.he-row.rm{background:rgba(176,42,42,.10);text-decoration:line-through;opacity:.75;}
+		.he-tag{font-size:9.5px;font-weight:800;border-radius:8px;padding:0 7px;color:#fff;}
+		.he-tag.add{background:#1d7a33;} .he-tag.rm{background:#b02a2a;}
+		.he-x{margin-left:auto;cursor:pointer;color:#b02a2a;font-weight:800;}
+		.he-x.undo{color:#1d7a33;}
+		.he-sum{font-size:12.5px;font-weight:700;margin:9px 0;}
 		.sh-card .meta{font-size:12px;color:var(--text-muted);margin:4px 0 10px;}
 		.sh-nums{display:flex;gap:16px;font-size:13px;margin-bottom:12px;}
 		.sh-nums b{font-size:16px;}
@@ -44,8 +59,12 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					<div class="meta">${esc(p.center || "")} · ${esc(p.prepared_on || "")}</div>
 					<div class="sh-nums">
 						<span><b>${p.pieces}</b> ${__("piece(s)")}</span>
-						<span><b>${flt(p.gross).toFixed(3)}</b> g</span>
+						<span class="pure"><b>${flt(p.pure).toFixed(3)}</b> g ${__("pure")}</span>
+						<span><b>${flt(p.stones).toFixed(3)}</b> ct ${__("stones")}</span>
 					</div>
+					<div class="meta">${(p.buckets || []).length
+						? (p.buckets || []).map((b) => `<span class="sh-bk">${esc(b)}</span>`).join("")
+						: ""} ${__("gross")} ${flt(p.gross).toFixed(3)} g</div>
 					<div class="sh-actions">
 						<button class="btn btn-primary btn-sm sh-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>
 						<button class="btn btn-default btn-sm sh-xls">${__("Excel ⤓")}</button>
@@ -87,6 +106,126 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 				}).catch(() => frappe.dom.unfreeze());
 		});
 	});
+
+	// Click the card to see what is actually on the batch, and change it. Nothing
+	// is written until Save, and until then the list says plainly which lines are
+	// going and which are coming — a batch is a packet of gold, so "what am I
+	// about to change" should never be a guess.
+	root.on("click", ".sh-card", function (e) {
+		if ($(e.target).closest("button").length) return;   // the card's own buttons win
+		openEditor($(this).data("name"));
+	});
+
+	function openEditor(name) {
+		frappe.call({ method: API + ".get_hall_prep", args: { name } }).then((r) => {
+			const m = r.message || {};
+			// original = what is saved; keep = what will be saved; extra = new lines
+			const orig = (m.items || []).map((i) => i.order_bag);
+			const E = { keep: new Set(orig), extra: [] };
+			const meta = {};
+			(m.items || []).forEach((i) => { meta[i.order_bag] = i; });
+
+			const dlg = new frappe.ui.Dialog({
+				title: __("{0} — {1} at {2}", [m.name, __("{0} piece(s)", [m.pieces]), m.center || ""]),
+				size: "large",
+				primary_action_label: __("Save"),
+				primary_action() {
+					const bags = orig.filter((b) => E.keep.has(b)).concat(E.extra);
+					if (!bags.length) {
+						return frappe.msgprint(__("A batch cannot be emptied — use Cancel on the card instead."));
+					}
+					frappe.dom.freeze(__("Saving…"));
+					frappe.call({ method: API + ".hall_prep_set_items",
+						args: { name, bags: JSON.stringify(bags) } })
+						.then((rr) => {
+							frappe.dom.unfreeze();
+							const v = rr.message || {};
+							dlg.hide();
+							frappe.show_alert({ message: __("{0} saved — {1} piece(s){2}{3}.",
+								[name, v.count,
+								 (v.added || []).length ? " · +" + v.added.length : "",
+								 (v.removed || []).length ? " · −" + v.removed.length : ""]),
+								indicator: "green" }, 6);
+							load();
+						}).catch(() => frappe.dom.unfreeze());
+				},
+			});
+			const $b = dlg.$wrapper.find(".modal-body");
+
+			function paintEd() {
+				const rows = orig.map((b) => ({ bag: b, state: E.keep.has(b) ? "" : "rm" }))
+					.concat(E.extra.map((b) => ({ bag: b, state: "add" })));
+				const added = E.extra.length;
+				const removed = orig.filter((b) => !E.keep.has(b)).length;
+				const total = orig.length - removed + added;
+				$b.find(".he-list").html(rows.map((x) => {
+					const i = meta[x.bag] || {};
+					return `<div class="he-row ${x.state}" data-b="${esc(x.bag)}">
+						${x.state ? `<span class="he-tag ${x.state}">${x.state === "add" ? __("ADDING") : __("REMOVING")}</span>` : ""}
+						<b>${esc(x.bag)}</b>
+						<span style="color:var(--text-muted);">${esc(i.design_no || i.design || "")}${i.design_type ? " · " + esc(i.design_type) : ""}</span>
+						<span style="color:var(--text-muted);">${i.gross ? flt(i.gross).toFixed(3) + " g" : ""}</span>
+						<span class="he-x ${x.state === "rm" ? "undo" : ""}">${x.state === "rm" ? "↺" : "✕"}</span>
+					</div>`;
+				}).join(""));
+				$b.find(".he-sum").html(added || removed
+					? __("Saving will leave <b>{0}</b> piece(s)", [total])
+						+ (added ? " · <span style='color:#1d7a33;'>+" + added + " " + __("added") + "</span>" : "")
+						+ (removed ? " · <span style='color:#b02a2a;'>−" + removed + " " + __("removed") + "</span>" : "")
+					: __("<b>{0}</b> piece(s) — nothing changed yet", [total]));
+				dlg.get_primary_btn().prop("disabled", !(added || removed));
+			}
+
+			$b.html(`
+				<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+					<input type="text" class="he-scan form-control" style="max-width:240px;"
+						placeholder="${__("scan a card to add + Enter")}">
+					<span style="font-size:12px;color:var(--text-muted);">${
+						__("✕ takes a line off · ↺ puts it back")}</span>
+				</div>
+				<div class="he-sum"></div>
+				<div class="he-list" style="max-height:46vh;overflow:auto;border:1px solid var(--border-color);border-radius:9px;"></div>`);
+
+			$b.on("click", ".he-x", function () {
+				const b = $(this).closest(".he-row").data("b");
+				if (E.extra.includes(b)) E.extra = E.extra.filter((x) => x !== b);
+				else if (E.keep.has(b)) E.keep.delete(b);
+				else E.keep.add(b);
+				paintEd();
+			});
+			$b.on("keydown", ".he-scan", function (e) {
+				if (e.key !== "Enter") return;
+				e.preventDefault();
+				const code = ($(this).val() || "").trim();
+				$(this).val("");
+				if (!code) return;
+				if (orig.includes(code)) {
+					E.keep.add(code);   // scanning one back is the same as undoing it
+					paintEd();
+					return;
+				}
+				if (E.extra.includes(code)) {
+					return frappe.show_alert({ message: __("{0} is already being added.", [code]), indicator: "orange" }, 3);
+				}
+				// the same guard a scan on the desk faces, so a piece that cannot go
+				// is refused here rather than at Save
+				frappe.call({ method: API + ".hall_draft_scan", freeze: false,
+					args: { barcode: code, existing: JSON.stringify(orig.concat(E.extra)) } })
+					.then((rr) => {
+						const v = rr.message || {};
+						if (v.rejected) {
+							return frappe.show_alert({ message: esc(v.rejected), indicator: "red" }, 6);
+						}
+						meta[v.order_bag] = v;
+						E.extra.push(v.order_bag);
+						paintEd();
+					});
+			});
+			paintEd();
+			dlg.show();
+			setTimeout(() => $b.find(".he-scan").focus(), 200);
+		});
+	}
 
 	page.set_primary_action(__("Refresh"), load, "refresh");
 	frappe.pages["send-hallmarking"].on_page_show = load;

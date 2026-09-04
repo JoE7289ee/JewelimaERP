@@ -214,7 +214,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		$b.html(S.rows.length ? S.rows.map((r, i) => `
 			<tr class="${r.held_by && to && r.held_by !== to && r.held_by !== "JD Stock" ? "mismatch" : ""}" data-i="${i}">
 				<td class="sl-bag" data-bag="${esc(r.order_bag)}"><span class="sl-bar">${esc(r.order_bag)}</span>${r.huid ? `<div class="sl-sub">HUID ${esc(r.huid)}</div>` : ""}</td>
-				<td>${esc(r.design)}<div class="sl-sub">${esc(r.design_type)}</div></td>
+				<td>${esc(r.design_no || r.design)}<div class="sl-sub">${esc(r.design_type)}</div></td>
 				<td class="sl-holder">${esc(r.held_by || "—")}</td>
 				<td class="r">${flt(r.nett).toFixed(3)}</td>
 				<td class="r">${r.dmd_ct ? flt(r.dmd_ct).toFixed(3) : "·"}</td>
@@ -406,7 +406,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					customer: to, price_chart: chart.get_value(), gold_rate: flt(rate.get_value()),
 					remarks: remarks.get_value(),
 					lines: S.rows.map((r) => ({
-						order_bag: r.order_bag, design: r.design, design_type: r.design_type,
+						order_bag: r.order_bag, design: r.design, design_no: r.design_no, design_type: r.design_type,
 						held_by: r.held_by, nett: r.nett, dmd_ct: r.dmd_ct, ostone_ct: r.ostone_ct,
 						...buckets(r),
 					})),

@@ -116,7 +116,8 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 		? `<div>${[esc(c.design_type || ""), col].filter(Boolean).join(" ")}</div>` : "";
 	const free = o.freeText ? `<div>${esc(o.freeText)}</div>` : "";
 	// a free line IS a fourth, so the column tightens to keep it on the tag
-	const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design || "")}</div>`
+	// the DESIGN, not the variant — a tag is read by whoever holds the piece
+	const right = `<div class="bc-col bc-right">${r1}<div>${esc(c.design_no || c.design || "")}</div>`
 		+ `<div>${esc(c.name)}</div>${free}</div>`;
 
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`

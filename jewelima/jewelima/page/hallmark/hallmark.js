@@ -68,8 +68,6 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			<button class="hm-btn hm-pick">${__("Add by filter…")}</button>
 			<span class="hm-actions">
 				<button class="hm-go" disabled>${__("PREP")}</button>
-				<button class="hm-go hm-gosend" disabled
-					style="background:#2e7d32;">${__("PREP & SEND")}</button>
 				<button class="hm-btn hm-clear">${__("Clear")}</button>
 			</span>
 		</div>
@@ -112,7 +110,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				<th class="num">${__("DMD ct")}</th><th style="width:34px;"></th></tr></thead><tbody>`
 				+ S.rows.map((r, i) => `<tr data-n="${esc(r.order_bag)}">
 					<td>${i + 1}</td><td><b>${esc(r.order_bag)}</b></td>
-					<td>${esc(r.design || "")}</td><td>${esc(r.design_type || "")}</td>
+					<td>${esc(r.design_no || r.design || "")}</td><td>${esc(r.design_type || "")}</td>
 					<td class="num">${flt(r.gross).toFixed(3)}</td>
 					<td class="num">${flt(r.dmd_ct).toFixed(3)}</td>
 					<td><span class="hm-x" title="${__("remove")}">&times;</span></td></tr>`).join("")
@@ -123,10 +121,8 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				+ `<span><b>${g.toFixed(3)}</b> g ${__("gross")}</span>`
 				+ `<span><b>${d.toFixed(3)}</b> ct ${__("diamond")}</span>`);
 		}
-		const ready = !!(S.rows.length && S.center);
-		root.find(".hm-go").prop("disabled", !ready);
-		root.find(".hm-go").not(".hm-gosend")
-			.text(S.rows.length ? __("PREP {0}", [S.rows.length]) : __("PREP"));
+		root.find(".hm-go").prop("disabled", !(S.rows.length && S.center))
+			.text(S.rows.length ? __("PREP {0} PIECE(S)", [S.rows.length]) : __("PREP"));
 		page.set_indicator(`${S.rows.length} ${__("piece(s)")}`, S.rows.length ? "blue" : "gray");
 	}
 
@@ -336,28 +332,16 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 
 	root.on("click", ".hm-go", function () {
 		if (!S.rows.length || !S.center) return;
-		const alsoSend = $(this).hasClass("hm-gosend");
-		frappe.dom.freeze(alsoSend ? __("Prepping and sending…") : __("Prepping…"));
+		frappe.dom.freeze(__("Prepping…"));
 		frappe.call({ method: API + ".hall_prep_create",
 			args: { center: S.center, bags: JSON.stringify(S.rows.map((r) => r.order_bag)) } })
 			.then((r) => {
+				frappe.dom.unfreeze();
 				const m = r.message || {};
-				if (!alsoSend) {
-					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Send it from Send Hallmarking.",
-						[m.name, m.count]), indicator: "green" }, 7);
-					msg("ok", __("Batch <b>{0}</b> is ready to send.", [esc(m.name)]));
-					S.rows = []; paint(); focusScan();
-					return;
-				}
-				return frappe.call({ method: API + ".send_hall_prep", args: { name: m.name } })
-					.then((rr) => {
-						frappe.dom.unfreeze();
-						frappe.show_alert({ message: __("{0} sent — {1} piece(s) out to {2}.",
-							[m.name, (rr.message || {}).count, S.center]), indicator: "green" }, 7);
-						msg("ok", __("Batch <b>{0}</b> is on its way.", [esc(m.name)]));
-						S.rows = []; paint(); focusScan();
-					});
+				frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Send it from Send Hallmarking.",
+					[m.name, m.count]), indicator: "green" }, 7);
+				msg("ok", __("Batch <b>{0}</b> is ready to send.", [esc(m.name)]));
+				S.rows = []; paint(); focusScan();
 			}).catch(() => frappe.dom.unfreeze());
 	});
 

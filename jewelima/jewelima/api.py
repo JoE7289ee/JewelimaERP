@@ -3510,7 +3510,8 @@ def get_stone_issue_card(barcode):
 		return {"error": "no_stones", "card": nm,
 			"message": frappe._("{0} has no stones on its BOM — nothing to issue here.").format(nm)}
 	return {
-		"order_bag": bag.name, "design": bag.design or "", "qty": bag.qty or 1,
+		"order_bag": bag.name, "design": bag.design or "", "design_no": design_no_of(bag.design),
+		"qty": bag.qty or 1,
 		"location": bag.location or "", "warehouse": wh,
 		"design_type": (frappe.db.get_value("Design", bag.design, "design_type") if bag.design else "") or "",
 		"lines": lines,
@@ -11263,7 +11264,7 @@ def get_sale_record(sale):
 		o = ov.get(r.order_bag)
 		chart_total = (flt(o.chart_gold) + flt(o.chart_diamond) + flt(o.chart_stone)
 			+ flt(o.chart_labour) + flt(o.chart_charges)) if o else 0
-		items.append({"order_bag": r.order_bag, "design": r.design or "",
+		items.append({"order_bag": r.order_bag, "design": r.design or "", "design_no": design_no_of(r.design),
 			"bank_code": bankno.get(bank.get(r.order_bag), ""),
 			"design_type": r.design_type or "", "holder": r.holder_at_sale or "",
 			"nett": flt(r.nett), "dmd_ct": flt(r.dmd_ct), "ostone_ct": flt(r.ostone_ct),
@@ -13149,7 +13150,9 @@ def get_sale_preparation(name):
 		"name": d.name, "customer": d.customer, "price_chart": d.price_chart,
 		"gold_rate": flt(d.gold_rate), "status": d.status, "sale": d.sale,
 		"remarks": d.remarks or "", "grand_total": flt(d.grand_total),
-		"items": [{"row": r.name, "order_bag": r.order_bag, "design": r.design,
+		# `design` is the stored variant; `design_no` is what a screen shows
+		"items": [{"row": r.name, "order_bag": r.order_bag,
+			"design": r.design or "", "design_no": design_no_of(r.design),
 			"design_type": r.design_type, "nett": flt(r.nett), "dmd_ct": flt(r.dmd_ct),
 			"solitaire_ct": flt(r.solitaire_ct), "ostone_ct": flt(r.ostone_ct),
 			**{f: flt(r.get(f)) for f in PREP_VALUE_FIELDS},
@@ -13296,7 +13299,8 @@ def sell_preparation(name):
 		frappe.throw(frappe._("Nothing on the list."))
 	lines = []
 	for r in d.items:
-		lines.append({"order_bag": r.order_bag, "design": r.design, "design_type": r.design_type,
+		lines.append({"order_bag": r.order_bag, "design": r.design,
+			"design_no": design_no_of(r.design), "design_type": r.design_type,
 			"held_by": frappe.db.get_value("Order Bag", r.order_bag, "held_by"),
 			"nett": flt(r.nett), "dmd_ct": flt(r.dmd_ct), "ostone_ct": flt(r.ostone_ct),
 			**{f: flt(r.get(f)) for f in PREP_VALUE_FIELDS}})
@@ -13609,7 +13613,12 @@ def save_sale_prep_board(payload):
 		}
 		total = round(sum(vals.values()), 2)
 		grand += total
-		items.append({"order_bag": r.get("order_bag"), "design": r.get("design"),
+		# design is a Link to Design: take the piece's own if the caller sent
+		# anything else (a design number, say), so the link cannot be broken
+		dsn = r.get("design")
+		if dsn and not frappe.db.exists("Design", dsn):
+			dsn = frappe.db.get_value("Order Bag", r.get("order_bag"), "design")
+		items.append({"order_bag": r.get("order_bag"), "design": dsn,
 			"design_type": r.get("design_type"), "nett": flt(r.get("nett")),
 			"dmd_ct": flt(r.get("dmd_ct")), "ostone_ct": flt(r.get("ostone_ct")),
 			**vals, "piece_total": total})
@@ -15039,6 +15048,19 @@ HALL_LOCATION = "HALLMARKING"
 HALL_STATUS = "At Hallmarking"
 
 
+def design_no_of(variant):
+	"""The DESIGN a variant belongs to — "A 13010" for "A13010NP-18EF-Y".
+
+	Order Bag.design holds the variant, which is what the factory works to. The
+	design is what a customer, a bill and a tag talk about, so anywhere a piece
+	is shown to somebody it is the design that should appear. Falls back to the
+	variant when a design carries no bank, so nothing ever renders blank."""
+	if not variant:
+		return ""
+	bank = frappe.db.get_value("Design", variant, "design_bank")
+	return (bank and frappe.db.get_value("Design Bank", bank, "design_no")) or variant
+
+
 def _hall_validate_piece(nm, taken=None):
 	"""Every scan guard for a hallmarking prep, writing nothing."""
 	if not frappe.db.exists("Order Bag", nm):
@@ -15067,8 +15089,15 @@ def _hall_validate_piece(nm, taken=None):
 	return b
 
 
+# Hallmarking Item.design is a Link to Design, so the stored value is the
+# VARIANT. design_no is for the screen only and never reaches the insert.
+_HALL_ITEM_FIELDS = ("order_bag", "design", "design_type", "gross", "dmd_ct")
+_hall_item = lambda r: {k: r[k] for k in _HALL_ITEM_FIELDS if k in r}
+
+
 def _hall_row(nm, b):
 	return {"order_bag": nm, "design": b.design or "",
+		"design_no": design_no_of(b.design),
 		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
 		"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight)}
 
@@ -15112,7 +15141,7 @@ def hall_prep_create(center, bags=None):
 		seen.add(nm)
 		rows.append(_hall_row(nm, b))
 	d = frappe.get_doc({"doctype": "Hallmarking Batch", "center": center, "status": "Prepared",
-		"prepared_on": frappe.utils.today(), "items": rows})
+		"prepared_on": frappe.utils.today(), "items": [_hall_item(r) for r in rows]})
 	d.insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": d.name, "count": len(rows)}
@@ -15195,10 +15224,27 @@ def get_hall_preps():
 			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]]},
 			fields=["name", "center", "status", "prepared_on", "sent_on"],
 			order_by="creation desc", limit=40):
-		items = frappe.get_all("Hallmarking Item", filters={"parent": r.name}, fields=["gross", "dmd_ct"])
+		items = frappe.get_all("Hallmarking Item", filters={"parent": r.name},
+			fields=["order_bag", "gross", "dmd_ct"])
+		bags = [i.order_bag for i in items]
 		r["pieces"] = len(items)
 		r["gross"] = round(sum(flt(i.gross) for i in items), 3)
 		r["dmd_ct"] = round(sum(flt(i.dmd_ct) for i in items), 3)
+		# what the centre is actually being handed: fine gold and stones, off the
+		# pieces' own frozen materials rather than the plan
+		pure = stones = 0.0
+		for mats in (_bag_convert_materials(bags) if bags else {}).values():
+			for it, q in mats.items():
+				m = frappe.db.get_value("Item", it, ["stone_type", "purity_percentage"], as_dict=True) or {}
+				if m.get("stone_type"):
+					stones += flt(q)
+				else:
+					pure += flt(q) * flt(m.get("purity_percentage")) / 100.0
+		r["pure"] = round(pure, 3)
+		r["stones"] = round(stones, 3)
+		# and where those pieces are kept, so a packet can be traced to a bucket
+		r["buckets"] = sorted({b for b in frappe.get_all("Order Bag",
+			filters={"name": ["in", bags or [""]]}, pluck="bucket") if b})
 		(out["prepared"] if r.status == "Prepared" else out["recent"]).append(r)
 	return out
 
@@ -15207,7 +15253,10 @@ def get_hall_preps():
 def get_hall_prep(name):
 	"""One batch with its pieces — the prep detail and the send summary."""
 	d = frappe.get_doc("Hallmarking Batch", name)
+	# one shape everywhere: `design` is the stored variant (a Link to Design),
+	# `design_no` is the design a person reads. _hall_row returns the same pair.
 	items = [{"row": r.name, "order_bag": r.order_bag, "design": r.design or "",
+		"design_no": design_no_of(r.design),
 		"design_type": r.design_type or "", "gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct),
 		"huid": r.huid or "", "received": cint(r.received), "rejected": cint(r.rejected),
 		"confirmed_by": r.confirmed_by or ""} for r in d.items]
@@ -15230,6 +15279,44 @@ def hall_prep_remove(name, row):
 	frappe.db.commit()
 	return get_hall_prep(name)
 
+
+@frappe.whitelist()
+def hall_prep_set_items(name, bags):
+	"""Replace a Prepared batch's pieces with exactly this list.
+
+	The desk shows the batch, its lines, and what is about to change; this is
+	what it saves. Every piece being ADDED is re-validated the same way a scan
+	is, so a batch cannot be edited into holding something that could never have
+	been scanned onto it. Pieces already on the batch pass that check by
+	definition — they are excluded from the "already on a batch" test, which
+	would otherwise refuse every line that is staying."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only a Prepared batch can be edited.").format(name, d.status))
+	wanted = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+	wanted = [b for b in wanted if b]
+	if not wanted:
+		frappe.throw(frappe._("A batch cannot be emptied — cancel it instead."))
+	had = [r.order_bag for r in d.items]
+	added = [b for b in wanted if b not in had]
+	removed = [b for b in had if b not in wanted]
+	keep = {r.order_bag: r for r in d.items}
+	rows, seen = [], set()
+	for nm in wanted:
+		if nm in seen:
+			continue
+		seen.add(nm)
+		if nm in keep:
+			r = keep[nm]
+			rows.append({"order_bag": r.order_bag, "design": r.design, "design_type": r.design_type,
+				"gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct)})
+			continue
+		b = _hall_validate_piece(nm, set())      # a new line faces the full scan guard
+		rows.append(_hall_item(_hall_row(nm, b)))
+	d.set("items", rows)
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "count": len(rows), "added": added, "removed": removed}
 
 @frappe.whitelist()
 def hall_prep_cancel(name):
@@ -15316,7 +15403,7 @@ def export_hallmarking_xlsx(name):
 			if frappe.db.get_value("Item", it, "stone_type")), 3)
 		# HUID left EMPTY on purpose — the centre writes the codes in and the
 		# sheet comes back as the slip the Confirm HUID desk is typed from
-		ws.append([i, r.order_bag, r.design or "", r.design_type or "", size, karat,
+		ws.append([i, r.order_bag, design_no_of(r.design), r.design_type or "", size, karat,
 			flt(r.gross), stones or None, r.huid or ""])
 		tg += flt(r.gross)
 		ts += stones
@@ -16303,7 +16390,11 @@ def get_barcode_card(order_bag):
 	gw = flt(b.act_gross_weight)
 	return {
 		"name": b.name,
+		# the DESIGN, not the variant the factory works to — a tag is read by
+		# whoever holds the piece. The variant rides along for anything that
+		# needs it, and the family/colour tokens below still come off it.
 		"design": b.design,
+		"design_no": design_no_of(b.design),
 		"design_type": frappe.db.get_value("Design", b.design, "design_type") if b.design else None,
 		"size": b.size,
 		"qty": int(b.qty or 0),
