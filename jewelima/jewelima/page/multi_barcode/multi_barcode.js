@@ -329,14 +329,12 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		const SAVED = JSON.parse(JSON.stringify({
 			tagW: base.tag.w, tagH: base.tag.h, pt: flt(base.pt) || D.pt, qr: flt(base.qr) || D.qr,
 			a: base.a, b: base.b, lines: base.lines,
-			splitFamily: !!base.splitFamily,
 		}));
 		const L = {
 			tagW: base.tag.w, tagH: base.tag.h,
 			pt: flt(base.pt) || D.pt, qr: flt(base.qr) || D.qr,
 			a: Object.assign({}, base.a), b: Object.assign({}, base.b),
 			lines: JSON.parse(JSON.stringify(base.lines || {})),
-			splitFamily: !!base.splitFamily,
 		};
 		// THIS page's card and THIS page's options — that is the whole point
 		const card = S.cards[0] || SAMPLE;
@@ -354,7 +352,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			primary_action() {
 				const payload = {
 					pt: L.pt, qr: L.qr, tag: { w: L.tagW, h: L.tagH }, a: L.a, b: L.b,
-					lines: L.lines, splitFamily: L.splitFamily,
+					lines: L.lines,
 				};
 				frappe.call({ method: API + ".save_barcode_layout",
 					args: { layout: JSON.stringify(payload) } })
@@ -431,7 +429,6 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 					</div></div>
 					<div class="tl-clip"></div>
 					<div class="tl-splits">
-						<label><input type="checkbox" class="tl-splitfam"> ${__("family on its own line")}</label>
 						<label>${__("FREE TEXT")}
 							<input type="text" class="tl-ft" maxlength="24" style="width:130px;"></label>
 						<label>${__("FREE TEXT 2")}
@@ -489,7 +486,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// the run's own wording rides along, so the preview is this sheet's tag
 		const dopts = () => jewelima.barcodeOpts({
 			pt: L.pt, qr: L.qr, tag: { w: L.tagW, h: L.tagH }, a: L.a, b: L.b,
-			lines: L.lines, splitFamily: L.splitFamily,
+			lines: L.lines,
 			offsetA: 0, offsetB: 0,
 			stoneGrams: S.stoneGrams, showFamily: S.showFamily, showColor: S.showColor,
 			freeText: S.freeText, freeText2: S.freeText2,
@@ -538,7 +535,6 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 					this.value = n ? String(+n.toFixed(3)) : "";
 				});
 			});
-			$b.find(".tl-splitfam").prop("checked", L.splitFamily);
 			[[".tl-ft", "freeText"], [".tl-ft2", "freeText2"]].forEach(([sel, key]) => {
 				const el = $b.find(sel)[0];
 				if (el && document.activeElement !== el) el.value = S[key] || "";
@@ -620,7 +616,6 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			root.find(".mb-free2").val(S.freeText2);
 			draw();
 		});
-		$b.on("change", ".tl-splitfam", function () { L.splitFamily = this.checked; draw(); });
 		dlg.$wrapper.on("keydown", function (e) {
 			const k = $b.find(".tl-rect.on").data("k");
 			if (!k || !e.key.startsWith("Arrow") || $(e.target).is("input")) return;

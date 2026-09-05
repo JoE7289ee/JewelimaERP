@@ -27,9 +27,9 @@ jewelima.BARCODE_DEFAULTS = {
 	// the two lines the operator may reword for a run. {gw} is the gross weight.
 	gwLine: "GW:{gw} gm",
 	familyText: "",
-	// the stone line is "DIA:12/0.11ct EF" as one string; splitFamily breaks the
-	// family (EF, GH …) off onto its own line — off by default, box A is 0.43in.
-	splitFamily: false,
+	// the family (EF, GH …) is never glued to the stone line: when the Stone
+	// family box is ticked it prints as its OWN line, placed on its own; when it
+	// is not, it does not print at all
 	// EVERY line on the tag, placed on its own. The tag has two zones, but inside
 	// them the lines do not want the same treatment — a card number reads better
 	// hard right while the design sits left, and a stone line often wants a hair
@@ -104,7 +104,6 @@ jewelima.barcodeOpts = function (over) {
 		showColor: o.showColor,
 		freeText: o.freeText,
 		freeText2: o.freeText2,
-		splitFamily: o.splitFamily,
 		gwLine: o.gwLine,
 		familyText: o.familyText,
 		lines: Object.assign({}, jewelima.BARCODE_DEFAULTS.lines, o.lines || {}),
@@ -185,15 +184,8 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	const fam = o.showFamily && famRaw ? esc(famRaw) : "";
 	// split: what the stones are on one line, what they weigh on the next, each
 	// placeable on its own. Joined: the single line every tag has carried.
-	const famInline = fam && !o.splitFamily ? " " + fam : "";
-	let stoneRows = "";
-	if (sp.head) {
-		stoneRows = `<div ${ln("stone")}>${sp.head}/${sp.wt}${famInline}</div>`;
-	}
-	// the family on its own line, or standing in for a stone line there is none of
-	if (fam && (o.splitFamily || !sp.head)) {
-		stoneRows += `<div ${ln("family")}>${fam}</div>`;
-	}
+	let stoneRows = sp.head ? `<div ${ln("stone")}>${sp.head}/${sp.wt}</div>` : "";
+	if (fam) stoneRows += `<div ${ln("family")}>${fam}</div>`;
 	const left = `<div class="bc-col bc-left"><div ${ln("gw")}>${esc(gwText)}</div>`
 		+ stoneRows + `</div>`;
 	const qr = c.qr
