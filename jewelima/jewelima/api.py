@@ -16863,6 +16863,10 @@ def get_barcode_card(order_bag):
 		"design": b.design,
 		"design_no": design_no_of(b.design),
 		"design_type": frappe.db.get_value("Design", b.design, "design_type") if b.design else None,
+		# the PARTY the piece was ordered for — that is what the tag's first line
+		# reads, not the design type; the holder stands in for a piece with no order
+		"party": (frappe.db.get_value("Job Order", b.job_order, "customer") if b.job_order else None)
+			or b.held_by or "",
 		"size": b.size,
 		"qty": int(b.qty or 0),
 		"gw": gw,

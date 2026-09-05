@@ -212,8 +212,11 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// is 0.43in and fits THREE lines at 9pt, so a fourth shaved the top off the
 	// type and the bottom off the colour on every tag that carried it.
 	const col = o.showColor && c.gold_color ? esc(c.gold_color) : "";
-	const r1 = (c.design_type || col)
-		? `<div ${ln("type")}>${[esc(c.design_type || ""), col].filter(Boolean).join(" ")}</div>` : "";
+	// the first line names the PARTY the piece is for, with the colour beside it;
+	// the design type only stands in when a card carries no party at all
+	const head = c.party || c.design_type || "";
+	const r1 = (head || col)
+		? `<div ${ln("type")}>${[esc(head), col].filter(Boolean).join(" ")}</div>` : "";
 	const free = o.freeText ? `<div ${ln("free")}>${esc(o.freeText)}</div>` : "";
 	// a two-character code the run is stamped with — a counter, a tray, a batch
 	const free2 = o.freeText2 ? `<div ${ln("free2")}>${esc(o.freeText2)}</div>` : "";

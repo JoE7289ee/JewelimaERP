@@ -284,7 +284,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		{ k: "stone", box: "A", label: __("Stone line") },
 		{ k: "dia", box: "A", label: __("Stone weight") },
 		{ k: "family", box: "A", label: __("Stone family") },
-		{ k: "type", box: "B", label: __("Type + colour") },
+		{ k: "type", box: "B", label: __("Party + colour") },
 		{ k: "design", box: "B", label: __("Design") },
 		{ k: "card", box: "B", label: __("Card number") },
 		{ k: "free", box: "B", label: __("Free text") },
@@ -301,7 +301,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		+ '<rect x="6" y="24" width="10" height="10" fill="#000"/>'
 		+ '<rect x="24" y="26" width="6" height="6" fill="#000"/></svg>');
 	const SAMPLE = { name: "E0001.1.1", design: "A13010NP-18EF-Y", design_no: "A 13010",
-		design_type: "NOSEPIN", gw: 2.487, dmd_no: 12, dmd_wt: 0.108,
+		design_type: "NOSEPIN", party: "JOS TRICHUR", gw: 2.487, dmd_no: 12, dmd_wt: 0.108,
 		stone_family: "EF", gold_color: "YG", qr: QR_STUB };
 
 	function showLayout() {
