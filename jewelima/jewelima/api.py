@@ -10264,7 +10264,9 @@ def save_price_chart(payload):
 	doc.making_rate = flt(p.get("making_rate"))
 	doc.making_min_grams = flt(p.get("making_min_grams"))
 	for r in p.get("making_rules") or []:
-		if flt(r.get("rate")):
+		# a rate OR a minimum makes a rule: "₹300 under 1 g, nothing above" has no
+		# per-gram rate at all, and dropping it here silently un-priced every 18K piece
+		if flt(r.get("rate")) or flt(r.get("min_per_piece")):
 			doc.append("making_rules", {"design_type": r.get("design_type") or None,
 				"karat": (r.get("karat") or "").strip().upper() or None,
 				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
@@ -12574,9 +12576,12 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 			else:
 				mc = nt * mc_rate
 				notes["mc"] = "{0} g x {1}/g [{2}]".format(nt, mc_rate, rule.design_type or "DEFAULT")
-				if flt(rule.min_per_piece) and mc < flt(rule.min_per_piece):
+				# floor only without a threshold; with one, the minimum is the under-threshold price
+				if not flt(rule.flat_below_gm) and flt(rule.min_per_piece) and mc < flt(rule.min_per_piece):
 					mc = flt(rule.min_per_piece)
 					notes["mc"] += " -> floored to min {0}".format(flt(rule.min_per_piece))
+				if not mc_rate and flt(rule.flat_below_gm):
+					notes["mc"] = "{0} g >= {1} g, no per-gram rate — making in the touch".format(nt, flt(rule.flat_below_gm))
 		elif flt(chart.making_rate):
 			mc_rate = flt(chart.making_rate)
 			mc = max(flt(r.get("nt")), flt(chart.making_min_grams) or 1) * mc_rate
@@ -14034,9 +14039,14 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 			else:
 				labour = nett * flt(row.rate)
 				rule_desc = "{0} g x {1}/g".format(round(nett, 3), flt(row.rate))
-				if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
+				# the classic floor applies ONLY when Flat below is blank; with a
+				# threshold, the minimum is the under-threshold price and nothing else
+				if not flt(row.flat_below_gm) and flt(row.min_per_piece) and labour < flt(row.min_per_piece):
 					labour = flt(row.min_per_piece)
 					rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
+				if not flt(row.rate):
+					rule_desc = "{0} g >= {1} g, no per-gram rate — making covered by the touch".format(
+						round(nett, 3), flt(row.flat_below_gm)) if flt(row.flat_below_gm) else rule_desc
 			rule_desc += " [{0}]".format(" ".join(x for x in (row.karat, row.design_type) if x) or "default")
 			comp("making", "Making", labour, note="{0} = {1}".format(rule_desc, _inr(labour)),
 				rate=flt(row.rate), qty=nett, unit="g")
