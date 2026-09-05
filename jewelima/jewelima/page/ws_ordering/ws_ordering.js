@@ -99,14 +99,14 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		return `<span class="od-age ${cls}">${d}d</span>`;
 	}
 
+	const filterArgs = () => ({
+		q: (root.find(".od-q").val() || "").trim(),
+		order_type: root.find(".od-type").val() || "",
+		kind: root.find(".od-kind").val() || "",
+	});
 	function filtered() {
-		const q = (root.find(".od-q").val() || "").toUpperCase();
-		const ty = root.find(".od-type").val();
-		const kind = root.find(".od-kind").val();
-		let rows = (D.rows || []).filter((r) =>
-			(!q || [r.name, r.design, r.party, r.salesman, r.placed_by].some((v) => (v || "").toUpperCase().includes(q)))
-			&& (!ty || r.order_type === ty)
-			&& (!kind || (kind === "cad" ? r.is_cad : !r.is_cad)));
+		// the filters run on the server, over the whole backlog; this only sorts
+		let rows = (D.rows || []);
 		rows = rows.slice().sort((a, b) => {
 			let x = a[sortKey], y = b[sortKey];
 			if (typeof x === "string") { x = (x || "").toUpperCase(); y = (y || "").toUpperCase(); }
@@ -117,13 +117,16 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 
 	function paintTable() {
 		const rows = filtered();
-		// filters only ever reach the loaded window, so say how deep the backlog is
+		// D.total is what MATCHES the filters across the whole backlog; the bar
+		// pages through that, and the count says which set it is describing
 		setTimeout(() => jewelima.moreBar(root.find(".od-more"),
 			(D.rows || []).length, D.total != null ? D.total : (D.rows || []).length,
 			() => load(true), __("Load {0} more", [OD_PAGE])), 0);
 		const loaded = (D.rows || []).length, tot = D.total != null ? D.total : loaded;
-		root.find(".od-count").text(`— ${rows.length} / ${loaded} ${__("card(s)")}`
-			+ (tot > loaded ? ` ${__("of {0} waiting", [tot])}` : ""));
+		root.find(".od-count").text(D.filtered
+			? `— ${loaded} ${__("of {0} matching", [tot])}${D.backlog_total != null
+				? ` · ${__("{0} waiting in all", [D.backlog_total])}` : ""}`
+			: `— ${loaded} ${__("card(s)")}` + (tot > loaded ? ` ${__("of {0} waiting", [tot])}` : ""));
 		root.find(".od-body").html(rows.length ? `
 			<table class="od-t"><thead><tr>
 				<th style="width:30px;cursor:default;"><input type="checkbox" class="od-all"
@@ -157,8 +160,8 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		root.find(".od-by").html((D.by || []).map((b) =>
 			`<span class="od-who"><b>${esc(b.who)}</b> — ${b.orders} ${__("order(s)")} · ${b.bags} ${__("pc")}</span>`).join("")
 			|| `<span style="font-size:12px;color:var(--text-muted);">${__("No orders placed on this day.")}</span>`);
-		// type filter options from the data
-		const types = [...new Set((D.rows || []).map((r) => r.order_type).filter(Boolean))].sort();
+		// type filter options across the WHOLE backlog, from the server
+		const types = D.order_types || [...new Set((D.rows || []).map((r) => r.order_type).filter(Boolean))].sort();
 		const cur = root.find(".od-type").val();
 		root.find(".od-type").html(`<option value="">${__("All types")}</option>` +
 			types.map((t) => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join(""));
@@ -172,8 +175,8 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		const $body = root.find(".od-body");
 		jewelima.busy($body, true, more ? __("Loading more cards…") : __("Loading the desk…"));
 		frappe.call({ method: API + ".get_ordering_workstation", freeze: false,
-			args: { date: root.find(".od-date").val(),
-				limit: OD_PAGE, offset: more && D ? (D.rows || []).length : 0 } })
+			args: Object.assign({ date: root.find(".od-date").val(),
+				limit: OD_PAGE, offset: more && D ? (D.rows || []).length : 0 }, filterArgs()) })
 			.then((r) => {
 				const m = r.message;
 				if (!m) return;
@@ -375,7 +378,8 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 	root.find(".od-xl").on("click", () =>
 		open_url_post("/api/method/jewelima.jewelima.api.export_daily_orders_xlsx",
 			{ date: root.find(".od-date").val() }));
-	root.on("input change", ".od-q, .od-type, .od-kind", paintTable);
+	root.on("input", ".od-q", frappe.utils.debounce(() => load(), 300));
+	root.on("change", ".od-type, .od-kind", () => load());
 	root.on("click", ".od-t th", function () {
 		const k = $(this).data("k");
 		if (!k) return; // the checkbox column doesn't sort

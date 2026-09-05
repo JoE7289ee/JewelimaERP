@@ -3361,7 +3361,7 @@ def export_daily_orders_xlsx(date=None):
 
 
 @frappe.whitelist()
-def get_ordering_workstation(date=None, limit=300, offset=0):
+def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=None, kind=None):
 	"""The ORDERING desk (standalone — not the bench engine):
 	- top: the day's placement KPIs — orders placed, pieces, and BY WHOM
 	- bottom: the cards still sitting in ORDERING (the un-dispatched backlog)
@@ -3369,9 +3369,28 @@ def get_ordering_workstation(date=None, limit=300, offset=0):
 	WINDOWED. The backlog used to come back whole — 3,748 KB at ten thousand
 	cards, with a File count and a full-name lookup per row on top — and the page
 	simply never finished loading. The COUNT is over the whole backlog, so the
-	page still states its true size."""
+	page still states its true size.
+
+	The filters run HERE, not over the window: a backlog of thousands was being
+	searched 300 cards at a time, so a card outside the loaded page looked like
+	it was not in ORDERING at all."""
 	date = date or frappe.utils.nowdate()
 	limit, offset = cint(limit), max(cint(offset), 0)
+	cond, vals = [], {"lim": limit, "off": offset}
+	qq = (q or "").strip()
+	if qq:
+		vals["q"] = "%" + qq + "%"
+		cond.append("""(b.name LIKE %(q)s OR b.design LIKE %(q)s OR jo.customer LIKE %(q)s
+			OR jo.salesman LIKE %(q)s OR jo.owner LIKE %(q)s
+			OR (SELECT u.full_name FROM `tabUser` u WHERE u.name = jo.owner) LIKE %(q)s)""")
+	if order_type:
+		vals["ot"] = order_type
+		cond.append("jo.order_type = %(ot)s")
+	if kind == "cad":
+		cond.append("b.is_cad = 1")
+	elif kind == "design":
+		cond.append("IFNULL(b.is_cad, 0) = 0")
+	extra = (" AND " + " AND ".join(cond)) if cond else ""
 	placed = frappe.get_all("Job Order", filters={"order_date": date},
 		fields=["name", "owner", "customer"])
 	bag_counts = {}
@@ -3390,14 +3409,25 @@ def get_ordering_workstation(date=None, limit=300, offset=0):
 			jo.name job_order, jo.customer party, jo.salesman, jo.order_type,
 			jo.owner placed_by, jo.order_date, jo.due_date due
 		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
-		WHERE b.location = 'ORDERING' AND b.is_finished = 0
+		WHERE b.location = 'ORDERING' AND b.is_finished = 0{extra}
 		ORDER BY b.creation ASC
 		{lim}
-	""".format(lim=("LIMIT %(lim)s OFFSET %(off)s" if limit > 0 else "")),
-		{"lim": limit, "off": offset}, as_dict=True)
+	""".format(extra=extra, lim=("LIMIT %(lim)s OFFSET %(off)s" if limit > 0 else "")),
+		vals, as_dict=True)
+	# the KPI is the WHOLE backlog; the paging count is what matches the filters
 	backlog_total = cint(frappe.db.sql("""
 		SELECT COUNT(*) FROM `tabOrder Bag`
 		WHERE location = 'ORDERING' AND is_finished = 0""")[0][0])
+	match_total = backlog_total if not cond else cint(frappe.db.sql("""
+		SELECT COUNT(*) FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.location = 'ORDERING' AND b.is_finished = 0{extra}""".format(extra=extra), vals)[0][0])
+	# the type dropdown covers the whole backlog, not the window that happens to
+	# be loaded — otherwise a type with no card in the first 300 could not be picked
+	order_types = frappe.db.sql_list("""
+		SELECT DISTINCT jo.order_type FROM `tabOrder Bag` b
+		JOIN `tabJob Order` jo ON jo.name = b.job_order
+		WHERE b.location = 'ORDERING' AND b.is_finished = 0 AND IFNULL(jo.order_type, '') != ''
+		ORDER BY jo.order_type""")
 	today = frappe.utils.nowdate()
 	# owner -> readable name, resolved once per distinct user
 	fullname = {u: frappe.db.get_value("User", u, "full_name") or u
@@ -3416,9 +3446,11 @@ def get_ordering_workstation(date=None, limit=300, offset=0):
 		r["photos"] = cint(photo_counts.get(r.name))
 		r["placed_by"] = fullname.get(r.placed_by, r.placed_by or "")
 	return {"date": date,
-		"total": backlog_total, "shown": offset + len(rows),
+		"total": match_total, "backlog_total": backlog_total, "filtered": bool(cond),
+		"order_types": order_types,
+		"shown": offset + len(rows),
 		"offset": offset, "limit": limit,
-		"has_more": (offset + len(rows)) < backlog_total,
+		"has_more": (offset + len(rows)) < match_total,
 		"kpis": {"orders": len(placed), "bags": sum(cint(v) for v in bag_counts.values()),
 			# the WHOLE backlog, not the window — a KPI that counted the loaded
 			# page would shrink the desk every time it was paged
