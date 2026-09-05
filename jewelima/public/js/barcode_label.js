@@ -27,11 +27,8 @@ jewelima.BARCODE_DEFAULTS = {
 	// the two lines the operator may reword for a run. {gw} is the gross weight.
 	gwLine: "GW:{gw} gm",
 	familyText: "",
-	// the stone line is "DIA:12/0.11ct EF" as one string. splitStone breaks the
-	// WEIGHT off onto its own line, splitFamily breaks the family (EF, GH …) off
-	// onto its own — both off by default, because each split adds a line to box A
-	// and box A is 0.43in.
-	splitStone: false,
+	// the stone line is "DIA:12/0.11ct EF" as one string; splitFamily breaks the
+	// family (EF, GH …) off onto its own line — off by default, box A is 0.43in.
 	splitFamily: false,
 	// EVERY line on the tag, placed on its own. The tag has two zones, but inside
 	// them the lines do not want the same treatment — a card number reads better
@@ -41,9 +38,9 @@ jewelima.BARCODE_DEFAULTS = {
 	lines: {
 		gw:     { align: "left", pt: 0, dx: 0, dy: 0 },
 		stone:  { align: "left", pt: 0, dx: 0, dy: 0 },
-		dia:    { align: "left", pt: 0, dx: 0, dy: 0 },
 		family: { align: "left", pt: 0, dx: 0, dy: 0 },
 		type:   { align: "left", pt: 0, dx: 0, dy: 0 },
+		colour: { align: "left", pt: 0, dx: 0, dy: 0 },
 		design: { align: "left", pt: 0, dx: 0, dy: 0 },
 		card:   { align: "left", pt: 0, dx: 0, dy: 0 },
 		free:   { align: "left", pt: 0, dx: 0, dy: 0 },
@@ -107,7 +104,6 @@ jewelima.barcodeOpts = function (over) {
 		showColor: o.showColor,
 		freeText: o.freeText,
 		freeText2: o.freeText2,
-		splitStone: o.splitStone,
 		splitFamily: o.splitFamily,
 		gwLine: o.gwLine,
 		familyText: o.familyText,
@@ -191,10 +187,7 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// placeable on its own. Joined: the single line every tag has carried.
 	const famInline = fam && !o.splitFamily ? " " + fam : "";
 	let stoneRows = "";
-	if (sp.head && o.splitStone) {
-		stoneRows = `<div ${ln("stone")}>${sp.head}${famInline}</div>`
-			+ `<div ${ln("dia")}>${sp.wt}</div>`;
-	} else if (sp.head) {
+	if (sp.head) {
 		stoneRows = `<div ${ln("stone")}>${sp.head}/${sp.wt}${famInline}</div>`;
 	}
 	// the family on its own line, or standing in for a stone line there is none of
@@ -211,18 +204,18 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// The colour rides ON the type line rather than taking one of its own: box B
 	// is 0.43in and fits THREE lines at 9pt, so a fourth shaved the top off the
 	// type and the bottom off the colour on every tag that carried it.
-	const col = o.showColor && c.gold_color ? esc(c.gold_color) : "";
-	// the first line names the PARTY the piece is for, with the colour beside it;
-	// the design type only stands in when a card carries no party at all
+	// the first line names the PARTY the piece is for (the design type stands in
+	// for a card with no party); the colour is its OWN line, on when the Gold
+	// colour box is ticked, placed on its own
 	const head = c.party || c.design_type || "";
-	const r1 = (head || col)
-		? `<div ${ln("type")}>${[esc(head), col].filter(Boolean).join(" ")}</div>` : "";
+	const r1 = head ? `<div ${ln("type")}>${esc(head)}</div>` : "";
+	const colLine = o.showColor && c.gold_color ? `<div ${ln("colour")}>${esc(c.gold_color)}</div>` : "";
 	const free = o.freeText ? `<div ${ln("free")}>${esc(o.freeText)}</div>` : "";
 	// a two-character code the run is stamped with — a counter, a tray, a batch
 	const free2 = o.freeText2 ? `<div ${ln("free2")}>${esc(o.freeText2)}</div>` : "";
 	// a free line IS a fourth, so the column tightens to keep it on the tag
 	// the DESIGN, not the variant — a tag is read by whoever holds the piece
-	const right = `<div class="bc-col bc-right">${r1}`
+	const right = `<div class="bc-col bc-right">${r1}${colLine}`
 		+ `<div ${ln("design")}>${esc(c.design_no || c.design || "")}</div>`
 		+ `<div ${ln("card")}>${esc(c.name)}</div>${free}${free2}</div>`;
 

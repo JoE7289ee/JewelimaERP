@@ -15936,7 +15936,7 @@ def save_barcode_layout(layout):
 	data = frappe.parse_json(layout) if isinstance(layout, str) else (layout or {})
 	if not isinstance(data, dict):
 		frappe.throw(frappe._("The layout must be an object."))
-	keep = ("pt", "qr", "tag", "a", "b", "lines", "splitStone", "splitFamily")
+	keep = ("pt", "qr", "tag", "a", "b", "lines", "splitFamily")
 	clean = {k: data[k] for k in keep if k in data}
 	if not clean.get("tag") or not clean.get("a") or not clean.get("b"):
 		frappe.throw(frappe._("A layout needs the tag and both boxes."))
