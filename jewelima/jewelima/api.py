@@ -13786,17 +13786,17 @@ def _karat_of_purity(pct):
 
 
 def _piece_karat(nm, design=None):
-	"""A finished piece's karat: off the gold it was converted from, else off
-	the variant name (A13010NP-18EF-Y carries its 18), else ''."""
+	"""A finished piece's karat, off the gold it was ACTUALLY converted from —
+	the heaviest karat gold in its Convert rows. Never off the variant name: a
+	variant's materials can be edited after the piece is made, and a bill has
+	to follow the metal that went in, not a label. No gold row = '' (unknown),
+	which bills at the typed rate and takes the blank-karat making rules."""
 	best, best_q = "", -1.0
 	for it, q in (_bag_convert_materials([nm]).get(nm) or {}).items():
 		mp, st = frappe.db.get_value("Item", it, ["metal_purity", "stone_type"]) or (None, None)
 		if not st and mp and flt(q) > best_q:
 			best, best_q = mp, flt(q)
-	if best:
-		return best
-	m = re.search(r"-(14|18|22)[A-Z]", str(design or ""))
-	return f"{m.group(1)}K" if m else ""
+	return best
 
 
 def _touch_for(chart, karat):
