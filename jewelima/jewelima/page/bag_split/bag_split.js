@@ -4,8 +4,10 @@
 // Bag Extraction — split one N-piece card into N individual order bags.
 //  Phase 1: scan -> show the card's item list + Start.
 //  Phase 2 (after Start, which assigns the worker + start time): one block per piece
-//  showing the FULL item list; stones auto-split & rounded to .000 (carats), gold per
-//  piece = entered GROSS - stone weight, with a live "remaining in bag" readout.
+//  showing the FULL item list; stones are ALWAYS system-split (even shares rounded
+//  to .000 ct, the rounding remainder to the first pieces, each cell showing how far
+//  it sits from the exact share), gold per piece = entered GROSS - stone weight,
+//  with a live "remaining in bag" readout. There is no manual mode.
 //  Split creates the individual bags. Barcode print is a later step. Route: /app/bag-split
 
 frappe.pages["bag-split"].on_page_load = function (wrapper) {
@@ -24,6 +26,10 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		.bs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 18px;font-size:12px;}
 		.bs-grid .k{color:var(--text-muted);}.bs-grid .v{font-weight:600;}
 		table.bs-mini{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
+		/* how the .000 rounding fell on this cell: up in green, down in amber */
+		.bs-adj{display:inline-block;margin-left:5px;padding:0 5px;border-radius:7px;font-size:10px;font-weight:800;
+			font-variant-numeric:tabular-nums;color:#fff;vertical-align:middle;}
+		.bs-adj.up{background:#1d7a33;} .bs-adj.down{background:#b45309;}
 		table.bs-mini th{background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--gray-400,#aeb6bf);padding:4px 8px;text-align:left;font-weight:600;}
 		table.bs-mini td{border-bottom:1px solid var(--border-color);padding:3px 8px;}
 		table.bs-mini td.num,table.bs-mini th.num{text-align:right;}
@@ -65,7 +71,6 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 			const d = r.message || {};
 			if (d.error) { setMsg(d.error); resetView(); return; }
 			state.data = d;
-			state.manual = false;
 			state.gross = new Array(d.n).fill(0);
 			setMsg("");
 			if (d.status === "Ongoing") {
@@ -151,17 +156,24 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 					let qtyCell, wtCell;
 					if (it.is_gold) {
 						qtyCell = "—";
-						wtCell = state.manual
-							? `<input type="number" step="0.001" class="bs-w" data-i="${i}" data-k="${k}" value="${flt(pp.weight) || ""}"> g`
-							: `<span class="bs-goldcell bs-w-${i}-${k}">${flt(pp.weight).toFixed(3)} g</span>`;
+						wtCell = `<span class="bs-goldcell bs-w-${i}-${k}">${flt(pp.weight).toFixed(3)} g</span>`;
 					} else {
-						qtyCell = state.manual ? `<input type="number" step="1" class="bs-q" data-i="${i}" data-k="${k}" value="${pp.qty}"> no` : `${pp.qty} no`;
-						wtCell = state.manual ? `<input type="number" step="0.001" class="bs-w" data-i="${i}" data-k="${k}" value="${flt(pp.weight)}"> ct` : `${flt(pp.weight).toFixed(3)} ct`;
+						// the even share is total / n exactly; the stored weight is that
+						// rounded to .000 with the remainder handed to the first pieces.
+						// Show the difference, so where the thousandths went is visible.
+						const exact = flt(it.total) / d.n;
+						const adj = Math.round((flt(pp.weight) - exact) * 10000) / 10000;
+						const chip = Math.abs(adj) >= 0.00005
+							? ` <span class="bs-adj ${adj > 0 ? "up" : "down"}" title="${__("exact share {0} ct — rounded {1}",
+								[exact.toFixed(4), adj > 0 ? __("up") : __("down")])}">${adj > 0 ? "+" : "−"}${Math.abs(adj).toFixed(4)}</span>`
+							: "";
+						qtyCell = `${pp.qty} no`;
+						wtCell = `${flt(pp.weight).toFixed(3)} ct${chip}`;
 					}
 					return `<tr><td><b>${frappe.utils.escape_html(it.item)}</b></td><td>${(it.purity || 0)}%</td><td class="num">${qtyCell}</td><td class="num">${wtCell}</td></tr>`;
 				})
 				.join("");
-			const grossInput = state.manual ? "" : `<span><span class="lbl">Gross g</span> <input type="number" step="0.001" class="bs-gross" data-i="${i}" value="${state.gross[i] || ""}"></span>`;
+			const grossInput = `<span><span class="lbl">Gross g</span> <input type="number" step="0.001" class="bs-gross" data-i="${i}" value="${state.gross[i] || ""}"></span>`;
 			$pieces.append(`
 				<div class="bs-piece">
 					<div class="ph"><span class="nm">${i + 1}. ${frappe.utils.escape_html(pieceName(i))}</span>${grossInput}</div>
@@ -175,13 +187,6 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 			goldItems().forEach((it, k) => $pieces.find(`.bs-w-${i}-${k}`).text(flt(it.per_piece[i].weight).toFixed(3) + " g"));
 			recalcRemaining();
 		});
-		$pieces.find(".bs-w").on("input", function () {
-			state.data.items[$(this).data("k")].per_piece[$(this).data("i")].weight = flt(this.value);
-			recalcRemaining();
-		});
-		$pieces.find(".bs-q").on("input", function () {
-			state.data.items[$(this).data("k")].per_piece[$(this).data("i")].qty = parseInt(this.value || "0", 10);
-		});
 		$foot.addClass("show");
 		renderActions();
 		recalcRemaining();
@@ -189,9 +194,6 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 	}
 	function renderActions() {
 		$actions.empty();
-		$(`<button class="btn btn-default btn-sm">${state.manual ? __("Auto (gross)") : __("Edit manually")}</button>`)
-			.appendTo($actions)
-			.on("click", () => { state.manual = !state.manual; renderPieces(); });
 		$(`<button class="btn btn-default btn-sm bs-splitrem" style="display:none">${__("Split remaining")}</button>`).appendTo($actions).on("click", splitRemaining);
 		$(`<button class="btn btn-primary btn-sm bs-splitbtn">${__("Split")}</button>`).appendTo($actions).on("click", doSplit);
 	}
@@ -247,12 +249,8 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		}
 		for (let s = 0; s < steps; s++) {
 			const i = order[s % d.n];
-			if (state.manual) {
-				gis[0].per_piece[i].weight = Math.round((flt(gis[0].per_piece[i].weight) + 0.001) * 1000) / 1000;
-			} else {
-				state.gross[i] = Math.round((flt(state.gross[i]) + 0.001) * 1000) / 1000;
-				applyAutoGold(i);
-			}
+			state.gross[i] = Math.round((flt(state.gross[i]) + 0.001) * 1000) / 1000;
+			applyAutoGold(i);
 		}
 		renderPieces();
 	}
