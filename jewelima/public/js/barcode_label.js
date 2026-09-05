@@ -120,15 +120,16 @@ jewelima.BARCODE_LABEL_CSS = `
    full width to be aligned in — without that, text-align has nothing to move in */
 .bc-label .bc-half{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:hidden;}
 .bc-label .bc-a{justify-content:space-between;gap:0.04in;}
-.bc-label .bc-b{flex-direction:column;justify-content:center;align-items:stretch;}
-.bc-label .bc-col{display:flex;flex-direction:column;justify-content:center;min-width:0;}
+/* lines are anchored to the TOP of their box and never re-centre: a tag with the
+   free text and one without must put every other line in the same place, or a
+   layout tuned with the free text on is wrong the moment it is off */
+.bc-label .bc-b{flex-direction:column;justify-content:flex-start;align-items:stretch;line-height:.82;}
+.bc-label .bc-col{display:flex;flex-direction:column;justify-content:flex-start;min-width:0;}
 .bc-label .bc-left{flex:1 1 auto;white-space:nowrap;}
 .bc-label .bc-qr{flex:0 0 auto;}
 .bc-label .bc-qr img{height:var(--bc-qr,0.41in);width:var(--bc-qr,0.41in);display:block;}
 .bc-label .bc-right{white-space:nowrap;text-align:left;width:100%;}
 .bc-label .bc-ln{position:relative;}
-/* a free line makes four; they only fit if the leading gives way */
-.bc-label .bc-b.tight{line-height:.82;}
 .bc-label .bc-fallback{font-size:7.5pt;font-style:normal;}`;
 
 // Stone weights print in CARATS by default, which is how the trade quotes them.
@@ -213,6 +214,6 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 
 	return `<div class="bc-label" style="${o.sizeVars || ""}">`
 		+ `<div class="bc-half bc-a" style="${box(a, o.offsetA)}">${left}${qr}</div>`
-		+ `<div class="bc-half bc-b${o.freeText || o.freeText2 ? " tight" : ""}" style="${box(b, o.offsetB)}">${right}</div>`
+		+ `<div class="bc-half bc-b" style="${box(b, o.offsetB)}">${right}</div>`
 		+ `</div>`;
 };
