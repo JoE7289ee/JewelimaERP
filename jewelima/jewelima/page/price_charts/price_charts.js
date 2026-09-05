@@ -167,7 +167,11 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "mk") return cur.making_rules.map((r, i) => `
-			<tr data-i="${i}"><td><select data-f="design_type">
+			<tr data-i="${i}"><td><select data-f="karat">
+				<option value="">${__("any karat")}</option>
+				${["14K", "18K", "22K"].map((k) => `<option ${(r.karat || "") === k ? "selected" : ""}>${k}</option>`).join("")}
+			</select></td>
+			<td><select data-f="design_type">
 				<option value="">${__("DEFAULT (any type)")}</option>
 				${DTYPES.map((t) => `<option ${r.design_type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
 			</select></td>
@@ -216,7 +220,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="mk"><thead><tr><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th title="${__("NT below this weight pays the Minimum flat; at/above goes per-gram. Blank = classic floor.")}">${__("Flat below g")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="mk"><thead><tr><th title="${
+				__("blank = any karat; a karat-specific row beats a blank one for the same type")}">${__("Karat")}</th><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th title="${__("NT below this weight pays the Minimum flat; at/above goes per-gram. Blank = classic floor.")}">${__("Flat below g")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
 			<div class="pc-sec">${__("Colour Stone Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="csr">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="csr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
@@ -282,7 +287,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "", from_ct: "", to_ct: "", solitaire: "" }
 			: k === "ps" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
-			: k === "mk" ? { design_type: "", rate: "", min_per_piece: "", flat_below_gm: "" }
+			: k === "mk" ? { karat: "", design_type: "", rate: "", min_per_piece: "", flat_below_gm: "" }
 			: ["csr", "czr", "cvr", "swr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
 			: { });
 		paintEditor();

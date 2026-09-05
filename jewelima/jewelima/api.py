@@ -10172,7 +10172,8 @@ def get_price_chart(name):
 		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cvd_rates") or [])],
 		"sw_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("sw_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
-		"making_rules": [{"design_type": r.design_type or "", "basis": r.basis or "Per Gram",
+		"making_rules": [{"karat": r.karat or "", "design_type": r.design_type or "",
+			"basis": r.basis or "Per Gram",
 			"rate": r.rate, "min_per_piece": r.min_per_piece,
 			"flat_below_gm": r.flat_below_gm} for r in (d.get("making_rules") or [])],
 		"payment_terms": d.payment_terms or "", "terms": d.terms or "",
@@ -10229,6 +10230,7 @@ def save_price_chart(payload):
 	for r in p.get("making_rules") or []:
 		if flt(r.get("rate")):
 			doc.append("making_rules", {"design_type": r.get("design_type") or None,
+				"karat": (r.get("karat") or "").strip().upper() or None,
 				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
 				"min_per_piece": flt(r.get("min_per_piece")),
 				"flat_below_gm": flt(r.get("flat_below_gm"))})
@@ -12519,8 +12521,8 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		# making: the row's ITEM is the design type; blank rule row = DEFAULT
 		mc = mc_rate = 0.0
 		item_type = ITEM_ALIAS.get(r.get("item") or "", r.get("item") or "")
-		rule = next((m for m in making_rules if (m.design_type or "").upper() == item_type and item_type), None) or next(
-			(m for m in making_rules if not m.design_type), None)
+		row_karat = _karat_of_purity(flt(r.get("pure")) / flt(r.get("nt")) * 100) if flt(r.get("nt")) and flt(r.get("pure")) else ""
+		rule = _making_rule_for(making_rules, item_type, row_karat)
 		band_gm = (flt(rule.flat_below_gm) if rule else 0) or 1.0
 		if rule:
 			mc_rate = flt(rule.rate)
@@ -13726,6 +13728,58 @@ def _inr(v):
 	return out
 
 
+# Making is priced by KARAT as well as by type: 22K plain gold is not made for
+# the same money as 18K stone-set. A rule row may name a karat, a type, both
+# or neither; the most specific row that fits the piece wins, and a row that
+# names neither is the chart's default.
+KARAT_BY_PURITY = {58.3: "14K", 75.1: "18K", 91.7: "22K"}
+
+
+def _karat_of_purity(pct):
+	"""The karat nearest a purity percentage — 91.7 -> 22K — or '' when the
+	number is nowhere near one (a standard gold, or nothing known)."""
+	pct = flt(pct)
+	if pct <= 0:
+		return ""
+	best = min(KARAT_BY_PURITY, key=lambda k: abs(k - pct))
+	return KARAT_BY_PURITY[best] if abs(best - pct) <= 3.0 else ""
+
+
+def _piece_karat(nm, design=None):
+	"""A finished piece's karat: off the gold it was converted from, else off
+	the variant name (A13010NP-18EF-Y carries its 18), else ''."""
+	best, best_q = "", -1.0
+	for it, q in (_bag_convert_materials([nm]).get(nm) or {}).items():
+		mp, st = frappe.db.get_value("Item", it, ["metal_purity", "stone_type"]) or (None, None)
+		if not st and mp and flt(q) > best_q:
+			best, best_q = mp, flt(q)
+	if best:
+		return best
+	m = re.search(r"-(14|18|22)[A-Z]", str(design or ""))
+	return f"{m.group(1)}K" if m else ""
+
+
+def _making_rule_for(rules, design_type, karat):
+	"""The one making rule that fits: type+karat, then type alone, then karat
+	alone, then the blank default. None when the chart has nothing that fits."""
+	dt = (design_type or "").strip().upper()
+	kt = (karat or "").strip().upper()
+	def fits_type(r): return (r.design_type or "").strip().upper() == dt and dt
+	def fits_karat(r): return (r.karat or "").strip().upper() == kt and kt
+	def no_type(r): return not (r.design_type or "").strip()
+	def no_karat(r): return not (r.karat or "").strip()
+	for pick in (
+		lambda r: fits_type(r) and fits_karat(r),
+		lambda r: fits_type(r) and no_karat(r),
+		lambda r: no_type(r) and fits_karat(r),
+		lambda r: no_type(r) and no_karat(r),
+	):
+		hit = next((r for r in rules if pick(r)), None)
+		if hit:
+			return hit
+	return None
+
+
 @frappe.whitelist()
 def get_sale_piece(barcode, price_chart, gold_rate=0):
 	"""Price one scanned piece against the chart, COMPONENT BY COMPONENT.
@@ -13908,11 +13962,12 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	if not chart:
 		comp("making", "Making", needs=True, note="no price chart picked")
 	elif making_rules:
-		row = next((r for r in making_rules if (r.design_type or "") == design_type and design_type), None) \
-			or next((r for r in making_rules if not r.design_type), None)
+		karat = _piece_karat(nm, b.design)
+		row = _making_rule_for(making_rules, design_type, karat)
 		if not row:
 			comp("making", "Making", needs=True,
-				note="no making rule for {0} and no DEFAULT row".format(design_type or "untyped"))
+				note="no making rule for {0} {1} and no DEFAULT row".format(
+					karat or "", design_type or "untyped").strip())
 		else:
 			if flt(row.flat_below_gm) and nett < flt(row.flat_below_gm):
 				labour = flt(row.min_per_piece)
@@ -13923,7 +13978,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 				if flt(row.min_per_piece) and labour < flt(row.min_per_piece):
 					labour = flt(row.min_per_piece)
 					rule_desc += " (floored to {0})".format(flt(row.min_per_piece))
-			rule_desc += " [{0}]".format(row.design_type or "default")
+			rule_desc += " [{0}]".format(" ".join(x for x in (row.karat, row.design_type) if x) or "default")
 			comp("making", "Making", labour, note="{0} = {1}".format(rule_desc, _inr(labour)),
 				rate=flt(row.rate), qty=nett, unit="g")
 	elif flt(chart.making_rate):

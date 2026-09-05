@@ -5,6 +5,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "karat",
   "design_type",
   "charge_category",
   "basis",
@@ -13,6 +14,15 @@
   "flat_below_gm"
  ],
  "fields": [
+  {
+   "columns": 1,
+   "fieldname": "karat",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Karat",
+   "options": "\n14K\n18K\n22K",
+   "description": "Blank = any karat. A karat-specific row beats a blank one for the same type."
+  },
   {
    "columns": 2,
    "description": "Blank + blank category = the default making rule.",
