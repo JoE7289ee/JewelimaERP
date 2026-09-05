@@ -10,6 +10,8 @@
   "chart_date",
   "status",
   "col_break_head",
+  "gold_section",
+  "touch_rates",
   "diamond_section",
   "diamond_rates",
   "certification_charges",
@@ -66,6 +68,18 @@
   {
    "fieldname": "col_break_head",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gold_section",
+   "fieldtype": "Section Break",
+   "label": "Gold Touch (per karat, % of the 24K board rate)"
+  },
+  {
+   "description": "Blank = the piece is billed at the typed rate as-is. With a touch, the Sell page's rate is the 24K board rate and gold = nett x rate x touch%.",
+   "fieldname": "touch_rates",
+   "fieldtype": "Table",
+   "label": "Touch by Karat",
+   "options": "Price Chart Touch"
   },
   {
    "fieldname": "diamond_section",

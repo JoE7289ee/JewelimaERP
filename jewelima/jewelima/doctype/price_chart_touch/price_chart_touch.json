@@ -1,0 +1,13 @@
+{
+ "actions": [], "creation": "2026-09-05 05:00:00", "doctype": "DocType", "editable_grid": 1,
+ "engine": "InnoDB", "field_order": ["karat", "touch"],
+ "fields": [
+  {"columns": 3, "fieldname": "karat", "fieldtype": "Select", "in_list_view": 1, "label": "Karat",
+   "options": "14K\n18K\n22K", "reqd": 1},
+  {"columns": 3, "fieldname": "touch", "fieldtype": "Percent", "in_list_view": 1, "label": "Touch %",
+   "reqd": 1, "description": "The agreed purity the gold is billed at — 18K is 75% by assay, a touch of 80 bills it at 80% of the 24K board rate."}
+ ],
+ "istable": 1, "links": [], "modified": "2026-09-05 05:00:00", "modified_by": "Administrator",
+ "module": "Jewelima", "name": "Price Chart Touch", "owner": "Administrator", "permissions": [],
+ "sort_field": "creation", "sort_order": "DESC", "states": []
+}

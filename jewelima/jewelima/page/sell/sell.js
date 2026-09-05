@@ -143,6 +143,20 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		.hover(function () { $(this).css("color", "var(--primary, #1f618d)"); },
 			function () { $(this).css("color", "var(--text-muted)"); });
 	const rate = mk(".sl-rate", { fieldtype: "Float", label: __("Gold Rate ₹/g"), fieldname: "rate" });
+	// when the picked chart carries a touch, the rate typed here is the 24K BOARD
+	// rate and each piece bills at board x its karat's touch — say so under the box
+	function showTouch() {
+		const nm = chart.get_value();
+		if (!nm) return rate.set_description("");
+		frappe.call({ method: API + ".get_price_chart", args: { name: nm }, freeze: false }).then((r) => {
+			const t = ((r.message || {}).touch_rates || []).filter((x) => flt(x.touch) > 0);
+			rate.set_description(t.length
+				? __("24K board rate — gold bills at board × touch: {0}",
+					[t.map((x) => `${x.karat} ${flt(x.touch)}%`).join(" · ")])
+				: "");
+		});
+	}
+	chart.$input.on("change", () => setTimeout(showTouch, 200));
 	const scan = mk(".sl-scan", { fieldtype: "Data", label: __("Scan card"), fieldname: "scan", placeholder: __("Scan barcode…") });
 	const remarks = mk(".sl-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "remarks" });
 	const tax = mk(".sl-tax", { fieldtype: "Check", label: __("3% Tax"), fieldname: "tax",

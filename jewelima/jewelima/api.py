@@ -10203,6 +10203,7 @@ def get_price_chart(name):
 		"cz_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cz_rates") or [])],
 		"cvd_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("cvd_rates") or [])],
 		"sw_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct, "basis": r.basis or "Per Ct", "rate": r.rate} for r in (d.get("sw_rates") or [])],
+		"touch_rates": [{"karat": r.karat or "", "touch": flt(r.touch)} for r in (d.get("touch_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
 		"making_rules": [{"karat": r.karat or "", "design_type": r.design_type or "",
 			"basis": r.basis or "Per Gram",
@@ -10257,6 +10258,9 @@ def save_price_chart(payload):
 			if flt(r.get("rate")):
 				doc.append(field, {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
 					"basis": r.get("basis") or "Per Ct", "rate": flt(r.get("rate"))})
+	for r in p.get("touch_rates") or []:
+		if (r.get("karat") or "").strip() and flt(r.get("touch")) > 0:
+			doc.append("touch_rates", {"karat": r.get("karat").strip().upper(), "touch": flt(r.get("touch"))})
 	doc.making_rate = flt(p.get("making_rate"))
 	doc.making_min_grams = flt(p.get("making_min_grams"))
 	for r in p.get("making_rules") or []:
@@ -12546,8 +12550,12 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		tok = str(r.get("quality_token") or "").strip().upper()
 		if tok and quality and tok not in (quality or "").upper():
 			flags.append("row says {0} but priced at {1}".format(tok, quality))
-		gold_va = round(flt(r.get("nt")) * gold_rate, 2)
-		notes["gold"] = "{0} g NT x {1}/g = {2}".format(flt(r.get("nt")), gold_rate, _inr(gold_va))
+		row_karat = _karat_of_purity(flt(r.get("pure")) / flt(r.get("nt")) * 100) if flt(r.get("nt")) and flt(r.get("pure")) else ""
+		touch = _touch_for(chart, row_karat)
+		eff_rate = gold_rate * touch / 100.0 if touch else gold_rate
+		gold_va = round(flt(r.get("nt")) * eff_rate, 2)
+		notes["gold"] = ("{0} g NT x {1}/g board x {2}% touch = {3}".format(flt(r.get("nt")), gold_rate, touch, _inr(gold_va))
+			if touch else "{0} g NT x {1}/g = {2}".format(flt(r.get("nt")), gold_rate, _inr(gold_va)))
 		if not gold_rate:
 			flags.append("no gold rate")
 		# making: the row's ITEM is the design type; blank rule row = DEFAULT
@@ -13791,6 +13799,17 @@ def _piece_karat(nm, design=None):
 	return f"{m.group(1)}K" if m else ""
 
 
+def _touch_for(chart, karat):
+	"""The chart's touch % for this karat, or 0 when it has none (bill at the typed rate)."""
+	kt = (karat or "").strip().upper()
+	if not chart or not kt:
+		return 0.0
+	for r in (chart.get("touch_rates") or []):
+		if (r.karat or "").strip().upper() == kt and flt(r.touch) > 0:
+			return flt(r.touch)
+	return 0.0
+
+
 def _making_rule_for(rules, design_type, karat):
 	"""The one making rule that fits: type+karat, then type alone, then karat
 	alone, then the blank default. None when the chart has nothing that fits."""
@@ -13855,7 +13874,15 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 
 	# ---- gold -------------------------------------------------------------------
 	nett = flt(b.act_nett_weight)
-	if gold_rate > 0:
+	piece_karat = _piece_karat(nm, b.design)
+	touch = _touch_for(chart, piece_karat)
+	if gold_rate > 0 and touch:
+		eff = gold_rate * touch / 100.0
+		comp("gold", "Gold", nett * eff,
+			note="{0} g x {1}/g board x {2}% touch ({3}) = {4}/g = {5}".format(
+				round(nett, 3), gold_rate, touch, piece_karat, round(eff, 2), _inr(nett * eff)),
+			rate=eff, qty=nett, unit="g")
+	elif gold_rate > 0:
 		comp("gold", "Gold", nett * gold_rate,
 			note="{0} g x {1}/g = {2}".format(round(nett, 3), gold_rate, _inr(nett * gold_rate)),
 			rate=gold_rate, qty=nett, unit="g")
