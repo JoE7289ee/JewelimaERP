@@ -9,7 +9,7 @@ import frappe
 from frappe import _
 
 # Server-side write gates. The catalog pages hide edit UI from read-only
-# roles (Jewelima Info), but whitelisted methods are callable by ANY logged-in
+# roles (JW Info), but whitelisted methods are callable by ANY logged-in
 # user — so every mutator checks roles itself. Editors work the catalog;
 # only approvers touch the review / approve / purge lane.
 DESIGN_EDITOR_ROLES = {"System Manager", "Jewelima Design Bank", "Jewelima Design Approver", "Jewelima Graphics", "JW Manager"}

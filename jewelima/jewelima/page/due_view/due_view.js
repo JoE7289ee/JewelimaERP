@@ -4,7 +4,7 @@
 // Due View — the READ-ONLY Due Soon: every bench's cards due within N days
 // (or overdue, red), same data as the managers' Due Soon page but with NO
 // prioritise actions. Click a card -> Card Info; click its design ->
-// Design Info. Built for the lookup roles (Jewelima Info + Ordering).
+// Design Info. Built for the lookup roles (JW Info + Ordering).
 // Route: /app/due-view
 
 frappe.pages["due-view"].on_page_load = function (wrapper) {

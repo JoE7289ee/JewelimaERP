@@ -114,7 +114,7 @@ jewelima.buildBenchBoard = function (wrapper, bench, opts) {
 		<div class="bb-body"></div>
 	`);
 	const root = $(page.main);
-	// view-only personas (e.g. Jewelima Info) can't set queue reasons — hide the button
+	// view-only personas (e.g. JW Info) can't set queue reasons — hide the button
 	const bbCanAct = (frappe.user_roles || []).some((r) =>
 		["System Manager", "Stock Manager", "Jewelima CAD", "JW Manager"].includes(r));
 	if (!bbCanAct) root.append("<style>.bb-qr{display:none !important;}</style>");

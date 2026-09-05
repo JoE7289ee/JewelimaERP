@@ -8019,7 +8019,7 @@ def set_bench_queue_reason(order_bag, location, reason=None):
 	reason; no bench record yet means the card is In Queue -> one is made."""
 	from jewelima.jewelima.benches import BENCH_DOCTYPE
 	loc = (location or "").upper()
-	# operators/managers only — view-only roles (e.g. Jewelima Info) can't annotate
+	# operators/managers only — view-only roles (e.g. JW Info) can't annotate
 	roles = set(frappe.get_roles())
 	if not {"System Manager", "Stock Manager", "JW Manager", "Jewelima CAD"} & roles:
 		frappe.throw(frappe._("Not permitted"), frappe.PermissionError)
@@ -17843,7 +17843,7 @@ def get_order_tracker(limit=100, offset=0, owner=None, stage=None, due=None, q=N
 
 def _following_access():
 	if not {"System Manager", "Stock Manager", "JW Manager", "Jewelima Ordering",
-			"Jewelima Info"} & set(frappe.get_roles()):
+			"JW Info"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Needs ordering access."), frappe.PermissionError)
 
 
@@ -18051,11 +18051,11 @@ def set_my_password(new_password):
 
 # ---------------------------------------------------------------------------
 # File Share — one shared drop for excels / pdfs / any working file.
-# Everyone with the page (Jewelima Info up) uploads and downloads; a file is
+# Everyone with the page (JW Info up) uploads and downloads; a file is
 # deleted only by the person who put it there, or an admin. Files live PRIVATE
 # under Home/File Share — the only way out is the role-checked download below.
 # ---------------------------------------------------------------------------
-FILE_SHARE_ROLES = ("System Manager", "Stock Manager", "JW Manager", "Jewelima Info")
+FILE_SHARE_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Info")
 FILE_SHARE_ADMIN_ROLES = ("System Manager", "JW Manager")
 FILE_SHARE_FOLDER = "Home/File Share"
 
@@ -19579,7 +19579,7 @@ def get_out_summary():
 	long has it been out". So this is the pair, side by side, with the batches
 	underneath in one list ordered by how long they have been gone."""
 	if not {"System Manager", "Stock Manager", "JW Manager", "JW Delivery",
-			"JW Stock Admin", "Jewelima Info"} & set(frappe.get_roles()):
+			"JW Stock Admin", "JW Info"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Out of House is for the desk."), frappe.PermissionError)
 
 	today = frappe.utils.today()
@@ -19662,7 +19662,7 @@ def get_party_stock(group=None, zone=None, district=None, state=None, special=No
 		old_name=None, party=None, status="In Stock", search=None, limit=400):
 	"""Piece counts by party, sliced any way the party name can be read."""
 	if not {"System Manager", "Stock Manager", "JW Manager", "JW Delivery",
-			"JW Stock Admin", "Jewelima Stock", "Jewelima Info"} & set(frappe.get_roles()):
+			"JW Stock Admin", "Jewelima Stock", "JW Info"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Stock by Party is for the desk."), frappe.PermissionError)
 
 	status = status if status in ("In Stock", "At Certification", "At Hallmarking", "Sold") else "In Stock"
@@ -19762,7 +19762,7 @@ def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
 	the bucket counts over the whole stock, so the numbers never describe just
 	the page you happen to be looking at."""
 	if not {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin",
-			"Jewelima Stock", "Jewelima Info"} & set(frappe.get_roles()):
+			"Jewelima Stock", "JW Info"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Finished Goods is for the desk."), frappe.PermissionError)
 
 	limit = max(1, min(cint(limit) or 300, 1000))

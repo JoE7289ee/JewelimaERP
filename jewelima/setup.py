@@ -419,7 +419,7 @@ JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-du
 # Info: THE read-only persona (the old "Jewelima Design Viewer" merged in,
 # 2026-08-08): card/job lookups + browse-and-filter on the catalog. Read
 # grants only — and every mutating page API refuses the role server-side.
-JEWELIMA_INFO_ROLE = "Jewelima Info"
+JEWELIMA_INFO_ROLE = "JW Info"
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
@@ -502,7 +502,7 @@ def drop_retired_pages():
 
 def merge_design_viewer_into_info():
 	"""One-time fold (2026-08-08): "Jewelima Design Viewer" becomes part of
-	Jewelima Info. Holders keep their access through Info; the old role's
+	JW Info. Holders keep their access through Info; the old role's
 	page tags, perms and Quick Menu role layout all follow; then the role
 	itself is deleted. No-op once the old role is gone."""
 	old = "Jewelima Design Viewer"
@@ -544,6 +544,13 @@ def setup_roles():
 	                      bag and its movement history. Nothing else.
 	"""
 	from frappe.permissions import add_permission, update_permission_property
+
+	# "Jewelima Info" became "JW Info" (2026-09-05). rename_doc carries every Has Role
+	# row (users AND pages) and every Custom DocPerm with it, so nobody loses access
+	# and no page loses its grant — the old name simply stops existing.
+	if frappe.db.exists("Role", "Jewelima Info") and not frappe.db.exists("Role", JEWELIMA_INFO_ROLE):
+		frappe.rename_doc("Role", "Jewelima Info", JEWELIMA_INFO_ROLE, force=True)
+		frappe.db.commit()
 
 	def ensure_role(name):
 		if name and not frappe.db.exists("Role", name):
@@ -643,14 +650,27 @@ def setup_roles():
 		if changed:
 			pg.save(ignore_permissions=True)
 
-	# Jewelima Info — THE read-only persona: card/job lookups + catalog
+	# JW Info — THE read-only persona: card/job lookups + catalog
 	# browsing (the old Design Viewer, merged in). Reads only, everywhere.
 	merge_design_viewer_into_info()
 	for dt in ("Order Bag", "Job Order", "Design", "Item", "Employee") + tuple(JEWELIMA_DESIGN_BANK_READ):
 		grant(dt, JEWELIMA_INFO_ROLE, {"read": 1})
 	for page in JEWELIMA_ORDER_PAGES:
+		if page == "card-info":
+			# the order desk opens Card Info through JW Info, which every ordering
+			# account carries (guaranteed below) — not through its own role, and
+			# never through the ERPNext stock role
+			set_page_roles(page, (JEWELIMA_INFO_ROLE,), strip=("Jewelima Ordering", "Stock Manager"))
+			continue
 		roles = ("Jewelima Ordering", JEWELIMA_INFO_ROLE) if page in JEWELIMA_INFO_LOOKUP_PAGES else ("Jewelima Ordering",)
 		set_page_roles(page, roles)
+	# 4. every ordering account holds JW Info — that is what lets it read Card Info now
+	for u in frappe.get_all("Has Role", filters={"parenttype": "User", "role": "Jewelima Ordering"}, pluck="parent"):
+		if frappe.db.get_value("User", u, "enabled") and not frappe.db.exists("Has Role",
+				{"parenttype": "User", "parent": u, "role": JEWELIMA_INFO_ROLE}):
+			ud = frappe.get_doc("User", u)
+			ud.append("roles", {"role": JEWELIMA_INFO_ROLE})
+			ud.save(ignore_permissions=True)
 	# Info can open every bench BOARD (view-only; the one mutation, queue reason,
 	# is blocked server-side + hidden for view-only users)
 	for page in JEWELIMA_INFO_BENCH_PAGES:

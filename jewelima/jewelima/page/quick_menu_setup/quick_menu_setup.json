@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:14:21.908353",
+ "modified": "2026-09-05 12:51:52.464678",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "quick-menu-setup",
@@ -39,7 +39,16 @@
    "role": "JW CAM"
   },
   {
+   "role": "System Manager"
+  },
+  {
    "role": "JW Delivery"
+  },
+  {
+   "role": "JW EXTRACTION"
+  },
+  {
+   "role": "JW Info"
   },
   {
    "role": "JW Stock Admin"
@@ -48,7 +57,7 @@
    "role": "JW Stone Admin"
   },
   {
-   "role": "System Manager"
+   "role": "JW WAXING"
   },
   {
    "role": "Jewelima Design Approver"
@@ -58,9 +67,6 @@
   },
   {
    "role": "Jewelima Graphics"
-  },
-  {
-   "role": "Jewelima Info"
   },
   {
    "role": "Jewelima Ordering"
