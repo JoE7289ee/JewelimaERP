@@ -309,11 +309,15 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// the saved layout may still be in flight; opening on the shipped defaults
 		// and pressing Save would publish those defaults over the floor's own
 		// measurements, so wait for it
-		if (!jewelima.BARCODE_LAYOUT && jewelima._layoutLoad) {
+		if (!jewelima.BARCODE_LAYOUT && (jewelima._layoutLoad || jewelima.BARCODE_LAYOUT_ERROR)) {
 			frappe.dom.freeze(__("Loading the saved layout…"));
-			return Promise.resolve(jewelima.loadBarcodeLayout())
-				.then(() => { frappe.dom.unfreeze(); openLayout(); })
-				.catch(() => { frappe.dom.unfreeze(); openLayout(); });
+			// a failed load is retried here rather than opening on the shipped
+			// defaults as though they were what the floor saved
+			return Promise.resolve(jewelima.loadBarcodeLayout(!!jewelima.BARCODE_LAYOUT_ERROR))
+				.then(() => { frappe.dom.unfreeze(); if (jewelima.BARCODE_LAYOUT_ERROR) {
+					frappe.msgprint(__("The saved layout could not be loaded, so this would open on the shipped defaults. Reload the page and try again."));
+				} else openLayout(); })
+				.catch(() => frappe.dom.unfreeze());
 		}
 		openLayout();
 	}
@@ -337,8 +341,15 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// THIS page's card and THIS page's options — that is the whole point
 		const card = S.cards[0] || SAMPLE;
 
+		// the title says WHICH layout this is, so saved-vs-shipped is never a guess
+		const meta = jewelima.BARCODE_LAYOUT_META;
+		const source = jewelima.BARCODE_LAYOUT
+			? (meta && meta.saved_on
+				? __("saved {0} by {1}", [frappe.datetime.str_to_user(meta.saved_on), meta.saved_by || "?"])
+				: __("saved layout"))
+			: __("SHIPPED DEFAULTS — nothing saved yet");
 		const dlg = new frappe.ui.Dialog({
-			title: __("Tag layout"), size: "extra-large",
+			title: __("Tag layout · {0}", [source]), size: "extra-large",
 			primary_action_label: __("Save layout"),
 			primary_action() {
 				const payload = {
@@ -349,6 +360,8 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 					args: { layout: JSON.stringify(payload) } })
 					.then(() => {
 						jewelima.BARCODE_LAYOUT = payload;
+						jewelima.BARCODE_LAYOUT_META = { saved_on: frappe.datetime.now_datetime(),
+							saved_by: frappe.session.user_fullname || frappe.session.user };
 						dlg.hide();
 						paint();      // the sheet below redraws on the new geometry
 						frappe.show_alert({ indicator: "green", message:

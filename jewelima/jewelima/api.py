@@ -15902,11 +15902,16 @@ BARCODE_LAYOUT_ROLES = ("System Manager", "JW Manager")
 @frappe.whitelist()
 def get_barcode_layout():
 	"""The saved tag layout, or nothing — in which case the shipped defaults stand."""
-	raw = frappe.db.get_single_value("Barcode Layout", "layout")
+	raw = frappe.db.get_single_value("Barcode Layout", "layout", cache=False)
 	if not raw:
 		return {"layout": None}
+	# who saved it and when — the dialog shows this so "am I looking at the saved
+	# layout or the shipped defaults" is never a guess
+	meta = dict(frappe.db.sql("""select field, value from `tabSingles`
+		where doctype = 'Barcode Layout' and field in ('modified', 'modified_by')"""))
 	try:
-		return {"layout": json.loads(raw)}
+		return {"layout": json.loads(raw), "saved_on": meta.get("modified"),
+			"saved_by": _user_label(meta.get("modified_by")) if meta.get("modified_by") else ""}
 	except Exception:
 		# a layout that will not parse must not take every tag down with it
 		return {"layout": None, "error": frappe._("The saved layout is not readable.")}

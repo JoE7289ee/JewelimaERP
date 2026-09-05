@@ -58,15 +58,30 @@ jewelima.BARCODE_DEFAULTS = {
 // the shipped defaults and a caller's per-run overrides, so a tag printed from
 // any page picks up the same geometry without anyone editing code.
 jewelima.BARCODE_LAYOUT = null;
-jewelima.loadBarcodeLayout = function () {
-	if (jewelima._layoutLoad) return jewelima._layoutLoad;
+jewelima.BARCODE_LAYOUT_META = null;     // {saved_on, saved_by} when a saved layout is in force
+jewelima.BARCODE_LAYOUT_ERROR = false;   // the fetch failed: tags are on the SHIPPED defaults
+jewelima.loadBarcodeLayout = function (force) {
+	if (jewelima._layoutLoad && !force) return jewelima._layoutLoad;
+	jewelima.BARCODE_LAYOUT_ERROR = false;
 	jewelima._layoutLoad = frappe.call({
 		method: "jewelima.jewelima.api.get_barcode_layout", freeze: false,
 	}).then((r) => {
-		const L = (r.message || {}).layout;
-		if (L && typeof L === "object") jewelima.BARCODE_LAYOUT = L;
+		const m = r.message || {};
+		if (m.layout && typeof m.layout === "object") {
+			jewelima.BARCODE_LAYOUT = m.layout;
+			jewelima.BARCODE_LAYOUT_META = { saved_on: m.saved_on || "", saved_by: m.saved_by || "" };
+		}
 		return jewelima.BARCODE_LAYOUT;
-	}).catch(() => null);
+	}).catch(() => {
+		// a failed fetch used to be swallowed, so every tag quietly printed on the
+		// shipped defaults and the layout looked "not saved". Say it, and do not
+		// memoise the failure — the next page or the next open retries.
+		jewelima.BARCODE_LAYOUT_ERROR = true;
+		jewelima._layoutLoad = null;
+		frappe.show_alert({ indicator: "red", message:
+			__("The saved tag layout could not be loaded — tags are on the shipped defaults. Reload the page.") }, 10);
+		return null;
+	});
 	return jewelima._layoutLoad;
 };
 
