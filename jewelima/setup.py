@@ -420,6 +420,16 @@ JEWELIMA_DESIGN_APPROVER_PAGES = ["design-review", "photo-approvals", "design-du
 # 2026-08-08): card/job lookups + browse-and-filter on the catalog. Read
 # grants only — and every mutating page API refuses the role server-side.
 JEWELIMA_INFO_ROLE = "JW Info"
+
+# ---- JW Costing: what we charge, and to whom ----------------------------------
+# The costing desk reads the price charts as a set — every agreed rate for every
+# party. That is a narrower circle than running the floor, so JW MANAGER is
+# deliberately NOT on these pages; only this role and an administrator.
+# Read-only: neither page writes a chart, and save_price_chart still refuses
+# anyone outside its own list.
+JEWELIMA_COSTING_ROLE = "JW Costing"
+JEWELIMA_COSTING_PAGES = ["costing-board", "costing-chart"]
+JEWELIMA_COSTING_READ = ["Price Chart", "Design Type", "Charge Category", "Item", "Customer"]
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
 JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
@@ -560,7 +570,8 @@ def setup_roles():
 	# below: saving a Page validates ALL its role rows, not just the changed
 	# one, so a role created later in this function aborts the whole install
 	# (and takes seed_benches / the rosters down with it).
-	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_STONE_ISSUE_ROLE,
+	for name in ("Jewelima Ordering", "Jewelima Purchase", "Jewelima CAD", JEWELIMA_COSTING_ROLE,
+			JEWELIMA_STONE_ISSUE_ROLE,
 			JEWELIMA_DESIGN_BANK_ROLE, JEWELIMA_DESIGN_APPROVER_ROLE, JEWELIMA_GRAPHICS_ROLE,
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
 			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE, "JW Dye Admin",
@@ -911,6 +922,21 @@ def setup_roles():
 	bench_role(JEWELIMA_WAXING_ROLE, JEWELIMA_WAXING_PAGES,
 		JEWELIMA_WAXING_FROM, JEWELIMA_WAXING_TO)
 
+	# ---- JW Costing: the price charts, read-only, and nobody else's business ----
+	ensure_role(JEWELIMA_COSTING_ROLE)
+	for dt in JEWELIMA_COSTING_READ:
+		if frappe.db.exists("DocType", dt):
+			grant(dt, JEWELIMA_COSTING_ROLE, {"read": 1})
+	for page in JEWELIMA_COSTING_PAGES:
+		set_page_roles(page, (JEWELIMA_COSTING_ROLE,), strip=("JW Manager", "Stock Manager"))
+	# tight: this role opens those two pages and nothing else
+	for page in frappe.get_all("Has Role",
+			filters={"parenttype": "Page", "role": JEWELIMA_COSTING_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_COSTING_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_COSTING_ROLE])
+			pg.save(ignore_permissions=True)
+
 	# ---- JW Delivery: goods out, certification, and a bill it may only prepare --
 	ensure_role(JEWELIMA_DELIVERY_ROLE)
 	for dt in JEWELIMA_DELIVERY_READ:
@@ -1004,8 +1030,13 @@ def setup_roles():
 	for dt in ("Party Group", "Party Zone", "Party District", "Party State", "Party Special", "Party Old Name"):
 		if frappe.db.exists("DocType", dt):
 			grant(dt, "JW Manager", {"read": 1, "write": 1, "create": 1, "delete": 1})
-	# grant to EVERY Jewelima page (auto-covers current + future pages)
+	# grant to EVERY Jewelima page (auto-covers current + future pages) EXCEPT the
+	# costing pages: what a party is charged is a narrower circle than running the
+	# floor, and this sweep runs after that block, so without the exception it
+	# would hand the pages straight back
 	for pg in frappe.get_all("Page", filters={"module": "Jewelima"}, pluck="name"):
+		if pg in set(JEWELIMA_COSTING_PAGES):
+			continue
 		set_page_roles(pg, ("JW Manager",))
 
 	# ---- Everyone-pages: the learning page + self-service My Account -----------

@@ -10140,6 +10140,156 @@ def get_party_detail(customer):
 # Active chart auto-supersedes the previous one of the same name); these APIs
 # and the price-charts page replace the raw ERPNext form as the face.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Costing — the price charts read as a set. The desk that negotiates rates needs
+# to see what has been agreed with whom, side by side, without opening five
+# charts one at a time. Read-only: nothing here writes a chart.
+#
+# JW Costing and admin ONLY. Deliberately NOT JW Manager — what a party is
+# charged is a narrower circle than the floor's management.
+# ---------------------------------------------------------------------------
+COSTING_ROLES = ("System Manager", "JW Costing")
+KARATS = ("14K", "18K", "22K")
+
+
+def _require_costing():
+	frappe.only_for(list(COSTING_ROLES))
+
+
+def _chart_summary(d):
+	"""One chart reduced to what a costing desk compares: the touch it bills gold
+	at, the making it charges, how deep its diamond brackets go, and what it is
+	missing. Money figures stay raw; the page formats them."""
+	touch = {r.karat: flt(r.touch) for r in (d.get("touch_rates") or []) if flt(r.touch) > 0}
+	rules = list(d.get("making_rules") or [])
+	mk_rates = [flt(r.rate) for r in rules if flt(r.rate) > 0]
+	mk_by_karat = {}
+	for r in rules:
+		k = (r.karat or "").strip().upper()
+		if k and flt(r.rate) > 0:
+			mk_by_karat.setdefault(k, []).append(flt(r.rate))
+	dmd = [r for r in (d.get("diamond_rates") or []) if flt(r.rate) > 0]
+	dmd_rates = [flt(r.rate) for r in dmd]
+	quals = sorted({(r.quality or "").strip().upper() for r in dmd if (r.quality or "").strip()})
+	cert = list(d.get("certification_charges") or [])
+	hall = next((flt(c.rate) for c in cert
+		if (c.certification or "").strip().upper() in ("HALLMARKING", "HALL")), 0.0)
+	buckets = {k: len(d.get(f"{k}_rates") or []) for k in ("cs", "cz", "cvd", "sw")}
+
+	# what a chart cannot price — the reason a scan comes back amber on the Sell
+	# board, said here before anyone scans anything
+	gaps = []
+	if not touch:
+		gaps.append(frappe._("no gold touch"))
+	if not rules and not flt(d.making_rate):
+		gaps.append(frappe._("no making rule"))
+	elif rules and not any(not (r.design_type or "").strip() and not (r.karat or "").strip() for r in rules):
+		gaps.append(frappe._("no DEFAULT making row"))
+	if not dmd:
+		gaps.append(frappe._("no diamond brackets"))
+	if not hall:
+		gaps.append(frappe._("no hallmark charge"))
+
+	return {
+		"name": d.name, "chart_name": d.chart_name, "status": d.status,
+		"chart_date": str(d.chart_date or ""),
+		"age_days": frappe.utils.date_diff(frappe.utils.nowdate(), d.chart_date) if d.chart_date else None,
+		"touch": {k: touch.get(k) for k in KARATS},
+		"making_rules": len(rules),
+		"making_min": min(mk_rates) if mk_rates else None,
+		"making_max": max(mk_rates) if mk_rates else None,
+		"making_flat": flt(d.making_rate) or None,
+		"making_by_karat": {k: (min(mk_by_karat[k]) if k in mk_by_karat else None) for k in KARATS},
+		"dmd_brackets": len(dmd),
+		"dmd_min": min(dmd_rates) if dmd_rates else None,
+		"dmd_max": max(dmd_rates) if dmd_rates else None,
+		"qualities": quals,
+		"ps_rows": len(d.get("precious_stone_rates") or []),
+		"bucket_rows": buckets,
+		"cert_rows": len(cert), "hallmark": hall or None,
+		"gaps": gaps,
+	}
+
+
+@frappe.whitelist()
+def get_costing_board():
+	"""Every price chart as one board: a row per chart, plus the series the page
+	draws — touch by karat, making by karat, and each chart's diamond curve."""
+	_require_costing()
+	charts = [frappe.get_doc("Price Chart", n) for n in frappe.get_all(
+		"Price Chart", order_by="status asc, chart_date desc, creation desc", pluck="name")]
+	rows = [_chart_summary(d) for d in charts]
+
+	# the diamond curve: rate against the PER-STONE weight the bracket starts at,
+	# one series per chart per quality — the page picks the quality to show
+	curves = {}
+	for d in charts:
+		for r in (d.get("diamond_rates") or []):
+			if flt(r.rate) <= 0:
+				continue
+			q = (r.quality or "").strip().upper() or "—"
+			curves.setdefault(q, {}).setdefault(d.chart_name, []).append(
+				{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct), "rate": flt(r.rate),
+				 "sieve": r.sieve_label or ""})
+	for q in curves:
+		for nm in curves[q]:
+			curves[q][nm].sort(key=lambda x: x["from_ct"])
+
+	active = [r for r in rows if r["status"] == "Active"]
+	return {
+		"rows": rows,
+		"curves": {q: [{"chart": nm, "points": pts} for nm, pts in sorted(curves[q].items())]
+			for q in sorted(curves)},
+		"karats": list(KARATS),
+		"kpis": {
+			"charts": len(rows), "active": len(active),
+			"superseded": len(rows) - len(active),
+			"with_touch": sum(1 for r in active if any(r["touch"].values())),
+			"with_gaps": sum(1 for r in active if r["gaps"]),
+			"parties": len({r["chart_name"] for r in active}),
+		},
+	}
+
+
+@frappe.whitelist()
+def get_costing_chart(name=None):
+	"""One chart in full, for the detail page — plus the list of every chart so
+	the page can move between them without going back."""
+	_require_costing()
+	names = frappe.get_all("Price Chart",
+		fields=["name", "chart_name", "status", "chart_date"],
+		order_by="status asc, chart_date desc, creation desc")
+	if not names:
+		return {"list": [], "chart": None}
+	name = name if name and frappe.db.exists("Price Chart", name) else names[0].name
+	d = frappe.get_doc("Price Chart", name)
+	out = _chart_summary(d)
+	out["making"] = [{"karat": r.karat or "", "design_type": r.design_type or "",
+		"charge_category": r.charge_category or "", "basis": r.basis or "Per Gram",
+		"rate": flt(r.rate), "min_per_piece": flt(r.min_per_piece),
+		"flat_below_gm": flt(r.flat_below_gm)} for r in (d.get("making_rules") or [])]
+	out["diamond"] = [{"sieve": r.sieve_label or "", "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+		"quality": (r.quality or "").strip().upper(), "rate": flt(r.rate)}
+		for r in (d.get("diamond_rates") or [])]
+	out["diamond"].sort(key=lambda x: (x["quality"], x["from_ct"]))
+	out["precious"] = [{"stone": r.stone, "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+		"rate": flt(r.rate)} for r in (d.get("precious_stone_rates") or [])]
+	out["buckets"] = {k: [{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+		"basis": r.basis or "Per Ct", "rate": flt(r.rate)} for r in (d.get(f"{k}_rates") or [])]
+		for k in ("cs", "cz", "cvd", "sw")}
+	out["cert"] = [{"certification": r.certification or "", "basis": r.basis or "Per Piece",
+		"rate": flt(r.rate), "min_amount": flt(r.min_amount), "from_ct": flt(r.from_ct),
+		"to_ct": flt(r.to_ct), "solitaire": cint(r.solitaire)} for r in (d.get("certification_charges") or [])]
+	out["terms"] = {"payment": d.payment_terms or "", "terms": d.terms or "",
+		"signatory": d.signatory or "", "phone": d.signatory_phone or ""}
+	# the same name's earlier charts — a rate history without leaving the page
+	out["history"] = [{"name": r.name, "status": r.status, "chart_date": str(r.chart_date or "")}
+		for r in frappe.get_all("Price Chart", filters={"chart_name": d.chart_name},
+			fields=["name", "status", "chart_date"], order_by="chart_date desc")]
+	return {"list": [{"name": r.name, "chart_name": r.chart_name, "status": r.status,
+		"chart_date": str(r.chart_date or "")} for r in names], "chart": out}
+
+
 @frappe.whitelist()
 def get_price_chart_list():
 	"""Charts grouped by name: the Active one + its superseded history."""
@@ -14143,7 +14293,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 # Desks that may READ the price charts without changing them. Same shape as the
 # selling rule below: a list of who is held back, so a role that is not named
 # here keeps whatever it had.
-PRICE_CHART_VIEW_ONLY_ROLES = {"JW Delivery"}
+PRICE_CHART_VIEW_ONLY_ROLES = {"JW Delivery", "JW Costing"}
 PRICE_CHART_EDIT_ROLES = {"System Manager", "JW Manager", "Stock Manager"}
 
 

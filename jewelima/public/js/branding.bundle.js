@@ -10,6 +10,7 @@ import "./filter_bar"; // jewelima.buildFilterBar — generic reusable filter en
 import "./bench_board"; // jewelima.buildBenchBoard — shared by every Bench sidebar page
 import "./repair_stones";
 import "./barcode_label"; // jewelima.buildBarcodeLabel — shared by both barcode printers
+import "./costing_charts"; // jewelima.costDotPlot / costStepChart — the Costing pages
 import "./repair_print";  // jewelima.printRepairOrder / printRepairBill // jewelima.repairStoneDialog — shared by repair intake + billing
 import "./job_cards"; // jewelima.printJobCards — shared job-card printer (Print Order Bags + Ordering desk)
 import "./workstation"; // jewelima.buildWorkstation — the per-bench workstation pages

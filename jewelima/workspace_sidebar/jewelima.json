@@ -2282,6 +2282,38 @@
   {
    "child": 0,
    "collapsible": 1,
+   "indent": 0,
+   "keep_closed": 1,
+   "label": "Costing",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Costing Board",
+   "link_to": "costing-board",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 0,
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Chart Detail",
+   "link_to": "costing-chart",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
    "icon": "chart-column",
    "indent": 0,
    "keep_closed": 1,
@@ -2696,7 +2728,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-04 16:51:12.978982",
+ "modified": "2026-09-06 13:07:58.213544",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
