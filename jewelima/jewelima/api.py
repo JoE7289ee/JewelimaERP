@@ -10176,19 +10176,38 @@ def _chart_summary(d):
 		if (c.certification or "").strip().upper() in ("HALLMARKING", "HALL")), 0.0)
 	buckets = {k: len(d.get(f"{k}_rates") or []) for k in ("cs", "cz", "cvd", "sw")}
 
-	# what a chart cannot price — the reason a scan comes back amber on the Sell
-	# board, said here before anyone scans anything
-	gaps = []
-	if not touch:
-		gaps.append(frappe._("no gold touch"))
-	if not rules and not flt(d.making_rate):
-		gaps.append(frappe._("no making rule"))
-	elif rules and not any(not (r.design_type or "").strip() and not (r.karat or "").strip() for r in rules):
-		gaps.append(frappe._("no DEFAULT making row"))
-	if not dmd:
-		gaps.append(frappe._("no diamond brackets"))
-	if not hall:
-		gaps.append(frappe._("no hallmark charge"))
+	# WHAT THIS CHART PRICES. A chart is not meant to be complete: one party buys
+	# EF stones on a touch and nothing else, another is making charge only. So
+	# coverage is a profile — what is here — never a list of what is missing.
+	covers = {
+		"gold": "touch" if touch else "rate",
+		"making": bool(rules) or bool(flt(d.making_rate)),
+		"diamond": bool(dmd),
+		"precious": bool(d.get("precious_stone_rates")),
+		"buckets": any(buckets.values()),
+		"charges": bool(cert),
+	}
+
+	# CHECKS are different: not "this chart does not price diamonds" (that is a
+	# choice) but "this chart prices diamonds and a stone can still fall between
+	# two of its brackets" (that is a mistake). Only real inconsistencies.
+	checks = []
+	by_q = {}
+	for r in dmd:
+		by_q.setdefault((r.quality or "").strip().upper() or "—", []).append(r)
+	for q, rows_q in by_q.items():
+		rows_q = sorted(rows_q, key=lambda r: flt(r.from_ct))
+		for a_, b_ in zip(rows_q, rows_q[1:]):
+			if flt(a_.to_ct) and flt(b_.from_ct) - flt(a_.to_ct) > 0.0005:
+				checks.append(frappe._("{0}: nothing priced between {1} and {2} ct").format(
+					q, flt(a_.to_ct), flt(b_.from_ct)))
+	for r in rules:
+		if not flt(r.rate) and not flt(r.min_per_piece):
+			checks.append(frappe._("a making rule charges nothing ({0})").format(
+				r.design_type or r.karat or frappe._("DEFAULT")))
+	if rules and not any(not (r.design_type or "").strip() and not (r.karat or "").strip() for r in rules) \
+			and not flt(d.making_rate):
+		checks.append(frappe._("no DEFAULT making row — a piece matching no rule has no making charge"))
 
 	return {
 		"name": d.name, "chart_name": d.chart_name, "status": d.status,
@@ -10207,7 +10226,9 @@ def _chart_summary(d):
 		"ps_rows": len(d.get("precious_stone_rates") or []),
 		"bucket_rows": buckets,
 		"cert_rows": len(cert), "hallmark": hall or None,
-		"gaps": gaps,
+		"covers": covers, "checks": checks,
+		# the widest per-stone weight the diamond brackets actually reach
+		"dmd_span": ([min(flt(r.from_ct) for r in dmd), max(flt(r.to_ct) for r in dmd)] if dmd else None),
 	}
 
 
@@ -10236,17 +10257,31 @@ def get_costing_board():
 			curves[q][nm].sort(key=lambda x: x["from_ct"])
 
 	active = [r for r in rows if r["status"] == "Active"]
+	# a party whose only chart is superseded cannot be sold to — that IS a problem,
+	# unlike a chart that simply does not price diamonds
+	names = {r["chart_name"] for r in rows}
+	no_active = sorted(n for n in names if not any(
+		r["chart_name"] == n and r["status"] == "Active" for r in rows))
 	return {
 		"rows": rows,
 		"curves": {q: [{"chart": nm, "points": pts} for nm, pts in sorted(curves[q].items())]
 			for q in sorted(curves)},
 		"karats": list(KARATS),
+		"components": [
+			{"key": "gold", "label": frappe._("Gold")},
+			{"key": "making", "label": frappe._("Making")},
+			{"key": "diamond", "label": frappe._("Diamond")},
+			{"key": "precious", "label": frappe._("Precious")},
+			{"key": "buckets", "label": frappe._("CS / CZ / CVD / SW")},
+			{"key": "charges", "label": frappe._("Charges")},
+		],
+		"no_active": no_active,
 		"kpis": {
 			"charts": len(rows), "active": len(active),
 			"superseded": len(rows) - len(active),
-			"with_touch": sum(1 for r in active if any(r["touch"].values())),
-			"with_gaps": sum(1 for r in active if r["gaps"]),
-			"parties": len({r["chart_name"] for r in active}),
+			"parties": len(names),
+			"on_touch": sum(1 for r in active if any(r["touch"].values())),
+			"to_check": sum(1 for r in active if r["checks"]) + len(no_active),
 		},
 	}
 

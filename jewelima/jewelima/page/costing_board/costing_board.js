@@ -6,9 +6,13 @@
 // The question this page answers is comparative, not per-chart: what have we
 // agreed with whom, and where does one party sit against the others. So the
 // numbers that differ between charts get drawn — touch by karat, making by
-// karat, the diamond curve — and the numbers that only describe a chart stay in
-// the table. What a chart CANNOT price is stated here too, because a gap only
-// shows itself today when a scan comes back amber on the Sell board.
+// karat, the diamond curve.
+//
+// A chart is NOT meant to be complete. One party buys EF stones on a touch and
+// nothing else; another is making charge only. So the coverage grid says what
+// each chart PRICES, as a shape to recognise — never a list of what it lacks.
+// Only a genuine mistake (a stone size falling between two brackets, a rule
+// that charges nothing, a party with no Active chart) is called a check.
 // Route: /app/costing-board
 
 frappe.pages["costing-board"].on_page_load = function (wrapper) {
@@ -71,6 +75,18 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		.ok{color:#1d7a33;font-size:11.5px;font-weight:700;}
 		[data-theme="dark"] .ok{color:#6fbf7f;}
 		.cb-empty{padding:32px;text-align:center;color:var(--text-muted);}
+		table.cb-t th.mid,table.cb-t td.mid{text-align:center;}
+		/* coverage reads as presence, so the filled cell is quiet and the empty one
+		   is quieter still — neither is a warning */
+		.cov{display:inline-block;border-radius:8px;padding:1px 9px;font-size:10.5px;font-weight:700;}
+		.cov.on{background:rgba(22,101,168,.13);color:#1665A8;}
+		.cov.alt{background:rgba(154,117,0,.15);color:#8a6a00;}
+		.cov.off{color:var(--text-muted);opacity:.55;}
+		[data-theme="dark"] .cov.on{color:#7FB3DA;background:rgba(62,146,216,.18);}
+		[data-theme="dark"] .cov.alt{color:#C8A43C;background:rgba(166,126,12,.22);}
+		.cb-flag{border:1px solid #b45309;border-left:4px solid #b45309;border-radius:9px;
+			background:rgba(180,83,9,.09);color:#b45309;font-size:12.5px;padding:9px 13px;margin-bottom:14px;}
+		[data-theme="dark"] .cb-flag{color:#e8a24a;background:rgba(180,83,9,.2);}
 		</style>
 		<div class="cb-head">
 			<label class="cb-note"><input type="checkbox" class="cb-active" checked>
@@ -78,6 +94,12 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 			<span class="cb-note cb-count"></span>
 		</div>
 		<div class="cb-kpis"></div>
+		<div class="cb-noactive"></div>
+		<div class="cb-card" style="margin-bottom:16px;">
+			<h3>${__("What each chart prices")}</h3>
+			<p class="sub">${__("charts differ by design — a party we only sell stones to has no making rule, and that is not a gap")}</p>
+			<div class="cb-tw"><div class="cb-cover"></div></div>
+		</div>
 		<div class="cb-grid">
 			<div class="cb-card">
 				<h3>${__("Gold touch by karat")}</h3>
@@ -106,10 +128,14 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 			<div class="cb-kpi"><div class="k">${__("Active")}</div><div class="v">${k.active}</div></div>
 			<div class="cb-kpi"><div class="k">${__("Superseded")}</div><div class="v">${k.superseded}</div></div>
 			<div class="cb-kpi"><div class="k">${__("Billing on a touch")}</div>
-				<div class="v">${k.with_touch}<span style="font-size:13px;color:var(--text-muted);"> / ${k.active}</span></div></div>
-			<div class="cb-kpi ${k.with_gaps ? "warn" : ""}"><div class="k">${
-				k.with_gaps ? __("Cannot fully price") : __("All can price")}</div>
-				<div class="v">${k.with_gaps}</div></div>`);
+				<div class="v">${k.on_touch}<span style="font-size:13px;color:var(--text-muted);"> / ${k.active}</span></div></div>
+			<div class="cb-kpi ${k.to_check ? "warn" : ""}"><div class="k">${__("To check")}</div>
+				<div class="v">${k.to_check}</div></div>`);
+		root.find(".cb-noactive").html((S.data.no_active || []).length
+			? `<div class="cb-flag"><b>${__("No active chart")}</b> — ${
+				__("{0} cannot be priced on the Sell page until one of its charts is made Active.",
+					[S.data.no_active.map(esc).join(", ")])}</div>`
+			: "");
 	}
 
 	const shown = () => (S.data.rows || []).filter((r) => !S.onlyActive || r.status === "Active");
@@ -150,6 +176,31 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		});
 	}
 
+	function paintCover() {
+		const rows = shown();
+		const comps = S.data.components || [];
+		const hues = jewelima.costHues();
+		const all = rows.map((r) => r.chart_name);
+		root.find(".cb-cover").html(!rows.length ? "" : `
+			<table class="cb-t cb-cov"><thead><tr><th>${__("Chart")}</th>
+				${comps.map((c) => `<th class="mid">${esc(c.label)}</th>`).join("")}
+			</tr></thead><tbody>${rows.map((r, i) => `<tr class="clickable" data-n="${esc(r.name)}">
+				<td><span class="cb-swatch" style="background:${hues[i % hues.length]}"></span>
+					<span class="cb-nm">${esc(r.chart_name)}</span></td>
+				${comps.map((c) => {
+					const v = (r.covers || {})[c.key];
+					if (c.key === "gold") {
+						// gold is always priced; what differs is HOW, so the cell says which
+						return v === "touch"
+							? `<td class="mid"><span class="cov on">${__("touch")}</span></td>`
+							: `<td class="mid"><span class="cov alt">${__("typed rate")}</span></td>`;
+					}
+					return v ? `<td class="mid"><span class="cov on">${__("yes")}</span></td>`
+						: `<td class="mid"><span class="cov off">${__("—")}</span></td>`;
+				}).join("")}
+			</tr>`).join("")}</tbody></table>`);
+	}
+
 	function paintTable() {
 		const rows = shown();
 		const hues = jewelima.costHues();
@@ -162,7 +213,7 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 				<th>${__("Chart")}</th><th>${__("Dated")}</th>
 				<th class="num">14K</th><th class="num">18K</th><th class="num">22K</th>
 				<th class="num">${__("Making ₹/g")}</th><th class="num">${__("Diamond ₹/ct")}</th>
-				<th class="num">${__("Hallmark")}</th><th>${__("Stones")}</th><th>${__("Cannot price")}</th>
+				<th class="num">${__("Hallmark")}</th><th>${__("Stones")}</th><th>${__("To check")}</th>
 			</tr></thead><tbody>${rows.map((r) => {
 				const i = all.indexOf(r.chart_name);
 				const bk = r.bucket_rows || {};
@@ -190,14 +241,14 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 						__("{0} bracket(s)", [r.dmd_brackets])}</div></td>
 					<td class="num">${inr(r.hallmark)}</td>
 					<td>${esc(stones)}</td>
-					<td>${r.gaps.length
-						? r.gaps.map((g) => `<span class="gap">${esc(g)}</span>`).join("")
-						: `<span class="ok">${__("prices everything")}</span>`}</td>
+					<td>${r.checks.length
+						? r.checks.map((g) => `<span class="gap">${esc(g)}</span>`).join("")
+						: `<span class="ok">${__("nothing to check")}</span>`}</td>
 				</tr>`;
 			}).join("")}</tbody></table>`);
 	}
 
-	function paint() { paintKpis(S.data.kpis); paintCharts(); paintTable(); }
+	function paint() { paintKpis(S.data.kpis); paintCover(); paintCharts(); paintTable(); }
 
 	function load() {
 		return frappe.call({ method: API + ".get_costing_board", freeze: false }).then((r) => {

@@ -7,6 +7,10 @@
 // we agree with this party". Everything the chart holds is here in the order a
 // bill is built: gold, then making, then stones, then charges, then terms — so
 // reading down the page is reading a bill being priced.
+//
+// A section the chart does not price says so plainly and stays quiet: charts are
+// partial by design, and an empty Precious Stones table is a fact about this
+// party, not a fault. Only a real inconsistency is called out at the top.
 // Route: /app/costing-chart  (or /app/costing-chart/PCH-0001)
 
 frappe.pages["costing-chart"].on_page_load = function (wrapper) {
@@ -70,6 +74,11 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 		.cd-tools{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
 		.cd-tools select{height:26px;min-width:auto;font-size:12px;font-weight:400;}
 		.cd-none{padding:20px;text-align:center;color:var(--text-muted);font-size:12.5px;}
+		.cd-covers{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px;}
+		.cov{display:inline-block;border-radius:9px;padding:2px 10px;font-size:11.5px;font-weight:700;}
+		.cov.on{background:rgba(22,101,168,.13);color:#1665A8;}
+		.cov.off{background:var(--control-bg);color:var(--text-muted);opacity:.7;}
+		[data-theme="dark"] .cov.on{color:#7FB3DA;background:rgba(62,146,216,.18);}
 		.cd-terms{font-size:12.5px;white-space:pre-wrap;color:var(--text-muted);line-height:1.55;}
 		.cd-hist{display:flex;gap:7px;flex-wrap:wrap;font-size:11.5px;}
 		.cd-hist a{border:1px solid var(--border-color);border-radius:8px;padding:2px 9px;color:var(--text-color);}
@@ -101,8 +110,8 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			<span class="pill ${c.status === "Active" ? "act" : "sup"}">${esc(c.status)}</span></div>
 			<div class="meta">${esc(c.chart_date)}${c.age_days != null
 				? " · " + __("{0} days old", [c.age_days]) : ""} · ${esc(c.name)}</div>`);
-		root.find(".cd-gaps").html(c.gaps.length
-			? c.gaps.map((g) => `<span class="gap">${__("Cannot price")}: ${esc(g)}</span>`).join("")
+		root.find(".cd-gaps").html(c.checks.length
+			? c.checks.map((g) => `<span class="gap">${__("Check")}: ${esc(g)}</span>`).join("")
 			: "");
 
 		const K = ["14K", "18K", "22K"];
@@ -124,7 +133,7 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 				<td class="num">${r.rate ? inr2(r.rate) + (r.basis === "Per Gram" ? "/g" : r.basis === "Per Piece" ? "/pc" : "%") : "—"}</td>
 				<td class="num">${inr(r.min_per_piece)}</td>
 				<td class="num">${r.flat_below_gm ? flt(r.flat_below_gm).toFixed(3) + " g" : "—"}</td></tr>`,
-			__("No making rules — every piece asks for a manual price."));
+			__("Making is not priced on this chart — it is asked for on the bill."));
 
 		const quals = [...new Set(c.diamond.map((d) => d.quality || "—"))];
 		if (!quals.includes(S.quality)) S.quality = quals[0] || "";
@@ -134,13 +143,13 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			 <th class="num">${__("₹ per ct")}</th>`,
 			(r) => `<tr><td>${esc(r.sieve || "—")}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td class="num">${inr(r.rate)}</td></tr>`,
-			__("No diamond brackets."));
+			__("Diamonds are not priced on this chart."));
 
 		const ps = tableOr(c.precious,
 			`<th>${__("Stone")}</th><th class="num">${__("From ct")}</th><th class="num">${__("Below ct")}</th><th class="num">${__("₹ per ct")}</th>`,
 			(r) => `<tr><td>${esc(r.stone)}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td class="num">${inr(r.rate)}</td></tr>`,
-			__("No precious-stone rates — a PS piece cannot be scanned on this chart."));
+			__("Precious stones are not priced on this chart."));
 
 		const bnames = { cs: __("Colour stone"), cz: __("CZ"), cvd: __("CVD"), sw: __("Swarovski") };
 		const bk = Object.keys(bnames).flatMap((k) => (c.buckets[k] || []).map((r) => ({ ...r, b: bnames[k] })));
@@ -150,7 +159,7 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			(r) => `<tr><td>${esc(r.b)}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td>${esc(r.basis)}</td>
 				<td class="num">${inr(r.rate)}</td></tr>`,
-			__("No bucket rates."));
+			__("Colour stone, CZ, CVD and Swarovski are not priced on this chart."));
 
 		const cert = tableOr(c.cert,
 			`<th>${__("Charge")}</th><th>${__("Basis")}</th><th class="num">${__("Rate")}</th>
@@ -160,9 +169,17 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 				<td>${esc(r.basis)}</td><td class="num">${inr(r.rate)}</td>
 				<td class="num">${inr(r.min_amount)}</td>
 				<td>${r.to_ct ? `${ct(r.from_ct) || "0"} – ${ct(r.to_ct)} ct` : "—"}</td></tr>`,
-			__("No certification or hallmarking charges."));
+			__("No certification or hallmarking charge on this chart."));
+
+		const CN = { making: __("Making"), diamond: __("Diamond"), precious: __("Precious"),
+			buckets: __("CS / CZ / CVD / SW"), charges: __("Charges") };
+		const covers = `<div class="cd-covers">
+			<span class="cov on">${c.covers.gold === "touch" ? __("Gold on a touch") : __("Gold at the typed rate")}</span>
+			${Object.keys(CN).map((k) => `<span class="cov ${c.covers[k] ? "on" : "off"}">${
+				CN[k]}${c.covers[k] ? "" : " · " + __("not priced")}</span>`).join("")}</div>`;
 
 		root.find(".cd-body").html(`
+			${covers}
 			<div class="cd-sec">${__("Gold — what the metal is billed at")}</div>
 			<div class="cd-touch">${touch}</div>
 
@@ -177,7 +194,10 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			<div class="cd-cols">
 				<div class="cd-card">
 					<h3>${__("Rate by stone size")}</h3>
-					<p class="sub">${__("per-stone ct — total carats ÷ piece count picks the bracket")}</p>
+					<p class="sub">${c.dmd_span
+						? __("per-stone ct — total carats ÷ piece count picks the bracket. Priced from {0} to {1} ct.",
+							[c.dmd_span[0], c.dmd_span[1]])
+						: __("per-stone ct — total carats ÷ piece count picks the bracket")}</p>
 					<div class="cd-dmd"></div>
 				</div>
 				<div class="cd-card">
