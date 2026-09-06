@@ -138,7 +138,16 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 			: "");
 	}
 
-	const shown = () => (S.data.rows || []).filter((r) => !S.onlyActive || r.status === "Active");
+	// The server labels a chart with its version whenever the NAME is shared, but
+	// with "active only" on there is usually one chart per party — so drop the
+	// version again when nothing in view is ambiguous.
+	function shown() {
+		const rows = (S.data.rows || []).filter((r) => !S.onlyActive || r.status === "Active");
+		const n = {};
+		rows.forEach((r) => (n[r.chart_name] = (n[r.chart_name] || 0) + 1));
+		return rows.map((r) => Object.assign({}, r, {
+			label: n[r.chart_name] === 1 ? r.chart_name : r.label }));
+	}
 
 	function paintCharts() {
 		const rows = shown();
@@ -169,7 +178,9 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		const series = (curves[S.quality] || [])
 			.filter((s) => keys.includes(s.chart))
 			// the hue must follow the chart, not its position in this filtered list
-			.map((s) => ({ name: s.label, points: s.points, i: keys.indexOf(s.chart) }))
+			// the legend must read the same as the table, so take the shown label
+			.map((s) => ({ name: names[keys.indexOf(s.chart)], points: s.points,
+				i: keys.indexOf(s.chart) }))
 			.sort((a, b) => a.i - b.i);
 		jewelima.costStepChart(root.find(".cb-dmd"), {
 			title: __("Diamond ₹/ct"), series,
