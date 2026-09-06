@@ -142,21 +142,22 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 
 	function paintCharts() {
 		const rows = shown();
-		const names = rows.map((r) => r.chart_name);
+		const keys = rows.map((r) => r.name);
+		const names = rows.map((r) => r.label);
 		const K = S.data.karats;
 
 		jewelima.costDotPlot(root.find(".cb-touch"), {
 			title: __("Gold touch by karat"), series: names, fmt: (v) => pct(v),
 			empty: __("No chart carries a touch yet — every one bills at the rate typed on Sell."),
 			rows: K.map((k) => ({ label: k,
-				values: rows.map((r) => ({ series: r.chart_name, value: r.touch[k] })) })),
+				values: rows.map((r) => ({ series: r.label, value: r.touch[k] })) })),
 		});
 
 		jewelima.costDotPlot(root.find(".cb-making"), {
 			title: __("Making by karat"), series: names, fmt: (v) => inr(v),
 			empty: __("No karat-specific making rule on these charts."),
 			rows: K.map((k) => ({ label: k,
-				values: rows.map((r) => ({ series: r.chart_name, value: r.making_by_karat[k] })) })),
+				values: rows.map((r) => ({ series: r.label, value: r.making_by_karat[k] })) })),
 		});
 
 		const curves = S.data.curves || {};
@@ -166,9 +167,9 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		$q.html(quals.map((q) => `<option ${q === S.quality ? "selected" : ""}>${esc(q)}</option>`).join("")
 			|| `<option>${__("—")}</option>`);
 		const series = (curves[S.quality] || [])
-			.filter((s) => names.includes(s.chart))
+			.filter((s) => keys.includes(s.chart))
 			// the hue must follow the chart, not its position in this filtered list
-			.map((s) => ({ name: s.chart, points: s.points, i: names.indexOf(s.chart) }))
+			.map((s) => ({ name: s.label, points: s.points, i: keys.indexOf(s.chart) }))
 			.sort((a, b) => a.i - b.i);
 		jewelima.costStepChart(root.find(".cb-dmd"), {
 			title: __("Diamond ₹/ct"), series,
@@ -180,13 +181,12 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		const rows = shown();
 		const comps = S.data.components || [];
 		const hues = jewelima.costHues();
-		const all = rows.map((r) => r.chart_name);
 		root.find(".cb-cover").html(!rows.length ? "" : `
 			<table class="cb-t cb-cov"><thead><tr><th>${__("Chart")}</th>
 				${comps.map((c) => `<th class="mid">${esc(c.label)}</th>`).join("")}
 			</tr></thead><tbody>${rows.map((r, i) => `<tr class="clickable" data-n="${esc(r.name)}">
 				<td><span class="cb-swatch" style="background:${hues[i % hues.length]}"></span>
-					<span class="cb-nm">${esc(r.chart_name)}</span></td>
+					<span class="cb-nm">${esc(r.label)}</span></td>
 				${comps.map((c) => {
 					const v = (r.covers || {})[c.key];
 					if (c.key === "gold") {
@@ -204,8 +204,7 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 	function paintTable() {
 		const rows = shown();
 		const hues = jewelima.costHues();
-		const all = (S.data.rows || []).filter((r) => !S.onlyActive || r.status === "Active")
-			.map((r) => r.chart_name);
+		const all = rows.map((r) => r.name);
 		root.find(".cb-count").text(__("{0} chart(s) shown", [rows.length]));
 		root.find(".cb-table").html(!rows.length
 			? `<div class="cb-empty">${__("No price charts yet.")}</div>`
@@ -215,7 +214,7 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 				<th class="num">${__("Making ₹/g")}</th><th class="num">${__("Diamond ₹/ct")}</th>
 				<th class="num">${__("Hallmark")}</th><th>${__("Stones")}</th><th>${__("To check")}</th>
 			</tr></thead><tbody>${rows.map((r) => {
-				const i = all.indexOf(r.chart_name);
+				const i = all.indexOf(r.name);
 				const bk = r.bucket_rows || {};
 				const stones = [r.ps_rows ? `PS ${r.ps_rows}` : "", bk.cs ? `CS ${bk.cs}` : "",
 					bk.cz ? `CZ ${bk.cz}` : "", bk.cvd ? `CVD ${bk.cvd}` : "", bk.sw ? `SW ${bk.sw}` : ""]
@@ -227,7 +226,7 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 					: (r.dmd_min === r.dmd_max ? inr(r.dmd_min) : `${inr(r.dmd_min)}–${inr(r.dmd_max)}`);
 				return `<tr class="clickable ${r.status === "Active" ? "" : "sup"}" data-n="${esc(r.name)}">
 					<td><span class="cb-swatch" style="background:${hues[i % hues.length]}"></span>
-						<span class="cb-nm">${esc(r.chart_name)}</span>
+						<span class="cb-nm">${esc(r.label)}</span>
 						<span class="pill ${r.status === "Active" ? "act" : "sup"}">${esc(r.status)}</span></td>
 					<td>${esc(r.chart_date)}${r.age_days != null
 						? `<div style="font-size:11px;color:var(--text-muted);">${

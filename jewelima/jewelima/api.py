@@ -10241,15 +10241,28 @@ def get_costing_board():
 		"Price Chart", order_by="status asc, chart_date desc, creation desc", pluck="name")]
 	rows = [_chart_summary(d) for d in charts]
 
+	# A party keeps every chart it has ever had, all under one name, so the NAME
+	# does not identify a chart — the document does. Anything the page keys on
+	# (a series, a colour, a row) keys on d.name, and the label only adds the
+	# version when that name is carried by more than one chart.
+	seen_names = {}
+	for r in rows:
+		seen_names[r["chart_name"]] = seen_names.get(r["chart_name"], 0) + 1
+	for r in rows:
+		r["label"] = (r["chart_name"] if seen_names[r["chart_name"]] == 1
+			else "{0} · {1}".format(r["chart_name"], r["name"]))
+
 	# the diamond curve: rate against the PER-STONE weight the bracket starts at,
-	# one series per chart per quality — the page picks the quality to show
+	# one series per CHART DOCUMENT per quality — keyed on the name they share and
+	# the versions would pile into one line that never existed
+	label_of = {r["name"]: r["label"] for r in rows}
 	curves = {}
 	for d in charts:
 		for r in (d.get("diamond_rates") or []):
 			if flt(r.rate) <= 0:
 				continue
 			q = (r.quality or "").strip().upper() or "—"
-			curves.setdefault(q, {}).setdefault(d.chart_name, []).append(
+			curves.setdefault(q, {}).setdefault(d.name, []).append(
 				{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct), "rate": flt(r.rate),
 				 "sieve": r.sieve_label or ""})
 	for q in curves:
@@ -10264,8 +10277,8 @@ def get_costing_board():
 		r["chart_name"] == n and r["status"] == "Active" for r in rows))
 	return {
 		"rows": rows,
-		"curves": {q: [{"chart": nm, "points": pts} for nm, pts in sorted(curves[q].items())]
-			for q in sorted(curves)},
+		"curves": {q: [{"chart": nm, "label": label_of.get(nm, nm), "points": pts}
+			for nm, pts in sorted(curves[q].items())] for q in sorted(curves)},
 		"karats": list(KARATS),
 		"components": [
 			{"key": "gold", "label": frappe._("Gold")},
