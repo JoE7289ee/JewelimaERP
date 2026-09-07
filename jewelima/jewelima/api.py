@@ -10245,7 +10245,17 @@ def get_provider_rates(name=None):
 	cards = frappe.get_all("Provider Rate",
 		fields=["name", "supplier", "rate_date", "status", "currency_note"],
 		order_by="status asc, rate_date desc, creation desc")
-	out = {"list": [dict(c) | {"rate_date": str(c.rate_date or "")} for c in cards], "card": None,
+	# the entry page shows how much is ON a card without opening it — a card with
+	# no lines at all is the one worth spotting from the list
+	counts = {}
+	for tbl, key in (("Provider Making Rate", "making"), ("Provider Metal Rate", "metal"),
+			("Provider Diamond Rate", "diamond")):
+		for r in frappe.get_all(tbl, filters={"parenttype": "Provider Rate"},
+				fields=["parent", {"COUNT": "*"}], group_by="parent"):
+			vals = list(r.values())
+			counts.setdefault(r.get("parent"), {})[key] = [v for k, v in r.items() if k != "parent"][0]
+	out = {"list": [dict(c) | {"rate_date": str(c.rate_date or ""),
+			"counts": counts.get(c.name) or {}} for c in cards], "card": None,
 		"suppliers": frappe.get_all("Supplier", pluck="name", order_by="name"),
 		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
 		"karats": list(KARATS)}

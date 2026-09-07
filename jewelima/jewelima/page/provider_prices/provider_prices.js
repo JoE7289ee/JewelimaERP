@@ -78,26 +78,13 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 		.pp-card.on{border:2px solid #1f618d;background:rgba(31,97,141,.07);}
 		.pp-card .nm{font-weight:800;font-size:13.5px;}
 		.pp-card .meta{font-size:11px;color:var(--text-muted);}
-		/* the editor grid */
-		table.pe-t{width:100%;border-collapse:collapse;font-size:12.5px;}
-		table.pe-t th{text-align:left;font-size:10px;text-transform:uppercase;color:var(--text-muted);
-			padding:5px 7px;border-bottom:1px solid var(--border-color);}
-		table.pe-t td{padding:3px 6px;border-bottom:1px solid var(--border-color);}
-		table.pe-t input,table.pe-t select{width:100%;border:1px solid var(--border-color);
-			border-radius:6px;padding:3px 7px;font-size:12.5px;background:var(--control-bg);
-			color:var(--text-color);}
-		table.pe-t input[type=number]{text-align:right;}
-		.pe-del{color:#b02a2a;cursor:pointer;font-weight:800;text-align:center;}
-		.pe-add{font-size:11.5px;color:#1f618d;cursor:pointer;font-weight:700;}
-		.pe-sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
-			color:var(--text-muted);margin:14px 0 6px;display:flex;justify-content:space-between;}
 		</style>
 		<div class="pp-bar">
 			<div><label>${__("Our price chart")}</label><select class="pp-chart"></select></div>
 			<div><label>${__("24K board rate ₹/g")}</label>
 				<input type="number" class="pp-gold" step="1" placeholder="${__("for metal")}"></div>
 			<span class="pp-actions">
-				<button class="pp-btn pp-new">${__("New rate card")}</button>
+				<button class="pp-btn pp-edit">${__("Add / edit rates")}</button>
 			</span>
 		</div>
 		<div class="pp-sec">${__("Provider rate cards")}</div>
@@ -126,7 +113,9 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 					<span class="pill ${c.status === "Active" ? "act" : "sup"}">${esc(c.status)}</span></div>
 				<div class="meta">${esc(c.rate_date)} · ${esc(c.name)}</div>
 			</div>`).join("")
-			: `<div class="pp-empty">${__("No provider rate cards yet — add one to see what a maker charges against what we charge.")}</div>`);
+			: `<div class="pp-empty">${__("No provider rate cards yet.")}
+				<a class="pp-edit" style="cursor:pointer;">${__("Add one on Provider Rates")}</a>
+				${__("and this page will show what we keep on it.")}</div>`);
 	}
 
 	function paintMargins() {
@@ -222,132 +211,22 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 			});
 	}
 
-	// ---- the rate card editor ------------------------------------------------
-	function showEditor(base) {
-		const C = base ? JSON.parse(JSON.stringify(base)) : {
-			supplier: "", rate_date: frappe.datetime.get_today(), currency_note: "", notes: "",
-			making_rates: [], diamond_rates: [], metal_rates: [] };
-		// a saved card is history; opening one starts the NEXT card from its rates
-		const isNew = !base;
-		const dlg = new frappe.ui.Dialog({
-			title: isNew ? __("New rate card") : __("New card from {0}", [base.supplier]),
-			size: "extra-large",
-			primary_action_label: __("Save as the provider's current rates"),
-			primary_action() {
-				if (!C.supplier) return frappe.msgprint(__("Pick the provider."));
-				frappe.call({ method: API + ".save_provider_rate",
-					args: { payload: JSON.stringify(C) } }).then((r) => {
-					dlg.hide();
-					frappe.show_alert({ indicator: "green",
-						message: __("Saved — {0} is now on this card.", [C.supplier]) }, 5);
-					load((r.message || {}).name);
-				});
-			},
-		});
-		const $b = $(dlg.body);
-		const KAR = S.meta.karats || ["14K", "18K", "22K"];
-		const DT = S.meta.design_types || [];
-
-		function draw() {
-			$b.html(`
-				<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;">
-					<div><label style="font-size:10.5px;color:var(--text-muted);display:block;">${__("Provider")}</label>
-						<select class="pe-sup" style="min-width:200px;height:30px;border:1px solid var(--border-color);border-radius:7px;background:var(--control-bg);color:var(--text-color);">
-							<option value="">${__("— pick —")}</option>
-							${(S.meta.suppliers || []).map((s) =>
-								`<option ${s === C.supplier ? "selected" : ""}>${esc(s)}</option>`).join("")}
-						</select></div>
-					<div><label style="font-size:10.5px;color:var(--text-muted);display:block;">${__("Quoted on")}</label>
-						<input type="date" class="pe-date" value="${esc(C.rate_date)}"
-							style="height:30px;border:1px solid var(--border-color);border-radius:7px;background:var(--control-bg);color:var(--text-color);padding:2px 8px;"></div>
-					<div style="flex:1;min-width:200px;"><label style="font-size:10.5px;color:var(--text-muted);display:block;">${__("Reference")}</label>
-						<input type="text" class="pe-ref" value="${esc(C.currency_note || "")}"
-							placeholder="${__("their email, a call, a rate sheet")}"
-							style="width:100%;height:30px;border:1px solid var(--border-color);border-radius:7px;background:var(--control-bg);color:var(--text-color);padding:2px 8px;"></div>
-				</div>
-
-				<div class="pe-sec">${__("Making — what they charge us")}<span class="pe-add" data-k="making_rates">+ ${__("row")}</span></div>
-				<table class="pe-t"><thead><tr><th>${__("Karat")}</th><th>${__("Design type")}</th>
-					<th>${__("Basis")}</th><th>${__("Rate")}</th><th>${__("Min ₹/pc")}</th><th></th></tr></thead>
-					<tbody>${C.making_rates.map((r, i) => `<tr data-k="making_rates" data-i="${i}">
-						<td><select data-f="karat"><option value="">${__("any")}</option>
-							${KAR.map((k) => `<option ${r.karat === k ? "selected" : ""}>${k}</option>`).join("")}</select></td>
-						<td><select data-f="design_type"><option value="">${__("DEFAULT")}</option>
-							${DT.map((t) => `<option ${r.design_type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></td>
-						<td><select data-f="basis">${["Per Gram", "Per Piece"].map((b) =>
-							`<option ${(r.basis || "Per Gram") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
-						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
-						<td><input data-f="min_per_piece" type="number" step="0.01" value="${r.min_per_piece || ""}"></td>
-						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
-
-				<div class="pe-sec">${__("Metal — ₹ per gram")}<span class="pe-add" data-k="metal_rates">+ ${__("row")}</span></div>
-				<table class="pe-t"><thead><tr><th>${__("Karat")}</th><th>${__("Rate ₹/g")}</th><th></th></tr></thead>
-					<tbody>${C.metal_rates.map((r, i) => `<tr data-k="metal_rates" data-i="${i}">
-						<td><select data-f="karat">${["14K", "18K", "22K", "24K / fine"].map((k) =>
-							`<option ${r.karat === k ? "selected" : ""}>${k}</option>`).join("")}</select></td>
-						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
-						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
-
-				<div class="pe-sec">${__("Diamonds — ₹ per carat")}<span class="pe-add" data-k="diamond_rates">+ ${__("row")}</span></div>
-				<table class="pe-t"><thead><tr><th>${__("Sieve")}</th><th>${__("From ct")}</th>
-					<th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
-					<tbody>${C.diamond_rates.map((r, i) => `<tr data-k="diamond_rates" data-i="${i}">
-						<td><input data-f="sieve_label" value="${esc(r.sieve_label || "")}"></td>
-						<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
-						<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
-						<td><input data-f="quality" value="${esc(r.quality || "")}" placeholder="VVS-EF"></td>
-						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
-						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
-
-				<div class="pe-sec">${__("Notes")}</div>
-				<textarea class="pe-notes" rows="2" style="width:100%;border:1px solid var(--border-color);border-radius:7px;background:var(--control-bg);color:var(--text-color);padding:5px 8px;font-size:12.5px;">${esc(C.notes || "")}</textarea>
-			`);
-		}
-		draw();
-
-		$b.on("change", ".pe-sup", function () { C.supplier = this.value; });
-		$b.on("change", ".pe-date", function () { C.rate_date = this.value; });
-		$b.on("input", ".pe-ref", function () { C.currency_note = this.value; });
-		$b.on("input", ".pe-notes", function () { C.notes = this.value; });
-		$b.on("input change", "table.pe-t input, table.pe-t select", function () {
-			const $tr = $(this).closest("tr");
-			const arr = C[$tr.data("k")], i = +$tr.data("i");
-			arr[i][$(this).data("f")] = this.type === "number" ? flt(this.value) : this.value;
-		});
-		$b.on("click", ".pe-add", function () {
-			const k = $(this).data("k");
-			C[k].push(k === "making_rates" ? { karat: "", design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
-				: k === "metal_rates" ? { karat: "18K", rate: "" }
-				: { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" });
-			draw();
-		});
-		$b.on("click", ".pe-del", function () {
-			const $tr = $(this).closest("tr");
-			C[$tr.data("k")].splice(+$tr.data("i"), 1);
-			draw();
-		});
-		dlg.show();
-	}
-
-	root.on("click", ".pp-new", () => showEditor(null));
-	// clicking a card selects it for the comparison; double-click opens it as the
-	// starting point for the provider's next quote
+	// clicking a card puts it in the comparison, or takes it out. Entering rates
+	// is a different job at a different moment — it lives on Provider Rates.
 	root.on("click", ".pp-card", function () {
 		const n = $(this).data("n");
 		S.pick.has(n) ? S.pick.delete(n) : S.pick.add(n);
 		paintCards();
 		loadMargins();
 	});
-	root.on("dblclick", ".pp-card", function () {
-		frappe.call({ method: API + ".get_provider_rates", args: { name: $(this).data("n") } })
-			.then((r) => showEditor((r.message || {}).card));
-	});
+	root.on("click", ".pp-edit", () => frappe.set_route("provider-rates"));
 	root.on("change", ".pp-chart", function () { S.chart = this.value; loadMargins(); });
 	root.on("input", ".pp-gold", frappe.utils.debounce(function () {
 		S.gold = flt(this.value); loadMargins();
 	}, 400));
 
-	page.set_primary_action(__("Refresh"), () => load(S.card && S.card.name), "refresh");
+	page.set_secondary_action(__("Provider Rates"), () => frappe.set_route("provider-rates"));
+	page.set_primary_action(__("Refresh"), () => load(), "refresh");
 	frappe.call({ method: API + ".get_price_chart_list" }).then((r) => {
 		// the list comes grouped by party — one Active chart each, plus history.
 		// A margin must be read against the chart that is Active TODAY.

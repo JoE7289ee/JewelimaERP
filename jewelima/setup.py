@@ -428,7 +428,7 @@ JEWELIMA_INFO_ROLE = "JW Info"
 # Read-only: neither page writes a chart, and save_price_chart still refuses
 # anyone outside its own list.
 JEWELIMA_COSTING_ROLE = "JW Costing"
-JEWELIMA_COSTING_PAGES = ["costing-board", "costing-chart", "provider-prices"]
+JEWELIMA_COSTING_PAGES = ["costing-board", "costing-chart", "provider-prices", "provider-rates"]
 JEWELIMA_COSTING_READ = ["Price Chart", "Design Type", "Charge Category", "Item", "Customer",
 	"Supplier", "Provider Rate"]
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]

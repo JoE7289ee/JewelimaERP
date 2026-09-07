@@ -2326,6 +2326,18 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "file-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Provider Rates",
+   "link_to": "provider-rates",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "coins",
    "indent": 0,
    "keep_closed": 0,
@@ -2752,7 +2764,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-07 12:08:10.789605",
+ "modified": "2026-09-07 12:23:33.628687",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

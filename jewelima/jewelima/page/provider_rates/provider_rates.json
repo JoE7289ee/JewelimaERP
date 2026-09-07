@@ -1,32 +1,26 @@
 {
  "content": null,
- "creation": "2026-07-02 11:00:00",
+ "creation": "2026-09-07 07:10:00.000000",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-07 12:23:44.645139",
+ "modified": "2026-09-07 07:10:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "design-types",
+ "name": "provider-rates",
  "owner": "Administrator",
- "page_name": "design-types",
+ "page_name": "provider-rates",
  "roles": [
   {
    "role": "System Manager"
   },
   {
-   "role": "Stock Manager"
-  },
-  {
-   "role": "JW Manager"
-  },
-  {
-   "role": "Jewelima Ordering"
+   "role": "JW Costing"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Design Types"
+ "title": "Provider Rates"
 }
