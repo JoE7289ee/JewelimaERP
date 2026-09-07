@@ -184,14 +184,24 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// one line's own placement: alignment inside its box, its own type size if it
 	// was given one, and a nudge that moves it without moving the box
 	const L = Object.assign({}, D.lines, o.lines || {});
-	const ln = (k) => {
+	const ln = (k, hide) => {
 		const s = L[k] || {};
 		return `class="bc-ln" style="text-align:${s.align || "left"};`
 			+ (flt(s.pt) ? `font-size:${flt(s.pt)}pt;` : "")
 			+ (flt(s.dx) ? `left:${flt(s.dx).toFixed(3)}in;` : "")
 			+ (flt(s.dy) ? `top:${flt(s.dy).toFixed(3)}in;` : "")
+			+ (hide ? "visibility:hidden;" : "")
 			+ `"`;
 	};
+	// A line the operator switched OFF must not move the lines under it: the
+	// layout was tuned against the tag as a whole, so unticking Gold colour has
+	// to leave a hole, not pull the design and the card number up a line. The
+	// slot is held by a hidden glyph, which reserves exactly one line box at
+	// whatever type size that line carries.
+	//
+	// A line missing because the piece HAS no such value is different and still
+	// collapses — a tag for a piece with no stones is genuinely a shorter tag.
+	const slot = (k) => `<div ${ln(k, true)}>0</div>`;
 
 	// A — what the piece weighs and what is in it, then the code square
 	const gwText = (o.gwLine || D.gwLine).replace("{gw}", flt(c.gw).toFixed(3));
@@ -202,6 +212,7 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// placeable on its own. Joined: the single line every tag has carried.
 	let stoneRows = sp.head ? `<div ${ln("stone")}>${sp.head}/${sp.wt}</div>` : "";
 	if (fam) stoneRows += `<div ${ln("family")}>${fam}</div>`;
+	else if (famRaw) stoneRows += slot("family");     // switched off, not absent
 	const left = `<div class="bc-col bc-left"><div ${ln("gw")}>${esc(gwText)}</div>`
 		+ stoneRows + `</div>`;
 	const qr = c.qr
@@ -221,7 +232,9 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// floor reads it as. A piece whose karat could not be resolved still gets the
 	// plain YG rather than nothing, because a colour is worth having either way.
 	const colCode = c.gold_code || c.gold_color || "";
-	const colLine = o.showColor && colCode ? `<div ${ln("colour")}>${esc(colCode)}</div>` : "";
+	const colLine = colCode
+		? (o.showColor ? `<div ${ln("colour")}>${esc(colCode)}</div>` : slot("colour"))
+		: "";
 	const free = o.freeText ? `<div ${ln("free")}>${esc(o.freeText)}</div>` : "";
 	// a two-character code the run is stamped with — a counter, a tray, a batch
 	const free2 = o.freeText2 ? `<div ${ln("free2")}>${esc(o.freeText2)}</div>` : "";
