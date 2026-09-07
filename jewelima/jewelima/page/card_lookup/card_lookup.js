@@ -1,228 +1,463 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Card Lookup (Info) — the read-only card view.
-//
-// Card Info answers everything about a card, which is what the floor needs when
-// something has gone wrong: where it travelled, who worked on it, what was
-// issued, the material change trail. Most people looking a card up are not
-// investigating — they want to know where it is, whose it is, and what it
-// weighs right now. That is this page, and nothing else.
-//
-// Deliberately absent: Where it travelled, Who worked on it, issue details, the
-// material history and the costing. They are not hidden — they are on Card Info,
-// which the managers hold.
-// Route: /app/card-lookup
+// Card Info — scan a card to see everything about it: where it is, where it
+// travelled, who worked on it, plan vs actual weights, current contents. Slim +
+// printable (Print opens a clean one-page view). Route: /app/card-info
 
 frappe.pages["card-lookup"].on_page_load = function (wrapper) {
-	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Card Lookup"), single_column: true });
+	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Card Lookup", single_column: true });
+	const state = { data: null };
+
+	const CSS = `
+	.ci-wrap{max-width:none;width:100%;}
+	.ci-img{height:84px;width:84px;object-fit:cover;border-radius:8px;border:1px solid #e2e6ea;margin:0 12px;cursor:zoom-in;}
+	.ci-photo{display:flex;flex-direction:column;align-items:center;gap:5px;}
+	.ci-due{font-size:11px;font-weight:800;border-radius:10px;padding:2px 9px;white-space:nowrap;}
+	.ci-due.ok{background:#eaf6ec;color:#1d7a33;}
+	.ci-due.warn{background:#fff3cd;color:#8a6d00;}
+	.ci-due.late{background:#fdecea;color:#b02a2a;}
+	.ci-locstat{font-size:11px;font-weight:800;color:#8a6d00;margin-top:3px;}
+	.ci-loc-link{color:#1f618d;cursor:pointer;}
+	.ci-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out;}
+	.ci-lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;background:#fff;}
+	.ci-head{display:flex;justify-content:space-between;align-items:flex-start;border:1px solid #e2e6ea;border-radius:9px;padding:10px 14px;background:#fff;margin-bottom:8px;}
+	.ci-code{font-size:20px;font-weight:800;letter-spacing:.4px;}
+	.ci-sub{color:#6b7785;font-size:12px;margin-top:2px;}
+	.ci-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;margin-top:6px;}
+	.ci-badge.prod{background:#eaf6ec;color:#1d7a33;}
+	.ci-badge.wip{background:#eef2f7;color:#5a6b7b;}
+	.ci-badge.pre{background:#fdf3e7;color:#9a6b1f;}
+	.ci-badge.rw{background:#fbf0dc;color:#8a5a00;}
+	.ci-rw{margin-top:6px;}
+	.ci-rw .row{display:flex;gap:10px;align-items:baseline;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border-color);}
+	.ci-rw .row:last-child{border-bottom:none;}
+	.ci-rw .w{font-weight:700;white-space:nowrap;}
+	.ci-rw .m{color:var(--text-muted);font-size:11px;}
+	.ci-loc{font-size:11px;color:#8a96a3;text-align:right;}
+	.ci-loc b{font-size:16px;color:#222;display:block;margin-top:2px;}
+	.ci-sec{border:1px solid #e2e6ea;border-radius:9px;padding:9px 14px;background:#fff;margin-bottom:8px;}
+	.ci-sec h4{margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#8a96a3;}
+	.ci-2col{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;}
+	.ci-2col > .ci-sec{flex:1 1 300px;}
+	.ci-kvs{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;}
+	.ci-kvs .k{color:#8a96a3;}
+	.ci-line{font-size:13px;margin:2px 0;}
+	.ci-line .tag{display:inline-block;min-width:46px;color:#8a96a3;font-size:11px;font-weight:700;text-transform:uppercase;}
+	.ci-line.muted{color:#6b7785;}
+	.ci-chain{font-size:13px;line-height:1.7;}
+	.ci-chain .ar{color:#b3bdc7;margin:0 3px;}
+	table.ci-tbl{width:100%;border-collapse:collapse;font-size:12px;}
+	table.ci-tbl th,table.ci-tbl td{border-bottom:1px solid #eef1f4;padding:3px 6px;text-align:left;}
+	table.ci-tbl th{color:#8a96a3;font-weight:700;font-size:11px;}
+	table.ci-tbl td.num,table.ci-tbl th.num{text-align:right;}
+	.ci-empty{color:#8a96a3;}
+	`;
+
+	// screen-only colour layer — print_window gets CSS only, so paper stays clean
+	const SCREEN_CSS = `
+	.ci-head{border-left:4px solid #1f618d;}
+	.ci-loc b{color:#1f618d;}
+	.ci-kvs > span{font-weight:600;color:#222;}
+	.ci-kvs .k{font-weight:400;color:#8a96a3;margin-right:3px;}
+	.ci-sec{border-left:3px solid #e2e6ea;}
+	.ci-sec.acc-gold{border-left-color:#b7791f;}
+	.ci-sec.acc-gold h4{color:#b7791f;}
+	.ci-sec.acc-blue{border-left-color:#1f618d;}
+	.ci-sec.acc-blue h4{color:#1f618d;}
+	.ci-sec.acc-green{border-left-color:#1d7a33;}
+	.ci-sec.acc-green h4{color:#1d7a33;}
+	.ci-sec.acc-red{border-left-color:#b02a2a;}
+	.ci-sec.acc-amber{border-left-color:#b8860b;}
+	.ci-sec.acc-red h4{color:#b02a2a;}
+	.ci-mtbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
+	.ci-mtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;color:#8a8a8a;border-bottom:1px solid #e3e3e3;padding:2px 4px;}
+	.ci-mtbl td{padding:2px 4px;border-bottom:1px solid #f2f2f2;}
+	.ci-mtbl td.n{white-space:nowrap;}
+	.ci-mtbl td.b{font-weight:700;font-size:10px;text-transform:uppercase;}
+	.ci-mtbl tr.m-added td.b{color:#1d7a33;} .ci-mtbl tr.m-added td{background:#f3faf4;}
+	.ci-mtbl tr.m-removed td.b{color:#b02a2a;} .ci-mtbl tr.m-removed td{background:#fdf4f4;text-decoration:line-through;}
+	.ci-mtbl tr.m-changed td.b{color:#7a5b00;} .ci-mtbl tr.m-changed td{background:#fffaf0;}
+	.ci-mtbl.hist{margin-top:8px;}
+	.ci-mnote{font-size:10px;color:#8a8a8a;margin-top:3px;}
+	table.ci-tbl th{background:#f4f7fa;}
+	table.ci-tbl td.num b{color:#b02a2a;}
+	.ci-line b{color:#222;}
+	.ci-chain b{color:#1f618d;}
+	`;
+	$(page.main).append(`<style>${CSS}</style><style>${SCREEN_CSS}</style>
+		<div class="ci-bar" style="max-width:420px;margin:2px 0 12px;"></div>
+		<div class="ci-out ci-wrap"></div>`);
+
+	const scan = frappe.ui.form.make_control({
+		df: { fieldtype: "Data", label: "Scan Order Bag", fieldname: "scan", description: "Scan a card to see its full history." },
+		parent: $(page.main).find(".ci-bar").get(0), render_input: true,
+	});
+	scan.refresh();
+	frappe.call({ method: "jewelima.jewelima.api.get_print_branding" }).then((r) => (state.branding = r.message || {}));
+	const $out = $(page.main).find(".ci-out");
 	const esc = frappe.utils.escape_html;
-	const flt = (v) => parseFloat(v) || 0;
+	const flt = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 	const g = (v) => flt(v).toFixed(3);
-	const root = $(page.main);
+	const focusScan = () => setTimeout(() => scan.$input.focus(), 30);
 
-	root.append(`
-		<style>
-		#page-card-lookup .container{max-width:900px;}
-		.cl-bar{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;
-			border:1px solid var(--border-color);border-radius:13px;padding:13px 16px;background:var(--fg-color);}
-		.cl-bar label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
-			color:var(--text-muted);margin-bottom:3px;}
-		.cl-bar input{border:2px solid var(--primary);border-radius:8px;height:36px;width:260px;
-			padding:2px 12px;font-size:15px;font-weight:600;background:var(--control-bg);color:var(--text-color);}
-		.cl-msg{margin:6px 0 12px;font-size:13px;font-weight:600;min-height:18px;color:#b02a2a;}
-
-		/* the answer to "where is it" is the biggest thing on the page */
-		.cl-head{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;
-			border:1px solid var(--border-color);border-radius:13px;padding:16px 18px;
-			background:var(--fg-color);margin-bottom:14px;}
-		.cl-id{flex:1 1 240px;min-width:0;}
-		.cl-code{font-size:23px;font-weight:800;line-height:1.15;word-break:break-all;}
-		.cl-design{font-size:13px;color:var(--text-muted);margin-top:2px;}
-		.cl-badge{display:inline-block;margin-top:8px;border-radius:9px;padding:2px 10px;
-			font-size:10.5px;font-weight:800;letter-spacing:.04em;}
-		.cl-badge.pre{background:rgba(128,128,128,.16);color:var(--text-muted);}
-		.cl-badge.wip{background:rgba(31,97,141,.14);color:#1f618d;}
-		.cl-badge.prod{background:rgba(29,122,51,.15);color:#1d7a33;}
-		[data-theme="dark"] .cl-badge.wip{color:#7FB3DA;}
-		[data-theme="dark"] .cl-badge.prod{color:#6fbf7f;}
-		.cl-where{text-align:right;min-width:170px;}
-		.cl-where .k{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}
-		.cl-where .v{font-size:26px;font-weight:800;line-height:1.2;color:#1f618d;}
-		[data-theme="dark"] .cl-where .v{color:#7FB3DA;}
-		.cl-where .s{font-size:11.5px;color:var(--text-muted);}
-		.cl-photo img{max-height:84px;border-radius:9px;border:1px solid var(--border-color);cursor:zoom-in;}
-
-		.cl-sec{border:1px solid var(--border-color);border-left:3px solid var(--border-color);
-			border-radius:11px;background:var(--fg-color);padding:12px 15px;margin-bottom:12px;}
-		.cl-sec h4{margin:0 0 8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
-			color:var(--text-muted);font-weight:700;}
-		.cl-sec.gold{border-left-color:#b7791f;} .cl-sec.gold h4{color:#b7791f;}
-		.cl-sec.blue{border-left-color:#1f618d;} .cl-sec.blue h4{color:#1f618d;}
-		[data-theme="dark"] .cl-sec.gold h4{color:#d2a43f;}
-		[data-theme="dark"] .cl-sec.blue h4{color:#7FB3DA;}
-		/* label above value, so a long party name never collides with the next pair */
-		.cl-kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:11px 16px;}
-		.cl-kv .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;
-			color:var(--text-muted);}
-		.cl-kv .v{font-size:14px;font-weight:600;word-break:break-word;}
-		.cl-kv a{color:#1f618d;cursor:pointer;font-weight:700;}
-		[data-theme="dark"] .cl-kv a{color:#7FB3DA;}
-		.cl-line{font-size:13.5px;line-height:1.9;}
-		.cl-line b{font-variant-numeric:tabular-nums;}
-		.cl-empty{color:var(--text-muted);font-size:13px;}
-		.cl-lightbox{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;
-			align-items:center;justify-content:center;z-index:1000;cursor:zoom-out;}
-		.cl-lightbox img{max-width:92vw;max-height:92vh;}
-		</style>
-		<div class="cl-bar">
-			<div><label>${__("Scan or type a card")}</label>
-				<input type="text" class="cl-scan" placeholder="${__("E7559.1.1")}"></div>
-		</div>
-		<div class="cl-msg"></div>
-		<div class="cl-out"></div>
-	`);
-
-	const $scan = root.find(".cl-scan");
-	const $out = root.find(".cl-out");
-	const focusScan = () => setTimeout(() => $scan.trigger("focus"), 30);
-	const msg = (h) => root.find(".cl-msg").html(h || "");
-
-	const kv = (k, v) => (v == null || v === ""
-		? "" : `<div class="cl-kv"><span class="k">${k}</span><span class="v">${esc("" + v)}</span></div>`);
-	const dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
-
-	// the same weight line Card Info prints, so a weight read here and a weight
-	// read there are the same number in the same order
-	function weights(b) {
+	// compact weight line, skipping anything zero/empty
+	function wline(v, pure) {
 		const p = [];
-		if (flt(b.act_gross_weight)) p.push(`${__("Gross")} <b>${g(b.act_gross_weight)}</b> g`);
-		if (flt(b.act_nett_weight)) p.push(`${__("Nett")} <b>${g(b.act_nett_weight)}</b> g`);
-		if (flt(b.act_pure_weight)) p.push(`${__("Pure")} <b>${g(b.act_pure_weight)}</b> g`);
-		if (flt(b.act_purity)) p.push(`<b>${flt(b.act_purity).toFixed(1)}%</b>`);
-		[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CZ", "cz"],
-		 ["CVD", "cvd"], ["SW", "sw"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, k]) => {
-			const no = b["act_" + k + "_no"], w = b["act_" + k + "_weight"];
-			if (no || flt(w)) p.push(`${lb} <b>${no || 0}</b>/<b>${g(w)}</b> ct`);
+		if (flt(v.gross)) p.push(`Gross <b>${g(v.gross)}</b>g`);
+		if (flt(v.nett)) p.push(`Nett <b>${g(v.nett)}</b>g`);
+		if (pure && flt(v.pure)) p.push(`Pure <b>${g(v.pure)}</b>g`);
+		if (flt(v.purity)) p.push(`<b>${flt(v.purity).toFixed(1)}%</b>`);
+		[["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CZ", "cz"], ["CVD", "cvd"], ["SW", "sw"], ["PDMD", "pdmd"], ["POTH", "poth"]].forEach(([lb, b]) => {
+			if (v[b + "_no"] || flt(v[b + "_w"])) p.push(`${lb} <b>${v[b + "_no"] || 0}</b>/<b>${g(v[b + "_w"])}</b>ct`);
 		});
 		return p.join(" &middot; ");
 	}
 
-	function render(d) {
-		const b = d.bag || {};
-		const act = weights(b);
-		const contents = (((d.contents || {}).items) || [])
-			.map((m) => `${esc(m.item)} <b>${m.pcs ? m.pcs + " / " : ""}${m.qty} ${esc(m.uom || "")}</b>`)
-			.join(" &middot; ");
+	// forPrint = the concise one-pager (chain + slim tables); screen = everything.
+	function buildHTML(d, forPrint) {
+		const b = d.bag;
+		const kv = (k, v) => (v == null || v === "" ? "" : `<span><span class="k">${k}</span> ${esc("" + v)}</span>`);
+		const dt = (v) => (v ? frappe.datetime.str_to_user(v) : "");
+		const dtt = (v) => (v ? frappe.datetime.str_to_user(v) + " " + (("" + v).split(" ")[1] || "").slice(0, 5) : "—");
+		// humanised gap between two timestamps (to=null → until now) — "how long it stayed"
+		const fmtDur = (from, to) => {
+			if (!from) return "";
+			const ms = moment(to || undefined).diff(moment(from));
+			if (!(ms > 0)) return "";
+			const mins = Math.floor(ms / 60000), dd = Math.floor(mins / 1440), hh = Math.floor((mins % 1440) / 60), mm = mins % 60;
+			return dd ? `${dd}d ${hh}h` : hh ? `${hh}h ${mm}m` : `${mm}m`;
+		};
+		const finished = b.is_finished;
+
+		const bkt = (src, pre) => {
+			const o = {};
+			["dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth"].forEach((k) => { o[k + "_no"] = src[pre + k + "_no"]; o[k + "_w"] = src[pre + k + "_weight"]; });
+			return o;
+		};
+		const act = wline({ gross: b.act_gross_weight, nett: b.act_nett_weight, pure: b.act_pure_weight, purity: b.act_purity, ...bkt(b, "act_") }, true);
+		const plan = wline({ gross: b.gross_weight, nett: b.nett_weight, purity: b.purity, ...bkt(b, "") }, false);
+
+		const contents = (d.contents.items || []).map((m) => `${esc(m.item)} <b>${m.pcs ? m.pcs + " / " : ""}${m.qty} ${esc(m.uom || "")}</b>`).join(" &middot; ") || '<span class="ci-empty">Empty</span>';
+
+		// travel: print = the compact location chain; screen = the full trail with when/who
+		let travel = '<span class="ci-empty">No transfers yet.</span>';
+		if ((d.transfers || []).length) {
+			if (forPrint) {
+				const locs = [d.transfers[0].from_location || "—"].concat(d.transfers.map((t) => t.to_location || ""));
+				travel = locs.map((l) => `<b>${esc(l)}</b>`).join('<span class="ar">&rarr;</span>');
+			} else {
+				travel = `<table class="ci-tbl"><thead><tr><th>From</th><th>To</th><th>When</th><th>Stayed</th><th>By</th></tr></thead><tbody>${d.transfers
+					.map((t, i) => {
+						const nextT = d.transfers[i + 1];
+						const stayed = fmtDur(t.transfer_time, nextT ? nextT.transfer_time : null);
+						return `<tr${t.from_parent ? ' style="opacity:.62;"' : ""}><td>${esc(t.from_location || "—")}${t.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td><b>${esc(t.to_location || "")}</b></td><td>${dtt(t.transfer_time)}</td><td>${stayed}${!nextT && stayed ? ' <span class="ci-empty" style="font-size:10px;">so far</span>' : ""}</td><td>${esc(t.transferred_by || "")}</td></tr>`;
+					})
+					.join("")}</tbody></table>`;
+			}
+		}
+
+		// bench work: print = slim (bench/employee/status/loss, active rows only);
+		// screen = every stage with in/out times and weights
+		let stageTbl = '<span class="ci-empty">No bench work yet.</span>';
+		if (forPrint) {
+			const stages = (d.stages || []).filter((s) => s.is_issue && (s.employee_name || flt(s.loss)));
+			const rows = stages.map((s) => `<tr><td><b>${esc(s.bench || "")}</b></td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td><td class="num">${flt(s.loss) ? g(s.loss) : ""}</td></tr>`).join("");
+			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
+		} else {
+			// "who worked on it" — only stages with a tagged employee; the placeholder
+			// records created on transfer-in (no employee) that expire on move-out drop out
+			const rows = (d.stages || []).filter((s) => s.employee_name).map((s) => `<tr${s.from_parent ? ' style="opacity:.62;"' : ""}>
+				<td><b>${esc(s.bench || "")}</b>${s.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td><td>${esc(s.employee_name || "—")}</td><td>${esc(s.status || "")}</td>
+				<td>${esc(s.work_type || "")}</td><td>${esc(s.collection_state || "")}</td>
+				<td>${dtt(s.issued_at || s.time_in)}</td><td>${dtt(s.receipted_at || s.time_out)}</td>
+				<td class="num">${flt(s.weight_out) ? g(s.weight_out) : ""}</td>
+				<td class="num">${flt(s.weight_in) ? g(s.weight_in) : ""}</td>
+				<td class="num">${flt(s.loss) ? "<b>" + g(s.loss) + "</b>" : ""}</td></tr>`).join("");
+			if (rows) stageTbl = `<table class="ci-tbl"><thead><tr><th>Bench</th><th>Employee</th><th>Status</th><th>Work</th><th>State</th><th>In</th><th>Out</th><th class="num">Wt Out</th><th class="num">Wt In</th><th class="num">Loss</th></tr></thead><tbody>${rows}</tbody></table>`;
+		}
+
+		// issue details — who issued what stones/gold into this card and when
+		let issueTbl = '<span class="ci-empty">Nothing issued yet.</span>';
+		if ((d.issues || []).length) {
+			const rows = d.issues.map((r) => {
+				const sign = r.direction === "Out" ? "−" : "";
+				const uom = r.stone_type ? "ct" : "g";
+				return `<tr${r.from_parent ? ' style="opacity:.62;"' : ""}>
+					<td>${r.entry_type === "Stone Return" ? '<span style="color:#7a5b00;font-weight:700;">Stone ↩</span>'
+						: r.entry_type === "Stone Issue" ? "Stone" : "Gold"}${r.from_parent ? ' <span class="ci-empty" style="font-size:10px;">(parent)</span>' : ""}</td>
+					<td><b>${esc(r.item)}</b>${r.stone_type ? ` <span class="muted">(${esc(r.stone_type)})</span>` : ""}</td>
+					<td class="num">${r.pcs ? r.pcs + " / " : ""}${sign}${flt(r.qty).toFixed(3)} ${uom}</td>
+					<td>${esc(r.who || "—")}</td><td>${r.datetime ? frappe.datetime.str_to_user(r.datetime) : "—"}</td></tr>`;
+			}).join("");
+			issueTbl = `<table class="ci-tbl"><thead><tr><th>What</th><th>Item</th><th class="num">Qty</th><th>Issued By</th><th>When</th></tr></thead><tbody>${rows}</tbody></table>`;
+		}
+
+		const img = !forPrint && b.image ? `<img class="ci-img" src="${encodeURI(b.image)}" onerror="this.style.display='none'">` : "";
+		const extraKvs = forPrint ? "" : `${kv("Party Date", dt(b.customer_date))}${b.job_order ? `<span><span class="k">Job Order</span> <a class="ci-jo" data-jo="${esc(b.job_order)}" style="color:#1f618d;font-weight:700;cursor:pointer;">${esc(b.job_order)}</a></span>` : ""}${b.split_of ? `<span><span class="k">Split of</span> <a class="jw-card-link" data-card="${esc(b.split_of)}" style="color:#9a6b1f;font-weight:700;cursor:pointer;">${esc(b.split_of)}</a> · piece #${b.piece_no || "?"}</span>` : ""}${kv("Tree", b.tree)}${kv("Held By", b.held_by)}`;
+		const narration = !forPrint && b.narration ? `<div class="ci-sec"><h4>Remark</h4><div class="ci-line">${esc(b.narration)}</div></div>` : "";
+
+		// ---- everything else we hold (screen only) ---------------------------
 		const ex = d.extras || {};
-
 		const chips = [];
-		if (b.huid) chips.push(`${__("HUID")} <b>${esc(b.huid)}</b>`);
-		if (b.certifications) chips.push(`${__("Certs")} <b>${esc(b.certifications)}</b>`);
-		if ((ex.charge_categories || []).length)
-			chips.push(`${__("Tags")} <b>${ex.charge_categories.map(esc).join(", ")}</b>`);
+		if (b.huid) chips.push(`HUID <b>${esc(b.huid)}</b>`);
+		if (b.certifications) chips.push(`Certs <b>${esc(b.certifications)}</b>`);
+		if ((ex.charge_categories || []).length) chips.push(`Tags <b>${ex.charge_categories.map(esc).join(", ")}</b>`);
+		const identity = !forPrint && chips.length ? `<div class="ci-sec acc-blue"><h4>Identity</h4><div class="ci-line">${chips.join(" &middot; ")}</div></div>` : "";
 
-		const state = b.is_finished
-			? ["prod", __("PRODUCT — {0}", [b.stock_status || __("In Stock")])]
-			: flt(b.act_gross_weight) ? ["wip", __("IN PRODUCTION")] : ["pre", __("IN PREPRODUCTION")];
+		const flags = [];
+		if (b.stone_issue) flags.push(`<span style="color:#9a6700;font-weight:700;">AWAITING STONES</span> since ${dtt(b.stone_issue_on)}`);
+		if (b.stone_oos) flags.push(`<span style="color:#b02a2a;font-weight:700;">OUT OF STOCK</span> ${esc(b.stone_oos_note || "")} (${dtt(b.stone_oos_on)})`);
+		if (ex.bench_now && ex.bench_now.queue_reason) flags.push(`Reason <b>${esc(ex.bench_now.queue_reason)}</b>`);
+		const pr = ex.priority || {};
+		if (pr.manual) flags.push(`<span style="color:#d63031;font-weight:700;">MANUAL PRIORITY #${pr.manual}</span>`);
+		else if (pr.bench_rank) flags.push(`Bench rank <b>P${pr.bench_rank}</b>`);
+		if (ex.bench_now && ex.bench_now.status) flags.push(`Bench status <b>${esc(ex.bench_now.status)}</b>${ex.bench_now.employee_name ? " &middot; " + esc(ex.bench_now.employee_name) : ""}${ex.bench_now.work_type ? " &middot; " + esc(ex.bench_now.work_type) : ""}`);
+		if ((ex.preps || []).length) flags.push(`On prepared bill <b>${ex.preps.map(esc).join(", ")}</b>`);
+		const standing = !forPrint && flags.length ? `<div class="ci-sec acc-red"><h4>Standing</h4><div class="ci-line">${flags.join(" &middot; ")}</div></div>` : "";
 
-		$out.html(`
-			<div class="cl-head">
-				<div class="cl-id">
-					<div class="cl-code">${esc(b.name)}</div>
-					<div class="cl-design">${esc(b.design || "")}${
-						b.design_type ? " &middot; " + esc(b.design_type) : ""}</div>
-					<span class="cl-badge ${state[0]}">${state[1]}</span>
-				</div>
-				${b.image ? `<div class="cl-photo"><img class="cl-img" src="${encodeURI(b.image)}"
-					onerror="this.style.display='none'"></div>` : ""}
-				<div class="cl-where">
-					<div class="k">${__("Where it is now")}</div>
-					<div class="v">${esc(b.location || "—")}</div>
-					${b.stock_status ? `<div class="s">${esc(b.stock_status)}</div>` : ""}
-				</div>
+		// a card that was finished and came back — the whole point is WHEN
+		const reworkSec = (d.reworks || []).length ? `<div class="ci-sec acc-amber"><h4>${
+			(d.reworks.length > 1 ? __("Sent back to the floor ({0} times)", [d.reworks.length]) : __("Sent back to the floor"))
+			}</h4><div class="ci-rw">${d.reworks.map((r) => `
+				<div class="row">
+					<span class="w">${esc((r.when || "").replace("T", " ").slice(0, 16))}</span>
+					<span>&rarr; <b>${esc(r.to || "—")}</b></span>
+					<span class="m">${__("came back with")} ${g(r.gold)}${r.stones ? " &middot; " + r.stones.toFixed(3) + " ct" + (r.pcs ? " / " + r.pcs + " pcs" : "") : ""}</span>
+					<span class="m" style="margin-left:auto;">${esc(r.who || "")}${r.note ? " &middot; " + esc(r.note) : ""}</span>
+				</div>`).join("")}</div></div>` : "";
+
+		// gold put on or taken off this card by hand (Stock > Card Gold)
+		const gm = d.gold_moves || [];
+		const gmNet = gm.reduce((a, r) => a + (r.kind === "Added" ? r.qty : -r.qty), 0);
+		const goldSec = gm.length ? `<div class="ci-sec acc-green"><h4>${
+			__("Gold added / reduced by hand ({0})", [gm.length])
+			}</h4><div class="ci-rw">${gm.map((r) => `
+				<div class="row">
+					<span class="w">${esc((r.when || "").replace("T", " ").slice(0, 16))}</span>
+					<span style="color:${r.kind === "Added" ? "#1d7a33" : "#b02a2a"};font-weight:700;">
+						${r.kind === "Added" ? "+" : "&minus;"}${r.qty.toFixed(3)} g</span>
+					<span class="m">${esc(r.item_name || r.item)}</span>
+					<span class="m" style="margin-left:auto;">${esc(r.who || "")}${r.note ? " &middot; " + esc(r.note) : ""}</span>
+				</div>`).join("")}<div class="row"><span class="w">${__("Net")}</span>
+				<span style="font-weight:800;">${gmNet >= 0 ? "+" : "&minus;"}${Math.abs(gmNet).toFixed(3)} g</span></div>
+			</div></div>` : "";
+
+		const cadSec = !forPrint && b.is_cad ? `<div class="ci-sec acc-blue"><h4>CAD request</h4><div class="ci-line">
+			${esc(b.cad_design_type || "")} &middot; ${esc(b.cad_karat || "")} &middot; gold ${esc(b.cad_gold_weight || "")} &middot; dmd ${esc(b.cad_diamond_weight || "")} ct &middot; ${b.cad_stone_no || 0} stones${b.cad_reference ? " &middot; ref " + esc(b.cad_reference) : ""}</div></div>` : "";
+
+		let saleSec = "";
+		if (!forPrint && ex.sale && !ex.sale.parent) {
+			// restricted eyes only get the fact of the sale — no customer, no money
+			saleSec = `<div class="ci-sec acc-green"><h4>Sold</h4><div class="ci-line"><b>Sold</b></div></div>`;
+		} else if (!forPrint && ex.sale) {
+			const sv = ex.sale;
+			const money = (v) => "&#8377;" + (flt(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+			saleSec = `<div class="ci-sec acc-green"><h4>Sold</h4><div class="ci-line">
+				<a href="/app/product-sale/${encodeURIComponent(sv.parent)}"><b>${esc(sv.parent)}</b></a>
+				&middot; ${esc(sv.customer)} &middot; ${sv.sale_date ? frappe.datetime.str_to_user(sv.sale_date) : ""}
+				&middot; ${esc(sv.chart_name || "")} @ ${sv.gold_rate}</div>
+				<div class="ci-line">Gold ${money(sv.gold_value)} &middot; DMD ${money(sv.diamond_value)} &middot; Stones ${money(sv.stone_value)}
+				&middot; Labour ${money(sv.labour_value)} &middot; Charges ${money(sv.charges_value)}
+				&middot; <b>Piece ${money(sv.piece_total)}</b>${sv.tax_percent ? " &middot; bill incl. " + sv.tax_percent + "% tax" : ""}</div></div>`;
+		}
+		let holderSec = "";
+		if (!forPrint && (ex.holder_transfers || []).length) {
+			holderSec = `<div class="ci-sec acc-blue"><h4>Holder history</h4><table class="ci-tbl">
+				<thead><tr><th>From</th><th>To</th><th>When</th><th>By</th><th>Reason</th></tr></thead><tbody>
+				${ex.holder_transfers.map((h) => `<tr><td>${esc(h.from || "—")}</td><td><b>${esc(h.to || "")}</b></td>
+					<td>${dtt(h.when)}</td><td>${esc(h.by || "")}</td><td>${esc(h.reason || "")}</td></tr>`).join("")}
+				</tbody></table></div>`;
+		}
+		const costingSec = !forPrint && finished && (frappe.user.has_role("System Manager") || frappe.user.has_role("JW Manager"))
+			? `<div class="ci-sec acc-red"><h4>Costing <span class="muted" style="font-weight:400;font-size:11px;">(restricted)</span></h4>
+				<div class="ci-line" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+					<input type="number" class="ci-rate" placeholder="gold rate /g" style="width:110px;border:1px solid var(--border-color);border-radius:6px;height:26px;padding:2px 8px;background:var(--fg-color);color:var(--text-color);">
+					<button class="btn btn-xs ci-cost" data-name="${esc(b.name)}" style="background:#1f618d;border-color:#1f618d;color:#fff;">${__("Compute")}</button>
+					<span class="ci-cost-out" style="font-size:12.5px;"></span>
+				</div></div>` : "";
+
+		// due countdown (right under the photo) + the current bench status under the location
+		const dueChip = (due, today) => {
+			if (!due || !today) return "";
+			const dd = frappe.datetime.get_day_diff(due, today);
+			if (dd < 0) return `<span class="ci-due late">Overdue ${-dd}d</span>`;
+			if (dd === 0) return `<span class="ci-due warn">Due today</span>`;
+			return `<span class="ci-due ${dd <= 3 ? "warn" : "ok"}">Due in ${dd} day${dd === 1 ? "" : "s"}</span>`;
+		};
+		const bn = ex.bench_now || {};
+		const locStat = (() => {
+			const s = bn.status || "";
+			if (s === "Issued" || s === "Ongoing") return "Issued";
+			if (s === "Receipted" || s === "Completed") return "In Transfer Queue";
+			if (s === "In Queue" || s === "On Hold") return "In Queue";
+			return s;
+		})();
+		const hasLoc = b.location && b.location !== "—";
+		// ---- materials: design BOM vs the card's plan, plus the change trail ----
+		// only painted when something actually differs, so untouched cards stay slim
+		const M = d.materials || {};
+		const mnum = (v) => (flt(v) ? flt(v).toFixed(3) : "\u2014");
+		const mBadge = { added: "added", removed: "removed", changed: "changed", same: "" };
+		const matTbl = !M.show ? "" : `
+			<div class="ci-sec acc-red"><h4>Materials \u2014 changed from the design</h4>
+				<table class="ci-mtbl"><thead><tr>
+					<th>Material</th><th>Design</th><th>Now</th><th></th>
+				</tr></thead><tbody>
+				${(M.rows || []).map((r) => `
+					<tr class="m-${esc(r.status)}">
+						<td>${esc(r.item)}</td>
+						<td class="n">${M.has_design ? mnum(r.design_qty) + " / " + mnum(r.design_weight) : "\u2014"}</td>
+						<td class="n">${mnum(r.qty)} / ${mnum(r.weight)}</td>
+						<td class="b">${mBadge[r.status] || ""}</td>
+					</tr>`).join("")}
+				</tbody></table>
+				<div class="ci-mnote">qty / weight &middot; ${M.has_design
+					? "compared with the design's original BOM"
+					: "no design BOM on this card to compare with"}</div>
+				${(M.history || []).length ? `
+					<table class="ci-mtbl hist"><thead><tr>
+						<th>When</th><th>Who</th><th>Where</th><th>Material</th><th>Change</th>
+					</tr></thead><tbody>
+					${M.history.map((h) => `
+						<tr>
+							<td>${dtt(h.creation)}</td>
+							<td>${esc(h.by || "")}</td>
+							<td>${esc(h.source || "")}</td>
+							<td>${esc(h.item || "")}</td>
+							<td>${h.action === "Added" ? "+ " + mnum(h.new_qty) + " / " + mnum(h.new_weight)
+								: h.action === "Removed" ? "\u2212 " + mnum(h.old_qty) + " / " + mnum(h.old_weight)
+								: mnum(h.old_qty) + " / " + mnum(h.old_weight) + " \u2192 " + mnum(h.new_qty) + " / " + mnum(h.new_weight)}</td>
+						</tr>`).join("")}
+					</tbody></table>` : ""}
+			</div>`;
+
+		return `
+		<div class="ci-head">
+			<div>
+				<div class="ci-code">${esc(b.name)}</div>
+				<div class="ci-sub">${esc(b.design || "")}${b.design_type ? " &middot; " + esc(b.design_type) : ""}${b.item && b.item !== b.design ? " &middot; " + esc(b.item) : ""}</div>
+				<span class="ci-badge ${finished ? "prod" : flt(b.act_gross_weight) ? "wip" : "pre"}">${finished ? "PRODUCT &mdash; " + esc(b.stock_status || "In Stock") : flt(b.act_gross_weight) ? "IN PRODUCTION" : "IN PREPRODUCTION"}</span>
+				${(d.reworks || []).length ? `<span class="ci-badge rw" title="${__("This card was a finished product and went back to the floor")}">↩ ${
+					(d.reworks || []).length > 1 ? __("REWORKED &times;{0}", [d.reworks.length]) : __("REWORKED")
+					} &middot; ${esc((d.reworks[0].when || "").slice(0, 10))} &rarr; ${esc(d.reworks[0].to || "")}</span>` : ""}
+				${d.pre_bag && d.pre_bag.exists ? `<span class="ci-badge prod" title="${__("Stones pre-bagged")}" style="background:#e3f0e6;color:#1d7a33;">💎 ${d.pre_bag.fully_issued ? __("PRE-BAGGED &mdash; issued") : __("STONES PRE-BAGGED")}${d.pre_bag.status === "Partial" ? " (" + __("partial") + ")" : ""}${(d.pre_bag.bags || []).length ? " &middot; " + __("bag") + " " + esc(d.pre_bag.bags.join(", ")) : ""}</span>` : ""}
 			</div>
-
-			<div class="cl-sec"><h4>${__("Order")}</h4><div class="cl-kvs">
-				${kv(__("Party"), b.customer || b.held_by)}
-				${kv(__("Salesman"), b.salesman)}
-				${kv(__("Type"), b.order_type)}
-				${kv(__("Qty"), b.qty)}
-				${kv(__("Size"), b.size)}
-				${kv(__("Ordered"), dt(b.order_date))}
-				${kv(__("Due"), dt(b.due_date))}
-				${kv(__("Party Date"), dt(b.customer_date))}
-				${b.job_order ? `<div class="cl-kv"><span class="k">${__("Job Order")}</span>
-					<span class="v"><a class="cl-jo" data-jo="${esc(b.job_order)}">${esc(b.job_order)}</a></span></div>` : ""}
-				${kv(__("Tree"), b.tree)}
-				${kv(__("Held By"), b.held_by)}
-			</div></div>
-
-			<div class="cl-sec gold"><h4>${__("Actual weight now")}</h4>
-				<div class="cl-line">${act || `<span class="cl-empty">${
-					__("No actual weight recorded yet.")}</span>`}</div></div>
-
-			<div class="cl-sec gold"><h4>${__("Contents")}</h4>
-				<div class="cl-line">${contents || `<span class="cl-empty">${b.is_finished
-					// a finished piece holds nothing: its gold and stones were converted
-					// INTO the product, and the weights above are what it is made of.
-					// "Empty" beside a 4.5 g gross reads as a fault, so say why.
-					? __("Made into the product — the weights above are what it holds.")
-					: __("Nothing issued into this card yet.")}</span>`}</div></div>
-
-			${chips.length ? `<div class="cl-sec blue"><h4>${__("Identity")}</h4>
-				<div class="cl-line">${chips.join(" &middot; ")}</div></div>` : ""}
-
-			${b.narration ? `<div class="cl-sec"><h4>${__("Remark")}</h4>
-				<div class="cl-line">${esc(b.narration)}</div></div>` : ""}
-		`);
+			<div class="ci-photo">${img}${!forPrint && b.due_date ? dueChip(b.due_date, d.today) : ""}</div>
+			<div class="ci-loc">Location${hasLoc ? `<b><a class="ci-loc-link" data-loc="${esc(b.location)}">${esc(b.location)}</a></b>` : `<b>${esc(b.location || "—")}</b>`}${locStat ? `<div class="ci-locstat">${esc(locStat)}</div>` : ""}</div>
+		</div>
+		<div class="ci-sec"><div class="ci-kvs">
+			${kv("Party", b.customer || b.held_by)}${kv("Salesman", b.salesman)}${kv("Type", b.order_type)}
+			${kv("Qty", b.qty)}${kv("Size", b.size)}${kv("Ordered", dt(b.order_date))}${kv("Due", dt(b.due_date))}
+			${extraKvs}
+		</div></div>
+		<div class="ci-2col">
+			<div class="ci-sec acc-gold"><h4>Weights</h4>
+				${act ? `<div class="ci-line"><span class="tag">Actual</span> ${act}</div>` : ""}
+				${plan ? `<div class="ci-line muted"><span class="tag">Plan</span> ${plan}</div>` : ""}
+				${!act && !plan ? '<span class="ci-empty">—</span>' : ""}
+			</div>
+			<div class="ci-sec acc-gold"><h4>Contents</h4><div class="ci-line">${contents}</div></div>
+		</div>
+		${matTbl}
+		<div class="ci-2col">
+			<div class="ci-sec acc-blue"><h4>Issue details</h4>${issueTbl}</div>
+			${standing}
+			${reworkSec}
+			${goldSec}
+		</div>
+		${identity}
+		${cadSec}
+		${narration}
+		<div class="ci-sec acc-green"><h4>Where it travelled</h4><div class="ci-chain">${travel}</div></div>
+		<div class="ci-sec acc-blue"><h4>Who worked on it</h4>${stageTbl}</div>
+		${saleSec}
+		${holderSec}
+		${costingSec}`;
 	}
+
+	// Job Order kv -> the Job Order Status page, pre-loaded
+	$out.on("click", ".ci-jo", function () {
+		frappe.route_options = { job_order: $(this).data("jo") };
+		frappe.set_route("job-order-status");
+	});
+	// photo -> full-screen lightbox
+	$out.on("click", ".ci-img", function () {
+		const lb = $(`<div class="ci-lightbox"><img src="${this.getAttribute("src")}"></div>`);
+		lb.on("click", () => lb.remove());
+		$(document.body).append(lb);
+	});
+	// location -> its bench board (not the workstation)
+	$out.on("click", ".ci-loc-link", function () {
+		const loc = String($(this).data("loc") || "");
+		frappe.set_route("bench-" + loc.toLowerCase().replace(/\s+/g, "-"));
+	});
 
 	function load(code) {
 		code = (code || "").trim().toUpperCase();
 		if (!code) return;
-		// a bare number is an E-card: 114.1.1 and 0114.1.1 both mean E0114.1.1
+		// forgiving entry: a bare number means an E-card — 0114.1.1 / 114.1.1
+		// both resolve to E0114.1.1 (job orders are E + 4 digits)
 		if (/^\d/.test(code)) {
 			const p = code.split(".");
-			if (p[0] && /^\d+$/.test(p[0])) code = "E" + p[0].padStart(4, "0") + (p.length > 1 ? "." + p.slice(1).join(".") : "");
+			code = "E" + p[0].padStart(4, "0") + (p.length > 1 ? "." + p.slice(1).join(".") : "");
 		}
-		msg("");
-		return jewelima.busyCall($out, __("Loading the card…"), {
-			method: "jewelima.jewelima.api.get_card_passport", args: { order_bag: code },
-		}).then((r) => {
-			const d = r.message;
-			if (!d || !d.bag) {
-				$out.empty();
-				msg(__("No card <b>{0}</b>.", [esc(code)]));
+		jewelima.busyCall($out, __("Loading the card…"), { method: "jewelima.jewelima.api.get_card_passport", args: { order_bag: code } }).then((r) => {
+			const d = r.message || {};
+			if (!d.bag) {
+				$out.html(`<div class="ci-sec ci-empty">No Order Bag <b>${esc(code)}</b>.</div>`);
+				state.data = null;
 				return;
 			}
-			render(d);
-		}).always(focusScan);
+			state.data = d;
+			$out.html(buildHTML(d));
+		});
 	}
 
-	$scan.on("keydown", (e) => {
-		if (e.which !== 13 && e.key !== "Enter") return;
-		e.preventDefault();
-		const v = $scan.val();
-		$scan.val("");
-		load(v);
-	});
-	$out.on("click", ".cl-jo", function () {
-		frappe.route_options = { job_order: $(this).data("jo") };
-		frappe.set_route("job-order-status");
-	});
-	$out.on("click", ".cl-img", function () {
-		const lb = $(`<div class="cl-lightbox"><img src="${this.getAttribute("src")}"></div>`);
-		lb.on("click", () => lb.remove());
-		$(document.body).append(lb);
-	});
+	function printCard() {
+		if (!state.data) return frappe.msgprint(__("Scan a card first."));
+		const title = "Card " + state.data.bag.name;
+		if (window.jewelima && jewelima.print_window) {
+			// shared branded header/footer + this page's CSS — CONCISE print layout
+			jewelima.print_window(state.branding || {}, title, buildHTML(state.data, true), CSS);
+			return;
+		}
+		// no branding loaded yet — still print in place through the shared iframe helper
+		jewelima.print_window({}, state.data.bag.name, buildHTML(state.data, true),
+			CSS + " body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#222;}");
+	}
 
-	// arriving from another page with a card already in hand
-	if (frappe.route_options && frappe.route_options.order_bag) {
-		const c = frappe.route_options.order_bag;
+	// arriving from any card link with the number already punched in
+	if (frappe.route_options && frappe.route_options.card) {
+		const pre = frappe.route_options.card;
 		frappe.route_options = null;
-		load(c);
+		setTimeout(() => load(pre), 150);
 	}
+	$(page.main).on("click", ".ci-cost", function () {
+		const nm = $(this).data("name");
+		const rate = $(page.main).find(".ci-rate").val() || 0;
+		const $out = $(page.main).find(".ci-cost-out").text(__("computing…"));
+		frappe.call({ method: "jewelima.jewelima.api.get_card_costing",
+			args: { order_bag: nm, gold_rate: rate }, freeze: false }).then((r) => {
+			const m = r.message || {};
+			if (m.error) { $out.html(`<span style="color:#b02a2a;">${frappe.utils.escape_html(m.error)}</span>`); return; }
+			const money = (v) => "₹" + (flt(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+			const parts = Object.values(m.components || {}).map((c) =>
+				`${frappe.utils.escape_html(c.label)} ${c.value === null ? "<span style='color:#b02a2a;'>?</span>" : money(c.value)}`);
+			const total = Object.values(m.components || {}).reduce((s2, c) => s2 + (flt(c.value) || 0), 0);
+			$out.html(`${frappe.utils.escape_html(m.chart_name || "")}: ` + parts.join(" · ")
+				+ ` · <b>${money(total)}</b>`);
+		});
+	});
+
+	scan.$input.on("keydown", (e) => {
+		if (e.which === 13 || e.key === "Enter") {
+			e.preventDefault();
+			const c = scan.$input.val();
+			scan.set_value("");
+			load(c);
+		}
+	});
+	page.set_primary_action(__("Print"), printCard, "printer");
 	focusScan();
-	frappe.pages["card-lookup"].on_page_show = focusScan;
 };
