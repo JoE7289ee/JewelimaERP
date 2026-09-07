@@ -2362,6 +2362,18 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "alert-triangle",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Chart Gaps",
+   "link_to": "chart-gaps",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "file-text",
    "indent": 0,
    "keep_closed": 0,
@@ -2800,7 +2812,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-07 23:33:34.781332",
+ "modified": "2026-09-08 00:12:29.418912",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

@@ -430,7 +430,16 @@ JEWELIMA_INFO_ROLE = "JW Info"
 # anyone outside its own list.
 JEWELIMA_COSTING_ROLE = "JW Costing"
 JEWELIMA_COSTING_PAGES = ["costing-board", "costing-chart", "provider-prices", "provider-rates",
-	"board-rate"]
+	"board-rate", "chart-gaps"]
+# Chart Gaps links straight at a chart, so the costing desk has to be able to
+# OPEN Price Charts — but that page is NOT costing's own: it belongs to the
+# manager and delivery desks too. Keeping it out of the list above matters,
+# because every page in that list has JW Manager stripped from it, and putting
+# price-charts there quietly took the chart editor away from the managers.
+# Granted below instead, additively. JW Costing stays view-only regardless:
+# it is in PRICE_CHART_VIEW_ONLY_ROLES and the page hides every save control
+# from a role that cannot save.
+JEWELIMA_COSTING_SHARED_PAGES = ["price-charts"]
 JEWELIMA_COSTING_READ = ["Price Chart", "Design Type", "Charge Category", "Item", "Customer",
 	"Supplier", "Provider Rate"]
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
@@ -940,10 +949,14 @@ def setup_roles():
 			grant(dt, JEWELIMA_COSTING_ROLE, {"read": 1})
 	for page in JEWELIMA_COSTING_PAGES:
 		set_page_roles(page, (JEWELIMA_COSTING_ROLE,), strip=("JW Manager", "Stock Manager"))
-	# tight: this role opens those two pages and nothing else
+	# shared with other desks — added, never stripping anyone else off
+	for page in JEWELIMA_COSTING_SHARED_PAGES:
+		set_page_roles(page, (JEWELIMA_COSTING_ROLE,))
+	# tight: this role opens those pages and nothing else
+	_costing_ok = set(JEWELIMA_COSTING_PAGES) | set(JEWELIMA_COSTING_SHARED_PAGES)
 	for page in frappe.get_all("Has Role",
 			filters={"parenttype": "Page", "role": JEWELIMA_COSTING_ROLE}, pluck="parent"):
-		if page not in set(JEWELIMA_COSTING_PAGES):
+		if page not in _costing_ok:
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_COSTING_ROLE])
 			pg.save(ignore_permissions=True)

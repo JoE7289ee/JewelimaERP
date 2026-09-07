@@ -10822,6 +10822,77 @@ def get_costing_board():
 
 
 @frappe.whitelist()
+def get_chart_gaps():
+	"""Every ACTIVE chart's gaps, grouped by the gap rather than by the chart.
+
+	The detail page answers "what does this chart price"; this one answers "which
+	charts still need something", which is the question you ask when there are
+	thirty of them and you are the one who has to close them.
+
+	Two kinds, kept apart on purpose. A PROBLEM is a chart that cannot bill
+	correctly — nothing to price the metal or the work with, a stone that falls
+	between two brackets, a rule that charges nothing. NOT PRICED is a chart that
+	simply does not carry a section, which is usually the desk's choice and is
+	listed so it can be checked, never as an error."""
+	_require_costing()
+	charts = [_chart_summary(frappe.get_doc("Price Chart", n))
+		for n in frappe.get_all("Price Chart", filters={"status": "Active"},
+			order_by="chart_name", pluck="name")]
+
+	def card(c, note=""):
+		return {"name": c["name"], "chart_name": c["chart_name"],
+			"chart_date": c["chart_date"], "age_days": c.get("age_days"), "note": note}
+
+	problems, missing = [], []
+
+	def bucket(into, key, title, why, rows):
+		if rows:
+			into.append({"key": key, "title": title, "why": why, "charts": rows})
+
+	# ---- problems: the chart cannot bill correctly -------------------------
+	bucket(problems, "unpriced", frappe._("Prices neither making nor touch"),
+		frappe._("a piece on these would bill on its stones alone"),
+		[card(c) for c in charts
+			if not c["covers"]["making"] and c["covers"]["gold"] != "touch"])
+
+	gapped = []
+	for c in charts:
+		holes = [x for x in c["checks"] if "nothing priced between" in x]
+		if holes:
+			gapped.append(card(c, "; ".join(holes)))
+	bucket(problems, "dmdgap", frappe._("Diamond brackets with a hole"),
+		frappe._("a stone of that size has no price at all"), gapped)
+
+	zero = []
+	for c in charts:
+		z = [x for x in c["checks"] if "charges nothing" in x]
+		if z:
+			zero.append(card(c, "; ".join(z)))
+	bucket(problems, "zero", frappe._("A making rule that charges nothing"),
+		frappe._("check it is meant to be free"), zero)
+
+	# ---- not priced: usually a choice, listed so it can be checked ----------
+	bucket(missing, "touch", frappe._("No gold touch"),
+		frappe._("gold bills at the rate typed on Sell"),
+		[card(c) for c in charts if c["covers"]["gold"] != "touch"])
+	bucket(missing, "making", frappe._("No making charge"),
+		frappe._("making is asked for on the bill"),
+		[card(c) for c in charts if not c["covers"]["making"]])
+	bucket(missing, "diamond", frappe._("No diamond rates"),
+		frappe._("diamonds are not priced on the chart"),
+		[card(c) for c in charts if not c["covers"]["diamond"]])
+	bucket(missing, "charges", frappe._("No certification or hallmarking charge"),
+		frappe._("those charges are not on the chart"),
+		[card(c) for c in charts if not c["covers"]["charges"]])
+
+	clean = [card(c) for c in charts
+		if not c["checks"] and c["covers"]["making"] and c["covers"]["diamond"]]
+	return {"total": len(charts), "problems": problems, "missing": missing,
+		"clean": clean,
+		"problem_charts": len({x["name"] for b in problems for x in b["charts"]})}
+
+
+@frappe.whitelist()
 def get_costing_chart(name=None):
 	"""One chart in full, for the detail page — plus the list of every chart so
 	the page can move between them without going back."""
