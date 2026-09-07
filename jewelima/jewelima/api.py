@@ -14986,7 +14986,7 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 		"Quality", "Other Stones (ct)"])
 	for c in ws[1]:
 		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
-	tg = tdc = tpc = 0.0
+	tg = tdc = tpc = tost = 0.0
 	for i, nm in enumerate(bags, 1):
 		b = frappe.db.get_value("Order Bag", nm, [
 			"design", "huid", "act_gross_weight", "act_dmd_weight", "act_dmd_no",
@@ -15007,7 +15007,9 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 		tg += flt(b.act_gross_weight)
 		tdc += flt(b.act_dmd_weight)
 		tpc += cint(b.act_dmd_no)
-	ws.append(["", "TOTAL", "", "", "", round(tg, 3), int(tpc), round(tdc, 3), "", ""])
+		tost += ost
+	ws.append(["", "TOTAL", "", "", "", round(tg, 3), int(tpc), round(tdc, 3), "",
+		round(tost, 3) or None])
 	for c in ws[ws.max_row]:
 		c.font = Font(bold=True)
 	for i, w in enumerate([5, 16, 14, 12, 14, 10, 9, 10, 13, 15], 1):
@@ -15015,6 +15017,81 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 	buf = BytesIO()
 	wb.save(buf)
 	fname = (tag if tag else "{0}-{1}".format(cert_type, frappe.utils.today())) + ".xlsx"
+	return fname, buf.getvalue()
+
+
+# DHC asks for its own sheet, and it is not the generic one: the barcode goes
+# WITHOUT our E prefix, Style No is the DESIGN NUMBER rather than the variant,
+# the karat reads "18KT", the metal colour is one lowercase word, and the
+# diamond quality is split into its colour and clarity halves.
+_DHC_METAL_WORD = {"YG": "yellowgold", "WG": "whitegold", "PG": "rosegold"}
+_DHC_HEAD = ["Sr#", "BARCODE", "Category", "Style No", "Gross Wt", "No of Dia", "Dia Wt",
+	"COLOR STONE NUMBER", "COLOR STONE WT", "CARAT", "COLOR", "Shape", "COLOR", "CLARITY"]
+_DHC_WIDTH = [5.4, 13.7, 14, 14, 11, 9.6, 10, 20, 18, 8.1, 15, 10.9, 11, 9.6]
+
+
+def _dhc_xlsx_bytes(bags, tag=""):
+	"""DHC's submission sheet, in DHC's own layout."""
+	from io import BytesIO
+	from openpyxl import Workbook
+	from openpyxl.styles import Font, PatternFill
+	qmap = _diamond_qmap()
+	mats = _bag_convert_materials(bags)
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "DHC"
+	ws.append(_DHC_HEAD)
+	for c in ws[1]:
+		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+
+	tg = tdn = tdc = tcn = tcw = 0.0
+	for i, nm in enumerate(bags, 1):
+		b = frappe.db.get_value("Order Bag", nm, [
+			"design", "act_gross_weight", "act_dmd_weight", "act_dmd_no",
+			"act_cs_weight", "act_cs_no", "act_ps_weight", "act_ps_no"], as_dict=True) or frappe._dict()
+		dtype = (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or ""
+		# the dominant diamond bracket by carats, split into DHC's two columns
+		qual_ct = {}
+		for it, qty in (mats.get(nm) or {}).items():
+			st, grp = frappe.db.get_value("Item", it, ["stone_type", "item_group"]) or ("", "")
+			if st != "Diamond":
+				continue
+			q = qmap.get((grp or "").replace("DIAMOND ", ""), (grp or "").replace("DIAMOND ", ""))
+			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+		quality = max(qual_ct, key=qual_ct.get) if qual_ct else ""
+		colour, clarity = _IGI_QUALITY.get(quality, ("", ""))
+		tok = _variant_tokens(b.design)
+		karat = _piece_karat(nm, b.design)
+		# colour stones are DHC's own column pair: colour stone + precious together
+		cs_no = cint(b.act_cs_no) + cint(b.act_ps_no)
+		cs_wt = flt(b.act_cs_weight) + flt(b.act_ps_weight)
+		ws.append([
+			i,
+			nm[1:] if nm[:1].upper() == "E" else nm,          # DHC's barcode drops our E
+			dtype,
+			design_no_of(b.design) or b.design or "",
+			round(flt(b.act_gross_weight), 2),
+			cint(b.act_dmd_no) or None,
+			round(flt(b.act_dmd_weight), 2) or None,
+			cs_no or None,
+			round(cs_wt, 2) or None,
+			karat.replace("K", "KT") if karat else "",
+			_DHC_METAL_WORD.get(tok.get("gold_color") or "", ""),
+			"RD",
+			colour,
+			clarity,
+		])
+		tg += flt(b.act_gross_weight); tdn += cint(b.act_dmd_no); tdc += flt(b.act_dmd_weight)
+		tcn += cs_no; tcw += cs_wt
+	ws.append(["", "TOTAL", "", "", round(tg, 2), int(tdn) or None, round(tdc, 2) or None,
+		int(tcn) or None, round(tcw, 2) or None, "", "", "", "", ""])
+	for c in ws[ws.max_row]:
+		c.font = Font(bold=True)
+	for i, w in enumerate(_DHC_WIDTH, 1):
+		ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+	buf = BytesIO()
+	wb.save(buf)
+	fname = (tag or "DHC-{0}".format(frappe.utils.today())) + ".xlsx"
 	return fname, buf.getvalue()
 
 
@@ -15026,10 +15103,18 @@ def export_lab_xlsx(bags, cert_type):
 	bags = [b for b in bags if b]
 	if not bags:
 		frappe.throw(frappe._("Pick at least one piece."))
-	fname, content = _lab_xlsx_bytes(bags, (cert_type or "LAB").upper())
+	fname, content = _lab_sheet(bags, (cert_type or "LAB").upper())
 	frappe.local.response.filename = fname
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
+
+
+def _lab_sheet(bags, cert_type, tag=""):
+	"""Which sheet a lab gets. DHC has its own layout; everyone else the generic
+	one. One decision, so the downloaded copy and the emailed copy cannot differ."""
+	if (cert_type or "").upper() == "DHC":
+		return _dhc_xlsx_bytes(bags, tag=tag)
+	return _lab_xlsx_bytes(bags, cert_type, tag=tag)
 
 
 def _cert_excel_bytes(prep):
@@ -15043,7 +15128,7 @@ def _cert_excel_bytes(prep):
 		fname = frappe.local.response.filename
 		frappe.local.response.filecontent = frappe.local.response.filename = frappe.local.response.type = None
 		return fname, content
-	return _lab_xlsx_bytes(bags, prep["cert_type"], tag=prep["name"])
+	return _lab_sheet(bags, prep["cert_type"], tag=prep["name"])
 
 
 @frappe.whitelist()
