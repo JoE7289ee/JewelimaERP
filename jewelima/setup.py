@@ -286,6 +286,7 @@ JEWELIMA_DELIVERY_PAGES = [
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications", "stone-changes",
+	"remove-certification",
 	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
 	# remove-hallmarking belongs here too: the desk holding the piece is the one
 	# that finds the stamp unreadable, and every removal is signed on the piece

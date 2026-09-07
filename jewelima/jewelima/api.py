@@ -17382,6 +17382,91 @@ def save_barcode_layout(layout):
 	return {"ok": 1, "saved": sorted(clean.keys())}
 
 
+# Taking a certification off is the delivery desk's own job, the same as taking
+# a hallmark off — they are the ones holding the piece when the certificate is
+# wrong, missing, or belongs to another piece entirely.
+CERT_REMOVE_ROLES = HALL_REMOVE_ROLES
+
+
+@frappe.whitelist()
+def get_certification_removal(barcode):
+	"""Remove Certification: what one piece is tagged with right now.
+	Reads only — nothing is undone until remove_certification is called."""
+	frappe.only_for(list(CERT_REMOVE_ROLES))
+	nm = _resolve_bag_code(barcode)
+	if not frappe.db.exists("Order Bag", nm):
+		return {"rejected": frappe._("This card doesn't exist")}
+	b = frappe.db.get_value("Order Bag", nm,
+		["design", "stock_status", "bucket", "held_by", "act_gross_weight",
+		 "act_dmd_weight", "certifications", "is_finished"], as_dict=True)
+	if not cint(b.is_finished):
+		return {"rejected": frappe._("{0} is not a finished product.").format(nm)}
+	# HALLMARKING lives on the same trail but is not ours to take off — Remove
+	# Hallmarking owns that, because it has to clear the HUID with it
+	tags = [t.strip() for t in (b.certifications or "").split(",") if t.strip()]
+	removable = [t for t in tags if t.upper() != "HALLMARKING"]
+	if not removable:
+		return {"rejected": frappe._("{0} carries no certification tag.").format(nm)
+			if not tags else
+			frappe._("{0} is only hallmarked — use Remove Hallmarking for that.").format(nm)}
+	trips = frappe.db.sql("""select c.name, c.cert_type, c.certification_type, c.center,
+			c.status, c.collected_on, i.received, i.rejected, i.stone_change, i.confirmed_by
+		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s order by c.creation desc""", nm, as_dict=True)
+	return {"order_bag": nm, "design": b.design or "", "design_no": design_no_of(b.design),
+		"stock_status": b.stock_status, "bucket": b.bucket or "", "held_by": b.held_by or "",
+		"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight),
+		"certifications": b.certifications or "", "tags": tags, "removable": removable,
+		"batches": [{"name": t.name, "cert_type": t.cert_type or t.certification_type or "?",
+			"center": t.center or "", "status": t.status,
+			"collected_on": str(t.collected_on or ""),
+			"outcome": ("confirmed" if t.received else "rejected" if t.rejected
+				else "stone change" if t.stone_change else "pending"),
+			"by": _user_label(t.confirmed_by) if t.confirmed_by else ""} for t in trips]}
+
+
+@frappe.whitelist()
+def remove_certification(barcode, tag, reason=None):
+	"""Take ONE certification tag off a piece so it can go again — the certificate
+	never arrived, it was wrong, or it belonged to another piece.
+
+	Only the TAG leaves the piece. The BATCH is history and is never rewritten:
+	its item keeps whoever confirmed it and when, and the removal is written onto
+	the piece as a comment, so what happened stays readable rather than being
+	quietly erased.
+
+	HALLMARKING is refused here even though it sits on the same trail — taking it
+	off has to clear the HUID with it, and Remove Hallmarking is what does that."""
+	frappe.only_for(list(CERT_REMOVE_ROLES))
+	nm = _resolve_bag_code(barcode)
+	tag = (tag or "").strip()
+	why = (reason or "").strip()
+	if not why:
+		frappe.throw(frappe._("Say why the certification is coming off."))
+	if not frappe.db.exists("Order Bag", nm):
+		frappe.throw(frappe._("This card doesn't exist"))
+	if tag.upper() == "HALLMARKING":
+		frappe.throw(frappe._("Hallmarking comes off on Remove Hallmarking — it has to take the HUID with it."))
+	tags = [t.strip() for t in (frappe.db.get_value("Order Bag", nm, "certifications") or "").split(",") if t.strip()]
+	if tag not in tags:
+		frappe.throw(frappe._("{0} is not tagged {1}.").format(nm, tag or "?"))
+	open_batch = frappe.db.sql("""select i.parent from `tabCertification Item` i
+		join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and c.status in ('Prepared', 'Sent', 'Collected', 'Partially Received')
+		limit 1""", (nm,))
+	if open_batch:
+		frappe.throw(frappe._("{0} is on open batch {1} — finish or cancel that first.")
+			.format(nm, open_batch[0][0]))
+	frappe.db.set_value("Order Bag", nm,
+		"certifications", ", ".join(t for t in tags if t != tag), update_modified=False)
+	frappe.get_doc("Order Bag", nm).add_comment("Comment",
+		frappe._("Certification {0} removed by {1}. Reason: {2}").format(
+			tag, _user_label(frappe.session.user), frappe.utils.escape_html(why)))
+	frappe.db.commit()
+	return {"ok": 1, "order_bag": nm, "was": tag,
+		"left": ", ".join(t for t in tags if t != tag)}
+
+
 @frappe.whitelist()
 def get_hallmark_removal(barcode):
 	"""Remove Hallmarking: what one piece's hallmarking looks like right now.
