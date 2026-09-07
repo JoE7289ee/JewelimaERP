@@ -15024,27 +15024,50 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 # WITHOUT our E prefix, Style No is the DESIGN NUMBER rather than the variant,
 # the karat reads "18KT", the metal colour is one lowercase word, and the
 # diamond quality is split into its colour and clarity halves.
+# DHC asks for its own sheet, and it is not the generic one: the barcode goes
+# WITHOUT our E prefix, Style No is the DESIGN NUMBER rather than the variant
+# the factory works to, the karat reads "18KT", the metal colour is one
+# lowercase word, and the diamond quality is split into its colour and clarity
+# halves across two columns DHC both calls COLOR.
+#
+# The STYLING below is copied cell for cell from the workbook DHC sent, because
+# what goes back to a lab should look like what it sent: no fills anywhere (our
+# generic sheet's dark header is ours, not theirs), 9pt bold centred wrapped
+# headers on a 39pt row, 30pt data rows, thin borders throughout, and the four
+# code columns as 8pt bold TEXT so "18KT" and "EF" cannot be read as numbers or
+# dates. There is no TOTAL row on DHC's sheet, so there is none on ours.
 _DHC_METAL_WORD = {"YG": "yellowgold", "WG": "whitegold", "PG": "rosegold"}
 _DHC_HEAD = ["Sr#", "BARCODE", "Category", "Style No", "Gross Wt", "No of Dia", "Dia Wt",
 	"COLOR STONE NUMBER", "COLOR STONE WT", "CARAT", "COLOR", "Shape", "COLOR", "CLARITY"]
-_DHC_WIDTH = [5.4, 13.7, 14, 14, 11, 9.6, 10, 20, 18, 8.1, 15, 10.9, 11, 9.6]
+# only the columns DHC set a width on; the rest keep Excel's default
+_DHC_WIDTH = {"A": 5.4, "B": 13.7, "E": 11.0, "F": 9.6, "J": 8.1, "K": 15.0,
+	"L": 10.9, "M": 11.0, "N": 9.6}
+# the columns DHC styles as short bold TEXT codes
+_DHC_CODE_COLS = {10, 12, 13, 14}          # CARAT, Shape, COLOR(diamond), CLARITY
+_DHC_BOLD_COLS = {8, 9, 11} | _DHC_CODE_COLS   # + colour-stone pair and metal colour
 
 
 def _dhc_xlsx_bytes(bags, tag=""):
-	"""DHC's submission sheet, in DHC's own layout."""
+	"""DHC's submission sheet, in DHC's own layout and DHC's own styling."""
 	from io import BytesIO
 	from openpyxl import Workbook
-	from openpyxl.styles import Font, PatternFill
+	from openpyxl.styles import Font, Alignment, Border, Side
+
+	thin = Side(style="thin", color="FF000000")
+	box = Border(left=thin, right=thin, top=thin, bottom=thin)
 	qmap = _diamond_qmap()
 	mats = _bag_convert_materials(bags)
 	wb = Workbook()
 	ws = wb.active
 	ws.title = "DHC"
-	ws.append(_DHC_HEAD)
-	for c in ws[1]:
-		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
 
-	tg = tdn = tdc = tcn = tcw = 0.0
+	ws.append(_DHC_HEAD)
+	ws.row_dimensions[1].height = 39
+	for c in ws[1]:
+		c.font = Font(bold=True, size=9, name="Calibri", color="FF000000")
+		c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+		c.border = box
+
 	for i, nm in enumerate(bags, 1):
 		b = frappe.db.get_value("Order Bag", nm, [
 			"design", "act_gross_weight", "act_dmd_weight", "act_dmd_no",
@@ -15062,7 +15085,7 @@ def _dhc_xlsx_bytes(bags, tag=""):
 		colour, clarity = _IGI_QUALITY.get(quality, ("", ""))
 		tok = _variant_tokens(b.design)
 		karat = _piece_karat(nm, b.design)
-		# colour stones are DHC's own column pair: colour stone + precious together
+		# DHC has ONE colour-stone pair, so colour stones and precious go together
 		cs_no = cint(b.act_cs_no) + cint(b.act_ps_no)
 		cs_wt = flt(b.act_cs_weight) + flt(b.act_ps_weight)
 		ws.append([
@@ -15081,14 +15104,21 @@ def _dhc_xlsx_bytes(bags, tag=""):
 			colour,
 			clarity,
 		])
-		tg += flt(b.act_gross_weight); tdn += cint(b.act_dmd_no); tdc += flt(b.act_dmd_weight)
-		tcn += cs_no; tcw += cs_wt
-	ws.append(["", "TOTAL", "", "", round(tg, 2), int(tdn) or None, round(tdc, 2) or None,
-		int(tcn) or None, round(tcw, 2) or None, "", "", "", "", ""])
-	for c in ws[ws.max_row]:
-		c.font = Font(bold=True)
-	for i, w in enumerate(_DHC_WIDTH, 1):
-		ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+		r = ws.max_row
+		ws.row_dimensions[r].height = 30
+		for col in range(1, 15):
+			c = ws.cell(row=r, column=col)
+			code = col in _DHC_CODE_COLS
+			c.font = Font(bold=col in _DHC_BOLD_COLS, size=8 if code else 11, name="Calibri",
+				color="FF000000")
+			c.alignment = (Alignment(horizontal="center", vertical="center", wrap_text=True) if code
+				else Alignment(vertical="center", wrap_text=True))
+			if code:
+				c.number_format = "@"
+			c.border = box
+
+	for col, w in _DHC_WIDTH.items():
+		ws.column_dimensions[col].width = w
 	buf = BytesIO()
 	wb.save(buf)
 	fname = (tag or "DHC-{0}".format(frappe.utils.today())) + ".xlsx"
