@@ -126,8 +126,17 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			`<th>${__("Karat")}</th><th>${__("Design type")}</th><th>${__("Basis")}</th>
 			 <th class="num">${__("Rate")}</th><th class="num">${__("Minimum")}</th><th class="num">${__("Flat below")}</th>`,
 			(r) => `<tr>
-				<td>${r.karat ? `<span class="k-chip">${esc(r.karat)}</span>` : `<span style="color:var(--text-muted)">${__("any")}</span>`}</td>
-				<td>${esc(r.design_type || r.charge_category || "") || `<span style="color:var(--text-muted)">${__("DEFAULT")}</span>`}</td>
+				<td>${r.karat ? `<span class="k-chip">${esc(r.karat)}</span>`
+					: `<span style="color:var(--text-muted)">${__("any karat")}</span>`}</td>
+				<td>${esc(r.design_type || r.charge_category || "")
+					|| `<span style="color:var(--text-muted)">${__("any type")}</span>`}${
+					// DEFAULT means the row that catches a piece matching nothing else,
+					// and that is only true when BOTH columns are blank. Calling a
+					// karat-only row DEFAULT read as "everything is covered" while the
+					// check above the table said the opposite — an 18K-only rule leaves
+					// a 22K piece with no making charge at all.
+					!(r.karat || "").trim() && !(r.design_type || r.charge_category || "").trim()
+						? ` <span class="k-chip">${__("DEFAULT")}</span>` : ""}</td>
 				<td>${esc(r.basis)}</td>
 				<td class="num">${r.rate ? inr2(r.rate) + (r.basis === "Per Gram" ? "/g" : r.basis === "Per Piece" ? "/pc" : "%") : "—"}</td>
 				<td class="num">${inr(r.min_per_piece)}</td>
