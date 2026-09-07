@@ -14650,7 +14650,31 @@ def get_cert_prep_context():
 	qmap = _diamond_qmap()
 	groups = frappe.get_all("Item Group", filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name")
 	quals = sorted({qmap.get(g.replace("DIAMOND ", ""), g.replace("DIAMOND ", "")) for g in groups})
-	return {"types": types, "centers": centers, "qualities": quals}
+	# per type: the qualities it may lock to. [] = it does not lock at all, so the
+	# page skips the stage instead of asking a question with no answer
+	locks = {t.name: _cert_qualities(t.name, quals) for t in types}
+	return {"types": types, "centers": centers, "qualities": quals, "quality_lock": locks}
+
+
+# A lab that grades stones takes ONE colour+clarity a batch, because the sheet
+# it grades from carries one. IGI takes any of ours; DHC is EF only for now.
+# None here = the lab does not grade stones, so a batch may hold anything.
+CERT_QUALITY_LOCK = {"IGI": None, "DHC": ["VVS-EF"]}
+
+
+def _cert_qualities(cert_type, all_qualities=None):
+	"""The colour+clarity options a certification may be locked to — [] when it
+	does not lock at all."""
+	if cert_type not in CERT_QUALITY_LOCK:
+		return []
+	allowed = CERT_QUALITY_LOCK[cert_type]
+	if allowed is None:
+		return list(all_qualities or [])
+	return list(allowed)
+
+
+def _cert_locks_quality(cert_type):
+	return cert_type in CERT_QUALITY_LOCK
 
 
 def _cert_validate_piece(cert_type, quality, nm, taken=None):
@@ -14670,12 +14694,17 @@ def _cert_validate_piece(cert_type, quality, nm, taken=None):
 		where i.order_bag = %s and c.status = 'Prepared' limit 1""", (nm,))
 	if other:
 		frappe.throw(frappe._("{0} is already on prepared batch {1}.").format(nm, other[0][0]))
-	if cert_type == "IGI":
+	if _cert_locks_quality(cert_type):
+		allowed = _cert_qualities(cert_type)
 		quals = _bag_diamond_qualities(nm)
 		if len(quals) > 1:
-			frappe.throw(frappe._("{0} carries MIXED diamond qualities ({1}) — IGI batches take one only.").format(nm, ", ".join(quals)))
+			frappe.throw(frappe._("{0} carries MIXED diamond qualities ({1}) — {2} batches take one only.")
+				.format(nm, ", ".join(quals), cert_type))
 		if not quals:
-			frappe.throw(frappe._("{0} has no diamonds — nothing for IGI to certify.").format(nm))
+			frappe.throw(frappe._("{0} has no diamonds — nothing for {1} to certify.").format(nm, cert_type))
+		if allowed and quals[0] not in allowed:
+			frappe.throw(frappe._("{0} is {1} — {2} takes {3} only.")
+				.format(nm, quals[0], cert_type, " / ".join(allowed)))
 		if quals[0] != quality:
 			frappe.throw(frappe._("{0} is {1} — this batch is locked to {2}.").format(nm, quals[0], quality))
 	return b
@@ -14808,8 +14837,8 @@ def get_certifiable(cert_type=None, quality=None, design_type=None, bucket=None,
 	cond.append("""NOT EXISTS (SELECT 1 FROM `tabCertification Item` ci
 		JOIN `tabCertification` c ON c.name = ci.parent
 		WHERE ci.order_bag = b.name AND c.status = 'Prepared')""")
-	# IGI certifies diamonds, so a piece with none of them is not a candidate
-	if cert_type == "IGI":
+	# a lab that grades stones has nothing to grade on a piece without them
+	if _cert_locks_quality(cert_type):
 		cond.append("IFNULL(b.act_dmd_weight, 0) > 0")
 	W = " AND ".join(cond)
 	FROM = "FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design"
@@ -14823,9 +14852,9 @@ def get_certifiable(cert_type=None, quality=None, design_type=None, bucket=None,
 		WHERE {1}
 		ORDER BY d.design_type, b.design, b.name
 		LIMIT %(lim)s OFFSET %(off)s""".format(FROM, W), vals, as_dict=True)
-	# the colour+clarity an IGI batch locks to, so the picker can grey a mismatch
+	# the colour+clarity the batch locks to, so the picker can grey a mismatch
 	# BEFORE it is ticked rather than refusing it after
-	if cert_type == "IGI" and rows:
+	if _cert_locks_quality(cert_type) and rows:
 		for r in rows:
 			q = _bag_diamond_qualities(r.name)
 			r["quality"] = q[0] if len(q) == 1 else (", ".join(q) if q else "")
@@ -14862,8 +14891,8 @@ def cert_prep_create_full(cert_type, center=None, quality=None, bags=None):
 	if not frappe.db.exists("Certification Type", cert_type):
 		frappe.throw(frappe._("Pick the certification."))
 	quality = (quality or "").strip()
-	if cert_type == "IGI" and not quality:
-		frappe.throw(frappe._("IGI batches carry ONE colour+clarity — pick it first."))
+	if _cert_locks_quality(cert_type) and not quality:
+		frappe.throw(frappe._("{0} batches carry ONE colour+clarity — pick it first.").format(cert_type))
 	rows, seen = [], set()
 	for nm in bags:
 		b = _cert_validate_piece(cert_type, quality, nm, seen)
@@ -14885,8 +14914,8 @@ def create_cert_prep(cert_type, center=None, quality=None):
 	"""Start a prep — it takes its FINAL outgoing name now (IGI-0001)."""
 	if not frappe.db.exists("Certification Type", cert_type):
 		frappe.throw(frappe._("Pick the certification."))
-	if cert_type == "IGI" and not (quality or "").strip():
-		frappe.throw(frappe._("IGI batches carry ONE colour+clarity — pick it first."))
+	if _cert_locks_quality(cert_type) and not (quality or "").strip():
+		frappe.throw(frappe._("{0} batches carry ONE colour+clarity — pick it first.").format(cert_type))
 	# legacy Select filled only where the old option list has the value (receive
 	# flow reads it for HUID handling); the new cert_type is the real key
 	legacy = {"HALL": "HALLMARKING", "SGL": "SGL", "IDT": "IDT", "GIG": "GIG"}.get(cert_type)

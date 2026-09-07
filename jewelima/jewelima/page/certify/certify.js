@@ -117,8 +117,12 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		root.find(".cf-b-center").html(centers.map((c) => blk(c.center_name, "", sel.center === c.name))
 			.join("").replace(/data-code="([^"]*)"/g, (m, i) => m));  // codes are center names below
 		root.find(".cf-b-center .cf-blk").each(function (i) { $(this).attr("data-code", centers[i].name); });
-		root.find('.cf-stage[data-stage="qual"]').toggle(sel.type === "IGI" && !!(sel.center || !centers.length));
-		root.find(".cf-b-qual").html(CTX.qualities.map((q) => blk(q, "", sel.quality === q)).join(""));
+		// a lab that grades stones locks the batch to one colour+clarity; which
+		// ones it will take is the lab's own list — DHC is EF only
+		const lockQ = (CTX.quality_lock || {})[sel.type] || [];
+		root.find('.cf-stage[data-stage="qual"]').toggle(lockQ.length > 0 && !!(sel.center || !centers.length));
+		if (lockQ.length === 1 && sel.type && !sel.quality) sel.quality = lockQ[0];
+		root.find(".cf-b-qual").html(lockQ.map((q) => blk(q, "", sel.quality === q)).join(""));
 		const ty = CTX.types.find((x) => x.name === sel.type);
 		root.find(".cf-req").text(ty && ty.excel_requirements ? __("Rules: ") + ty.excel_requirements : "");
 	}
@@ -127,7 +131,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	function maybeStart() {
 		const centers = CTX.centers.filter((c) => c.certification_type === sel.type);
 		const needCenter = centers.length > 0 && !sel.center;
-		const needQual = sel.type === "IGI" && !sel.quality;
+		const needQual = (((CTX.quality_lock || {})[sel.type] || []).length > 0) && !sel.quality;
 		if (!sel.type || needCenter || needQual) { paintPicker(); return; }
 		draft = { cert_type: sel.type, center: sel.center, quality: sel.quality || "", rows: [] };
 		prep = null;
@@ -263,7 +267,8 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 
 	function showPicker() {
 		if (!draft) return;
-		const igi = draft.cert_type === "IGI";
+		// the lock is what the picker cares about, not IGI's own sheet columns
+		const igi = (((CTX.quality_lock || {})[draft.cert_type] || []).length > 0);
 		const P = { bucket: "", design_type: "", karat: "", held_by: "", q: "",
 			rows: [], sel: new Set(), total: 0, hasMore: false, selOnly: false };
 		const PAGE = 60;
