@@ -18,7 +18,7 @@
  */
 .body-sidebar .standard-sidebar-item .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .sidebar-item-label {
-	font-weight: 600;
+	font-weight: 700;
 }
 
 /* A section heading leads a group, so it carries a touch more than the lines
@@ -27,5 +27,5 @@
  */
 .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
-	font-weight: 700;
+	font-weight: 800;
 }
