@@ -74,6 +74,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 						${p.can_manage
 							? `<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
 							: `<button class="btn btn-default btn-sm sc-ask">${__("ASK A MANAGER TO SEND")}</button>`}
+						<button class="btn btn-default btn-sm sc-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
 						${p.can_manage
 							? `<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>`
@@ -116,6 +117,12 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		});
 	});
 
+	// the same sheet the lab is emailed, in your hands instead — for a pen drive,
+	// a reprint, or a lab that wants it handed over with the packet
+	root.on("click", ".sc-xls", function () {
+		const nm = $(this).closest(".sc-card").data("name");
+		open_url_post("/api/method/jewelima.jewelima.api.export_certification_xlsx", { name: nm });
+	});
 	root.on("click", ".sc-mail", function () {
 		const nm = $(this).closest(".sc-card").data("name");
 		frappe.call({ method: API + ".get_cert_mail_defaults", args: { name: nm } }).then((r) => {

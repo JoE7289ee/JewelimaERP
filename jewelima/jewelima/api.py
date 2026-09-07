@@ -15787,6 +15787,24 @@ def email_cert_excel(name, recipient, subject, body, cc=None):
 	return {"sent_to": recipient, "cc": cc_list, "attachment": fname}
 
 
+@frappe.whitelist()
+def export_certification_xlsx(name):
+	"""The same sheet the lab is emailed, downloaded instead.
+
+	It goes through _cert_excel_bytes, so a file carried on a pen drive and a
+	file that arrived by mail are the same bytes — IGI's shipped template for
+	IGI, DHC's own layout for DHC, the generic bracket sheet for everyone else.
+	A second builder here would drift from the mailed one the first time a lab
+	changed its format."""
+	p = get_cert_prep(name)
+	if not p["rows"]:
+		frappe.throw(frappe._("Nothing on the batch."))
+	fname, content = _cert_excel_bytes(p)
+	frappe.local.response.filename = fname
+	frappe.local.response.filecontent = content
+	frappe.local.response.type = "binary"
+
+
 # A certification batch belongs to whoever prepped it, exactly as a hallmarking
 # one does — the same desk, the same people, so the same rule rather than a
 # second one to learn. Everybody on the desk can SEE every batch (you cannot
