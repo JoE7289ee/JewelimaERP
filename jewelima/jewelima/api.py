@@ -15111,8 +15111,16 @@ def _dhc_xlsx_bytes(bags, tag=""):
 			code = col in _DHC_CODE_COLS
 			c.font = Font(bold=col in _DHC_BOLD_COLS, size=8 if code else 11, name="Calibri",
 				color="FF000000")
-			c.alignment = (Alignment(horizontal="center", vertical="center", wrap_text=True) if code
-				else Alignment(vertical="center", wrap_text=True))
+			# DHC centres the colour-stone weight horizontally and leaves the metal
+			# colour plain; everything else sits centred in its 30pt row
+			if code:
+				c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+			elif col == 9:
+				c.alignment = Alignment(horizontal="center", wrap_text=True)
+			elif col == 11:
+				c.alignment = Alignment()
+			else:
+				c.alignment = Alignment(vertical="center", wrap_text=True)
 			if code:
 				c.number_format = "@"
 			c.border = box
