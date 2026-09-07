@@ -15954,6 +15954,85 @@ def get_confirm_pool():
 	return {"batches": batches, "pending": pend}
 
 
+def _confirm_cert_one(nm, mode, touched):
+	"""One piece, claimed atomically. Returns the same shape confirm_cert_scan
+	does. Does NOT commit and does NOT roll the batch up — the caller does both
+	once for the whole run, so a fifty-piece save is one transaction rather than
+	fifty."""
+	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
+		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and c.status in ('Collected', 'Partially Received')
+		order by c.creation desc limit 1""", nm, as_dict=True)
+	if not row:
+		if not frappe.db.exists("Order Bag", nm):
+			return {"rejected_scan": frappe._("This card doesn't exist")}
+		return {"rejected_scan": frappe._("Not on any collected batch")}
+	r = row[0]
+	if r.received:
+		return {"rejected_scan": frappe._("Already confirmed by {0}").format(r.confirmed_by or "?")}
+	if r.rejected:
+		return {"rejected_scan": frappe._("Already in the reject queue")}
+	now = frappe.utils.now_datetime()
+	user = frappe.session.user
+	# ATOMIC claim: the guarded UPDATE wins for exactly one scanner — a second
+	# simultaneous scan of the same card affects 0 rows and reports the loser
+	field = "received" if mode == "accept" else "rejected"
+	frappe.db.sql("""update `tabCertification Item`
+		set {0} = 1, received_on = %s, confirmed_by = %s
+		where name = %s and received = 0 and rejected = 0""".format(field), (now, user, r.name))
+	claimed = frappe.db.sql("select confirmed_by from `tabCertification Item` where name = %s", r.name)[0][0]
+	if claimed != user:
+		return {"rejected_scan": frappe._("Already confirmed by {0}").format(claimed or "?")}
+	if mode == "accept":
+		ct = frappe.db.get_value("Certification", r.parent, "cert_type") or frappe.db.get_value(
+			"Certification", r.parent, "certification_type")
+		frappe.db.set_value("Order Bag", nm, "certifications", _stamp_certification(nm, ct))
+	touched.add(r.parent)
+	return {"ok": 1, "mode": mode, "batch": r.parent}
+
+
+def _confirm_cert_rollup(parents):
+	"""All processed -> Received; some -> Partially Received. Once per batch."""
+	done = []
+	for parent in parents:
+		left = frappe.db.sql("""select count(*) from `tabCertification Item`
+			where parent = %s and received = 0 and rejected = 0""", parent)[0][0]
+		frappe.db.set_value("Certification", parent, "status",
+			"Received" if left == 0 else "Partially Received", update_modified=False)
+		if left == 0:
+			done.append(parent)
+	return done
+
+
+@frappe.whitelist()
+def confirm_cert_batch(changes):
+	"""A whole tray in ONE call.
+
+	The page stages scans locally and sends them together, so a bad scan is
+	caught on the page before anything is written and the desk is not one
+	round trip per piece. Each piece is still claimed atomically here, which is
+	what keeps two people scanning the same tray honest: a piece the other
+	scanner already took comes back refused, by name, and the rest still land.
+	"""
+	if isinstance(changes, str):
+		changes = json.loads(changes or "[]")
+	touched, results = set(), []
+	for c in changes or []:
+		nm = _resolve_bag_code((c or {}).get("bag"))
+		mode = (c or {}).get("mode") or "accept"
+		if mode not in ("accept", "reject"):
+			mode = "accept"
+		if not nm:
+			continue
+		res = _confirm_cert_one(nm, mode, touched)
+		res.update({"bag": nm, "mode": mode})
+		results.append(res)
+	done = _confirm_cert_rollup(touched)
+	frappe.db.commit()
+	return {"results": results, "saved": sum(1 for r in results if r.get("ok")),
+		"refused": [r for r in results if r.get("rejected_scan")], "batches_done": done}
+
+
 @frappe.whitelist()
 def confirm_cert_scan(barcode, mode="accept"):
 	"""ONE scan on the Confirm page — lightweight and race-safe for several
