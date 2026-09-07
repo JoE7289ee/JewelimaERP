@@ -155,12 +155,13 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 						<td><input data-f="min_per_piece" type="number" step="0.01" value="${r.min_per_piece || ""}"></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
 
-				<div class="pe-sec">${__("Metal — ₹ per gram")}<span class="pe-add" data-k="metal_rates">+ ${__("row")}</span></div>
-				<table class="pe-t"><thead><tr><th>${__("Karat")}</th><th>${__("Rate ₹/g")}</th><th></th></tr></thead>
+				<div class="pe-sec">${__("Metal — touch % of the day's board rate")}<span class="pe-add" data-k="metal_rates">+ ${__("row")}</span></div>
+				<table class="pe-t"><thead><tr><th>${__("Karat")}</th><th>${__("Touch %")}</th><th></th></tr></thead>
 					<tbody>${C.metal_rates.map((r, i) => `<tr data-k="metal_rates" data-i="${i}">
-						<td><select data-f="karat">${["14K", "18K", "22K", "24K / fine"].map((k) =>
+						<td><select data-f="karat">${["14K", "18K", "22K"].map((k) =>
 							`<option ${r.karat === k ? "selected" : ""}>${k}</option>`).join("")}</select></td>
-						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
+						<td><input data-f="touch" type="number" step="0.01" value="${r.touch || ""}"
+							placeholder="${__("80 = 80% of the 24K board rate")}"></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
 
 				<div class="pe-sec">${__("Diamonds — ₹ per carat")}<span class="pe-add" data-k="diamond_rates">+ ${__("row")}</span></div>
@@ -192,7 +193,7 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 		$b.on("click", ".pe-add", function () {
 			const k = $(this).data("k");
 			C[k].push(k === "making_rates" ? { karat: "", design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
-				: k === "metal_rates" ? { karat: "18K", rate: "" }
+				: k === "metal_rates" ? { karat: "18K", touch: "" }
 				: { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" });
 			draw();
 		});

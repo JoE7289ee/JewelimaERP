@@ -10272,7 +10272,7 @@ def get_provider_rates(name=None):
 		"diamond_rates": [{"sieve_label": r.sieve_label or "", "from_ct": flt(r.from_ct),
 			"to_ct": flt(r.to_ct), "quality": (r.quality or "").strip().upper(),
 			"rate": flt(r.rate)} for r in (d.get("diamond_rates") or [])],
-		"metal_rates": [{"karat": r.karat or "", "rate": flt(r.rate)}
+		"metal_rates": [{"karat": r.karat or "", "touch": flt(r.touch)}
 			for r in (d.get("metal_rates") or [])],
 	}
 	return out
@@ -10307,8 +10307,8 @@ def save_provider_rate(payload):
 				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
 				"quality": (r.get("quality") or "").strip().upper(), "rate": flt(r.get("rate"))})
 	for r in p.get("metal_rates") or []:
-		if flt(r.get("rate")) and (r.get("karat") or "").strip():
-			doc.append("metal_rates", {"karat": r["karat"].strip().upper(), "rate": flt(r.get("rate"))})
+		if flt(r.get("touch")) and (r.get("karat") or "").strip():
+			doc.append("metal_rates", {"karat": r["karat"].strip().upper(), "touch": flt(r.get("touch"))})
 	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name}
@@ -10382,16 +10382,27 @@ def get_provider_margins(price_chart=None, providers=None, gold_rate=0):
 				"sieve": r.sieve_label or "", "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
 				"quality": q, **_margin(ours, flt(r.rate))})
 
-	# ---- metal: our side is the board rate through the chart's touch ---------
+	# ---- metal: BOTH sides are a touch on the day's board rate ---------------
+	# Nobody quotes gold as a fixed rupee figure — the board moves daily, so a
+	# provider quotes the same way we do, as a percentage of it. Comparing the
+	# touches is therefore the real comparison and holds on any day; the rupees
+	# beside them are only that comparison priced at the board rate given.
 	for k in KARATS:
-		touch = _touch_for(chart, k) if chart else 0
-		ours = round(gold_rate * touch / 100.0, 2) if (gold_rate and touch) else None
-		row = {"karat": k, "ours": ours, "touch": touch or None, "by": {}}
+		ours_t = _touch_for(chart, k) if chart else 0
+		ours = round(gold_rate * ours_t / 100.0, 2) if (gold_rate and ours_t) else None
+		row = {"karat": k, "ours": ours, "touch": ours_t or None, "by": {}}
 		for c in cards:
 			m = next((r for r in (c.get("metal_rates") or [])
 				if (r.karat or "").strip().upper() == k), None)
-			row["by"][c.name] = _margin(ours, flt(m.rate) if m else None)
-		if ours is not None or any(v["theirs"] is not None for v in row["by"].values()):
+			their_t = flt(m.touch) if m else 0
+			theirs = round(gold_rate * their_t / 100.0, 2) if (gold_rate and their_t) else None
+			cell = _margin(ours, theirs)
+			# the touches travel with the money, because a touch is the number the
+			# two sides actually agreed and the rupees are only today's reading
+			cell["touch"] = their_t or None
+			cell["touch_margin"] = round(ours_t - their_t, 2) if (ours_t and their_t) else None
+			row["by"][c.name] = cell
+		if ours_t or any(v["touch"] for v in row["by"].values()):
 			out["metal"].append(row)
 	return out
 

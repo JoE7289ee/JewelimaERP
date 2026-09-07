@@ -134,7 +134,14 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 		const scan = (v) => { if (v && v.margin != null) { priced++; if (v.margin < 0) under++;
 			else if (v.pct != null && v.pct < 15) thin++; } };
 		m.making.forEach((r) => Object.values(r.by).forEach(scan));
-		m.metal.forEach((r) => Object.values(r.by).forEach(scan));
+		// a metal cell is judged on its touch, in points, not on rupees that move
+		// with the board — scanning it as money would call every row "thin"
+		m.metal.forEach((r) => Object.values(r.by).forEach((v) => {
+			if (!v || v.touch_margin == null) return;
+			priced++;
+			if (v.touch_margin < 0) under++;
+			else if (v.touch_margin < 2) thin++;
+		}));
 		m.diamond.forEach(scan);
 
 		root.find(".pp-kpis").html(`
@@ -151,10 +158,25 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 				? `<div class="pct">${__("our rule")}: ${esc(r.our_rule)}</div>` : ""}</td>
 			${P.map((p) => mgCell(r.by[p.name])).join("")}</tr>`).join("");
 
+		// metal is quoted as a touch, so the touch is what the row compares; the
+		// rupees underneath are that comparison read at today's board rate
+		const metalCell = (v) => {
+			if (!v || v.touch == null) {
+				return `<td class="num grp"><span style="color:var(--text-muted)">—</span></td>`;
+			}
+			const d = v.touch_margin;
+			const cls = d == null ? "" : d < 0 ? "down" : d < 2 ? "thin" : "up";
+			return `<td class="num grp"><b>${v.touch}%</b>
+				${d == null ? "" : `<div class="mg ${cls}">${d < 0 ? "−" : "+"}${Math.abs(d)}${
+					__("pts")}</div>`}
+				${v.theirs == null ? "" : `<div class="pct">${inr(v.theirs)}${
+					v.margin == null ? "" : ` · ${v.margin < 0 ? "−" : "+"}${inr(Math.abs(v.margin)).slice(1)}`}</div>`}</td>`;
+		};
 		const metalRows = m.metal.map((r) => `<tr>
-			<td><b>${esc(r.karat)}</b>${r.touch ? `<div class="pct">${__("touch")} ${r.touch}%</div>` : ""}</td>
-			<td class="num">${inr(r.ours)}</td>
-			${P.map((p) => mgCell(r.by[p.name])).join("")}</tr>`).join("");
+			<td><b>${esc(r.karat)}</b></td>
+			<td class="num">${r.touch ? `<b>${r.touch}%</b>` : "—"}
+				${r.ours == null ? "" : `<div class="pct">${inr(r.ours)}</div>`}</td>
+			${P.map((p) => metalCell(r.by[p.name])).join("")}</tr>`).join("");
 
 		const dmdRows = m.diamond.map((r) => `<tr>
 			<td>${esc(r.supplier)}</td>
@@ -172,12 +194,12 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 			</tr></thead><tbody>${makingRows}</tbody></table></div>`
 				: `<div class="pp-empty">${__("No provider quotes a making rate yet.")}</div>`}
 
-			<div class="pp-sec">${__("Metal — ₹ per gram")}</div>
+			<div class="pp-sec">${__("Metal — touch on the board rate")}</div>
 			<p class="pp-note">${m.gold_rate
-				? __("our rate is the {0} board rate through the chart's touch", [inr(m.gold_rate)])
-				: __("type the 24K board rate above to compare metal — our side of it is that rate through the chart's touch")}</p>
+				? __("gold is never a stored rate — both sides quote a touch on the day's board rate, and the rupees are that touch read at {0}", [inr(m.gold_rate)])
+				: __("both sides quote a touch on the day's board rate; type the 24K rate above to see it in rupees too")}</p>
 			${m.metal.length ? `<div class="pp-tw"><table class="pp-t"><thead><tr>
-				<th>${__("Karat")}</th><th class="num">${__("We charge")}</th>${head}
+				<th>${__("Karat")}</th><th class="num">${__("Our touch")}</th>${head}
 			</tr></thead><tbody>${metalRows}</tbody></table></div>`
 				: `<div class="pp-empty">${__("No provider quotes a metal rate yet.")}</div>`}
 
