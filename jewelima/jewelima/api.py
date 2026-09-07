@@ -10456,21 +10456,121 @@ def _feed_surabi():
 	}
 
 
+def _feed_shivsahai():
+	"""Shiv Sahai's board, the feed their own site posts to.
+
+	The richest of the four, and the only one that quotes CITY BY CITY — Chennai,
+	Hyderabad, Bangalore, Kolkata, Jaipur, Indore and, the one that matters here,
+	GLD TSR (Thrissur). A Kerala board is far likelier to sit on a Kerala city
+	line than on a national average, which is the whole reason the rows are
+	carried through untouched.
+
+	Rows are tab-separated and the first column says what kind of row it is:
+	1 = world spot, 2 = MCX futures, 3 = Indian city rates, 4 = the board's clock.
+	The city lines are per GRAM; the futures line is per ten grams, and matches
+	the other dealers' rupee gold to the rupee, which is what fixes the units."""
+	import requests
+
+	r = requests.post(
+		"http://13.200.166.91/lmxtrade/winbullliteapi/api/v1/broadcastrates",
+		json={"client": "ssahaitrd"}, timeout=BOARD_FEED_TIMEOUT)
+	r.raise_for_status()
+	r.encoding = "utf-8"
+
+	def num(v):
+		v = (v or "").strip().strip('"')
+		return flt(v) if v and v not in ("-", "") else None
+
+	rows, fut, stamp = [], None, ""
+	for line in (r.text or "").splitlines():
+		f = [x.strip() for x in line.split("\t")]
+		if len(f) < 3:
+			continue
+		kind = f[0]
+		if kind == "4":
+			stamp = next((x.strip('"') for x in f if "/" in x and ":" in x), "")
+			continue
+		label = (f[2] if kind == "3" else f[2]).strip('"')
+		row = {"label": label, "kind": {"1": "World", "2": "Futures", "3": "India"}.get(kind, kind),
+			"bid": num(f[3]) if len(f) > 3 else None,
+			"ask": num(f[4]) if len(f) > 4 else None,
+			"high": num(f[5]) if len(f) > 5 else None,
+			"low": num(f[6]) if len(f) > 6 else None}
+		if kind == "3":
+			# a city line carries ONE price, in the bid slot, and it is per gram
+			row["ask"] = row["ask"] or row["bid"]
+		rows.append(row)
+		if kind == "2" and label.upper().startswith("GOLD"):
+			fut = row["ask"] or row["bid"]
+	if not fut:
+		raise ValueError("no rupee gold future in the board")
+
+	fine_g = fut / 10.0
+	return {
+		"as_of": stamp,
+		"by_karat": {k: round(fine_g / 0.999 * f2, 2) for k, f2 in KARAT_FINENESS.items()},
+		"detail": "MCX gold Rs {0}/10g".format(fut),
+		"extra": rows,
+	}
+
+
 BOARD_FEEDS = [
 	{"key": "ibja", "name": "IBJA", "kind": "Indian trade rate",
 	 "note": "What the trade deals at — duty and GST already inside it. Market working days, AM/PM.",
 	 "source": "ibjarates.com, via a public mirror", "url": "https://ibja-api.vercel.app/latest",
-	 "official": False, "fn": _feed_ibja},
+	 "official": False, "live": False, "fn": _feed_ibja},
 	{"key": "surabi", "name": "Surabi Bullion", "kind": "Dealer board",
 	 "note": "A dealer's own live bid/ask, not an average — the closest here to a board. Its whole board is shown below.",
 	 "source": "surabibullion.com's own live feed",
 	 "url": "https://bcast.surabibullion.net:7768/…/GetLiveRateByTemplateID/surabi",
-	 "official": False, "fn": _feed_surabi},
+	 "official": False, "live": True, "fn": _feed_surabi},
+	{"key": "shivsahai", "name": "Shiv Sahai", "kind": "Dealer board",
+	 "note": "Quotes CITY BY CITY — including GLD TSR (Thrissur). If a Kerala board sits on any line here, it is that one.",
+	 "source": "shivsahai.com's own live feed",
+	 "url": "http://13.200.166.91/lmxtrade/winbullliteapi/api/v1/broadcastrates",
+	 "official": False, "live": True, "fn": _feed_shivsahai},
 	{"key": "spot", "name": "International spot", "kind": "World metal price",
 	 "note": "The metal's world price at the day's USD/INR. Always below the Indian rate — the gap is duty, GST and local premium.",
 	 "source": "gold-api.com + open.er-api.com", "url": "https://api.gold-api.com/price/XAU",
-	 "official": False, "fn": _feed_spot},
+	 "official": False, "live": True, "fn": _feed_spot},
 ]
+
+
+BOARD_LIVE_CACHE_KEY = "jw_board_rate_live"
+BOARD_LIVE_CACHE_SECS = 15
+
+
+@frappe.whitelist()
+def get_board_rate_live():
+	"""Just the feeds that MOVE during the day, for the page's live tick.
+
+	IBJA is a published AM/PM figure and is not re-read here — polling it every
+	twenty seconds would ask a daily number to be a live one.
+
+	Fifteen seconds of cache in front of upstream, so a room full of open pages
+	is still only a few calls a minute on somebody else's free endpoint. A page
+	nobody is looking at polls nothing at all."""
+	_require_costing()
+	hit = frappe.cache().get_value(BOARD_LIVE_CACHE_KEY)
+	if hit:
+		return hit
+
+	rows = []
+	for f in BOARD_FEEDS:
+		if not f.get("live"):
+			continue
+		row = {"key": f["key"], "name": f["name"]}
+		started = time.time()
+		try:
+			row.update(f["fn"]())
+			row["error"] = ""
+		except Exception as e:
+			row.update({"by_karat": {}, "as_of": "", "error": str(e)[:200]})
+		row["ms"] = int((time.time() - started) * 1000)
+		rows.append(row)
+	out = {"rows": rows, "at": frappe.utils.now()}
+	frappe.cache().set_value(BOARD_LIVE_CACHE_KEY, out, expires_in_sec=BOARD_LIVE_CACHE_SECS)
+	return out
 
 
 @frappe.whitelist()
@@ -10488,7 +10588,7 @@ def get_board_rate_feeds(refresh=0):
 
 	rows = []
 	for f in BOARD_FEEDS:
-		row = {k: f[k] for k in ("key", "name", "kind", "note", "source", "url", "official")}
+		row = {k: f[k] for k in ("key", "name", "kind", "note", "source", "url", "official", "live")}
 		started = time.time()
 		try:
 			row.update(f["fn"]())

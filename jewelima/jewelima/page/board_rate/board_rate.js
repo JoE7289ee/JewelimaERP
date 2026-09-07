@@ -19,10 +19,24 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
-	const S = { data: null, karat: "24K" };
+	// prev holds the last value seen for each number, so a tick can be shown as a
+	// direction rather than just a new figure — a board is watched for movement
+	const S = { data: null, karat: "24K", live: true, prev: {}, dir: {}, timer: null, at: "" };
+	const POLL_MS = 20000;
 
 	const inr = (v) => (v == null ? "—" : "₹" + flt(v).toLocaleString("en-IN",
 		{ minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+	const num = (v) => (v == null ? "—" : flt(v).toLocaleString("en-IN", { maximumFractionDigits: 3 }));
+
+	// remember every number by a key, and report which way it last moved
+	function moved(key, v) {
+		if (v == null) return "";
+		const was = S.prev[key];
+		if (was != null && was !== v) S.dir[key] = v > was ? "up" : "down";
+		S.prev[key] = v;
+		return S.dir[key] || "";
+	}
+	const arrow = (d) => (d === "up" ? ` <span class="arw">▲</span>` : d === "down" ? ` <span class="arw">▼</span>` : "");
 
 	root.append(`
 		<style>
@@ -34,6 +48,23 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		.br-kar button:last-child{border-right:0;}
 		.br-kar button.on{background:#1f618d;color:#fff;font-weight:700;}
 		.br-stamp{margin-left:auto;font-size:11.5px;color:var(--text-muted);}
+		.br-livebtn{border:1px solid var(--border-color);border-radius:9px;background:none;
+			padding:7px 14px;font-size:12.5px;cursor:pointer;color:var(--text-color);
+			display:flex;align-items:center;gap:7px;}
+		.br-livebtn.on{border-color:#1d7a33;color:#1d7a33;font-weight:700;}
+		[data-theme="dark"] .br-livebtn.on{color:#6fbf7f;}
+		.dot{width:8px;height:8px;border-radius:50%;background:var(--text-muted);display:inline-block;}
+		.br-livebtn.on .dot{background:#1d7a33;animation:brpulse 1.6s ease-in-out infinite;}
+		[data-theme="dark"] .br-livebtn.on .dot{background:#6fbf7f;}
+		@keyframes brpulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+		/* a moved number says which way it went, and settles */
+		.up{color:#1d7a33;} .down{color:#b02a2a;}
+		[data-theme="dark"] .up{color:#6fbf7f;} [data-theme="dark"] .down{color:#f0a0a0;}
+		.arw{font-size:.7em;vertical-align:middle;}
+		@keyframes brflashup{from{background:rgba(29,122,51,.22);}to{background:transparent;}}
+		@keyframes brflashdn{from{background:rgba(176,42,42,.22);}to{background:transparent;}}
+		.fl-up{animation:brflashup 1.1s ease-out;}
+		.fl-down{animation:brflashdn 1.1s ease-out;}
 		.br-cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
 		.br-card{flex:1 1 290px;border:1px solid var(--border-color);border-radius:13px;
 			padding:14px 16px;background:var(--fg-color);}
@@ -51,6 +82,8 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 			letter-spacing:.04em;text-transform:uppercase;}
 		.tag.ind{background:rgba(31,97,141,.16);color:#1f618d;}
 		.tag.wld{background:rgba(122,79,181,.16);color:#7a4fb5;}
+		.tag.dlr{background:rgba(29,122,51,.16);color:#1d7a33;}
+		[data-theme="dark"] .tag.dlr{color:#6fbf7f;}
 		.tag.un{background:rgba(180,83,9,.16);color:#b45309;}
 		[data-theme="dark"] .tag.ind{color:#7fb2dd;} [data-theme="dark"] .tag.wld{color:#bfa3e8;}
 		[data-theme="dark"] .tag.un{color:#e8a24a;}
@@ -74,6 +107,7 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		</style>
 		<div class="br-top">
 			<div class="br-kar"></div>
+			<button class="br-livebtn on"><span class="dot"></span><span class="lbl"></span></button>
 			<span class="br-stamp"></span>
 		</div>
 		<div class="br-cards"></div>
@@ -85,21 +119,28 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		if (!d) return;
 		root.find(".br-kar").html(d.karats.map((k) =>
 			`<button class="${k === S.karat ? "on" : ""}" data-k="${k}">${k}</button>`).join(""));
-		root.find(".br-stamp").html(d.cached
-			? __("read a moment ago — feeds are held for ten minutes")
-			: __("read just now"));
+		root.find(".br-livebtn").toggleClass("on", S.live)
+			.find(".lbl").text(S.live ? __("Live") : __("Paused"));
+		root.find(".br-stamp").html(S.live
+			? __("the moving feeds refresh every {0} seconds · last at {1}",
+				[POLL_MS / 1000, esc((S.at || d.fetched_on || "").slice(11, 19))])
+			: __("paused — press Live to follow the board again"));
 
 		root.find(".br-cards").html(d.rows.map((r) => {
 			const v = (r.by_karat || {})[S.karat];
+			const d = r.error ? "" : moved(r.key + ":" + S.karat, v);
+			const tag = r.kind === "Indian trade rate" ? "ind"
+				: r.kind === "Dealer board" ? "dlr" : "wld";
+			const body = r.error
+				? `<div class="bad">${__("could not read it")} — ${esc(r.error)}</div>`
+				: `<div class="big ${d}">${inr(v)}${arrow(d)}<span style="font-size:13px;font-weight:400;color:var(--text-muted);"> /g ${esc(S.karat)}</span></div>
+					<div class="sub">${__("as of")} ${esc((r.as_of || "").replace("T", " ").slice(0, 19)) || "—"}
+						· ${r.ms}ms${r.detail ? " · " + esc(r.detail) : ""}</div>`;
 			return `<div class="br-card ${r.error ? "err" : ""}">
 				<div class="nm">${esc(r.name)}
-					<span class="tag ${r.kind === "Indian trade rate" ? "ind" : "wld"}">${esc(r.kind)}</span>
-					${r.official ? "" : `<span class="tag un">${__("unofficial")}</span>`}</div>
-				${r.error
-					? `<div class="bad">${__("could not read it")} — ${esc(r.error)}</div>`
-					: `<div class="big">${inr(v)}<span style="font-size:13px;font-weight:400;color:var(--text-muted);"> /g ${esc(S.karat)}</span></div>
-						<div class="sub">${__("as of")} ${esc((r.as_of || "").replace("T", " ").slice(0, 19)) || "—"}
-							· ${r.ms}ms${r.detail ? " · " + esc(r.detail) : ""}</div>`}
+					<span class="tag ${tag}">${esc(r.kind)}</span>
+					${r.live ? "" : `<span class="tag un">${__("daily")}</span>`}</div>
+				${body}
 				<div class="note">${esc(r.note)}</div>
 				<div class="src">${esc(r.source)}<br>${esc(r.url)}</div>
 			</div>`;
@@ -126,10 +167,11 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 				<th>${__("Line")}</th><th class="num">${__("Bid")}</th><th class="num">${__("Ask")}</th>
 				<th class="num">${__("High")}</th><th class="num">${__("Low")}</th>
 			</tr></thead><tbody>${r.extra.map((e) => `<tr>
-				<td>${esc(e.label)}</td>
-				${["bid", "ask", "high", "low"].map((k) => `<td class="num">${
-					e[k] == null ? "—" : flt(e[k]).toLocaleString("en-IN",
-						{ maximumFractionDigits: 3 })}</td>`).join("")}
+				<td>${e.kind ? `<span class="pct" style="font-size:9.5px;">${esc(e.kind)}</span> ` : ""}${esc(e.label)}</td>
+				${["bid", "ask", "high", "low"].map((k) => {
+					const d = k === "high" || k === "low" ? "" : moved(r.key + ":" + e.label + ":" + k, e[k]);
+					return `<td class="num ${d}">${num(e[k])}${arrow(d)}</td>`;
+				}).join("")}
 			</tr>`).join("")}</tbody></table></div>`).join("");
 
 		root.find(".br-body").html(`
@@ -160,7 +202,31 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 			.then((r) => { S.data = r.message; paint(); });
 	}
 
+	function tick() {
+		// a page nobody is looking at asks nothing of anybody's server
+		if (!S.live || !S.data || document.hidden || !$(wrapper).is(":visible")) return;
+		frappe.call({ method: API + ".get_board_rate_live", freeze: false })
+			.then((r) => {
+				const m = r.message || {};
+				(m.rows || []).forEach((n) => {
+					const row = S.data.rows.find((x) => x.key === n.key);
+					if (!row) return;
+					Object.assign(row, n);       // by_karat, extra, as_of, ms, error
+				});
+				S.at = m.at || "";
+				paint();
+			})
+			.catch(() => {});      // a dropped tick is not worth a message; the next one comes
+	}
+
+	root.on("click", ".br-livebtn", () => {
+		S.live = !S.live;
+		paint();
+		if (S.live) tick();
+	});
 	root.on("click", ".br-kar button", function () { S.karat = $(this).data("k"); paint(); });
 	page.set_primary_action(__("Read again"), () => load(true), "refresh");
-	load(false);
+	load(false).then(() => { S.timer = setInterval(tick, POLL_MS); });
+	// the interval belongs to this page, not to the desk it was opened from
+	$(wrapper).on("remove", () => clearInterval(S.timer));
 };
