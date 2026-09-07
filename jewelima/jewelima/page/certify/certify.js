@@ -87,7 +87,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				<div class="cf-tiles"></div>
 				<div class="cf-scanrow"><div class="cf-scan"></div>
 					<button class="cf-btn cf-pick">${__("Add by filter…")}</button>
-					<span style="font-size:11.5px;color:var(--text-muted);">${__("scan / type card no. + Enter — products only")}</span></div>
+					<span style="font-size:11.5px;color:var(--text-muted);">${__("scan / type card no. + Enter — E optional")}</span></div>
 				<table class="cf-t"><thead class="cf-th"></thead><tbody class="cf-tb"></tbody></table>
 				<div class="cf-tot"></div>
 				<div class="cf-actions">

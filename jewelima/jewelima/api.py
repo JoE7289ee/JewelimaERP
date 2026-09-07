@@ -14913,7 +14913,7 @@ def cert_draft_scan(cert_type, quality, barcode, existing=None):
 	Throws with the reason on any rejection; returns the format row otherwise."""
 	if isinstance(existing, str):
 		existing = json.loads(existing or "[]")
-	nm = (barcode or "").strip()
+	nm = _resolve_bag_code(barcode)
 	try:
 		b = _cert_validate_piece(cert_type, (quality or "").strip(), nm, set(existing or []))
 	except frappe.ValidationError as e:
@@ -14935,7 +14935,7 @@ def cert_draft_scan_many(cert_type, quality, barcodes, existing=None):
 	seen = set(existing or [])
 	out = []
 	for code in barcodes or []:
-		nm = (code or "").strip()
+		nm = _resolve_bag_code(code)
 		if not nm:
 			continue
 		try:
@@ -15091,7 +15091,7 @@ def cert_prep_scan(name, barcode):
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — no more scanning.").format(name, d.status))
-	nm = (barcode or "").strip()
+	nm = _resolve_bag_code(barcode)
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("{0} does not exist.").format(nm or "?"))
 	b = frappe.db.get_value("Order Bag", nm,
