@@ -15452,6 +15452,7 @@ def cert_prep_scan(name, barcode):
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — no more scanning.").format(name, d.status))
+	_require_cert_owner(d, frappe._("add to"))
 	nm = _resolve_bag_code(barcode)
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("{0} does not exist.").format(nm or "?"))
@@ -15516,6 +15517,8 @@ def get_cert_prep(name):
 			row.update(dh)
 		rows.append(row)
 	return {"name": d.name, "cert_type": d.cert_type, "center": d.center or "",
+		"owner": d.owner, "owner_label": _user_label(d.owner),
+		"can_manage": _cert_can_manage(d),
 		"quality": d.quality or "", "status": d.status, "prepared_on": str(d.prepared_on or ""),
 		"remarks": d.remarks or "", "rows": rows, "count": len(rows),
 		"gross": round(sum(x["gross"] for x in rows), 3), "dmd_ct": round(sum(x["dmd_ct"] for x in rows), 3)}
@@ -15784,11 +15787,60 @@ def email_cert_excel(name, recipient, subject, body, cc=None):
 	return {"sent_to": recipient, "cc": cc_list, "attachment": fname}
 
 
+# A certification batch belongs to whoever prepped it, exactly as a hallmarking
+# one does — the same desk, the same people, so the same rule rather than a
+# second one to learn. Everybody on the desk can SEE every batch (you cannot
+# hand over a packet you are not allowed to look at); adding, removing, sending
+# and cancelling belong to its preparer, and a manager overrides because
+# someone has to when that person is not in today.
+CERT_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
+
+
+def _cert_can_manage(d):
+	return bool(set(frappe.get_roles()) & CERT_OVERRIDE_ROLES) or d.owner == frappe.session.user
+
+
+def _require_cert_owner(d, what):
+	if _cert_can_manage(d):
+		return
+	frappe.throw(frappe._("{0} was prepped by {1} — only they or a manager can {2} it.")
+		.format(d.name, _user_label(d.owner), what))
+
+
+@frappe.whitelist()
+def request_cert_send(name, to_user, note=None):
+	"""Ask a manager to send a batch that is not yours. Nothing moves — this puts
+	the request in front of a named person, so a packet is not stuck behind
+	whoever happens to be off."""
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only a Prepared batch is waiting to go.").format(name, d.status))
+	if not frappe.db.exists("User", to_user):
+		frappe.throw(frappe._("{0} is not a user.").format(to_user))
+	who = _user_label(frappe.session.user)
+	body = frappe._("{0} is asking you to send certification batch {1} to {2} ({3} piece(s)).").format(
+		who, name, d.cert_type or "?", len(d.items))
+	if (note or "").strip():
+		body += "<br>" + frappe.utils.escape_html(note.strip())
+	frappe.get_doc({
+		"doctype": "Notification Log", "for_user": to_user, "from_user": frappe.session.user,
+		"type": "Alert", "subject": frappe._("Send {0}?").format(name),
+		"email_content": body, "document_type": "Certification", "document_name": name,
+	}).insert(ignore_permissions=True)
+	# and a note ON the batch, so the ask is part of its record rather than only
+	# a notification someone may clear
+	d.add_comment("Comment", frappe._("{0} asked {1} to send this batch.").format(
+		who, _user_label(to_user)))
+	frappe.db.commit()
+	return {"ok": 1, "to": _user_label(to_user)}
+
+
 @frappe.whitelist()
 def cert_prep_remove(name, row):
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — no more edits.").format(name, d.status))
+	_require_cert_owner(d, frappe._("change"))
 	d.set("items", [x for x in d.items if x.name != row])
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -15800,6 +15852,7 @@ def cert_prep_cancel(name):
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("Only a Prepared batch cancels — {0} is {1}.").format(name, d.status))
+	_require_cert_owner(d, frappe._("cancel"))
 	d.status = "Cancelled"
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
@@ -15812,9 +15865,13 @@ def get_cert_preps():
 	out = {"prepared": [], "recent": []}
 	for r in frappe.get_all("Certification",
 			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]], "cert_type": ["is", "set"]},
-			fields=["name", "cert_type", "center", "quality", "status", "prepared_on", "sent_on"],
+			fields=["name", "cert_type", "center", "quality", "status", "prepared_on",
+				"sent_on", "owner"],
 			order_by="creation desc", limit=40):
 		r["pieces"] = frappe.db.count("Certification Item", {"parent": r.name})
+		r["owner_label"] = _user_label(r.owner)
+		r["can_manage"] = bool(set(frappe.get_roles()) & CERT_OVERRIDE_ROLES) \
+			or r.owner == frappe.session.user
 		(out["prepared"] if r.status == "Prepared" else out["recent"]).append(r)
 	return out
 
@@ -15951,6 +16008,7 @@ def send_cert_prep(name):
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — only Prepared batches send.").format(name, d.status))
+	_require_cert_owner(d, frappe._("send"))
 	if not d.items:
 		frappe.throw(frappe._("Nothing on the batch."))
 	bags = [r.order_bag for r in d.items]

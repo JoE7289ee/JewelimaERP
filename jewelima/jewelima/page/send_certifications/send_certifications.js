@@ -18,6 +18,11 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		.sc-card .nm{font-size:17px;font-weight:800;}
 		.sc-card .meta{font-size:12px;color:var(--text-muted);margin:4px 0 10px;}
 		.sc-lock{font-size:10.5px;font-weight:700;border-radius:10px;padding:1px 8px;background:#1f618d;color:#fff;}
+		/* someone else's batch is still fully readable — it just does not look like yours */
+		.sc-card.theirs{background:var(--control-bg);}
+		.sc-not{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+			border-radius:9px;padding:1px 7px;background:rgba(180,83,9,.16);color:#b45309;}
+		[data-theme="dark"] .sc-not{color:#e8a24a;}
 		.sc-nums{display:flex;gap:16px;font-size:13px;margin-bottom:12px;}
 		.sc-nums b{font-size:16px;}
 		.sc-actions{display:flex;gap:8px;}
@@ -38,16 +43,24 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_cert_preps" }).then((r) => {
 			const m = r.message || { prepared: [], recent: [] };
 			root.find(".sc-prep").html(m.prepared.map((p) => `
-				<div class="sc-card" data-name="${esc(p.name)}">
+				<div class="sc-card ${p.can_manage ? "" : "theirs"}" data-name="${esc(p.name)}"
+						data-mine="${p.can_manage ? 1 : 0}">
 					<div class="nm">${esc(p.name)}</div>
 					<div class="meta">${esc(p.cert_type)}${p.center ? " · " + esc((p.center || "").split("-").slice(1).join("-")) : ""}
 						${p.quality ? ` <span class="sc-lock">${esc(p.quality)}</span>` : ""} · ${esc(p.prepared_on || "")}</div>
+					<div class="meta">${__("prepped by")} <b>${esc(p.owner_label || "")}</b>${
+						p.can_manage ? "" : ` <span class="sc-not">${__("not yours")}</span>`}</div>
 					<div class="sc-nums"><span><b>${p.pieces}</b> ${__("piece(s)")}</span></div>
 					<div class="sc-actions">
-						<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>
-						<button class="btn btn-default btn-sm sc-open">${__("Open / edit")}</button>
+						${p.can_manage
+							? `<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
+							: `<button class="btn btn-default btn-sm sc-ask">${__("ASK A MANAGER TO SEND")}</button>`}
+						<button class="btn btn-default btn-sm sc-open">${
+							p.can_manage ? __("Open / edit") : __("Open")}</button>
 						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
-						<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>
+						${p.can_manage
+							? `<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>`
+							: ""}
 					</div>
 				</div>`).join("") || `<div class="sc-empty">${__("Nothing prepared — build a batch on the Certification desk.")}</div>`);
 			root.find(".sc-recent").html(m.recent.length ? `<table class="sc-r"><thead><tr>
@@ -57,6 +70,35 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 				: `<div class="sc-empty">${__("Nothing yet.")}</div>`);
 		});
 	}
+	// a batch you did not prep is still yours to look at — but sending it is an
+	// ask, not a click, and the ask goes to a named person
+	root.on("click", ".sc-ask", function () {
+		const nm = $(this).closest(".sc-card").data("name");
+		frappe.call({ method: API + ".get_hall_managers" }).then((r) => {
+			const men = ((r.message || {}).managers) || [];
+			if (!men.length) {
+				return frappe.msgprint(__("Nobody holds JW Manager — ask an administrator to send {0}.", [nm]));
+			}
+			const d = new frappe.ui.Dialog({
+				title: __("Ask someone to send {0}", [nm]),
+				fields: [
+					{ fieldtype: "Select", fieldname: "to", reqd: 1, label: __("Manager"),
+						options: men.map((m) => ({ label: m.label, value: m.user })) },
+					{ fieldtype: "Small Text", fieldname: "note", label: __("Anything to add") },
+				],
+				primary_action_label: __("Send the request"),
+				primary_action(v) {
+					d.hide();
+					frappe.call({ method: API + ".request_cert_send",
+						args: { name: nm, to_user: v.to, note: v.note || "" } })
+						.then((rr) => frappe.show_alert({ indicator: "green", message:
+							__("Asked {0} to send {1}.", [(rr.message || {}).to, nm]) }, 6));
+				},
+			});
+			d.show();
+		});
+	});
+
 	root.on("click", ".sc-open", function () {
 		frappe.route_options = { prep: $(this).closest(".sc-card").data("name") };
 		frappe.set_route("certify");

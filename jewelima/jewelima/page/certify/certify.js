@@ -211,13 +211,18 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			dmd_ct: Math.round(draft.rows.reduce((a, r) => a + (r.dmd_ct || 0), 0) * 1000) / 1000,
 		};
 		const igi = src.cert_type === "IGI";
-		const locked = prep ? prep.status !== "Prepared" : false;
+		const mine = prep ? prep.can_manage !== false : true;
+		const locked = prep ? (prep.status !== "Prepared" || !mine) : false;
 		root.find(".cf-setup, .cf-req").toggle(false);
 		root.find(".cf-head").css("display", "flex").html(`
 			<span class="nm">${esc(src.name)}</span>
 			<span>${esc(src.cert_type)}${src.center ? " · " + esc(src.center.split("-").slice(1).join("-")) : ""}</span>
 			${src.quality ? `<span class="cf-lock">${esc(src.quality)}</span>` : ""}
-			<span class="cf-lock" style="background:${src.status === "Draft" ? "#b35a00" : src.status === "Prepared" ? "#7f8c8d" : src.status === "Cancelled" ? "#b02a2a" : "#2e7d32"};">${esc(src.status)}</span>`);
+			<span class="cf-lock" style="background:${src.status === "Draft" ? "#b35a00" : src.status === "Prepared" ? "#7f8c8d" : src.status === "Cancelled" ? "#b02a2a" : "#2e7d32"};">${esc(src.status)}</span>
+			${prep && prep.owner_label ? `<span style="font-size:11.5px;color:var(--text-muted);">${
+				__("prepped by")} ${esc(prep.owner_label)}</span>` : ""}
+			${prep && !mine ? `<span class="cf-lock" style="background:#b45309;">${
+				__("not yours — read only")}</span>` : ""}`);
 		const dhc = src.cert_type === "DHC";
 		const cols = igi ? IGI_COLS : dhc ? DHC_COLS : BASIC_COLS;
 		const head = igi ? IGI_HEAD : dhc ? DHC_HEAD : BASIC_HEAD;
