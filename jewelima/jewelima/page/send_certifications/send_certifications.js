@@ -10,6 +10,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Send Certifications", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
+	const flt = (v) => parseFloat(v) || 0;
 
 	$(page.main).append(`
 		<style>
@@ -31,6 +32,24 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		table.sc-r td,table.sc-r th{border:1px solid var(--border-color);padding:5px 10px;text-align:left;}
 		table.sc-r th{background:var(--control-bg);font-size:10px;text-transform:uppercase;color:var(--text-muted);}
 		.sc-empty{color:var(--text-muted);padding:18px;}
+		.sc-card{cursor:pointer;}
+		.ce-bar{display:flex;gap:8px;align-items:center;margin-bottom:10px;padding:7px 9px;
+			border-radius:9px;border:1px solid var(--border-color);}
+		.ce-bar.removing{border-color:#b02a2a;background:rgba(176,42,42,.07);}
+		.ce-mode{border:none;border-radius:8px;padding:6px 16px;font-weight:800;font-size:12px;
+			letter-spacing:.5px;color:#fff;background:#1d7a33;cursor:pointer;}
+		.ce-mode.removing{background:#b02a2a;}
+		.ce-bar.removing .ce-scan{border-color:#b02a2a;}
+		.ce-sum{font-size:12.5px;margin-bottom:8px;}
+		.ce-row{display:flex;align-items:center;gap:9px;padding:5px 8px;
+			border-bottom:1px solid var(--border-color);font-size:12.5px;}
+		.ce-row.add{background:rgba(29,122,51,.10);}
+		.ce-row.rm{background:rgba(176,42,42,.10);text-decoration:line-through;opacity:.75;}
+		.ce-tag{font-size:9.5px;font-weight:800;letter-spacing:.05em;border-radius:8px;
+			padding:1px 6px;color:#fff;}
+		.ce-tag.add{background:#1d7a33;} .ce-tag.rm{background:#b02a2a;}
+		.ce-x{margin-left:auto;cursor:pointer;font-weight:800;color:#b02a2a;padding:0 6px;}
+		.ce-x.undo{color:#1d7a33;}
 		</style>
 		<div class="sc-sec">${__("Prepared — ready to go out")}</div>
 		<div class="sc-grid sc-prep"></div>
@@ -148,5 +167,163 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 				}).catch(() => frappe.dom.unfreeze());
 		});
 	});
+	// Click the card to see what is actually on the batch, and change it. Nothing
+	// is written until Save, and until then the list says plainly which lines are
+	// going and which are coming — a batch is a packet of gold, so "what am I
+	// about to change" should never be a guess.
+	root.on("click", ".sc-card", function (e) {
+		if ($(e.target).closest("button").length) return;   // the card's own buttons win
+		openEditor($(this).data("name"));
+	});
+
+	function openEditor(name) {
+		frappe.call({ method: API + ".get_cert_prep", args: { name } }).then((r) => {
+			const m = r.message || {};
+			// original = what is saved; keep = what will be saved; extra = new lines
+			const orig = (m.rows || []).map((i) => i.order_bag);
+			const E = { keep: new Set(orig), extra: [], mode: "add" };
+			const meta = {};
+			(m.rows || []).forEach((i) => { meta[i.order_bag] = i; });
+
+			const mine = m.can_manage !== false;
+			const dlg = new frappe.ui.Dialog({
+				title: __("{0} — {1} · {2}{3}", [m.name, __("{0} piece(s)", [m.count]),
+					m.cert_type || "", m.quality ? " · " + m.quality : ""]),
+				size: "large",
+				primary_action_label: mine ? __("Save") : __("Close"),
+				primary_action() {
+					if (!mine) return dlg.hide();
+					const bags = orig.filter((b) => E.keep.has(b)).concat(E.extra);
+					if (!bags.length) {
+						return frappe.msgprint(__("A batch cannot be emptied — use Cancel on the card instead."));
+					}
+					frappe.dom.freeze(__("Saving…"));
+					frappe.call({ method: API + ".cert_prep_set_items",
+						args: { name, bags: JSON.stringify(bags) } })
+						.then((rr) => {
+							frappe.dom.unfreeze();
+							const v = rr.message || {};
+							dlg.hide();
+							frappe.show_alert({ message: __("{0} saved — {1} piece(s){2}{3}.",
+								[name, v.count,
+								 (v.added || []).length ? " · +" + v.added.length : "",
+								 (v.removed || []).length ? " · −" + v.removed.length : ""]),
+								indicator: "green" }, 6);
+							load();
+						}).catch(() => frappe.dom.unfreeze());
+				},
+			});
+			const $b = dlg.$wrapper.find(".modal-body");
+
+			function paintEd() {
+				const rows = orig.map((b) => ({ bag: b, state: E.keep.has(b) ? "" : "rm" }))
+					.concat(E.extra.map((b) => ({ bag: b, state: "add" })));
+				const added = E.extra.length;
+				const removed = orig.filter((b) => !E.keep.has(b)).length;
+				const total = orig.length - removed + added;
+				$b.find(".ce-list").html(rows.map((x) => {
+					const i = meta[x.bag] || {};
+					return `<div class="ce-row ${x.state}" data-b="${esc(x.bag)}">
+						${x.state ? `<span class="ce-tag ${x.state}">${x.state === "add" ? __("ADDING") : __("REMOVING")}</span>` : ""}
+						<b>${esc(x.bag)}</b>
+						<span style="color:var(--text-muted);">${esc(i.design || "")}${i.design_type ? " · " + esc(i.design_type) : ""}</span>
+						<span style="color:var(--text-muted);">${i.gross ? flt(i.gross).toFixed(3) + " g" : ""}</span>
+						<span style="color:var(--text-muted);">${i.dmd_ct ? flt(i.dmd_ct).toFixed(3) + " ct" : ""}</span>
+						<span class="ce-x ${x.state === "rm" ? "undo" : ""}">${x.state === "rm" ? "↺" : "✕"}</span>
+					</div>`;
+				}).join(""));
+				$b.find(".ce-sum").html(added || removed
+					? __("Saving will leave <b>{0}</b> piece(s)", [total])
+						+ (added ? " · <span style='color:#1d7a33;'>+" + added + " " + __("added") + "</span>" : "")
+						+ (removed ? " · <span style='color:#b02a2a;'>−" + removed + " " + __("removed") + "</span>" : "")
+					: __("<b>{0}</b> piece(s) — nothing changed yet", [total]));
+				dlg.get_primary_btn().prop("disabled", !(added || removed));
+			}
+
+			$b.html(`
+				${mine ? `<div class="ce-bar">
+					<input type="text" class="ce-scan form-control" style="max-width:240px;">
+					<button class="ce-mode">${__("ADDING")}</button>
+					<span style="font-size:12px;color:var(--text-muted);">${
+						__("✕ takes a line off · ↺ puts it back")}</span>
+				</div>` : `<div class="ce-bar" style="border-color:#4a5a6a;">
+					<span style="font-size:12.5px;font-weight:700;">${
+						__("Prepped by {0} — you can look, but only they or a manager can change it.",
+							[m.owner_label || ""])}</span>
+				</div>`}
+				<div class="ce-sum"></div>
+				<div class="ce-list" style="max-height:46vh;overflow:auto;border:1px solid var(--border-color);border-radius:9px;"></div>`);
+
+			$b.on("click", ".ce-x", function () {
+				if (!mine) return;
+				const b = $(this).closest(".ce-row").data("b");
+				if (E.extra.includes(b)) E.extra = E.extra.filter((x) => x !== b);
+				else if (E.keep.has(b)) E.keep.delete(b);
+				else E.keep.add(b);
+				paintEd();
+			});
+			function setMode(mo) {
+				E.mode = mo;
+				const rm = mo === "remove";
+				$b.find(".ce-bar").toggleClass("removing", rm);
+				$b.find(".ce-mode").toggleClass("removing", rm).text(rm ? __("REMOVING") : __("ADDING"));
+				$b.find(".ce-scan").attr("placeholder", rm
+					? __("scan a card to take it OFF + Enter")
+					: __("scan a card to add + Enter")).focus();
+			}
+			$b.on("click", ".ce-mode", () => setMode(E.mode === "add" ? "remove" : "add"));
+
+			$b.on("keydown", ".ce-scan", function (e) {
+				if (e.key !== "Enter") return;
+				e.preventDefault();
+				const code = ($(this).val() || "").trim();
+				$(this).val("");
+				if (!code) return;
+				// the E prefix is optional here as everywhere else, so a typed number
+				// still matches a line that is already on the batch
+				const up = code.toUpperCase();
+				const hit = (b) => b.toUpperCase() === up || b.toUpperCase() === "E" + up;
+				const on = orig.find(hit);
+				const ex = E.extra.find(hit);
+
+				// REMOVING: a scan takes a line off, and only ever a line that is there
+				if (E.mode === "remove") {
+					if (ex) E.extra = E.extra.filter((x) => x !== ex);   // one just added: forget it
+					else if (on) E.keep.delete(on);
+					else return frappe.show_alert({ message: __("{0} is not on this batch.", [code]), indicator: "orange" }, 4);
+					paintEd();
+					return;
+				}
+
+				if (on) {
+					E.keep.add(on);   // scanning one back is the same as undoing it
+					paintEd();
+					return;
+				}
+				if (ex) {
+					return frappe.show_alert({ message: __("{0} is already being added.", [code]), indicator: "orange" }, 3);
+				}
+				// the same guard a scan on the desk faces — including the lab's quality
+				// lock — so a piece that cannot go is refused here rather than at Save
+				frappe.call({ method: API + ".cert_draft_scan", freeze: false,
+					args: { cert_type: m.cert_type, quality: m.quality || "", barcode: code,
+						existing: JSON.stringify(orig.concat(E.extra)) } })
+					.then((rr) => {
+						const v = rr.message || {};
+						if (v.rejected) {
+							return frappe.show_alert({ message: esc(v.rejected), indicator: "red" }, 6);
+						}
+						meta[v.order_bag] = v;
+						E.extra.push(v.order_bag);
+						paintEd();
+					});
+			});
+			paintEd();
+			setMode("add");
+			dlg.show();
+			setTimeout(() => $b.find(".ce-scan").focus(), 200);
+		});
+	}
+
 	load();
 };

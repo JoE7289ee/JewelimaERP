@@ -15848,6 +15848,52 @@ def cert_prep_remove(name, row):
 
 
 @frappe.whitelist()
+def cert_prep_set_items(name, bags):
+	"""Replace a Prepared batch's pieces with exactly this list.
+
+	The desk shows the batch, its lines, and what is about to change; this is
+	what it saves. Every piece being ADDED faces the same guard a scan does —
+	In Stock, a product, not on another prepared batch, and for a lab that locks
+	a quality, the right one — so a batch cannot be edited into holding
+	something that could never have been scanned onto it.
+
+	Lines that are STAYING are copied across untouched rather than re-checked.
+	They passed on the way in, and re-running the guard would refuse every one
+	of them for being on a prepared batch: this one."""
+	d = frappe.get_doc("Certification", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — only a Prepared batch can be edited.").format(name, d.status))
+	_require_cert_owner(d, frappe._("change"))
+	wanted = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+	wanted = [_resolve_bag_code(b) for b in wanted if b]
+	if not wanted:
+		frappe.throw(frappe._("A batch cannot be emptied — cancel it instead."))
+	had = [r.order_bag for r in d.items]
+	added = [b for b in wanted if b not in had]
+	removed = [b for b in had if b not in wanted]
+	keep = {r.order_bag: r for r in d.items}
+	quality = (d.quality or "").strip()
+	rows, seen = [], set()
+	for nm in wanted:
+		if nm in seen:
+			continue
+		seen.add(nm)
+		if nm in keep:
+			r = keep[nm]
+			rows.append({"order_bag": r.order_bag, "design": r.design,
+				"design_type": r.design_type, "gross": flt(r.gross), "dmd_ct": flt(r.dmd_ct)})
+			continue
+		b = _cert_validate_piece(d.cert_type, quality, nm, seen - {nm})
+		rows.append({"order_bag": nm, "design": b.design,
+			"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+			"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight)})
+	d.set("items", rows)
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "count": len(rows), "added": added, "removed": removed}
+
+
+@frappe.whitelist()
 def cert_prep_cancel(name):
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
