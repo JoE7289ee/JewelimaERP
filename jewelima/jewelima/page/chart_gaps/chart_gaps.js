@@ -20,10 +20,31 @@ frappe.pages["chart-gaps"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const root = $(page.main);
 	let D = null;
+	let Q = "";        // a chart name being looked up
 
 	root.append(`
 		<style>
 		#page-chart-gaps .container{max-width:100%;}
+		.cg-bar{display:flex;gap:9px;align-items:center;margin-bottom:14px;}
+		.cg-bar input{flex:1 1 320px;max-width:460px;border:1px solid var(--border-color);
+			border-radius:9px;height:36px;padding:2px 12px;font-size:13.5px;
+			background:var(--control-bg);color:var(--text-color);}
+		.cg-bar button{border:1px solid var(--border-color);border-radius:9px;background:none;
+			height:36px;padding:0 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
+		/* the answer to "what is this chart missing", in one panel */
+		.cg-focus{margin-bottom:16px;}
+		.cg-fc{border:1px solid var(--border-color);border-left:3px solid #1665A8;border-radius:13px;
+			background:var(--fg-color);padding:14px 17px;margin-bottom:10px;}
+		.cg-fc .h{font-size:17px;font-weight:800;}
+		.cg-fc .d{font-size:11.5px;color:var(--text-muted);margin:1px 0 11px;}
+		.cg-fc .tag{display:inline-block;border-radius:8px;padding:2px 10px;margin:0 6px 6px 0;
+			font-size:11.5px;font-weight:700;background:var(--control-bg);
+			border:1px solid var(--border-color);}
+		.cg-fc .tag.prob{border-color:#B02A2A;color:#B02A2A;background:rgba(176,42,42,.08);}
+		[data-theme="dark"] .cg-fc .tag.prob{color:#F0A0A0;}
+		.cg-fc .open{margin-top:6px;font-size:12.5px;color:#1665A8;cursor:pointer;font-weight:700;}
+		.cg-fc .none{font-size:12.5px;color:#1D7A33;font-weight:700;}
+		[data-theme="dark"] .cg-fc .none{color:#6FBF7F;}
 		.cg-kpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
 		.cg-kpi{flex:1 1 160px;border:1px solid var(--border-color);border-radius:12px;
 			padding:11px 15px;background:var(--fg-color);}
@@ -58,6 +79,12 @@ frappe.pages["chart-gaps"].on_page_load = function (wrapper) {
 		.cg-empty{padding:24px;text-align:center;color:var(--text-muted);font-size:13px;
 			border:1px dashed var(--border-color);border-radius:12px;}
 		</style>
+		<div class="cg-bar">
+			<input type="text" class="cg-q" placeholder="${
+				__("type a chart name to see every bucket it is in")}">
+			<button class="cg-clear" style="display:none;">${__("clear")}</button>
+		</div>
+		<div class="cg-focus"></div>
 		<div class="cg-kpis"></div>
 		<div class="cg-body"></div>
 	`);
@@ -71,21 +98,74 @@ frappe.pages["chart-gaps"].on_page_load = function (wrapper) {
 			</span>`).join("")}</div>`;
 	}
 
+	function match(c) {
+		const q = Q.trim().toUpperCase();
+		return !q || (c.chart_name || "").toUpperCase().includes(q)
+			|| (c.name || "").toUpperCase().includes(q);
+	}
+
 	function box(b, kind) {
 		// one note for the whole bucket; a per-chart note only where it differs
-		const notes = b.charts.filter((c) => c.note);
+		const shown = b.charts.filter(match);
+		if (!shown.length) return "";
+		const notes = shown.filter((c) => c.note);
 		return `<div class="cg-b ${kind}">
-			<span class="cnt">${b.charts.length}</span>
+			<span class="cnt">${shown.length === b.charts.length ? b.charts.length
+				: shown.length + " / " + b.charts.length}</span>
 			<div class="h">${esc(b.title)}</div>
 			<div class="n">${esc(b.why)}</div>
-			${chips(b.charts)}
+			${chips(shown)}
 			${notes.length ? `<div class="cg-why">${notes.map((c) =>
 				`<b>${esc(c.chart_name)}</b> — ${esc(c.note)}`).join("<br>")}</div>` : ""}
 		</div>`;
 	}
 
+	// every bucket the named chart sits in, gathered from what is already on the
+	// page — the whole point is one answer, not a hunt through fifteen blocks
+	function allBuckets() {
+		const out = [];
+		(D.problems || []).forEach((b) => out.push({ b, problem: true, group: __("Problem") }));
+		(D.groups || []).forEach((g) => g.buckets.forEach((b) =>
+			out.push({ b, problem: false, group: g.title })));
+		return out;
+	}
+
+	function paintFocus(hits) {
+		const all = allBuckets();
+		root.find(".cg-focus").html(hits.map((c) => {
+			const inb = all.filter((x) => x.b.charts.some((y) => y.name === c.name));
+			return `<div class="cg-fc">
+				<div class="h">${esc(c.chart_name)}</div>
+				<div class="d">${esc(c.chart_date)}${c.age_days != null
+					? " · " + __("{0} days old", [c.age_days]) : ""} · ${esc(c.name)}
+					${inb.length ? " · " + __("in {0} bucket(s)", [inb.length]) : ""}</div>
+				${inb.length
+					? inb.map((x) => `<span class="tag ${x.problem ? "prob" : ""}"
+						title="${esc(x.group)}">${esc(x.b.title)}</span>`).join("")
+					: `<span class="none">${__("Nothing outstanding — this chart is in no bucket.")}</span>`}
+				<div class="open" data-n="${esc(c.name)}">${__("Open this chart →")}</div>
+			</div>`;
+		}).join(""));
+	}
+
 	function paint() {
 		if (!D) return;
+		// searching narrows every bucket to the charts that match, and answers the
+		// question up front for each one
+		const q = Q.trim().toUpperCase();
+		const seen = new Map();
+		if (q) {
+			allBuckets().forEach((x) => x.b.charts.forEach((c) => {
+				if ((c.chart_name || "").toUpperCase().includes(q)
+					|| (c.name || "").toUpperCase().includes(q)) seen.set(c.name, c);
+			}));
+			(D.clean || []).forEach((c) => {
+				if ((c.chart_name || "").toUpperCase().includes(q)
+					|| (c.name || "").toUpperCase().includes(q)) seen.set(c.name, c);
+			});
+		}
+		root.find(".cg-clear").toggle(!!q);
+		if (q) paintFocus([...seen.values()]); else root.find(".cg-focus").empty();
 		root.find(".cg-kpis").html(`
 			<div class="cg-kpi"><div class="k">${__("Active charts")}</div><div class="v">${D.total}</div></div>
 			<div class="cg-kpi bad"><div class="k">${__("With a problem")}</div>
@@ -94,28 +174,43 @@ frappe.pages["chart-gaps"].on_page_load = function (wrapper) {
 				<div class="v">${D.clean.length}</div></div>`);
 
 		const P = [];
-		if (D.problems.length) {
+		const probBoxes = D.problems.map((b) => box(b, "prob")).join("");
+		if (probBoxes) {
 			P.push(`<div class="cg-sec">${__("Problems")}</div>
 				<p class="cg-note">${__("these charts cannot bill a piece correctly as they stand")}</p>
-				<div class="cg-grid">${D.problems.map((b) => box(b, "prob")).join("")}</div>`);
-		} else {
+				<div class="cg-grid">${probBoxes}</div>`);
+		} else if (!q) {
 			P.push(`<div class="cg-sec">${__("Problems")}</div>
 				<div class="cg-empty">${__("Nothing broken — every active chart can bill a piece.")}</div>`);
 		}
 		// one heading per subject, its buckets underneath — a chart appears in
 		// every bucket it belongs to, because each bucket is its own question
 		(D.groups || []).forEach((g) => {
+			const boxes = g.buckets.map((b) => box(b, "miss")).join("");
+			if (!boxes) return;
 			P.push(`<div class="cg-sec">${esc(g.title)}</div>
 				<p class="cg-note">${esc(g.why)}</p>
-				<div class="cg-grid">${g.buckets.map((b) => box(b, "miss")).join("")}</div>`);
+				<div class="cg-grid">${boxes}</div>`);
 		});
-		if (D.clean.length) {
+		const cleanShown = D.clean.filter(match);
+		if (cleanShown.length) {
 			P.push(`<div class="cg-sec">${__("Fully priced")}</div>
 				<p class="cg-note">${__("making and diamonds both priced, nothing flagged")}</p>
-				${chips(D.clean)}`);
+				${chips(cleanShown)}`);
 		}
 		root.find(".cg-body").html(P.join(""));
 	}
+
+	root.on("input", ".cg-q", frappe.utils.debounce(function () { Q = this.value; paint(); }, 180));
+	root.on("click", ".cg-clear", () => {
+		Q = "";
+		root.find(".cg-q").val("").focus();
+		paint();
+	});
+	root.on("click", ".cg-fc .open", function () {
+		frappe.route_options = { chart: $(this).data("n") };
+		frappe.set_route("price-charts");
+	});
 
 	// straight to the chart, on the page that can change it
 	root.on("click", ".cg-chip", function () {
