@@ -26,7 +26,8 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	const TAG = () => (jewelima.barcodeOpts().tag) || D.tag;
 	// measuring the tag is a manager's job: these numbers are the floor's, not
 	// one operator's, and everything printed anywhere picks them up
-	const CAN_LAYOUT = ["System Manager", "JW Manager"].some((r) => frappe.user_roles.includes(r));
+	const CAN_LAYOUT = ["System Manager", "JW Manager", "JW EXTRACTION"]
+		.some((r) => frappe.user_roles.includes(r));
 	const IN = 96;                       // CSS pixels per inch at 100% zoom
 	const S = { cards: [], stoneGrams: false, showFamily: true, showColor: true, freeText: "",
 		freeText2: "", familyText: "", gwLine: D.gwLine };

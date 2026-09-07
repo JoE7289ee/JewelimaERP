@@ -16550,7 +16550,7 @@ def huid_confirm_batch(changes):
 # Multi Print, off a Bag Split or off the roll is the same tag — and getting it
 # right no longer means editing code and deploying.
 # ---------------------------------------------------------------------------
-BARCODE_LAYOUT_ROLES = ("System Manager", "JW Manager")
+BARCODE_LAYOUT_ROLES = ("System Manager", "JW Manager", "JW EXTRACTION")
 
 
 @frappe.whitelist()
