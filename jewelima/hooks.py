@@ -28,7 +28,7 @@ extend_bootinfo = "jewelima.boot.boot_session"
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/jewelima/css/jewelima.css"
+app_include_css = ["jewelima.bundle.css"]
 app_include_js = ["branding.bundle.js", "viz.bundle.js"]
 
 # include js, css files in header of web template

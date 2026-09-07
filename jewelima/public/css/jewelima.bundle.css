@@ -1,0 +1,31 @@
+/* Copyright (c) 2026, efeone and contributors
+ * For license information, please see license.txt
+ *
+ * Desk styling that belongs to US, not to a workspace or a page — loaded on
+ * every desk screen through app_include_css.
+ *
+ * Keep this file small and keep every rule justified. It reaches into Frappe's
+ * own markup, so anything here is a bet on class names we do not own; a rule
+ * that stops applying after an upgrade should fail QUIETLY (a label that is no
+ * longer bold), never break a screen.
+ */
+
+/* The sidebar is read at a glance, from across a bench, on screens that are not
+ * always clean. Frappe sets the menu lines at the default weight, which is fine
+ * for a desk app someone sits in front of and thin for a floor. Bolding the
+ * lines is the whole change — no colour, no size, no spacing, so nothing moves
+ * and nothing needs re-measuring.
+ */
+.body-sidebar .standard-sidebar-item .sidebar-item-label,
+.sidebar-item-container .standard-sidebar-item .sidebar-item-label {
+	font-weight: 600;
+}
+
+/* A section heading leads a group, so it carries a touch more than the lines
+ * under it. It keeps its muted colour — the weight is what separates it, and
+ * darkening it too would flatten the difference between a heading and a link.
+ */
+.body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
+.sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
+	font-weight: 700;
+}
