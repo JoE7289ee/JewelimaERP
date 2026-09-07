@@ -285,7 +285,7 @@ JEWELIMA_DELIVERY_PAGES = [
 	# Barcode: the roll printer and the sheet printer
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again
-	"certify", "send-certifications", "certification-out", "confirm-certifications",
+	"certify", "send-certifications", "certification-out", "confirm-certifications", "stone-changes",
 	# Hallmarking — its own four, same shape: prepare, send, collect, stamp the HUID
 	# remove-hallmarking belongs here too: the desk holding the piece is the one
 	# that finds the stamp unreadable, and every removal is signed on the piece
@@ -2460,6 +2460,11 @@ CERTIFICATION_WAREHOUSE = "At Certification"
 # ...and pieces away at a hallmarking centre sit HERE. Its own warehouse, so the
 # At Certification report stops counting hallmarked pieces as lab work.
 HALLMARKING_WAREHOUSE = "At Hallmarking"
+# A piece the lab sent back for a STONE CHANGE is not sellable and is not at a
+# lab either — it is on our own floor having a stone replaced. Its own warehouse,
+# so it stops counting as Finished Goods the moment it is marked, and the value
+# sitting in stone-change work is a number somebody can actually read.
+STONE_CHANGE_WAREHOUSE = "Stone Change"
 
 
 def create_store_warehouses():
@@ -2473,6 +2478,7 @@ def create_store_warehouses():
 	make_warehouse(IN_PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(HALLMARKING_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(STONE_CHANGE_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	# The bench flow issues gold/loss as real stock moves; gold isn't always
 	# pre-stocked in the Store, so allow negative stock (a negative balance just

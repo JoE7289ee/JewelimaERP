@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-07 13:44:14.219306",
+ "modified": "2026-09-07 19:40:43.420401",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "parties",
@@ -24,10 +24,10 @@
    "role": "JW Party Admin"
   },
   {
-   "role": "JW Delivery"
+   "role": "Jewelima Ordering"
   },
   {
-   "role": "Jewelima Ordering"
+   "role": "JW Delivery"
   }
  ],
  "script": null,

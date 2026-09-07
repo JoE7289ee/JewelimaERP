@@ -14,7 +14,8 @@
   "huid",
   "received_on",
   "rejected",
-  "confirmed_by"
+  "confirmed_by",
+  "stone_change"
  ],
  "fields": [
   {
@@ -94,6 +95,14 @@
    "fieldtype": "Data",
    "label": "Confirmed By",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "The lab sent it back for a stone to be replaced \u2014 no stamp, and it is out of stock until the change is done.",
+   "fieldname": "stone_change",
+   "fieldtype": "Check",
+   "in_list_view": 0,
+   "label": "Stone Change"
   }
  ],
  "index_web_pages_for_search": 1,

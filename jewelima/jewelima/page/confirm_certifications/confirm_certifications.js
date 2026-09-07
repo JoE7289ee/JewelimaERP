@@ -32,6 +32,8 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		.cc-mode{font-size:15px;font-weight:800;padding:9px 26px;border-radius:8px;border:2px solid;cursor:pointer;}
 		.cc-mode.accept{background:#2e7d32;border-color:#2e7d32;color:#fff;}
 		.cc-mode.reject{background:#b02a2a;border-color:#b02a2a;color:#fff;}
+		/* yellow reads as "held", which is exactly what a stone change is */
+		.cc-mode.stone{background:#b8860b;border-color:#b8860b;color:#fff;}
 		.cc-pend{font-size:13px;color:var(--text-muted);align-self:center;}
 		.cc-histbtn{border:1px solid var(--border-color);border-radius:8px;background:none;
 			padding:9px 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
@@ -65,6 +67,12 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		.cc-chip .t{display:block;font-size:10px;font-weight:400;color:var(--text-muted);}
 		.cc-chip.confirmed{border-color:#2e7d32;background:rgba(46,125,50,.12);}
 		.cc-chip.rejected{border-color:#b02a2a;background:rgba(176,42,42,.12);text-decoration:line-through;}
+		/* away having a stone replaced — stays yellow until it comes back */
+		.cc-chip.stone{border-color:#b8860b;background:rgba(184,134,11,.16);}
+		/* back from a stone change: settled, no longer asking for anything */
+		.cc-chip.changed{border-color:#7f8c8d;background:rgba(127,140,141,.10);}
+		.cc-chip.stg-stone{border-color:#b8860b;background:rgba(184,134,11,.07);}
+		.cc-kpi.st .v{color:#b8860b;}
 		/* STAGED — scanned here, not yet written. Dashed, so it never reads as done */
 		.cc-chip.stg{border-style:dashed;border-width:2px;cursor:pointer;}
 		.cc-chip.stg-accept{border-color:#2e7d32;background:rgba(46,125,50,.07);}
@@ -114,10 +122,19 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		scan.$input.focus();
 	});
 
+	// three modes, so the button CYCLES: confirm -> reject -> stone change.
+	// Stone change is its own thing and not a kind of rejection — a rejected
+	// piece just goes without its stamp and stays sellable, a stone-change piece
+	// owes work and leaves stock until it is done.
+	const MODES = ["accept", "reject", "stone"];
+	const MODE_LABEL = { accept: __("CONFIRM"), reject: __("REJECT"), stone: __("STONE CHANGE") };
+	function paintMode() {
+		root.find(".cc-mode").removeClass("accept reject stone").addClass(MODE)
+			.text(__("MODE: {0} — tap to switch", [MODE_LABEL[MODE]]));
+	}
 	root.find(".cc-mode").on("click", function () {
-		MODE = MODE === "accept" ? "reject" : "accept";
-		$(this).toggleClass("accept", MODE === "accept").toggleClass("reject", MODE === "reject")
-			.text(MODE === "accept" ? __("MODE: CONFIRM — tap to switch") : __("MODE: REJECT — tap to switch"));
+		MODE = MODES[(MODES.indexOf(MODE) + 1) % MODES.length];
+		paintMode();
 		scan.$input.focus();
 	});
 
@@ -131,7 +148,9 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 					// a staged mark is drawn OVER whatever the server last said, so a
 					// re-sync mid-tray never wipes what somebody just scanned
 					const st = staged.get(p.order_bag);
-					const cls = st ? `stg stg-${st}` : p.state;
+					const cls = st
+						? `stg stg-${st === "accept" ? "accept" : st === "reject" ? "reject" : "stone"}`
+						: p.state;
 					return `<span class="cc-chip ${cls}" data-bag="${esc(p.order_bag)}">${esc(p.order_bag)}
 						<span class="t">${esc(p.design_type)}${p.by ? " · " + esc(p.by.split("@")[0]) : ""}</span></span>`;
 				}).join("")}</div>
@@ -141,15 +160,16 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 
 	// what is staged, and the one button that writes it
 	function paintBar() {
-		let ok = 0, rj = 0;
-		staged.forEach((m) => (m === "accept" ? ok++ : rj++));
-		const n = ok + rj;
+		let ok = 0, rj = 0, st = 0;
+		staged.forEach((m) => (m === "accept" ? ok++ : m === "reject" ? rj++ : st++));
+		const n = ok + rj + st;
 		root.find(".cc-bar").toggleClass("dirty", n > 0);
 		root.find(".cc-kpis").html(`
 			<div class="cc-kpi"><div class="k">${__("Waiting")}</div>
 				<div class="v">${Math.max(0, (POOL.pending || 0) - n)}</div></div>
 			<div class="cc-kpi ok"><div class="k">${__("Scanned to confirm")}</div><div class="v">${ok}</div></div>
 			<div class="cc-kpi rj"><div class="k">${__("Scanned to reject")}</div><div class="v">${rj}</div></div>
+			<div class="cc-kpi st"><div class="k">${__("Stone change")}</div><div class="v">${st}</div></div>
 			<div class="cc-kpi"><div class="k">${__("Unsaved")}</div><div class="v">${n}</div></div>`);
 		root.find(".cc-save").prop("disabled", !n)
 			.text(n ? __("SAVE {0} SCAN(S)", [n]) : __("NOTHING TO SAVE"));
@@ -196,7 +216,10 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		if (staged.has(p.order_bag)) {
 			return logScan(p.order_bag, "er", __("Already scanned — it is waiting to be saved"));
 		}
-		if (p.state === "confirmed" || p.state === "rejected") {
+		if (p.state === "stone") {
+			return logScan(p.order_bag, "er", __("Away for a stone change — it comes back on the Stone Changes desk"));
+		}
+		if (p.state !== "pending") {
 			return logScan(p.order_bag, "er", p.by
 				? __("Already {0} by {1}", [p.state, p.by.split("@")[0]])
 				: __("Already {0}", [p.state]));
@@ -246,6 +269,11 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 				}
 				frappe.show_alert({ indicator: "green",
 					message: __("{0} saved.", [m.saved || 0]) }, 5);
+				if (m.stone_change) {
+					frappe.show_alert({ indicator: "orange", message:
+						__("{0} opened — {1} piece(s) out for a stone change.",
+							[m.stone_change.name, m.stone_change.count]) }, 8);
+				}
 				(m.batches_done || []).forEach((b) =>
 					frappe.show_alert({ message: __("{0} fully processed.", [b]), indicator: "green" }, 6));
 				load();
@@ -260,6 +288,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 	});
 	$(wrapper).on("remove", () => $(window).off("beforeunload.cc"));
 
+	paintMode();
 	load();
 	// live-ish for multiple scanners: re-sync the pool every 7s while the page shows
 	// paint() draws staged marks over the pool, so a re-sync is safe mid-tray

@@ -191,7 +191,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Location",
-   "options": "ORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION\nREWORK\nCERTIFICATION\nHALLMARKING",
+   "options": "ORDERING\nCAD\nCAM\nWAXING\nTREE MAKING\nCASTING\nGRINDING\nFILING\nSETTING\nPRE POLISH\nWAX SETTING\nFINAL POLISH\nWAX CLEANING\nBAG EXTRACTION\nREWORK\nCERTIFICATION\nHALLMARKING\nSTONE CHANGE",
    "read_only": 1
   },
   {
@@ -350,7 +350,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Stock Status",
-   "options": "In Production\nIn Stock\nAt Certification\nAt Hallmarking\nSold\nCancelled",
+   "options": "In Production\nIn Stock\nAt Certification\nAt Hallmarking\nStone Change\nSold\nCancelled",
    "read_only": 1
   },
   {
@@ -373,11 +373,11 @@
    "label": "HUID"
   },
   {
+   "description": "The piece's ID in the old software, kept so an imported piece can still be traced back.",
    "fieldname": "legacy_id",
    "fieldtype": "Data",
    "label": "Old Unique ID",
-   "read_only": 1,
-   "description": "The piece's ID in the old software, kept so an imported piece can still be traced back."
+   "read_only": 1
   },
   {
    "description": "Which certifications this piece went through, e.g. IGL, HALLMARKING (stamped on receive).",
@@ -862,11 +862,11 @@
    "options": "Order Bag Attachment"
   },
   {
+   "description": "Where the finished piece is filed. Set when the ornament is made.",
    "fieldname": "bucket",
    "fieldtype": "Link",
-   "options": "Finished Bucket",
    "label": "Bucket",
-   "description": "Where the finished piece is filed. Set when the ornament is made."
+   "options": "Finished Bucket"
   }
  ],
  "image_field": "image",

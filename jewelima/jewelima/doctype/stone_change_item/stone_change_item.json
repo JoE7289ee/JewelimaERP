@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-07 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["order_bag", "design", "design_type", "gross", "dmd_ct", "from_certification", "note"],
+ "fields": [
+  {"fieldname": "order_bag", "fieldtype": "Link", "in_list_view": 1, "label": "Order Bag", "options": "Order Bag", "reqd": 1},
+  {"fieldname": "design", "fieldtype": "Data", "in_list_view": 1, "label": "Design"},
+  {"fieldname": "design_type", "fieldtype": "Data", "in_list_view": 1, "label": "Type"},
+  {"fieldname": "gross", "fieldtype": "Float", "in_list_view": 1, "label": "Gross (g)", "precision": "3"},
+  {"fieldname": "dmd_ct", "fieldtype": "Float", "in_list_view": 1, "label": "Diamond (ct)", "precision": "3"},
+  {"fieldname": "from_certification", "fieldtype": "Link", "label": "From Certification", "options": "Certification", "read_only": 1},
+  {"fieldname": "note", "fieldtype": "Small Text", "label": "What has to change"}
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-07 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stone Change Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
