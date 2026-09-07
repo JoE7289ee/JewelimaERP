@@ -163,7 +163,12 @@ frappe.pages["card-lookup"].on_page_load = function (wrapper) {
 					__("No actual weight recorded yet.")}</span>`}</div></div>
 
 			<div class="cl-sec gold"><h4>${__("Contents")}</h4>
-				<div class="cl-line">${contents || `<span class="cl-empty">${__("Empty.")}</span>`}</div></div>
+				<div class="cl-line">${contents || `<span class="cl-empty">${b.is_finished
+					// a finished piece holds nothing: its gold and stones were converted
+					// INTO the product, and the weights above are what it is made of.
+					// "Empty" beside a 4.5 g gross reads as a fault, so say why.
+					? __("Made into the product — the weights above are what it holds.")
+					: __("Nothing issued into this card yet.")}</span>`}</div></div>
 
 			${chips.length ? `<div class="cl-sec blue"><h4>${__("Identity")}</h4>
 				<div class="cl-line">${chips.join(" &middot; ")}</div></div>` : ""}
