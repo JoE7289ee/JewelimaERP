@@ -8500,7 +8500,6 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 	loss booked (per-bag ledger + In Bags -> '<bench> -LOSS' stock). The optional
 	collection state (complete / failed / QC failed / …) lands on every line."""
 	from jewelima.jewelima.benches import ISSUE_RECEIPT_LOCATIONS, bench_doctype
-	from jewelima.setup import MAX_RECEIPT_GAIN_G
 
 	if isinstance(lines, str):
 		lines = json.loads(lines or "[]")
@@ -8528,16 +8527,13 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 			wout = flt(issue.weight_out)
 			loss = max(wout - win, 0.0)
 			gain = max(win - wout, 0.0)
-			# a card heavier than it went out is scale drift or polish build-up; a
-			# BIG jump is a mis-typed weight, so refuse it rather than book metal
-			# that never existed
-			if gain > MAX_RECEIPT_GAIN_G:
-				errors.append({"name": nm, "error": frappe._(
-					"Received weight is {0} g more than issued ({1} g out, {2} g in). "
-					"The most that can be added on receipt is {3} g — re-weigh, or "
-					"use Weight Add if the metal really was added."
-				).format(round(gain, 3), round(wout, 3), round(win, 3), MAX_RECEIPT_GAIN_G)})
-				continue
+			# A card heavier than it went out is scale drift or polish build-up, and
+			# a big jump is usually a mis-typed weight. That USED to be refused over
+			# MAX_RECEIPT_GAIN_G; the cap is lifted for now by request, so any gain
+			# books and pulls from Production. Nothing is silent about it: the page
+			# names the figure and the warehouse before the operator confirms, the
+			# Gain lands on the bag ledger with the bench and the employee on it,
+			# and Production going negative is the report that it happened.
 			issue_emp = issue.employee
 			# the mirror of the optional issue: a card that went out unnamed cannot
 			# also come back unnamed, or its loss is booked against nobody

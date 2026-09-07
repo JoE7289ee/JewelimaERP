@@ -167,7 +167,6 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			$thead.html(`<tr><th style="width:40px">#</th><th>Order Bag</th><th class="num">Weight Out (g)</th><th class="num">Weight In (g)</th><th class="num">Loss (g)</th><th style="width:34px"></th></tr>`);
 		}
 	}
-	const MAX_GAIN = 0.1;   // must match MAX_RECEIPT_GAIN_G in setup.py
 	function rowLoss(r) {
 		const win = parseFloat(r.weight_in);
 		if (isNaN(win)) return null;
@@ -420,11 +419,6 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		if (state.rows.some((r) => rowLoss(r) == null)) return frappe.msgprint(__("Enter the weight-in for every card."));
 		let total = 0, gain = 0;
 		state.rows.forEach((r) => { total += rowLoss(r); gain += rowGain(r); });
-		const over = state.rows.filter((r) => rowGain(r) > MAX_GAIN + 1e-9);
-		if (over.length) {
-			return frappe.msgprint(__("{0} came back more than {1} g heavier than issued. Re-weigh it — or use Weight Add if the metal really was added.",
-				[over.map((r) => r.name).join(", "), MAX_GAIN.toFixed(3)]));
-		}
 		frappe.confirm(
 			__("<b>{0}</b> will be credited with <b>{1} g</b> loss across <b>{2}</b> card(s) at <b>{3}</b>.{4}<br><br>Confirm receipt?",
 				[frappe.utils.escape_html(empDisp()), total.toFixed(3), state.rows.length, state.location,

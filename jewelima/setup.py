@@ -2466,8 +2466,9 @@ IN_PRODUCTION_WAREHOUSE = "In Bags"
 # pulls from here. Allowed to go negative: a negative balance is the report of
 # what the floor has added without a top-up.
 PRODUCTION_WAREHOUSE = "Production"
-# A gain bigger than this is refused on receipt — that is a mis-typed weight,
-# not scale drift.
+# What a receipt may add before it looks like a mis-typed weight rather than
+# scale drift. NOT ENFORCED at the moment: the cap was lifted on request, and
+# receipt_bench_cards books any gain. Kept here so putting it back is one line.
 MAX_RECEIPT_GAIN_G = 0.100
 # Finished pieces sent out for certification sit here (still own stock).
 CERTIFICATION_WAREHOUSE = "At Certification"
