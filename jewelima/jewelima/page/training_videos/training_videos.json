@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-05 12:51:52.423256",
+ "modified": "2026-09-07 12:08:21.548174",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "training-videos",
@@ -40,6 +40,9 @@
   },
   {
    "role": "JW CAM"
+  },
+  {
+   "role": "JW Costing"
   },
   {
    "role": "JW Delivery"

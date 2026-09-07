@@ -1,0 +1,141 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:PRV-{#####}",
+ "creation": "2026-09-07 07:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "module": "Jewelima",
+ "name": "Provider Rate",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "modified": "2026-09-07 07:00:00",
+ "modified_by": "Administrator",
+ "field_order": [
+  "supplier",
+  "rate_date",
+  "status",
+  "col_head",
+  "currency_note",
+  "making_section",
+  "making_rates",
+  "diamond_section",
+  "diamond_rates",
+  "metal_section",
+  "metal_rates",
+  "notes_section",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "options": "Supplier",
+   "label": "Provider",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "rate_date",
+   "fieldtype": "Date",
+   "label": "Quoted On",
+   "reqd": 1,
+   "default": "Today",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "options": "Active\nSuperseded",
+   "default": "Active",
+   "label": "Status",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "col_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "currency_note",
+   "fieldtype": "Data",
+   "label": "Reference",
+   "description": "Where this came from \u2014 an email, a call, a rate sheet."
+  },
+  {
+   "fieldname": "making_section",
+   "fieldtype": "Section Break",
+   "label": "Making Charges \u2014 what the provider charges us"
+  },
+  {
+   "fieldname": "making_rates",
+   "fieldtype": "Table",
+   "options": "Provider Making Rate",
+   "label": "Making Rates"
+  },
+  {
+   "fieldname": "diamond_section",
+   "fieldtype": "Section Break",
+   "label": "Diamond Rates (\u20b9/ct by size bracket)"
+  },
+  {
+   "fieldname": "diamond_rates",
+   "fieldtype": "Table",
+   "options": "Provider Diamond Rate",
+   "label": "Diamond Rates"
+  },
+  {
+   "fieldname": "metal_section",
+   "fieldtype": "Section Break",
+   "label": "Metal Rates (\u20b9/g)"
+  },
+  {
+   "fieldname": "metal_rates",
+   "fieldtype": "Table",
+   "options": "Provider Metal Rate",
+   "label": "Metal Rates"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Costing",
+   "share": 1,
+   "write": 1
+  }
+ ]
+}

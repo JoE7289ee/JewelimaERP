@@ -10232,6 +10232,160 @@ def _chart_summary(d):
 	}
 
 
+# ---------------------------------------------------------------------------
+# Providers — the people who MAKE the pieces for us. Their rate card is what we
+# PAY; the price chart is what we CHARGE; the difference is the margin, which is
+# the whole reason both live in Costing. The card mirrors the chart's shape
+# field for field, so a margin is a subtraction rather than a translation.
+# ---------------------------------------------------------------------------
+@frappe.whitelist()
+def get_provider_rates(name=None):
+	"""Every provider rate card, plus one in full."""
+	_require_costing()
+	cards = frappe.get_all("Provider Rate",
+		fields=["name", "supplier", "rate_date", "status", "currency_note"],
+		order_by="status asc, rate_date desc, creation desc")
+	out = {"list": [dict(c) | {"rate_date": str(c.rate_date or "")} for c in cards], "card": None,
+		"suppliers": frappe.get_all("Supplier", pluck="name", order_by="name"),
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
+		"karats": list(KARATS)}
+	if not cards:
+		return out
+	name = name if name and frappe.db.exists("Provider Rate", name) else cards[0].name
+	d = frappe.get_doc("Provider Rate", name)
+	out["card"] = {
+		"name": d.name, "supplier": d.supplier, "rate_date": str(d.rate_date or ""),
+		"status": d.status, "currency_note": d.currency_note or "", "notes": d.notes or "",
+		"making_rates": [{"karat": r.karat or "", "design_type": r.design_type or "",
+			"basis": r.basis or "Per Gram", "rate": flt(r.rate),
+			"min_per_piece": flt(r.min_per_piece)} for r in (d.get("making_rates") or [])],
+		"diamond_rates": [{"sieve_label": r.sieve_label or "", "from_ct": flt(r.from_ct),
+			"to_ct": flt(r.to_ct), "quality": (r.quality or "").strip().upper(),
+			"rate": flt(r.rate)} for r in (d.get("diamond_rates") or [])],
+		"metal_rates": [{"karat": r.karat or "", "rate": flt(r.rate)}
+			for r in (d.get("metal_rates") or [])],
+	}
+	return out
+
+
+@frappe.whitelist()
+def save_provider_rate(payload):
+	"""Save = a NEW Active card for that provider (the controller supersedes the
+	previous one — what we were quoted before is history, never edited)."""
+	_require_costing()
+	p = frappe.parse_json(payload) if isinstance(payload, str) else payload
+	if not (p.get("supplier") or "").strip():
+		frappe.throw(frappe._("Pick the provider."))
+	if not frappe.db.exists("Supplier", p["supplier"]):
+		frappe.throw(frappe._("{0} is not a supplier.").format(p["supplier"]))
+	doc = frappe.new_doc("Provider Rate")
+	doc.supplier = p["supplier"]
+	doc.rate_date = p.get("rate_date") or frappe.utils.today()
+	doc.status = "Active"
+	doc.currency_note = p.get("currency_note") or ""
+	doc.notes = p.get("notes") or ""
+	for r in p.get("making_rates") or []:
+		# a rate OR a minimum makes a rule — the same rule the price chart follows
+		if flt(r.get("rate")) or flt(r.get("min_per_piece")):
+			doc.append("making_rates", {"karat": (r.get("karat") or "").strip().upper() or None,
+				"design_type": r.get("design_type") or None,
+				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
+				"min_per_piece": flt(r.get("min_per_piece"))})
+	for r in p.get("diamond_rates") or []:
+		if flt(r.get("rate")):
+			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label") or "",
+				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
+				"quality": (r.get("quality") or "").strip().upper(), "rate": flt(r.get("rate"))})
+	for r in p.get("metal_rates") or []:
+		if flt(r.get("rate")) and (r.get("karat") or "").strip():
+			doc.append("metal_rates", {"karat": r["karat"].strip().upper(), "rate": flt(r.get("rate"))})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name}
+
+
+def _margin(ours, theirs):
+	"""What we keep on a line, and as a share of what we charge. None when either
+	side has no rate — an unpriced line is not a zero margin."""
+	if ours is None or theirs is None:
+		return {"ours": ours, "theirs": theirs, "margin": None, "pct": None}
+	m = flt(ours) - flt(theirs)
+	return {"ours": flt(ours), "theirs": flt(theirs), "margin": round(m, 2),
+		"pct": (round(m / flt(ours) * 100, 1) if flt(ours) else None)}
+
+
+@frappe.whitelist()
+def get_provider_margins(price_chart=None, providers=None, gold_rate=0):
+	"""What we charge minus what each provider charges, line by line.
+
+	Making is compared on the rule that actually fits — the chart's resolver
+	picks type+karat before type before karat before DEFAULT, so a provider's
+	18K RING rate is set against the rule a real 18K ring would be billed on.
+	Diamonds are compared bracket by bracket on the per-stone weight both sides
+	quote in. Metal needs today's board rate, because our side of it is the
+	touch applied to that rate — without one the metal rows say so."""
+	_require_costing()
+	if isinstance(providers, str):
+		providers = json.loads(providers or "[]")
+	chart = frappe.get_doc("Price Chart", price_chart) if price_chart and \
+		frappe.db.exists("Price Chart", price_chart) else None
+	cards = [frappe.get_doc("Provider Rate", n) for n in (providers or frappe.get_all(
+		"Provider Rate", filters={"status": "Active"}, pluck="name"))]
+	gold_rate = flt(gold_rate)
+
+	rules = list(chart.get("making_rules") or []) if chart else []
+	out = {"chart": price_chart or "", "gold_rate": gold_rate,
+		"providers": [{"name": c.name, "supplier": c.supplier, "rate_date": str(c.rate_date or "")}
+			for c in cards],
+		"making": [], "diamond": [], "metal": []}
+
+	# ---- making: every karat+type the providers actually quote ---------------
+	combos = sorted({((r.karat or "").strip().upper(), (r.design_type or "").strip())
+		for c in cards for r in (c.get("making_rates") or [])})
+	for karat, dtype in combos:
+		row = {"karat": karat, "design_type": dtype, "by": {}}
+		hit = _making_rule_for(rules, dtype, karat) if rules else None
+		ours = flt(hit.rate) if hit and flt(hit.rate) else (flt(chart.making_rate) if chart and flt(chart.making_rate) else None)
+		row["ours"] = ours
+		row["our_rule"] = (" ".join(x for x in ((hit.karat or ""), (hit.design_type or "")) if x) or "DEFAULT") if hit else ""
+		for c in cards:
+			m = next((r for r in (c.get("making_rates") or [])
+				if (r.karat or "").strip().upper() == karat
+				and (r.design_type or "").strip() == dtype), None)
+			row["by"][c.name] = _margin(ours, flt(m.rate) if m else None)
+		out["making"].append(row)
+
+	# ---- diamonds: the provider's bracket against the chart bracket that holds
+	# ---- the same per-stone weight
+	for c in cards:
+		for r in (c.get("diamond_rates") or []):
+			q = (r.quality or "").strip().upper()
+			ours = None
+			if chart:
+				mid = (flt(r.from_ct) + (flt(r.to_ct) or flt(r.from_ct))) / 2 or flt(r.from_ct)
+				cand = [x for x in chart.diamond_rates
+					if (x.quality or "").strip().upper() in (q, "")
+					and flt(x.from_ct) <= mid and (not flt(x.to_ct) or mid < flt(x.to_ct))]
+				if cand:
+					ours = flt(cand[0].rate)
+			out["diamond"].append({"provider": c.name, "supplier": c.supplier,
+				"sieve": r.sieve_label or "", "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+				"quality": q, **_margin(ours, flt(r.rate))})
+
+	# ---- metal: our side is the board rate through the chart's touch ---------
+	for k in KARATS:
+		touch = _touch_for(chart, k) if chart else 0
+		ours = round(gold_rate * touch / 100.0, 2) if (gold_rate and touch) else None
+		row = {"karat": k, "ours": ours, "touch": touch or None, "by": {}}
+		for c in cards:
+			m = next((r for r in (c.get("metal_rates") or [])
+				if (r.karat or "").strip().upper() == k), None)
+			row["by"][c.name] = _margin(ours, flt(m.rate) if m else None)
+		if ours is not None or any(v["theirs"] is not None for v in row["by"].values()):
+			out["metal"].append(row)
+	return out
+
+
 @frappe.whitelist()
 def get_costing_board():
 	"""Every price chart as one board: a row per chart, plus the series the page
