@@ -675,6 +675,12 @@ def setup_roles():
 			# look cards up on card-info, which is the simple one
 			set_page_roles(page, (), strip=("Jewelima Ordering", "Stock Manager", JEWELIMA_INFO_ROLE))
 			continue
+		if page == "card-info":
+			# the order desk reaches it through JW Info, which every ordering
+			# account carries (guaranteed below) — not through its own role, and
+			# never through the ERPNext stock role
+			set_page_roles(page, (JEWELIMA_INFO_ROLE,), strip=("Jewelima Ordering", "Stock Manager"))
+			continue
 		roles = ("Jewelima Ordering", JEWELIMA_INFO_ROLE) if page in JEWELIMA_INFO_LOOKUP_PAGES else ("Jewelima Ordering",)
 		set_page_roles(page, roles)
 	# 4. every ordering account holds JW Info — that is what lets it read Card Info now
