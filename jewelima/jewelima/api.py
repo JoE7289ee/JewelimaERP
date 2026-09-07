@@ -16580,7 +16580,7 @@ def save_barcode_layout(layout):
 	data = frappe.parse_json(layout) if isinstance(layout, str) else (layout or {})
 	if not isinstance(data, dict):
 		frappe.throw(frappe._("The layout must be an object."))
-	keep = ("pt", "qr", "tag", "a", "b", "lines")
+	keep = ("pt", "qr", "tag", "a", "b", "lines", "face", "bold")
 	clean = {k: data[k] for k in keep if k in data}
 	if not clean.get("tag") or not clean.get("a") or not clean.get("b"):
 		frappe.throw(frappe._("A layout needs the tag and both boxes."))
@@ -17453,15 +17453,44 @@ def transfer_order_bags(names, to_location, remarks=None):
 
 
 def _qr_data_uri(text):
-	"""Standard (full) QR as a PNG data-URI via segno. make_qr() forces a real QR with all
+	"""Standard (full) QR as a data-URI via segno. make_qr() forces a real QR with all
 	three finder patterns — segno.make() emits a Micro QR for short codes, which most phone
-	cameras / barcode scanners can't read. None if segno is unavailable."""
+	cameras / barcode scanners can't read. None if segno is unavailable.
+
+	VECTOR, not a bitmap. A card code is a 21-module version-1 symbol; as a PNG at
+	scale 4 it is 100px, and the 0.41in square it prints into is 83 dots on a 203dpi
+	thermal head — so every module landed on 3.32 dots and the printer had to
+	interpolate the edges, which is what made the square look soft and cost us scans.
+	As SVG the printer rasterises the modules itself, at whatever resolution its own
+	head has, with shape-rendering pinning each edge to a whole dot.
+
+	A PNG fallback stays for a segno too old to emit SVG, at a scale high enough that
+	any printer downsamples rather than magnifies."""
 	try:
 		import segno
-
-		return segno.make_qr(str(text), error="m").png_data_uri(scale=4, border=2)
 	except Exception:
 		return None
+	q = segno.make_qr(str(text), error="m")
+	try:
+		import urllib.parse
+
+		# segno has no shape-rendering option, so it goes in afterwards — without it
+		# a printer may antialias the module edges and undo the point of vector
+		uri = q.svg_data_uri(border=2)
+		body = urllib.parse.unquote(uri.split(",", 1)[1])
+		# segno writes width/height in MODULES and no viewBox; an <img> given a
+		# width in inches would then letterbox the symbol at its 25px intrinsic
+		# size instead of scaling it, so the viewBox goes in
+		if "viewBox" not in body:
+			m = re.search(r"width='(\d+)' height='(\d+)'", body)
+			if m:
+				body = body.replace("<svg ",
+					"<svg viewBox='0 0 {0} {1}' ".format(m.group(1), m.group(2)), 1)
+		if "shape-rendering" not in body:
+			body = body.replace("<svg ", '<svg shape-rendering="crispEdges" ', 1)
+		return "data:image/svg+xml;charset=utf-8," + urllib.parse.quote(body, safe="")
+	except Exception:
+		return q.png_data_uri(scale=16, border=2)
 
 
 def _variant_tokens(design):

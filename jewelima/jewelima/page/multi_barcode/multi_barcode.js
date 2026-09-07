@@ -329,12 +329,14 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		const SAVED = JSON.parse(JSON.stringify({
 			tagW: base.tag.w, tagH: base.tag.h, pt: flt(base.pt) || D.pt, qr: flt(base.qr) || D.qr,
 			a: base.a, b: base.b, lines: base.lines,
+			face: base.face || D.face, bold: !!base.bold,
 		}));
 		const L = {
 			tagW: base.tag.w, tagH: base.tag.h,
 			pt: flt(base.pt) || D.pt, qr: flt(base.qr) || D.qr,
 			a: Object.assign({}, base.a), b: Object.assign({}, base.b),
 			lines: JSON.parse(JSON.stringify(base.lines || {})),
+			face: base.face || D.face, bold: !!base.bold,
 		};
 		// THIS page's card and THIS page's options — that is the whole point
 		const card = S.cards[0] || SAMPLE;
@@ -352,7 +354,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			primary_action() {
 				const payload = {
 					pt: L.pt, qr: L.qr, tag: { w: L.tagW, h: L.tagH }, a: L.a, b: L.b,
-					lines: L.lines,
+					lines: L.lines, face: L.face, bold: L.bold,
 				};
 				frappe.call({ method: API + ".save_barcode_layout",
 					args: { layout: JSON.stringify(payload) } })
@@ -457,6 +459,14 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 							<input type="number" step="0.5" min="6" max="14" data-f="pt"> <span class="u">pt</span></div>
 						<div class="tl-row"><label>${__("Code square")}</label>
 							<input type="number" step="0.01" data-f="qr"> <span class="u">in</span></div>
+						<div class="tl-row"><label>${__("Type face")}</label>
+							<select data-f="face" style="flex:1;height:26px;border:1px solid var(--border-color);border-radius:6px;background:var(--control-bg);color:var(--text-color);font-size:12px;">
+								<option value="condensed">${__("Condensed — fits more")}</option>
+								<option value="normal">${__("Normal — prints darker")}</option>
+							</select></div>
+						<div class="tl-row"><label>${__("Bold")}</label>
+							<input type="checkbox" data-f="bold" style="flex:0 0 auto;margin-right:auto;">
+							<span class="u" style="font-size:10.5px;">${__("for a worn head")}</span></div>
 					</div>
 					<div class="tl-grid">
 						<div class="tl-card"><h4>${__("A — weights & code")}</h4>
@@ -486,7 +496,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// the run's own wording rides along, so the preview is this sheet's tag
 		const dopts = () => jewelima.barcodeOpts({
 			pt: L.pt, qr: L.qr, tag: { w: L.tagW, h: L.tagH }, a: L.a, b: L.b,
-			lines: L.lines,
+			lines: L.lines, face: L.face, bold: L.bold,
 			offsetA: 0, offsetB: 0,
 			stoneGrams: S.stoneGrams, showFamily: S.showFamily, showColor: S.showColor,
 			freeText: S.freeText, freeText2: S.freeText2,
@@ -522,8 +532,10 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			].filter(Boolean).join("  "));
 			$b.find("input[data-f]").each(function () {
 				if (document.activeElement === this) return;   // never fight the typist
+				if (this.type === "checkbox") { this.checked = !!get(this.dataset.f); return; }
 				this.value = (+get(this.dataset.f)).toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
 			});
+			$b.find("select[data-f]").each(function () { this.value = get(this.dataset.f); });
 			$b.find(".tl-lines tr[data-k]").each(function () {
 				const v = L.lines[this.dataset.k] || {};
 				$(this).find(".tl-al").each(function () {
@@ -591,7 +603,11 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		$(document).on("mousemove.tlayout", onMove).on("mouseup.tlayout", onUp);
 		dlg.onhide = () => $(document).off(".tlayout");
 
-		$b.on("input", "input[data-f]", function () {
+		$b.on("change", "select[data-f]", function () { set(this.dataset.f, this.value); draw(); });
+		$b.on("change", "input[data-f][type=checkbox]", function () {
+			set(this.dataset.f, this.checked); draw();
+		});
+		$b.on("input", "input[data-f]:not([type=checkbox])", function () {
 			const v = parseFloat(this.value);
 			if (!isNaN(v)) { set(this.dataset.f, v); draw(); }
 		});

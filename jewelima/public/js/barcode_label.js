@@ -21,6 +21,12 @@ jewelima.BARCODE_DEFAULTS = {
 	b: { x: 1.95, y: 0.03, w: 1.02, h: 0.43 },
 	// per-machine nudges the roll printer adds to the box lefts; zero for everyone else
 	offsetA: 0, offsetB: 0,
+	// A thermal head burns whole dots: at 203dpi a 9pt CONDENSED stroke is about
+	// one dot wide, so it prints thin and breaks up. "normal" trades a little
+	// width for a stroke the printer can actually lay down, and bold thickens it
+	// again for a head that is worn or running cold. Geometry is unaffected —
+	// only how the glyphs are drawn — so a layout stays true whichever is picked.
+	face: "condensed", bold: false,
 	// everything on by default, so a tag reads the same whichever page printed it;
 	// Multi Print's checkboxes are the per-run way to leave something off
 	showFamily: true, showColor: true,
@@ -93,12 +99,18 @@ jewelima.barcodeOpts = function (over) {
 	o.lines = {};
 	for (const k in merged) o.lines[k] = Object.assign({}, merged[k]);
 	return {
-		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;--bc-w:${o.tag.w}in;--bc-h:${o.tag.h}in;`,
+		sizeVars: `--bc-size:${o.pt}pt;--bc-qr:${o.qr}in;--bc-w:${o.tag.w}in;--bc-h:${o.tag.h}in;`
+			+ (o.face === "normal"
+				? `--bc-family:Arial,Helvetica,"Liberation Sans",sans-serif;`
+					+ `--bc-stretch:normal;--bc-track:0;`
+				: "")
+			+ (o.bold ? `--bc-weight:700;` : ""),
 		// the numbers themselves, not only the CSS they were baked into — the
 		// layout editor needs to read them back without parsing a style string
 		pt: o.pt, qr: o.qr,
 		tag: o.tag, a: o.a, b: o.b,
 		offsetA: o.offsetA, offsetB: o.offsetB,
+		face: o.face, bold: o.bold,
 		stoneGrams: o.stoneGrams,
 		showFamily: o.showFamily,
 		showColor: o.showColor,
@@ -113,9 +125,12 @@ jewelima.barcodeOpts = function (over) {
 jewelima.BARCODE_LABEL_CSS = `
 .bc-label{position:relative;width:var(--bc-w,3.3in);height:var(--bc-h,0.475in);box-sizing:border-box;
 	overflow:hidden;
-	font-family:"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif;
-	font-stretch:condensed;font-size:var(--bc-size,9pt);font-weight:400;font-style:normal;
-	line-height:1.05;letter-spacing:-.2px;color:#000;}
+	font-family:var(--bc-family,"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif);
+	font-stretch:var(--bc-stretch,condensed);font-size:var(--bc-size,9pt);
+	font-weight:var(--bc-weight,400);font-style:normal;
+	line-height:1.05;letter-spacing:var(--bc-track,-.2px);color:#000;
+	/* the printer must lay the ink down as pure black, not a dithered grey */
+	-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 /* a line can be placed on its own inside its box, so the columns give it the
    full width to be aligned in — without that, text-align has nothing to move in */
 .bc-label .bc-half{position:absolute;box-sizing:border-box;display:flex;align-items:center;overflow:hidden;}
