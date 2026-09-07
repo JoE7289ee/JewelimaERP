@@ -55,8 +55,6 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 						${p.can_manage
 							? `<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
 							: `<button class="btn btn-default btn-sm sc-ask">${__("ASK A MANAGER TO SEND")}</button>`}
-						<button class="btn btn-default btn-sm sc-open">${
-							p.can_manage ? __("Open / edit") : __("Open")}</button>
 						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
 						${p.can_manage
 							? `<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>`
@@ -99,10 +97,6 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		});
 	});
 
-	root.on("click", ".sc-open", function () {
-		frappe.route_options = { prep: $(this).closest(".sc-card").data("name") };
-		frappe.set_route("certify");
-	});
 	root.on("click", ".sc-mail", function () {
 		const nm = $(this).closest(".sc-card").data("name");
 		frappe.call({ method: API + ".get_cert_mail_defaults", args: { name: nm } }).then((r) => {
