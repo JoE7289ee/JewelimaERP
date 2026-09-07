@@ -74,11 +74,6 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 		.cd-tools{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
 		.cd-tools select{height:26px;min-width:auto;font-size:12px;font-weight:400;}
 		.cd-none{padding:20px;text-align:center;color:var(--text-muted);font-size:12.5px;}
-		.cd-covers{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px;}
-		.cov{display:inline-block;border-radius:9px;padding:2px 10px;font-size:11.5px;font-weight:700;}
-		.cov.on{background:rgba(22,101,168,.13);color:#1665A8;}
-		.cov.off{background:var(--control-bg);color:var(--text-muted);opacity:.7;}
-		[data-theme="dark"] .cov.on{color:#7FB3DA;background:rgba(62,146,216,.18);}
 		.cd-terms{font-size:12.5px;white-space:pre-wrap;color:var(--text-muted);line-height:1.55;}
 		.cd-hist{display:flex;gap:7px;flex-wrap:wrap;font-size:11.5px;}
 		.cd-hist a{border:1px solid var(--border-color);border-radius:8px;padding:2px 9px;color:var(--text-color);}
@@ -92,11 +87,14 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 		<div class="cd-body"></div>
 	`);
 
-	function tableOr(rows, head, body, empty) {
+	// A chart prices what it prices. Nothing here announces what a chart does NOT
+	// carry — a party who buys only EF stones on a touch should see two sections,
+	// not seven, five of them saying "not priced on this chart".
+	function tbl(rows, head, body) {
 		return rows.length
 			? `<div class="cd-tw"><table class="cd-t"><thead><tr>${head}</tr></thead>
 				<tbody>${rows.map(body).join("")}</tbody></table></div>`
-			: `<div class="cd-none">${empty}</div>`;
+			: "";
 	}
 
 	function paint() {
@@ -114,16 +112,17 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			? c.checks.map((g) => `<span class="gap">${__("Check")}: ${esc(g)}</span>`).join("")
 			: "");
 
-		const K = ["14K", "18K", "22K"];
+		// only the karats that actually carry a touch — three tiles reading
+		// "not set" told you nothing you could act on
+		const K = ["14K", "18K", "22K"].filter((k) => flt(c.touch[k]));
 		const touch = K.map((k) => {
 			const t = c.touch[k];
-			return `<div class="cd-tile ${t ? "on" : "off"}"><div class="k">${k} ${__("touch")}</div>
-				<div class="v">${t ? flt(t).toFixed(t % 1 ? 1 : 0) + "%" : __("not set")}</div>
-				<div class="n">${t ? __("board × {0}% = the ₹/g billed", [flt(t)])
-					: __("bills at the rate typed on Sell")}</div></div>`;
+			return `<div class="cd-tile on"><div class="k">${k} ${__("touch")}</div>
+				<div class="v">${flt(t).toFixed(t % 1 ? 1 : 0)}%</div>
+				<div class="n">${__("board × {0}% = the ₹/g billed", [flt(t)])}</div></div>`;
 		}).join("");
 
-		const mk = tableOr(c.making,
+		const mk = tbl(c.making,
 			`<th>${__("Karat")}</th><th>${__("Design type")}</th><th>${__("Basis")}</th>
 			 <th class="num">${__("Rate")}</th><th class="num">${__("Minimum")}</th><th class="num">${__("Flat below")}</th>`,
 			(r) => `<tr>
@@ -133,35 +132,35 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 				<td class="num">${r.rate ? inr2(r.rate) + (r.basis === "Per Gram" ? "/g" : r.basis === "Per Piece" ? "/pc" : "%") : "—"}</td>
 				<td class="num">${inr(r.min_per_piece)}</td>
 				<td class="num">${r.flat_below_gm ? flt(r.flat_below_gm).toFixed(3) + " g" : "—"}</td></tr>`,
-			__("Making is not priced on this chart — it is asked for on the bill."));
+			);
 
 		const quals = [...new Set(c.diamond.map((d) => d.quality || "—"))];
 		if (!quals.includes(S.quality)) S.quality = quals[0] || "";
 		const dmdRows = c.diamond.filter((d) => (d.quality || "—") === S.quality);
-		const dmdTable = tableOr(dmdRows,
+		const dmdTable = tbl(dmdRows,
 			`<th>${__("Sieve")}</th><th class="num">${__("From ct")}</th><th class="num">${__("Below ct")}</th>
 			 <th class="num">${__("₹ per ct")}</th>`,
 			(r) => `<tr><td>${esc(r.sieve || "—")}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td class="num">${inr(r.rate)}</td></tr>`,
-			__("Diamonds are not priced on this chart."));
+			);
 
-		const ps = tableOr(c.precious,
+		const ps = tbl(c.precious,
 			`<th>${__("Stone")}</th><th class="num">${__("From ct")}</th><th class="num">${__("Below ct")}</th><th class="num">${__("₹ per ct")}</th>`,
 			(r) => `<tr><td>${esc(r.stone)}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td class="num">${inr(r.rate)}</td></tr>`,
-			__("Precious stones are not priced on this chart."));
+			);
 
 		const bnames = { cs: __("Colour stone"), cz: __("CZ"), cvd: __("CVD"), sw: __("Swarovski") };
 		const bk = Object.keys(bnames).flatMap((k) => (c.buckets[k] || []).map((r) => ({ ...r, b: bnames[k] })));
-		const buckets = tableOr(bk,
+		const buckets = tbl(bk,
 			`<th>${__("Bucket")}</th><th class="num">${__("From ct")}</th><th class="num">${__("Below ct")}</th>
 			 <th>${__("Basis")}</th><th class="num">${__("Rate")}</th>`,
 			(r) => `<tr><td>${esc(r.b)}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td>${esc(r.basis)}</td>
 				<td class="num">${inr(r.rate)}</td></tr>`,
-			__("Colour stone, CZ, CVD and Swarovski are not priced on this chart."));
+			);
 
-		const cert = tableOr(c.cert,
+		const cert = tbl(c.cert,
 			`<th>${__("Charge")}</th><th>${__("Basis")}</th><th class="num">${__("Rate")}</th>
 			 <th class="num">${__("Minimum")}</th><th>${__("Weight slab")}</th>`,
 			(r) => `<tr><td>${esc(r.certification)}${r.solitaire
@@ -169,74 +168,87 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 				<td>${esc(r.basis)}</td><td class="num">${inr(r.rate)}</td>
 				<td class="num">${inr(r.min_amount)}</td>
 				<td>${r.to_ct ? `${ct(r.from_ct) || "0"} – ${ct(r.to_ct)} ct` : "—"}</td></tr>`,
-			__("No certification or hallmarking charge on this chart."));
+			);
 
-		const CN = { making: __("Making"), diamond: __("Diamond"), precious: __("Precious"),
-			buckets: __("CS / CZ / CVD / SW"), charges: __("Charges") };
-		const covers = `<div class="cd-covers">
-			<span class="cov on">${c.covers.gold === "touch" ? __("Gold on a touch") : __("Gold at the typed rate")}</span>
-			${Object.keys(CN).map((k) => `<span class="cov ${c.covers[k] ? "on" : "off"}">${
-				CN[k]}${c.covers[k] ? "" : " · " + __("not priced")}</span>`).join("")}</div>`;
-
-		root.find(".cd-body").html(`
-			${covers}
-			<div class="cd-sec">${__("Gold — what the metal is billed at")}</div>
-			<div class="cd-touch">${touch}</div>
-
-			<div class="cd-sec">${__("Making")}</div>
-			<div class="cd-card">
-				<h3>${__("{0} rule(s)", [c.making.length])}</h3>
-				<p class="sub">${__("the most specific row that fits a piece wins: karat + type, then type, then karat, then DEFAULT")}</p>
-				${mk}
-			</div>
-
-			<div class="cd-sec">${__("Diamonds")}</div>
-			<div class="cd-cols">
+		// Built section by section, and a section that would be empty is simply not
+		// built. What the chart prices is the whole story; what it does not price
+		// is the bill's business, not this page's.
+		const P = [];
+		if (touch) {
+			P.push(`<div class="cd-sec">${__("Gold — what the metal is billed at")}</div>
+				<div class="cd-touch">${touch}</div>`);
+		} else {
+			P.push(`<div class="cd-sec">${__("Gold")}</div>
+				<div class="cd-card"><p class="sub" style="margin:0">${
+					__("No touch is set — gold bills at the rate typed on Sell.")}</p></div>`);
+		}
+		if (mk) {
+			P.push(`<div class="cd-sec">${__("Making")}</div>
 				<div class="cd-card">
-					<h3>${__("Rate by stone size")}</h3>
-					<p class="sub">${c.dmd_span
-						? __("per-stone ct — total carats ÷ piece count picks the bracket. Priced from {0} to {1} ct.",
-							[c.dmd_span[0], c.dmd_span[1]])
-						: __("per-stone ct — total carats ÷ piece count picks the bracket")}</p>
-					<div class="cd-dmd"></div>
-				</div>
-				<div class="cd-card">
-					<h3>${__("Brackets")}</h3>
-					<div class="cd-tools"><label class="sub" style="margin:0">${__("Quality")}</label>
-						<select class="cd-qual">${quals.map((q) =>
-							`<option ${q === S.quality ? "selected" : ""}>${esc(q)}</option>`).join("")}</select></div>
-					${dmdTable}
-				</div>
-			</div>
-
-			<div class="cd-sec">${__("Other stones")}</div>
-			<div class="cd-cols">
-				<div class="cd-card"><h3>${__("Precious stones")}</h3>
-					<p class="sub">${__("priced by stone name, in carat brackets")}</p>${ps}</div>
-				<div class="cd-card"><h3>${__("Buckets")}</h3>
-					<p class="sub">${__("colour stone, CZ, CVD and Swarovski")}</p>${buckets}</div>
-			</div>
-
-			<div class="cd-sec">${__("Charges")}</div>
-			<div class="cd-card">${cert}</div>
-
-			<div class="cd-sec">${__("Terms")}</div>
-			<div class="cd-cols">
-				<div class="cd-card"><h3>${__("Payment")}</h3>
-					<div class="cd-terms">${esc(c.terms.payment) || __("Not stated.")}</div></div>
-				<div class="cd-card"><h3>${__("Conditions")}</h3>
-					<div class="cd-terms">${esc(c.terms.terms) || __("Not stated.")}</div>
-					${c.terms.signatory ? `<p class="sub" style="margin-top:10px;">${__("Signed")}: ${
-						esc(c.terms.signatory)}${c.terms.phone ? " · " + esc(c.terms.phone) : ""}</p>` : ""}</div>
-			</div>
-
-			${c.history.length > 1 ? `<div class="cd-sec">${__("Earlier charts for {0}", [esc(c.chart_name)])}</div>
+					<h3>${__("{0} rule(s)", [c.making.length])}</h3>
+					<p class="sub">${__("the most specific row that fits a piece wins: karat + type, then type, then karat, then DEFAULT")}</p>
+					${mk}
+				</div>`);
+		}
+		if (c.diamond.length) {
+			P.push(`<div class="cd-sec">${__("Diamonds")}</div>
+				<div class="cd-cols">
+					<div class="cd-card">
+						<h3>${__("Rate by stone size")}</h3>
+						<p class="sub">${c.dmd_span
+							? __("per-stone ct — total carats ÷ piece count picks the bracket. Priced from {0} to {1} ct.",
+								[c.dmd_span[0], c.dmd_span[1]])
+							: __("per-stone ct — total carats ÷ piece count picks the bracket")}</p>
+						<div class="cd-dmd"></div>
+					</div>
+					<div class="cd-card">
+						<h3>${__("Brackets")}</h3>
+						${quals.length > 1 ? `<div class="cd-tools">
+							<label class="sub" style="margin:0">${__("Quality")}</label>
+							<select class="cd-qual">${quals.map((q) =>
+								`<option ${q === S.quality ? "selected" : ""}>${esc(q)}</option>`).join("")}</select>
+							</div>` : `<p class="sub">${esc(S.quality || "")}</p>`}
+						${dmdTable}
+					</div>
+				</div>`);
+		}
+		// side by side only when there are two of them
+		const others = [
+			ps ? `<div class="cd-card"><h3>${__("Precious stones")}</h3>
+				<p class="sub">${__("priced by stone name, in carat brackets")}</p>${ps}</div>` : "",
+			buckets ? `<div class="cd-card"><h3>${__("Buckets")}</h3>
+				<p class="sub">${__("colour stone, CZ, CVD and Swarovski")}</p>${buckets}</div>` : "",
+		].filter(Boolean);
+		if (others.length) {
+			P.push(`<div class="cd-sec">${__("Other stones")}</div>`
+				+ (others.length > 1 ? `<div class="cd-cols">${others.join("")}</div>` : others[0]));
+		}
+		if (cert) {
+			P.push(`<div class="cd-sec">${__("Charges")}</div><div class="cd-card">${cert}</div>`);
+		}
+		const terms = [
+			c.terms.payment ? `<div class="cd-card"><h3>${__("Payment")}</h3>
+				<div class="cd-terms">${esc(c.terms.payment)}</div></div>` : "",
+			(c.terms.terms || c.terms.signatory) ? `<div class="cd-card"><h3>${__("Conditions")}</h3>
+				${c.terms.terms ? `<div class="cd-terms">${esc(c.terms.terms)}</div>` : ""}
+				${c.terms.signatory ? `<p class="sub" style="margin-top:10px;">${__("Signed")}: ${
+					esc(c.terms.signatory)}${c.terms.phone ? " · " + esc(c.terms.phone) : ""}</p>` : ""}</div>` : "",
+		].filter(Boolean);
+		if (terms.length) {
+			P.push(`<div class="cd-sec">${__("Terms")}</div>`
+				+ (terms.length > 1 ? `<div class="cd-cols">${terms.join("")}</div>` : terms[0]));
+		}
+		if (c.history.length > 1) {
+			P.push(`<div class="cd-sec">${__("Earlier charts for {0}", [esc(c.chart_name)])}</div>
 				<div class="cd-hist">${c.history.map((h) =>
 					`<a href="#" data-n="${esc(h.name)}" class="${h.name === c.name ? "on" : ""}">${
-						esc(h.chart_date)} · ${esc(h.status)}</a>`).join("")}</div>` : ""}
-		`);
+						esc(h.chart_date)} · ${esc(h.status)}</a>`).join("")}</div>`);
+		}
+		root.find(".cd-body").html(P.join(""));
 
-		// the chart's own curve — one series, so the heading names it and no legend
+		// the chart's own curve — one series, so the heading names it and no legend.
+		// A chart with no diamonds has no canvas to draw on any more.
+		if (!c.diamond.length) return;
 		jewelima.costStepChart(root.find(".cd-dmd"), {
 			title: __("Diamond ₹/ct"),
 			series: dmdRows.length ? [{ name: c.chart_name, points: dmdRows.map((d) => ({
