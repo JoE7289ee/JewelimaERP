@@ -102,11 +102,13 @@ frappe.pages["chart-gaps"].on_page_load = function (wrapper) {
 			P.push(`<div class="cg-sec">${__("Problems")}</div>
 				<div class="cg-empty">${__("Nothing broken — every active chart can bill a piece.")}</div>`);
 		}
-		if (D.missing.length) {
-			P.push(`<div class="cg-sec">${__("Not priced")}</div>
-				<p class="cg-note">${__("a chart is not meant to be complete — this is what each one leaves out, to be checked rather than fixed")}</p>
-				<div class="cg-grid">${D.missing.map((b) => box(b, "miss")).join("")}</div>`);
-		}
+		// one heading per subject, its buckets underneath — a chart appears in
+		// every bucket it belongs to, because each bucket is its own question
+		(D.groups || []).forEach((g) => {
+			P.push(`<div class="cg-sec">${esc(g.title)}</div>
+				<p class="cg-note">${esc(g.why)}</p>
+				<div class="cg-grid">${g.buckets.map((b) => box(b, "miss")).join("")}</div>`);
+		});
 		if (D.clean.length) {
 			P.push(`<div class="cg-sec">${__("Fully priced")}</div>
 				<p class="cg-note">${__("making and diamonds both priced, nothing flagged")}</p>

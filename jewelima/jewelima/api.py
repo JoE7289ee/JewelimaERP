@@ -10826,68 +10826,129 @@ def get_chart_gaps():
 	"""Every ACTIVE chart's gaps, grouped by the gap rather than by the chart.
 
 	The detail page answers "what does this chart price"; this one answers "which
-	charts still need something", which is the question you ask when there are
-	thirty of them and you are the one who has to close them.
+	charts still need something" — at a glance, for all of them at once. A chart
+	appears in every bucket it belongs to, on purpose: the buckets are questions
+	("which charts have no 22K making?"), and the same chart is a legitimate
+	answer to several of them.
 
-	Two kinds, kept apart on purpose. A PROBLEM is a chart that cannot bill
-	correctly — nothing to price the metal or the work with, a stone that falls
-	between two brackets, a rule that charges nothing. NOT PRICED is a chart that
-	simply does not carry a section, which is usually the desk's choice and is
-	listed so it can be checked, never as an error."""
+	Two kinds, kept apart. A PROBLEM is a chart that cannot bill correctly. The
+	rest is simply what a chart does not carry, which is usually the desk's
+	choice — listed so it can be checked, never as an error."""
 	_require_costing()
-	charts = [_chart_summary(frappe.get_doc("Price Chart", n))
+	docs = [frappe.get_doc("Price Chart", n)
 		for n in frappe.get_all("Price Chart", filters={"status": "Active"},
 			order_by="chart_name", pluck="name")]
+	charts = [(d, _chart_summary(d)) for d in docs]
 
 	def card(c, note=""):
 		return {"name": c["name"], "chart_name": c["chart_name"],
 			"chart_date": c["chart_date"], "age_days": c.get("age_days"), "note": note}
 
-	problems, missing = [], []
+	def bucket(key, title, why, pick):
+		rows = [card(c) for d, c in charts if pick(d, c)]
+		return {"key": key, "title": title, "why": why, "charts": rows} if rows else None
 
-	def bucket(into, key, title, why, rows):
-		if rows:
-			into.append({"key": key, "title": title, "why": why, "charts": rows})
+	def group(title, why, buckets):
+		bs = [b for b in buckets if b]
+		return {"title": title, "why": why, "buckets": bs} if bs else None
 
 	# ---- problems: the chart cannot bill correctly -------------------------
-	bucket(problems, "unpriced", frappe._("Prices neither making nor touch"),
+	problems = []
+	b = bucket("unpriced", frappe._("Prices neither making nor touch"),
 		frappe._("a piece on these would bill on its stones alone"),
-		[card(c) for c in charts
-			if not c["covers"]["making"] and c["covers"]["gold"] != "touch"])
+		lambda d, c: not c["covers"]["making"] and c["covers"]["gold"] != "touch")
+	if b:
+		problems.append(b)
+	for key, needle, title, why in (
+		("dmdgap", "nothing priced between", frappe._("Diamond brackets with a hole"),
+			frappe._("a stone of that size has no price at all")),
+		("zero", "charges nothing", frappe._("A making rule that charges nothing"),
+			frappe._("check it is meant to be free")),
+	):
+		rows = []
+		for d, c in charts:
+			hit = [x for x in c["checks"] if needle in x]
+			if hit:
+				rows.append(card(c, "; ".join(hit)))
+		if rows:
+			problems.append({"key": key, "title": title, "why": why, "charts": rows})
 
-	gapped = []
-	for c in charts:
-		holes = [x for x in c["checks"] if "nothing priced between" in x]
-		if holes:
-			gapped.append(card(c, "; ".join(holes)))
-	bucket(problems, "dmdgap", frappe._("Diamond brackets with a hole"),
-		frappe._("a stone of that size has no price at all"), gapped)
+	# ---- gold ---------------------------------------------------------------
+	def no_touch(k):
+		return lambda d, c: not flt((c["touch"] or {}).get(k))
 
-	zero = []
-	for c in charts:
-		z = [x for x in c["checks"] if "charges nothing" in x]
-		if z:
-			zero.append(card(c, "; ".join(z)))
-	bucket(problems, "zero", frappe._("A making rule that charges nothing"),
-		frappe._("check it is meant to be free"), zero)
+	gold = group(frappe._("Gold"), frappe._("what the metal is billed at"), [
+		bucket("touch-none", frappe._("No touch at all"),
+			frappe._("gold bills at the rate typed on Sell"),
+			lambda d, c: not [r for r in (d.get("touch_rates") or []) if flt(r.touch)]),
+	] + [
+		bucket("touch-" + k, frappe._("No {0} touch").format(k),
+			frappe._("a {0} piece has no touch on this chart").format(k), no_touch(k))
+		for k in KARATS
+	])
 
-	# ---- not priced: usually a choice, listed so it can be checked ----------
-	bucket(missing, "touch", frappe._("No gold touch"),
-		frappe._("gold bills at the rate typed on Sell"),
-		[card(c) for c in charts if c["covers"]["gold"] != "touch"])
-	bucket(missing, "making", frappe._("No making charge"),
-		frappe._("making is asked for on the bill"),
-		[card(c) for c in charts if not c["covers"]["making"]])
-	bucket(missing, "diamond", frappe._("No diamond rates"),
-		frappe._("diamonds are not priced on the chart"),
-		[card(c) for c in charts if not c["covers"]["diamond"]])
-	bucket(missing, "charges", frappe._("No certification or hallmarking charge"),
-		frappe._("those charges are not on the chart"),
-		[card(c) for c in charts if not c["covers"]["charges"]])
+	# ---- making: per karat, asked the way the biller asks it ---------------
+	def no_making(k):
+		def pick(d, c):
+			rules = list(d.get("making_rules") or [])
+			if not rules and not flt(d.making_rate):
+				return True
+			return not flt(d.making_rate) and not _making_rule_for(rules, "", k)
+		return pick
 
-	clean = [card(c) for c in charts
+	making = group(frappe._("Making"), frappe._("what the work is billed at"), [
+		bucket("mk-none", frappe._("No making charge"),
+			frappe._("making is asked for on the bill"),
+			lambda d, c: not c["covers"]["making"]),
+	] + [
+		bucket("mk-" + k, frappe._("No {0} making").format(k),
+			frappe._("a {0} piece matches no making rule").format(k), no_making(k))
+		for k in KARATS
+	])
+
+	# ---- stones -------------------------------------------------------------
+	def empty_table(field):
+		return lambda d, c: not [r for r in (d.get(field) or []) if flt(r.rate)]
+
+	stones = group(frappe._("Stones"), frappe._("what each kind of stone is billed at"), [
+		bucket("dmd", frappe._("No diamond rates"),
+			frappe._("diamonds are not priced"), lambda d, c: not c["covers"]["diamond"]),
+		bucket("ps", frappe._("No precious stone rates (PS)"),
+			frappe._("emerald, ruby, sapphire and the rest"), empty_table("precious_stone_rates")),
+		bucket("cs", frappe._("No colour stone rates (CS)"),
+			frappe._("the colour stone bucket"), empty_table("cs_rates")),
+		bucket("cz", frappe._("No CZ rates"), frappe._("the CZ bucket"), empty_table("cz_rates")),
+		bucket("cvd", frappe._("No CVD rates"), frappe._("the CVD bucket"), empty_table("cvd_rates")),
+		bucket("sw", frappe._("No Swarovski rates"), frappe._("the SW bucket"), empty_table("sw_rates")),
+	])
+
+	# ---- certification: one bucket per lab we actually run ------------------
+	labs = frappe.get_all("Certification Type", order_by="name", pluck="name")
+	# HALLMARKING is charged like a lab on a chart but is not one of them
+	labs = list(dict.fromkeys(list(labs) + ["HALLMARKING"]))
+
+	def no_charge(lab):
+		def pick(d, c):
+			return not any((r.certification or "").strip().upper() == lab.upper()
+				and (flt(r.rate) or flt(r.min_amount))
+				for r in (d.get("certification_charges") or []))
+		return pick
+
+	certs = group(frappe._("Certification charges"),
+		frappe._("which labs are not priced on which chart"), [
+		bucket("cert-none", frappe._("No charge of any kind"),
+			frappe._("certification is not billed on this chart"),
+			lambda d, c: not c["covers"]["charges"]),
+	] + [
+		bucket("cert-" + lab, frappe._("No {0} charge").format(lab),
+			frappe._("{0} work is not priced").format(lab), no_charge(lab))
+		for lab in labs
+	])
+
+	clean = [card(c) for d, c in charts
 		if not c["checks"] and c["covers"]["making"] and c["covers"]["diamond"]]
-	return {"total": len(charts), "problems": problems, "missing": missing,
+	return {"total": len(charts), "problems": problems,
+		"groups": [g for g in (gold, making, stones, certs) if g],
 		"clean": clean,
 		"problem_charts": len({x["name"] for b in problems for x in b["charts"]})}
 
