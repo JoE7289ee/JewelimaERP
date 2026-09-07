@@ -10403,11 +10403,69 @@ def _feed_spot():
 	}
 
 
+def _feed_surabi():
+	"""Surabi Bullion's own live board — the feed their website reads.
+
+	A DEALER's board, which is the closest thing here to the number the firm
+	actually boards: it carries the dealer's own bid/ask, not an association
+	average and not a world price. Tab-separated rows of
+	id / name / bid / ask / high / low.
+
+	"GOLD Rs" is 999 per TEN grams, the way the trade quotes it — it lands within
+	half a percent of IBJA's 999, which is what confirms the unit. The local
+	lines below it (COSWAN, BAR 9999, Silver 999) are carried through untouched,
+	because a Kerala board may well be read off one of those rather than off the
+	999 figure, and that is exactly the question this page exists to settle."""
+	import requests
+
+	r = requests.get(
+		"https://bcast.surabibullion.net:7768/VOTSBroadcastStreaming/Services/xml"
+		"/GetLiveRateByTemplateID/surabi", timeout=BOARD_FEED_TIMEOUT)
+	r.raise_for_status()
+	# the board declares no charset, so requests falls back to latin-1 and the
+	# rupee sign in its own row labels comes back as mojibake
+	r.encoding = "utf-8"
+
+	def num(v):
+		v = (v or "").strip()
+		return flt(v) if v and v != "-" else None
+
+	rows, gold10 = [], None
+	for line in (r.text or "").splitlines():
+		f = [x.strip() for x in line.split("\t")]
+		f = [x for x in f if x != ""]
+		if len(f) < 3:
+			continue
+		label = f[1]
+		row = {"label": label, "bid": num(f[2]) if len(f) > 2 else None,
+			"ask": num(f[3]) if len(f) > 3 else None,
+			"high": num(f[4]) if len(f) > 4 else None,
+			"low": num(f[5]) if len(f) > 5 else None}
+		rows.append(row)
+		if label.startswith("GOLD") and "$" not in label:
+			gold10 = row["ask"] or row["bid"]
+	if not gold10:
+		raise ValueError("no rupee gold line in the board")
+
+	fine_g = gold10 / 10.0                      # per 10g 999 -> per gram fine
+	return {
+		"as_of": frappe.utils.now()[:19],       # the board is live; it has no stamp
+		"by_karat": {k: round(fine_g / 0.999 * f2, 2) for k, f2 in KARAT_FINENESS.items()},
+		"detail": "GOLD Rs {0}/10g".format(gold10),
+		"extra": rows,
+	}
+
+
 BOARD_FEEDS = [
 	{"key": "ibja", "name": "IBJA", "kind": "Indian trade rate",
 	 "note": "What the trade deals at — duty and GST already inside it. Market working days, AM/PM.",
 	 "source": "ibjarates.com, via a public mirror", "url": "https://ibja-api.vercel.app/latest",
 	 "official": False, "fn": _feed_ibja},
+	{"key": "surabi", "name": "Surabi Bullion", "kind": "Dealer board",
+	 "note": "A dealer's own live bid/ask, not an average — the closest here to a board. Its whole board is shown below.",
+	 "source": "surabibullion.com's own live feed",
+	 "url": "https://bcast.surabibullion.net:7768/…/GetLiveRateByTemplateID/surabi",
+	 "official": False, "fn": _feed_surabi},
 	{"key": "spot", "name": "International spot", "kind": "World metal price",
 	 "note": "The metal's world price at the day's USD/INR. Always below the Indian rate — the gap is duty, GST and local premium.",
 	 "source": "gold-api.com + open.er-api.com", "url": "https://api.gold-api.com/price/XAU",

@@ -108,7 +108,7 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		// every karat at once, so a purity we do not sell today is still visible
 		const live = d.rows.filter((r) => !r.error);
 		const ind = live.find((r) => r.kind === "Indian trade rate");
-		const wld = live.find((r) => r.kind !== "Indian trade rate");
+		const wld = live.find((r) => r.kind === "World metal price");
 		const rows = d.karats.map((k) => {
 			const a = ind && ind.by_karat[k], b = wld && wld.by_karat[k];
 			const gap = a && b ? a - b : null;
@@ -118,6 +118,20 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 					+ `<div class="br-gap">${(100 * gap / b).toFixed(1)}% ${__("over spot")}</div>`}</td></tr>`;
 		}).join("");
 
+		// a dealer publishes more than the 999 line, and a Kerala board may well be
+		// read off one of the local rows rather than off 999 — so show them all
+		const boards = live.filter((r) => (r.extra || []).length).map((r) => `
+			<div class="br-sec">${esc(r.name)} — ${__("the whole board")}</div>
+			<div class="br-tw"><table class="br-t"><thead><tr>
+				<th>${__("Line")}</th><th class="num">${__("Bid")}</th><th class="num">${__("Ask")}</th>
+				<th class="num">${__("High")}</th><th class="num">${__("Low")}</th>
+			</tr></thead><tbody>${r.extra.map((e) => `<tr>
+				<td>${esc(e.label)}</td>
+				${["bid", "ask", "high", "low"].map((k) => `<td class="num">${
+					e[k] == null ? "—" : flt(e[k]).toLocaleString("en-IN",
+						{ maximumFractionDigits: 3 })}</td>`).join("")}
+			</tr>`).join("")}</tbody></table></div>`).join("");
+
 		root.find(".br-body").html(`
 			<div class="br-sec">${__("Every purity")}</div>
 			${live.length ? `<div class="br-tw"><table class="br-t"><thead><tr>
@@ -125,6 +139,7 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 				<th class="num">${__("Indian over world")}</th>
 			</tr></thead><tbody>${rows}</tbody></table></div>`
 				: `<div class="br-why">${__("No feed could be read just now.")}</div>`}
+			${boards}
 			${d.ours ? `<div class="br-sec">${__("What we last billed at")}</div>
 				<div class="br-tw"><table class="br-t"><tbody><tr>
 					<td>${esc(d.ours.doc)} · ${esc(d.ours.on)}</td>
