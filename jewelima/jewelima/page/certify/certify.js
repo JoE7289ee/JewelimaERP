@@ -224,8 +224,13 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		// neither lab's sheet carries OUR card number, but the preparer works from
 		// it — scanning, deleting, hovering — so it leads the row on both
 		const lead = igi || dhc;
-		root.find(".cf-th").html(`<tr>${lead ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${locked ? "" : "<th></th>"}</tr>`);
+		// DHC numbers its sheet Sr# 1..n in the order the rows sit, which is the
+		// order they were scanned — so the count on screen is the count on the sheet
+		root.find(".cf-th").html(`<tr>${dhc ? `<th>${__("Sr#")}</th>` : ""}${
+			lead ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${
+			locked ? "" : "<th></th>"}</tr>`);
 		root.find(".cf-tb").html(src.rows.map((r, i) => `<tr data-row="${esc(r.row || i)}" data-i="${i}">
+			${dhc ? `<td class="r" style="color:var(--text-muted);width:38px;">${i + 1}</td>` : ""}
 			${lead ? `<td class="cf-bag" data-bag="${esc(r.order_bag)}"><b>${esc(r.order_bag)}</b></td>` : ""}
 			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}${c === "order_bag" ? " cf-bag" : ""}"${c === "order_bag" ? ` data-bag="${esc(r.order_bag)}"` : ""}>${typeof r[c] === "number" ? numCell(c, r[c]) : esc("" + (r[c] || ""))}</td>`).join("")}
 			${locked ? "" : '<td class="del">&times;</td>'}</tr>`).join("")
