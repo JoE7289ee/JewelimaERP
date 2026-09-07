@@ -48,6 +48,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		.cf-lock{font-size:11px;font-weight:700;border-radius:10px;padding:2px 10px;background:#1f618d;color:#fff;}
 		.cf-scanrow{display:none;gap:10px;align-items:end;margin-bottom:10px;}
 		.cf-scanrow .frappe-control{margin:0;flex:0 0 260px;}
+		.cf-tw{overflow-x:auto;}
 		table.cf-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);display:none;}
 		table.cf-t th{background:var(--control-bg);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:6px 8px;border:1px solid var(--border-color);text-align:left;}
 		table.cf-t td{border:1px solid var(--border-color);padding:5px 8px;}
@@ -88,7 +89,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				<div class="cf-scanrow"><div class="cf-scan"></div>
 					<button class="cf-btn cf-pick">${__("Add by filter…")}</button>
 					<span style="font-size:11.5px;color:var(--text-muted);">${__("scan / type card no. + Enter — E optional")}</span></div>
-				<table class="cf-t"><thead class="cf-th"></thead><tbody class="cf-tb"></tbody></table>
+				<div class="cf-tw"><table class="cf-t"><thead class="cf-th"></thead><tbody class="cf-tb"></tbody></table></div>
 				<div class="cf-tot"></div>
 				<div class="cf-actions">
 					<button class="btn btn-primary cf-prep" style="background:#2e7d32;border-color:#2e7d32;display:none;">${__("PREP — create the batch")}</button>
@@ -187,6 +188,20 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	const IGI_HEAD = [__("Style Number"), __("Metal Color"), __("Color Criteria"), __("Clarity Criteria"), __("Shape"), __("Gross Wt (g)"), __("Diamond Wt (ct)")];
 	const BASIC_COLS = ["order_bag", "design", "design_type", "gross", "dmd_ct"];
 	const BASIC_HEAD = [__("Card"), __("Design"), __("Type"), __("Gross (g)"), __("Diamond (ct)")];
+	// DHC's own sheet, column for column — a preparer checking the list on screen
+	// is checking exactly what the lab will be sent
+	const DHC_COLS = ["barcode", "category", "style_no", "gross", "dia_no", "dia_wt",
+		"cs_no", "cs_wt", "carat", "metal_color", "shape", "color", "clarity"];
+	const DHC_HEAD = ["BARCODE", "Category", "Style No", "Gross Wt", "No of Dia", "Dia Wt",
+		"COLOR STONE NUMBER", "COLOR STONE WT", "CARAT", "COLOR", "Shape", "COLOR", "CLARITY"];
+	// DHC rounds to two, and leaves a zero count or weight blank rather than "0"
+	const DEC = { gross: 2, dia_wt: 2, cs_wt: 2 };
+	const BLANK_IF_ZERO = new Set(["dia_no", "dia_wt", "cs_no", "cs_wt"]);
+
+	function numCell(c, v) {
+		if (BLANK_IF_ZERO.has(c) && !v) return "";
+		return c === "dia_no" || c === "cs_no" ? "" + v : v.toFixed(DEC[c] == null ? 3 : DEC[c]);
+	}
 
 	function paint() {
 		const src = prep || {
@@ -203,12 +218,16 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			<span>${esc(src.cert_type)}${src.center ? " · " + esc(src.center.split("-").slice(1).join("-")) : ""}</span>
 			${src.quality ? `<span class="cf-lock">${esc(src.quality)}</span>` : ""}
 			<span class="cf-lock" style="background:${src.status === "Draft" ? "#b35a00" : src.status === "Prepared" ? "#7f8c8d" : src.status === "Cancelled" ? "#b02a2a" : "#2e7d32"};">${esc(src.status)}</span>`);
-		const cols = igi ? IGI_COLS : BASIC_COLS;
-		const head = igi ? IGI_HEAD : BASIC_HEAD;
-		root.find(".cf-th").html(`<tr>${igi ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${locked ? "" : "<th></th>"}</tr>`);
+		const dhc = src.cert_type === "DHC";
+		const cols = igi ? IGI_COLS : dhc ? DHC_COLS : BASIC_COLS;
+		const head = igi ? IGI_HEAD : dhc ? DHC_HEAD : BASIC_HEAD;
+		// neither lab's sheet carries OUR card number, but the preparer works from
+		// it — scanning, deleting, hovering — so it leads the row on both
+		const lead = igi || dhc;
+		root.find(".cf-th").html(`<tr>${lead ? `<th>${__("Card")}</th>` : ""}${head.map((h) => `<th>${h}</th>`).join("")}${locked ? "" : "<th></th>"}</tr>`);
 		root.find(".cf-tb").html(src.rows.map((r, i) => `<tr data-row="${esc(r.row || i)}" data-i="${i}">
-			${igi ? `<td class="cf-bag" data-bag="${esc(r.order_bag)}"><b>${esc(r.order_bag)}</b></td>` : ""}
-			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}${c === "order_bag" ? " cf-bag" : ""}"${c === "order_bag" ? ` data-bag="${esc(r.order_bag)}"` : ""}>${typeof r[c] === "number" ? r[c].toFixed(3) : esc("" + (r[c] || ""))}</td>`).join("")}
+			${lead ? `<td class="cf-bag" data-bag="${esc(r.order_bag)}"><b>${esc(r.order_bag)}</b></td>` : ""}
+			${cols.map((c) => `<td class="${typeof r[c] === "number" ? "r" : ""}${c === "order_bag" ? " cf-bag" : ""}"${c === "order_bag" ? ` data-bag="${esc(r.order_bag)}"` : ""}>${typeof r[c] === "number" ? numCell(c, r[c]) : esc("" + (r[c] || ""))}</td>`).join("")}
 			${locked ? "" : '<td class="del">&times;</td>'}</tr>`).join("")
 			|| `<tr><td colspan="9" style="color:var(--text-muted);padding:14px;">${__("Scan the first product.")}</td></tr>`);
 		root.find("table.cf-t").show();

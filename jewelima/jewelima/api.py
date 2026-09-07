@@ -14881,6 +14881,10 @@ def _cert_format_row(cert_type, quality, nm, b):
 			"color": (_IGI_QUALITY.get(quality or "", ("", "")))[0],
 			"clarity": (_IGI_QUALITY.get(quality or "", ("", "")))[1],
 			"shape": "Round Brilliant"})
+	elif cert_type == "DHC":
+		d = _dhc_piece(nm)
+		d.pop("gross")          # the tiles total the exact weight, not DHC's 2dp
+		row.update(d)
 	return row
 
 
@@ -15127,6 +15131,9 @@ def cert_prep_scan(name, barcode):
 @frappe.whitelist()
 def get_cert_prep(name):
 	d = frappe.get_doc("Certification", name)
+	# DHC needs each piece's stones; read the whole batch once rather than per row
+	qmap = _diamond_qmap() if d.cert_type == "DHC" else None
+	mats = _bag_convert_materials([r.order_bag for r in d.items]) if d.cert_type == "DHC" else None
 	rows = []
 	for r in d.items:
 		row = {"row": r.name, "order_bag": r.order_bag, "design": r.design or "",
@@ -15146,6 +15153,10 @@ def get_cert_prep(name):
 				"color": (_IGI_QUALITY.get(d.quality or "", ("", "")))[0],
 				"clarity": (_IGI_QUALITY.get(d.quality or "", ("", "")))[1],
 				"shape": "Round Brilliant"})
+		elif d.cert_type == "DHC":
+			dh = _dhc_piece(r.order_bag, qmap=qmap, mats=mats)
+			dh.pop("gross")     # the tiles total the exact weight, not DHC's 2dp
+			row.update(dh)
 		rows.append(row)
 	return {"name": d.name, "cert_type": d.cert_type, "center": d.center or "",
 		"quality": d.quality or "", "status": d.status, "prepared_on": str(d.prepared_on or ""),
@@ -15204,10 +15215,6 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 
 
 # DHC asks for its own sheet, and it is not the generic one: the barcode goes
-# WITHOUT our E prefix, Style No is the DESIGN NUMBER rather than the variant,
-# the karat reads "18KT", the metal colour is one lowercase word, and the
-# diamond quality is split into its colour and clarity halves.
-# DHC asks for its own sheet, and it is not the generic one: the barcode goes
 # WITHOUT our E prefix, Style No is the DESIGN NUMBER rather than the variant
 # the factory works to, the karat reads "18KT", the metal colour is one
 # lowercase word, and the diamond quality is split into its colour and clarity
@@ -15228,6 +15235,48 @@ _DHC_WIDTH = {"A": 5.4, "B": 13.7, "E": 11.0, "F": 9.6, "J": 8.1, "K": 15.0,
 # the columns DHC styles as short bold TEXT codes
 _DHC_CODE_COLS = {10, 12, 13, 14}          # CARAT, Shape, COLOR(diamond), CLARITY
 _DHC_BOLD_COLS = {8, 9, 11} | _DHC_CODE_COLS   # + colour-stone pair and metal colour
+
+
+# DHC's columns, for ONE piece. The submission sheet and the certify page both
+# read this, so what a preparer checks on screen is literally what the lab is
+# sent — a difference between the two would only ever be a bug.
+def _dhc_piece(nm, b=None, qmap=None, mats=None):
+	if b is None:
+		b = frappe.db.get_value("Order Bag", nm, [
+			"design", "act_gross_weight", "act_dmd_weight", "act_dmd_no",
+			"act_cs_weight", "act_cs_no", "act_ps_weight", "act_ps_no"], as_dict=True) or frappe._dict()
+	if qmap is None:
+		qmap = _diamond_qmap()
+	if mats is None:
+		mats = _bag_convert_materials([nm])
+	# the dominant diamond bracket by carats, split into DHC's two COLOR columns
+	qual_ct = {}
+	for it, qty in (mats.get(nm) or {}).items():
+		st, grp = frappe.db.get_value("Item", it, ["stone_type", "item_group"]) or ("", "")
+		if st != "Diamond":
+			continue
+		q = qmap.get((grp or "").replace("DIAMOND ", ""), (grp or "").replace("DIAMOND ", ""))
+		qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
+	quality = max(qual_ct, key=qual_ct.get) if qual_ct else ""
+	colour, clarity = _IGI_QUALITY.get(quality, ("", ""))
+	karat = _piece_karat(nm, b.design)
+	tok = _variant_tokens(b.design)
+	return {
+		"barcode": nm[1:] if nm[:1].upper() == "E" else nm,   # DHC's barcode drops our E
+		"category": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
+		"style_no": design_no_of(b.design) or b.design or "",
+		"gross": round(flt(b.act_gross_weight), 2),
+		"dia_no": cint(b.act_dmd_no),
+		"dia_wt": round(flt(b.act_dmd_weight), 2),
+		# DHC has ONE colour-stone pair, so colour stones and precious go together
+		"cs_no": cint(b.act_cs_no) + cint(b.act_ps_no),
+		"cs_wt": round(flt(b.act_cs_weight) + flt(b.act_ps_weight), 2),
+		"carat": karat.replace("K", "KT") if karat else "",
+		"metal_color": _DHC_METAL_WORD.get(tok.get("gold_color") or "", ""),
+		"shape": "RD",
+		"color": colour,
+		"clarity": clarity,
+	}
 
 
 def _dhc_xlsx_bytes(bags, tag=""):
@@ -15252,41 +15301,11 @@ def _dhc_xlsx_bytes(bags, tag=""):
 		c.border = box
 
 	for i, nm in enumerate(bags, 1):
-		b = frappe.db.get_value("Order Bag", nm, [
-			"design", "act_gross_weight", "act_dmd_weight", "act_dmd_no",
-			"act_cs_weight", "act_cs_no", "act_ps_weight", "act_ps_no"], as_dict=True) or frappe._dict()
-		dtype = (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or ""
-		# the dominant diamond bracket by carats, split into DHC's two columns
-		qual_ct = {}
-		for it, qty in (mats.get(nm) or {}).items():
-			st, grp = frappe.db.get_value("Item", it, ["stone_type", "item_group"]) or ("", "")
-			if st != "Diamond":
-				continue
-			q = qmap.get((grp or "").replace("DIAMOND ", ""), (grp or "").replace("DIAMOND ", ""))
-			qual_ct[q] = qual_ct.get(q, 0) + flt(qty)
-		quality = max(qual_ct, key=qual_ct.get) if qual_ct else ""
-		colour, clarity = _IGI_QUALITY.get(quality, ("", ""))
-		tok = _variant_tokens(b.design)
-		karat = _piece_karat(nm, b.design)
-		# DHC has ONE colour-stone pair, so colour stones and precious go together
-		cs_no = cint(b.act_cs_no) + cint(b.act_ps_no)
-		cs_wt = flt(b.act_cs_weight) + flt(b.act_ps_weight)
-		ws.append([
-			i,
-			nm[1:] if nm[:1].upper() == "E" else nm,          # DHC's barcode drops our E
-			dtype,
-			design_no_of(b.design) or b.design or "",
-			round(flt(b.act_gross_weight), 2),
-			cint(b.act_dmd_no) or None,
-			round(flt(b.act_dmd_weight), 2) or None,
-			cs_no or None,
-			round(cs_wt, 2) or None,
-			karat.replace("K", "KT") if karat else "",
-			_DHC_METAL_WORD.get(tok.get("gold_color") or "", ""),
-			"RD",
-			colour,
-			clarity,
-		])
+		d = _dhc_piece(nm, qmap=qmap, mats=mats)
+		# a zero count or weight is left EMPTY on DHC's sheet, not printed as 0
+		ws.append([i, d["barcode"], d["category"], d["style_no"], d["gross"],
+			d["dia_no"] or None, d["dia_wt"] or None, d["cs_no"] or None, d["cs_wt"] or None,
+			d["carat"], d["metal_color"], d["shape"], d["color"], d["clarity"]])
 		r = ws.max_row
 		ws.row_dimensions[r].height = 30
 		for col in range(1, 15):
