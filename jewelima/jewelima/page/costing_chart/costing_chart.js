@@ -56,13 +56,23 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 		.cd-tile.on{border-left:3px solid #9A7500;}
 		[data-theme="dark"] .cd-tile.on{border-left-color:#A67E0C;}
 		.cd-tile .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
-		.cd-tile .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.2;}
+		.cd-tile .v{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.2;
+			color:#8C6A00;}
+		[data-theme="dark"] .cd-tile .v{color:#B98D10;}
 		.cd-tile .n{font-size:11.5px;color:var(--text-muted);}
 		.cd-tile.off .v{color:var(--text-muted);font-size:17px;}
 		.cd-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;}
 		.cd-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);padding:14px 16px;}
 		.cd-card h3{font-size:13px;margin:0 0 2px;font-weight:700;}
 		.cd-card .sub{font-size:11.5px;color:var(--text-muted);margin:0 0 12px;}
+		/* THE number in each row — what a piece is billed at. One accent, the same
+		   gold the touch tiles already carry, so the eye lands on the rate and the
+		   supporting figures (minimums, slabs, carat ranges) stay quiet. Weight
+		   and tabular figures carry it as much as the colour does, so it still
+		   reads on a mono screen or in print. */
+		.money{font-weight:700;color:#8C6A00;}
+		[data-theme="dark"] .money{color:#B98D10;}
+		td.num .sub2{display:block;font-size:10.5px;color:var(--text-muted);font-weight:400;}
 		.cd-tw{overflow-x:auto;}
 		table.cd-t{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums;}
 		table.cd-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
@@ -138,7 +148,8 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 					!(r.karat || "").trim() && !(r.design_type || r.charge_category || "").trim()
 						? ` <span class="k-chip">${__("DEFAULT")}</span>` : ""}</td>
 				<td>${esc(r.basis)}</td>
-				<td class="num">${r.rate ? inr2(r.rate) + (r.basis === "Per Gram" ? "/g" : r.basis === "Per Piece" ? "/pc" : "%") : "—"}</td>
+				<td class="num">${r.rate ? `<span class="money">${inr2(r.rate)}${
+					r.basis === "Per Gram" ? "/g" : r.basis === "Per Piece" ? "/pc" : "%"}</span>` : "—"}</td>
 				<td class="num">${inr(r.min_per_piece)}</td>
 				<td class="num">${r.flat_below_gm ? flt(r.flat_below_gm).toFixed(3) + " g" : "—"}</td></tr>`,
 			);
@@ -150,13 +161,15 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			`<th>${__("Sieve")}</th><th class="num">${__("From ct")}</th><th class="num">${__("Below ct")}</th>
 			 <th class="num">${__("₹ per ct")}</th>`,
 			(r) => `<tr><td>${esc(r.sieve || "—")}</td><td class="num">${ct(r.from_ct) || "0"}</td>
-				<td class="num">${ct(r.to_ct) || "▸"}</td><td class="num">${inr(r.rate)}</td></tr>`,
+				<td class="num">${ct(r.to_ct) || "▸"}</td>
+				<td class="num"><span class="money">${inr(r.rate)}</span></td></tr>`,
 			);
 
 		const ps = tbl(c.precious,
 			`<th>${__("Stone")}</th><th class="num">${__("From ct")}</th><th class="num">${__("Below ct")}</th><th class="num">${__("₹ per ct")}</th>`,
 			(r) => `<tr><td>${esc(r.stone)}</td><td class="num">${ct(r.from_ct) || "0"}</td>
-				<td class="num">${ct(r.to_ct) || "▸"}</td><td class="num">${inr(r.rate)}</td></tr>`,
+				<td class="num">${ct(r.to_ct) || "▸"}</td>
+				<td class="num"><span class="money">${inr(r.rate)}</span></td></tr>`,
 			);
 
 		const bnames = { cs: __("Colour stone"), cz: __("CZ"), cvd: __("CVD"), sw: __("Swarovski") };
@@ -166,7 +179,7 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			 <th>${__("Basis")}</th><th class="num">${__("Rate")}</th>`,
 			(r) => `<tr><td>${esc(r.b)}</td><td class="num">${ct(r.from_ct) || "0"}</td>
 				<td class="num">${ct(r.to_ct) || "▸"}</td><td>${esc(r.basis)}</td>
-				<td class="num">${inr(r.rate)}</td></tr>`,
+				<td class="num"><span class="money">${inr(r.rate)}</span></td></tr>`,
 			);
 
 		const cert = tbl(c.cert,
@@ -174,7 +187,8 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			 <th class="num">${__("Minimum")}</th><th>${__("Weight slab")}</th>`,
 			(r) => `<tr><td>${esc(r.certification)}${r.solitaire
 					? ` <span class="k-chip">${__("solitaire")}</span>` : ""}</td>
-				<td>${esc(r.basis)}</td><td class="num">${inr(r.rate)}</td>
+				<td>${esc(r.basis)}</td>
+				<td class="num"><span class="money">${inr(r.rate)}</span></td>
 				<td class="num">${inr(r.min_amount)}</td>
 				<td>${r.to_ct ? `${ct(r.from_ct) || "0"} – ${ct(r.to_ct)} ct` : "—"}</td></tr>`,
 			);
