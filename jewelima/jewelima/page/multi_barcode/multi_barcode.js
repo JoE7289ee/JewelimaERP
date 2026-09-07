@@ -335,14 +335,14 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		const SAVED = JSON.parse(JSON.stringify({
 			tagW: base.tag.w, tagH: base.tag.h, pt: flt(base.pt) || D.pt, qr: flt(base.qr) || D.qr,
 			a: base.a, b: base.b, lines: base.lines,
-			face: base.face || D.face, bold: !!base.bold,
+			face: base.face || D.face, weight: base.weight || D.weight, italic: !!base.italic,
 		}));
 		const L = {
 			tagW: base.tag.w, tagH: base.tag.h,
 			pt: flt(base.pt) || D.pt, qr: flt(base.qr) || D.qr,
 			a: Object.assign({}, base.a), b: Object.assign({}, base.b),
 			lines: JSON.parse(JSON.stringify(base.lines || {})),
-			face: base.face || D.face, bold: !!base.bold,
+			face: base.face || D.face, weight: base.weight || D.weight, italic: !!base.italic,
 		};
 		// THIS page's card and THIS page's options — that is the whole point
 		const card = S.cards[0] || SAMPLE;
@@ -360,7 +360,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			primary_action() {
 				const payload = {
 					pt: L.pt, qr: L.qr, tag: { w: L.tagW, h: L.tagH }, a: L.a, b: L.b,
-					lines: L.lines, face: L.face, bold: L.bold,
+					lines: L.lines, face: L.face, weight: L.weight, italic: L.italic,
 				};
 				frappe.call({ method: API + ".save_barcode_layout",
 					args: { layout: JSON.stringify(payload) } })
@@ -409,6 +409,8 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 				letter-spacing:.06em;color:var(--text-muted);}
 			.tl-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:12.5px;}
 			.tl-row label{width:70px;color:var(--text-muted);}
+			.tl-sel{flex:1;height:26px;border:1px solid var(--border-color);border-radius:6px;
+				background:var(--control-bg);color:var(--text-color);font-size:12px;}
 			.tl-row input{width:78px;border:1px solid var(--border-color);border-radius:6px;
 				padding:3px 7px;text-align:right;background:var(--control-bg);color:var(--text-color);}
 			.tl-row .u{color:var(--text-muted);font-size:11px;}
@@ -466,13 +468,21 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 						<div class="tl-row"><label>${__("Code square")}</label>
 							<input type="number" step="0.01" data-f="qr"> <span class="u">in</span></div>
 						<div class="tl-row"><label>${__("Type face")}</label>
-							<select data-f="face" style="flex:1;height:26px;border:1px solid var(--border-color);border-radius:6px;background:var(--control-bg);color:var(--text-color);font-size:12px;">
-								<option value="condensed">${__("Condensed — fits more")}</option>
-								<option value="normal">${__("Normal — prints darker")}</option>
+							<select data-f="face" class="tl-sel">
+								<option value="condensed">${__("Arial Narrow")}</option>
+								<option value="normal">${__("Arial")}</option>
 							</select></div>
-						<div class="tl-row"><label>${__("Bold")}</label>
-							<input type="checkbox" data-f="bold" style="flex:0 0 auto;margin-right:auto;">
-							<span class="u" style="font-size:10.5px;">${__("for a worn head")}</span></div>
+						<div class="tl-row"><label>${__("Weight")}</label>
+							<select data-f="weight" class="tl-sel">
+								<option value="normal">${__("Normal")}</option>
+								<option value="bold">${__("Bold")}</option>
+								<option value="heavy">${__("Heavy")}</option>
+							</select></div>
+						<div class="tl-row"><label>${__("Oblique")}</label>
+							<input type="checkbox" data-f="italic" style="flex:0 0 auto;margin-right:auto;">
+							<span class="u" style="font-size:10.5px;">${__("slanted")}</span></div>
+						<button class="btn btn-xs btn-default tl-old" style="width:100%;margin-top:6px;">${
+							__("Match the old software")}</button>
 					</div>
 					<div class="tl-grid">
 						<div class="tl-card"><h4>${__("A — weights & code")}</h4>
@@ -502,7 +512,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		// the run's own wording rides along, so the preview is this sheet's tag
 		const dopts = () => jewelima.barcodeOpts({
 			pt: L.pt, qr: L.qr, tag: { w: L.tagW, h: L.tagH }, a: L.a, b: L.b,
-			lines: L.lines, face: L.face, bold: L.bold,
+			lines: L.lines, face: L.face, weight: L.weight, italic: L.italic,
 			offsetA: 0, offsetB: 0,
 			stoneGrams: S.stoneGrams, showFamily: S.showFamily, showColor: S.showColor,
 			freeText: S.freeText, freeText2: S.freeText2,
@@ -609,6 +619,14 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		$(document).on("mousemove.tlayout", onMove).on("mouseup.tlayout", onUp);
 		dlg.onhide = () => $(document).off(".tlayout");
 
+		// straight off the old software's print dialog: Arial Narrow 11 Heavy
+		// Oblique. Only the TYPE — the boxes stay where this floor put them.
+		$b.on("click", ".tl-old", () => {
+			L.pt = 11; L.face = "condensed"; L.weight = "heavy"; L.italic = true;
+			draw();
+			frappe.show_alert({ indicator: "blue",
+				message: __("Arial Narrow 11 Heavy Oblique — print a test tag, then Save layout.") }, 6);
+		});
 		$b.on("change", "select[data-f]", function () { set(this.dataset.f, this.value); draw(); });
 		$b.on("change", "input[data-f][type=checkbox]", function () {
 			set(this.dataset.f, this.checked); draw();

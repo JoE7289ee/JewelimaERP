@@ -15,18 +15,24 @@ window.jewelima = window.jewelima || {};
 // Inches throughout, never pixels. qr is bounded by A's height — there is nowhere
 // further to go on a 0.43in box.
 jewelima.BARCODE_DEFAULTS = {
-	pt: 9.0, qr: 0.41,
+	pt: 11.0, qr: 0.41,
 	tag: { w: 3.3, h: 0.475 },
 	a: { x: 0.94, y: 0.03, w: 0.96, h: 0.43 },
 	b: { x: 1.95, y: 0.03, w: 1.02, h: 0.43 },
 	// per-machine nudges the roll printer adds to the box lefts; zero for everyone else
 	offsetA: 0, offsetB: 0,
-	// A thermal head burns whole dots: at 203dpi a 9pt CONDENSED stroke is about
-	// one dot wide, so it prints thin and breaks up. "normal" trades a little
-	// width for a stroke the printer can actually lay down, and bold thickens it
-	// again for a head that is worn or running cold. Geometry is unaffected —
-	// only how the glyphs are drawn — so a layout stays true whichever is picked.
-	face: "condensed", bold: false,
+	// The type is the old software's, copied off its print dialog: Arial Narrow,
+	// 11pt, Heavy, Oblique, on the same 3.3 x 0.475in page with no margins. That
+	// machine's tags read cleanly on a Datamax head, and the reason is the WEIGHT
+	// and the SIZE, not the family — a thermal head burns whole dots, and at 9pt
+	// regular a condensed stem is about one dot wide, so it prints thin and breaks
+	// up. Heavy gives the head something to lay down; the oblique keeps the
+	// condensed glyphs from closing up on one another.
+	//
+	// All four are open in the layout dialog, because a different head or a
+	// different stock may want something else. Geometry is unaffected by any of
+	// them — only how the glyphs are drawn — so a tuned layout stays true.
+	face: "condensed", weight: "heavy", italic: true,
 	// everything on by default, so a tag reads the same whichever page printed it;
 	// Multi Print's checkboxes are the per-run way to leave something off
 	showFamily: true, showColor: true,
@@ -88,9 +94,23 @@ jewelima.loadBarcodeLayout = function (force) {
 	return jewelima._layoutLoad;
 };
 
+// what the old software called Normal / Bold / Heavy
+jewelima.BARCODE_WEIGHTS = { normal: 400, bold: 700, heavy: 900 };
+
 jewelima.barcodeOpts = function (over) {
+	const WEIGHT = jewelima.BARCODE_WEIGHTS;
 	const saved = jewelima.BARCODE_LAYOUT || {};
 	const o = Object.assign({}, jewelima.BARCODE_DEFAULTS, saved, over || {});
+	// A layout SAVED before the weight and the oblique existed keeps printing the
+	// way it prints today — the shipped default must not reach in and restyle a
+	// tag the floor already tuned. It says nothing about weight, so it meant the
+	// regular upright it was measured in; an explicit bold still means bold.
+	// Clicking "Match the old software" is how a saved layout adopts the new type.
+	const chosen = Object.assign({}, saved, over || {});
+	if (chosen.weight == null && jewelima.BARCODE_LAYOUT) {
+		o.weight = saved.bold || chosen.bold ? "bold" : "normal";
+		if (chosen.italic == null) o.italic = false;
+	}
 	// `lines` is a map, so a shallow assign would drop every line the saved
 	// layout did not mention — and each line is COPIED, because a shared
 	// reference here lets a caller's edit write straight into the saved layout
@@ -104,13 +124,14 @@ jewelima.barcodeOpts = function (over) {
 				? `--bc-family:Arial,Helvetica,"Liberation Sans",sans-serif;`
 					+ `--bc-stretch:normal;--bc-track:0;`
 				: "")
-			+ (o.bold ? `--bc-weight:700;` : ""),
+			+ `--bc-weight:${WEIGHT[o.weight] || WEIGHT.heavy};`
+			+ `--bc-style:${o.italic ? "oblique" : "normal"};`,
 		// the numbers themselves, not only the CSS they were baked into — the
 		// layout editor needs to read them back without parsing a style string
 		pt: o.pt, qr: o.qr,
 		tag: o.tag, a: o.a, b: o.b,
 		offsetA: o.offsetA, offsetB: o.offsetB,
-		face: o.face, bold: o.bold,
+		face: o.face, weight: o.weight, italic: o.italic,
 		stoneGrams: o.stoneGrams,
 		showFamily: o.showFamily,
 		showColor: o.showColor,
@@ -127,7 +148,7 @@ jewelima.BARCODE_LABEL_CSS = `
 	overflow:hidden;
 	font-family:var(--bc-family,"Arial Narrow","Liberation Sans Narrow","Roboto Condensed","Helvetica Neue Condensed",Arial,sans-serif);
 	font-stretch:var(--bc-stretch,condensed);font-size:var(--bc-size,9pt);
-	font-weight:var(--bc-weight,400);font-style:normal;
+	font-weight:var(--bc-weight,900);font-style:var(--bc-style,oblique);
 	line-height:1.05;letter-spacing:var(--bc-track,-.2px);color:#000;
 	/* the printer must lay the ink down as pure black, not a dithered grey */
 	-webkit-print-color-adjust:exact;print-color-adjust:exact;}
