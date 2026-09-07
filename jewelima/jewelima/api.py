@@ -10206,19 +10206,20 @@ def _chart_summary(d):
 		if not flt(r.rate) and not flt(r.min_per_piece):
 			checks.append(frappe._("a making rule charges nothing ({0})").format(
 				r.design_type or r.karat or frappe._("DEFAULT")))
-	# A chart is allowed to price one karat and no other — a party that only buys
-	# 18K needs an 18K rule and nothing else, and warning about the 22K it never
-	# orders is noise. What is worth flagging is a chart with no CATCH-ALL at any
-	# level: only type-specific rows, so a piece of a priced karat in an unlisted
-	# type still bills no making at all. A karat row with the type left blank
-	# catches everything in that karat, and that counts.
-	def _catches_all(r):
-		return not (r.design_type or "").strip() and flt(r.rate or r.min_per_piece)
-
-	if rules and not any(_catches_all(r) for r in rules) and not flt(d.making_rate):
+	# A chart is not meant to be complete, and the shape of it is the desk's
+	# choice: one party buys 18K only, another is priced on a touch with no making
+	# line at all, another is making-charge only. None of that is a mistake and
+	# none of it is worth a banner.
+	#
+	# The one shape that IS a mistake is a chart that prices NEITHER — no making
+	# rule, no chart-level making rate, and no touch — because then there is
+	# nothing to bill the metal or the work with and every piece comes out at the
+	# stones alone.
+	has_making = bool(rules) or bool(flt(d.making_rate))
+	if not has_making and not touch:
 		checks.append(frappe._(
-			"no catch-all making row — every rule names a design type, so a piece of "
-			"an unlisted type has no making charge"))
+			"this chart prices neither making nor a gold touch — a piece would bill "
+			"on its stones alone"))
 
 	return {
 		"name": d.name, "chart_name": d.chart_name, "status": d.status,
