@@ -190,27 +190,34 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 					${mk}
 				</div>`);
 		}
+		// A curve needs a shape to show. Three brackets or fewer draw a line that
+		// says nothing the table beside it did not already say, so the chart only
+		// earns its half of the row once there are four.
+		const showCurve = dmdRows.length > 3;
 		if (c.diamond.length) {
-			P.push(`<div class="cd-sec">${__("Diamonds")}</div>
-				<div class="cd-cols">
-					<div class="cd-card">
-						<h3>${__("Rate by stone size")}</h3>
-						<p class="sub">${c.dmd_span
-							? __("per-stone ct — total carats ÷ piece count picks the bracket. Priced from {0} to {1} ct.",
-								[c.dmd_span[0], c.dmd_span[1]])
-							: __("per-stone ct — total carats ÷ piece count picks the bracket")}</p>
-						<div class="cd-dmd"></div>
-					</div>
-					<div class="cd-card">
-						<h3>${__("Brackets")}</h3>
-						${quals.length > 1 ? `<div class="cd-tools">
-							<label class="sub" style="margin:0">${__("Quality")}</label>
-							<select class="cd-qual">${quals.map((q) =>
-								`<option ${q === S.quality ? "selected" : ""}>${esc(q)}</option>`).join("")}</select>
-							</div>` : `<p class="sub">${esc(S.quality || "")}</p>`}
-						${dmdTable}
-					</div>
-				</div>`);
+			const brackets = `<div class="cd-card">
+				<h3>${__("Brackets")}</h3>
+				${quals.length > 1 ? `<div class="cd-tools">
+					<label class="sub" style="margin:0">${__("Quality")}</label>
+					<select class="cd-qual">${quals.map((q) =>
+						`<option ${q === S.quality ? "selected" : ""}>${esc(q)}</option>`).join("")}</select>
+					</div>` : `<p class="sub">${esc(S.quality || "")}</p>`}
+				<p class="sub">${c.dmd_span
+					? __("per-stone ct — total carats ÷ piece count picks the bracket. Priced from {0} to {1} ct.",
+						[c.dmd_span[0], c.dmd_span[1]])
+					: __("per-stone ct — total carats ÷ piece count picks the bracket")}</p>
+				${dmdTable}
+			</div>`;
+			P.push(`<div class="cd-sec">${__("Diamonds")}</div>`
+				+ (showCurve
+					? `<div class="cd-cols">
+						<div class="cd-card">
+							<h3>${__("Rate by stone size")}</h3>
+							<div class="cd-dmd"></div>
+						</div>
+						${brackets}
+					</div>`
+					: brackets));
 		}
 		// side by side only when there are two of them
 		const others = [
@@ -247,8 +254,8 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 		root.find(".cd-body").html(P.join(""));
 
 		// the chart's own curve — one series, so the heading names it and no legend.
-		// A chart with no diamonds has no canvas to draw on any more.
-		if (!c.diamond.length) return;
+		// There is only a canvas to draw on when the curve earned its place.
+		if (!showCurve) return;
 		jewelima.costStepChart(root.find(".cd-dmd"), {
 			title: __("Diamond ₹/ct"),
 			series: dmdRows.length ? [{ name: c.chart_name, points: dmdRows.map((d) => ({
