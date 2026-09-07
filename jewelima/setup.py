@@ -184,7 +184,7 @@ JEWELIMA_ORDERING_READ = [
 # Order-flow doctypes the Ordering role fully manages.
 JEWELIMA_ORDER_DOCTYPES = ["Job Order", "Order Bag", "Ordering", "Design", "Order Request"]
 # Desk pages every Jewelima user can open (base role).
-JEWELIMA_ORDER_PAGES = ["card-info", "design-info", "job-order-status", "due-view", "order-requests",
+JEWELIMA_ORDER_PAGES = ["card-lookup", "card-info", "design-info", "job-order-status", "due-view", "order-requests",
 	"ws-ordering", "cancellation", "order-tracker", "following",
 	# the CAD board, to see where a design has got to. Assigning a card is
 	# System Manager / JW Manager only (assign_cad_card refuses anyone else),
@@ -431,7 +431,10 @@ JEWELIMA_COSTING_ROLE = "JW Costing"
 JEWELIMA_COSTING_PAGES = ["costing-board", "costing-chart"]
 JEWELIMA_COSTING_READ = ["Price Chart", "Design Type", "Charge Category", "Item", "Customer"]
 JEWELIMA_INFO_GALLERY_PAGES = ["design-gallery", "search-design", "old-categories"]
-JEWELIMA_INFO_LOOKUP_PAGES = ["card-info", "design-info", "job-order-status", "due-view"]
+# card-lookup is JW Info's card view: where it is, whose it is, what it weighs.
+# card-info — the trail, who worked on it, what was issued — stays with the
+# managers; it is the page for investigating a card, not for looking one up.
+JEWELIMA_INFO_LOOKUP_PAGES = ["card-lookup", "design-info", "job-order-status", "due-view"]
 # every bench BOARD (read-only status boards) — Info sees them all, view-only
 JEWELIMA_INFO_BENCH_PAGES = ["bench-info"]  # one page for every bench (the per-bench pages are retired)
 # the shared file drop — Info uploads and downloads; delete stays uploader/admin
@@ -668,10 +671,9 @@ def setup_roles():
 		grant(dt, JEWELIMA_INFO_ROLE, {"read": 1})
 	for page in JEWELIMA_ORDER_PAGES:
 		if page == "card-info":
-			# the order desk opens Card Info through JW Info, which every ordering
-			# account carries (guaranteed below) — not through its own role, and
-			# never through the ERPNext stock role
-			set_page_roles(page, (JEWELIMA_INFO_ROLE,), strip=("Jewelima Ordering", "Stock Manager"))
+			# Card Info is the manager's investigation view now: JW Info and the
+			# order desk look cards up on card-lookup instead
+			set_page_roles(page, (), strip=("Jewelima Ordering", "Stock Manager", JEWELIMA_INFO_ROLE))
 			continue
 		roles = ("Jewelima Ordering", JEWELIMA_INFO_ROLE) if page in JEWELIMA_INFO_LOOKUP_PAGES else ("Jewelima Ordering",)
 		set_page_roles(page, roles)

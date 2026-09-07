@@ -359,6 +359,17 @@
   },
   {
    "child": 1,
+   "collapsible": 1,
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Card Lookup",
+   "link_to": "card-lookup",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
    "collapsible": 0,
    "icon": "search",
    "indent": 1,
@@ -2728,7 +2739,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-06 13:07:58.213544",
+ "modified": "2026-09-07 10:34:25.566295",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
