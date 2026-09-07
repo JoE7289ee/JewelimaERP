@@ -302,7 +302,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		+ '<rect x="24" y="26" width="6" height="6" fill="#000"/></svg>');
 	const SAMPLE = { name: "E0001.1.1", design: "A13010NP-18EF-Y", design_no: "A 13010",
 		design_type: "NOSEPIN", party: "JOS TRICHUR", gw: 2.487, dmd_no: 12, dmd_wt: 0.108,
-		stone_family: "EF", gold_color: "YG", qr: QR_STUB };
+		stone_family: "EF", gold_color: "YG", gold_code: "18Y", qr: QR_STUB };
 
 	function showLayout() {
 		if (!CAN_LAYOUT) return;

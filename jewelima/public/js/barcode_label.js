@@ -217,7 +217,11 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// colour box is ticked, placed on its own
 	const head = c.party || c.design_type || "";
 	const r1 = head ? `<div ${ln("type")}>${esc(head)}</div>` : "";
-	const colLine = o.showColor && c.gold_color ? `<div ${ln("colour")}>${esc(c.gold_color)}</div>` : "";
+	// the colour prints as karat + letter — 18Y, 18W, 18P — which is what the
+	// floor reads it as. A piece whose karat could not be resolved still gets the
+	// plain YG rather than nothing, because a colour is worth having either way.
+	const colCode = c.gold_code || c.gold_color || "";
+	const colLine = o.showColor && colCode ? `<div ${ln("colour")}>${esc(colCode)}</div>` : "";
 	const free = o.freeText ? `<div ${ln("free")}>${esc(o.freeText)}</div>` : "";
 	// a two-character code the run is stamped with — a counter, a tray, a batch
 	const free2 = o.freeText2 ? `<div ${ln("free2")}>${esc(o.freeText2)}</div>` : "";

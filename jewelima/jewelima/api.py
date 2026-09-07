@@ -17516,6 +17516,14 @@ def _variant_tokens(design):
 	return out
 
 
+def _gold_code(name, design):
+	"""The tag's colour token: karat digits + colour letter, e.g. 18Y / 18W / 18P."""
+	colour = (_variant_tokens(design).get("gold_color") or "")[:1]   # YG -> Y
+	karat = _piece_karat(name, design) or ""                         # 18K
+	digits = karat.rstrip("Kk")
+	return "{0}{1}".format(digits, colour) if digits and colour else ""
+
+
 @frappe.whitelist()
 def get_barcode_card(order_bag):
 	"""Label data for the Print Barcode page. Weights come from ACTUAL (never the BOM/plan);
@@ -17552,6 +17560,12 @@ def get_barcode_card(order_bag):
 		# the tag can carry the stone family (EF / GH / …) and the gold colour
 		# (YG / WG / PG); both live only in the variant name
 		**_variant_tokens(b.design),
+		# what the tag actually prints for colour: the karat and the colour letter
+		# as one token — 18Y, 18W, 18P. The karat comes off the piece's OWN gold,
+		# never the variant name, because a variant's materials can be edited; the
+		# letter is all the colour half of that name is good for. Either half
+		# missing means no token, and the tag falls back to the plain YG.
+		"gold_code": _gold_code(b.name, b.design),
 		"qr": _qr_data_uri(b.name),
 	}
 
