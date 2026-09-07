@@ -120,7 +120,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 
 	const scan = frappe.ui.form.make_control({
 		df: { fieldtype: "Data", label: __("Scan card"), fieldname: "scan",
-			description: __("one piece per card — a card holding more than one is refused") },
+			description: __("scan or type the card no. — the E is optional; one piece per card, a card holding more than one is refused") },
 		parent: root.find(".mb-scan").get(0), render_input: true,
 	});
 	scan.refresh();
@@ -180,6 +180,11 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		return frappe.call({ method: API + ".get_barcode_card", args: { order_bag: code } }).then((r) => {
 			const c = r.message;
 			if (!c || c.error) return msg("err", esc((c && c.error) || __("No card {0}.", [code])));
+			// the check above compared what was TYPED; a card typed without its E
+			// only reveals itself as a duplicate once the server has named it
+			if (S.cards.some((x) => x.name === c.name)) {
+				return msg("warn", __("<b>{0}</b> already on the sheet.", [esc(c.name)]));
+			}
 			S.cards.push(c);
 			paint();
 			msg(c.actual_empty ? "warn" : "ok",

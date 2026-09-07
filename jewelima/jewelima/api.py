@@ -17530,6 +17530,9 @@ def get_barcode_card(order_bag):
 	`actual_empty` flags cards with no actual weight yet (the page warns). Errors if qty > 1 —
 	a multi-piece card must be extracted into singles first. No status restriction: a card can
 	be barcode-printed at any stage."""
+	# typed off the card, the order series prefix is usually left out — resolve
+	# "7564.12.1" to E7564.12.1 the way every scanning station does
+	order_bag = _resolve_bag_code(order_bag)
 	if not order_bag or not frappe.db.exists("Order Bag", order_bag):
 		return {"error": "No Order Bag {0}.".format(order_bag)}
 	b = frappe.get_doc("Order Bag", order_bag)
