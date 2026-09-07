@@ -2303,6 +2303,18 @@
   },
   {
    "child": 1,
+   "collapsible": 1,
+   "icon": "trending-up",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Board Rate",
+   "link_to": "board-rate",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
    "collapsible": 0,
    "indent": 1,
    "keep_closed": 0,
@@ -2764,7 +2776,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-07 13:29:38.529750",
+ "modified": "2026-09-07 13:44:03.025427",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

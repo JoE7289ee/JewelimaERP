@@ -5,6 +5,7 @@
 import re
 import json
 import os
+import time
 
 import frappe
 from frappe import _
@@ -10322,6 +10323,133 @@ def _margin(ours, theirs):
 	m = flt(ours) - flt(theirs)
 	return {"ours": flt(ours), "theirs": flt(theirs), "margin": round(m, 2),
 		"pct": (round(m / flt(ours) * 100, 1) if flt(ours) else None)}
+
+
+# ---------------------------------------------------------------------------
+# Board rate feeds
+#
+# Two DIFFERENT numbers get called "the gold rate" and they are not close, so
+# the page shows both and says which is which:
+#
+#   * the INDIAN TRADE rate (IBJA) — what the trade actually deals at, duty and
+#     GST already inside it. This is the neighbourhood of a board rate.
+#   * the INTERNATIONAL SPOT price (XAU) converted at the day's USD/INR. It is
+#     the world price of the metal and always well below the Indian rate; the
+#     gap is import duty, GST and local premium.
+#
+# Nothing here sets a board rate. A board rate is a decision made each morning,
+# not a market fact, and a feed that quietly became the billing number would
+# have the firm charging a figure nobody chose. These are for the eye.
+#
+# Only key-less sources are wired up, so the page works with nothing to sign up
+# for; the keyed ones (GoldAPI.io, MetalpriceAPI, Metals-API, Metals.Dev) can be
+# added the same way once someone picks one and buys a key.
+BOARD_FEED_TIMEOUT = 8
+BOARD_FEED_CACHE_KEY = "jw_board_rate_feeds"
+BOARD_FEED_CACHE_SECS = 600      # a board rate does not move minute to minute
+
+# gold is quoted per troy ounce; a troy ounce is this many grams
+TROY_OZ_G = 31.1034768
+# what the trade calls each karat, as a fraction of fine gold
+KARAT_FINENESS = {"24K": 0.999, "22K": 0.916, "18K": 0.750, "14K": 0.585}
+
+
+def _feed_ibja():
+	"""IBJA's published rates, through a public mirror of their site. Indian trade
+	rates, per 10 grams, by purity — 999 / 995 / 916 / 750 / 585. Published on
+	market working days only, AM and PM, so a PM figure is absent until it is set."""
+	import requests
+
+	r = requests.get("https://ibja-api.vercel.app/latest", timeout=BOARD_FEED_TIMEOUT)
+	r.raise_for_status()
+	d = r.json() or {}
+
+	def g(purity):
+		# the PM rate supersedes the AM one on the same day; per 10g -> per gram
+		for half in ("PM", "AM"):
+			v = d.get("lblGold{0}_{1}".format(purity, half))
+			if v not in (None, "", "0"):
+				return round(flt(v) / 10.0, 2)
+		return None
+
+	return {"as_of": d.get("date") or "", "by_karat": {
+		"24K": g("999"), "22K": g("916"), "18K": g("750"), "14K": g("585")}}
+
+
+def _feed_spot():
+	"""International spot XAU in USD per ounce, converted at the day's USD/INR.
+	Two hops, two public services, so either one failing is worth naming."""
+	import requests
+
+	g = requests.get("https://api.gold-api.com/price/XAU", timeout=BOARD_FEED_TIMEOUT)
+	g.raise_for_status()
+	gd = g.json() or {}
+	usd_oz = flt(gd.get("price"))
+	if not usd_oz:
+		raise ValueError("no XAU price in the response")
+
+	f = requests.get("https://open.er-api.com/v6/latest/USD", timeout=BOARD_FEED_TIMEOUT)
+	f.raise_for_status()
+	fd = f.json() or {}
+	inr = flt((fd.get("rates") or {}).get("INR"))
+	if not inr:
+		raise ValueError("no USD/INR in the response")
+
+	fine_g = usd_oz / TROY_OZ_G * inr
+	return {
+		"as_of": gd.get("updatedAt") or "",
+		"by_karat": {k: round(fine_g * f2, 2) for k, f2 in KARAT_FINENESS.items()},
+		"detail": "XAU ${0}/oz x {1} INR/USD".format(round(usd_oz, 2), round(inr, 3)),
+	}
+
+
+BOARD_FEEDS = [
+	{"key": "ibja", "name": "IBJA", "kind": "Indian trade rate",
+	 "note": "What the trade deals at — duty and GST already inside it. Market working days, AM/PM.",
+	 "source": "ibjarates.com, via a public mirror", "url": "https://ibja-api.vercel.app/latest",
+	 "official": False, "fn": _feed_ibja},
+	{"key": "spot", "name": "International spot", "kind": "World metal price",
+	 "note": "The metal's world price at the day's USD/INR. Always below the Indian rate — the gap is duty, GST and local premium.",
+	 "source": "gold-api.com + open.er-api.com", "url": "https://api.gold-api.com/price/XAU",
+	 "official": False, "fn": _feed_spot},
+]
+
+
+@frappe.whitelist()
+def get_board_rate_feeds(refresh=0):
+	"""Every free gold-rate feed we can read without a key, side by side.
+
+	Cached for ten minutes: these are reference numbers, and hammering somebody's
+	free endpoint on every page load is how a free endpoint stops being free."""
+	_require_costing()
+	if not cint(refresh):
+		hit = frappe.cache().get_value(BOARD_FEED_CACHE_KEY)
+		if hit:
+			hit["cached"] = True
+			return hit
+
+	rows = []
+	for f in BOARD_FEEDS:
+		row = {k: f[k] for k in ("key", "name", "kind", "note", "source", "url", "official")}
+		started = time.time()
+		try:
+			row.update(f["fn"]())
+			row["error"] = ""
+		except Exception as e:
+			# one feed being down must not take the page down — it says which
+			row.update({"by_karat": {}, "as_of": "", "error": str(e)[:200]})
+		row["ms"] = int((time.time() - started) * 1000)
+		rows.append(row)
+
+	# what we last actually billed at, as the anchor the feeds are read against
+	last = frappe.get_all("Sale Preparation", filters={"gold_rate": [">", 0]},
+		fields=["name", "gold_rate", "creation"], order_by="creation desc", limit=1)
+	out = {"rows": rows, "fetched_on": frappe.utils.now(), "cached": False,
+		"ours": ({"rate": flt(last[0].gold_rate), "on": str(last[0].creation or "")[:10],
+			"doc": last[0].name} if last else None),
+		"karats": ["24K", "22K", "18K", "14K"]}
+	frappe.cache().set_value(BOARD_FEED_CACHE_KEY, out, expires_in_sec=BOARD_FEED_CACHE_SECS)
+	return out
 
 
 @frappe.whitelist()
