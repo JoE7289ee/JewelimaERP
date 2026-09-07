@@ -10523,16 +10523,16 @@ BOARD_FEEDS = [
 	 "note": "A dealer's own live bid/ask, not an average — the closest here to a board. Its whole board is shown below.",
 	 "source": "surabibullion.com's own live feed",
 	 "url": "https://bcast.surabibullion.net:7768/…/GetLiveRateByTemplateID/surabi",
-	 "official": False, "live": True, "fn": _feed_surabi},
+	 "official": False, "live": True, "ttl": 4, "fn": _feed_surabi},
 	{"key": "shivsahai", "name": "Shiv Sahai", "kind": "Dealer board",
 	 "note": "Quotes CITY BY CITY — including GLD TSR (Thrissur). If a Kerala board sits on any line here, it is that one.",
 	 "source": "shivsahai.com's own live feed",
 	 "url": "http://13.200.166.91/lmxtrade/winbullliteapi/api/v1/broadcastrates",
-	 "official": False, "live": True, "fn": _feed_shivsahai},
+	 "official": False, "live": True, "ttl": 4, "fn": _feed_shivsahai},
 	{"key": "spot", "name": "International spot", "kind": "World metal price",
 	 "note": "The metal's world price at the day's USD/INR. Always below the Indian rate — the gap is duty, GST and local premium.",
 	 "source": "gold-api.com + open.er-api.com", "url": "https://api.gold-api.com/price/XAU",
-	 "official": False, "live": True, "fn": _feed_spot},
+	 "official": False, "live": True, "ttl": 60, "fn": _feed_spot},
 ]
 
 
@@ -10582,41 +10582,44 @@ def _board_hero(rows):
 	return out
 
 
-BOARD_LIVE_CACHE_KEY = "jw_board_rate_live"
-BOARD_LIVE_CACHE_SECS = 15
-
-
 @frappe.whitelist()
 def get_board_rate_live():
 	"""Just the feeds that MOVE during the day, for the page's live tick.
 
-	IBJA is a published AM/PM figure and is not re-read here — polling it every
-	twenty seconds would ask a daily number to be a live one.
+	IBJA is a published AM/PM figure and is not re-read here — asking a daily
+	number to be a live one is only noise.
 
-	Fifteen seconds of cache in front of upstream, so a room full of open pages
-	is still only a few calls a minute on somebody else's free endpoint. A page
-	nobody is looking at polls nothing at all."""
+	Each feed is cached on its OWN clock rather than the page's, because they do
+	not move alike: a dealer board changes every few seconds and is held for
+	four, while world spot barely moves inside a minute and is held for sixty.
+	So a five-second tick reaches the dealers fresh and leaves the slow feed —
+	the slowest to answer, at well over a second — mostly alone.
+
+	The cache is what makes the poll rate a page concern rather than somebody
+	else's problem: however many pages are open, upstream sees at most one call
+	per feed per TTL. A page nobody is looking at polls nothing at all."""
 	_require_costing()
-	hit = frappe.cache().get_value(BOARD_LIVE_CACHE_KEY)
-	if hit:
-		return hit
-
 	rows = []
 	for f in BOARD_FEEDS:
 		if not f.get("live"):
 			continue
-		row = {"key": f["key"], "name": f["name"]}
-		started = time.time()
-		try:
-			row.update(f["fn"]())
-			row["error"] = ""
-		except Exception as e:
-			row.update({"by_karat": {}, "as_of": "", "error": str(e)[:200]})
-		row["ms"] = int((time.time() - started) * 1000)
+		ck = "jw_board_feed::" + f["key"]
+		row = frappe.cache().get_value(ck)
+		if not row:
+			row = {"key": f["key"], "name": f["name"]}
+			started = time.time()
+			try:
+				row.update(f["fn"]())
+				row["error"] = ""
+			except Exception as e:
+				row.update({"by_karat": {}, "as_of": "", "error": str(e)[:200]})
+			row["ms"] = int((time.time() - started) * 1000)
+			# a feed that just failed is held BRIEFLY too, so an endpoint that is
+			# down is not hammered once every five seconds by every open page
+			frappe.cache().set_value(ck, row,
+				expires_in_sec=(5 if row["error"] else cint(f.get("ttl")) or 5))
 		rows.append(row)
-	out = {"rows": rows, "hero": _board_hero(rows), "at": frappe.utils.now()}
-	frappe.cache().set_value(BOARD_LIVE_CACHE_KEY, out, expires_in_sec=BOARD_LIVE_CACHE_SECS)
-	return out
+	return {"rows": rows, "hero": _board_hero(rows), "at": frappe.utils.now()}
 
 
 @frappe.whitelist()

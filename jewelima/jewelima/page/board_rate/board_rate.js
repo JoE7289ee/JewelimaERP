@@ -21,9 +21,8 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 	// prev holds the last value seen against a key, so a tick reads as a
 	// DIRECTION rather than just a new figure — a board is watched for movement
-	const S = { data: null, karat: "22K", live: true, prev: {}, dir: {},
-		timer: null, at: "", detail: false };
-	const POLL_MS = 20000;
+	const S = { data: null, live: true, prev: {}, dir: {}, timer: null, at: "", detail: false };
+	const POLL_MS = 5000;
 
 	const inr = (v, dp) => (v == null ? "—" : "₹" + flt(v).toLocaleString("en-IN",
 		{ minimumFractionDigits: dp == null ? 2 : dp, maximumFractionDigits: dp == null ? 2 : dp }));
@@ -70,11 +69,12 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		.h1c .rate{font-size:40px;font-weight:800;line-height:1.12;margin:8px 0 0;
 			font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
 		.h1c .per{font-size:12.5px;font-weight:400;color:var(--text-muted);}
-		.h1c .drv{margin-top:11px;padding-top:10px;border-top:1px solid var(--border-color);
-			display:flex;gap:16px;flex-wrap:wrap;}
-		.h1c .drv div{font-size:11px;color:var(--text-muted);}
-		.h1c .drv b{display:block;font-size:15px;color:var(--text-color);font-weight:700;
-			font-variant-numeric:tabular-nums;}
+		.h1c .drv{margin-top:12px;padding-top:11px;border-top:1px solid var(--border-color);
+			display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+		.h1c .drv div{font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+			color:var(--text-muted);}
+		.h1c .drv b{display:block;font-size:16px;color:var(--text-color);font-weight:700;
+			font-variant-numeric:tabular-nums;letter-spacing:-.2px;margin-top:1px;}
 		.h1c .hl{margin-top:9px;font-size:11px;color:var(--text-muted);
 			font-variant-numeric:tabular-nums;}
 		.h1c .bad{color:#b02a2a;font-size:12.5px;margin-top:8px;}
@@ -105,7 +105,6 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		.ctx{font-size:12.5px;color:var(--text-muted);margin:-3px 0 10px;}
 		</style>
 		<div class="br-top">
-			<div class="br-kar"></div>
 			<button class="br-btn br-live on"><span class="dot"></span><span class="lbl"></span></button>
 			<button class="br-btn br-more"></button>
 			<span class="br-stamp"></span>
@@ -125,17 +124,14 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 					<div class="nm">${esc(h.name)}</div>
 					<div class="bad">${esc(h.error)}</div></div>`;
 			}
-			const kv = (h.by_karat || {})[S.karat];
 			return `<div class="h1c">
 				<div class="who">${esc(h.of)}</div>
 				<div class="nm">${esc(h.label)}</div>
 				<div class="rate ${dir}">${inr(h.rate, 2)}${arrow(dir)}
 					<span class="per">${__("per gram")}</span></div>
-				<div class="drv">
-					<div>${esc(S.karat)} ${__("derived")}<b>${inr(kv, 2)}</b></div>
-					<div>${__("fine (999)")}<b>${inr((h.by_karat || {})["24K"], 2)}</b></div>
-				</div>
-				<div class="hl">${__("derived assuming this line is {0} fine", [h.fineness])}</div>
+				<div class="drv">${KARATS.map((k) => `<div>${k}<b>${
+					inr((h.by_karat || {})[k], 0)}</b></div>`).join("")}</div>
+				<div class="hl">${__("karats derived, assuming this line is {0} fine", [h.fineness])}</div>
 				${h.high || h.low ? `<div class="hl">${__("high")} ${num(h.high)} · ${__("low")} ${num(h.low)}</div>` : ""}
 			</div>`;
 		}).join(""));
@@ -144,8 +140,6 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 	function paint() {
 		const d = S.data;
 		if (!d) return;
-		root.find(".br-kar").html(KARATS.map((k) =>
-			`<button class="${k === S.karat ? "on" : ""}" data-k="${k}">${k}</button>`).join(""));
 		root.find(".br-live").toggleClass("on", S.live)
 			.find(".lbl").text(S.live ? __("Live") : __("Paused"));
 		root.find(".br-more").toggleClass("on", S.detail)
@@ -187,7 +181,7 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 
 		root.find(".br-body").html(`
 			<div class="br-sec">${__("Every feed, for checking against")}</div>
-			<p class="ctx">${__("what each source makes a gram of {0} worth", [S.karat])}</p>
+			<p class="ctx">${__("what each source makes a gram worth, at every purity")}</p>
 			<div class="br-tw"><table class="br-t"><thead><tr>
 				<th>${__("Source")}</th><th>${__("What it is")}</th>
 				${KARATS.map((k) => `<th class="num">${k}</th>`).join("")}
@@ -238,7 +232,6 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 
 	root.on("click", ".br-live", () => { S.live = !S.live; paint(); if (S.live) tick(); });
 	root.on("click", ".br-more", () => { S.detail = !S.detail; paint(); });
-	root.on("click", ".br-kar button", function () { S.karat = $(this).data("k"); paint(); });
 	page.set_primary_action(__("Read again"), () => load(true), "refresh");
 	load(false).then(() => { S.timer = setInterval(tick, POLL_MS); });
 	// the interval belongs to this page, not to the desk it was opened from
