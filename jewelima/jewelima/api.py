@@ -11014,9 +11014,33 @@ def _price_chart_letter_html(d):
 		if flt(r["to_ct"]):
 			return "{0} – {1} ct".format(r["from_ct"], r["to_ct"])
 		return "{0} ct & above".format(r["from_ct"]) if flt(r["from_ct"]) else "any size"
-	dmd = "".join("<tr><td>{0}</td><td>{1}</td><td><b>{2}</b></td><td class='r'>₹ {3}</td></tr>".format(
-		frappe.utils.escape_html(r["sieve_label"] or ""), bracket(r),
-		frappe.utils.escape_html(r["quality"] or "All"), money(r["rate"])) for r in d["diamond_rates"])
+	# Diamonds read by QUALITY, not as one run of rows: a party looks up "what do
+	# I pay for EF in this size", and mixing the qualities together makes that a
+	# search. Each quality gets its own block, EF first because it is the one most
+	# charts lead on, then GH, then anything else in its own order.
+	def _q_rank(q):
+		u = (q or "").upper()
+		return (0 if "EF" in u else 1 if "GH" in u else 2, u)
+
+	by_q, order = {}, []
+	for r in d["diamond_rates"]:
+		q = (r["quality"] or "All qualities").strip() or "All qualities"
+		if q not in by_q:
+			by_q[q] = []
+			order.append(q)
+		by_q[q].append(r)
+	order.sort(key=_q_rank)
+
+	def _dmd_rows(rows):
+		return "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
+			frappe.utils.escape_html(r["sieve_label"] or "—"), bracket(r), money(r["rate"]))
+			for r in rows)
+
+	dmd = "".join(
+		"<div class='qblk'><div class='qh'>{0}</div>"
+		"<table><thead><tr><th>Sieve</th><th>Size</th><th class='r'>Rate / ct</th></tr></thead>"
+		"<tbody>{1}</tbody></table></div>".format(
+			frappe.utils.escape_html(q), _dmd_rows(by_q[q])) for q in order)
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
 		frappe.utils.escape_html(r["certification"])
 			+ (" ({0} – {1} ct{2})".format(r["from_ct"], r["to_ct"], ", solitaire" if cint(r.get("solitaire")) else "")
@@ -11064,6 +11088,36 @@ def _price_chart_letter_html(d):
 	else:
 		density = "font-size:12.5px;", "5px 8px", "64px"
 	base_font, cell_pad, logo_h = density
+	# How far to push the signature down so it sits at the FOOT of the sheet.
+	#
+	# wkhtmltopdf's WebKit collapses percentage heights — html/body/table at 100%
+	# gives nothing — so the gap is a measured number of points rather than "the
+	# rest of the page". The content height is estimated from what is actually
+	# being printed (sections, quality blocks, table heads, rows), and the gap is
+	# whatever is left of the A4 text column after the closing block, less a
+	# safety margin. Overshooting costs a second page carrying only a signature,
+	# so the estimate is deliberately generous and the margin absorbs the rest.
+	# The scale is MEASURED, not assumed: wkhtmltopdf renders to a viewport and
+	# scales the result onto the page, so a CSS point does not land as a point.
+	# Bisected against a real render — 240pt was the largest gap that stayed on
+	# one page where the arithmetic said 293pt, so a point here is worth 1.22.
+	SHEET_PT = 774          # A4 297mm less 12mm margins top and bottom
+	CLOSING_PT = 55         # signature line + rule + tagline, measured
+	SAFETY_PT = 20
+	PT_SCALE = 1.22
+	EST_CUSHION = 1.08      # the row estimate ran ~7% under a measured render
+	row_pt = 13.0 if total_rows <= 14 else 11.5 if total_rows <= 26 else 10.0
+	n_qblocks = len({(r["quality"] or "All qualities") for r in d.get("diamond_rates", [])})
+	n_sections = sum(1 for x in (dmd, psr, cs, cz, cvd, mkr, certs) if x)
+	n_tables = n_sections + max(0, n_qblocks - 1)
+	est = (82                       # letterhead + the chart's name and date
+		+ 20 * n_sections           # each section's rule and title
+		+ 22 * n_qblocks            # each quality's own caption
+		+ 14 * n_tables             # each table's column heads
+		+ row_pt * total_rows
+		+ (34 if d.get("payment_terms") else 0)
+		+ (30 if d.get("terms") else 0))
+	gap_h = max(18, int((SHEET_PT - CLOSING_PT - SAFETY_PT - est * EST_CUSHION) / PT_SCALE))
 	import base64 as _b64
 	logo_html = ""
 	try:
@@ -11092,30 +11146,53 @@ def _price_chart_letter_html(d):
 			color: #888; padding: 4px 8px; border-bottom: 1px solid #ddd; }}
 		td {{ padding: {cell_pad}; border-bottom: 1px solid #eee; }}
 		td.r, th.r {{ text-align: right; white-space: nowrap; }}
-		.terms {{ margin-top: 16px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
+		.terms {{ margin-top: 14px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
+		/* a quality is a heading over its own small table, not a repeated column */
+		.qblk {{ margin-bottom: 9px; page-break-inside: avoid; }}
+		.qblk:last-child {{ margin-bottom: 0; }}
+		.qh {{ display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em;
+			text-transform: uppercase; color: #1f4e5f; background: #eef4f6;
+			border: 1px solid #cfe0e6; border-radius: 3px; padding: 2px 9px; margin-bottom: 4px; }}
+		/* The signature belongs at the FOOT of the page, not wherever the terms
+		   happened to end. wkhtmltopdf lays this out with a table rather than
+		   flexbox — its WebKit is old enough that flex justify-content is not
+		   reliable — and the closing block is pushed down by a spacer cell that
+		   takes whatever height is left. */
+		.sheet {{ width: 100%; border-collapse: collapse; }}
+		.sheet td {{ border: 0; padding: 0; vertical-align: top; }}
+		.sheet td.gap {{ height: {gap_h}pt; }}
 		.closing {{ page-break-inside: avoid; }}
-		.sign {{ margin-top: 18px; display: flex; justify-content: space-between; align-items: flex-end; }}
+		.sign {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
+		.sign td {{ border: 0; padding: 0; vertical-align: bottom; }}
 		.sign .who {{ font-weight: 700; }}
-		.sign .line {{ border-top: 1px solid #999; padding-top: 4px; width: 220px; text-align: center; color: #666; font-size: 11px; }}
+		.sign td.sg {{ text-align: right; }}
+		.sign .line {{ display: inline-block; border-top: 1px solid #999; padding-top: 4px;
+			width: 220px; text-align: center; color: #666; font-size: 11px; }}
 	</style></head><body>
-		<div class='head'>{logo}<div class='doc'>Rate Chart</div></div>
-		<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
-		{qnote}
-		{dmd_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
-		{payment}{terms}
-		<div class='closing'>
-			<div class='sign'>
-				<div><div class='who'>{signatory}</div><div>{signatory_phone}</div></div>
-				<div class='line'>Authorised Signatory</div>
+		<table class='sheet'><tr><td>
+			<div class='head'>{logo}<div class='doc'>Rate Chart</div></div>
+			<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
+			{qnote}
+			{dmd_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
+			{payment}{terms}
+		</td></tr>
+		<tr><td class='gap'></td></tr>
+		<tr><td>
+			<div class='closing'>
+				<table class='sign'><tr>
+					<td><div class='who'>{signatory}</div><div>{signatory_phone}</div></td>
+					<td class='sg'><div class='line'>Authorised Signatory</div></td>
+				</tr></table>
+				<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
 			</div>
-			<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
-		</div>
+		</td></tr></table>
 	</body></html>""".format(
-		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h,
+		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, gap_h=gap_h,
 		logo=logo_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		qnote="",
-		dmd_sec=sec("Diamond Rates", "<thead><tr><th>Sieves</th><th>Size</th><th>Quality</th><th class='r'>Rate / ct</th></tr></thead>", dmd),
+		dmd_sec=("<div class='sec'><div class='st'>Diamond Rates</div>{0}</div>".format(dmd)
+			if dmd else ""),
 		cert_sec=sec("Certification Charges", "", certs),
 		ps_sec=sec("Precious Stone Rates", "", psr),
 		mk_sec=sec("Making Charges", "<thead><tr><th>Design</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", mkr),
