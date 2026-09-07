@@ -10536,6 +10536,52 @@ BOARD_FEEDS = [
 ]
 
 
+# The three lines the floor actually watches. Everything else on this page is
+# context for these.
+#
+# Matched on a PREFIX, not the whole label, because a dealer stamps the day into
+# some of them — "COSWAN Sept 07" is "COSWAN Sept 08" tomorrow, and a page that
+# matched the full string would quietly go blank overnight.
+BOARD_HERO = [
+	{"key": "shivsahai", "prefix": "GLD CHN PURE", "name": "Chennai pure",
+	 "fineness": 0.9999, "of": "Shiv Sahai"},
+	{"key": "shivsahai", "prefix": "GLD TSR 995", "name": "Thrissur 995",
+	 "fineness": 0.995, "of": "Shiv Sahai"},
+	{"key": "surabi", "prefix": "COSWAN", "name": "COSWAN",
+	 "fineness": 0.995, "of": "Surabi Bullion"},
+]
+
+
+def _board_hero(rows):
+	"""Pull the watched lines out of whatever the feeds returned.
+
+	Each is a price per GRAM. The karat figures beside it are derived — the
+	line's own fineness backed out to fine gold, then taken to each karat — and
+	the page labels them as derived, because that is an arithmetic convenience
+	and not a rate anybody quoted."""
+	by_key = {r.get("key"): r for r in rows}
+	out = []
+	for h in BOARD_HERO:
+		feed = by_key.get(h["key"]) or {}
+		hit = next((e for e in (feed.get("extra") or [])
+			if (e.get("label") or "").upper().startswith(h["prefix"].upper())), None)
+		val = (hit or {}).get("ask") or (hit or {}).get("bid")
+		fine_g = (flt(val) / flt(h["fineness"])) if val else None
+		out.append({
+			"key": h["key"], "name": h["name"], "of": h["of"], "prefix": h["prefix"],
+			"label": (hit or {}).get("label") or h["prefix"],
+			"rate": flt(val) if val else None,
+			"bid": (hit or {}).get("bid"), "ask": (hit or {}).get("ask"),
+			"high": (hit or {}).get("high"), "low": (hit or {}).get("low"),
+			"fineness": h["fineness"],
+			"by_karat": ({k: round(fine_g * f, 2) for k, f in KARAT_FINENESS.items()}
+				if fine_g else {}),
+			"as_of": feed.get("as_of") or "",
+			"error": feed.get("error") or ("" if hit else "not on the board just now"),
+		})
+	return out
+
+
 BOARD_LIVE_CACHE_KEY = "jw_board_rate_live"
 BOARD_LIVE_CACHE_SECS = 15
 
@@ -10568,7 +10614,7 @@ def get_board_rate_live():
 			row.update({"by_karat": {}, "as_of": "", "error": str(e)[:200]})
 		row["ms"] = int((time.time() - started) * 1000)
 		rows.append(row)
-	out = {"rows": rows, "at": frappe.utils.now()}
+	out = {"rows": rows, "hero": _board_hero(rows), "at": frappe.utils.now()}
 	frappe.cache().set_value(BOARD_LIVE_CACHE_KEY, out, expires_in_sec=BOARD_LIVE_CACHE_SECS)
 	return out
 
@@ -10602,7 +10648,8 @@ def get_board_rate_feeds(refresh=0):
 	# what we last actually billed at, as the anchor the feeds are read against
 	last = frappe.get_all("Sale Preparation", filters={"gold_rate": [">", 0]},
 		fields=["name", "gold_rate", "creation"], order_by="creation desc", limit=1)
-	out = {"rows": rows, "fetched_on": frappe.utils.now(), "cached": False,
+	out = {"rows": rows, "hero": _board_hero(rows),
+		"fetched_on": frappe.utils.now(), "cached": False,
 		"ours": ({"rate": flt(last[0].gold_rate), "on": str(last[0].creation or "")[:10],
 			"doc": last[0].name} if last else None),
 		"karats": ["24K", "22K", "18K", "14K"]}

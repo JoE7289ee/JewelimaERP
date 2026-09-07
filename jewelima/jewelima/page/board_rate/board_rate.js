@@ -1,16 +1,16 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Board Rate (Costing) — every free gold-rate feed, side by side, so the team
-// can decide which one sits closest to the rate they actually board.
+// Board Rate (Costing) — the three lines the floor watches, live.
 //
-// This page SETS NOTHING. A board rate is a decision made each morning, not a
+// Shiv Sahai's GLD CHN PURE and GLD TSR 995, and Surabi's COSWAN. Everything
+// else on this page is context for those three: the other feeds are kept, but
+// underneath, because they are what you check the three against, not what you
+// board from.
+//
+// The page SETS NOTHING. A board rate is a decision made each morning, not a
 // market fact, and a feed that quietly became the billing number would have the
-// firm charging a figure nobody chose. It reads.
-//
-// The two kinds of number are kept apart on purpose, because they are routinely
-// confused: the Indian trade rate has duty and GST inside it, the world spot
-// price does not, and they are more than a thousand rupees a gram apart.
+// firm charging a figure nobody chose.
 // Route: /app/board-rate
 
 frappe.pages["board-rate"].on_page_load = function (wrapper) {
@@ -19,16 +19,16 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
-	// prev holds the last value seen for each number, so a tick can be shown as a
-	// direction rather than just a new figure — a board is watched for movement
-	const S = { data: null, karat: "24K", live: true, prev: {}, dir: {}, timer: null, at: "" };
+	// prev holds the last value seen against a key, so a tick reads as a
+	// DIRECTION rather than just a new figure — a board is watched for movement
+	const S = { data: null, karat: "22K", live: true, prev: {}, dir: {},
+		timer: null, at: "", detail: false };
 	const POLL_MS = 20000;
 
-	const inr = (v) => (v == null ? "—" : "₹" + flt(v).toLocaleString("en-IN",
-		{ minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+	const inr = (v, dp) => (v == null ? "—" : "₹" + flt(v).toLocaleString("en-IN",
+		{ minimumFractionDigits: dp == null ? 2 : dp, maximumFractionDigits: dp == null ? 2 : dp }));
 	const num = (v) => (v == null ? "—" : flt(v).toLocaleString("en-IN", { maximumFractionDigits: 3 }));
 
-	// remember every number by a key, and report which way it last moved
 	function moved(key, v) {
 		if (v == null) return "";
 		const was = S.prev[key];
@@ -36,151 +36,168 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		S.prev[key] = v;
 		return S.dir[key] || "";
 	}
-	const arrow = (d) => (d === "up" ? ` <span class="arw">▲</span>` : d === "down" ? ` <span class="arw">▼</span>` : "");
+	const arrow = (d) => (d === "up" ? ` <span class="arw">▲</span>`
+		: d === "down" ? ` <span class="arw">▼</span>` : "");
 
 	root.append(`
 		<style>
 		#page-board-rate .container{max-width:100%;}
-		.br-top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
-		.br-kar{display:flex;gap:0;border:1px solid var(--border-color);border-radius:9px;overflow:hidden;}
+		.br-top{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+		.br-kar{display:flex;border:1px solid var(--border-color);border-radius:9px;overflow:hidden;}
 		.br-kar button{background:none;border:0;border-right:1px solid var(--border-color);
 			padding:7px 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
 		.br-kar button:last-child{border-right:0;}
 		.br-kar button.on{background:#1f618d;color:#fff;font-weight:700;}
-		.br-stamp{margin-left:auto;font-size:11.5px;color:var(--text-muted);}
-		.br-livebtn{border:1px solid var(--border-color);border-radius:9px;background:none;
+		.br-btn{border:1px solid var(--border-color);border-radius:9px;background:none;
 			padding:7px 14px;font-size:12.5px;cursor:pointer;color:var(--text-color);
 			display:flex;align-items:center;gap:7px;}
-		.br-livebtn.on{border-color:#1d7a33;color:#1d7a33;font-weight:700;}
-		[data-theme="dark"] .br-livebtn.on{color:#6fbf7f;}
+		.br-btn.on{border-color:#1d7a33;color:#1d7a33;font-weight:700;}
+		[data-theme="dark"] .br-btn.on{color:#6fbf7f;}
 		.dot{width:8px;height:8px;border-radius:50%;background:var(--text-muted);display:inline-block;}
-		.br-livebtn.on .dot{background:#1d7a33;animation:brpulse 1.6s ease-in-out infinite;}
-		[data-theme="dark"] .br-livebtn.on .dot{background:#6fbf7f;}
+		.br-btn.on .dot{background:#1d7a33;animation:brpulse 1.6s ease-in-out infinite;}
+		[data-theme="dark"] .br-btn.on .dot{background:#6fbf7f;}
 		@keyframes brpulse{0%,100%{opacity:1;}50%{opacity:.25;}}
-		/* a moved number says which way it went, and settles */
+		.br-stamp{margin-left:auto;font-size:11.5px;color:var(--text-muted);text-align:right;}
+
+		/* the three watched lines */
+		.hero{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
+		.h1c{flex:1 1 300px;border:1px solid var(--border-color);border-radius:15px;
+			padding:17px 19px;background:var(--fg-color);position:relative;overflow:hidden;}
+		.h1c.err{border-color:#b02a2a;}
+		.h1c .who{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+			color:var(--text-muted);}
+		.h1c .nm{font-size:16px;font-weight:800;margin-top:1px;}
+		.h1c .rate{font-size:40px;font-weight:800;line-height:1.12;margin:8px 0 0;
+			font-variant-numeric:tabular-nums;letter-spacing:-.5px;}
+		.h1c .per{font-size:12.5px;font-weight:400;color:var(--text-muted);}
+		.h1c .drv{margin-top:11px;padding-top:10px;border-top:1px solid var(--border-color);
+			display:flex;gap:16px;flex-wrap:wrap;}
+		.h1c .drv div{font-size:11px;color:var(--text-muted);}
+		.h1c .drv b{display:block;font-size:15px;color:var(--text-color);font-weight:700;
+			font-variant-numeric:tabular-nums;}
+		.h1c .hl{margin-top:9px;font-size:11px;color:var(--text-muted);
+			font-variant-numeric:tabular-nums;}
+		.h1c .bad{color:#b02a2a;font-size:12.5px;margin-top:8px;}
+		[data-theme="dark"] .h1c .bad{color:#f0a0a0;}
 		.up{color:#1d7a33;} .down{color:#b02a2a;}
 		[data-theme="dark"] .up{color:#6fbf7f;} [data-theme="dark"] .down{color:#f0a0a0;}
-		.arw{font-size:.7em;vertical-align:middle;}
-		@keyframes brflashup{from{background:rgba(29,122,51,.22);}to{background:transparent;}}
-		@keyframes brflashdn{from{background:rgba(176,42,42,.22);}to{background:transparent;}}
-		.fl-up{animation:brflashup 1.1s ease-out;}
-		.fl-down{animation:brflashdn 1.1s ease-out;}
-		.br-cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
-		.br-card{flex:1 1 290px;border:1px solid var(--border-color);border-radius:13px;
-			padding:14px 16px;background:var(--fg-color);}
-		.br-card.err{border-color:#b02a2a;}
-		.br-card .nm{font-weight:800;font-size:14px;display:flex;align-items:center;gap:8px;}
-		.br-card .big{font-size:30px;font-weight:800;line-height:1.2;margin:6px 0 2px;
-			font-variant-numeric:tabular-nums;}
-		.br-card .sub{font-size:11.5px;color:var(--text-muted);}
-		.br-card .note{font-size:11.5px;color:var(--text-muted);margin-top:9px;line-height:1.5;}
-		.br-card .src{font-size:10.5px;color:var(--text-muted);margin-top:7px;
-			padding-top:7px;border-top:1px solid var(--border-color);word-break:break-all;}
-		.br-card .bad{color:#b02a2a;font-size:12px;margin:6px 0;}
-		[data-theme="dark"] .br-card .bad{color:#f0a0a0;}
-		.tag{display:inline-block;border-radius:9px;padding:1px 8px;font-size:10px;font-weight:800;
-			letter-spacing:.04em;text-transform:uppercase;}
-		.tag.ind{background:rgba(31,97,141,.16);color:#1f618d;}
-		.tag.wld{background:rgba(122,79,181,.16);color:#7a4fb5;}
-		.tag.dlr{background:rgba(29,122,51,.16);color:#1d7a33;}
-		[data-theme="dark"] .tag.dlr{color:#6fbf7f;}
-		.tag.un{background:rgba(180,83,9,.16);color:#b45309;}
-		[data-theme="dark"] .tag.ind{color:#7fb2dd;} [data-theme="dark"] .tag.wld{color:#bfa3e8;}
-		[data-theme="dark"] .tag.un{color:#e8a24a;}
+		.arw{font-size:.55em;vertical-align:middle;}
+
 		.br-sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
-			color:var(--text-muted);margin:22px 0 9px;padding-bottom:5px;
+			color:var(--text-muted);margin:24px 0 9px;padding-bottom:5px;
 			border-bottom:1px solid var(--border-color);}
 		.br-tw{overflow-x:auto;}
-		table.br-t{width:100%;border-collapse:collapse;font-size:13px;background:var(--fg-color);
+		table.br-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);
 			border:1px solid var(--border-color);border-radius:11px;overflow:hidden;
 			font-variant-numeric:tabular-nums;}
 		table.br-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
 			color:var(--text-muted);padding:8px 11px;background:var(--control-bg);
 			border-bottom:1px solid var(--border-color);white-space:nowrap;}
-		table.br-t td{padding:8px 11px;border-bottom:1px solid var(--border-color);}
+		table.br-t td{padding:7px 11px;border-bottom:1px solid var(--border-color);}
 		table.br-t td.num,table.br-t th.num{text-align:right;}
-		.br-gap{font-size:11px;color:var(--text-muted);}
+		table.br-t tr.pick td{background:rgba(31,97,141,.07);font-weight:700;}
+		.k{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);
+			border:1px solid var(--border-color);border-radius:6px;padding:0 5px;margin-right:6px;}
 		.br-why{border:1px solid var(--border-color);border-left:3px solid #b45309;
-			border-radius:10px;padding:11px 14px;background:var(--fg-color);
-			font-size:12.5px;line-height:1.65;color:var(--text-muted);margin-top:14px;}
+			border-radius:10px;padding:12px 15px;background:var(--fg-color);
+			font-size:12.5px;line-height:1.65;color:var(--text-muted);margin-top:18px;}
 		.br-why b{color:var(--text-color);}
+		.ctx{font-size:12.5px;color:var(--text-muted);margin:-3px 0 10px;}
 		</style>
 		<div class="br-top">
 			<div class="br-kar"></div>
-			<button class="br-livebtn on"><span class="dot"></span><span class="lbl"></span></button>
+			<button class="br-btn br-live on"><span class="dot"></span><span class="lbl"></span></button>
+			<button class="br-btn br-more"></button>
 			<span class="br-stamp"></span>
 		</div>
-		<div class="br-cards"></div>
+		<div class="hero"></div>
 		<div class="br-body"></div>
 	`);
+
+	const KARATS = ["24K", "22K", "18K", "14K"];
+
+	function paintHero() {
+		const d = S.data;
+		root.find(".hero").html((d.hero || []).map((h) => {
+			const dir = moved("hero:" + h.prefix, h.rate);
+			if (h.error && h.rate == null) {
+				return `<div class="h1c err"><div class="who">${esc(h.of)}</div>
+					<div class="nm">${esc(h.name)}</div>
+					<div class="bad">${esc(h.error)}</div></div>`;
+			}
+			const kv = (h.by_karat || {})[S.karat];
+			return `<div class="h1c">
+				<div class="who">${esc(h.of)}</div>
+				<div class="nm">${esc(h.label)}</div>
+				<div class="rate ${dir}">${inr(h.rate, 2)}${arrow(dir)}
+					<span class="per">${__("per gram")}</span></div>
+				<div class="drv">
+					<div>${esc(S.karat)} ${__("derived")}<b>${inr(kv, 2)}</b></div>
+					<div>${__("fine (999)")}<b>${inr((h.by_karat || {})["24K"], 2)}</b></div>
+				</div>
+				<div class="hl">${__("derived assuming this line is {0} fine", [h.fineness])}</div>
+				${h.high || h.low ? `<div class="hl">${__("high")} ${num(h.high)} · ${__("low")} ${num(h.low)}</div>` : ""}
+			</div>`;
+		}).join(""));
+	}
 
 	function paint() {
 		const d = S.data;
 		if (!d) return;
-		root.find(".br-kar").html(d.karats.map((k) =>
+		root.find(".br-kar").html(KARATS.map((k) =>
 			`<button class="${k === S.karat ? "on" : ""}" data-k="${k}">${k}</button>`).join(""));
-		root.find(".br-livebtn").toggleClass("on", S.live)
+		root.find(".br-live").toggleClass("on", S.live)
 			.find(".lbl").text(S.live ? __("Live") : __("Paused"));
+		root.find(".br-more").toggleClass("on", S.detail)
+			.text(S.detail ? __("Hide the other feeds") : __("Show the other feeds"));
 		root.find(".br-stamp").html(S.live
-			? __("the moving feeds refresh every {0} seconds · last at {1}",
+			? __("refreshing every {0}s · last at {1}",
 				[POLL_MS / 1000, esc((S.at || d.fetched_on || "").slice(11, 19))])
 			: __("paused — press Live to follow the board again"));
 
-		root.find(".br-cards").html(d.rows.map((r) => {
-			const v = (r.by_karat || {})[S.karat];
-			const d = r.error ? "" : moved(r.key + ":" + S.karat, v);
-			const tag = r.kind === "Indian trade rate" ? "ind"
-				: r.kind === "Dealer board" ? "dlr" : "wld";
-			const body = r.error
-				? `<div class="bad">${__("could not read it")} — ${esc(r.error)}</div>`
-				: `<div class="big ${d}">${inr(v)}${arrow(d)}<span style="font-size:13px;font-weight:400;color:var(--text-muted);"> /g ${esc(S.karat)}</span></div>
-					<div class="sub">${__("as of")} ${esc((r.as_of || "").replace("T", " ").slice(0, 19)) || "—"}
-						· ${r.ms}ms${r.detail ? " · " + esc(r.detail) : ""}</div>`;
-			return `<div class="br-card ${r.error ? "err" : ""}">
-				<div class="nm">${esc(r.name)}
-					<span class="tag ${tag}">${esc(r.kind)}</span>
-					${r.live ? "" : `<span class="tag un">${__("daily")}</span>`}</div>
-				${body}
-				<div class="note">${esc(r.note)}</div>
-				<div class="src">${esc(r.source)}<br>${esc(r.url)}</div>
-			</div>`;
-		}).join(""));
+		paintHero();
 
-		// every karat at once, so a purity we do not sell today is still visible
-		const live = d.rows.filter((r) => !r.error);
-		const ind = live.find((r) => r.kind === "Indian trade rate");
-		const wld = live.find((r) => r.kind === "World metal price");
-		const rows = d.karats.map((k) => {
-			const a = ind && ind.by_karat[k], b = wld && wld.by_karat[k];
-			const gap = a && b ? a - b : null;
-			return `<tr><td><b>${k}</b></td>
-				${live.map((r) => `<td class="num">${inr(r.by_karat[k])}</td>`).join("")}
-				<td class="num">${gap == null ? "—" : inr(gap)
-					+ `<div class="br-gap">${(100 * gap / b).toFixed(1)}% ${__("over spot")}</div>`}</td></tr>`;
-		}).join("");
+		if (!S.detail) {
+			root.find(".br-body").html(`<div class="br-why">
+				<b>${__("These three are what the floor watches.")}</b>
+				${__("The karat figures under each are DERIVED — the line's own fineness backed out to fine gold and taken to that karat. They are arithmetic, not a rate anybody quoted.")}
+				<br><br>
+				${__("Nothing here sets a board rate. That stays a decision made each morning — a feed that quietly became the billing number would have us charging a figure nobody chose.")}
+			</div>`);
+			return;
+		}
 
-		// a dealer publishes more than the 999 line, and a Kerala board may well be
-		// read off one of the local rows rather than off 999 — so show them all
+		const live = (d.rows || []).filter((r) => !r.error);
+		const watched = new Set((d.hero || []).map((h) => h.prefix.toUpperCase()));
 		const boards = live.filter((r) => (r.extra || []).length).map((r) => `
 			<div class="br-sec">${esc(r.name)} — ${__("the whole board")}</div>
 			<div class="br-tw"><table class="br-t"><thead><tr>
 				<th>${__("Line")}</th><th class="num">${__("Bid")}</th><th class="num">${__("Ask")}</th>
 				<th class="num">${__("High")}</th><th class="num">${__("Low")}</th>
-			</tr></thead><tbody>${r.extra.map((e) => `<tr>
-				<td>${e.kind ? `<span class="pct" style="font-size:9.5px;">${esc(e.kind)}</span> ` : ""}${esc(e.label)}</td>
-				${["bid", "ask", "high", "low"].map((k) => {
-					const d = k === "high" || k === "low" ? "" : moved(r.key + ":" + e.label + ":" + k, e[k]);
-					return `<td class="num ${d}">${num(e[k])}${arrow(d)}</td>`;
-				}).join("")}
-			</tr>`).join("")}</tbody></table></div>`).join("");
+			</tr></thead><tbody>${r.extra.map((e) => {
+				const on = [...watched].some((w) => (e.label || "").toUpperCase().startsWith(w));
+				return `<tr class="${on ? "pick" : ""}">
+					<td>${e.kind ? `<span class="k">${esc(e.kind)}</span>` : ""}${esc(e.label)}</td>
+					${["bid", "ask", "high", "low"].map((k) => {
+						const dd = k === "high" || k === "low" ? ""
+							: moved(r.key + ":" + e.label + ":" + k, e[k]);
+						return `<td class="num ${dd}">${num(e[k])}${arrow(dd)}</td>`;
+					}).join("")}</tr>`;
+			}).join("")}</tbody></table></div>`).join("");
 
 		root.find(".br-body").html(`
-			<div class="br-sec">${__("Every purity")}</div>
-			${live.length ? `<div class="br-tw"><table class="br-t"><thead><tr>
-				<th>${__("Karat")}</th>${live.map((r) => `<th class="num">${esc(r.name)}</th>`).join("")}
-				<th class="num">${__("Indian over world")}</th>
-			</tr></thead><tbody>${rows}</tbody></table></div>`
-				: `<div class="br-why">${__("No feed could be read just now.")}</div>`}
+			<div class="br-sec">${__("Every feed, for checking against")}</div>
+			<p class="ctx">${__("what each source makes a gram of {0} worth", [S.karat])}</p>
+			<div class="br-tw"><table class="br-t"><thead><tr>
+				<th>${__("Source")}</th><th>${__("What it is")}</th>
+				${KARATS.map((k) => `<th class="num">${k}</th>`).join("")}
+				<th class="num">${__("Read in")}</th>
+			</tr></thead><tbody>${(d.rows || []).map((r) => `<tr>
+				<td><b>${esc(r.name)}</b>${r.live ? "" : ` <span class="k">${__("daily")}</span>`}</td>
+				<td>${esc(r.kind)}${r.detail ? `<div class="k" style="border:0;padding:0;">${esc(r.detail)}</div>` : ""}</td>
+				${r.error ? `<td colspan="4" class="down">${esc(r.error)}</td>`
+					: KARATS.map((k) => `<td class="num">${inr((r.by_karat || {})[k], 2)}</td>`).join("")}
+				<td class="num">${r.ms}ms</td></tr>`).join("")}</tbody></table></div>
 			${boards}
 			${d.ours ? `<div class="br-sec">${__("What we last billed at")}</div>
 				<div class="br-tw"><table class="br-t"><tbody><tr>
@@ -188,10 +205,10 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 					<td class="num"><b>${inr(d.ours.rate)}</b> /g</td>
 				</tr></tbody></table></div>` : ""}
 			<div class="br-why">
-				<b>${__("These are for the eye, not for billing.")}</b>
-				${__("Nothing on this page sets a board rate — that stays a decision made each morning, and a feed that quietly became the billing number would have us charging a figure nobody chose.")}
+				<b>${__("For the eye, not for billing.")}</b>
+				${__("Nothing on this page sets a board rate. The highlighted rows are the three lines shown above.")}
 				<br><br>
-				${__("The two kinds of number are not the same and are routinely confused. The Indian trade rate has import duty and GST inside it; the world spot price does not, which is why it sits well below. Pick whichever the team reads as closest to the board, and tell me — I can pin the page to it, or add a keyed feed (GoldAPI.io, MetalpriceAPI, Metals-API, Metals.Dev) once someone buys a key.")}
+				${__("These are undocumented endpoints belonging to two bullion firms — the same ones their own websites call. Reads are held server-side and a paused or hidden page asks for nothing, but if one of these becomes the feed we rely on, we should ask them.")}
 			</div>`);
 	}
 
@@ -199,7 +216,7 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 		return frappe.call({ method: API + ".get_board_rate_feeds",
 			args: { refresh: refresh ? 1 : 0 }, freeze: !!refresh,
 			freeze_message: __("Reading the feeds…") })
-			.then((r) => { S.data = r.message; paint(); });
+			.then((r) => { S.data = r.message; S.at = (S.data || {}).fetched_on || ""; paint(); });
 	}
 
 	function tick() {
@@ -209,21 +226,18 @@ frappe.pages["board-rate"].on_page_load = function (wrapper) {
 			.then((r) => {
 				const m = r.message || {};
 				(m.rows || []).forEach((n) => {
-					const row = S.data.rows.find((x) => x.key === n.key);
-					if (!row) return;
-					Object.assign(row, n);       // by_karat, extra, as_of, ms, error
+					const row = (S.data.rows || []).find((x) => x.key === n.key);
+					if (row) Object.assign(row, n);
 				});
+				if (m.hero) S.data.hero = m.hero;
 				S.at = m.at || "";
 				paint();
 			})
 			.catch(() => {});      // a dropped tick is not worth a message; the next one comes
 	}
 
-	root.on("click", ".br-livebtn", () => {
-		S.live = !S.live;
-		paint();
-		if (S.live) tick();
-	});
+	root.on("click", ".br-live", () => { S.live = !S.live; paint(); if (S.live) tick(); });
+	root.on("click", ".br-more", () => { S.detail = !S.detail; paint(); });
 	root.on("click", ".br-kar button", function () { S.karat = $(this).data("k"); paint(); });
 	page.set_primary_action(__("Read again"), () => load(true), "refresh");
 	load(false).then(() => { S.timer = setInterval(tick, POLL_MS); });
