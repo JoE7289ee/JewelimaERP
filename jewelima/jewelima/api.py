@@ -14740,6 +14740,117 @@ def cert_draft_scan(cert_type, quality, barcode, existing=None):
 
 
 @frappe.whitelist()
+def cert_draft_scan_many(cert_type, quality, barcodes, existing=None):
+	"""The picker's whole tick-list in ONE round trip. Same guard as a single
+	scan, applied piece by piece against a growing set, so a duplicate inside
+	the selection is refused exactly as a re-scan would be."""
+	if isinstance(barcodes, str):
+		barcodes = json.loads(barcodes or "[]")
+	if isinstance(existing, str):
+		existing = json.loads(existing or "[]")
+	quality = (quality or "").strip()
+	seen = set(existing or [])
+	out = []
+	for code in barcodes or []:
+		nm = (code or "").strip()
+		if not nm:
+			continue
+		try:
+			b = _cert_validate_piece(cert_type, quality, nm, seen)
+		except frappe.ValidationError as e:
+			frappe.local.message_log = []      # no modal — the page logs it in history
+			out.append({"code": nm, "rejected": str(e)})
+			continue
+		seen.add(nm)
+		out.append({"code": nm, "row": _cert_format_row(cert_type, quality, nm, b)})
+	return {"results": out}
+
+
+@frappe.whitelist()
+def get_certifiable(cert_type=None, quality=None, design_type=None, bucket=None,
+		held_by=None, karat=None, search=None, limit=60, offset=0, names=None):
+	"""The Certification desk's picker: finished pieces that could go for this
+	certification, narrowed by the handful of things an operator sorts by.
+
+	Scanning is right for a few pieces; a batch is often a whole slice, so the
+	desk must be able to say "every RING in FEMI" and get 80 of them. The
+	FILTERS run in SQL — searching a loaded page would hide the piece you know
+	is there. Anything already on a prepared batch is excluded, so the list only
+	offers work that can actually be done; the IGI colour+clarity lock is left
+	to the per-piece guard, which explains a mismatch by name."""
+	_require_stock(("JW Delivery",))
+	cond = ["b.is_finished = 1", "b.stock_status = 'In Stock'"]
+	vals = {}
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	if names is not None:
+		names = [n for n in names if n]
+		if not names:
+			return {"rows": [], "count": 0, "total": 0, "offset": 0, "has_more": False}
+		cond.append("b.name IN %(names)s")
+		vals["names"] = names
+	if karat:
+		cond.append("""EXISTS (SELECT 1 FROM `tabBag Material Ledger` l
+			JOIN `tabItem` i ON i.name = l.item
+			WHERE l.order_bag = b.name AND l.entry_type = 'Convert' AND l.direction = 'Out'
+			  AND IFNULL(i.stone_type, '') = '' AND i.metal_purity = %(karat)s)""")
+		vals["karat"] = karat
+	if design_type:
+		cond.append("d.design_type = %(dt)s"); vals["dt"] = design_type
+	if bucket:
+		cond.append("b.bucket = %(bk)s"); vals["bk"] = bucket
+	if held_by:
+		cond.append("b.held_by = %(hb)s"); vals["hb"] = held_by
+	if search:
+		cond.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s OR b.held_by LIKE %(q)s)")
+		vals["q"] = "%" + search + "%"
+	# already spoken for by another prepared batch — never on offer
+	cond.append("""NOT EXISTS (SELECT 1 FROM `tabCertification Item` ci
+		JOIN `tabCertification` c ON c.name = ci.parent
+		WHERE ci.order_bag = b.name AND c.status = 'Prepared')""")
+	# IGI certifies diamonds, so a piece with none of them is not a candidate
+	if cert_type == "IGI":
+		cond.append("IFNULL(b.act_dmd_weight, 0) > 0")
+	W = " AND ".join(cond)
+	FROM = "FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design"
+	vals["lim"] = max(1, min(cint(limit) or 60, 500))
+	vals["off"] = max(0, cint(offset))
+	total = frappe.db.sql("SELECT COUNT(*) {0} WHERE {1}".format(FROM, W), vals)[0][0]
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, d.design_type, b.act_gross_weight AS gross,
+			b.act_dmd_weight AS dmd_ct, b.act_dmd_no AS dmd_no, b.bucket, b.held_by, b.huid
+		{0}
+		WHERE {1}
+		ORDER BY d.design_type, b.design, b.name
+		LIMIT %(lim)s OFFSET %(off)s""".format(FROM, W), vals, as_dict=True)
+	# the colour+clarity an IGI batch locks to, so the picker can grey a mismatch
+	# BEFORE it is ticked rather than refusing it after
+	if cert_type == "IGI" and rows:
+		for r in rows:
+			q = _bag_diamond_qualities(r.name)
+			r["quality"] = q[0] if len(q) == 1 else (", ".join(q) if q else "")
+			r["mixed"] = len(q) > 1
+	return {"rows": rows, "count": len(rows), "total": cint(total),
+		"offset": vals["off"], "has_more": vals["off"] + len(rows) < cint(total)}
+
+
+@frappe.whitelist()
+def get_cert_filter_options():
+	"""What the certification picker can filter by, from what is there to certify."""
+	_require_stock(("JW Delivery",))
+	return {
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
+		"buckets": frappe.get_all("Finished Bucket", filters={"active": 1},
+			pluck="name", order_by="name"),
+		"holders": frappe.db.sql_list("""SELECT DISTINCT b.held_by FROM `tabOrder Bag` b
+			WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
+			  AND IFNULL(b.held_by, '') != '' ORDER BY b.held_by"""),
+		"karats": sorted({(k or "").upper() for k in frappe.get_all("Item",
+			filters={"material_group": "GOLD", "metal_purity": ["!=", ""]}, pluck="metal_purity") if k}),
+	}
+
+
+@frappe.whitelist()
 def cert_prep_create_full(cert_type, center=None, quality=None, bags=None):
 	"""PREP: the draft list becomes the real batch in one shot — re-validated
 	piece by piece, then named by the code series (IGI-0001)."""

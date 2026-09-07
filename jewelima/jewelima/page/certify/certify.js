@@ -12,6 +12,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "Certification", single_column: true });
 	const API = "jewelima.jewelima.api";
 	const esc = frappe.utils.escape_html;
+	const flt = (v) => parseFloat(v) || 0;
 	let CTX = { types: [], centers: [], qualities: [] };
 	let prep = null;    // a SAVED batch (opened from Send Certifications)
 	let draft = null;   // the local unsaved list {cert_type, center, quality, rows}
@@ -23,9 +24,25 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		.cf-setup{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:14px;}
 		.cf-setup .frappe-control{margin:0;min-width:200px;}
 		.cf-req{font-size:12px;color:var(--text-muted);max-width:900px;margin-bottom:12px;white-space:pre-wrap;}
-		.cf-cols{display:flex;gap:20px;align-items:flex-start;}
-		.cf-main{flex:1;min-width:0;}
-		.cf-side{flex:0 0 340px;}
+		.cf-cols{display:block;}
+		.cf-main{min-width:0;}
+		/* the batch at a glance — the run-on totals line said the same thing in
+		   a sentence nobody read */
+		.cf-tiles{display:none;gap:10px;flex-wrap:wrap;margin:0 0 12px;}
+		.cf-tile{flex:1 1 150px;border:1px solid var(--border-color);border-radius:11px;
+			padding:9px 13px;background:var(--fg-color);}
+		.cf-tile .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+		.cf-tile .v{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.25;}
+		.cf-tile.gold .v{color:#1f618d;}
+		.cf-tile.dmd .v{color:#7a4fb5;}
+		[data-theme="dark"] .cf-tile.dmd .v{color:#bfa3e8;}
+		.cf-btn{background:none;border:1px solid var(--border-color);border-radius:8px;padding:8px 15px;
+			font-size:12.5px;cursor:pointer;color:var(--text-color);}
+		table.cf-histt{width:100%;border-collapse:collapse;font-size:12px;}
+		table.cf-histt td{padding:5px 9px;border-bottom:1px solid var(--border-color);vertical-align:top;}
+		.hb{display:inline-block;border-radius:9px;padding:0 7px;font-size:10px;font-weight:800;color:#fff;}
+		.hb.ok{background:#1d7a33;} .hb.no{background:#b02a2a;} .hb.by{background:#4a5a6a;}
+		.cf-none{padding:26px;text-align:center;color:var(--text-muted);font-size:13px;}
 		.cf-head{display:none;gap:18px;align-items:baseline;flex-wrap:wrap;background:var(--control-bg);border:1px solid var(--border-color);border-radius:8px;padding:10px 16px;margin-bottom:12px;}
 		.cf-head .nm{font-size:19px;font-weight:800;}
 		.cf-lock{font-size:11px;font-weight:700;border-radius:10px;padding:2px 10px;background:#1f618d;color:#fff;}
@@ -67,7 +84,9 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		<div class="cf-cols">
 			<div class="cf-main">
 				<div class="cf-head"></div>
+				<div class="cf-tiles"></div>
 				<div class="cf-scanrow"><div class="cf-scan"></div>
+					<button class="cf-btn cf-pick">${__("Add by filter…")}</button>
 					<span style="font-size:11.5px;color:var(--text-muted);">${__("scan / type card no. + Enter — products only")}</span></div>
 				<table class="cf-t"><thead class="cf-th"></thead><tbody class="cf-tb"></tbody></table>
 				<div class="cf-tot"></div>
@@ -79,10 +98,6 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 					<a class="btn btn-default" href="/app/send-certifications">${__("Go to Send Certifications →")}</a>
 				</div>
 			</div>
-			<div class="cf-side"><div class="cf-panel">
-				<div class="h"><span>${__("Scan History")}</span><span class="cf-hist-t"></span></div>
-				<div class="b cf-hist-b"></div>
-			</div></div>
 		</div>
 	`);
 	$(page.main).append('<div class="cf-tip"></div>');
@@ -130,16 +145,38 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 	function load(name) {
 		frappe.call({ method: API + ".get_cert_prep", args: { name } }).then((r) => { prep = r.message; paint(); });
 	}
-	function logScan(code, ok, note) {
-		hist.unshift({ code, ok, note: note || "", t: frappe.datetime.now_time().slice(0, 5) });
-		if (hist.length > 40) hist.pop();
-		root.find(".cf-hist-t").text(__("{0} scan(s)", [hist.length]));
-		root.find(".cf-hist-b").html(`<table><tbody>${hist.map((h) => `
-			<tr class="cf-hrow"><td>${esc(h.code)}</td>
-			<td><span class="cf-hb ${h.ok ? "ok" : "no"}">${h.ok ? __("ADDED") : __("REJECTED")}</span>
-			${h.ok ? "" : `<span class="cf-why">${esc(h.note)}</span>`}</td>
-			<td class="text-muted">${h.t}</td></tr>`).join("")}</tbody></table>`);
-		root.find(".cf-panel").show();
+	// the log is worth keeping and not worth a column: it lives behind History,
+	// the way the hallmark desk does it
+	let $hist = null;
+	function paintHist() {
+		if (!$hist) return;
+		$hist.html(hist.length
+			? `<table class="cf-histt">${hist.map((h, i) => `<tr>
+				<td style="width:38px;color:var(--text-muted);">${hist.length - i}</td>
+				<td style="white-space:nowrap;">${esc(h.code)}</td>
+				<td style="white-space:nowrap;"><span class="hb ${h.ok ? "ok" : "no"}">${
+					h.ok ? __("ADDED") : __("NO")}</span>${
+					h.by ? ` <span class="hb by">${__("BY FILTER")}</span>` : ""}</td>
+				<td>${esc(h.note || "")}</td>
+				<td style="color:var(--text-muted);">${esc(h.t)}</td></tr>`).join("")}</table>`
+			: `<div class="cf-none">${__("Every scan lands here, good or refused.")}</div>`);
+	}
+	function showHistory() {
+		const d = new frappe.ui.Dialog({ title: __("Scan history ({0})", [hist.length]),
+			size: "large", fields: [{ fieldtype: "HTML", fieldname: "h" }] });
+		$hist = d.fields_dict.h.$wrapper;
+		paintHist();
+		d.onhide = () => ($hist = null);
+		d.show();
+	}
+	const $histBtn = page.add_inner_button(__("History"), showHistory);
+
+	function logScan(code, ok, note, by) {
+		hist.unshift({ code, ok, note: note || "", by: by ? 1 : 0,
+			t: frappe.datetime.now_time().slice(0, 5) });
+		if (hist.length > 200) hist.pop();
+		if ($histBtn) $histBtn.text(hist.length ? __("History ({0})", [hist.length]) : __("History"));
+		paintHist();
 	}
 
 	const IGI_COLS = ["style_no", "metal_color", "color", "clarity", "shape", "gross", "dmd_ct"];
@@ -171,8 +208,17 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 			${locked ? "" : '<td class="del">&times;</td>'}</tr>`).join("")
 			|| `<tr><td colspan="9" style="color:var(--text-muted);padding:14px;">${__("Scan the first product.")}</td></tr>`);
 		root.find("table.cf-t").show();
-		root.find(".cf-tot").show().text(__("{0} piece(s) · {1} g gross · {2} ct diamond", [src.count, src.gross, src.dmd_ct]));
+		root.find(".cf-tot").hide();
+		root.find(".cf-tiles").css("display", "flex").html(`
+			<div class="cf-tile"><div class="k">${__("Pieces")}</div><div class="v">${src.count}</div></div>
+			<div class="cf-tile gold"><div class="k">${__("Gross")}</div>
+				<div class="v">${flt(src.gross).toFixed(3)}<span style="font-size:12px;"> g</span></div></div>
+			<div class="cf-tile dmd"><div class="k">${__("Diamond")}</div>
+				<div class="v">${flt(src.dmd_ct).toFixed(3)}<span style="font-size:12px;"> ct</span></div></div>
+			<div class="cf-tile"><div class="k">${__("Scans")}</div><div class="v">${hist.length}</div></div>`);
 		root.find(".cf-scanrow").css("display", locked ? "none" : "flex");
+		// pieces are added to a DRAFT; a saved batch is edited on Send Certifications
+		root.find(".cf-pick").toggle(!!draft && !prep);
 		root.find(".cf-actions").css("display", "flex");
 		root.find(".cf-prep").toggle(!!draft && !prep && src.count > 0);
 		// every lab except HALL gets a submission excel (IGI = its template,
@@ -186,6 +232,225 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 		root.find(".cf-cancel").text(prep ? __("Cancel Batch") : __("Discard Draft"));
 		if (!locked) setTimeout(() => scan.$input.focus(), 100);
 	}
+
+
+	// ------------------------------------------------------------------------
+	// Add by filter — the picker the transfer and hallmark desks have.
+	//
+	// Scanning is right for a handful; a certification batch is often a whole
+	// slice ("every RING in FEMI"), and paging 60 at a time to reach it is not a
+	// workflow. Every piece picked goes through the SAME per-piece guard a scan
+	// does, so nothing lands here that could not have been scanned in — for IGI
+	// that includes the colour+clarity lock, which the list shows before you tick
+	// rather than refusing after.
+	// ------------------------------------------------------------------------
+	function addMany(codes) {
+		if (!codes.length) return Promise.resolve({ ok: 0, no: 0 });
+		return frappe.call({ method: API + ".cert_draft_scan_many", freeze: false,
+			args: { cert_type: draft.cert_type, quality: draft.quality || "",
+				barcodes: JSON.stringify(codes),
+				existing: JSON.stringify(draft.rows.map((r) => r.order_bag)) } })
+			.then((r) => {
+				let ok = 0, no = 0;
+				for (const x of (r.message || {}).results || []) {
+					if (x.rejected) { no++; logScan(x.code, 0, x.rejected, 1); }
+					else { ok++; draft.rows.push(x.row); logScan(x.row.order_bag, 1, "", 1); }
+				}
+				paint();
+				return { ok, no };
+			});
+	}
+
+	function showPicker() {
+		if (!draft) return;
+		const igi = draft.cert_type === "IGI";
+		const P = { bucket: "", design_type: "", karat: "", held_by: "", q: "",
+			rows: [], sel: new Set(), total: 0, hasMore: false, selOnly: false };
+		const PAGE = 60;
+		const onList = (n) => draft.rows.some((r) => r.order_bag === n);
+		// for IGI a piece of another colour+clarity can never join this batch, so
+		// it is shown greyed and untickable instead of being refused after the fact
+		const blocked = (r) => igi && (r.mixed || (r.quality || "") !== (draft.quality || ""));
+
+		const dlg = new frappe.ui.Dialog({
+			title: __("Pieces to certify"), size: "extra-large",
+			primary_action_label: __("Add to batch"),
+			primary_action() {
+				if (!P.sel.size) return frappe.msgprint(__("Tick at least one piece."));
+				const picked = [...P.sel];
+				dlg.hide();
+				frappe.dom.freeze(__("Adding {0}…", [picked.length]));
+				addMany(picked).then((c) => {
+					frappe.dom.unfreeze();
+					frappe.show_alert({ indicator: c.no ? "orange" : "green", message: c.no
+						? __("{0} added by filter, {1} refused — see History.", [c.ok, c.no])
+						: __("{0} added by filter.", [c.ok]) }, 6);
+				}).catch(() => frappe.dom.unfreeze());
+			},
+		});
+		const $b = $(dlg.body);
+		$b.html(`
+			<style>
+			.cp-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+			.cp-top select,.cp-q{border:1px solid var(--border-color);border-radius:7px;height:30px;
+				padding:2px 9px;font-size:12.5px;background:var(--control-bg);color:var(--text-color);}
+			.cp-q{width:200px;}
+			.cp-pill{border:1px solid var(--border-color);border-radius:11px;padding:2px 11px;
+				font-size:12.5px;cursor:pointer;color:var(--text-muted);}
+			.cp-pill.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
+			.cp-count{margin-left:auto;font-size:12px;color:var(--text-muted);}
+			/* the count you cannot see is the one that matters: ticking "all shown"
+			   and adding 60 while 6 more matched is the mistake this bar prevents */
+			.cp-short{display:none;align-items:center;gap:10px;margin-bottom:9px;padding:7px 11px;
+				border:1px solid #b02a2a;border-left:4px solid #b02a2a;border-radius:7px;
+				background:rgba(176,42,42,.09);color:#b02a2a;font-size:12.5px;font-weight:700;}
+			[data-theme="dark"] .cp-short{color:#f0a0a0;background:rgba(176,42,42,.20);}
+			.cp-box{border:1px solid var(--border-color);border-radius:10px;overflow:auto;
+				max-height:52vh;}
+			table.cp-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+			table.cp-t th{position:sticky;top:0;z-index:1;background:var(--control-bg);
+				text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
+				color:var(--text-muted);padding:7px 9px;border-bottom:1px solid var(--border-color);}
+			table.cp-t td{padding:5px 9px;border-bottom:1px solid var(--border-color);}
+			table.cp-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+			table.cp-t tr.on td{background:rgba(31,97,141,.09);}
+			table.cp-t tr.blocked td{opacity:.5;}
+			.cp-qual{font-size:10.5px;font-weight:700;border-radius:7px;padding:0 6px;
+				background:var(--control-bg);border:1px solid var(--border-color);}
+			.cp-empty{padding:26px;text-align:center;color:var(--text-muted);}
+			</style>
+			<div class="cp-top">
+				<select class="cp-f" data-f="bucket"><option value="">${__("— bucket —")}</option></select>
+				<select class="cp-f" data-f="design_type"><option value="">${__("— type —")}</option></select>
+				<select class="cp-f" data-f="karat"><option value="">${__("— karat —")}</option></select>
+				<select class="cp-f" data-f="held_by"><option value="">${__("— held by —")}</option></select>
+				<input type="text" class="cp-q" placeholder="${__("Search card / design / holder")}">
+				<span class="cp-pill cp-selonly">${__("Selected only")}</span>
+				<button class="btn btn-xs btn-default cp-reset">${__("Reset")}</button>
+				<button class="btn btn-xs btn-default cp-clear" style="display:none;">${__("Clear selection")}</button>
+				<span class="cp-count"></span>
+			</div>
+			<div class="cp-short"><span class="cp-short-t"></span>
+				<button class="btn btn-xs btn-danger cp-all">${__("Load all")}</button></div>
+			<div class="cp-box"><table class="cp-t">
+				<thead><tr><th style="width:32px;"><input type="checkbox" class="cp-head-cb"
+						title="${__("Select / clear all shown")}"></th>
+					<th>${__("Piece")}</th><th>${__("Design")}</th><th>${__("Type")}</th>
+					${igi ? `<th>${__("Quality")}</th>` : ""}
+					<th>${__("Bucket")}</th><th>${__("Held by")}</th>
+					<th class="num">${__("Gross g")}</th><th class="num">${__("DMD ct")}</th></tr></thead>
+				<tbody class="cp-body"></tbody></table></div>`);
+
+		const visible = () => (P.selOnly ? P.rows.filter((r) => P.sel.has(r.name)) : P.rows);
+
+		function paintP() {
+			const rows = visible();
+			$b.find(".cp-body").html(rows.length ? rows.map((r) => {
+				const off = onList(r.name) || blocked(r);
+				return `<tr class="${P.sel.has(r.name) ? "on" : ""} ${blocked(r) ? "blocked" : ""}">
+					<td><input type="checkbox" data-nm="${esc(r.name)}" ${P.sel.has(r.name) ? "checked" : ""}
+						${off ? `disabled title="${onList(r.name) ? __("Already on the batch")
+							: r.mixed ? __("Mixed diamond qualities — IGI takes one")
+							: __("This batch is locked to {0}", [draft.quality || ""])}"` : ""}></td>
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td>
+					<td>${esc(r.design_type || "")}</td>
+					${igi ? `<td>${r.quality ? `<span class="cp-qual">${esc(r.quality)}</span>` : "—"}</td>` : ""}
+					<td>${esc(r.bucket || "")}</td><td>${esc(r.held_by || "")}</td>
+					<td class="num">${flt(r.gross).toFixed(3)}</td>
+					<td class="num">${flt(r.dmd_ct).toFixed(3)}</td></tr>`;
+			}).join("") : `<tr><td colspan="${igi ? 9 : 8}" class="cp-empty">${P.selOnly
+				? __("Nothing ticked yet.") : __("Nothing matches — or everything that does is spoken for.")}</td></tr>`);
+
+			const short = !P.selOnly && P.hasMore;
+			$b.find(".cp-short").css("display", short ? "flex" : "none");
+			if (short) {
+				$b.find(".cp-short-t").text(__("Showing {0} of {1} — {2} more match this filter.",
+					[P.rows.length, P.total, P.total - P.rows.length]));
+				$b.find(".cp-all").text(__("Load all {0}", [P.total]));
+			}
+			$b.find(".cp-count").text(__("{0} ticked · {1} shown · {2} available",
+				[P.sel.size, rows.length, P.total]));
+			$b.find(".cp-clear").toggle(P.sel.size > 0).text(__("Clear selection ({0})", [P.sel.size]));
+			jewelima.shiftSelect($b, ".cp-body input");
+			$b.find(".cp-body input").on("change", function () {
+				this.checked ? P.sel.add(this.dataset.nm) : P.sel.delete(this.dataset.nm);
+				P.selOnly ? load() : paintP();
+			});
+			const pick = rows.filter((r) => !onList(r.name) && !blocked(r));
+			const hit = pick.filter((r) => P.sel.has(r.name)).length;
+			const h = $b.find(".cp-head-cb")[0];
+			if (h) { h.checked = pick.length > 0 && hit === pick.length;
+				h.indeterminate = hit > 0 && hit < pick.length; }
+			dlg.get_primary_btn().text(P.sel.size ? __("Add {0} to batch", [P.sel.size]) : __("Add to batch"));
+		}
+
+		function load(more, all) {
+			jewelima.busy($b.find("table.cp-t"), true, all ? __("Loading all…") : __("Looking…"));
+			// Selected only means the whole tick list, not the ticks that survive
+			// the filters — those are two different questions
+			const args = P.selOnly
+				? { names: JSON.stringify([...P.sel]), limit: Math.max(P.sel.size, PAGE) }
+				: { bucket: P.bucket, design_type: P.design_type, karat: P.karat,
+					held_by: P.held_by, search: P.q,
+					limit: all ? Math.max(P.total, PAGE) : PAGE,
+					offset: all || !more ? 0 : P.rows.length };
+			args.cert_type = draft.cert_type;
+			frappe.call({ method: API + ".get_certifiable", freeze: false, args })
+				.then((r) => {
+					const m = r.message || {};
+					P.rows = more && !all ? P.rows.concat(m.rows || []) : (m.rows || []);
+					P.total = m.total || 0;
+					P.hasMore = !!m.has_more;
+					paintP();
+				}).always(() => jewelima.busy($b.find("table.cp-t"), false));
+		}
+
+		$b.on("change", ".cp-f", function () { P[this.dataset.f] = this.value; load(); });
+		$b.on("input", ".cp-q", frappe.utils.debounce(function () { P.q = this.value || ""; load(); }, 300));
+		$b.on("click", ".cp-all", () => load(true, true));
+		$b.on("click", ".cp-selonly", function () {
+			P.selOnly = !P.selOnly;
+			$(this).toggleClass("on", P.selOnly);
+			// a filter left standing behind this view only hides ticks, so drop it
+			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
+			$b.find(".cp-f").val(""); $b.find(".cp-q").val("");
+			load();
+		});
+		$b.on("click", ".cp-clear", function () {
+			P.sel.clear();
+			const was = P.selOnly;
+			P.selOnly = false;
+			$b.find(".cp-selonly").removeClass("on");
+			was ? load() : paintP();
+		});
+		$b.on("click", ".cp-reset", function () {
+			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
+			P.selOnly = false;                       // Reset drops filters, never ticks
+			$b.find(".cp-f").val(""); $b.find(".cp-q").val("");
+			$b.find(".cp-selonly").removeClass("on");
+			load();
+		});
+		$b.on("change", ".cp-head-cb", function () {
+			const on = this.checked;
+			visible().filter((r) => !onList(r.name) && !blocked(r))
+				.forEach((r) => (on ? P.sel.add(r.name) : P.sel.delete(r.name)));
+			P.selOnly ? load() : paintP();
+		});
+
+		frappe.call({ method: API + ".get_cert_filter_options" }).then((r) => {
+			const o = r.message || {};
+			const fill = (f, blank, list) => $b.find(`.cp-f[data-f="${f}"]`).html(
+				`<option value="">${blank}</option>`
+				+ (list || []).map((v) => `<option>${esc(v)}</option>`).join(""));
+			fill("bucket", __("— bucket —"), o.buckets);
+			fill("design_type", __("— type —"), o.design_types);
+			fill("karat", __("— karat —"), o.karats);
+			fill("held_by", __("— held by —"), o.holders);
+			load();
+		});
+		dlg.show();
+	}
+	root.on("click", ".cf-pick", showPicker);
 
 	function rejMsg(err) {
 		let raw = "";
