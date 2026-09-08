@@ -4,7 +4,7 @@
 // three open menus push everything else below the fold. Two rules:
 //
 //   1. a menu that opens is scrolled into view, title first.
-//   2. one menu at a time, EXCEPT the menu holding the page you are on.
+//   2. one MENU at a time, EXCEPT the menu holding the page you are on.
 //
 //      Closing that one as well was tried, and it made the sidebar feel broken.
 //      It is usually the menu ABOVE the one you are reaching for, so closing it
@@ -13,6 +13,16 @@
 //      under your finger, and the second click lands on a different menu. The
 //      anchor below gives back what scroll it can, but near the top of the list
 //      there is nothing to give back, so the exemption stays.
+//
+//   3. SUB-MENUS ARE NOT MENUS. Delivery holds Certification, Hallmarking,
+//      Sales and three more; Stock holds Loss, Records, Stock Reports and two
+//      more. Open as many of a menu's sub-menus together as you like — opening
+//      one closes nothing at all.
+//
+//      Frappe gives them away only by item.indent: every section, menu and
+//      sub-menu alike, is a sibling in sidebar.items and sits at the same depth
+//      in the DOM. Treating them all as menus is what made opening a sub-menu
+//      shut the whole sidebar, its own parent included.
 //
 // Two things this must be careful about, both learned the hard way:
 //
@@ -45,13 +55,28 @@ frappe.provide("jewelima.sidebar");
 	}
 	const isOpen = (s) => !s.$nested_items.hasClass("hidden");
 	const headerOf = (s) => s.wrapper.find(".standard-sidebar-item").get(0);
+	// the ONLY thing separating a menu from a sub-menu
+	const isMenu = (s) => !(s.item && s.item.indent);
 
-	// the menu holding the page you are on — the one that is never closed for you
+	// the menu a sub-menu belongs to: the nearest menu above it in the list,
+	// which is exactly how the sidebar reads on screen
+	function menuOf(sb, s) {
+		if (!s) return null;
+		const all = sections(sb);
+		for (let i = all.indexOf(s); i >= 0; i--) {
+			if (isMenu(all[i])) return all[i];
+		}
+		return null;
+	}
+
+	// the section holding the page you are on — may be a sub-menu
 	function current(sb) {
 		const a = sb.wrapper && sb.wrapper.find(".active-sidebar").get(0);
 		if (!a) return null;
 		return sections(sb).find((s) => s.wrapper.get(0).contains(a)) || null;
 	}
+	// ...and the MENU that section lives under — the one never closed for you
+	const currentMenu = (sb) => menuOf(sb, current(sb));
 
 	// One read, one write, merged into whatever is stored now — so a menu the
 	// desk closed for you is remembered exactly like one you closed by hand,
@@ -81,11 +106,13 @@ frappe.provide("jewelima.sidebar");
 		sections(sb).forEach((s) => { s.section_breaks_state = all; });
 	}
 
+	// Closes other MENUS only. A menu's sub-menus are left exactly as they are:
+	// they go out of sight with their parent and come back as you left them.
 	function keepOnly(sb, opened) {
-		const cur = current(sb);
+		const cur = currentMenu(sb);
 		const closed = [];
 		sections(sb).forEach((s) => {
-			if (s === opened || s === cur || !isOpen(s)) return;
+			if (!isMenu(s) || s === opened || s === cur || !isOpen(s)) return;
 			try {
 				s.close();
 				closed.push(s);
@@ -167,8 +194,8 @@ frappe.provide("jewelima.sidebar");
 		if (Math.abs(d) > 1) box.scrollTop += d;
 	}
 
-	jewelima.sidebar = { sidebar, sections, isOpen, current, keepOnly, keepOnlyInPlace,
-		reveal, revealHeader, headerOf };
+	jewelima.sidebar = { sidebar, sections, isOpen, isMenu, menuOf, current, currentMenu,
+		keepOnly, keepOnlyInPlace, reveal, revealHeader, headerOf };
 
 	// Frappe's own click handler opens or closes the menu; we only tidy up after
 	// it, and ONLY for a click on a menu's own header. A click on a page inside a
@@ -179,10 +206,11 @@ frappe.provide("jewelima.sidebar");
 		const el = this;
 		requestAnimationFrame(() => {
 			const s = sections(sb).find((x) => headerOf(x) === el);
-			if (!s || !isOpen(s)) return;   // a link, or a menu being closed
-			// no reveal here: you are looking at the menu you just clicked, so
-			// the only thing worth doing is not moving it
-			keepOnlyInPlace(sb, s);
+			if (!s || !isOpen(s)) return;   // a link, or a section being closed
+			// A SUB-MENU closes nothing — several of a menu's sub-menus are meant
+			// to be open together. It only gets brought into view.
+			if (isMenu(s)) keepOnlyInPlace(sb, s);
+			else revealHeader(s);
 		});
 	});
 
@@ -199,10 +227,14 @@ frappe.provide("jewelima.sidebar");
 				const sb = sidebar();
 				if (sb) {
 					const cur = current(sb);
-					if (cur) {
-						keepOnly(sb, cur);
-						reveal(cur);
-					}
+					const menu = menuOf(sb, cur);
+					// Frappe opens the SECTION holding the page, which for a page
+					// inside a sub-menu is the sub-menu — and a sub-menu of a shut
+					// menu is not drawn at all. Open the menu over it, or landing
+					// on the page shows you nothing about where you are.
+					if (menu && !isOpen(menu)) menu.open();
+					if (menu) keepOnly(sb, menu);
+					if (cur) reveal(cur);
 				}
 			} catch (e) {
 				console.warn("jewelima sidebar:", e);   // never worth a broken page
