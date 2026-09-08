@@ -15816,6 +15816,26 @@ _DHC_BOLD_COLS = {8, 9, 11} | _DHC_CODE_COLS   # + colour-stone pair and metal c
 # DHC's columns, for ONE piece. The submission sheet and the certify page both
 # read this, so what a preparer checks on screen is literally what the lab is
 # sent — a difference between the two would only ever be a bug.
+def _piece_gold_color(nm, design=None, mats=None):
+	"""The piece's gold colour — YG / WG / PG — read off the gold it is ACTUALLY
+	made of, not off the variant name.
+
+	Same rule as the karat: a variant's materials get edited, so the name is a
+	label and the Convert rows are the fact. The variant token is kept only as a
+	fallback for a piece whose materials resolve no gold at all, which is better
+	than sending a lab a blank column.
+	"""
+	if mats is None:
+		mats = _bag_convert_materials([nm])
+	for it in (mats.get(nm) or {}):
+		if frappe.db.get_value("Item", it, "stone_type"):
+			continue
+		g = re.search(r"(\d{2}K)(YG|WG|PG)$", it or "")
+		if g:
+			return g.group(2)
+	return (_variant_tokens(design).get("gold_color") or "") if design else ""
+
+
 def _dhc_piece(nm, b=None, qmap=None, mats=None):
 	if b is None:
 		b = frappe.db.get_value("Order Bag", nm, [
@@ -15836,7 +15856,7 @@ def _dhc_piece(nm, b=None, qmap=None, mats=None):
 	quality = max(qual_ct, key=qual_ct.get) if qual_ct else ""
 	colour, clarity = _IGI_QUALITY.get(quality, ("", ""))
 	karat = _piece_karat(nm, b.design)
-	tok = _variant_tokens(b.design)
+	colour_code = _piece_gold_color(nm, b.design, mats)
 	return {
 		"barcode": nm[1:] if nm[:1].upper() == "E" else nm,   # DHC's barcode drops our E
 		"category": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
@@ -15848,7 +15868,7 @@ def _dhc_piece(nm, b=None, qmap=None, mats=None):
 		"cs_no": cint(b.act_cs_no) + cint(b.act_ps_no),
 		"cs_wt": round(flt(b.act_cs_weight) + flt(b.act_ps_weight), 2),
 		"carat": karat.replace("K", "KT") if karat else "",
-		"metal_color": _DHC_METAL_WORD.get(tok.get("gold_color") or "", ""),
+		"metal_color": _DHC_METAL_WORD.get(colour_code, ""),
 		"shape": "RD",
 		"color": colour,
 		"clarity": clarity,
@@ -16264,12 +16284,47 @@ def get_confirm_pool():
 	return {"batches": batches, "pending": pend, "stone": stone}
 
 
+def _cert_claimed(row_name, field, user):
+	"""Did THIS call actually win the row?
+
+	Asking "is confirmed_by me?" was not enough. A guarded UPDATE that changes
+	nothing leaves confirmed_by exactly as it was, so the same person marking the
+	same piece twice read as a win both times — which is how a piece already away
+	for a stone change could be accepted again, and its trail stamped, on a second
+	press of Save. The row is a claim only if the FLAG this call set is now on and
+	the row carries this user's name.
+	"""
+	got = frappe.db.sql("""select `{0}` as flag, confirmed_by
+		from `tabCertification Item` where name = %s""".format(field), row_name, as_dict=True)
+	return bool(got) and cint(got[0].flag) == 1 and got[0].confirmed_by == user
+
+
+def _cert_taken_by(row_name):
+	"""Why the claim was lost, in the words the scan history uses."""
+	got = frappe.db.sql("""select received, rejected, stone_change, confirmed_by
+		from `tabCertification Item` where name = %s""", row_name, as_dict=True)
+	if not got:
+		return frappe._("That piece is no longer on the batch.")
+	g = got[0]
+	who = g.confirmed_by or "?"
+	if cint(g.stone_change):
+		return frappe._("Already marked for a stone change by {0}").format(who)
+	if cint(g.rejected):
+		return frappe._("Already rejected by {0}").format(who)
+	return frappe._("Already confirmed by {0}").format(who)
+
+
 def _confirm_cert_one(nm, mode, touched):
 	"""One piece, claimed atomically. Returns the same shape confirm_cert_scan
 	does. Does NOT commit and does NOT roll the batch up — the caller does both
 	once for the whole run, so a fifty-piece save is one transaction rather than
 	fifty."""
-	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
+	# stone_change MUST be selected: the guard below reads it, and a column that is
+	# not fetched reads as None, which is falsy — the guard silently never fired and
+	# a second stone mark opened a second Stone Change batch and moved the same gold
+	# out of Finished Goods twice.
+	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.stone_change,
+			i.confirmed_by
 		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
 		where i.order_bag = %s and c.status in ('Collected', 'Partially Received')
 		order by c.creation desc limit 1""", nm, as_dict=True)
@@ -16293,9 +16348,8 @@ def _confirm_cert_one(nm, mode, touched):
 		set {0} = 1, received_on = %s, confirmed_by = %s
 		where name = %s and received = 0 and rejected = 0 and stone_change = 0""".format(field),
 		(now, user, r.name))
-	claimed = frappe.db.sql("select confirmed_by from `tabCertification Item` where name = %s", r.name)[0][0]
-	if claimed != user:
-		return {"rejected_scan": frappe._("Already taken by {0}").format(claimed or "?")}
+	if not _cert_claimed(r.name, field, user):
+		return {"rejected_scan": _cert_taken_by(r.name)}
 	if mode == "accept":
 		ct = frappe.db.get_value("Certification", r.parent, "cert_type") or frappe.db.get_value(
 			"Certification", r.parent, "certification_type")
@@ -16488,7 +16542,8 @@ def confirm_cert_scan(barcode, mode="accept"):
 	nm = (barcode or "").strip()
 	if mode not in ("accept", "reject"):
 		mode = "accept"
-	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.confirmed_by
+	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.stone_change,
+			i.confirmed_by
 		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
 		where i.order_bag = %s and c.status in ('Collected', 'Partially Received')
 		order by c.creation desc limit 1""", nm, as_dict=True)
@@ -16501,6 +16556,8 @@ def confirm_cert_scan(barcode, mode="accept"):
 		return {"rejected_scan": frappe._("Already confirmed by {0}").format(r.confirmed_by or "?")}
 	if r.rejected:
 		return {"rejected_scan": frappe._("Already in the reject queue")}
+	if r.stone_change:
+		return {"rejected_scan": frappe._("Already marked for a stone change")}
 	now = frappe.utils.now_datetime()
 	user = frappe.session.user
 	# ATOMIC claim: the guarded UPDATE wins for exactly one scanner — a second
@@ -16508,10 +16565,10 @@ def confirm_cert_scan(barcode, mode="accept"):
 	field = "received" if mode == "accept" else "rejected"
 	frappe.db.sql("""update `tabCertification Item`
 		set {0} = 1, received_on = %s, confirmed_by = %s
-		where name = %s and received = 0 and rejected = 0""".format(field), (now, user, r.name))
-	claimed = frappe.db.sql("select confirmed_by from `tabCertification Item` where name = %s", r.name)[0][0]
-	if claimed != user:
-		return {"rejected_scan": frappe._("Already confirmed by {0}").format(claimed or "?")}
+		where name = %s and received = 0 and rejected = 0 and stone_change = 0""".format(field),
+		(now, user, r.name))
+	if not _cert_claimed(r.name, field, user):
+		return {"rejected_scan": _cert_taken_by(r.name)}
 	if mode == "accept":
 		ct = frappe.db.get_value("Certification", r.parent, "cert_type") or frappe.db.get_value(
 			"Certification", r.parent, "certification_type")
