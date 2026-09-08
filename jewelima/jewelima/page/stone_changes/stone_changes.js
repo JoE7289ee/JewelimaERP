@@ -37,7 +37,20 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 			border-bottom:1px solid var(--border-color);}
 		.sx-card{border:1px solid var(--border-color);border-left:3px solid #b8860b;
 			border-radius:12px;background:var(--fg-color);margin-bottom:14px;overflow:hidden;}
+		.sx-card.processing{border-left-color:#b8860b;}
+		.sx-card.sent{border-left-color:#1f618d;}
 		.sx-card.closed{border-left-color:#7f8c8d;opacity:.85;}
+		.sx-stage{font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:9px;
+			padding:2px 9px;text-transform:uppercase;}
+		.sx-stage.processing{background:rgba(184,134,11,.18);color:#8a6508;}
+		.sx-stage.sent{background:rgba(31,97,141,.16);color:#1f618d;}
+		.sx-stage.done{background:rgba(127,140,141,.16);color:var(--text-muted);}
+		[data-theme="dark"] .sx-stage.processing{color:#e8b84a;}
+		[data-theme="dark"] .sx-stage.sent{color:#7FB3DA;}
+		.sx-collect{background:#1f618d;border:1px solid #1f618d;color:#fff;font-weight:700;
+			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
+		.sx-send{background:#b8860b;border:1px solid #b8860b;color:#fff;font-weight:700;
+			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		.sx-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 16px;
 			background:var(--control-bg);border-bottom:1px solid var(--border-color);}
 		.sx-head .nm{font-size:16px;font-weight:800;}
@@ -46,8 +59,6 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 		.sx-age{font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 9px;
 			background:rgba(184,134,11,.16);color:#b8860b;text-transform:uppercase;letter-spacing:.04em;}
 		[data-theme="dark"] .sx-age{color:#e8b84a;}
-		.sx-close{background:#2e7d32;border:1px solid #2e7d32;color:#fff;font-weight:700;
-			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		table.sx-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.sx-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;
 			color:var(--text-muted);padding:7px 16px;border-bottom:1px solid var(--border-color);}
@@ -82,39 +93,62 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 		</tr>`).join("")}</tbody></table>`;
 	}
 
-	function card(b, open) {
-		return `<div class="sx-card ${open ? "" : "closed"}" data-name="${esc(b.name)}">
+	// The tray has three stages and each offers exactly one action, so the card
+	// never asks the desk to remember what comes next: being worked on -> send it
+	// out -> bring it back. Anything already back is history and offers nothing.
+	function card(b, stage) {
+		const live = stage !== "done";
+		const act = stage === "processing"
+			? `<button class="sx-send">${__("STONES CHANGED — send it out again")}</button>`
+			: stage === "sent"
+				? `<button class="sx-collect">${__("COLLECT — bring the tray back")}</button>`
+				: "";
+		return `<div class="sx-card ${live ? stage : "closed"}" data-name="${esc(b.name)}">
 			<div class="sx-head">
 				<span class="nm">${esc(b.name)}</span>
+				<span class="sx-stage ${live ? stage : "done"}">${
+					stage === "processing" ? __("PROCESSING")
+						: stage === "sent" ? __("SENT") : esc(b.status)}</span>
 				<span class="meta">${__("opened")} ${esc(b.opened_on)} ${__("by")} ${esc(b.owner_label || "")}${
-					b.closed_on ? " · " + __("closed") + " " + esc(b.closed_on) : ""}</span>
-				${open && b.days > 0 ? `<span class="sx-age">${__("{0} day(s) out", [b.days])}</span>` : ""}
+					b.sent_on ? " · " + __("sent") + " " + esc(b.sent_on) : ""}${
+					b.closed_on ? " · " + __("back") + " " + esc(b.closed_on) : ""}</span>
+				${stage === "sent" && b.days_out > 0
+					? `<span class="sx-age">${__("{0} day(s) away", [b.days_out])}</span>`
+					: stage === "processing" && b.days > 0
+						? `<span class="sx-age">${__("{0} day(s) on the floor", [b.days])}</span>` : ""}
 				<span class="meta"><b>${b.pieces}</b> ${__("piece(s)")} · ${flt(b.gross).toFixed(3)} g · ${
 					flt(b.dmd_ct).toFixed(3)} ct</span>
-				${open ? `<span class="act"><button class="sx-close">${
-					__("STONES CHANGED — bring the tray back")}</button></span>` : ""}
+				${act ? `<span class="act">${act}</span>` : ""}
 			</div>
-			${rows(b, open)}
+			${rows(b, stage === "processing")}
 		</div>`;
 	}
 
 	function paint() {
-		const openPieces = DATA.pieces_open || 0;
-		const oldest = DATA.open.reduce((a, b) => Math.max(a, b.days || 0), 0);
+		const openPieces = (DATA.pieces_processing || 0) + (DATA.pieces_sent || 0);
+		const oldest = (DATA.open || []).reduce((a, b) => Math.max(a, b.days || 0), 0);
 		root.find(".sx-kpis").html(`
 			<div class="sx-kpi hold"><div class="k">${__("Pieces out")}</div><div class="v">${openPieces}</div></div>
-			<div class="sx-kpi"><div class="k">${__("Open batches")}</div><div class="v">${DATA.open.length}</div></div>
+			<div class="sx-kpi"><div class="k">${__("On the floor")}</div>
+				<div class="v">${(DATA.processing || []).length}</div></div>
+			<div class="sx-kpi"><div class="k">${__("Sent back out")}</div>
+				<div class="v">${(DATA.sent || []).length}</div></div>
 			<div class="sx-kpi"><div class="k">${__("Longest out")}</div><div class="v">${
 				oldest ? __("{0}d", [oldest]) : "—"}</div></div>
-			<div class="sx-kpi"><div class="k">${__("Gold held")}</div><div class="v">${
-				DATA.open.reduce((a, b) => a + flt(b.gross), 0).toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text-muted);"> g</span></div></div>`);
+			<div class="sx-kpi"><div class="k">${__("Gold out")}</div><div class="v">${
+				(DATA.open || []).reduce((a, b) => a + flt(b.gross), 0).toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text-muted);"> g</span></div></div>`);
 
+		const proc = DATA.processing || [], sent = DATA.sent || [];
 		root.find(".sx-body").html(`
-			<div class="sx-sec">${__("Out for a stone change")}</div>
-			${DATA.open.length ? DATA.open.map((b) => card(b, true)).join("")
-				: `<div class="sx-empty">${__("Nothing out. A batch opens itself when the Confirm desk marks pieces STONE CHANGE.")}</div>`}
-			${DATA.recent.length ? `<div class="sx-sec">${__("Back in")}</div>`
-				+ DATA.recent.map((b) => card(b, false)).join("") : ""}`);
+			<div class="sx-sec">${__("On the floor — stones being changed")}</div>
+			${proc.length ? proc.map((b) => card(b, "processing")).join("")
+				: `<div class="sx-empty">${__("Nothing being worked on. A tray opens itself when the Confirm desk marks pieces STONE CHANGE.")}</div>`}
+			${sent.length ? `<div class="sx-sec">${__("Sent back out")}</div>
+				<p class="sx-note">${__("away at the lab again — these also show on Out of House")}</p>`
+				+ sent.map((b) => card(b, "sent")).join("") : ""}
+			${DATA.recent.length ? `<div class="sx-sec">${__("Back in")}</div>
+				<p class="sx-note">${__("collected — their pieces are waiting to be confirmed again")}</p>`
+				+ DATA.recent.map((b) => card(b, "done")).join("") : ""}`);
 	}
 
 	function load() {
@@ -123,32 +157,64 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 	}
 
 	// the whole tray comes back at once, the way a certification batch is collected
-	root.on("click", ".sx-close", function () {
+	// stones done: the tray goes back out to the lab, exactly like a first trip
+	root.on("click", ".sx-send", function () {
 		const nm = $(this).closest(".sx-card").data("name");
-		const b = DATA.open.find((x) => x.name === nm) || {};
+		const b = (DATA.processing || []).find((x) => x.name === nm) || {};
+		const d = new frappe.ui.Dialog({
+			title: __("Send {0} out again", [nm]),
+			fields: [
+				{ fieldtype: "Data", fieldname: "center", label: __("Where it is going") },
+				{ fieldtype: "Small Text", fieldname: "remarks", label: __("Anything to record") },
+				{ fieldtype: "HTML", fieldname: "note" },
+			],
+			primary_action_label: __("Send it out"),
+			primary_action(v) {
+				d.hide();
+				frappe.dom.freeze(__("Sending…"));
+				frappe.call({ method: API + ".send_stone_change",
+					args: { name: nm, center: v.center || "", remarks: v.remarks || "" } })
+					.then((rr) => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({ indicator: "green", message:
+							__("{0} sent — {1} piece(s) out again.", [nm, (rr.message || {}).count]) }, 6);
+						load();
+					}).catch(() => frappe.dom.unfreeze());
+			},
+		});
+		d.fields_dict.note.$wrapper.html(`<div style="font-size:12.5px;color:var(--text-muted);">${
+			__("{0} piece(s) move Stone Change → At Certification and show on Out of House until they come back.",
+				[b.pieces || 0])}</div>`);
+		d.show();
+	});
+
+	// and back again — which is what puts the pieces in front of the Confirm desk
+	root.on("click", ".sx-collect", function () {
+		const nm = $(this).closest(".sx-card").data("name");
+		const b = (DATA.sent || []).find((x) => x.name === nm) || {};
 		const d = new frappe.ui.Dialog({
 			title: __("Bring {0} back", [nm]),
 			fields: [
 				{ fieldtype: "HTML", fieldname: "note" },
 				{ fieldtype: "Small Text", fieldname: "remarks", label: __("Anything to record") },
 			],
-			primary_action_label: __("Stones changed — back in stock"),
+			primary_action_label: __("Collect it"),
 			primary_action(v) {
 				d.hide();
-				frappe.dom.freeze(__("Bringing the tray back…"));
-				frappe.call({ method: API + ".close_stone_change",
+				frappe.dom.freeze(__("Collecting…"));
+				frappe.call({ method: API + ".collect_stone_change",
 					args: { name: nm, remarks: v.remarks || "" } })
 					.then((rr) => {
 						frappe.dom.unfreeze();
+						const m = rr.message || {};
 						frappe.show_alert({ indicator: "green", message:
-							__("{0} closed — {1} piece(s) back In Stock.",
-								[nm, (rr.message || {}).count]) }, 6);
+							__("{0} back — {1} piece(s) waiting to be confirmed.", [nm, m.count]) }, 7);
 						load();
 					}).catch(() => frappe.dom.unfreeze());
 			},
 		});
 		d.fields_dict.note.$wrapper.html(`<div style="font-size:12.5px;color:var(--text-muted);">${
-			__("{0} piece(s) move Stone Change → Finished Goods and go back In Stock in their own buckets. From there, scan them onto a new certification batch to send them out again.",
+			__("{0} piece(s) move At Certification → Finished Goods, go back In Stock in their own buckets, and their certification lines go back to WAITING — ready to confirm on the Confirm desk.",
 				[b.pieces || 0])}</div>`);
 		d.show();
 	});

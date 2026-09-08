@@ -6,18 +6,90 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["status", "opened_on", "closed_on", "cb1", "stock_entry", "return_stock_entry",
-   "sec_items", "items", "remarks"],
+ "field_order": [
+  "status",
+  "opened_on",
+  "sent_on",
+  "center",
+  "closed_on",
+  "cb1",
+  "stock_entry",
+  "return_stock_entry",
+  "sec_items",
+  "items",
+  "remarks"
+ ],
  "fields": [
-  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Open\nClosed\nCancelled", "default": "Open", "in_list_view": 1, "in_standard_filter": 1, "reqd": 1},
-  {"fieldname": "opened_on", "fieldtype": "Date", "label": "Opened On", "in_list_view": 1, "read_only": 1},
-  {"fieldname": "closed_on", "fieldtype": "Date", "label": "Closed On", "read_only": 1},
-  {"fieldname": "cb1", "fieldtype": "Column Break"},
-  {"fieldname": "stock_entry", "fieldtype": "Link", "label": "Stock Entry (out)", "options": "Stock Entry", "read_only": 1},
-  {"fieldname": "return_stock_entry", "fieldtype": "Link", "label": "Stock Entry (back)", "options": "Stock Entry", "read_only": 1},
-  {"fieldname": "sec_items", "fieldtype": "Section Break", "label": "Pieces"},
-  {"fieldname": "items", "fieldtype": "Table", "label": "Pieces", "options": "Stone Change Item"},
-  {"fieldname": "remarks", "fieldtype": "Small Text", "label": "Remarks"}
+  {
+   "default": "Processing",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Processing\nSent\nCollected\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "opened_on",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Opened On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closed_on",
+   "fieldtype": "Date",
+   "label": "Closed On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry (out)",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "return_stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry (back)",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_items",
+   "fieldtype": "Section Break",
+   "label": "Pieces"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Pieces",
+   "options": "Stone Change Item"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "sent_on",
+   "fieldtype": "Date",
+   "label": "Sent On",
+   "read_only": 1
+  },
+  {
+   "description": "Where the tray went when it was sent out again.",
+   "fieldname": "center",
+   "fieldtype": "Data",
+   "label": "Sent To",
+   "read_only": 1
+  }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
@@ -27,7 +99,18 @@
  "name": "Stone Change",
  "owner": "Administrator",
  "permissions": [
-  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1}
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
  ],
  "sort_field": "creation",
  "sort_order": "DESC",

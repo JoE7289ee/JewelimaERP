@@ -16572,8 +16572,10 @@ def get_confirm_pool():
 	names = frappe.get_all("Certification",
 		filters={"status": ["in", ["Collected", "Partially Received"]]}, pluck="name")
 	still_out = frappe.db.sql("""select distinct i.parent
-		from `tabCertification Item` i join `tabOrder Bag` b on b.name = i.order_bag
-		where i.stone_change = 1 and b.stock_status = 'Stone Change'""", pluck=True) or []
+		from `tabCertification Item` i
+		join `tabStone Change Item` si on si.order_bag = i.order_bag
+		join `tabStone Change` s on s.name = si.parent
+		where i.stone_change = 1 and s.status in ('Processing', 'Sent')""", pluck=True) or []
 	names = list(dict.fromkeys(list(names) + list(still_out)))
 
 	batches = []
@@ -16586,8 +16588,13 @@ def get_confirm_pool():
 		away = {}
 		marked = [i.order_bag for i in items if i.stone_change]
 		if marked:
-			away = {r.name: r.stock_status for r in frappe.get_all("Order Bag",
-				filters={"name": ["in", marked]}, fields=["name", "stock_status"])}
+			# where the TRAY is, not where the bag is: the bag reads At
+			# Certification on the second trip, which is not "back"
+			for r in frappe.db.sql("""select si.order_bag, s.status
+				from `tabStone Change Item` si join `tabStone Change` s on s.name = si.parent
+				where si.order_bag in %(bags)s
+				order by s.creation""", {"bags": tuple(marked)}, as_dict=True):
+				away[r.order_bag] = r.status
 		pieces = []
 		for i in items:
 			if i.received:
@@ -16596,7 +16603,7 @@ def get_confirm_pool():
 				st = "rejected"
 			elif i.stone_change:
 				# still away, or back and settled
-				st = "stone" if away.get(i.order_bag) == "Stone Change" else "changed"
+				st = "stone" if away.get(i.order_bag) in ("Processing", "Sent") else "changed"
 			else:
 				st = "pending"
 			pieces.append({"order_bag": i.order_bag, "design_type": i.design_type or "",
@@ -16714,9 +16721,9 @@ def _undo_cert_one(nm, touched):
 		sc = frappe.db.sql("""select s.name, s.status from `tabStone Change Item` i
 			join `tabStone Change` s on s.name = i.parent
 			where i.order_bag = %s order by s.creation desc limit 1""", nm, as_dict=True)
-		if sc and sc[0].status != "Open":
-			return {"rejected_scan": frappe._("{0} is already closed — the piece is back in stock.")
-				.format(sc[0].name)}
+		if sc and sc[0].status != "Processing":
+			return {"rejected_scan": frappe._("{0} is {1} — the tray has already left the floor.")
+				.format(sc[0].name, sc[0].status.lower())}
 		if sc:
 			d = frappe.get_doc("Stone Change", sc[0].name)
 			mats = _bag_convert_materials([nm]).get(nm) or {}
@@ -16800,7 +16807,7 @@ def _open_stone_change(pieces):
 			"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
 			"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight),
 			"from_certification": p.get("cert")})
-	d = frappe.get_doc({"doctype": "Stone Change", "status": "Open",
+	d = frappe.get_doc({"doctype": "Stone Change", "status": "Processing",
 		"opened_on": frappe.utils.today(), "items": rows}).insert(ignore_permissions=True)
 
 	totals = {}
@@ -16818,9 +16825,11 @@ def _open_stone_change(pieces):
 @frappe.whitelist()
 def get_stone_changes():
 	"""The Stone Changes desk: open batches with their pieces, and recent closed."""
-	out = {"open": [], "recent": [], "pieces_open": 0}
+	out = {"processing": [], "sent": [], "recent": [],
+		"pieces_processing": 0, "pieces_sent": 0}
 	for c in frappe.get_all("Stone Change",
-			fields=["name", "status", "opened_on", "closed_on", "remarks", "owner"],
+			fields=["name", "status", "opened_on", "closed_on", "sent_on", "center",
+				"remarks", "owner"],
 			order_by="creation desc", limit=60):
 		items = frappe.get_all("Stone Change Item", filters={"parent": c.name},
 			fields=["name", "order_bag", "design", "design_type", "gross", "dmd_ct",
@@ -16832,50 +16841,107 @@ def get_stone_changes():
 			"pieces": len(items), "items": items,
 			"gross": round(sum(flt(i.gross) for i in items), 3),
 			"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3),
+			"sent_on": str(c.sent_on or ""), "center": c.center or "",
 			"days": frappe.utils.date_diff(frappe.utils.today(), c.opened_on) if c.opened_on else 0,
+			"days_out": (frappe.utils.date_diff(frappe.utils.today(), c.sent_on)
+				if c.sent_on and c.status == "Sent" else 0),
 			"from": sorted({i.from_certification for i in items if i.from_certification}),
 		})
-		if c.status == "Open":
-			out["open"].append(row)
-			out["pieces_open"] += len(items)
+		if c.status == "Processing":
+			out["processing"].append(row)
+			out["pieces_processing"] += len(items)
+		elif c.status == "Sent":
+			out["sent"].append(row)
+			out["pieces_sent"] += len(items)
 		else:
 			out["recent"].append(row)
+	# the old shape, for anything still asking
+	out["open"] = out["processing"] + out["sent"]
+	out["pieces_open"] = out["pieces_processing"] + out["pieces_sent"]
 	return out
 
 
 @frappe.whitelist()
-def close_stone_change(name, remarks=None):
-	"""The stones are changed: the whole batch comes back. Stock moves Stone
-	Change -> Finished Goods, every piece goes back In Stock in its own bucket,
-	and the batch closes. From there it is an ordinary finished piece again —
-	scan it onto a new certification batch to send it back out."""
-	from jewelima.setup import STONE_CHANGE_WAREHOUSE
+def send_stone_change(name, center=None, remarks=None):
+	"""The stones are changed — send the tray back out to the lab.
+
+	Stock leaves the Stone Change warehouse for At Certification, exactly as a
+	first trip does, so the pieces show on Out of House again while they are
+	away. The certification lines stay marked stone_change: the piece has not
+	been confirmed yet, and it is not back."""
+	from jewelima.setup import STONE_CHANGE_WAREHOUSE, CERTIFICATION_WAREHOUSE
 
 	d = frappe.get_doc("Stone Change", name)
-	if d.status != "Open":
-		frappe.throw(frappe._("{0} is {1} — only an open batch comes back.").format(name, d.status))
+	if d.status != "Processing":
+		frappe.throw(frappe._("{0} is {1} — only a tray still being worked on goes out.")
+			.format(name, d.status))
 	if not d.items:
-		frappe.throw(frappe._("Nothing on the batch."))
+		frappe.throw(frappe._("Nothing on the tray."))
 	bags = [r.order_bag for r in d.items]
 	totals = {}
 	for mats in _bag_convert_materials(bags).values():
 		for it, q in mats.items():
 			totals[it] = totals.get(it, 0) + q
-	se = _stock_move_many(totals, _wh(STONE_CHANGE_WAREHOUSE), _wh("Finished Goods"))
-	now = frappe.utils.now_datetime()
+	se = _stock_move_many(totals, _wh(STONE_CHANGE_WAREHOUSE), _wh(CERTIFICATION_WAREHOUSE))
 	for nm in bags:
-		frappe.db.set_value("Order Bag", nm, {
-			"stock_status": "In Stock", "in_stock_on": now,
-			# home to whichever bucket it left from
-			"location": frappe.db.get_value("Order Bag", nm, "bucket") or STONE_CHANGE_LOCATION})
-	d.return_stock_entry = se
-	d.status = "Closed"
-	d.closed_on = frappe.utils.today()
+		frappe.db.set_value("Order Bag", nm,
+			{"stock_status": "At Certification", "location": CERT_LOCATION})
+	d.stock_entry = se
+	d.status = "Sent"
+	d.sent_on = frappe.utils.today()
+	d.center = (center or "").strip() or d.center
 	if (remarks or "").strip():
 		d.remarks = (d.remarks or "") + ("\n" if d.remarks else "") + remarks.strip()
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": name, "count": len(bags), "stock_entry": se}
+
+
+@frappe.whitelist()
+def collect_stone_change(name, remarks=None):
+	"""The tray is back. Stock returns to Finished Goods, the pieces go back In
+	Stock in their own buckets — and their certification lines are put back to
+	WAITING, because the whole point of the trip was to have them confirmed.
+
+	That last part is what makes the round trip close: a piece reads yellow on
+	the Confirm desk while it is away and plain again once it is home, ready to
+	be confirmed like any other piece on the batch."""
+	from jewelima.setup import CERTIFICATION_WAREHOUSE
+
+	d = frappe.get_doc("Stone Change", name)
+	if d.status != "Sent":
+		frappe.throw(frappe._("{0} is {1} — only a tray that went out comes back.")
+			.format(name, d.status))
+	bags = [r.order_bag for r in d.items]
+	totals = {}
+	for mats in _bag_convert_materials(bags).values():
+		for it, q in mats.items():
+			totals[it] = totals.get(it, 0) + q
+	se = _stock_move_many(totals, _wh(CERTIFICATION_WAREHOUSE), _wh("Finished Goods"))
+	now = frappe.utils.now_datetime()
+	touched = set()
+	for nm in bags:
+		frappe.db.set_value("Order Bag", nm, {
+			"stock_status": "In Stock", "in_stock_on": now,
+			"location": frappe.db.get_value("Order Bag", nm, "bucket") or CERT_LOCATION})
+		# back to waiting on whichever line sent it away
+		for row in frappe.db.sql("""select i.name, i.parent from `tabCertification Item` i
+				where i.order_bag = %s and i.stone_change = 1""", nm, as_dict=True):
+			frappe.db.sql("""update `tabCertification Item`
+				set stone_change = 0, received = 0, rejected = 0,
+					received_on = null, confirmed_by = null
+				where name = %s""", row.name)
+			touched.add(row.parent)
+	_confirm_cert_rollup(touched)
+	d.return_stock_entry = se
+	d.status = "Collected"
+	d.closed_on = frappe.utils.today()
+	if (remarks or "").strip():
+		d.remarks = (d.remarks or "") + ("\n" if d.remarks else "") + remarks.strip()
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "count": len(bags), "stock_entry": se,
+		"reopened": sorted(touched)}
 
 
 @frappe.whitelist()
@@ -21803,6 +21869,22 @@ def get_out_summary():
 			"pieces": len(items), "gross": round(sum(flt(i.gross) for i in items), 3),
 			"bags": [i.order_bag for i in items]})
 	pool("hallmarking", frappe._("At hallmarking"), "At Hallmarking", hall)
+
+	# a tray sent back after a stone change is out of the building too — same
+	# warehouse as a first trip, so it belongs on the same board or the gold
+	# simply disappears from the desk's view for the length of the second trip
+	stone = []
+	for sc in frappe.get_all("Stone Change", filters={"status": "Sent"},
+			fields=["name", "sent_on", "center", "opened_on"], order_by="sent_on asc"):
+		items = frappe.get_all("Stone Change Item", filters={"parent": sc.name},
+			fields=["order_bag", "gross"])
+		stone.append({"kind": "stone_change", "name": sc.name,
+			"what": frappe._("Stone change"), "where": sc.center or "",
+			"note": frappe._("re-sent"), "sent_on": str(sc.sent_on or ""),
+			"days_out": frappe.utils.date_diff(today, sc.sent_on) if sc.sent_on else 0,
+			"pieces": len(items), "gross": round(sum(flt(i.gross) for i in items), 3),
+			"bags": [i.order_bag for i in items]})
+	pool("stone_change", frappe._("Back out after a stone change"), "At Certification", stone)
 
 	# longest gone first — that is the one somebody has to chase
 	out["batches"].sort(key=lambda b: -b["days_out"])
