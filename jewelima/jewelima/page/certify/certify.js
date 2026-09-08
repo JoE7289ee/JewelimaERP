@@ -576,9 +576,10 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				.then((r) => {
 					frappe.dom.unfreeze();
 					const m = r.message || {};
-					frappe.show_alert({ message: __("{0} prepped — {1} piece(s).", [m.name, m.count]), indicator: "green" }, 5);
+					frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Sending next.",
+						[m.name, m.count]), indicator: "green" }, 6);
 					draft = null;
-					load(m.name);
+					frappe.set_route("send-certifications");
 				}).catch(() => frappe.dom.unfreeze());
 		});
 	});

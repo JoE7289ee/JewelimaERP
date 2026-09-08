@@ -34,6 +34,28 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		.cc-mode.reject{background:#b02a2a;border-color:#b02a2a;color:#fff;}
 		/* yellow reads as "held", which is exactly what a stone change is */
 		.cc-mode.stone{background:#b8860b;border-color:#b8860b;color:#fff;}
+		/* undo is the absence of a decision, so it is the absence of a colour */
+		.cc-mode.undo{background:var(--fg-color);border-color:var(--text-color);color:var(--text-color);}
+		/* the page itself wears the mode — a band across the top and a matching
+		   frame, so it is unmistakable from across a bench */
+		.cc-banner{border-radius:9px;padding:7px 14px;margin:0 0 12px;font-size:13px;
+			border:1px solid var(--border-color);background:var(--control-bg);}
+		.cc-banner.accept{background:rgba(46,125,50,.13);border-color:#2e7d32;color:#1d5e21;}
+		.cc-banner.reject{background:rgba(176,42,42,.13);border-color:#b02a2a;color:#8f1f1f;}
+		.cc-banner.stone{background:rgba(184,134,11,.16);border-color:#b8860b;color:#7a5a07;}
+		.cc-banner.undo{background:var(--fg-color);border-color:var(--text-color);color:var(--text-color);}
+		[data-theme="dark"] .cc-banner.accept{color:#8ed49b;}
+		[data-theme="dark"] .cc-banner.reject{color:#f0a0a0;}
+		[data-theme="dark"] .cc-banner.stone{color:#e8c05a;}
+		.cc-m-accept .cc-scan input{border-color:#2e7d32;}
+		.cc-m-reject .cc-scan input{border-color:#b02a2a;}
+		.cc-m-stone  .cc-scan input{border-color:#b8860b;}
+		.cc-m-undo   .cc-scan input{border-color:var(--text-color);}
+		.cc-m-accept .cc-scan input,.cc-m-reject .cc-scan input,
+		.cc-m-stone .cc-scan input,.cc-m-undo .cc-scan input{border-width:2px;}
+		.cc-chip.stg-undo{border-style:dashed;border-color:var(--text-color);
+			background:var(--control-bg);}
+		.cc-kpi.un .v{color:var(--text-color);}
 		.cc-pend{font-size:13px;color:var(--text-muted);align-self:center;}
 		.cc-histbtn{border:1px solid var(--border-color);border-radius:8px;background:none;
 			padding:9px 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
@@ -72,6 +94,8 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		/* back from a stone change: settled, no longer asking for anything */
 		.cc-chip.changed{border-color:#7f8c8d;background:rgba(127,140,141,.10);}
 		.cc-chip.stg-stone{border-color:#b8860b;background:rgba(184,134,11,.07);}
+		.cc-chip.stg-accept{border-color:#2e7d32;background:rgba(46,125,50,.07);}
+		.cc-chip.stg-reject{border-color:#b02a2a;background:rgba(176,42,42,.07);}
 		.cc-kpi.st .v{color:#b8860b;}
 		/* STAGED — scanned here, not yet written. Dashed, so it never reads as done */
 		.cc-chip.stg{border-style:dashed;border-width:2px;cursor:pointer;}
@@ -90,6 +114,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		.cc-why{display:none;margin-left:8px;font-size:11.5px;color:#b35a00;}
 		.cc-hrow:hover .cc-why{display:inline;}
 		</style>
+		<div class="cc-banner"></div>
 		<div class="cc-top">
 			<div class="cc-scan"></div>
 			<button class="cc-mode accept">${__("MODE: CONFIRM — tap to switch")}</button>
@@ -126,11 +151,26 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 	// Stone change is its own thing and not a kind of rejection — a rejected
 	// piece just goes without its stamp and stays sellable, a stone-change piece
 	// owes work and leaves stock until it is done.
-	const MODES = ["accept", "reject", "stone"];
-	const MODE_LABEL = { accept: __("CONFIRM"), reject: __("REJECT"), stone: __("STONE CHANGE") };
+	const MODES = ["accept", "reject", "stone", "undo"];
+	const MODE_LABEL = { accept: __("CONFIRM"), reject: __("REJECT"),
+		stone: __("STONE CHANGE"), undo: __("UNDO") };
+	const MODE_HINT = {
+		accept: __("scanning marks the piece confirmed"),
+		reject: __("scanning sends it back without a stamp"),
+		stone: __("scanning sends it out for a stone change"),
+		undo: __("scanning puts a piece back to waiting — whatever it was marked"),
+	};
+	// The mode is the single most consequential thing on this page and a scanner
+	// never looks up. So it is not just a button: the whole page carries the
+	// colour, and it is stated in words as well, because colour alone is no use
+	// to somebody who cannot tell red from green.
 	function paintMode() {
-		root.find(".cc-mode").removeClass("accept reject stone").addClass(MODE)
+		root.find(".cc-mode").removeClass("accept reject stone undo").addClass(MODE)
 			.text(__("MODE: {0} — tap to switch", [MODE_LABEL[MODE]]));
+		root.closest(".layout-main-section-wrapper").addBack()
+			.removeClass("cc-m-accept cc-m-reject cc-m-stone cc-m-undo").addClass("cc-m-" + MODE);
+		root.find(".cc-banner").removeClass("accept reject stone undo").addClass(MODE)
+			.html(`<b>${MODE_LABEL[MODE]}</b> — ${MODE_HINT[MODE]}`);
 	}
 	root.find(".cc-mode").on("click", function () {
 		MODE = MODES[(MODES.indexOf(MODE) + 1) % MODES.length];
@@ -148,9 +188,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 					// a staged mark is drawn OVER whatever the server last said, so a
 					// re-sync mid-tray never wipes what somebody just scanned
 					const st = staged.get(p.order_bag);
-					const cls = st
-						? `stg stg-${st === "accept" ? "accept" : st === "reject" ? "reject" : "stone"}`
-						: p.state;
+					const cls = st ? `stg stg-${st}` : p.state;
 					return `<span class="cc-chip ${cls}" data-bag="${esc(p.order_bag)}">${esc(p.order_bag)}
 						<span class="t">${esc(p.design_type)}${p.by ? " · " + esc(p.by.split("@")[0]) : ""}</span></span>`;
 				}).join("")}</div>
@@ -160,9 +198,10 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 
 	// what is staged, and the one button that writes it
 	function paintBar() {
-		let ok = 0, rj = 0, st = 0;
-		staged.forEach((m) => (m === "accept" ? ok++ : m === "reject" ? rj++ : st++));
-		const n = ok + rj + st;
+		let ok = 0, rj = 0, st = 0, un = 0;
+		staged.forEach((m) => (m === "accept" ? ok++ : m === "reject" ? rj++
+			: m === "stone" ? st++ : un++));
+		const n = ok + rj + st + un;
 		root.find(".cc-bar").toggleClass("dirty", n > 0);
 		root.find(".cc-kpis").html(`
 			<div class="cc-kpi"><div class="k">${__("Waiting")}</div>
@@ -170,6 +209,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 			<div class="cc-kpi ok"><div class="k">${__("Scanned to confirm")}</div><div class="v">${ok}</div></div>
 			<div class="cc-kpi rj"><div class="k">${__("Scanned to reject")}</div><div class="v">${rj}</div></div>
 			<div class="cc-kpi st"><div class="k">${__("Stone change")}</div><div class="v">${st}</div></div>
+			${un ? `<div class="cc-kpi un"><div class="k">${__("Undoing")}</div><div class="v">${un}</div></div>` : ""}
 			<div class="cc-kpi"><div class="k">${__("Unsaved")}</div><div class="v">${n}</div></div>`);
 		root.find(".cc-save").prop("disabled", !n)
 			.text(n ? __("SAVE {0} SCAN(S)", [n]) : __("NOTHING TO SAVE"));
@@ -216,16 +256,28 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		if (staged.has(p.order_bag)) {
 			return logScan(p.order_bag, "er", __("Already scanned — it is waiting to be saved"));
 		}
-		if (p.state === "stone") {
-			return logScan(p.order_bag, "er", __("Away for a stone change — it comes back on the Stone Changes desk"));
-		}
-		if (p.state !== "pending") {
-			return logScan(p.order_bag, "er", p.by
-				? __("Already {0} by {1}", [p.state, p.by.split("@")[0]])
-				: __("Already {0}", [p.state]));
+		if (MODE === "undo") {
+			// undo is the mirror image: it wants a piece that HAS been decided
+			if (p.state === "pending") {
+				return logScan(p.order_bag, "er", __("Nothing to undo — it is still waiting"));
+			}
+			if (p.state === "changed") {
+				return logScan(p.order_bag, "er",
+					__("Its stone change is already closed — the piece came back"));
+			}
+		} else {
+			if (p.state === "stone") {
+				return logScan(p.order_bag, "er", __("Away for a stone change — it comes back on the Stone Changes desk"));
+			}
+			if (p.state !== "pending") {
+				return logScan(p.order_bag, "er", p.by
+					? __("Already {0} by {1}", [p.state, p.by.split("@")[0]])
+					: __("Already {0}", [p.state]));
+			}
 		}
 		staged.set(p.order_bag, MODE);
-		logScan(p.order_bag, MODE === "accept" ? "ok" : "rj", __("staged"));
+		logScan(p.order_bag, MODE === "accept" ? "ok" : MODE === "undo" ? "er" : "rj",
+			MODE === "undo" ? __("staged to UNDO ({0})", [p.state]) : __("staged"));
 		paint();
 		root.find(`.cc-chip[data-bag="${p.order_bag}"]`).addClass("flash");
 	});

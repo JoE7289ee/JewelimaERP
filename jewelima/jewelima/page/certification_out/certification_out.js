@@ -64,8 +64,9 @@ frappe.pages["certification-out"].on_page_load = function (wrapper) {
 			frappe.call({ method: API + ".collect_certification", args: { name: nm } })
 				.then((r) => {
 					frappe.dom.unfreeze();
-					frappe.show_alert({ message: __("{0} collected — {1} piece(s) back in stock.", [nm, (r.message || {}).pieces]), indicator: "green" }, 5);
-					load();
+					frappe.show_alert({ message: __("{0} collected — {1} piece(s) back in stock. Confirm them next.",
+						[nm, (r.message || {}).pieces]), indicator: "green" }, 6);
+					frappe.set_route("confirm-certifications");
 				}).catch(() => frappe.dom.unfreeze());
 		});
 	});
