@@ -4,10 +4,10 @@
 // three open menus push everything else below the fold. Two rules:
 //
 //   1. a menu that opens is scrolled into view, title first.
-//   2. one menu at a time, EXCEPT the menu holding the page you are on. On
-//      Place Order, Ordering stays open while you look through Delivery; open
-//      Party and Delivery closes. Walk into a Party page and Party becomes the
-//      menu you are in, so Ordering closes behind you.
+//   2. ONE menu at a time. Opening one closes whatever was open, including the
+//      menu holding the page you are on — that menu is not doing any work by
+//      staying open, and the page you are on is already marked by its white
+//      pill. Walking into a page opens its menu and closes the rest.
 //
 // Two things this must be careful about, both learned the hard way:
 //
@@ -41,7 +41,8 @@ frappe.provide("jewelima.sidebar");
 	const isOpen = (s) => !s.$nested_items.hasClass("hidden");
 	const headerOf = (s) => s.wrapper.find(".standard-sidebar-item").get(0);
 
-	// the menu holding the page you are on — the one that is never closed for you
+	// the menu holding the page you are on — used when a route change decides
+	// which single menu should be left open
 	function current(sb) {
 		const a = sb.wrapper && sb.wrapper.find(".active-sidebar").get(0);
 		if (!a) return null;
@@ -77,10 +78,9 @@ frappe.provide("jewelima.sidebar");
 	}
 
 	function keepOnly(sb, opened) {
-		const cur = current(sb);
 		const closed = [];
 		sections(sb).forEach((s) => {
-			if (s === opened || s === cur || !isOpen(s)) return;
+			if (s === opened || !isOpen(s)) return;
 			try {
 				s.close();
 				closed.push(s);
@@ -138,9 +138,8 @@ frappe.provide("jewelima.sidebar");
 		});
 	});
 
-	// Walking into a page makes its menu the one you are in, and whatever was
-	// only being looked at closes behind you. Frappe opens the active page's
-	// menu here, so this runs straight after it.
+	// Walking into a page opens its menu and closes everything else. Frappe opens
+	// the active page's menu here, so this runs straight after it.
 	function patch() {
 		if (!frappe.ui || !frappe.ui.Sidebar || frappe.ui.Sidebar.prototype.__jw_menus) return false;
 		const proto = frappe.ui.Sidebar.prototype;
