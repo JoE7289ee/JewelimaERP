@@ -216,7 +216,7 @@ JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", 
 # JW Stock — the stock desk: buy (purchase page + history), move stock
 # between warehouses, melt gold. Purchase stays the tighter buy-only role.
 JEWELIMA_STOCK_ROLE = "Jewelima Stock"
-JEWELIMA_STOCK_PAGES = ["scrub", "transfer-weight", "purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
+JEWELIMA_STOCK_PAGES = ["scrub", "purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
 JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type"]
 # JW Stock Admin — the senior stock desk: everything Jewelima Stock does, plus
 # the whole Loss branch (collection, write-off, report) and the record pages.
@@ -235,6 +235,7 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	# Stock Setup — the shelves themselves
 	"raw-materials", "warehouse-management",
 	"purchase-history", "loss-history", "melt-history", "transfer-history", "stock-day",
+	"scrub-history",
 	# gold on / off a card, and its trail
 	"card-gold", "card-gold-history",
 	# the old software's stock, brought in piece by piece
@@ -2484,14 +2485,10 @@ STONE_CHANGE_WAREHOUSE = "Stone Change"
 # It is not loss — it is our gold, still ours, waiting to go to refining — so it
 # gets a real warehouse rather than a -LOSS one, and can be transferred out.
 SCRUB_WAREHOUSE = "Scrub"
-# Warehouses that COLLECT weight off the floor. These are the only places a
-# Transfer Weight may take metal FROM: a collection point is a holding pen, and
-# emptying one is the whole job. Anything else is ordinary stock movement.
-SCRUB_SOURCE_WAREHOUSES = (SCRUB_WAREHOUSE, "Loss Collection")
-# ...and the only places it may go TO. Refining and re-issue are the real
-# destinations; a leaf that pieces are built out of is not one, or scrub would
-# silently become finished stock.
-SCRUB_TARGET_WAREHOUSES = ("Gold Issue", PRODUCTION_WAREHOUSE, "Loss Collection", SCRUB_WAREHOUSE)
+# Scrub comes out of exactly one place, so there is no source list. Where it may
+# GO is computed instead (api._scrub_targets): every leaf warehouse except the
+# ones that COLLECT weight, because loss has its own screens and moving metal
+# between collection points from the Scrub desk would blur two different jobs.
 
 
 def create_store_warehouses():

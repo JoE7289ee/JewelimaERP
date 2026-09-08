@@ -7324,7 +7324,7 @@ def get_scrub_board():
 	different questions and can legitimately differ once weight has been
 	transferred out, so the page shows both rather than pretending one explains
 	the other."""
-	from jewelima.setup import SCRUB_WAREHOUSE, SCRUB_TARGET_WAREHOUSES
+	from jewelima.setup import SCRUB_WAREHOUSE
 
 	wh = _wh(SCRUB_WAREHOUSE)
 	held = frappe.db.sql("""select item_code, sum(actual_qty) qty
@@ -7367,76 +7367,104 @@ def get_scrub_board():
 		"by_bench": roll("bench"),
 		"by_employee": by_emp,
 		"recent": recent,
-		"targets": [_wh(w) for w in SCRUB_TARGET_WAREHOUSES if _wh(w)],
+		"targets": _scrub_targets(),
 	}
 
 
-@frappe.whitelist()
-def get_weight_transfer_context():
-	"""Where weight may be moved FROM and TO on the Transfer Weight page."""
-	from jewelima.setup import SCRUB_SOURCE_WAREHOUSES, SCRUB_TARGET_WAREHOUSES
+def _scrub_targets():
+	"""Anywhere scrub may be transferred IN to.
 
-	def stock(wh):
-		return frappe.db.sql("""select item_code, sum(actual_qty) qty
-			from `tabStock Ledger Entry` where warehouse = %s and is_cancelled = 0
-			group by item_code having abs(qty) > 0.0005 order by qty desc""", wh, as_dict=True)
+	Every leaf warehouse of the company EXCEPT the places that collect weight —
+	Scrub itself and the loss buckets. Loss has its own screens (Loss Collection,
+	Loss Write-off) and moving metal between collection points from here would
+	blur two different jobs; everywhere else that can hold stock is fair game,
+	because where recovered gold goes next is the desk's call, not ours."""
+	from jewelima.setup import SCRUB_WAREHOUSE
 
-	sources = []
-	for w in SCRUB_SOURCE_WAREHOUSES:
-		wh = _wh(w)
-		if not wh:
+	out = []
+	for w in frappe.get_all("Warehouse", filters={"is_group": 0, "disabled": 0},
+			fields=["name", "warehouse_name"], order_by="name"):
+		nm = w.name
+		if nm == _wh(SCRUB_WAREHOUSE) or " -LOSS - " in nm or nm.startswith("Loss Collection"):
 			continue
-		items = stock(wh)
-		sources.append({"warehouse": wh, "label": w,
-			"total": round(sum(flt(i.qty) for i in items), 3),
-			"items": [{"item": i.item_code, "qty": round(flt(i.qty), 3)} for i in items]})
-	# every per-bench -LOSS warehouse is a collection point too — the sweepings
-	# are swept up eventually, and that is the same job as emptying Scrub
-	for wh in frappe.get_all("Warehouse", filters={"name": ["like", "% -LOSS - %"]}, pluck="name"):
-		items = stock(wh)
-		if items:
-			sources.append({"warehouse": wh, "label": wh,
-				"total": round(sum(flt(i.qty) for i in items), 3),
-				"items": [{"item": i.item_code, "qty": round(flt(i.qty), 3)} for i in items]})
-	return {"sources": sources,
-		"targets": [{"warehouse": _wh(w), "label": w} for w in SCRUB_TARGET_WAREHOUSES if _wh(w)]}
+		out.append({"warehouse": nm, "label": w.warehouse_name or nm})
+	return out
 
 
 @frappe.whitelist()
-def transfer_weight(source, target, item, qty, remarks=None):
-	"""Move collected weight out of a collection warehouse.
+def get_scrub_transfer_context():
+	"""What the Scrub desk may move, and where it may go."""
+	from jewelima.setup import SCRUB_WAREHOUSE
 
-	Both ends are checked against the allow-lists, not merely offered by the
-	page: a source must be a place that COLLECTS weight and a target a place
-	allowed to receive it. Without the server check, anything that could call
-	the endpoint could move gold anywhere."""
-	from jewelima.setup import SCRUB_SOURCE_WAREHOUSES, SCRUB_TARGET_WAREHOUSES
+	wh = _wh(SCRUB_WAREHOUSE)
+	items = frappe.db.sql("""select item_code, sum(actual_qty) qty
+		from `tabStock Ledger Entry` where warehouse = %s and is_cancelled = 0
+		group by item_code having qty > 0.0005 order by qty desc""", wh, as_dict=True)
+	return {"warehouse": wh,
+		"items": [{"item": r.item_code, "qty": round(flt(r.qty), 3)} for r in items],
+		"total": round(sum(flt(r.qty) for r in items), 3),
+		"targets": _scrub_targets()}
+
+
+@frappe.whitelist()
+def transfer_scrub(target, item, qty, remarks=None):
+	"""Move recovered scrub out of the Scrub warehouse.
+
+	The SOURCE is not a parameter: scrub only ever comes out of the Scrub
+	warehouse, and the loss buckets have their own screens. The target is checked
+	against what may receive it — offering a list on the page is not a rule."""
+	from jewelima.setup import SCRUB_WAREHOUSE
 
 	qty = flt(qty)
 	if qty <= 0:
 		frappe.throw(frappe._("Say how much to move."))
-	ok_src = {_wh(w) for w in SCRUB_SOURCE_WAREHOUSES if _wh(w)}
-	ok_src |= set(frappe.get_all("Warehouse", filters={"name": ["like", "% -LOSS - %"]}, pluck="name"))
-	ok_tgt = {_wh(w) for w in SCRUB_TARGET_WAREHOUSES if _wh(w)}
-	if source not in ok_src:
-		frappe.throw(frappe._("{0} is not a weight collection warehouse.").format(source))
-	if target not in ok_tgt:
-		frappe.throw(frappe._("{0} is not allowed to receive collected weight.").format(target))
-	if source == target:
-		frappe.throw(frappe._("Pick two different warehouses."))
+	source = _wh(SCRUB_WAREHOUSE)
+	if target not in {t["warehouse"] for t in _scrub_targets()}:
+		frappe.throw(frappe._("{0} cannot receive scrub.").format(target))
 	have = flt(frappe.db.sql("""select ifnull(sum(actual_qty),0) from `tabStock Ledger Entry`
 		where warehouse = %s and item_code = %s and is_cancelled = 0""", (source, item))[0][0])
 	if qty - have > 0.0005:
-		frappe.throw(frappe._("{0} holds only {1} of {2}.").format(source, round(have, 3), item))
+		frappe.throw(frappe._("Scrub holds only {0} of {1}.").format(round(have, 3), item))
 	se = _stock_move(item, qty, source, target)
+	# the move is a scrub-history line too, so the log reads as one story:
+	# collected from a bench, then sent somewhere
 	frappe.get_doc({"doctype": "Comment", "comment_type": "Info",
 		"reference_doctype": "Stock Entry", "reference_name": se,
-		"content": frappe._("{0} g of {1} moved {2} -> {3} by {4}. {5}").format(
-			round(qty, 3), item, source, target, _user_label(frappe.session.user),
+		"content": frappe._("{0} g of {1} sent from Scrub to {2} by {3}. {4}").format(
+			round(qty, 3), item, target, _user_label(frappe.session.user),
 			frappe.utils.escape_html(remarks or ""))}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"stock_entry": se, "qty": round(qty, 3), "item": item,
 		"source": source, "target": target}
+
+
+@frappe.whitelist()
+def get_scrub_history(limit=200, bench=None, employee=None, order_bag=None):
+	"""Every gram of scrub ever booked, as a log.
+
+	One row per handover: the card it came off, the bench it was collected at,
+	who handed it over, and when. This is the record you read when a number on
+	the Scrub desk needs explaining."""
+	_require_stock_records()
+	cond = ["l.entry_type = 'Scrub'"]
+	vals = []
+	for field, val in (("l.bench", bench), ("l.employee", employee), ("l.order_bag", order_bag)):
+		if (val or "").strip():
+			cond.append("{0} = %s".format(field))
+			vals.append(val.strip())
+	rows = frappe.db.sql("""select l.name, l.order_bag, l.item, l.qty, l.bench, l.employee,
+			l.datetime, l.remarks, b.design, b.held_by
+		from `tabBag Material Ledger` l
+		left join `tabOrder Bag` b on b.name = l.order_bag
+		where {0} order by l.datetime desc, l.creation desc limit {1}""".format(
+			" and ".join(cond), cint(limit) or 200), vals, as_dict=True)
+	for r in rows:
+		r["datetime"] = str(r.datetime or "")
+		r["employee_label"] = frappe.db.get_value("Employee", r.employee, "employee_name") or r.employee or ""
+		r["design_no"] = design_no_of(r.design) if r.design else ""
+	return {"rows": rows, "total": round(sum(flt(r.qty) for r in rows), 3),
+		"benches": sorted({r.bench for r in rows if r.bench}),
+		"people": sorted({(r.employee_label or "") for r in rows if r.employee_label})}
 
 
 def book_scrub(order_bag, item, qty, bench=None, employee=None, remarks=None):

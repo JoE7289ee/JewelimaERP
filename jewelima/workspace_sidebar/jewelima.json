@@ -8,7 +8,7 @@
  "items": [
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "lightbulb",
    "indent": 0,
    "keep_closed": 0,
@@ -16,12 +16,11 @@
    "link_to": "request-feature",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "clipboard-list",
    "indent": 0,
    "keep_closed": 0,
@@ -29,12 +28,11 @@
    "link_to": "meeting-minutes",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-play",
    "indent": 0,
    "keep_closed": 0,
@@ -42,8 +40,7 @@
    "link_to": "training-videos",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
@@ -55,25 +52,23 @@
    "link_to": "Jewelima",
    "link_type": "Workspace",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "file-text",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Orders",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shopping-bag",
    "indent": 1,
    "keep_closed": 0,
@@ -81,12 +76,11 @@
    "link_to": "place-order",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "activity",
    "indent": 1,
    "keep_closed": 0,
@@ -94,12 +88,11 @@
    "link_to": "order-tracker",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "bookmark",
    "indent": 1,
    "keep_closed": 0,
@@ -107,12 +100,11 @@
    "link_to": "following",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "inbox",
    "indent": 1,
    "keep_closed": 0,
@@ -120,12 +112,11 @@
    "link_to": "ws-ordering",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "store",
    "indent": 1,
    "keep_closed": 0,
@@ -133,12 +124,11 @@
    "link_to": "shop",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shopping-basket",
    "indent": 1,
    "keep_closed": 0,
@@ -146,25 +136,23 @@
    "link_to": "basket",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "square-pen",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Order Actions",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "square-pen",
    "indent": 0,
    "keep_closed": 0,
@@ -172,12 +160,11 @@
    "link_to": "edit-order",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-minus",
    "indent": 0,
    "keep_closed": 0,
@@ -185,12 +172,11 @@
    "link_to": "cancellation",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "printer",
    "indent": 0,
    "keep_closed": 0,
@@ -198,12 +184,11 @@
    "link_to": "print-order-bags",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "inbox",
    "indent": 0,
    "keep_closed": 0,
@@ -211,25 +196,23 @@
    "link_to": "order-requests",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "arrow-down-wide-narrow",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Prioritisation",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "arrow-down-wide-narrow",
    "indent": 0,
    "keep_closed": 0,
@@ -237,12 +220,11 @@
    "link_to": "prioritization",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "arrow-down-wide-narrow",
    "indent": 0,
    "keep_closed": 0,
@@ -250,12 +232,11 @@
    "link_to": "due-risk",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "arrow-down-wide-narrow",
    "indent": 0,
    "keep_closed": 0,
@@ -263,25 +244,23 @@
    "link_to": "due-soon",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "settings",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Order Setup",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shapes",
    "indent": 0,
    "keep_closed": 0,
@@ -289,12 +268,11 @@
    "link_to": "design-types",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
@@ -302,12 +280,11 @@
    "link_to": "order-masters",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "settings-2",
    "indent": 0,
    "keep_closed": 0,
@@ -315,12 +292,11 @@
    "link_to": "Jewelima Order Settings",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "inbox",
    "indent": 0,
    "keep_closed": 0,
@@ -328,25 +304,23 @@
    "link_to": "all-requests",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "info",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Info",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "image",
    "indent": 1,
    "keep_closed": 0,
@@ -354,12 +328,11 @@
    "link_to": "order-bag-photos",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "search",
    "indent": 1,
    "keep_closed": 0,
@@ -367,8 +340,7 @@
    "link_to": "card-info",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
@@ -384,7 +356,7 @@
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "search",
    "indent": 1,
    "keep_closed": 0,
@@ -392,12 +364,11 @@
    "link_to": "design-info",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "map-pin",
    "indent": 1,
    "keep_closed": 0,
@@ -405,12 +376,11 @@
    "link_to": "job-order-status",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "eye",
    "indent": 1,
    "keep_closed": 0,
@@ -418,12 +388,11 @@
    "link_to": "due-view",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "layers",
    "indent": 1,
    "keep_closed": 0,
@@ -431,25 +400,23 @@
    "link_to": "bench-info",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Manufacturing",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "wrench",
    "indent": 1,
    "keep_closed": 0,
@@ -457,12 +424,11 @@
    "link_to": "workstations",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "user-check",
    "indent": 1,
    "keep_closed": 0,
@@ -470,12 +436,11 @@
    "link_to": "assign-collect",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "briefcase",
    "indent": 1,
    "keep_closed": 0,
@@ -483,12 +448,11 @@
    "link_to": "job-work",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "arrow-right",
    "indent": 1,
    "keep_closed": 0,
@@ -496,12 +460,11 @@
    "link_to": "transfer-order-bag",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "git-branch",
    "indent": 1,
    "keep_closed": 0,
@@ -509,12 +472,11 @@
    "link_to": "bag-split",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "box",
    "indent": 1,
    "keep_closed": 0,
@@ -522,25 +484,23 @@
    "link_to": "make-products",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "stamp",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Dye",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "boxes",
    "indent": 1,
    "keep_closed": 0,
@@ -548,12 +508,11 @@
    "link_to": "dye-bank",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "search",
    "indent": 1,
    "keep_closed": 0,
@@ -561,12 +520,11 @@
    "link_to": "dye-find",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "move",
    "indent": 1,
    "keep_closed": 0,
@@ -574,12 +532,11 @@
    "link_to": "dye-manage",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "gauge",
    "indent": 1,
    "keep_closed": 0,
@@ -587,25 +544,23 @@
    "link_to": "dye-info",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "hammer",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Casting",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
@@ -613,12 +568,11 @@
    "link_to": "casting-queue",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "network",
    "indent": 1,
    "keep_closed": 0,
@@ -626,12 +580,11 @@
    "link_to": "make-tree",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
@@ -639,12 +592,11 @@
    "link_to": "gold-casting",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "network",
    "indent": 1,
    "keep_closed": 0,
@@ -652,14 +604,13 @@
    "link_to": "edit-tree",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Manufacturing Settings",
    "link_type": "DocType",
    "show_arrow": 0,
@@ -667,7 +618,7 @@
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
@@ -675,12 +626,11 @@
    "link_to": "assign-bench",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shield",
    "indent": 0,
    "keep_closed": 0,
@@ -688,12 +638,11 @@
    "link_to": "issue-access",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "list-checks",
    "indent": 0,
    "keep_closed": 0,
@@ -701,38 +650,35 @@
    "link_to": "bench-work-setup",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "wrench",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Workstations",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "arrow-left-right",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Stock",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shopping-cart",
    "indent": 1,
    "keep_closed": 0,
@@ -740,12 +686,11 @@
    "link_to": "purchase-raw-material",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "flame",
    "indent": 1,
    "keep_closed": 0,
@@ -753,12 +698,11 @@
    "link_to": "melt-gold",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "arrow-left-right",
    "indent": 1,
    "keep_closed": 0,
@@ -766,12 +710,11 @@
    "link_to": "stock-transfer",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "diff",
    "indent": 1,
    "keep_closed": 0,
@@ -779,12 +722,11 @@
    "link_to": "card-gold",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -792,12 +734,11 @@
    "link_to": "import-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "download",
    "indent": 1,
    "keep_closed": 0,
@@ -805,8 +746,7 @@
    "link_to": "import-old-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
@@ -821,33 +761,20 @@
    "type": "Link"
   },
   {
-   "child": 1,
-   "collapsible": 1,
-   "icon": "arrow-left-right",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Transfer Weight",
-   "link_to": "transfer-weight",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
    "child": 0,
    "collapsible": 1,
    "icon": "flame",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Loss",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "archive",
    "indent": 0,
    "keep_closed": 0,
@@ -855,12 +782,11 @@
    "link_to": "loss-collection",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "trash-2",
    "indent": 0,
    "keep_closed": 0,
@@ -868,12 +794,11 @@
    "link_to": "loss-writeoff",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-minus",
    "indent": 0,
    "keep_closed": 0,
@@ -881,12 +806,11 @@
    "link_to": "loss-report",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "user-round-x",
    "indent": 0,
    "keep_closed": 0,
@@ -894,25 +818,23 @@
    "link_to": "employee-loss",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "history",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Records",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "calendar",
    "indent": 0,
    "keep_closed": 0,
@@ -920,12 +842,11 @@
    "link_to": "stock-day",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "history",
    "indent": 0,
    "keep_closed": 0,
@@ -933,12 +854,11 @@
    "link_to": "purchase-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "book-open",
    "indent": 0,
    "keep_closed": 0,
@@ -946,12 +866,23 @@
    "link_to": "loss-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
+   "icon": "scroll-text",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Scrub History",
+   "link_to": "scrub-history",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "flame-kindling",
    "indent": 0,
    "keep_closed": 0,
@@ -959,12 +890,11 @@
    "link_to": "melt-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "flame-kindling",
    "indent": 0,
    "keep_closed": 0,
@@ -972,12 +902,11 @@
    "link_to": "transfer-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "flame-kindling",
    "indent": 0,
    "keep_closed": 0,
@@ -985,25 +914,23 @@
    "link_to": "card-gold-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "chart-column",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Stock Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "coins",
    "indent": 0,
    "keep_closed": 0,
@@ -1011,12 +938,11 @@
    "link_to": "total-gold",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "gem",
    "indent": 0,
    "keep_closed": 0,
@@ -1024,12 +950,11 @@
    "link_to": "finished-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "tag",
    "indent": 0,
    "keep_closed": 0,
@@ -1037,12 +962,11 @@
    "link_to": "at-certification",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "stamp",
    "indent": 0,
    "keep_closed": 0,
@@ -1050,12 +974,11 @@
    "link_to": "at-hallmarking",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shopping-bag",
    "indent": 0,
    "keep_closed": 0,
@@ -1063,12 +986,11 @@
    "link_to": "in-bags",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
@@ -1076,12 +998,11 @@
    "link_to": "location-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column",
    "indent": 0,
    "keep_closed": 0,
@@ -1089,25 +1010,23 @@
    "link_to": "stock-analysis",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "link",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Findings",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "log-out",
    "indent": 0,
    "keep_closed": 0,
@@ -1115,12 +1034,11 @@
    "link_to": "issue-findings",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "undo-2",
    "indent": 0,
    "keep_closed": 0,
@@ -1128,12 +1046,11 @@
    "link_to": "recover-findings",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "boxes",
    "indent": 0,
    "keep_closed": 0,
@@ -1141,12 +1058,11 @@
    "link_to": "findings-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column",
    "indent": 0,
    "keep_closed": 0,
@@ -1154,12 +1070,11 @@
    "link_to": "findings-report",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "plus",
    "indent": 0,
    "keep_closed": 0,
@@ -1167,12 +1082,11 @@
    "link_to": "add-findings",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "history",
    "indent": 0,
    "keep_closed": 0,
@@ -1180,25 +1094,23 @@
    "link_to": "findings-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "warehouse",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Stock Setup",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
@@ -1206,12 +1118,11 @@
    "link_to": "raw-materials",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "warehouse",
    "indent": 0,
    "keep_closed": 0,
@@ -1219,25 +1130,23 @@
    "link_to": "warehouse-management",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "gem",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Stones",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "gem",
    "indent": 1,
    "keep_closed": 0,
@@ -1245,12 +1154,11 @@
    "link_to": "stone-info",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "send",
    "indent": 1,
    "keep_closed": 0,
@@ -1258,12 +1166,11 @@
    "link_to": "stone-request",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "package-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -1271,12 +1178,11 @@
    "link_to": "pre-bag",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "package-open",
    "indent": 1,
    "keep_closed": 0,
@@ -1284,12 +1190,11 @@
    "link_to": "stone-issue",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "undo-2",
    "indent": 1,
    "keep_closed": 0,
@@ -1297,12 +1202,11 @@
    "link_to": "stone-return",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "package",
    "indent": 1,
    "keep_closed": 0,
@@ -1310,12 +1214,11 @@
    "link_to": "repack-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "package",
    "indent": 1,
    "keep_closed": 0,
@@ -1323,14 +1226,13 @@
    "link_to": "repack-requests",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Stones Report",
    "link_type": "DocType",
    "show_arrow": 0,
@@ -1338,7 +1240,7 @@
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "history",
    "indent": 1,
    "keep_closed": 0,
@@ -1346,12 +1248,11 @@
    "link_to": "stone-history",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "package-search",
    "indent": 1,
    "keep_closed": 0,
@@ -1359,12 +1260,11 @@
    "link_to": "stone-stock-info",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "grid-2x2",
    "indent": 1,
    "keep_closed": 0,
@@ -1372,25 +1272,23 @@
    "link_to": "sieve-chart",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "pen-tool",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "CAD",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "pen-tool",
    "indent": 1,
    "keep_closed": 0,
@@ -1398,12 +1296,11 @@
    "link_to": "cad-jobs",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "monitor",
    "indent": 1,
    "keep_closed": 0,
@@ -1411,12 +1308,11 @@
    "link_to": "cad-workstation",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "scale",
    "indent": 1,
    "keep_closed": 0,
@@ -1424,12 +1320,11 @@
    "link_to": "weight-checker",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "warehouse",
    "indent": 1,
    "keep_closed": 0,
@@ -1437,12 +1332,11 @@
    "link_to": "stone-stock",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "file-text",
    "indent": 1,
    "keep_closed": 0,
@@ -1450,25 +1344,23 @@
    "link_to": "cad-sheet",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "box",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Delivery",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "gem",
    "indent": 1,
    "keep_closed": 0,
@@ -1476,8 +1368,7 @@
    "link_to": "finished-goods",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
@@ -1508,7 +1399,7 @@
    "collapsible": 1,
    "icon": "arrow-right-left",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Product Transfer",
    "link_type": "DocType",
    "show_arrow": 0,
@@ -1516,7 +1407,7 @@
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -1524,12 +1415,11 @@
    "link_to": "transfer-holder",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -1537,12 +1427,11 @@
    "link_to": "transfer-bucket",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "undo-2",
    "indent": 1,
    "keep_closed": 0,
@@ -1550,8 +1439,7 @@
    "link_to": "rework",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
@@ -1563,12 +1451,11 @@
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "printer",
    "indent": 0,
    "keep_closed": 0,
@@ -1576,12 +1463,11 @@
    "link_to": "print-barcode",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "printer",
    "indent": 0,
    "keep_closed": 0,
@@ -1589,25 +1475,23 @@
    "link_to": "multi-barcode",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "award",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Certification",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -1615,12 +1499,11 @@
    "link_to": "certify",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "send",
    "indent": 0,
    "keep_closed": 0,
@@ -1628,12 +1511,11 @@
    "link_to": "send-certifications",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "arrow-right",
    "indent": 1,
    "keep_closed": 0,
@@ -1641,12 +1523,11 @@
    "link_to": "certification-out",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-check",
    "indent": 0,
    "keep_closed": 0,
@@ -1654,8 +1535,7 @@
    "link_to": "confirm-certifications",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
@@ -1686,16 +1566,15 @@
    "collapsible": 1,
    "icon": "stamp",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Hallmarking",
    "link_type": "DocType",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -1703,12 +1582,11 @@
    "link_to": "hallmark",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "send",
    "indent": 1,
    "keep_closed": 0,
@@ -1716,12 +1594,11 @@
    "link_to": "send-hallmarking",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "clock",
    "indent": 1,
    "keep_closed": 0,
@@ -1729,12 +1606,11 @@
    "link_to": "hallmark-out",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-check",
    "indent": 1,
    "keep_closed": 0,
@@ -1742,8 +1618,7 @@
    "link_to": "confirm-huid",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
@@ -1762,7 +1637,7 @@
    "collapsible": 1,
    "icon": "cog",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Delivery Settings",
    "link_type": "DocType",
    "show_arrow": 0,
@@ -1785,17 +1660,16 @@
    "collapsible": 1,
    "icon": "credit-card",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Sales",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "clipboard-check",
    "indent": 0,
    "keep_closed": 0,
@@ -1803,12 +1677,11 @@
    "link_to": "prepare-sale",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shopping-cart",
    "indent": 1,
    "keep_closed": 0,
@@ -1816,12 +1689,11 @@
    "link_to": "sell",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "clipboard-list",
    "indent": 1,
    "keep_closed": 0,
@@ -1829,12 +1701,11 @@
    "link_to": "sales-records",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "file-text",
    "indent": 1,
    "keep_closed": 0,
@@ -1842,25 +1713,23 @@
    "link_to": "price-charts",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "drill",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "E-SMITH",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "file-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -1868,12 +1737,11 @@
    "link_to": "old-format",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "save",
    "indent": 1,
    "keep_closed": 0,
@@ -1881,12 +1749,11 @@
    "link_to": "saved-imports",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "file-text",
    "indent": 1,
    "keep_closed": 0,
@@ -1894,25 +1761,23 @@
    "link_to": "view-pc",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "chart-column-big",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "E - Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column-big",
    "indent": 1,
    "keep_closed": 0,
@@ -1920,12 +1785,11 @@
    "link_to": "party-gold",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -1933,12 +1797,11 @@
    "link_to": "party-groups",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "package",
    "indent": 1,
    "keep_closed": 0,
@@ -1946,25 +1809,23 @@
    "link_to": "bag-status",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "images",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Design Bank",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "layout-grid",
    "indent": 1,
    "keep_closed": 0,
@@ -1972,12 +1833,11 @@
    "link_to": "design-gallery",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "search",
    "indent": 0,
    "keep_closed": 0,
@@ -1985,12 +1845,11 @@
    "link_to": "search-design",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "folder",
    "indent": 0,
    "keep_closed": 0,
@@ -1998,12 +1857,11 @@
    "link_to": "old-categories",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-plus",
    "indent": 0,
    "keep_closed": 0,
@@ -2011,12 +1869,11 @@
    "link_to": "new-design-bank",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "image-plus",
    "indent": 0,
    "keep_closed": 0,
@@ -2024,12 +1881,11 @@
    "link_to": "card-builder",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "copy",
    "indent": 0,
    "keep_closed": 0,
@@ -2037,12 +1893,11 @@
    "link_to": "design-duplicates",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "eye",
    "indent": 0,
    "keep_closed": 0,
@@ -2050,12 +1905,11 @@
    "link_to": "design-review",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "gem",
    "indent": 0,
    "keep_closed": 0,
@@ -2063,12 +1917,11 @@
    "link_to": "dw-reconcile",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "archive",
    "indent": 0,
    "keep_closed": 0,
@@ -2076,12 +1929,11 @@
    "link_to": "retired-designs",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column-big",
    "indent": 0,
    "keep_closed": 0,
@@ -2089,12 +1941,11 @@
    "link_to": "design-bank-report",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "palette",
    "indent": 0,
    "keep_closed": 0,
@@ -2102,12 +1953,11 @@
    "link_to": "design-report",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -2115,12 +1965,11 @@
    "link_to": "design-tags",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "trash-2",
    "indent": 1,
    "keep_closed": 0,
@@ -2128,25 +1977,23 @@
    "link_to": "retire-design",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "camera",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Graphics",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "camera",
    "indent": 0,
    "keep_closed": 0,
@@ -2154,12 +2001,11 @@
    "link_to": "photo-update",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "image",
    "indent": 0,
    "keep_closed": 0,
@@ -2167,12 +2013,11 @@
    "link_to": "photo-queue",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "flame",
    "indent": 0,
    "keep_closed": 0,
@@ -2180,12 +2025,11 @@
    "link_to": "photo-urgent",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "user-plus",
    "indent": 0,
    "keep_closed": 0,
@@ -2193,12 +2037,11 @@
    "link_to": "customer-photos",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "refresh-cw",
    "indent": 0,
    "keep_closed": 0,
@@ -2206,12 +2049,11 @@
    "link_to": "customer-update",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column-big",
    "indent": 0,
    "keep_closed": 0,
@@ -2219,12 +2061,11 @@
    "link_to": "photo-kpi",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "square-check",
    "indent": 0,
    "keep_closed": 0,
@@ -2232,12 +2073,11 @@
    "link_to": "photo-approvals",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle-minus",
    "indent": 0,
    "keep_closed": 0,
@@ -2245,25 +2085,23 @@
    "link_to": "rejection",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "image",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Selection",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "image",
    "indent": 1,
    "keep_closed": 0,
@@ -2271,12 +2109,11 @@
    "link_to": "select-photos",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "check",
    "indent": 1,
    "keep_closed": 0,
@@ -2284,12 +2121,11 @@
    "link_to": "selection-review",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "grid-2x2",
    "indent": 1,
    "keep_closed": 0,
@@ -2297,12 +2133,11 @@
    "link_to": "selected-pieces",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "archive",
    "indent": 1,
    "keep_closed": 0,
@@ -2310,12 +2145,11 @@
    "link_to": "selection-records",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "tag",
    "indent": 1,
    "keep_closed": 0,
@@ -2323,12 +2157,11 @@
    "link_to": "selection-tags",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -2336,14 +2169,13 @@
    "link_to": "selection-providers",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Costing",
    "link_type": "DocType",
    "show_arrow": 0,
@@ -2363,7 +2195,7 @@
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "layout-dashboard",
    "indent": 1,
    "keep_closed": 0,
@@ -2375,7 +2207,7 @@
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column",
    "indent": 1,
    "keep_closed": 0,
@@ -2426,17 +2258,16 @@
    "collapsible": 1,
    "icon": "chart-column",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "activity",
    "indent": 1,
    "keep_closed": 0,
@@ -2444,25 +2275,23 @@
    "link_to": "usage",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "gem",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Stone Reports",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "list-checks",
    "indent": 0,
    "keep_closed": 0,
@@ -2470,12 +2299,11 @@
    "link_to": "stone-issues",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "microscope",
    "indent": 0,
    "keep_closed": 0,
@@ -2483,25 +2311,23 @@
    "link_to": "stone-audit",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "wrench",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Repair",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "plus",
    "indent": 1,
    "keep_closed": 0,
@@ -2509,12 +2335,11 @@
    "link_to": "new-repair-order",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "list",
    "indent": 1,
    "keep_closed": 0,
@@ -2522,12 +2347,11 @@
    "link_to": "repair-status",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "file-text",
    "indent": 1,
    "keep_closed": 0,
@@ -2535,12 +2359,11 @@
    "link_to": "repair-billing",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "truck",
    "indent": 1,
    "keep_closed": 0,
@@ -2548,12 +2371,11 @@
    "link_to": "repair-dispatch",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "chart-column-big",
    "indent": 1,
    "keep_closed": 0,
@@ -2561,12 +2383,11 @@
    "link_to": "repair-kpi",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "settings",
    "indent": 1,
    "keep_closed": 0,
@@ -2574,25 +2395,23 @@
    "link_to": "repair-masters",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "users",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Party",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -2600,12 +2419,11 @@
    "link_to": "parties",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "user-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -2613,12 +2431,11 @@
    "link_to": "create-party",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "database",
    "indent": 1,
    "keep_closed": 0,
@@ -2626,12 +2443,11 @@
    "link_to": "party-masters",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "circle",
    "indent": 1,
    "keep_closed": 0,
@@ -2639,25 +2455,23 @@
    "link_to": "party-metal",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "settings",
    "indent": 0,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Setup",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "database",
    "indent": 1,
    "keep_closed": 0,
@@ -2665,12 +2479,11 @@
    "link_to": "system-information",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "folder-open",
    "indent": 1,
    "keep_closed": 0,
@@ -2678,12 +2491,11 @@
    "link_to": "file-share",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "",
    "indent": 1,
    "keep_closed": 0,
@@ -2691,25 +2503,23 @@
    "link_to": "",
    "link_type": "URL",
    "show_arrow": 0,
-   "type": "Link",
-   "url": "#"
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "database",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Masters",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shopping-cart",
    "indent": 0,
    "keep_closed": 0,
@@ -2717,25 +2527,23 @@
    "link_to": "purchase-masters",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "users",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Employee",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "user-check",
    "indent": 0,
    "keep_closed": 0,
@@ -2743,12 +2551,11 @@
    "link_to": "add-employee",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "user-check",
    "indent": 0,
    "keep_closed": 0,
@@ -2756,12 +2563,11 @@
    "link_to": "add-user",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "settings-2",
    "indent": 0,
    "keep_closed": 0,
@@ -2769,25 +2575,23 @@
    "link_to": "reset-password",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 0,
    "collapsible": 1,
    "icon": "lock",
    "indent": 1,
-   "keep_closed": 1,
+   "keep_closed": 0,
    "label": "Permissions",
    "link_to": "",
    "link_type": "",
    "show_arrow": 0,
-   "type": "Section Break",
-   "url": ""
+   "type": "Section Break"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "zap",
    "indent": 1,
    "keep_closed": 0,
@@ -2795,12 +2599,11 @@
    "link_to": "quick-menu-setup",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "users",
    "indent": 0,
    "keep_closed": 0,
@@ -2808,12 +2611,11 @@
    "link_to": "user-roles",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "shield-check",
    "indent": 0,
    "keep_closed": 0,
@@ -2821,12 +2623,11 @@
    "link_to": "role-access",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   },
   {
    "child": 1,
-   "collapsible": 0,
+   "collapsible": 1,
    "icon": "route",
    "indent": 1,
    "keep_closed": 0,
@@ -2834,11 +2635,10 @@
    "link_to": "transfer-matrix",
    "link_type": "Page",
    "show_arrow": 0,
-   "type": "Link",
-   "url": ""
+   "type": "Link"
   }
  ],
- "modified": "2026-09-08 13:29:04.846530",
+ "modified": "2026-09-08 15:31:15.073733",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

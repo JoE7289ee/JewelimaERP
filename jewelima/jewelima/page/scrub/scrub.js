@@ -22,7 +22,8 @@ frappe.pages["scrub"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
-	let D = null;
+	let D = null, T = null;                 // board, and what may be moved where
+	const M = { item: "", qty: "", target: "" };
 
 	const g = (v) => flt(v).toFixed(3) + " g";
 
@@ -52,10 +53,26 @@ frappe.pages["scrub"].on_page_load = function (wrapper) {
 		table.sc-t td.num,table.sc-t th.num{text-align:right;}
 		.wt{font-weight:700;color:#8C6A00;}
 		[data-theme="dark"] .wt{color:#B98D10;}
+		/* sending it on lives HERE, on the page that shows what there is to send —
+		   loss has its own screens and is deliberately not reachable from this one */
+		.sc-form{border:1px solid var(--border-color);border-left:3px solid #8C6A00;
+			border-radius:13px;padding:13px 16px;background:var(--fg-color);
+			display:flex;gap:13px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px;}
+		.sc-f label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+			color:var(--text-muted);margin-bottom:3px;}
+		.sc-f select,.sc-f input{border:1px solid var(--border-color);border-radius:8px;height:34px;
+			padding:2px 10px;font-size:13.5px;background:var(--control-bg);color:var(--text-color);
+			min-width:180px;}
+		.sc-f input[type=number]{text-align:right;min-width:120px;}
+		.sc-go{background:#8C6A00;border:1px solid #8C6A00;color:#fff;font-weight:800;
+			border-radius:9px;padding:9px 20px;font-size:13.5px;cursor:pointer;}
+		.sc-go:disabled{background:var(--control-bg);border-color:var(--border-color);
+			color:var(--text-muted);cursor:default;font-weight:600;}
 		.sc-empty{padding:26px;text-align:center;color:var(--text-muted);font-size:13px;
 			border:1px dashed var(--border-color);border-radius:12px;}
 		</style>
 		<div class="sc-kpis"></div>
+		<div class="sc-move"></div>
 		<div class="sc-body"></div>
 	`);
 
@@ -120,12 +137,80 @@ frappe.pages["scrub"].on_page_load = function (wrapper) {
 			${recent ? `<div class="sc-sec">${__("Recent handovers")}</div>${recent}` : ""}`);
 	}
 
-	function load() {
-		return frappe.call({ method: API + ".get_scrub_board", freeze: false })
-			.then((r) => { D = r.message; paint(); });
+	function paintMove() {
+		if (!T) return;
+		if (!T.items.some((i) => i.item === M.item)) M.item = (T.items[0] || {}).item || "";
+		const have = flt((T.items.find((i) => i.item === M.item) || {}).qty);
+		if (!T.items.length) {
+			root.find(".sc-move").html("");
+			return;
+		}
+		root.find(".sc-move").html(`
+			<div class="sc-sec" style="margin-top:0;">${__("Send it on")}</div>
+			<p class="sc-note">${__("scrub leaves from here — the loss buckets have their own screens and are not reachable from this page")}</p>
+			<div class="sc-form">
+				<div class="sc-f"><label>${__("Item")}</label>
+					<select class="sc-item">${T.items.map((i) =>
+						`<option value="${esc(i.item)}" ${i.item === M.item ? "selected" : ""}>${
+							esc(i.item)} — ${flt(i.qty).toFixed(3)} g</option>`).join("")}</select></div>
+				<div class="sc-f"><label>${__("Weight (g)")}</label>
+					<input type="number" class="sc-qty" step="0.001" min="0" max="${have}"
+						value="${M.qty}" placeholder="${have.toFixed(3)}"></div>
+				<div class="sc-f"><label>${__("To")}</label>
+					<select class="sc-target"><option value="">${__("— pick —")}</option>
+						${(T.targets || []).map((t) =>
+							`<option value="${esc(t.warehouse)}" ${t.warehouse === M.target ? "selected" : ""}>${
+								esc(t.label)}</option>`).join("")}</select></div>
+				<div class="sc-f" style="flex:1;min-width:190px;"><label>${__("Note")}</label>
+					<input type="text" class="sc-remark" style="width:100%;"
+						placeholder="${__("sent to refining, tray no…")}"></div>
+				<button class="sc-go" ${!M.target || flt(M.qty) <= 0 ? "disabled" : ""}>${
+					__("SEND {0} g", [flt(M.qty).toFixed(3)])}</button>
+			</div>`);
 	}
 
-	page.set_secondary_action(__("Transfer weight"), () => frappe.set_route("transfer-weight"));
+	root.on("change", ".sc-item", function () { M.item = this.value; M.qty = ""; paintMove(); });
+	root.on("input", ".sc-qty", function () {
+		M.qty = this.value;
+		root.find(".sc-go").prop("disabled", !M.target || flt(M.qty) <= 0)
+			.text(__("SEND {0} g", [flt(M.qty).toFixed(3)]));
+	});
+	root.on("change", ".sc-target", function () {
+		M.target = this.value;
+		root.find(".sc-go").prop("disabled", !M.target || flt(M.qty) <= 0);
+	});
+	root.on("click", ".sc-go", function () {
+		const note = root.find(".sc-remark").val() || "";
+		// recovered gold leaving the building is worth one question first
+		frappe.confirm(
+			__("Send <b>{0} g</b> of {1} to <b>{2}</b>?",
+				[flt(M.qty).toFixed(3), esc(M.item), esc(M.target)]),
+			() => {
+				frappe.dom.freeze(__("Sending…"));
+				frappe.call({ method: API + ".transfer_scrub", args: {
+					target: M.target, item: M.item, qty: flt(M.qty), remarks: note } })
+					.then((r) => {
+						frappe.dom.unfreeze();
+						const m = r.message || {};
+						M.qty = "";
+						frappe.show_alert({ indicator: "green", message:
+							__("{0} g sent to {1} — {2}", [flt(m.qty).toFixed(3), m.target, m.stock_entry]) }, 6);
+						load();
+					}).catch(() => frappe.dom.unfreeze());
+			});
+	});
+
+	function load() {
+		return Promise.all([
+			frappe.call({ method: API + ".get_scrub_board", freeze: false }),
+			frappe.call({ method: API + ".get_scrub_transfer_context", freeze: false }),
+		]).then(([a, b]) => {
+			D = a.message; T = b.message;
+			paint(); paintMove();
+		});
+	}
+
+	page.set_secondary_action(__("Scrub history"), () => frappe.set_route("scrub-history"));
 	page.set_primary_action(__("Refresh"), load, "refresh");
 	frappe.pages["scrub"].on_page_show = load;
 	load();
