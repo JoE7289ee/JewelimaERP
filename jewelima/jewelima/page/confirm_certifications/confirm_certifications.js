@@ -24,6 +24,18 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 	const hist = [];
 	// bag -> "accept" | "reject", staged on this page and not yet written
 	const staged = new Map();
+	// batch names, most recently scanned first. A tray of fifty pieces can run
+	// several batches deep, and a scanner watching the screen wants the batch
+	// they are working on under their eyes — not a chip going green somewhere
+	// below the fold. Scanning a piece lifts its batch to the top and it stays
+	// there, through re-syncs, until another batch is scanned into.
+	const recent = [];
+	function bump(name) {
+		if (!name) return;
+		const i = recent.indexOf(name);
+		if (i > -1) recent.splice(i, 1);
+		recent.unshift(name);
+	}
 
 	$(page.main).append(`
 		<style>
@@ -178,7 +190,11 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 
 	function paint() {
 		root.find(".cc-pend").text(POOL.pending ? __("{0} piece(s) waiting", [POOL.pending]) : "");
-		root.find(".cc-main").html(POOL.batches.map((b) => `
+		const order = POOL.batches.slice().sort((x, y) => {
+			const a = recent.indexOf(x.name), b = recent.indexOf(y.name);
+			return (a < 0 ? 1e9 : a) - (b < 0 ? 1e9 : b);   // untouched keep server order
+		});
+		root.find(".cc-main").html(order.map((b) => `
 			<div class="cc-batch">
 				<div class="h"><span><b>${esc(b.name)}</b> · ${esc(b.cert_type)}${b.quality ? " · " + esc(b.quality) : ""}</span>
 					<span>${__("collected")} ${esc(b.collected_on)}</span></div>
@@ -240,6 +256,12 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		}
 		return null;
 	}
+	function batchOf(bag) {
+		for (const b of POOL.batches || []) {
+			if ((b.pieces || []).some((p) => p.order_bag === bag)) return b.name;
+		}
+		return "";
+	}
 
 	scan.$input.on("keydown", (e) => {
 		if (e.key !== "Enter") return;
@@ -259,26 +281,27 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 			}
 			staged.delete(p.order_bag);
 			logScan(p.order_bag, "er", __("unstaged ({0})", [MODE_LABEL[was]]));
+			bump(batchOf(p.order_bag));
 			paint();
 			return;
 		}
 		if (staged.has(p.order_bag)) {
 			return logScan(p.order_bag, "er", __("Already scanned — it is waiting to be saved"));
 		}
-		{
-			if (p.state === "stone") {
-				return logScan(p.order_bag, "er", __("Away for a stone change — it comes back on the Stone Changes desk"));
-			}
-			if (p.state !== "pending") {
-				return logScan(p.order_bag, "er", p.by
-					? __("Already {0} by {1}", [p.state, p.by.split("@")[0]])
-					: __("Already {0}", [p.state]));
-			}
+		if (p.state === "stone") {
+			return logScan(p.order_bag, "er", __("Away for a stone change — it comes back on the Stone Changes desk"));
+		}
+		if (p.state !== "pending") {
+			return logScan(p.order_bag, "er", p.by
+				? __("Already {0} by {1}", [p.state, p.by.split("@")[0]])
+				: __("Already {0}", [p.state]));
 		}
 		staged.set(p.order_bag, MODE);
 		logScan(p.order_bag, MODE === "accept" ? "ok" : "rj", __("staged"));
+		bump(batchOf(p.order_bag));
 		paint();
-		root.find(`.cc-chip[data-bag="${p.order_bag}"]`).addClass("flash");
+		const $c = root.find(`.cc-chip[data-bag="${p.order_bag}"]`).addClass("flash");
+		if ($c.length) $c.get(0).scrollIntoView({ block: "nearest" });
 	});
 
 	// a wrong scan is a click to undo, which is the whole point of staging
