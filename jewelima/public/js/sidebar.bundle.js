@@ -1,34 +1,18 @@
 // Jewelima desk sidebar behaviour.
 //
-// The sidebar carries ~40 menus and each opens into a dozen pages, so two or
-// three open menus push everything else below the fold. Two rules:
+// One rule, now: a menu that opens is brought into view. Open as many as you
+// like — the desk asked for the closing and then found it in the way, twice:
+// closing a menu ABOVE the one you just clicked takes a screenful out of the
+// list, everything below jumps up (measured at 261px), and the menu you opened
+// leaves from under your finger. Menus stay where you put them.
 //
-//   1. a menu that opens is scrolled into view, title first.
-//   2. one menu at a time, EXCEPT the menu holding the page you are on.
-//
-//      Closing that one as well was tried, and it made the sidebar feel broken.
-//      It is usually the menu ABOVE the one you are reaching for, so closing it
-//      takes a screenful out of the list and everything below jumps up —
-//      measured at 261px. The menu you clicked DOES open; it just leaves from
-//      under your finger, and the second click lands on a different menu. The
-//      anchor below gives back what scroll it can, but near the top of the list
-//      there is nothing to give back, so the exemption stays.
-//
-// Two things this must be careful about, both learned the hard way:
-//
-//   - only a menu's OWN header counts as opening a menu. Every row in the
-//     sidebar is a .standard-sidebar-item, so a handler that fires on all of
-//     them runs the whole close-the-others sweep every time somebody clicks a
-//     page inside a menu — which is exactly the click that should be fast.
-//   - the closing is one write, not forty. Frappe's save_section_break_state
-//     stringifies the whole map per section AND writes from a copy each item
-//     took when it was built, so calling it in a loop is both slow and lossy:
-//     the last writer wins and the others' state is thrown away.
+// What is left is small on purpose: the sidebar is Frappe's, and every line
+// here is a bet on class names we do not own. Anything that stops applying
+// after an upgrade should fail QUIETLY.
 frappe.provide("jewelima.sidebar");
 
 (function () {
-	const PAD = 10;                       // breathing room when a menu is revealed
-	const KEY = "section-breaks-state";   // Frappe's own store, shared with it
+	const PAD = 10;   // breathing room when a menu is brought into view
 
 	function sidebar() {
 		const sb = frappe.app && frappe.app.sidebar;
@@ -46,62 +30,15 @@ frappe.provide("jewelima.sidebar");
 	const isOpen = (s) => !s.$nested_items.hasClass("hidden");
 	const headerOf = (s) => s.wrapper.find(".standard-sidebar-item").get(0);
 
-	// the menu holding the page you are on — the one that is never closed for you
+	// the menu holding the page you are on
 	function current(sb) {
 		const a = sb.wrapper && sb.wrapper.find(".active-sidebar").get(0);
 		if (!a) return null;
 		return sections(sb).find((s) => s.wrapper.get(0).contains(a)) || null;
 	}
 
-	// One read, one write, merged into whatever is stored now — so a menu the
-	// desk closed for you is remembered exactly like one you closed by hand,
-	// and no section's state is trampled by another's stale copy.
-	function remember(sb, closed) {
-		if (!closed.length) return;
-		let all = {};
-		try {
-			all = JSON.parse(localStorage.getItem(KEY) || "{}") || {};
-		} catch (e) {
-			all = {};
-		}
-		const ws = (sb.wrapper.find(".body-sidebar").attr("data-title") || "").toLowerCase()
-			|| sb.sidebar_title;
-		all[ws] = all[ws] || {};
-		closed.forEach((s) => {
-			const title = s.wrapper.attr("title");
-			if (title) all[ws][title] = true;
-		});
-		try {
-			localStorage.setItem(KEY, JSON.stringify(all));
-		} catch (e) {
-			return;
-		}
-		// hand every item the merged map, so its own next write starts from the
-		// truth rather than from the snapshot it was born with
-		sections(sb).forEach((s) => { s.section_breaks_state = all; });
-	}
-
-	function keepOnly(sb, opened) {
-		const cur = current(sb);
-		const closed = [];
-		sections(sb).forEach((s) => {
-			if (s === opened || s === cur || !isOpen(s)) return;
-			try {
-				s.close();
-				closed.push(s);
-			} catch (e) {
-				// a menu that will not close is not worth a broken sidebar
-			}
-		});
-		remember(sb, closed);
-		return closed.length;
-	}
-
 	// the sidebar's own scroll box — .body-sidebar-top today, but found rather
-	// than named, because it is Frappe's markup and not ours. Scrollability is
-	// deliberately NOT part of the test: a box that cannot scroll ignores the
-	// write, and a box that has just had four menus closed inside it may not
-	// look scrollable for another frame.
+	// than named, because it is Frappe's markup and not ours
 	function scrollParent(el) {
 		let p = el.parentElement;
 		while (p && p !== document.body) {
@@ -112,67 +49,26 @@ frappe.provide("jewelima.sidebar");
 		return null;
 	}
 
-	// Close the others WITHOUT moving the menu you just clicked.
-	//
-	// This is the whole difference between the rule feeling helpful and feeling
-	// broken. Closing a menu that sits ABOVE the one you clicked takes its rows
-	// out of the list, and everything below jumps up — measured at 261px on a
-	// real sidebar. The menu does open; it just leaves from under your finger,
-	// and a second click lands on a different menu entirely. It reads as "it
-	// won't open". So: note where the header is, do the closing, and put the
-	// scroll back so the header has not moved a pixel.
-	function keepOnlyInPlace(sb, s) {
-		const el = headerOf(s);
-		const box = el && scrollParent(el);
-		const before = el ? el.getBoundingClientRect().top : 0;
-		const n = keepOnly(sb, s);
-		if (n && box && el) {
-			const after = el.getBoundingClientRect().top;
-			if (after !== before) box.scrollTop += after - before;
-		}
-		// Scrolling can only give back what there is above it: near the top of
-		// the list there may not be enough, and the header still rises. Nothing
-		// can hold it there — the rows it was sitting on are gone — so make sure
-		// at least that it did not rise out of sight. This runs even when
-		// nothing was closed, because the menu you clicked may simply have been
-		// sitting at the bottom edge.
-		//
-		// The HEADER only. reveal() would scroll a tall open menu until its last
-		// item showed, which drags the header up and undoes the anchor — the very
-		// thing this function exists to prevent.
-		revealHeader(s);
-	}
-
+	// Bring the HEADER into view, and only if it is out of it. Never the whole
+	// menu: scrolling a tall open menu until its last item shows drags the title
+	// off the top, which is the half you actually read.
 	function revealHeader(s) {
 		const el = headerOf(s);
 		const box = el && scrollParent(el);
 		if (!box) return;
 		const e = el.getBoundingClientRect(), b = box.getBoundingClientRect();
-		if (!e.height) return;
+		if (!e.height) return;   // built but not painted — a hidden rect is all zeros
 		if (e.top < b.top + PAD) box.scrollTop -= b.top + PAD - e.top;
 		else if (e.bottom > b.bottom - PAD) box.scrollTop += e.bottom - b.bottom + PAD;
 	}
 
-	// show the menu, header first: a menu taller than the sidebar is scrolled to
-	// its title rather than its last item, which is the half you can read
-	function reveal(s) {
-		const el = s && s.wrapper && s.wrapper.get(0);
-		const box = el && scrollParent(el);
-		if (!box) return;
-		const e = el.getBoundingClientRect(), b = box.getBoundingClientRect();
-		if (!e.height) return;   // not on screen at all — a hidden rect is all zeros
-		let d = 0;
-		if (e.top < b.top + PAD) d = e.top - b.top - PAD;
-		else if (e.bottom > b.bottom - PAD) d = Math.min(e.bottom - b.bottom + PAD, e.top - b.top - PAD);
-		if (Math.abs(d) > 1) box.scrollTop += d;
-	}
+	jewelima.sidebar = { sidebar, sections, isOpen, current, revealHeader, headerOf };
 
-	jewelima.sidebar = { sidebar, sections, isOpen, current, keepOnly, keepOnlyInPlace,
-		reveal, revealHeader, headerOf };
-
-	// Frappe's own click handler opens or closes the menu; we only tidy up after
-	// it, and ONLY for a click on a menu's own header. A click on a page inside a
-	// menu is a navigation and belongs to the route handler below.
+	// Frappe's own click handler opens or closes the menu; we only bring it into
+	// view afterwards, and ONLY for a click on a menu's own header. Every row in
+	// the sidebar is a .standard-sidebar-item, so a handler that fires on all of
+	// them also fires on the page you are navigating to — the click that should
+	// be doing nothing else at all.
 	$(document).on("click", ".standard-sidebar-item", function () {
 		const sb = sidebar();
 		if (!sb) return;
@@ -180,15 +76,12 @@ frappe.provide("jewelima.sidebar");
 		requestAnimationFrame(() => {
 			const s = sections(sb).find((x) => headerOf(x) === el);
 			if (!s || !isOpen(s)) return;   // a link, or a menu being closed
-			// no reveal here: you are looking at the menu you just clicked, so
-			// the only thing worth doing is not moving it
-			keepOnlyInPlace(sb, s);
+			revealHeader(s);
 		});
 	});
 
-	// Walking into a page makes its menu the one you are in, and whatever was
-	// only being looked at closes behind you. Frappe opens the active page's
-	// menu here, so this runs straight after it.
+	// Walking into a page: Frappe opens that page's menu here, so bring it into
+	// view straight after. Nothing is closed.
 	function patch() {
 		if (!frappe.ui || !frappe.ui.Sidebar || frappe.ui.Sidebar.prototype.__jw_menus) return false;
 		const proto = frappe.ui.Sidebar.prototype;
@@ -197,13 +90,8 @@ frappe.provide("jewelima.sidebar");
 			const r = orig.apply(this, arguments);
 			try {
 				const sb = sidebar();
-				if (sb) {
-					const cur = current(sb);
-					if (cur) {
-						keepOnly(sb, cur);
-						reveal(cur);
-					}
-				}
+				const cur = sb && current(sb);
+				if (cur && isOpen(cur)) revealHeader(cur);
 			} catch (e) {
 				console.warn("jewelima sidebar:", e);   // never worth a broken page
 			}
