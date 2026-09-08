@@ -143,6 +143,9 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 			else if (v.touch_margin < 2) thin++;
 		}));
 		m.diamond.forEach(scan);
+		(m.precious || []).forEach(scan);
+		(m.buckets || []).forEach(scan);
+		(m.charges || []).forEach(scan);
 
 		root.find(".pp-kpis").html(`
 			<div class="pp-kpi"><div class="k">${__("Providers")}</div><div class="v">${P.length}</div></div>
@@ -178,6 +181,25 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 				${r.ours == null ? "" : `<div class="pct">${inr(r.ours)}</div>`}</td>
 			${P.map((p) => metalCell(r.by[p.name])).join("")}</tr>`).join("");
 
+		const size = (r) => (r.to_ct ? `${flt(r.from_ct).toFixed(3)} – ${flt(r.to_ct).toFixed(3)}`
+			: `${flt(r.from_ct).toFixed(3)} ▸`);
+		const psRows = (m.precious || []).map((r) => `<tr>
+			<td>${esc(r.supplier)}</td><td>${esc(r.stone) || "—"}</td>
+			<td class="num">${size(r)}</td>
+			<td class="num">${inr(r.ours)}</td>
+			${mgCell(r).replace("grp", "")}</tr>`).join("");
+		const bkRows = (m.buckets || []).map((r) => `<tr>
+			<td>${esc(r.supplier)}</td><td>${esc(r.bucket)}</td>
+			<td class="num">${size(r)}</td><td>${esc(r.basis)}</td>
+			<td class="num">${inr(r.ours)}</td>
+			${mgCell(r).replace("grp", "")}</tr>`).join("");
+		const chRows = (m.charges || []).map((r) => `<tr>
+			<td>${esc(r.supplier)}</td>
+			<td>${esc(r.certification)}${r.solitaire ? ` <span class="pill act">${__("solitaire")}</span>` : ""}</td>
+			<td>${esc(r.basis)}</td>
+			<td class="num">${r.to_ct ? size(r) : "—"}</td>
+			<td class="num">${inr(r.ours)}</td>
+			${mgCell(r).replace("grp", "")}</tr>`).join("");
 		const dmdRows = m.diamond.map((r) => `<tr>
 			<td>${esc(r.supplier)}</td>
 			<td>${esc(r.sieve) || "—"}</td>
@@ -202,6 +224,28 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 				<th>${__("Karat")}</th><th class="num">${__("Our touch")}</th>${head}
 			</tr></thead><tbody>${metalRows}</tbody></table></div>`
 				: `<div class="pp-empty">${__("No provider quotes a metal rate yet.")}</div>`}
+
+			${psRows ? `<div class="pp-sec">${__("Precious stones — ₹ per carat")}</div>
+				<p class="pp-note">${__("matched by stone, then by the bracket holding the same per-stone weight")}</p>
+				<div class="pp-tw"><table class="pp-t"><thead><tr>
+					<th>${__("Provider")}</th><th>${__("Stone")}</th><th class="num">${__("Size")}</th>
+					<th class="num">${__("We charge")}</th><th class="num">${__("They charge")}</th>
+				</tr></thead><tbody>${psRows}</tbody></table></div>` : ""}
+
+			${bkRows ? `<div class="pp-sec">${__("Colour stone · CZ · CVD · Swarovski")}</div>
+				<div class="pp-tw"><table class="pp-t"><thead><tr>
+					<th>${__("Provider")}</th><th>${__("Bucket")}</th><th class="num">${__("Size")}</th>
+					<th>${__("Basis")}</th><th class="num">${__("We charge")}</th>
+					<th class="num">${__("They charge")}</th>
+				</tr></thead><tbody>${bkRows}</tbody></table></div>` : ""}
+
+			${chRows ? `<div class="pp-sec">${__("Certification charges")}</div>
+				<p class="pp-note">${__("matched by lab, and by the weight slab where the chart has one")}</p>
+				<div class="pp-tw"><table class="pp-t"><thead><tr>
+					<th>${__("Provider")}</th><th>${__("Lab")}</th><th>${__("Basis")}</th>
+					<th class="num">${__("Slab")}</th><th class="num">${__("We charge")}</th>
+					<th class="num">${__("They charge")}</th>
+				</tr></thead><tbody>${chRows}</tbody></table></div>` : ""}
 
 			<div class="pp-sec">${__("Diamonds — ₹ per carat")}</div>
 			<p class="pp-note">${__("each provider bracket set against the chart bracket that holds the same per-stone weight")}</p>

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-08 00:58:15.724703",
+ "modified": "2026-09-08 12:04:03.242910",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "quick-menu-setup",
@@ -36,61 +36,7 @@
    "role": "JW Dye Admin"
   },
   {
-   "role": "JW CAM"
-  },
-  {
    "role": "System Manager"
-  },
-  {
-   "role": "JW Costing"
-  },
-  {
-   "role": "JW Delivery"
-  },
-  {
-   "role": "JW EXTRACTION"
-  },
-  {
-   "role": "JW Info"
-  },
-  {
-   "role": "JW Stock Admin"
-  },
-  {
-   "role": "JW Stone Admin"
-  },
-  {
-   "role": "JW WAXING"
-  },
-  {
-   "role": "Jewelima Design Approver"
-  },
-  {
-   "role": "Jewelima Design Bank"
-  },
-  {
-   "role": "Jewelima Graphics"
-  },
-  {
-   "role": "Jewelima Ordering"
-  },
-  {
-   "role": "Jewelima Purchase"
-  },
-  {
-   "role": "Jewelima Repair"
-  },
-  {
-   "role": "Jewelima Stock"
-  },
-  {
-   "role": "Jewelima Stone Issue"
-  },
-  {
-   "role": "Jewelima Transfer"
-  },
-  {
-   "role": "Jewelima Transfer Plus"
   }
  ],
  "script": null,

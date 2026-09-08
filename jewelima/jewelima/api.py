@@ -10257,7 +10257,8 @@ def get_provider_rates(name=None):
 	# no lines at all is the one worth spotting from the list
 	counts = {}
 	for tbl, key in (("Provider Making Rate", "making"), ("Provider Metal Rate", "metal"),
-			("Provider Diamond Rate", "diamond")):
+			("Provider Diamond Rate", "diamond"), ("Provider Stone Rate", "precious"),
+			("Provider Bucket Rate", "buckets"), ("Provider Certification Charge", "charges")):
 		for r in frappe.get_all(tbl, filters={"parenttype": "Provider Rate"},
 				fields=["parent", {"COUNT": "*"}], group_by="parent"):
 			vals = list(r.values())
@@ -10266,7 +10267,12 @@ def get_provider_rates(name=None):
 			"counts": counts.get(c.name) or {}} for c in cards], "card": None,
 		"suppliers": frappe.get_all("Supplier", pluck="name", order_by="name"),
 		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
-		"karats": list(KARATS)}
+		"karats": list(KARATS),
+		# the labs a charge can be quoted for — the master, plus HALLMARKING,
+		# which a chart prices like a lab without being one
+		"labs": list(dict.fromkeys(
+			frappe.get_all("Certification Type", pluck="name", order_by="name") + ["HALLMARKING"])),
+		"buckets": [{"key": k, "label": BUCKET_LABEL[k]} for k in PROVIDER_BUCKETS]}
 	if not cards:
 		return out
 	name = name if name and frappe.db.exists("Provider Rate", name) else cards[0].name
@@ -10276,14 +10282,33 @@ def get_provider_rates(name=None):
 		"status": d.status, "currency_note": d.currency_note or "", "notes": d.notes or "",
 		"making_rates": [{"karat": r.karat or "", "design_type": r.design_type or "",
 			"basis": r.basis or "Per Gram", "rate": flt(r.rate),
-			"min_per_piece": flt(r.min_per_piece)} for r in (d.get("making_rates") or [])],
+			"min_per_piece": flt(r.min_per_piece), "flat_below_gm": flt(r.flat_below_gm)}
+			for r in (d.get("making_rates") or [])],
 		"diamond_rates": [{"sieve_label": r.sieve_label or "", "from_ct": flt(r.from_ct),
 			"to_ct": flt(r.to_ct), "quality": (r.quality or "").strip().upper(),
 			"rate": flt(r.rate)} for r in (d.get("diamond_rates") or [])],
 		"metal_rates": [{"karat": r.karat or "", "touch": flt(r.touch)}
 			for r in (d.get("metal_rates") or [])],
+		"precious_stone_rates": [{"stone": r.stone or "", "from_ct": flt(r.from_ct),
+			"to_ct": flt(r.to_ct), "rate": flt(r.rate)}
+			for r in (d.get("precious_stone_rates") or [])],
+		"certification_charges": [{"certification": r.certification or "",
+			"basis": r.basis or "Per Piece", "rate": flt(r.rate),
+			"min_amount": flt(r.min_amount), "from_ct": flt(r.from_ct),
+			"to_ct": flt(r.to_ct), "solitaire": cint(r.solitaire)}
+			for r in (d.get("certification_charges") or [])],
 	}
+	for tbl in PROVIDER_BUCKETS:
+		out["card"][tbl] = [{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+			"basis": r.basis or "Per Ct", "rate": flt(r.rate)} for r in (d.get(tbl) or [])]
 	return out
+
+
+# The four stone buckets a chart prices, in the order the desk reads them. A
+# provider's card carries the same four so the two can be compared line for line.
+PROVIDER_BUCKETS = ("cs_rates", "cz_rates", "cvd_rates", "sw_rates")
+BUCKET_LABEL = {"cs_rates": "Colour stone", "cz_rates": "CZ",
+	"cvd_rates": "CVD", "sw_rates": "Swarovski"}
 
 
 @frappe.whitelist()
@@ -10308,7 +10333,8 @@ def save_provider_rate(payload):
 			doc.append("making_rates", {"karat": (r.get("karat") or "").strip().upper() or None,
 				"design_type": r.get("design_type") or None,
 				"basis": r.get("basis") or "Per Gram", "rate": flt(r.get("rate")),
-				"min_per_piece": flt(r.get("min_per_piece"))})
+				"min_per_piece": flt(r.get("min_per_piece")),
+				"flat_below_gm": flt(r.get("flat_below_gm"))})
 	for r in p.get("diamond_rates") or []:
 		if flt(r.get("rate")):
 			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label") or "",
@@ -10317,6 +10343,23 @@ def save_provider_rate(payload):
 	for r in p.get("metal_rates") or []:
 		if flt(r.get("touch")) and (r.get("karat") or "").strip():
 			doc.append("metal_rates", {"karat": r["karat"].strip().upper(), "touch": flt(r.get("touch"))})
+	for r in p.get("precious_stone_rates") or []:
+		if flt(r.get("rate")) and (r.get("stone") or "").strip():
+			doc.append("precious_stone_rates", {"stone": r["stone"],
+				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
+				"rate": flt(r.get("rate"))})
+	for tbl in PROVIDER_BUCKETS:
+		for r in p.get(tbl) or []:
+			if flt(r.get("rate")):
+				doc.append(tbl, {"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")),
+					"basis": r.get("basis") or "Per Ct", "rate": flt(r.get("rate"))})
+	for r in p.get("certification_charges") or []:
+		if (r.get("certification") or "").strip() and (flt(r.get("rate")) or flt(r.get("min_amount"))):
+			doc.append("certification_charges", {
+				"certification": r["certification"].strip().upper(),
+				"basis": r.get("basis") or "Per Piece", "rate": flt(r.get("rate")),
+				"min_amount": flt(r.get("min_amount")), "from_ct": flt(r.get("from_ct")),
+				"to_ct": flt(r.get("to_ct")), "solitaire": cint(r.get("solitaire"))})
 	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name}
@@ -10690,7 +10733,8 @@ def get_provider_margins(price_chart=None, providers=None, gold_rate=0):
 	out = {"chart": price_chart or "", "gold_rate": gold_rate,
 		"providers": [{"name": c.name, "supplier": c.supplier, "rate_date": str(c.rate_date or "")}
 			for c in cards],
-		"making": [], "diamond": [], "metal": []}
+		"making": [], "diamond": [], "metal": [], "precious": [], "buckets": [],
+		"charges": []}
 
 	# ---- making: every karat+type the providers actually quote ---------------
 	combos = sorted({((r.karat or "").strip().upper(), (r.design_type or "").strip())
@@ -10747,6 +10791,52 @@ def get_provider_margins(price_chart=None, providers=None, gold_rate=0):
 			row["by"][c.name] = cell
 		if ours_t or any(v["touch"] for v in row["by"].values()):
 			out["metal"].append(row)
+
+	# ---- precious stones: matched by STONE, then by the bracket that holds the
+	# ---- provider's per-stone weight — the same way diamonds are matched
+	def _bracket_rate(rows, mid, key=None, val=None):
+		cand = [x for x in rows
+			if (key is None or (getattr(x, key, "") or "") == val)
+			and flt(x.from_ct) <= mid and (not flt(x.to_ct) or mid < flt(x.to_ct))]
+		return flt(cand[0].rate) if cand else None
+
+	for c in cards:
+		for r in (c.get("precious_stone_rates") or []):
+			mid = (flt(r.from_ct) + (flt(r.to_ct) or flt(r.from_ct))) / 2 or flt(r.from_ct)
+			ours = _bracket_rate(chart.get("precious_stone_rates") or [], mid,
+				"stone", r.stone) if chart else None
+			out["precious"].append({"provider": c.name, "supplier": c.supplier,
+				"stone": r.stone or "", "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+				**_margin(ours, flt(r.rate))})
+
+	# ---- the four stone buckets, each against the chart's own bucket ---------
+	for c in cards:
+		for tbl in PROVIDER_BUCKETS:
+			for r in (c.get(tbl) or []):
+				mid = (flt(r.from_ct) + (flt(r.to_ct) or flt(r.from_ct))) / 2 or flt(r.from_ct)
+				ours = _bracket_rate(chart.get(tbl) or [], mid) if chart else None
+				out["buckets"].append({"provider": c.name, "supplier": c.supplier,
+					"bucket": BUCKET_LABEL[tbl], "table": tbl,
+					"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+					"basis": r.basis or "Per Ct", **_margin(ours, flt(r.rate))})
+
+	# ---- certification: matched by LAB, and by the weight slab when it has one
+	for c in cards:
+		for r in (c.get("certification_charges") or []):
+			lab = (r.certification or "").strip().upper()
+			ours = None
+			if chart:
+				mid = (flt(r.from_ct) + (flt(r.to_ct) or flt(r.from_ct))) / 2 or flt(r.from_ct)
+				cand = [x for x in (chart.get("certification_charges") or [])
+					if (x.certification or "").strip().upper() == lab
+					and cint(x.solitaire) == cint(r.solitaire)
+					and (not flt(x.to_ct) or (flt(x.from_ct) <= mid and mid < flt(x.to_ct)))]
+				if cand:
+					ours = flt(cand[0].rate)
+			out["charges"].append({"provider": c.name, "supplier": c.supplier,
+				"certification": lab, "basis": r.basis or "Per Piece",
+				"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+				"solitaire": cint(r.solitaire), **_margin(ours, flt(r.rate))})
 	return out
 
 

@@ -4,69 +4,77 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "field_order": [
+  "karat",
+  "design_type",
+  "basis",
+  "rate",
+  "min_per_piece",
+  "flat_below_gm"
+ ],
+ "fields": [
+  {
+   "columns": 1,
+   "description": "Blank = any karat.",
+   "fieldname": "karat",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Karat",
+   "options": "\n14K\n18K\n22K"
+  },
+  {
+   "columns": 2,
+   "description": "Blank = the provider's default rate.",
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Design Type",
+   "options": "Design Type"
+  },
+  {
+   "columns": 2,
+   "default": "Per Gram",
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Basis",
+   "options": "Per Gram\nPer Piece\nPurity Percent",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "They charge",
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "min_per_piece",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Minimum \u20b9/pc",
+   "precision": "2"
+  },
+  {
+   "description": "Under this weight the minimum is charged flat instead of the rate \u2014 the same rule the price chart carries.",
+   "fieldname": "flat_below_gm",
+   "fieldtype": "Float",
+   "label": "Flat below (g)",
+   "precision": "3"
+  }
+ ],
  "istable": 1,
  "links": [],
+ "modified": "2026-09-07 07:10:00",
+ "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Provider Making Rate",
  "owner": "Administrator",
  "permissions": [],
  "sort_field": "creation",
  "sort_order": "DESC",
- "states": [],
- "modified": "2026-09-07 07:10:00",
- "modified_by": "Administrator",
- "field_order": [
-  "karat",
-  "design_type",
-  "basis",
-  "rate",
-  "min_per_piece"
- ],
- "fields": [
-  {
-   "fieldname": "karat",
-   "fieldtype": "Select",
-   "options": "\n14K\n18K\n22K",
-   "label": "Karat",
-   "in_list_view": 1,
-   "columns": 1,
-   "description": "Blank = any karat."
-  },
-  {
-   "fieldname": "design_type",
-   "fieldtype": "Link",
-   "options": "Design Type",
-   "label": "Design Type",
-   "in_list_view": 1,
-   "columns": 2,
-   "description": "Blank = the provider's default rate."
-  },
-  {
-   "fieldname": "basis",
-   "fieldtype": "Select",
-   "options": "Per Gram\nPer Piece",
-   "default": "Per Gram",
-   "label": "Basis",
-   "in_list_view": 1,
-   "columns": 2,
-   "reqd": 1
-  },
-  {
-   "fieldname": "rate",
-   "fieldtype": "Float",
-   "label": "They charge",
-   "in_list_view": 1,
-   "columns": 2,
-   "precision": "2",
-   "reqd": 1
-  },
-  {
-   "fieldname": "min_per_piece",
-   "fieldtype": "Float",
-   "label": "Minimum \u20b9/pc",
-   "in_list_view": 1,
-   "columns": 2,
-   "precision": "2"
-  }
- ]
+ "states": []
 }

@@ -1,0 +1,30 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-08 07:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["certification","basis","rate","min_amount","from_ct","to_ct","solitaire"],
+ "fields": [
+  {"fieldname":"certification","fieldtype":"Data","label":"Certification","in_list_view":1,"reqd":1},
+  {"fieldname":"basis","fieldtype":"Select","label":"Basis","options":"Per Piece\nPer Ct","default":"Per Piece","in_list_view":1},
+  {"fieldname":"rate","fieldtype":"Float","label":"Rate","precision":"2","in_list_view":1},
+  {"fieldname":"min_amount","fieldtype":"Float","label":"Minimum","precision":"2"},
+  {"fieldname":"from_ct","fieldtype":"Float","label":"From ct","precision":"3"},
+  {"fieldname":"to_ct","fieldtype":"Float","label":"Below ct","precision":"3"},
+  {"fieldname":"solitaire","fieldtype":"Check","label":"Solitaire","default":"0"}
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-08 07:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Provider Certification Charge",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

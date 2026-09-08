@@ -19,6 +19,9 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
 	const S = { list: [], card: null, meta: {} };
+	// the same four buckets, in the same order, as a price chart
+	const BUCKETS = [["cs_rates", __("Colour stone (CS) — ₹ per carat")],
+		["cz_rates", __("CZ")], ["cvd_rates", __("CVD")], ["sw_rates", __("Swarovski (SW)")]];
 
 	const inr = (v) => (v == null ? "—" : "₹" + flt(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
 
@@ -72,7 +75,11 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 			<div class="nm">${esc(c.supplier)}
 				<span class="pill ${c.status === "Active" ? "act" : "sup"}">${esc(c.status)}</span></div>
 			<div class="meta">${__("quoted")} ${esc(c.rate_date)} · ${esc(c.name)}</div>
-			<div class="cnt">${__("{0} making · {1} metal · {2} diamond", [n.making || 0, n.metal || 0, n.diamond || 0])}</div>
+			<div class="cnt">${[
+				[n.making, __("making")], [n.metal, __("metal")], [n.diamond, __("diamond")],
+				[n.precious, __("precious")], [n.buckets, __("buckets")], [n.charges, __("charges")],
+			].filter(([v]) => v).map(([v, l]) => v + " " + l).join(" · ")
+				|| __("nothing priced yet")}</div>
 			<div class="act"><span class="pr-open">${c.status === "Active"
 				? __("Open / re-quote") : __("Start a new card from this")}</span></div></div>`;
 	}
@@ -101,7 +108,14 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 	function showEditor(base) {
 		const C = base ? JSON.parse(JSON.stringify(base)) : {
 			supplier: "", rate_date: frappe.datetime.get_today(), currency_note: "", notes: "",
-			making_rates: [], diamond_rates: [], metal_rates: [] };
+			making_rates: [], diamond_rates: [], metal_rates: [],
+			precious_stone_rates: [], cs_rates: [], cz_rates: [], cvd_rates: [], sw_rates: [],
+			certification_charges: [] };
+		// an older card was saved before these sections existed — treat a missing
+		// table as an empty one rather than letting .map() throw on undefined
+		["making_rates", "diamond_rates", "metal_rates", "precious_stone_rates",
+		 "cs_rates", "cz_rates", "cvd_rates", "sw_rates", "certification_charges"]
+			.forEach((k) => { if (!Array.isArray(C[k])) C[k] = []; });
 		// a saved card is history; opening one starts the NEXT card from its rates
 		const isNew = !base;
 		const dlg = new frappe.ui.Dialog({
@@ -143,16 +157,18 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 
 				<div class="pe-sec">${__("Making — what they charge us")}<span class="pe-add" data-k="making_rates">+ ${__("row")}</span></div>
 				<table class="pe-t"><thead><tr><th>${__("Karat")}</th><th>${__("Design type")}</th>
-					<th>${__("Basis")}</th><th>${__("Rate")}</th><th>${__("Min ₹/pc")}</th><th></th></tr></thead>
+					<th>${__("Basis")}</th><th>${__("Rate")}</th><th>${__("Min ₹/pc")}</th>
+					<th>${__("Flat below g")}</th><th></th></tr></thead>
 					<tbody>${C.making_rates.map((r, i) => `<tr data-k="making_rates" data-i="${i}">
 						<td><select data-f="karat"><option value="">${__("any")}</option>
 							${KAR.map((k) => `<option ${r.karat === k ? "selected" : ""}>${k}</option>`).join("")}</select></td>
 						<td><select data-f="design_type"><option value="">${__("DEFAULT")}</option>
 							${DT.map((t) => `<option ${r.design_type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}</select></td>
-						<td><select data-f="basis">${["Per Gram", "Per Piece"].map((b) =>
+						<td><select data-f="basis">${["Per Gram", "Per Piece", "Purity Percent"].map((b) =>
 							`<option ${(r.basis || "Per Gram") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
 						<td><input data-f="min_per_piece" type="number" step="0.01" value="${r.min_per_piece || ""}"></td>
+						<td><input data-f="flat_below_gm" type="number" step="0.001" value="${r.flat_below_gm || ""}"></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
 
 				<div class="pe-sec">${__("Metal — touch % of the day's board rate")}<span class="pe-add" data-k="metal_rates">+ ${__("row")}</span></div>
@@ -175,6 +191,46 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
 
+				<div class="pe-sec">${__("Precious stones — ₹ per carat")}<span class="pe-add" data-k="precious_stone_rates">+ ${__("row")}</span></div>
+				<table class="pe-t"><thead><tr><th>${__("Stone")}</th><th>${__("From ct")}</th>
+					<th>${__("Below ct")}</th><th>${__("₹ / ct")}</th><th></th></tr></thead>
+					<tbody>${C.precious_stone_rates.map((r, i) => `<tr data-k="precious_stone_rates" data-i="${i}">
+						<td><input data-f="stone" value="${esc(r.stone || "")}" placeholder="${__("item code")}"></td>
+						<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
+						<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
+						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
+
+				${BUCKETS.map(([k, label]) => `
+					<div class="pe-sec">${label}<span class="pe-add" data-k="${k}">+ ${__("row")}</span></div>
+					<table class="pe-t"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th>
+						<th>${__("Basis")}</th><th>${__("Rate")}</th><th></th></tr></thead>
+						<tbody>${(C[k] || []).map((r, i) => `<tr data-k="${k}" data-i="${i}">
+							<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
+							<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+							<td><select data-f="basis">${["Per Ct", "Per Gram", "Per Piece"].map((b) =>
+								`<option ${(r.basis || "Per Ct") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
+							<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
+							<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>`).join("")}
+
+				<div class="pe-sec">${__("Certification charges")}<span class="pe-add" data-k="certification_charges">+ ${__("row")}</span></div>
+				<table class="pe-t"><thead><tr><th>${__("Lab")}</th><th>${__("Basis")}</th>
+					<th>${__("Rate")}</th><th>${__("Minimum")}</th><th>${__("From ct")}</th>
+					<th>${__("Below ct")}</th><th>${__("Solitaire")}</th><th></th></tr></thead>
+					<tbody>${C.certification_charges.map((r, i) => `<tr data-k="certification_charges" data-i="${i}">
+						<td><select data-f="certification"><option value="">${__("— lab —")}</option>
+							${(S.meta.labs || []).map((l) =>
+								`<option ${(r.certification || "") === l ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></td>
+						<td><select data-f="basis">${["Per Piece", "Per Ct"].map((b) =>
+							`<option ${(r.basis || "Per Piece") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
+						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
+						<td><input data-f="min_amount" type="number" step="0.01" value="${r.min_amount || ""}"></td>
+						<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
+						<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+						<td style="text-align:center;"><input data-f="solitaire" type="checkbox"
+							style="width:auto;" ${r.solitaire ? "checked" : ""}></td>
+						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
+
 				<div class="pe-sec">${__("Notes")}</div>
 				<textarea class="pe-notes" rows="2" style="width:100%;border:1px solid var(--border-color);border-radius:7px;background:var(--control-bg);color:var(--text-color);padding:5px 8px;font-size:12.5px;">${esc(C.notes || "")}</textarea>
 			`);
@@ -188,13 +244,18 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 		$b.on("input change", "table.pe-t input, table.pe-t select", function () {
 			const $tr = $(this).closest("tr");
 			const arr = C[$tr.data("k")], i = +$tr.data("i");
-			arr[i][$(this).data("f")] = this.type === "number" ? flt(this.value) : this.value;
+			arr[i][$(this).data("f")] = this.type === "checkbox" ? (this.checked ? 1 : 0)
+				: this.type === "number" ? flt(this.value) : this.value;
 		});
 		$b.on("click", ".pe-add", function () {
 			const k = $(this).data("k");
-			C[k].push(k === "making_rates" ? { karat: "", design_type: "", basis: "Per Gram", rate: "", min_per_piece: "" }
+			C[k].push(
+				k === "making_rates" ? { karat: "", design_type: "", basis: "Per Gram", rate: "", min_per_piece: "", flat_below_gm: "" }
 				: k === "metal_rates" ? { karat: "18K", touch: "" }
-				: { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" });
+				: k === "diamond_rates" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
+				: k === "precious_stone_rates" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
+				: k === "certification_charges" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "", from_ct: "", to_ct: "", solitaire: 0 }
+				: { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" });
 			draw();
 		});
 		$b.on("click", ".pe-del", function () {

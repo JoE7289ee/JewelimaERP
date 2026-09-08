@@ -5,17 +5,6 @@
  "creation": "2026-09-07 07:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
- "index_web_pages_for_search": 1,
- "links": [],
- "module": "Jewelima",
- "name": "Provider Rate",
- "owner": "Administrator",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "track_changes": 1,
- "modified": "2026-09-07 07:00:00",
- "modified_by": "Administrator",
  "field_order": [
   "supplier",
   "rate_date",
@@ -28,6 +17,15 @@
   "diamond_rates",
   "metal_section",
   "metal_rates",
+  "precious_section",
+  "precious_stone_rates",
+  "bucket_section",
+  "cs_rates",
+  "cz_rates",
+  "cvd_rates",
+  "sw_rates",
+  "cert_section",
+  "certification_charges",
   "notes_section",
   "notes"
  ],
@@ -35,38 +33,38 @@
   {
    "fieldname": "supplier",
    "fieldtype": "Link",
-   "options": "Supplier",
-   "label": "Provider",
-   "reqd": 1,
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Provider",
+   "options": "Supplier",
+   "reqd": 1
   },
   {
+   "default": "Today",
    "fieldname": "rate_date",
    "fieldtype": "Date",
+   "in_list_view": 1,
    "label": "Quoted On",
-   "reqd": 1,
-   "default": "Today",
-   "in_list_view": 1
+   "reqd": 1
   },
   {
+   "default": "Active",
    "fieldname": "status",
    "fieldtype": "Select",
-   "options": "Active\nSuperseded",
-   "default": "Active",
-   "label": "Status",
    "in_list_view": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Active\nSuperseded"
   },
   {
    "fieldname": "col_head",
    "fieldtype": "Column Break"
   },
   {
+   "description": "Where this came from \u2014 an email, a call, a rate sheet.",
    "fieldname": "currency_note",
    "fieldtype": "Data",
-   "label": "Reference",
-   "description": "Where this came from \u2014 an email, a call, a rate sheet."
+   "label": "Reference"
   },
   {
    "fieldname": "making_section",
@@ -76,8 +74,8 @@
   {
    "fieldname": "making_rates",
    "fieldtype": "Table",
-   "options": "Provider Making Rate",
-   "label": "Making Rates"
+   "label": "Making Rates",
+   "options": "Provider Making Rate"
   },
   {
    "fieldname": "diamond_section",
@@ -87,8 +85,8 @@
   {
    "fieldname": "diamond_rates",
    "fieldtype": "Table",
-   "options": "Provider Diamond Rate",
-   "label": "Diamond Rates"
+   "label": "Diamond Rates",
+   "options": "Provider Diamond Rate"
   },
   {
    "fieldname": "metal_section",
@@ -98,8 +96,8 @@
   {
    "fieldname": "metal_rates",
    "fieldtype": "Table",
-   "options": "Provider Metal Rate",
-   "label": "Metal Rates"
+   "label": "Metal Rates",
+   "options": "Provider Metal Rate"
   },
   {
    "fieldname": "notes_section",
@@ -110,8 +108,66 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "precious_section",
+   "fieldtype": "Section Break",
+   "label": "Precious stones"
+  },
+  {
+   "fieldname": "precious_stone_rates",
+   "fieldtype": "Table",
+   "label": "Precious stone rates",
+   "options": "Provider Stone Rate"
+  },
+  {
+   "fieldname": "bucket_section",
+   "fieldtype": "Section Break",
+   "label": "Colour stone / CZ / CVD / Swarovski"
+  },
+  {
+   "fieldname": "cs_rates",
+   "fieldtype": "Table",
+   "label": "Colour stone (CS)",
+   "options": "Provider Bucket Rate"
+  },
+  {
+   "fieldname": "cz_rates",
+   "fieldtype": "Table",
+   "label": "CZ",
+   "options": "Provider Bucket Rate"
+  },
+  {
+   "fieldname": "cvd_rates",
+   "fieldtype": "Table",
+   "label": "CVD",
+   "options": "Provider Bucket Rate"
+  },
+  {
+   "fieldname": "sw_rates",
+   "fieldtype": "Table",
+   "label": "Swarovski (SW)",
+   "options": "Provider Bucket Rate"
+  },
+  {
+   "fieldname": "cert_section",
+   "fieldtype": "Section Break",
+   "label": "Certification charges"
+  },
+  {
+   "fieldname": "certification_charges",
+   "fieldtype": "Table",
+   "label": "Certification charges",
+   "options": "Provider Certification Charge"
   }
  ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-07 07:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Provider Rate",
+ "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
@@ -137,5 +193,9 @@
    "share": 1,
    "write": 1
   }
- ]
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
 }
