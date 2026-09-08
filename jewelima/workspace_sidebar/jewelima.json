@@ -1648,7 +1648,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "x-circle",
+   "icon": "circle-x",
    "indent": 0,
    "keep_closed": 0,
    "label": "Remove Certification",
@@ -2340,6 +2340,7 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "layout-dashboard",
    "indent": 1,
    "keep_closed": 0,
    "label": "Costing Board",
@@ -2351,6 +2352,7 @@
   {
    "child": 1,
    "collapsible": 0,
+   "icon": "chart-column",
    "indent": 1,
    "keep_closed": 0,
    "label": "Chart Detail",
@@ -2362,7 +2364,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "alert-triangle",
+   "icon": "triangle-alert",
    "indent": 0,
    "keep_closed": 0,
    "label": "Chart Gaps",
@@ -2812,7 +2814,7 @@
    "url": ""
   }
  ],
- "modified": "2026-09-08 12:04:37.102519",
+ "modified": "2026-09-08 12:25:23.658988",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

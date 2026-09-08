@@ -10907,7 +10907,6 @@ def get_costing_board():
 	}
 
 
-@frappe.whitelist()
 def _stocked_diamond_qualities():
 	"""The diamond qualities we actually hold, as the PARENT quality a chart
 	prices in — VVS-EF, VVS/VS-GH, SI-IJ and the rest.
@@ -10927,6 +10926,7 @@ def _stocked_diamond_qualities():
 	return sorted(out)
 
 
+@frappe.whitelist()
 def get_chart_gaps():
 	"""Every ACTIVE chart's gaps, grouped by the gap rather than by the chart.
 
