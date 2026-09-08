@@ -29,3 +29,46 @@
 .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
 	font-weight: 800;
 }
+
+/* A darker ground for the sidebar, so the navigation reads as a separate thing
+ * from the work rather than as more white page. Frappe paints it with
+ * --surface-menu-bar, which the top bar shares, so the override is SCOPED to
+ * the sidebar's own container: custom properties inherit, and nothing outside
+ * this subtree sees a different value.
+ *
+ * The three colours move together, or the sidebar stops making sense:
+ *   - hover has to stay darker than the ground (Frappe's own direction), with
+ *     a bigger step than its 5 units, because this is read across a bench.
+ *   - the selected item stays WHITE. On a light-grey ground it now reads as a
+ *     card lifted off the sidebar, which is more legible than it was on
+ *     near-white.
+ *   - the edge has to be darker than the ground or the sidebar has no border
+ *     at all against a white page.
+ *
+ * Dark mode is already near-black and is left exactly as Frappe has it — the
+ * values are re-asserted so this override cannot leak into it.
+ */
+.body-sidebar-container {
+	--surface-menu-bar: #e8e8e8;
+	--sidebar-hover-color: #dcdcdc;
+	--sidebar-border-color: #d5d5d5;
+}
+[data-theme="dark"] .body-sidebar-container {
+	--surface-menu-bar: #0f0f0f;
+	--sidebar-hover-color: rgba(43, 43, 43, 1);
+	--sidebar-border-color: #232323;
+}
+
+/* A section heading is muted on purpose, but muted grey on a darker ground
+ * falls under the readable line (#7c7c7c on #e8e8e8 is 3.4:1). This is the
+ * smallest step that clears 4.5:1 while staying lighter than the links under
+ * it, so the heading still reads as a heading.
+ */
+.body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
+.sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
+	color: #666666;
+}
+[data-theme="dark"] .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
+[data-theme="dark"] .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
+	color: inherit;
+}
