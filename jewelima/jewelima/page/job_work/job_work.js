@@ -43,10 +43,13 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		table.jw-grid th{position:sticky;top:0;background:var(--control-bg,var(--fg-color));border-bottom:2px solid var(--gray-400,#aeb6bf);padding:6px 8px;text-align:left;font-weight:700;}
 		table.jw-grid td{border-bottom:1px solid var(--border-color);padding:5px 8px;}
 		table.jw-grid td.num,table.jw-grid th.num{text-align:right;}
-		table.jw-grid td.num input.jw-win{display:inline-block;width:90px;text-align:right;-moz-appearance:textfield;}
-		.jw-win::-webkit-inner-spin-button,.jw-win::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+		table.jw-grid td.num input.jw-win,table.jw-grid td.num input.jw-scrub{
+			display:inline-block;width:90px;text-align:right;-moz-appearance:textfield;}
+		.jw-win::-webkit-inner-spin-button,.jw-win::-webkit-outer-spin-button,
+		.jw-scrub::-webkit-inner-spin-button,.jw-scrub::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+		.jw-opts{margin:0 0 8px;}
 		.jw-scrubbtn{border:1px solid var(--border-color);border-radius:8px;background:none;
-			padding:4px 12px;font-size:12px;cursor:pointer;color:var(--text-color);margin-left:12px;}
+			padding:4px 12px;font-size:12px;cursor:pointer;color:var(--text-color);}
 		.jw-scrubbtn.on{border-color:#1f618d;background:rgba(31,97,141,.10);color:#1f618d;font-weight:700;}
 		.jw-scrub-pos{color:#1f618d;}
 		[data-theme="dark"] .jw-scrubbtn.on,[data-theme="dark"] .jw-scrub-pos{color:#7FB3DA;}
@@ -76,10 +79,10 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			<select class="jw-tpx-to" style="display:none;border:1px solid var(--border-color);border-radius:6px;height:28px;font-size:12px;background:var(--fg-color);color:var(--text-color);">
 				<option value="">${__("— destination —")}</option></select>
 		</div>
+		<div class="jw-opts" style="display:none;"><button class="jw-scrubbtn">${__("+ Scrub")}</button></div>
 		<div class="jw-msg"></div>
 		<div class="jw-box"><table class="jw-grid"><thead class="jw-thead"></thead><tbody class="jw-body"></tbody></table></div>
 		<div class="jw-foot"><span><span class="jw-count">0</span> card(s) collected.</span>
-			<button class="jw-scrubbtn" style="display:none;">${__("+ Scrub")}</button>
 			<span class="jw-total"></span></div>
 		<div class="jw-actions"></div>
 	`);
@@ -172,8 +175,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// ---- rendering -------------------------------------------------------
 	function renderHead() {
 		// scrub is a receipt idea only — there is nothing to hand back on the way out
-		$(page.main).find(".jw-scrubbtn").toggle(state.mode === "receipt")
-			.toggleClass("on", !!state.scrub)
+		$(page.main).find(".jw-opts").toggle(state.mode === "receipt");
+		$(page.main).find(".jw-scrubbtn").toggleClass("on", !!state.scrub)
 			.text(state.scrub ? __("Scrub on") : __("+ Scrub"));
 		if (state.mode === "issue") {
 			$thead.html(`<tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Status</th><th class="num">Gold (g)</th><th style="width:34px"></th></tr>`);

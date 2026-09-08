@@ -53,9 +53,6 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		.cc-m-undo   .cc-scan input{border-color:var(--text-color);}
 		.cc-m-accept .cc-scan input,.cc-m-reject .cc-scan input,
 		.cc-m-stone .cc-scan input,.cc-m-undo .cc-scan input{border-width:2px;}
-		.cc-chip.stg-undo{border-style:dashed;border-color:var(--text-color);
-			background:var(--control-bg);}
-		.cc-kpi.un .v{color:var(--text-color);}
 		.cc-pend{font-size:13px;color:var(--text-muted);align-self:center;}
 		.cc-histbtn{border:1px solid var(--border-color);border-radius:8px;background:none;
 			padding:9px 15px;font-size:12.5px;cursor:pointer;color:var(--text-color);}
@@ -147,10 +144,11 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		scan.$input.focus();
 	});
 
-	// three modes, so the button CYCLES: confirm -> reject -> stone change.
-	// Stone change is its own thing and not a kind of rejection — a rejected
-	// piece just goes without its stamp and stays sellable, a stone-change piece
-	// owes work and leaves stock until it is done.
+	// the button CYCLES: confirm -> reject -> stone change -> undo. Stone change
+	// is its own thing and not a kind of rejection — a rejected piece just goes
+	// without its stamp and stays sellable, a stone-change piece owes work and
+	// leaves stock until it is done. Undo is not a fourth decision at all: it is
+	// the eraser for scans still sitting on this page, and it stops at Save.
 	const MODES = ["accept", "reject", "stone", "undo"];
 	const MODE_LABEL = { accept: __("CONFIRM"), reject: __("REJECT"),
 		stone: __("STONE CHANGE"), undo: __("UNDO") };
@@ -158,7 +156,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		accept: __("scanning marks the piece confirmed"),
 		reject: __("scanning sends it back without a stamp"),
 		stone: __("scanning sends it out for a stone change"),
-		undo: __("scanning puts a piece back to waiting — whatever it was marked"),
+		undo: __("scanning clears a scan you have not saved yet"),
 	};
 	// The mode is the single most consequential thing on this page and a scanner
 	// never looks up. So it is not just a button: the whole page carries the
@@ -198,10 +196,9 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 
 	// what is staged, and the one button that writes it
 	function paintBar() {
-		let ok = 0, rj = 0, st = 0, un = 0;
-		staged.forEach((m) => (m === "accept" ? ok++ : m === "reject" ? rj++
-			: m === "stone" ? st++ : un++));
-		const n = ok + rj + st + un;
+		let ok = 0, rj = 0, st = 0;
+		staged.forEach((m) => (m === "accept" ? ok++ : m === "reject" ? rj++ : st++));
+		const n = ok + rj + st;
 		root.find(".cc-bar").toggleClass("dirty", n > 0);
 		root.find(".cc-kpis").html(`
 			<div class="cc-kpi"><div class="k">${__("Waiting")}</div>
@@ -209,7 +206,6 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 			<div class="cc-kpi ok"><div class="k">${__("Scanned to confirm")}</div><div class="v">${ok}</div></div>
 			<div class="cc-kpi rj"><div class="k">${__("Scanned to reject")}</div><div class="v">${rj}</div></div>
 			<div class="cc-kpi st"><div class="k">${__("Stone change")}</div><div class="v">${st}</div></div>
-			${un ? `<div class="cc-kpi un"><div class="k">${__("Undoing")}</div><div class="v">${un}</div></div>` : ""}
 			<div class="cc-kpi"><div class="k">${__("Unsaved")}</div><div class="v">${n}</div></div>`);
 		root.find(".cc-save").prop("disabled", !n)
 			.text(n ? __("SAVE {0} SCAN(S)", [n]) : __("NOTHING TO SAVE"));
@@ -253,19 +249,23 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 		scan.$input.focus();
 		const p = findPiece(v);
 		if (!p) return logScan(v, "er", __("Not on any collected batch"));
+		if (MODE === "undo") {
+			// the only thing undo can reach is a scan still sitting on this page
+			const was = staged.get(p.order_bag);
+			if (!was) {
+				return logScan(p.order_bag, "er", p.state === "pending"
+					? __("Nothing to undo — it has not been scanned")
+					: __("Already saved — use Remove Certification to take it back"));
+			}
+			staged.delete(p.order_bag);
+			logScan(p.order_bag, "er", __("unstaged ({0})", [MODE_LABEL[was]]));
+			paint();
+			return;
+		}
 		if (staged.has(p.order_bag)) {
 			return logScan(p.order_bag, "er", __("Already scanned — it is waiting to be saved"));
 		}
-		if (MODE === "undo") {
-			// undo is the mirror image: it wants a piece that HAS been decided
-			if (p.state === "pending") {
-				return logScan(p.order_bag, "er", __("Nothing to undo — it is still waiting"));
-			}
-			if (p.state === "changed") {
-				return logScan(p.order_bag, "er",
-					__("Its stone change is already closed — the piece came back"));
-			}
-		} else {
+		{
 			if (p.state === "stone") {
 				return logScan(p.order_bag, "er", __("Away for a stone change — it comes back on the Stone Changes desk"));
 			}
@@ -276,8 +276,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 			}
 		}
 		staged.set(p.order_bag, MODE);
-		logScan(p.order_bag, MODE === "accept" ? "ok" : MODE === "undo" ? "er" : "rj",
-			MODE === "undo" ? __("staged to UNDO ({0})", [p.state]) : __("staged"));
+		logScan(p.order_bag, MODE === "accept" ? "ok" : "rj", __("staged"));
 		paint();
 		root.find(`.cc-chip[data-bag="${p.order_bag}"]`).addClass("flash");
 	});

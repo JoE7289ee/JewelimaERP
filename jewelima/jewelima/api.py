@@ -16690,76 +16690,6 @@ def _confirm_cert_one(nm, mode, touched):
 	return {"ok": 1, "mode": mode, "batch": r.parent, "row": r.name}
 
 
-def _undo_cert_one(nm, touched):
-	"""Put a piece back to pending on its batch — the confirm desk's undo.
-
-	Each of the three outcomes leaves a different mess to clear:
-
-	  * CONFIRMED wrote a lab onto the piece's certifications trail. The tag only
-	    comes off if no OTHER confirmed line still justifies it, because a piece
-	    can legitimately have been to the same lab twice.
-	  * REJECTED wrote nothing but the flag.
-	  * STONE CHANGE moved metal out of Finished Goods and opened a batch. That
-	    has to be reversed in stock, not merely un-flagged — and only while the
-	    batch is still open. Once someone has closed it the metal has already come
-	    back and the piece has been worked on; there is nothing safe to undo.
-	"""
-	from jewelima.setup import STONE_CHANGE_WAREHOUSE
-
-	row = frappe.db.sql("""select i.name, i.parent, i.received, i.rejected, i.stone_change,
-			i.confirmed_by, c.cert_type, c.certification_type
-		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
-		where i.order_bag = %s and (i.received = 1 or i.rejected = 1 or i.stone_change = 1)
-		order by i.received_on desc, c.creation desc limit 1""", nm, as_dict=True)
-	if not row:
-		if not frappe.db.exists("Order Bag", nm):
-			return {"rejected_scan": frappe._("This card doesn't exist")}
-		return {"rejected_scan": frappe._("Nothing to undo — it is still waiting")}
-	r = row[0]
-
-	if cint(r.stone_change):
-		sc = frappe.db.sql("""select s.name, s.status from `tabStone Change Item` i
-			join `tabStone Change` s on s.name = i.parent
-			where i.order_bag = %s order by s.creation desc limit 1""", nm, as_dict=True)
-		if sc and sc[0].status != "Processing":
-			return {"rejected_scan": frappe._("{0} is {1} — the tray has already left the floor.")
-				.format(sc[0].name, sc[0].status.lower())}
-		if sc:
-			d = frappe.get_doc("Stone Change", sc[0].name)
-			mats = _bag_convert_materials([nm]).get(nm) or {}
-			if mats:
-				_stock_move_many(mats, _wh(STONE_CHANGE_WAREHOUSE), _wh("Finished Goods"))
-			d.set("items", [x for x in d.items if x.order_bag != nm])
-			if not d.items:
-				# an emptied batch is not a batch — it is cancelled, not deleted,
-				# so the number it was given stays readable
-				d.status = "Cancelled"
-			d.save(ignore_permissions=True)
-			frappe.db.set_value("Order Bag", nm, {
-				"stock_status": "In Stock", "in_stock_on": frappe.utils.now_datetime(),
-				"location": frappe.db.get_value("Order Bag", nm, "bucket") or STONE_CHANGE_LOCATION})
-
-	if cint(r.received):
-		ct = (r.cert_type or r.certification_type or "").strip()
-		others = frappe.db.sql("""select 1 from `tabCertification Item` i
-			join `tabCertification` c on c.name = i.parent
-			where i.order_bag = %s and i.name != %s and i.received = 1
-			  and ifnull(c.cert_type, c.certification_type) = %s limit 1""", (nm, r.name, ct))
-		if ct and not others:
-			tags = [t.strip() for t in
-				(frappe.db.get_value("Order Bag", nm, "certifications") or "").split(",") if t.strip()]
-			frappe.db.set_value("Order Bag", nm, "certifications",
-				", ".join(t for t in tags if t != ct), update_modified=False)
-
-	frappe.db.sql("""update `tabCertification Item`
-		set received = 0, rejected = 0, stone_change = 0, received_on = null, confirmed_by = null
-		where name = %s""", r.name)
-	touched.add(r.parent)
-	was = "confirmed" if cint(r.received) else "rejected" if cint(r.rejected) else "stone change"
-	return {"ok": 1, "mode": "undo", "batch": r.parent, "row": r.name, "was": was,
-		"by": r.confirmed_by or ""}
-
-
 def _confirm_cert_rollup(parents):
 	"""All processed -> Received; some -> Partially Received. Once per batch."""
 	done = []
@@ -16978,12 +16908,19 @@ def confirm_cert_batch(changes):
 	for c in changes or []:
 		nm = _resolve_bag_code((c or {}).get("bag"))
 		mode = (c or {}).get("mode") or "accept"
-		if mode not in ("accept", "reject", "stone", "undo"):
-			mode = "accept"
+		# "undo" never reaches here — it is a page-side eraser for scans that have
+		# not been saved yet, and there is deliberately no endpoint that unwrites
+		# a confirmation. Taking a tag off a piece that IS confirmed is Remove
+		# Certification's job, which asks for a reason and records who did it.
 		if not nm:
 			continue
-		res = _undo_cert_one(nm, touched) if mode == "undo" \
-			else _confirm_cert_one(nm, mode, touched)
+		if mode not in ("accept", "reject", "stone"):
+			# refused, never guessed — a stale page sending an old mode must not
+			# have it read as a confirmation
+			results.append({"bag": nm, "mode": mode, "ok": 0,
+				"rejected_scan": _("{0} is not something this desk can do — reload the page.").format(mode)})
+			continue
+		res = _confirm_cert_one(nm, mode, touched)
 		res.update({"bag": nm, "mode": mode})
 		if res.get("ok") and mode == "stone":
 			to_change.append({"bag": nm, "cert": res.get("batch")})
