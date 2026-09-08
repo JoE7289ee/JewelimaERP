@@ -111,7 +111,8 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 						: stage === "sent" ? __("SENT") : esc(b.status)}</span>
 				<span class="meta">${__("opened")} ${esc(b.opened_on)} ${__("by")} ${esc(b.owner_label || "")}${
 					b.sent_on ? " · " + __("sent") + " " + esc(b.sent_on) : ""}${
-					b.closed_on ? " · " + __("back") + " " + esc(b.closed_on) : ""}</span>
+					b.closed_on ? " · " + __("back") + " " + esc(b.closed_on) : ""}${
+					b.center ? " · " + esc(b.center) : ""}</span>
 				${stage === "sent" && b.days_out > 0
 					? `<span class="sx-age">${__("{0} day(s) away", [b.days_out])}</span>`
 					: stage === "processing" && b.days > 0
@@ -158,52 +159,40 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 
 	// the whole tray comes back at once, the way a certification batch is collected
 	// stones done: the tray goes back out to the lab, exactly like a first trip
+	// nothing to fill in: the tray goes back to the centre it came from, and the
+	// only question worth asking is whether it is going now
 	root.on("click", ".sx-send", function () {
 		const nm = $(this).closest(".sx-card").data("name");
 		const b = (DATA.processing || []).find((x) => x.name === nm) || {};
-		const d = new frappe.ui.Dialog({
-			title: __("Send {0} out again", [nm]),
-			fields: [
-				{ fieldtype: "Data", fieldname: "center", label: __("Where it is going") },
-				{ fieldtype: "Small Text", fieldname: "remarks", label: __("Anything to record") },
-				{ fieldtype: "HTML", fieldname: "note" },
-			],
-			primary_action_label: __("Send it out"),
-			primary_action(v) {
-				d.hide();
+		frappe.confirm(
+			__("Send {0} out again?", [nm]) + "<br><span style='color:var(--text-muted);font-size:12.5px;'>"
+			+ __("{0} piece(s) go back to {1} and show on Out of House until they return.",
+				[b.pieces || 0, b.center || __("the same centre")]) + "</span>",
+			() => {
 				frappe.dom.freeze(__("Sending…"));
-				frappe.call({ method: API + ".send_stone_change",
-					args: { name: nm, center: v.center || "", remarks: v.remarks || "" } })
+				frappe.call({ method: API + ".send_stone_change", args: { name: nm } })
 					.then((rr) => {
 						frappe.dom.unfreeze();
+						const m = rr.message || {};
 						frappe.show_alert({ indicator: "green", message:
-							__("{0} sent — {1} piece(s) out again.", [nm, (rr.message || {}).count]) }, 6);
+							__("{0} sent — {1} piece(s) out again{2}.",
+								[nm, m.count, m.center ? " · " + m.center : ""]) }, 6);
 						load();
 					}).catch(() => frappe.dom.unfreeze());
-			},
-		});
-		d.fields_dict.note.$wrapper.html(`<div style="font-size:12.5px;color:var(--text-muted);">${
-			__("{0} piece(s) move Stone Change → At Certification and show on Out of House until they come back.",
-				[b.pieces || 0])}</div>`);
-		d.show();
+			});
 	});
 
 	// and back again — which is what puts the pieces in front of the Confirm desk
 	root.on("click", ".sx-collect", function () {
 		const nm = $(this).closest(".sx-card").data("name");
 		const b = (DATA.sent || []).find((x) => x.name === nm) || {};
-		const d = new frappe.ui.Dialog({
-			title: __("Bring {0} back", [nm]),
-			fields: [
-				{ fieldtype: "HTML", fieldname: "note" },
-				{ fieldtype: "Small Text", fieldname: "remarks", label: __("Anything to record") },
-			],
-			primary_action_label: __("Collect it"),
-			primary_action(v) {
-				d.hide();
+		frappe.confirm(
+			__("Bring {0} back?", [nm]) + "<br><span style='color:var(--text-muted);font-size:12.5px;'>"
+			+ __("{0} piece(s) go back In Stock and return to the Confirm desk.", [b.pieces || 0])
+			+ "</span>",
+			() => {
 				frappe.dom.freeze(__("Collecting…"));
-				frappe.call({ method: API + ".collect_stone_change",
-					args: { name: nm, remarks: v.remarks || "" } })
+				frappe.call({ method: API + ".collect_stone_change", args: { name: nm } })
 					.then((rr) => {
 						frappe.dom.unfreeze();
 						const m = rr.message || {};
@@ -211,12 +200,7 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 							__("{0} back — {1} piece(s) waiting to be confirmed.", [nm, m.count]) }, 7);
 						load();
 					}).catch(() => frappe.dom.unfreeze());
-			},
-		});
-		d.fields_dict.note.$wrapper.html(`<div style="font-size:12.5px;color:var(--text-muted);">${
-			__("{0} piece(s) move At Certification → Finished Goods, go back In Stock in their own buckets, and their certification lines go back to WAITING — ready to confirm on the Confirm desk.",
-				[b.pieces || 0])}</div>`);
-		d.show();
+			});
 	});
 
 	// what the lab actually asked for, written where the bench will read it

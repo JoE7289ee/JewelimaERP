@@ -16776,6 +16776,19 @@ def _confirm_cert_rollup(parents):
 STONE_CHANGE_LOCATION = "STONE CHANGE"
 
 
+def _stone_change_center(rows):
+	"""Where the tray goes back to: the centre its pieces came from.
+
+	Nobody is asked — a stone change is the SAME trip resumed, so the centre is
+	whatever the originating certification batch used. Pieces from batches at
+	different centres leave it blank rather than guess."""
+	names = {r.get("from_certification") for r in rows if r.get("from_certification")}
+	centers = {(frappe.db.get_value("Certification", n, "center") or "").strip()
+		for n in names}
+	centers.discard("")
+	return centers.pop() if len(centers) == 1 else ""
+
+
 def _open_stone_change(pieces):
 	"""Open ONE Stone Change batch for the pieces just marked, and move their
 	stock out of Finished Goods."""
@@ -16792,7 +16805,8 @@ def _open_stone_change(pieces):
 			"gross": flt(b.act_gross_weight), "dmd_ct": flt(b.act_dmd_weight),
 			"from_certification": p.get("cert")})
 	d = frappe.get_doc({"doctype": "Stone Change", "status": "Processing",
-		"opened_on": frappe.utils.today(), "items": rows}).insert(ignore_permissions=True)
+		"opened_on": frappe.utils.today(), "center": _stone_change_center(rows),
+		"items": rows}).insert(ignore_permissions=True)
 
 	totals = {}
 	for mats in _bag_convert_materials(bags).values():
@@ -16846,12 +16860,12 @@ def get_stone_changes():
 
 
 @frappe.whitelist()
-def send_stone_change(name, center=None, remarks=None):
+def send_stone_change(name):
 	"""The stones are changed — send the tray back out to the lab.
 
-	Stock leaves the Stone Change warehouse for At Certification, exactly as a
-	first trip does, so the pieces show on Out of House again while they are
-	away. The certification lines stay marked stone_change: the piece has not
+	Nothing is asked for: it goes back to the centre it came from. Stock leaves
+	the Stone Change warehouse for At Certification, exactly as a first trip
+	does, so the pieces show on Out of House again while they are away. The certification lines stay marked stone_change: the piece has not
 	been confirmed yet, and it is not back."""
 	from jewelima.setup import STONE_CHANGE_WAREHOUSE, CERTIFICATION_WAREHOUSE
 
@@ -16873,16 +16887,16 @@ def send_stone_change(name, center=None, remarks=None):
 	d.stock_entry = se
 	d.status = "Sent"
 	d.sent_on = frappe.utils.today()
-	d.center = (center or "").strip() or d.center
-	if (remarks or "").strip():
-		d.remarks = (d.remarks or "") + ("\n" if d.remarks else "") + remarks.strip()
+	# trays opened before the centre was stamped at creation get it now
+	if not (d.center or "").strip():
+		d.center = _stone_change_center([r.as_dict() for r in d.items])
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
-	return {"name": name, "count": len(bags), "stock_entry": se}
+	return {"name": name, "count": len(bags), "stock_entry": se, "center": d.center or ""}
 
 
 @frappe.whitelist()
-def collect_stone_change(name, remarks=None):
+def collect_stone_change(name):
 	"""The tray is back. Stock returns to Finished Goods, the pieces go back In
 	Stock in their own buckets — and their certification lines are put back to
 	WAITING, because the whole point of the trip was to have them confirmed.
@@ -16920,8 +16934,6 @@ def collect_stone_change(name, remarks=None):
 	d.return_stock_entry = se
 	d.status = "Collected"
 	d.closed_on = frappe.utils.today()
-	if (remarks or "").strip():
-		d.remarks = (d.remarks or "") + ("\n" if d.remarks else "") + remarks.strip()
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": name, "count": len(bags), "stock_entry": se,
