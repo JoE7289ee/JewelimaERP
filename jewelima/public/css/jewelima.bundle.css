@@ -75,3 +75,30 @@
 [data-theme="dark"] .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
 	color: inherit;
 }
+
+/* The menu that is OPEN gets its own ground — a light red block against the
+ * green — so at a glance you can see which menu you are inside without reading
+ * a single word. It pairs with the two rules in sidebar.bundle.js: one menu is
+ * open at a time, plus the menu holding the page you are on, so this paints at
+ * most two blocks and never turns the sidebar into a patchwork.
+ *
+ * The page you are on stays WHITE, and white on this red is the same lift it
+ * had on the green (1.20 against 1.22), so the selected line reads as a card
+ * either way.
+ *
+ * :has() is doing the work — a container holding a nested list that is not
+ * hidden IS an open menu. On a browser without :has() the selector is invalid
+ * and the whole rule is dropped, which is the right way for this to fail: the
+ * sidebar goes back to plain green and nothing breaks.
+ */
+.body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden)) {
+	background: #f8e6e6;
+	border-radius: 8px;
+	/* hover has to follow the block it is on, or hovering inside an open menu
+	 * flashes the green back at you */
+	--sidebar-hover-color: #f0d6d6;
+}
+[data-theme="dark"] .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden)) {
+	background: rgba(120, 40, 40, 0.22);
+	--sidebar-hover-color: rgba(140, 55, 55, 0.35);
+}
