@@ -4,10 +4,15 @@
 // three open menus push everything else below the fold. Two rules:
 //
 //   1. a menu that opens is scrolled into view, title first.
-//   2. ONE menu at a time. Opening one closes whatever was open, including the
-//      menu holding the page you are on — that menu is not doing any work by
-//      staying open, and the page you are on is already marked by its white
-//      pill. Walking into a page opens its menu and closes the rest.
+//   2. one menu at a time, EXCEPT the menu holding the page you are on.
+//
+//      Closing that one as well was tried, and it made the sidebar feel broken.
+//      It is usually the menu ABOVE the one you are reaching for, so closing it
+//      takes a screenful out of the list and everything below jumps up —
+//      measured at 261px. The menu you clicked DOES open; it just leaves from
+//      under your finger, and the second click lands on a different menu. The
+//      anchor below gives back what scroll it can, but near the top of the list
+//      there is nothing to give back, so the exemption stays.
 //
 // Two things this must be careful about, both learned the hard way:
 //
@@ -41,8 +46,7 @@ frappe.provide("jewelima.sidebar");
 	const isOpen = (s) => !s.$nested_items.hasClass("hidden");
 	const headerOf = (s) => s.wrapper.find(".standard-sidebar-item").get(0);
 
-	// the menu holding the page you are on — used when a route change decides
-	// which single menu should be left open
+	// the menu holding the page you are on — the one that is never closed for you
 	function current(sb) {
 		const a = sb.wrapper && sb.wrapper.find(".active-sidebar").get(0);
 		if (!a) return null;
@@ -78,9 +82,10 @@ frappe.provide("jewelima.sidebar");
 	}
 
 	function keepOnly(sb, opened) {
+		const cur = current(sb);
 		const closed = [];
 		sections(sb).forEach((s) => {
-			if (s === opened || !isOpen(s)) return;
+			if (s === opened || s === cur || !isOpen(s)) return;
 			try {
 				s.close();
 				closed.push(s);
@@ -107,6 +112,47 @@ frappe.provide("jewelima.sidebar");
 		return null;
 	}
 
+	// Close the others WITHOUT moving the menu you just clicked.
+	//
+	// This is the whole difference between the rule feeling helpful and feeling
+	// broken. Closing a menu that sits ABOVE the one you clicked takes its rows
+	// out of the list, and everything below jumps up — measured at 261px on a
+	// real sidebar. The menu does open; it just leaves from under your finger,
+	// and a second click lands on a different menu entirely. It reads as "it
+	// won't open". So: note where the header is, do the closing, and put the
+	// scroll back so the header has not moved a pixel.
+	function keepOnlyInPlace(sb, s) {
+		const el = headerOf(s);
+		const box = el && scrollParent(el);
+		const before = el ? el.getBoundingClientRect().top : 0;
+		const n = keepOnly(sb, s);
+		if (n && box && el) {
+			const after = el.getBoundingClientRect().top;
+			if (after !== before) box.scrollTop += after - before;
+		}
+		// Scrolling can only give back what there is above it: near the top of
+		// the list there may not be enough, and the header still rises. Nothing
+		// can hold it there — the rows it was sitting on are gone — so make sure
+		// at least that it did not rise out of sight. This runs even when
+		// nothing was closed, because the menu you clicked may simply have been
+		// sitting at the bottom edge.
+		//
+		// The HEADER only. reveal() would scroll a tall open menu until its last
+		// item showed, which drags the header up and undoes the anchor — the very
+		// thing this function exists to prevent.
+		revealHeader(s);
+	}
+
+	function revealHeader(s) {
+		const el = headerOf(s);
+		const box = el && scrollParent(el);
+		if (!box) return;
+		const e = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+		if (!e.height) return;
+		if (e.top < b.top + PAD) box.scrollTop -= b.top + PAD - e.top;
+		else if (e.bottom > b.bottom - PAD) box.scrollTop += e.bottom - b.bottom + PAD;
+	}
+
 	// show the menu, header first: a menu taller than the sidebar is scrolled to
 	// its title rather than its last item, which is the half you can read
 	function reveal(s) {
@@ -121,7 +167,8 @@ frappe.provide("jewelima.sidebar");
 		if (Math.abs(d) > 1) box.scrollTop += d;
 	}
 
-	jewelima.sidebar = { sidebar, sections, isOpen, current, keepOnly, reveal, headerOf };
+	jewelima.sidebar = { sidebar, sections, isOpen, current, keepOnly, keepOnlyInPlace,
+		reveal, revealHeader, headerOf };
 
 	// Frappe's own click handler opens or closes the menu; we only tidy up after
 	// it, and ONLY for a click on a menu's own header. A click on a page inside a
@@ -133,13 +180,15 @@ frappe.provide("jewelima.sidebar");
 		requestAnimationFrame(() => {
 			const s = sections(sb).find((x) => headerOf(x) === el);
 			if (!s || !isOpen(s)) return;   // a link, or a menu being closed
-			keepOnly(sb, s);
-			reveal(s);
+			// no reveal here: you are looking at the menu you just clicked, so
+			// the only thing worth doing is not moving it
+			keepOnlyInPlace(sb, s);
 		});
 	});
 
-	// Walking into a page opens its menu and closes everything else. Frappe opens
-	// the active page's menu here, so this runs straight after it.
+	// Walking into a page makes its menu the one you are in, and whatever was
+	// only being looked at closes behind you. Frappe opens the active page's
+	// menu here, so this runs straight after it.
 	function patch() {
 		if (!frappe.ui || !frappe.ui.Sidebar || frappe.ui.Sidebar.prototype.__jw_menus) return false;
 		const proto = frappe.ui.Sidebar.prototype;
