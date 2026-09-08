@@ -14,7 +14,10 @@
 
 frappe.pages["job-work"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: "JOB WORK", single_column: true });
-	const state = { mode: "issue", rows: [], location: null, history: [], batchEmp: null };
+	// scrub is OFF until asked for: most receipts have none, and an extra column
+	// on every one of them would be a box to skip rather than a box to fill
+	const state = { mode: "issue", rows: [], location: null, history: [], batchEmp: null,
+		scrub: false };
 	// gold moves per card on both sides of this page — small requests, so a
 	// timeout can never strand a long batch half-done
 	const JW_CHUNK = 20;
@@ -42,6 +45,11 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		table.jw-grid td.num,table.jw-grid th.num{text-align:right;}
 		table.jw-grid td.num input.jw-win{display:inline-block;width:90px;text-align:right;-moz-appearance:textfield;}
 		.jw-win::-webkit-inner-spin-button,.jw-win::-webkit-outer-spin-button{-webkit-appearance:none;margin:0;}
+		.jw-scrubbtn{border:1px solid var(--border-color);border-radius:8px;background:none;
+			padding:4px 12px;font-size:12px;cursor:pointer;color:var(--text-color);margin-left:12px;}
+		.jw-scrubbtn.on{border-color:#1f618d;background:rgba(31,97,141,.10);color:#1f618d;font-weight:700;}
+		.jw-scrub-pos{color:#1f618d;}
+		[data-theme="dark"] .jw-scrubbtn.on,[data-theme="dark"] .jw-scrub-pos{color:#7FB3DA;}
 		.jw-loss-pos{color:#b00020;font-weight:600;}
 		.jw-foot{margin-top:6px;color:var(--text-muted);font-size:12px;display:flex;justify-content:space-between;}
 		.jw-foot b{color:var(--text-color);}
@@ -70,7 +78,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		</div>
 		<div class="jw-msg"></div>
 		<div class="jw-box"><table class="jw-grid"><thead class="jw-thead"></thead><tbody class="jw-body"></tbody></table></div>
-		<div class="jw-foot"><span><span class="jw-count">0</span> card(s) collected.</span><span class="jw-total"></span></div>
+		<div class="jw-foot"><span><span class="jw-count">0</span> card(s) collected.</span>
+			<button class="jw-scrubbtn" style="display:none;">${__("+ Scrub")}</button>
+			<span class="jw-total"></span></div>
 		<div class="jw-actions"></div>
 	`);
 
@@ -161,23 +171,36 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 
 	// ---- rendering -------------------------------------------------------
 	function renderHead() {
+		// scrub is a receipt idea only — there is nothing to hand back on the way out
+		$(page.main).find(".jw-scrubbtn").toggle(state.mode === "receipt")
+			.toggleClass("on", !!state.scrub)
+			.text(state.scrub ? __("Scrub on") : __("+ Scrub"));
 		if (state.mode === "issue") {
 			$thead.html(`<tr><th style="width:40px">#</th><th>Order Bag</th><th>Design</th><th>Qty</th><th>Status</th><th class="num">Gold (g)</th><th style="width:34px"></th></tr>`);
 		} else {
-			$thead.html(`<tr><th style="width:40px">#</th><th>Order Bag</th><th class="num">Weight Out (g)</th><th class="num">Weight In (g)</th><th class="num">Loss (g)</th><th style="width:34px"></th></tr>`);
+			$thead.html(`<tr><th style="width:40px">#</th><th>Order Bag</th>
+				<th class="num">Weight Out (g)</th><th class="num">Weight In (g)</th>
+				${state.scrub ? `<th class="num">${__("Scrub (g)")}</th>` : ""}
+				<th class="num">Loss (g)</th><th style="width:34px"></th></tr>`);
 		}
+	}
+	// weight out = weight in + scrub + loss. Scrub is what the bench HANDS BACK
+	// as filings, so it is typed; loss is only ever what is left over. Scrubbing
+	// therefore shrinks the write-off, which is the point of collecting it.
+	function rowScrub(r) {
+		return Math.max(flt(r.scrub), 0);
 	}
 	function rowLoss(r) {
 		const win = parseFloat(r.weight_in);
 		if (isNaN(win)) return null;
-		return Math.max(flt(r.weight_out) - win, 0);
+		return Math.max(flt(r.weight_out) - win - rowScrub(r), 0);
 	}
 	// a card can come back HEAVIER (polish build-up, scale drift); that gold is
 	// pulled from the Production warehouse on receipt
 	function rowGain(r) {
 		const win = parseFloat(r.weight_in);
 		if (isNaN(win)) return null;
-		return Math.max(win - flt(r.weight_out), 0);
+		return Math.max(win + rowScrub(r) - flt(r.weight_out), 0);
 	}
 	function flt(v) {
 		const n = parseFloat(v);
@@ -203,6 +226,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 					<td><b>${frappe.utils.escape_html(r.name)}</b></td>
 					<td class="num">${flt(r.weight_out).toFixed(3)}</td>
 					<td class="num"><input type="number" step="0.001" class="form-control input-xs jw-win" data-name="${frappe.utils.escape_html(r.name)}" value="${r.weight_in != null ? r.weight_in : ""}"></td>
+					${state.scrub ? `<td class="num"><input type="number" step="0.001" min="0"
+						class="form-control input-xs jw-scrub" data-name="${frappe.utils.escape_html(r.name)}"
+						value="${r.scrub != null ? r.scrub : ""}"></td>` : ""}
 					<td class="num jw-losscell">${loss == null ? "—" : `<span class="${loss > 0 ? "jw-loss-pos" : ""}">${loss.toFixed(3)}</span>`}</td>
 					${rm}</tr>`);
 			}
@@ -219,8 +245,33 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			if (l == null) ready = false;
 			else t += l;
 		});
-		$(page.main).find(".jw-total").html(`Total loss: <b class="${t > 0 ? "jw-loss-pos" : ""}">${t.toFixed(3)} g</b>${ready ? "" : " <span style='color:#9a6700'>(fill all weight-in)</span>"}`);
+		const sc = state.rows.reduce((n, r) => n + rowScrub(r), 0);
+		$(page.main).find(".jw-total").html(
+			`Total loss: <b class="${t > 0 ? "jw-loss-pos" : ""}">${t.toFixed(3)} g</b>`
+			+ (sc > 0 ? ` · ${__("scrub")} <b class="jw-scrub-pos">${sc.toFixed(3)} g</b>` : "")
+			+ (ready ? "" : " <span style='color:#9a6700'>(fill all weight-in)</span>"));
 	}
+
+	$body.on("input", ".jw-scrub", function () {
+		const row = state.rows.find((r) => r.name === $(this).data("name"));
+		if (!row) return;
+		row.scrub = this.value;
+		// the loss cell is derived, so it has to move as the scrub is typed
+		const loss = rowLoss(row);
+		$(this).closest("tr").find(".jw-losscell").html(
+			loss == null ? "—" : `<span class="${loss > 0 ? "jw-loss-pos" : ""}">${loss.toFixed(3)}</span>`);
+		updateTotal();
+	});
+
+	// the column appears when it is asked for, and clearing it clears the figures
+	// with it — a hidden box holding 2 g would post a scrub nobody could see
+	$(page.main).on("click", ".jw-scrubbtn", function () {
+		state.scrub = !state.scrub;
+		$(this).toggleClass("on", state.scrub).text(state.scrub ? __("Scrub on") : __("+ Scrub"));
+		if (!state.scrub) state.rows.forEach((r) => { r.scrub = null; });
+		renderHead();
+		renderRows();
+	});
 
 	$body.on("click", ".jw-rm", function () {
 		const nm = $(this).data("name");
@@ -432,7 +483,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				// ticked) an onward transfer too. Twenty at a time keeps every request
 				// short; a chunk that dies is named instead of vanishing.
 				const withTransfer = tpxTo && tpxTo !== "MISSING";
-				const allLines = state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in }));
+				const allLines = state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in,
+					scrub: state.scrub ? flt(r.scrub) : 0 }));
 				const parts = chunk(allLines, JW_CHUNK);
 				const tot = { count: 0, loss: 0, transferred: 0, errors: [], transfer_errors: [] };
 				const runReceipt = (i) => {

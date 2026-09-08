@@ -7314,6 +7314,147 @@ def book_loss(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	return {"ledger": name, **get_bag_contents(order_bag)}
 
 
+@frappe.whitelist()
+def get_scrub_board():
+	"""The Scrub desk: what is in the Scrub warehouse, and where it came from.
+
+	The BALANCE is the warehouse's own stock — that is the truth about how much
+	metal is sitting there. The breakdowns come from the bag ledger, which is
+	what records who handed each gram over and at which bench. The two answer
+	different questions and can legitimately differ once weight has been
+	transferred out, so the page shows both rather than pretending one explains
+	the other."""
+	from jewelima.setup import SCRUB_WAREHOUSE, SCRUB_TARGET_WAREHOUSES
+
+	wh = _wh(SCRUB_WAREHOUSE)
+	held = frappe.db.sql("""select item_code, sum(actual_qty) qty
+		from `tabStock Ledger Entry` where warehouse = %s and is_cancelled = 0
+		group by item_code having abs(qty) > 0.0005 order by qty desc""", wh, as_dict=True)
+
+	rows = frappe.db.sql("""select bench, employee, item, sum(qty) qty, count(*) n,
+			max(datetime) last_on
+		from `tabBag Material Ledger` where entry_type = 'Scrub'
+		group by bench, employee, item""", as_dict=True)
+
+	def roll(key):
+		out = {}
+		for r in rows:
+			k = (r.get(key) or "").strip() or "—"
+			e = out.setdefault(k, {"key": k, "qty": 0.0, "n": 0, "last_on": ""})
+			e["qty"] += flt(r.qty)
+			e["n"] += cint(r.n)
+			e["last_on"] = max(e["last_on"], str(r.last_on or ""))
+		for e in out.values():
+			e["qty"] = round(e["qty"], 3)
+		return sorted(out.values(), key=lambda x: -x["qty"])
+
+	by_emp = roll("employee")
+	for e in by_emp:
+		e["label"] = frappe.db.get_value("Employee", e["key"], "employee_name") or e["key"]
+
+	recent = frappe.get_all("Bag Material Ledger", filters={"entry_type": "Scrub"},
+		fields=["name", "order_bag", "item", "qty", "bench", "employee", "datetime"],
+		order_by="datetime desc, creation desc", limit=40)
+	for r in recent:
+		r["datetime"] = str(r.datetime or "")
+		r["employee_label"] = frappe.db.get_value("Employee", r.employee, "employee_name") or r.employee or ""
+
+	return {
+		"warehouse": wh,
+		"held": [{"item": r.item_code, "qty": round(flt(r.qty), 3)} for r in held],
+		"total_held": round(sum(flt(r.qty) for r in held), 3),
+		"collected": round(sum(flt(r.qty) for r in rows), 3),
+		"by_bench": roll("bench"),
+		"by_employee": by_emp,
+		"recent": recent,
+		"targets": [_wh(w) for w in SCRUB_TARGET_WAREHOUSES if _wh(w)],
+	}
+
+
+@frappe.whitelist()
+def get_weight_transfer_context():
+	"""Where weight may be moved FROM and TO on the Transfer Weight page."""
+	from jewelima.setup import SCRUB_SOURCE_WAREHOUSES, SCRUB_TARGET_WAREHOUSES
+
+	def stock(wh):
+		return frappe.db.sql("""select item_code, sum(actual_qty) qty
+			from `tabStock Ledger Entry` where warehouse = %s and is_cancelled = 0
+			group by item_code having abs(qty) > 0.0005 order by qty desc""", wh, as_dict=True)
+
+	sources = []
+	for w in SCRUB_SOURCE_WAREHOUSES:
+		wh = _wh(w)
+		if not wh:
+			continue
+		items = stock(wh)
+		sources.append({"warehouse": wh, "label": w,
+			"total": round(sum(flt(i.qty) for i in items), 3),
+			"items": [{"item": i.item_code, "qty": round(flt(i.qty), 3)} for i in items]})
+	# every per-bench -LOSS warehouse is a collection point too — the sweepings
+	# are swept up eventually, and that is the same job as emptying Scrub
+	for wh in frappe.get_all("Warehouse", filters={"name": ["like", "% -LOSS - %"]}, pluck="name"):
+		items = stock(wh)
+		if items:
+			sources.append({"warehouse": wh, "label": wh,
+				"total": round(sum(flt(i.qty) for i in items), 3),
+				"items": [{"item": i.item_code, "qty": round(flt(i.qty), 3)} for i in items]})
+	return {"sources": sources,
+		"targets": [{"warehouse": _wh(w), "label": w} for w in SCRUB_TARGET_WAREHOUSES if _wh(w)]}
+
+
+@frappe.whitelist()
+def transfer_weight(source, target, item, qty, remarks=None):
+	"""Move collected weight out of a collection warehouse.
+
+	Both ends are checked against the allow-lists, not merely offered by the
+	page: a source must be a place that COLLECTS weight and a target a place
+	allowed to receive it. Without the server check, anything that could call
+	the endpoint could move gold anywhere."""
+	from jewelima.setup import SCRUB_SOURCE_WAREHOUSES, SCRUB_TARGET_WAREHOUSES
+
+	qty = flt(qty)
+	if qty <= 0:
+		frappe.throw(frappe._("Say how much to move."))
+	ok_src = {_wh(w) for w in SCRUB_SOURCE_WAREHOUSES if _wh(w)}
+	ok_src |= set(frappe.get_all("Warehouse", filters={"name": ["like", "% -LOSS - %"]}, pluck="name"))
+	ok_tgt = {_wh(w) for w in SCRUB_TARGET_WAREHOUSES if _wh(w)}
+	if source not in ok_src:
+		frappe.throw(frappe._("{0} is not a weight collection warehouse.").format(source))
+	if target not in ok_tgt:
+		frappe.throw(frappe._("{0} is not allowed to receive collected weight.").format(target))
+	if source == target:
+		frappe.throw(frappe._("Pick two different warehouses."))
+	have = flt(frappe.db.sql("""select ifnull(sum(actual_qty),0) from `tabStock Ledger Entry`
+		where warehouse = %s and item_code = %s and is_cancelled = 0""", (source, item))[0][0])
+	if qty - have > 0.0005:
+		frappe.throw(frappe._("{0} holds only {1} of {2}.").format(source, round(have, 3), item))
+	se = _stock_move(item, qty, source, target)
+	frappe.get_doc({"doctype": "Comment", "comment_type": "Info",
+		"reference_doctype": "Stock Entry", "reference_name": se,
+		"content": frappe._("{0} g of {1} moved {2} -> {3} by {4}. {5}").format(
+			round(qty, 3), item, source, target, _user_label(frappe.session.user),
+			frappe.utils.escape_html(remarks or ""))}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"stock_entry": se, "qty": round(qty, 3), "item": item,
+		"source": source, "target": target}
+
+
+def book_scrub(order_bag, item, qty, bench=None, employee=None, remarks=None):
+	"""Metal the bench HANDED BACK as filings — the third outcome of a receipt.
+
+	It leaves the bag the same way loss does, because the card is lighter by it
+	either way. Where it goes is the whole difference: loss goes to a '<bench>
+	-LOSS' warehouse and is written off, scrub goes to the Scrub warehouse and is
+	still ours, waiting to be refined. Every gram scrubbed is a gram that stops
+	being a loss."""
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE, SCRUB_WAREHOUSE
+
+	name = _bag_ledger(order_bag, item, "Out", qty, "Scrub", bench=bench,
+		employee=employee, remarks=remarks)
+	_stock_move(item, qty, _wh(IN_PRODUCTION_WAREHOUSE), _wh(SCRUB_WAREHOUSE))
+	return {"ledger": name, **get_bag_contents(order_bag)}
+
+
 def book_gain(order_bag, item, qty, bench=None, employee=None, remarks=None):
 	"""The mirror of book_loss: a card came back HEAVIER than it went out (polish
 	build-up, scale variance). That gold has to come from somewhere — it is pulled
@@ -8312,7 +8453,8 @@ def _new_bench_issue(order_bag, bench, dt, visit, employee=None, work_type=None,
 	return issue
 
 
-def _close_bench_issue(issue_name, status, weight_in=None, loss=None, collection_state=None, employee=None):
+def _close_bench_issue(issue_name, status, weight_in=None, loss=None, collection_state=None,
+		employee=None, scrub=None):
 	"""Close a work session (Receipted / Completed / Cancelled) and mirror onto the Visit."""
 	now = frappe.utils.now_datetime()
 	issue = frappe.get_doc("Bench Issue", issue_name)
@@ -8320,6 +8462,8 @@ def _close_bench_issue(issue_name, status, weight_in=None, loss=None, collection
 	issue.receipted_at = now
 	if weight_in is not None:
 		issue.weight_in = flt(weight_in)
+	if scrub is not None:
+		issue.scrub = flt(scrub)
 	if loss is not None:
 		issue.loss = flt(loss)
 	if collection_state:
@@ -8507,7 +8651,7 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	collection_state = _valid_bench_option(location, "Collection State", collection_state)
 	loc = (location or "").upper()
-	done, errors, total_loss, total_gain = [], [], 0.0, 0.0
+	done, errors, total_loss, total_gain, total_scrub = [], [], 0.0, 0.0, 0.0
 	for ln in lines or []:
 		nm = ln.get("order_bag")
 		raw_win = ln.get("weight_in")
@@ -8525,8 +8669,12 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 				continue
 			issue = frappe.get_doc("Bench Issue", issue_name)
 			wout = flt(issue.weight_out)
-			loss = max(wout - win, 0.0)
-			gain = max(win - wout, 0.0)
+			# weight out = weight in + scrub + loss. Scrub is TYPED (the bench hands
+			# it over and it is weighed); loss is what is left over, never typed —
+			# so scrubbing more can only ever shrink the write-off, never inflate it.
+			scrub = max(flt((ln or {}).get("scrub")), 0.0)
+			loss = max(wout - win - scrub, 0.0)
+			gain = max(win + scrub - wout, 0.0)
 			# A card heavier than it went out is scale drift or polish build-up, and
 			# a big jump is usually a mis-typed weight. That USED to be refused over
 			# MAX_RECEIPT_GAIN_G; the cap is lifted for now by request, so any gain
@@ -8552,22 +8700,26 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 				_adjust_employee_balance(issue_emp, -wout)  # held weight returns
 			final_emp = employee or issue_emp
 			_close_bench_issue(issue_name, "Receipted", weight_in=win, loss=loss,
-				collection_state=collection_state, employee=final_emp)
+				collection_state=collection_state, employee=final_emp, scrub=scrub)
 			if loss > 0:
 				book_loss(nm, _bag_gold_item(nm), loss, bench=location, employee=final_emp)
+			if scrub > 0:
+				book_scrub(nm, _bag_gold_item(nm), scrub, bench=location, employee=final_emp)
 			if gain > 0:
 				book_gain(nm, _bag_gold_item(nm), gain, bench=location, employee=final_emp)
 			# a 'Back to In Queue' state sends the card back for rework
 			_apply_collection_disposition(issue_name, location, collection_state)
 			total_loss += loss
 			total_gain += gain
-			done.append({"name": nm, "loss": round(loss, 3), "gain": round(gain, 3)})
+			total_scrub += scrub
+			done.append({"name": nm, "loss": round(loss, 3), "gain": round(gain, 3),
+				"scrub": round(scrub, 3)})
 		except Exception as e:
 			errors.append({"name": nm, "error": str(e)})
 	frappe.db.commit()
 	return {"count": len(done), "done": done, "errors": errors,
 		"total_loss": round(total_loss, 3), "total_gain": round(total_gain, 3),
-		"employee": employee}
+		"total_scrub": round(total_scrub, 3), "employee": employee}
 
 
 @frappe.whitelist()

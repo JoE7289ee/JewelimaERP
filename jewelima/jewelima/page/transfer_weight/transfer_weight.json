@@ -1,15 +1,15 @@
 {
  "content": null,
- "creation": "2026-07-02 11:00:00",
+ "creation": "2026-09-08 08:10:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-08 13:29:13.713679",
+ "modified": "2026-09-08 13:27:25.740303",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "design-types",
+ "name": "transfer-weight",
  "owner": "Administrator",
- "page_name": "design-types",
+ "page_name": "transfer-weight",
  "roles": [
   {
    "role": "System Manager"
@@ -21,12 +21,12 @@
    "role": "JW Manager"
   },
   {
-   "role": "Jewelima Ordering"
+   "role": "Jewelima Stock"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Design Types"
+ "title": "Transfer Weight"
 }

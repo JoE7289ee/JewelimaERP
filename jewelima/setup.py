@@ -216,7 +216,7 @@ JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", 
 # JW Stock — the stock desk: buy (purchase page + history), move stock
 # between warehouses, melt gold. Purchase stays the tighter buy-only role.
 JEWELIMA_STOCK_ROLE = "Jewelima Stock"
-JEWELIMA_STOCK_PAGES = ["purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
+JEWELIMA_STOCK_PAGES = ["scrub", "transfer-weight", "purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
 JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type"]
 # JW Stock Admin — the senior stock desk: everything Jewelima Stock does, plus
 # the whole Loss branch (collection, write-off, report) and the record pages.
@@ -2480,6 +2480,18 @@ HALLMARKING_WAREHOUSE = "At Hallmarking"
 # so it stops counting as Finished Goods the moment it is marked, and the value
 # sitting in stone-change work is a number somebody can actually read.
 STONE_CHANGE_WAREHOUSE = "Stone Change"
+# Metal the bench HANDS BACK as filings, before it becomes unrecoverable powder.
+# It is not loss — it is our gold, still ours, waiting to go to refining — so it
+# gets a real warehouse rather than a -LOSS one, and can be transferred out.
+SCRUB_WAREHOUSE = "Scrub"
+# Warehouses that COLLECT weight off the floor. These are the only places a
+# Transfer Weight may take metal FROM: a collection point is a holding pen, and
+# emptying one is the whole job. Anything else is ordinary stock movement.
+SCRUB_SOURCE_WAREHOUSES = (SCRUB_WAREHOUSE, "Loss Collection")
+# ...and the only places it may go TO. Refining and re-issue are the real
+# destinations; a leaf that pieces are built out of is not one, or scrub would
+# silently become finished stock.
+SCRUB_TARGET_WAREHOUSES = ("Gold Issue", PRODUCTION_WAREHOUSE, "Loss Collection", SCRUB_WAREHOUSE)
 
 
 def create_store_warehouses():
@@ -2494,6 +2506,7 @@ def create_store_warehouses():
 	make_warehouse(CERTIFICATION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(HALLMARKING_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(STONE_CHANGE_WAREHOUSE, company, abbr, parent=root, is_group=0)
+	make_warehouse(SCRUB_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	make_warehouse(PRODUCTION_WAREHOUSE, company, abbr, parent=root, is_group=0)
 	# The bench flow issues gold/loss as real stock moves; gold isn't always
 	# pre-stocked in the Store, so allow negative stock (a negative balance just

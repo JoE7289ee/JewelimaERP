@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-08 12:04:03.214423",
+ "modified": "2026-09-08 13:29:13.653325",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "training-videos",
@@ -37,6 +37,60 @@
   },
   {
    "role": "System Manager"
+  },
+  {
+   "role": "JW CAM"
+  },
+  {
+   "role": "JW Costing"
+  },
+  {
+   "role": "JW Delivery"
+  },
+  {
+   "role": "JW EXTRACTION"
+  },
+  {
+   "role": "JW Info"
+  },
+  {
+   "role": "JW Stock Admin"
+  },
+  {
+   "role": "JW Stone Admin"
+  },
+  {
+   "role": "JW WAXING"
+  },
+  {
+   "role": "Jewelima Design Approver"
+  },
+  {
+   "role": "Jewelima Design Bank"
+  },
+  {
+   "role": "Jewelima Graphics"
+  },
+  {
+   "role": "Jewelima Ordering"
+  },
+  {
+   "role": "Jewelima Purchase"
+  },
+  {
+   "role": "Jewelima Repair"
+  },
+  {
+   "role": "Jewelima Stock"
+  },
+  {
+   "role": "Jewelima Stone Issue"
+  },
+  {
+   "role": "Jewelima Transfer"
+  },
+  {
+   "role": "Jewelima Transfer Plus"
   }
  ],
  "script": null,

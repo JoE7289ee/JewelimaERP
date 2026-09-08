@@ -22,6 +22,7 @@
   "weight_in",
   "cb_weights",
   "loss",
+  "scrub",
   "sec_more",
   "collection_state",
   "remarks"
@@ -140,6 +141,14 @@
    "fieldname": "remarks",
    "fieldtype": "Small Text",
    "label": "Remarks"
+  },
+  {
+   "description": "Metal handed back as filings at receipt. weight out = weight in + scrub + loss.",
+   "fieldname": "scrub",
+   "fieldtype": "Float",
+   "label": "Scrub (g)",
+   "precision": "3",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
