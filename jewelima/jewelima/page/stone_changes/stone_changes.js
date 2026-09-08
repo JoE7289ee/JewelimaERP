@@ -38,18 +38,23 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 		.sx-card{border:1px solid var(--border-color);border-left:3px solid #b8860b;
 			border-radius:12px;background:var(--fg-color);margin-bottom:14px;overflow:hidden;}
 		.sx-card.processing{border-left-color:#b8860b;}
+		.sx-card.prep{border-left-color:#117a65;}
 		.sx-card.sent{border-left-color:#1f618d;}
 		.sx-card.closed{border-left-color:#7f8c8d;opacity:.85;}
 		.sx-stage{font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:9px;
 			padding:2px 9px;text-transform:uppercase;}
 		.sx-stage.processing{background:rgba(184,134,11,.18);color:#8a6508;}
+		.sx-stage.prep{background:rgba(17,122,101,.16);color:#0e6553;}
 		.sx-stage.sent{background:rgba(31,97,141,.16);color:#1f618d;}
 		.sx-stage.done{background:rgba(127,140,141,.16);color:var(--text-muted);}
 		[data-theme="dark"] .sx-stage.processing{color:#e8b84a;}
+		[data-theme="dark"] .sx-stage.prep{color:#63c6b0;}
 		[data-theme="dark"] .sx-stage.sent{color:#7FB3DA;}
 		.sx-collect{background:#1f618d;border:1px solid #1f618d;color:#fff;font-weight:700;
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
-		.sx-send{background:#b8860b;border:1px solid #b8860b;color:#fff;font-weight:700;
+		.sx-send{background:#117a65;border:1px solid #117a65;color:#fff;font-weight:700;
+			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
+		.sx-prep{background:#b8860b;border:1px solid #b8860b;color:#fff;font-weight:700;
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		.sx-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 16px;
 			background:var(--control-bg);border-bottom:1px solid var(--border-color);}
@@ -93,45 +98,55 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 		</tr>`).join("")}</tbody></table>`;
 	}
 
-	// The tray has three stages and each offers exactly one action, so the card
-	// never asks the desk to remember what comes next: being worked on -> send it
-	// out -> bring it back. Anything already back is history and offers nothing.
+	// The tray has four stages and each offers exactly one action, so the card
+	// never asks the desk to remember what comes next: being worked on -> packed
+	// and waiting -> sent out -> brought back. Anything already back is history
+	// and offers nothing. Nothing moves between the floor and prep — prep is the
+	// line between work and waiting, so the desk can see what is still being
+	// worked on and what is only waiting for somebody to walk it to the lab.
 	function card(b, stage) {
 		const live = stage !== "done";
 		const act = stage === "processing"
-			? `<button class="sx-send">${__("STONES CHANGED — send it out again")}</button>`
-			: stage === "sent"
-				? `<button class="sx-collect">${__("COLLECT — bring the tray back")}</button>`
-				: "";
+			? `<button class="sx-prep">${__("STONES CHANGED — move to prep")}</button>`
+			: stage === "prep"
+				? `<button class="sx-send">${__("SEND — out to the lab again")}</button>`
+				: stage === "sent"
+					? `<button class="sx-collect">${__("COLLECT — bring the tray back")}</button>`
+					: "";
 		return `<div class="sx-card ${live ? stage : "closed"}" data-name="${esc(b.name)}">
 			<div class="sx-head">
 				<span class="nm">${esc(b.name)}</span>
 				<span class="sx-stage ${live ? stage : "done"}">${
 					stage === "processing" ? __("PROCESSING")
-						: stage === "sent" ? __("SENT") : esc(b.status)}</span>
+						: stage === "prep" ? __("PREP")
+							: stage === "sent" ? __("SENT") : esc(b.status)}</span>
 				<span class="meta">${__("opened")} ${esc(b.opened_on)} ${__("by")} ${esc(b.owner_label || "")}${
+					b.prepped_on ? " · " + __("prepped") + " " + esc(b.prepped_on) : ""}${
 					b.sent_on ? " · " + __("sent") + " " + esc(b.sent_on) : ""}${
 					b.closed_on ? " · " + __("back") + " " + esc(b.closed_on) : ""}${
 					b.center ? " · " + esc(b.center) : ""}</span>
 				${stage === "sent" && b.days_out > 0
 					? `<span class="sx-age">${__("{0} day(s) away", [b.days_out])}</span>`
-					: stage === "processing" && b.days > 0
-						? `<span class="sx-age">${__("{0} day(s) on the floor", [b.days])}</span>` : ""}
+					: (stage === "processing" || stage === "prep") && b.days > 0
+						? `<span class="sx-age">${__("{0} day(s) since it opened", [b.days])}</span>` : ""}
 				<span class="meta"><b>${b.pieces}</b> ${__("piece(s)")} · ${flt(b.gross).toFixed(3)} g · ${
 					flt(b.dmd_ct).toFixed(3)} ct</span>
 				${act ? `<span class="act">${act}</span>` : ""}
 			</div>
-			${rows(b, stage === "processing")}
+			${rows(b, stage === "processing" || stage === "prep")}
 		</div>`;
 	}
 
 	function paint() {
-		const openPieces = (DATA.pieces_processing || 0) + (DATA.pieces_sent || 0);
+		const openPieces = (DATA.pieces_processing || 0) + (DATA.pieces_prep || 0)
+			+ (DATA.pieces_sent || 0);
 		const oldest = (DATA.open || []).reduce((a, b) => Math.max(a, b.days || 0), 0);
 		root.find(".sx-kpis").html(`
 			<div class="sx-kpi hold"><div class="k">${__("Pieces out")}</div><div class="v">${openPieces}</div></div>
 			<div class="sx-kpi"><div class="k">${__("On the floor")}</div>
 				<div class="v">${(DATA.processing || []).length}</div></div>
+			<div class="sx-kpi"><div class="k">${__("In prep")}</div>
+				<div class="v">${(DATA.prep || []).length}</div></div>
 			<div class="sx-kpi"><div class="k">${__("Sent back out")}</div>
 				<div class="v">${(DATA.sent || []).length}</div></div>
 			<div class="sx-kpi"><div class="k">${__("Longest out")}</div><div class="v">${
@@ -139,11 +154,14 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 			<div class="sx-kpi"><div class="k">${__("Gold out")}</div><div class="v">${
 				(DATA.open || []).reduce((a, b) => a + flt(b.gross), 0).toFixed(1)}<span style="font-size:13px;font-weight:400;color:var(--text-muted);"> g</span></div></div>`);
 
-		const proc = DATA.processing || [], sent = DATA.sent || [];
+		const proc = DATA.processing || [], prep = DATA.prep || [], sent = DATA.sent || [];
 		root.find(".sx-body").html(`
 			<div class="sx-sec">${__("On the floor — stones being changed")}</div>
 			${proc.length ? proc.map((b) => card(b, "processing")).join("")
 				: `<div class="sx-empty">${__("Nothing being worked on. A tray opens itself when the Confirm desk marks pieces STONE CHANGE.")}</div>`}
+			${prep.length ? `<div class="sx-sec">${__("In prep — done, waiting to go")}</div>
+				<p class="sx-note">${__("the stones are changed and the tray is packed — the gold has not left the building")}</p>`
+				+ prep.map((b) => card(b, "prep")).join("") : ""}
 			${sent.length ? `<div class="sx-sec">${__("Sent back out")}</div>
 				<p class="sx-note">${__("away at the lab again — these also show on Out of House")}</p>`
 				+ sent.map((b) => card(b, "sent")).join("") : ""}
@@ -159,11 +177,34 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 
 	// the whole tray comes back at once, the way a certification batch is collected
 	// stones done: the tray goes back out to the lab, exactly like a first trip
+	// off the floor and packed — no stock moves, so this only asks whether the
+	// work is actually done
+	root.on("click", ".sx-prep", function () {
+		const nm = $(this).closest(".sx-card").data("name");
+		const b = (DATA.processing || []).find((x) => x.name === nm) || {};
+		frappe.confirm(
+			__("Move {0} to prep?", [nm]) + "<br><span style='color:var(--text-muted);font-size:12.5px;'>"
+			+ __("{0} piece(s) — the stones are changed and the tray is packed. Nothing moves yet.",
+				[b.pieces || 0]) + "</span>",
+			() => {
+				frappe.dom.freeze(__("Prepping…"));
+				frappe.call({ method: API + ".prep_stone_change", args: { name: nm } })
+					.then((rr) => {
+						frappe.dom.unfreeze();
+						const m = rr.message || {};
+						frappe.show_alert({ indicator: "green", message:
+							__("{0} in prep — {1} piece(s) ready to go{2}.",
+								[nm, m.count, m.center ? " · " + m.center : ""]) }, 6);
+						load();
+					}).catch(() => frappe.dom.unfreeze());
+			});
+	});
+
 	// nothing to fill in: the tray goes back to the centre it came from, and the
 	// only question worth asking is whether it is going now
 	root.on("click", ".sx-send", function () {
 		const nm = $(this).closest(".sx-card").data("name");
-		const b = (DATA.processing || []).find((x) => x.name === nm) || {};
+		const b = (DATA.prep || []).find((x) => x.name === nm) || {};
 		frappe.confirm(
 			__("Send {0} out again?", [nm]) + "<br><span style='color:var(--text-muted);font-size:12.5px;'>"
 			+ __("{0} piece(s) go back to {1} and show on Out of House until they return.",

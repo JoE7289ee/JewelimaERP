@@ -16657,7 +16657,7 @@ def get_confirm_pool():
 				st = "rejected"
 			elif i.stone_change:
 				# still away, or back and settled
-				st = "stone" if away.get(i.order_bag) in ("Processing", "Sent") else "changed"
+				st = "stone" if away.get(i.order_bag) in ("Processing", "Prep", "Sent") else "changed"
 			else:
 				st = "pending"
 			pieces.append({"order_bag": i.order_bag, "design_type": i.design_type or "",
@@ -16823,11 +16823,11 @@ def _open_stone_change(pieces):
 @frappe.whitelist()
 def get_stone_changes():
 	"""The Stone Changes desk: open batches with their pieces, and recent closed."""
-	out = {"processing": [], "sent": [], "recent": [],
-		"pieces_processing": 0, "pieces_sent": 0}
+	out = {"processing": [], "prep": [], "sent": [], "recent": [],
+		"pieces_processing": 0, "pieces_prep": 0, "pieces_sent": 0}
 	for c in frappe.get_all("Stone Change",
-			fields=["name", "status", "opened_on", "closed_on", "sent_on", "center",
-				"remarks", "owner"],
+			fields=["name", "status", "opened_on", "closed_on", "sent_on", "prepped_on",
+				"center", "remarks", "owner"],
 			order_by="creation desc", limit=60):
 		items = frappe.get_all("Stone Change Item", filters={"parent": c.name},
 			fields=["name", "order_bag", "design", "design_type", "gross", "dmd_ct",
@@ -16839,7 +16839,8 @@ def get_stone_changes():
 			"pieces": len(items), "items": items,
 			"gross": round(sum(flt(i.gross) for i in items), 3),
 			"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3),
-			"sent_on": str(c.sent_on or ""), "center": c.center or "",
+			"sent_on": str(c.sent_on or ""), "prepped_on": str(c.prepped_on or ""),
+			"center": c.center or "",
 			"days": frappe.utils.date_diff(frappe.utils.today(), c.opened_on) if c.opened_on else 0,
 			"days_out": (frappe.utils.date_diff(frappe.utils.today(), c.sent_on)
 				if c.sent_on and c.status == "Sent" else 0),
@@ -16848,15 +16849,42 @@ def get_stone_changes():
 		if c.status == "Processing":
 			out["processing"].append(row)
 			out["pieces_processing"] += len(items)
+		elif c.status == "Prep":
+			out["prep"].append(row)
+			out["pieces_prep"] += len(items)
 		elif c.status == "Sent":
 			out["sent"].append(row)
 			out["pieces_sent"] += len(items)
 		else:
 			out["recent"].append(row)
 	# the old shape, for anything still asking
-	out["open"] = out["processing"] + out["sent"]
-	out["pieces_open"] = out["pieces_processing"] + out["pieces_sent"]
+	out["open"] = out["processing"] + out["prep"] + out["sent"]
+	out["pieces_open"] = (out["pieces_processing"] + out["pieces_prep"]
+		+ out["pieces_sent"])
 	return out
+
+
+@frappe.whitelist()
+def prep_stone_change(name):
+	"""The stones are changed — the tray is off the floor and packed to go.
+
+	Nothing moves: the gold stays in the Stone Change warehouse. This is the
+	line between work and waiting, so the desk can see at a glance what is
+	still being worked on and what is only waiting for somebody to walk it to
+	the lab."""
+	d = frappe.get_doc("Stone Change", name)
+	if d.status != "Processing":
+		frappe.throw(frappe._("{0} is {1} — only a tray still being worked on can be prepped.")
+			.format(name, d.status))
+	if not d.items:
+		frappe.throw(frappe._("Nothing on the tray."))
+	d.status = "Prep"
+	d.prepped_on = frappe.utils.today()
+	if not (d.center or "").strip():
+		d.center = _stone_change_center([r.as_dict() for r in d.items])
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": name, "count": len(d.items), "center": d.center or ""}
 
 
 @frappe.whitelist()
@@ -16870,9 +16898,8 @@ def send_stone_change(name):
 	from jewelima.setup import STONE_CHANGE_WAREHOUSE, CERTIFICATION_WAREHOUSE
 
 	d = frappe.get_doc("Stone Change", name)
-	if d.status != "Processing":
-		frappe.throw(frappe._("{0} is {1} — only a tray still being worked on goes out.")
-			.format(name, d.status))
+	if d.status != "Prep":
+		frappe.throw(frappe._("{0} is {1} — a tray goes out from prep.").format(name, d.status))
 	if not d.items:
 		frappe.throw(frappe._("Nothing on the tray."))
 	bags = [r.order_bag for r in d.items]
@@ -16945,7 +16972,7 @@ def set_stone_change_note(name, row, note=None):
 	"""What has to change on one piece — written on the batch so the bench is not
 	working from somebody's memory of what the lab said."""
 	d = frappe.get_doc("Stone Change", name)
-	if d.status != "Open":
+	if d.status not in ("Processing", "Prep"):
 		frappe.throw(frappe._("{0} is {1} — no more edits.").format(name, d.status))
 	for r in d.items:
 		if r.name == row:

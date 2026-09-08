@@ -9,6 +9,7 @@
  "field_order": [
   "status",
   "opened_on",
+  "prepped_on",
   "sent_on",
   "center",
   "closed_on",
@@ -27,7 +28,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Processing\nSent\nCollected\nCancelled",
+   "options": "Processing\nPrep\nSent\nCollected\nCancelled",
    "reqd": 1
   },
   {
@@ -76,6 +77,12 @@
    "fieldname": "remarks",
    "fieldtype": "Small Text",
    "label": "Remarks"
+  },
+  {
+   "fieldname": "prepped_on",
+   "fieldtype": "Date",
+   "label": "Prepped On",
+   "read_only": 1
   },
   {
    "fieldname": "sent_on",
