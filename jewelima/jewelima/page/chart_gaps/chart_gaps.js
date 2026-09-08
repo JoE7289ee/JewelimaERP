@@ -192,11 +192,19 @@ frappe.pages["chart-gaps"].on_page_load = function (wrapper) {
 				<p class="cg-note">${esc(g.why)}</p>
 				<div class="cg-grid">${boxes}</div>`);
 		});
+		// The bar is stated, not implied. It used to read "fully priced" while
+		// meaning only making + diamonds, which called a chart complete with no
+		// colour stones and one quality out of five.
 		const cleanShown = D.clean.filter(match);
+		const bar = (D.complete_bar || []).join(" · ");
 		if (cleanShown.length) {
-			P.push(`<div class="cg-sec">${__("Fully priced")}</div>
-				<p class="cg-note">${__("making and diamonds both priced, nothing flagged")}</p>
+			P.push(`<div class="cg-sec">${__("Nothing outstanding")}</div>
+				<p class="cg-note">${__("these carry everything")}: ${esc(bar)}</p>
 				${chips(cleanShown)}`);
+		} else if (!Q.trim()) {
+			P.push(`<div class="cg-sec">${__("Nothing outstanding")}</div>
+				<div class="cg-empty">${__("No chart carries the lot yet.")}
+					<div style="margin-top:6px;font-size:12px;">${__("the bar")}: ${esc(bar)}</div></div>`);
 		}
 		root.find(".cg-body").html(P.join(""));
 	}

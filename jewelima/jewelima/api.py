@@ -10908,6 +10908,25 @@ def get_costing_board():
 
 
 @frappe.whitelist()
+def _stocked_diamond_qualities():
+	"""The diamond qualities we actually hold, as the PARENT quality a chart
+	prices in — VVS-EF, VVS/VS-GH, SI-IJ and the rest.
+
+	Read off the DIAMOND item groups rather than off the charts, on purpose: a
+	quality nobody has priced yet is exactly the one worth asking about, and
+	taking the list from the charts would make it invisible. PARTY DIAMOND is a
+	customer's own stone and is never ours to price."""
+	qmap = _diamond_qmap()
+	out = set()
+	for g in frappe.get_all("Item Group",
+			filters={"name": ["like", "DIAMOND %"], "is_group": 0}, pluck="name"):
+		leaf = g.replace("DIAMOND ", "").strip()
+		if not leaf or leaf.upper().startswith("PARTY"):
+			continue
+		out.add(qmap.get(leaf, leaf))
+	return sorted(out)
+
+
 def get_chart_gaps():
 	"""Every ACTIVE chart's gaps, grouped by the gap rather than by the chart.
 
@@ -10996,6 +11015,16 @@ def get_chart_gaps():
 	def empty_table(field):
 		return lambda d, c: not [r for r in (d.get(field) or []) if flt(r.rate)]
 
+	# a chart may deliberately price one quality only — but which one it is
+	# missing is a question worth being able to ask, so each gets its own bucket
+	QUALS = _stocked_diamond_qualities()
+
+	def no_quality(q):
+		def pick(d, c):
+			return not any((r.quality or "").strip().upper() == q.upper() and flt(r.rate)
+				for r in (d.get("diamond_rates") or []))
+		return pick
+
 	stones = group(frappe._("Stones"), frappe._("what each kind of stone is billed at"), [
 		bucket("dmd", frappe._("No diamond rates"),
 			frappe._("diamonds are not priced"), lambda d, c: not c["covers"]["diamond"]),
@@ -11006,6 +11035,13 @@ def get_chart_gaps():
 		bucket("cz", frappe._("No CZ rates"), frappe._("the CZ bucket"), empty_table("cz_rates")),
 		bucket("cvd", frappe._("No CVD rates"), frappe._("the CVD bucket"), empty_table("cvd_rates")),
 		bucket("sw", frappe._("No Swarovski rates"), frappe._("the SW bucket"), empty_table("sw_rates")),
+	])
+
+	quals = group(frappe._("Diamond qualities"),
+		frappe._("which of the qualities we stock each chart has no bracket for"), [
+		bucket("q-" + q, frappe._("No {0} brackets").format(q),
+			frappe._("a {0} stone has no price on this chart").format(q), no_quality(q))
+		for q in QUALS
 	])
 
 	# ---- certification: one bucket per lab we actually run ------------------
@@ -11031,11 +11067,30 @@ def get_chart_gaps():
 		for lab in labs
 	])
 
-	clean = [card(c) for d, c in charts
-		if not c["checks"] and c["covers"]["making"] and c["covers"]["diamond"]]
+	# "Fully priced" used to mean making + diamonds and nothing else, which called
+	# a chart complete while it carried no colour stones, no precious, no
+	# certification charge and one diamond quality out of five. It now means the
+	# whole bar: every section priced, every stocked quality bracketed, nothing
+	# flagged. The bar travels with the answer so the page can state it.
+	def _is_complete(d, c):
+		if c["checks"] or not all(c["covers"][k] for k in
+				("making", "diamond", "precious", "buckets", "charges")):
+			return False
+		if c["covers"]["gold"] != "touch":
+			return False
+		priced = {(r.quality or "").strip().upper() for r in (d.get("diamond_rates") or [])
+			if flt(r.rate)}
+		return all(q.upper() in priced for q in QUALS)
+
+	clean = [card(c) for d, c in charts if _is_complete(d, c)]
 	return {"total": len(charts), "problems": problems,
-		"groups": [g for g in (gold, making, stones, certs) if g],
+		"groups": [g for g in (gold, making, stones, quals, certs) if g],
 		"clean": clean,
+		"complete_bar": [frappe._("a gold touch"), frappe._("making"),
+			frappe._("diamonds in every quality we stock ({0})").format(", ".join(QUALS)),
+			frappe._("precious stones"), frappe._("all four stone buckets"),
+			frappe._("a certification charge"), frappe._("nothing flagged")],
+		"qualities": QUALS,
 		"problem_charts": len({x["name"] for b in problems for x in b["charts"]})}
 
 
