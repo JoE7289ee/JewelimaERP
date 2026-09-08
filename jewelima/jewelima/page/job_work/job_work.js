@@ -486,7 +486,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				const allLines = state.rows.map((r) => ({ order_bag: r.name, weight_in: r.weight_in,
 					scrub: state.scrub ? flt(r.scrub) : 0 }));
 				const parts = chunk(allLines, JW_CHUNK);
-				const tot = { count: 0, loss: 0, transferred: 0, errors: [], transfer_errors: [] };
+				const tot = { count: 0, loss: 0, scrub: 0, transferred: 0, errors: [], transfer_errors: [] };
 				const runReceipt = (i) => {
 					if (i >= parts.length) return Promise.resolve();
 					frappe.dom.freeze(parts.length > 1
@@ -501,6 +501,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 						const res = r.message || {};
 						tot.count += cint(res.count);
 						tot.loss += flt(res.total_loss);
+						tot.scrub += flt(res.total_scrub);
 						tot.transferred += cint(res.transferred);
 						tot.errors = tot.errors.concat(res.errors || []);
 						tot.transfer_errors = tot.transfer_errors.concat(res.transfer_errors || []);
@@ -514,7 +515,9 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 					frappe.dom.unfreeze();
 					frappe.show_alert({ message: withTransfer
 						? __("Received {0} · loss {1} g → moved {2} to {3}", [tot.count, tot.loss.toFixed(3), tot.transferred, tpxTo])
-						: __("Received {0} card(s) · loss {1} g → {2}", [tot.count, tot.loss.toFixed(3), empDisp()]), indicator: "green" }, 7);
+						: __("Received {0} card(s) · loss {1} g{3} → {2}", [tot.count, tot.loss.toFixed(3),
+								empDisp(), tot.scrub > 0 ? __(" · scrub {0} g", [tot.scrub.toFixed(3)]) : ""]),
+							indicator: "green" }, 7);
 					if (tot.transfer_errors.length) {
 						frappe.msgprint({ title: __("Received but not moved"), indicator: "orange",
 							message: tot.transfer_errors.map((e) => `${e.name}: ${e.error}`).join("<br>") });
