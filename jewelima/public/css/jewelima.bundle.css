@@ -77,13 +77,17 @@
 }
 
 /* The menu that is OPEN wears a pill, the same one the page you are on wears —
- * same 8px, same small shadow — but red instead of white. Only the menu's own
- * line is painted: the pages under it stay on the green, so the sidebar keeps
- * one white pill for where you ARE and one red pill for the menu you opened,
- * and nothing else changes colour.
+ * same 8px, same small shadow — but a deeper shade of the sidebar's own green
+ * instead of white. Only the menu's own line is painted: the pages under it sit
+ * on the plain ground, so the sidebar carries one white pill for where you ARE
+ * and one green pill for the menu you opened, and nothing else changes.
  *
  * It pairs with the one-menu-at-a-time rule in sidebar.bundle.js, so at most
- * two menus can carry the red at once.
+ * two menus can carry a pill at once.
+ *
+ * The title on the pill goes DARKER than a resting heading. It has to: muted
+ * grey on this green is 4.07:1, under the readable line — and the menu you have
+ * opened is the one you are working in, so reading stronger is right anyway.
  *
  * :has() is doing the work — a container holding a nested list that is not
  * hidden IS an open menu. On a browser without :has() the selector is invalid
@@ -92,11 +96,19 @@
  */
 .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {
-	background: #f8e2e2;
+	background: #cbe0ce;
 	box-shadow: var(--shadow-sm);
 	border-radius: 8px;
 }
+.body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
+	> .standard-sidebar-item .sidebar-item-label {
+	color: #4d4d4d;
+}
 [data-theme="dark"] .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {
-	background: rgba(130, 45, 45, 0.35);
+	background: rgba(60, 110, 70, 0.32);
+}
+[data-theme="dark"] .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
+	> .standard-sidebar-item .sidebar-item-label {
+	color: inherit;
 }
