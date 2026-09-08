@@ -15729,6 +15729,47 @@ def _cert_locks_quality(cert_type):
 	return cert_type in CERT_QUALITY_LOCK
 
 
+# A piece goes for certification ONCE. Two rules, written here once so the
+# picker's SQL and the scan guard can never drift apart:
+#
+#   1. it already carries a stone certification tag  -> it has been certified.
+#      HALLMARKING sits on the same trail and is not a stone certification, so
+#      it does not count.
+#   2. it is on a trip that has not finished  -> prepared, sent, collected and
+#      waiting to be confirmed, or away for a stone change. A line with no
+#      outcome yet (received = 0 and rejected = 0) IS that trip, whatever its
+#      batch's status says, so a batch half-confirmed cannot leak its
+#      undecided pieces onto a second batch. That is how E7563.3.1 ended up on
+#      DHC-0003 and DHC-0004 at once: the old guard only looked at 'Prepared'.
+#
+# A rejected piece is deliberately NOT blocked — it came back without a stamp
+# and is free to go again. Taking a tag off a certified one is Remove
+# Certification's job.
+SQL_NO_STONE_CERT = """(IFNULL(b.certifications, '') = ''
+	OR UPPER(REPLACE(REPLACE(b.certifications, ' ', ''), ',', '')) = 'HALLMARKING')"""
+SQL_NO_OPEN_TRIP = """NOT EXISTS (SELECT 1 FROM `tabCertification Item` ci
+	JOIN `tabCertification` c ON c.name = ci.parent
+	WHERE ci.order_bag = b.name AND IFNULL(c.status, '') != 'Cancelled'
+	  AND ci.received = 0 AND ci.rejected = 0)"""
+
+
+def _cert_stone_tags(certifications):
+	"""The certification tags on a piece, minus HALLMARKING."""
+	return [t.strip() for t in (certifications or "").split(",")
+		if t.strip() and t.strip().upper() != "HALLMARKING"]
+
+
+def _cert_open_trip(nm):
+	"""The unfinished certification trip a piece is on, or None."""
+	r = frappe.db.sql("""select c.name, c.status, c.cert_type, c.certification_type,
+			c.center, i.stone_change
+		from `tabCertification Item` i join `tabCertification` c on c.name = i.parent
+		where i.order_bag = %s and IFNULL(c.status, '') != 'Cancelled'
+		  and i.received = 0 and i.rejected = 0
+		order by c.creation desc limit 1""", nm, as_dict=True)
+	return r[0] if r else None
+
+
 def _cert_validate_piece(cert_type, quality, nm, taken=None):
 	"""All the scan guards, WITHOUT writing anything. Returns the piece's basics."""
 	if not frappe.db.exists("Order Bag", nm):
@@ -15741,11 +15782,21 @@ def _cert_validate_piece(cert_type, quality, nm, taken=None):
 		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can go out.").format(nm, b.stock_status))
 	if taken and nm in taken:
 		frappe.throw(frappe._("{0} is already on this list.").format(nm))
-	other = frappe.db.sql("""select i.parent from `tabCertification Item` i
-		join `tabCertification` c on c.name = i.parent
-		where i.order_bag = %s and c.status = 'Prepared' limit 1""", (nm,))
-	if other:
-		frappe.throw(frappe._("{0} is already on prepared batch {1}.").format(nm, other[0][0]))
+	tags = _cert_stone_tags(frappe.db.get_value("Order Bag", nm, "certifications"))
+	if tags:
+		frappe.throw(frappe._("{0} is already certified ({1}) — take the tag off on Remove Certification first.")
+			.format(nm, " / ".join(tags)))
+	trip = _cert_open_trip(nm)
+	if trip:
+		where = (frappe._("away for a stone change") if cint(trip.stone_change)
+			else {"Prepared": frappe._("prepped, not sent yet"),
+				"Sent": frappe._("out at the lab"),
+				"Collected": frappe._("back, waiting to be confirmed"),
+				"Partially Received": frappe._("back, waiting to be confirmed"),
+				"Received": frappe._("waiting to be confirmed"),
+			}.get(trip.status, (trip.status or "").lower()))
+		frappe.throw(frappe._("{0} is already on {1} — {2}.").format(
+			nm, trip.name, where))
 	if _cert_locks_quality(cert_type):
 		allowed = _cert_qualities(cert_type)
 		quals = _bag_diamond_qualities(nm)
@@ -15860,8 +15911,9 @@ def get_certifiable(cert_type=None, quality=None, design_type=None, bucket=None,
 	Scanning is right for a few pieces; a batch is often a whole slice, so the
 	desk must be able to say "every RING in FEMI" and get 80 of them. The
 	FILTERS run in SQL — searching a loaded page would hide the piece you know
-	is there. Anything already on a prepared batch is excluded, so the list only
-	offers work that can actually be done; the IGI colour+clarity lock is left
+	is there. A piece that is already certified, or is on a trip that has not
+	finished, is excluded (see SQL_NO_STONE_CERT / SQL_NO_OPEN_TRIP), so the
+	list only offers work that can actually be done; the IGI colour+clarity lock is left
 	to the per-piece guard, which explains a mismatch by name."""
 	_require_stock(("JW Delivery",))
 	cond = ["b.is_finished = 1", "b.stock_status = 'In Stock'"]
@@ -15889,10 +15941,9 @@ def get_certifiable(cert_type=None, quality=None, design_type=None, bucket=None,
 	if search:
 		cond.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s OR b.held_by LIKE %(q)s)")
 		vals["q"] = "%" + search + "%"
-	# already spoken for by another prepared batch — never on offer
-	cond.append("""NOT EXISTS (SELECT 1 FROM `tabCertification Item` ci
-		JOIN `tabCertification` c ON c.name = ci.parent
-		WHERE ci.order_bag = b.name AND c.status = 'Prepared')""")
+	# certified already, or still on a trip — never on offer
+	cond.append(SQL_NO_STONE_CERT)
+	cond.append(SQL_NO_OPEN_TRIP)
 	# a lab that grades stones has nothing to grade on a piece without them
 	if _cert_locks_quality(cert_type):
 		cond.append("IFNULL(b.act_dmd_weight, 0) > 0")
@@ -15988,8 +16039,8 @@ def create_cert_prep(cert_type, center=None, quality=None):
 def cert_prep_scan(name, barcode):
 	"""Scan a piece into the prep. Rejections THROW with the reason (the page
 	logs them in its scan history): not found / not a product yet (make product
-	first) / not In Stock / already on this or another open batch / IGI quality
-	mismatch or mixed-quality piece."""
+	first) / not In Stock / already certified / already on another trip that has
+	not finished / IGI quality mismatch or mixed-quality piece."""
 	d = frappe.get_doc("Certification", name)
 	if d.status != "Prepared":
 		frappe.throw(frappe._("{0} is {1} — no more scanning.").format(name, d.status))
@@ -16005,11 +16056,14 @@ def cert_prep_scan(name, barcode):
 		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can go out.").format(nm, b.stock_status))
 	if any(r.order_bag == nm for r in d.items):
 		frappe.throw(frappe._("{0} is already on this batch.").format(nm))
-	other = frappe.db.sql("""select i.parent from `tabCertification Item` i
-		join `tabCertification` c on c.name = i.parent
-		where i.order_bag = %s and c.status = 'Prepared' and c.name != %s limit 1""", (nm, name))
-	if other:
-		frappe.throw(frappe._("{0} is already on prepared batch {1}.").format(nm, other[0][0]))
+	# the same two rules the picker and the draft scan use — one piece, one trip
+	tags = _cert_stone_tags(frappe.db.get_value("Order Bag", nm, "certifications"))
+	if tags:
+		frappe.throw(frappe._("{0} is already certified ({1}) — take the tag off on Remove Certification first.")
+			.format(nm, " / ".join(tags)))
+	trip = _cert_open_trip(nm)
+	if trip and trip.name != name:
+		frappe.throw(frappe._("{0} is already on {1} ({2}).").format(nm, trip.name, trip.status))
 	# IGI: every diamond line must resolve to THE locked quality; mixed = error
 	if d.cert_type == "IGI":
 		quals = _bag_diamond_qualities(nm)
@@ -17288,11 +17342,12 @@ def _hall_validate_piece(nm, taken=None):
 		limit 1""", (nm,))
 	if open_batch:
 		frappe.throw(frappe._("{0} is already on hallmarking batch {1}.").format(nm, open_batch[0][0]))
-	out_at_lab = frappe.db.sql("""select i.parent from `tabCertification Item` i
-		join `tabCertification` c on c.name = i.parent
-		where i.order_bag = %s and c.status = 'Prepared' limit 1""", (nm,))
-	if out_at_lab:
-		frappe.throw(frappe._("{0} is on prepared certification batch {1}.").format(nm, out_at_lab[0][0]))
+	# spoken for by a certification trip that has not finished — same rule the
+	# certification desk itself uses, so a piece cannot be in two places at once
+	trip = _cert_open_trip(nm)
+	if trip:
+		frappe.throw(frappe._("{0} is on certification batch {1} ({2}).")
+			.format(nm, trip.name, trip.status))
 	return b
 
 
