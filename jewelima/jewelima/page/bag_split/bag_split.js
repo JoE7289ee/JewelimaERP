@@ -219,7 +219,9 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 	function renderActions() {
 		$actions.empty();
 		$(`<button class="btn btn-default btn-sm bs-splitrem" style="display:none">${__("Split remaining")}</button>`).appendTo($actions).on("click", splitRemaining);
-		$(`<button class="btn btn-primary btn-sm bs-splitbtn">${__("Split")}</button>`).appendTo($actions).on("click", doSplit);
+		// PRINT, because that is where it goes: the split is the step, the labels
+		// are the point, and the pieces are in the operator's hand right now
+		$(`<button class="btn btn-primary btn-sm bs-splitbtn">${__("PRINT")}</button>`).appendTo($actions).on("click", doSplit);
 	}
 	function totals() {
 		const d = state.data;
@@ -297,41 +299,23 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 			.then((r) => {
 				frappe.dom.unfreeze();
 				const m = r.message || {};
-				frappe.show_alert({ message: __("Split into {0} bags.", [m.count]), indicator: "green" }, 8);
-				// the pieces are new cards and each needs its own label — offer it
-				// here, while they are in the operator's hand, rather than sending
-				// them to Print Barcode to be scanned back in one at a time
-				offerLabels(m.created || []);
+				frappe.show_alert({ message: __("Split into {0} bags — labelling them now.", [m.count]), indicator: "green" }, 6);
 				resetView();
+				// Straight to Multi Print with the new pieces loaded. It used to ask
+				// first; the answer was always yes, because a piece without its
+				// label is a piece nobody can identify, and the operator is holding
+				// them at this exact moment. Multi Print rather than the printer so
+				// the tags can still be looked at before any stock is spent.
+				const cut = m.created || [];
+				if (cut.length) {
+					frappe.route_options = { cards: cut };
+					frappe.set_route("multi-barcode");
+				}
 			})
 			.catch(() => frappe.dom.unfreeze());
 	}
 
 	// ---- barcodes for the pieces just cut ---------------------------------
-	function offerLabels(names) {
-		if (!names.length) return;
-		const dlg = new frappe.ui.Dialog({
-			title: __("Label the {0} new piece(s)?", [names.length]),
-			fields: [{ fieldtype: "HTML", fieldname: "list" }],
-			// Multi Print rather than straight to the printer: the operator gets to
-			// see the tags, add a shop line, and turn the family or colour on or off
-			// before anything is spent on stock. Printing blind from here meant a
-			// wrong option cost a run of labels to find out.
-			primary_action_label: __("Review in Multi Print"),
-			primary_action: () => {
-				dlg.hide();
-				frappe.route_options = { cards: names };
-				frappe.set_route("multi-barcode");
-			},
-			secondary_action_label: __("Not now"),
-		});
-		dlg.fields_dict.list.$wrapper.html(
-			`<div style="font-size:13px;line-height:1.9;">`
-			+ names.map((n) => `<b>${frappe.utils.escape_html(n)}</b>`).join(" &nbsp;·&nbsp; ")
-			+ `</div>`);
-		dlg.show();
-	}
-
 	function printLabels(names) {
 		frappe.dom.freeze(__("Building labels…"));
 		// one fetch per piece — get_barcode_card is the single-card label source the

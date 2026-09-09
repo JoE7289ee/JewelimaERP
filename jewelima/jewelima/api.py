@@ -8105,6 +8105,9 @@ def get_bag_for_split(order_bag):
 	return its header, contents and a suggested even split across its qty pieces."""
 	from jewelima.jewelima.benches import bench_doctype
 
+	# the E prefix is optional here as on every other scanning desk — scanners
+	# and people both drop it
+	order_bag = _resolve_bag_code(order_bag)
 	bag = frappe.db.get_value(
 		"Order Bag", order_bag,
 		["name", "location", "design", "qty", "size", "purity", "gross_weight", "nett_weight",
