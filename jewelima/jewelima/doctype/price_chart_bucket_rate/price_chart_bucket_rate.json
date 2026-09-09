@@ -5,6 +5,44 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "field_order": [
+  "from_ct",
+  "to_ct",
+  "basis",
+  "rate"
+ ],
+ "fields": [
+  {
+   "description": "Four decimals, like every other carat bracket.",
+   "fieldname": "from_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "From ct",
+   "precision": "4"
+  },
+  {
+   "description": "Four decimals, like every other carat bracket.",
+   "fieldname": "to_ct",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Below ct",
+   "precision": "4"
+  },
+  {
+   "default": "Per Ct",
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Basis",
+   "options": "Per Ct\nPer Gram\nPer Piece"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Rate"
+  }
+ ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
@@ -16,40 +54,5 @@
  "permissions": [],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
- "fields": [
-  {
-   "fieldname": "from_ct",
-   "fieldtype": "Float",
-   "label": "From ct",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "to_ct",
-   "fieldtype": "Float",
-   "label": "Below ct",
-   "in_list_view": 1,
-   "description": "Blank = and above. Both blank = flat rate for any weight."
-  },
-  {
-   "fieldname": "basis",
-   "fieldtype": "Select",
-   "label": "Basis",
-   "options": "Per Ct\nPer Gram\nPer Piece",
-   "default": "Per Ct",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "rate",
-   "fieldtype": "Float",
-   "label": "Rate",
-   "in_list_view": 1
-  }
- ],
- "field_order": [
-  "from_ct",
-  "to_ct",
-  "basis",
-  "rate"
- ]
+ "states": []
 }

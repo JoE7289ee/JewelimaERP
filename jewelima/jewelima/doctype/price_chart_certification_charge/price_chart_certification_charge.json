@@ -48,20 +48,21 @@
   },
   {
    "columns": 1,
-   "description": "Weight-slab row (IGI style): applies when the piece's diamond ct falls in this range. Blank range = a plain named charge.",
+   "description": "Four decimals, like every other carat bracket.",
    "fieldname": "from_ct",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "From ct",
-   "precision": "3"
+   "precision": "4"
   },
   {
    "columns": 1,
+   "description": "Four decimals, like every other carat bracket.",
    "fieldname": "to_ct",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "To ct",
-   "precision": "3"
+   "precision": "4"
   },
   {
    "columns": 1,

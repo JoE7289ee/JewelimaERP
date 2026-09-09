@@ -196,8 +196,8 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 					<th>${__("Below ct")}</th><th>${__("₹ / ct")}</th><th></th></tr></thead>
 					<tbody>${C.precious_stone_rates.map((r, i) => `<tr data-k="precious_stone_rates" data-i="${i}">
 						<td><input data-f="stone" value="${esc(r.stone || "")}" placeholder="${__("item code")}"></td>
-						<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
-						<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+						<td><input data-f="from_ct" type="number" step="0.0001" value="${r.from_ct || ""}"></td>
+						<td><input data-f="to_ct" type="number" step="0.0001" value="${r.to_ct || ""}"></td>
 						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>
 
@@ -206,8 +206,8 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 					<table class="pe-t"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th>
 						<th>${__("Basis")}</th><th>${__("Rate")}</th><th></th></tr></thead>
 						<tbody>${(C[k] || []).map((r, i) => `<tr data-k="${k}" data-i="${i}">
-							<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
-							<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+							<td><input data-f="from_ct" type="number" step="0.0001" value="${r.from_ct || ""}"></td>
+							<td><input data-f="to_ct" type="number" step="0.0001" value="${r.to_ct || ""}"></td>
 							<td><select data-f="basis">${["Per Ct", "Per Gram", "Per Piece"].map((b) =>
 								`<option ${(r.basis || "Per Ct") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 							<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
@@ -225,8 +225,8 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 							`<option ${(r.basis || "Per Piece") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
 						<td><input data-f="min_amount" type="number" step="0.01" value="${r.min_amount || ""}"></td>
-						<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
-						<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+						<td><input data-f="from_ct" type="number" step="0.0001" value="${r.from_ct || ""}"></td>
+						<td><input data-f="to_ct" type="number" step="0.0001" value="${r.to_ct || ""}"></td>
 						<td style="text-align:center;"><input data-f="solitaire" type="checkbox"
 							style="width:auto;" ${r.solitaire ? "checked" : ""}></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>

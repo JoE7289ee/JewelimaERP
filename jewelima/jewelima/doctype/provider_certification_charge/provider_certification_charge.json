@@ -5,15 +5,64 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["certification","basis","rate","min_amount","from_ct","to_ct","solitaire"],
+ "field_order": [
+  "certification",
+  "basis",
+  "rate",
+  "min_amount",
+  "from_ct",
+  "to_ct",
+  "solitaire"
+ ],
  "fields": [
-  {"fieldname":"certification","fieldtype":"Data","label":"Certification","in_list_view":1,"reqd":1},
-  {"fieldname":"basis","fieldtype":"Select","label":"Basis","options":"Per Piece\nPer Ct","default":"Per Piece","in_list_view":1},
-  {"fieldname":"rate","fieldtype":"Float","label":"Rate","precision":"2","in_list_view":1},
-  {"fieldname":"min_amount","fieldtype":"Float","label":"Minimum","precision":"2"},
-  {"fieldname":"from_ct","fieldtype":"Float","label":"From ct","precision":"3"},
-  {"fieldname":"to_ct","fieldtype":"Float","label":"Below ct","precision":"3"},
-  {"fieldname":"solitaire","fieldtype":"Check","label":"Solitaire","default":"0"}
+  {
+   "fieldname": "certification",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Certification",
+   "reqd": 1
+  },
+  {
+   "default": "Per Piece",
+   "fieldname": "basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Basis",
+   "options": "Per Piece\nPer Ct"
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Rate",
+   "precision": "2"
+  },
+  {
+   "fieldname": "min_amount",
+   "fieldtype": "Float",
+   "label": "Minimum",
+   "precision": "2"
+  },
+  {
+   "description": "Four decimals, like every other carat bracket.",
+   "fieldname": "from_ct",
+   "fieldtype": "Float",
+   "label": "From ct",
+   "precision": "4"
+  },
+  {
+   "description": "Four decimals, like every other carat bracket.",
+   "fieldname": "to_ct",
+   "fieldtype": "Float",
+   "label": "Below ct",
+   "precision": "4"
+  },
+  {
+   "default": "0",
+   "fieldname": "solitaire",
+   "fieldtype": "Check",
+   "label": "Solitaire"
+  }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,

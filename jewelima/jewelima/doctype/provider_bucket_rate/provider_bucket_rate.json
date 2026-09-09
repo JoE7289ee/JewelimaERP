@@ -13,18 +13,20 @@
  ],
  "fields": [
   {
+   "description": "Four decimals, like every other carat bracket.",
    "fieldname": "from_ct",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "From ct",
-   "precision": "3"
+   "precision": "4"
   },
   {
+   "description": "Four decimals, like every other carat bracket.",
    "fieldname": "to_ct",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Below ct",
-   "precision": "3"
+   "precision": "4"
   },
   {
    "default": "Per Ct",

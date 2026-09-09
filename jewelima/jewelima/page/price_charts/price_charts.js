@@ -162,8 +162,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				${PSTONES.map((p) => `<option ${r.stone === p ? "selected" : ""}>${esc(p)}</option>`).join("")}
 				${r.stone && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
 			</select></td>
-			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
-			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
+			<td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
+			<td><input data-f="to_ct" type="number" step="0.0001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (kind === "touch") return (cur.touch_rates || []).map((r, i) => `
@@ -186,8 +186,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<td><input data-f="flat_below_gm" type="number" step="0.001" value="${num(r.flat_below_gm)}" placeholder="${__("e.g. 1")}"></td>
 			<td class="del">&times;</td></tr>`).join("");
 		if (["csr", "czr", "cvr", "swr"].includes(kind)) return (cur[KIND_ARR[kind]] || []).map((r, i) => `
-			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
-			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
+			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
+			<td><input data-f="to_ct" type="number" step="0.0001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td><select data-f="basis">${["Per Ct", "Per Gram", "Per Piece"].map((b) =>
 				`<option ${(r.basis || "Per Ct") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
@@ -203,8 +203,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				`<option ${(r.basis || "Per Piece") === b ? "selected" : ""}>${b}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}" placeholder="${__("0 = included")}"></td>
 			<td><input data-f="min_amount" class="inr" inputmode="numeric" value="${inr(r.min_amount)}" placeholder="${__("floor ₹ (Per Ct)")}"></td>
-			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}" placeholder="${__("slab from")}"></td>
-			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("slab to")}"></td>
+			<td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}" placeholder="${__("slab from")}"></td>
+			<td><input data-f="to_ct" type="number" step="0.0001" value="${num(r.to_ct)}" placeholder="${__("slab to")}"></td>
 			<td><select data-f="solitaire"><option value=""></option>
 				<option value="1" ${cint(r.solitaire) ? "selected" : ""}>${__("Solitaire")}</option></select></td>
 			<td class="del">&times;</td></tr>`).join("");
