@@ -13812,8 +13812,10 @@ def list_precious_stones():
 
 @frappe.whitelist()
 def list_old_format_sessions():
+	# the quality rides along: it is what decides which lots can be merged, so the
+	# card says it rather than making somebody open the lot to find out
 	return frappe.get_all("Old Format Import",
-		fields=["name", "title", "party", "status", "piece_count", "modified"],
+		fields=["name", "title", "party", "status", "piece_count", "quality_token", "modified"],
 		order_by="modified desc", limit=100)
 
 
@@ -13821,6 +13823,83 @@ def list_old_format_sessions():
 def delete_old_format_session(name):
 	frappe.delete_doc("Old Format Import", name)
 	return {"deleted": name}
+
+
+@frappe.whitelist()
+def list_old_format_mergeable(name):
+	"""The saved lots this one could be merged WITH: same quality, not itself.
+
+	The quality is the gate because it is the one thing a merged lot cannot have
+	two of — the OLD FORMAT desk prices a whole lot at ONE quality, so a lot
+	holding EF and GH pieces could never be priced correctly. Offering only the
+	valid partners says that better than refusing after the fact does."""
+	doc = frappe.get_doc("Old Format Import", name)
+	rows = frappe.get_all("Old Format Import",
+		filters={"name": ["!=", name], "quality_token": doc.quality_token or "EF"},
+		fields=["name", "title", "party", "piece_count", "status", "modified"],
+		order_by="modified desc", limit=100)
+	return {"name": doc.name, "title": doc.title, "quality": doc.quality_token or "EF",
+		"party": doc.party or "", "pieces": cint(doc.piece_count),
+		"candidates": [{**r, "modified": str(r.modified)} for r in rows],
+		# the shops already used, so the picker suggests rather than only accepts
+		"parties": sorted({p for p in frappe.get_all("Old Format Import", pluck="party") if p})}
+
+
+@frappe.whitelist()
+def merge_old_format_sessions(a, b, party=None, title=None):
+	"""Two saved lots into a NEW one. Neither source is touched.
+
+	A lot is priced at one quality, so both sides must carry the same one. The
+	pieces are concatenated and renumbered; a UNIQUE ID appearing on both sides
+	is refused BY NAME rather than merged over, because the priced view keys its
+	rows by unique id — two rows sharing one would silently show the same money
+	twice and there would be nothing on screen to say so."""
+	if a == b:
+		frappe.throw(frappe._("Pick two different lots."))
+	da, db = frappe.get_doc("Old Format Import", a), frappe.get_doc("Old Format Import", b)
+	qa, qb = (da.quality_token or "EF"), (db.quality_token or "EF")
+	if qa != qb:
+		frappe.throw(frappe._("{0} is {1} and {2} is {3} — a lot is priced at ONE quality.")
+			.format(da.title, qa, db.title, qb))
+
+	ba = json.loads(da.data or "{}")
+	bb = json.loads(db.data or "{}")
+	ra, rb = (ba.get("rows") or []), (bb.get("rows") or [])
+	if not ra or not rb:
+		frappe.throw(frappe._("One of the lots has no pieces in it."))
+
+	seen = {str(r.get("unique_id") or "").strip().upper() for r in ra}
+	clash = sorted({str(r.get("unique_id") or "").strip().upper() for r in rb} & seen)
+	if clash:
+		frappe.throw(frappe._("{0} piece(s) are on both lots — {1}{2}. Remove them from one side first.")
+			.format(len(clash), ", ".join(clash[:6]), "…" if len(clash) > 6 else ""))
+
+	rows = [dict(r) for r in ra] + [dict(r) for r in rb]
+	for i, r in enumerate(rows, start=1):
+		r["sl"] = i                       # one running number across the merged lot
+
+	shop = (party or "").strip()
+	doc = frappe.get_doc({
+		"doctype": "Old Format Import",
+		"title": (title or "").strip() or "{0} + {1}".format(da.title, db.title),
+		"party": shop,
+		"invoice_no": "",                 # a merged lot is not either source's invoice
+		"source_file": "{0} + {1}".format(da.source_file or da.name, db.source_file or db.name),
+		"quality_token": qa,
+		"status": "In Progress",
+		"piece_count": len(rows),
+		"data": json.dumps({
+			"rows": rows,
+			# the cover is rebuilt around the shop this lot is now for; the
+			# sources' invoice numbers belong to the sources
+			"cover": {**(ba.get("cover") or {}), "party": shop, "invoice_no": ""},
+			"sorted": False,              # the running order changed, so it is not sorted
+			"chains": (ba.get("chains") or []) + (bb.get("chains") or []),
+		}),
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "title": doc.title, "pieces": len(rows),
+		"quality": qa, "party": shop, "from": [a, b]}
 
 
 @frappe.whitelist()
