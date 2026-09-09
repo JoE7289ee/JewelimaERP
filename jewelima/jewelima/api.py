@@ -13833,23 +13833,47 @@ def delete_old_format_session(name):
 
 
 @frappe.whitelist()
-def list_old_format_mergeable(name):
-	"""The saved lots this one could be merged WITH: same quality, not itself.
+def list_old_format_mergeable(name=None):
+	"""The saved lots that can go into a merge.
+
+	With a lot named, the ones it could be merged WITH: same quality, not
+	itself. With none — the Merge button at the top of the page, which has no
+	lot to start from — every saved lot, each carrying its quality so the desk
+	can keep the picking honest.
 
 	The quality is the gate because it is the one thing a merged lot cannot have
 	two of — the OLD FORMAT desk prices a whole lot at ONE quality, so a lot
 	holding EF and GH pieces could never be priced correctly. Offering only the
 	valid partners says that better than refusing after the fact does."""
-	doc = frappe.get_doc("Old Format Import", name)
-	rows = frappe.get_all("Old Format Import",
-		filters={"name": ["!=", name], "quality_token": doc.quality_token or "EF"},
-		fields=["name", "title", "party", "piece_count", "status", "modified"],
+	fields = ["name", "title", "party", "piece_count", "status", "modified", "quality_token"]
+	doc = frappe.get_doc("Old Format Import", name) if name else None
+	filters = {"name": ["!=", name], "quality_token": doc.quality_token or "EF"} if doc else {}
+	rows = frappe.get_all("Old Format Import", filters=filters, fields=fields,
 		order_by="modified desc", limit=100)
-	return {"name": doc.name, "title": doc.title, "quality": doc.quality_token or "EF",
-		"party": doc.party or "", "pieces": cint(doc.piece_count),
-		"candidates": [{**r, "modified": str(r.modified)} for r in rows],
+	out = {
+		"candidates": [{**r, "modified": str(r.modified),
+			"quality": r.quality_token or "EF"} for r in rows],
 		# the shops already used, so the picker suggests rather than only accepts
-		"parties": sorted({p for p in frappe.get_all("Old Format Import", pluck="party") if p})}
+		"parties": sorted({p for p in frappe.get_all("Old Format Import", pluck="party") if p}),
+	}
+	if doc:
+		out.update({"name": doc.name, "title": doc.title,
+			"quality": doc.quality_token or "EF", "party": doc.party or "",
+			"pieces": cint(doc.piece_count)})
+	return out
+
+
+@frappe.whitelist()
+def rename_old_format_session(name, title):
+	"""Rename a saved lot. The title is the only thing anyone reads it by on the
+	Saved Imports page, and a lot imported from a file is named after the file —
+	which is rarely what the floor calls it."""
+	t = (title or "").strip()
+	if not t:
+		frappe.throw(frappe._("A lot needs a name."))
+	frappe.db.set_value("Old Format Import", name, "title", t)
+	frappe.db.commit()
+	return {"name": name, "title": t}
 
 
 @frappe.whitelist()
