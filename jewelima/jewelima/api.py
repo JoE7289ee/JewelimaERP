@@ -16574,8 +16574,8 @@ def email_cert_excel(name, recipient, subject, body, cc=None):
 
 
 @frappe.whitelist()
-def export_cert_batch_slip(name):
-	"""The batch slip: an A6 landscape card that travels WITH the parcel.
+def get_cert_batch_slip(name):
+	"""The batch slip, as HTML for the browser to PRINT.
 
 	It answers the two questions somebody holding a packet has — which batch is
 	this, and what is supposed to be inside it. The QR is the batch code, so a
@@ -16586,9 +16586,12 @@ def export_cert_batch_slip(name):
 	Not per piece. A per-piece list is the lab's Excel and is already sent; a
 	slip you can read at arm's length while holding the parcel is a different
 	document, and cramming fifty rows onto A6 would make it neither.
-	"""
-	from frappe.utils.pdf import get_pdf
 
+	HTML rather than a PDF because the desk prints it: the page drops this into
+	a hidden iframe and calls print, the same way the barcode labels go out, so
+	the paper comes straight off the printer instead of landing in Downloads.
+	The A6 landscape page size travels in the markup's own @page rule.
+	"""
 	d = frappe.get_doc("Certification", name)
 	rows = frappe.get_all("Certification Item", filters={"parent": name},
 		fields=["design_type", "gross", "dmd_ct"], limit_page_length=0)
@@ -16619,32 +16622,34 @@ def export_cert_batch_slip(name):
 			"{0:.3f}".format(g["gw"]), "{0:.3f}".format(g["ct"]) if g["ct"] else "—")
 		for k, g in groups)
 
-	# A6 landscape is 148x105mm; everything is laid out with TABLES because
-	# wkhtmltopdf's WebKit does not lay flexbox out reliably, and no height is a
-	# percentage because it collapses those to nothing.
-	html = """<!doctype html><html><head><meta charset="utf-8"><style>
-	@page {{ margin: 0; }}
-	body {{ margin:0; font-family:Helvetica,Arial,sans-serif; color:#111; }}
+	# A6 landscape is 148x105mm. Laid out with TABLES, not flexbox: this same
+	# markup is what a print driver sees, and break/layout behaviour on a flex
+	# box is the thing that has already cost us one wrong print run.
+	html = """<!doctype html><html><head><meta charset="utf-8"><title>{nm}</title><style>
+	@page {{ size: 148mm 105mm; margin: 0; }}
+	html, body {{ margin:0; padding:0; }}
+	body {{ font-family:Helvetica,Arial,sans-serif; color:#111;
+		-webkit-print-color-adjust:exact; print-color-adjust:exact; }}
+	.slip {{ width:148mm; height:105mm; box-sizing:border-box; padding:6mm 7mm; overflow:hidden; }}
 	table {{ border-collapse:collapse; width:100%; }}
 	.hd td {{ vertical-align:top; padding:0; }}
-	.nm {{ font-size:19pt; font-weight:bold; letter-spacing:.5px; line-height:1; }}
-	.sub {{ font-size:8pt; color:#444; padding-top:2mm; }}
-	.pcs {{ font-size:8pt; padding-top:1.5mm; }}
-	.pcs b {{ font-size:12pt; }}
-	.qr {{ width:24mm; }}
-	.qr img {{ width:24mm; height:24mm; display:block; }}
-	.qrc {{ font-size:6pt; color:#666; text-align:center; padding-top:.6mm; }}
-	table.it {{ margin-top:3mm; font-size:8.5pt; }}
-	table.it th {{ text-align:left; font-size:6.5pt; letter-spacing:.6px; text-transform:uppercase;
-		color:#555; border-bottom:.5pt solid #333; padding:0 1.5mm 1mm 0; }}
-	table.it td {{ padding:1.1mm 1.5mm 1.1mm 0; border-bottom:.3pt solid #ddd; }}
+	.nm {{ font-size:22pt; font-weight:bold; letter-spacing:.5px; line-height:1; }}
+	.sub {{ font-size:8.5pt; color:#444; padding-top:2mm; }}
+	.pcs {{ font-size:8.5pt; padding-top:1.5mm; }}
+	.pcs b {{ font-size:13pt; }}
+	.qr {{ width:26mm; }}
+	.qr img {{ width:26mm; height:26mm; display:block; }}
+	.qrc {{ font-size:6.5pt; color:#666; text-align:center; padding-top:.6mm; }}
+	table.it {{ margin-top:4mm; font-size:9.5pt; }}
+	table.it th {{ text-align:left; font-size:7pt; letter-spacing:.6px; text-transform:uppercase;
+		color:#555; border-bottom:.5pt solid #333; padding:0 2mm 1.2mm 0; }}
+	table.it td {{ padding:1.4mm 2mm 1.4mm 0; border-bottom:.3pt solid #ddd; }}
 	table.it td.t {{ font-weight:bold; }}
 	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
 	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
-		font-size:9.5pt; padding-top:1.4mm; }}
-	.ft {{ font-size:6pt; color:#888; padding-top:2mm; }}
-	</style></head><body>
-	<div style="padding:4mm 5mm;">
+		font-size:10.5pt; padding-top:1.6mm; }}
+	.ft {{ font-size:6.5pt; color:#888; padding-top:2.5mm; }}
+	</style></head><body><div class="slip">
 	<table class="hd"><tr>
 		<td>
 			<div class="nm">{nm}</div>
@@ -16671,13 +16676,7 @@ def export_cert_batch_slip(name):
 		body=body, l_tot=frappe._("TOTAL"), t_pc=t_pc,
 		t_gw="{0:.3f}".format(t_gw), t_ct="{0:.3f}".format(t_ct),
 		ft="{0} · {1}".format(frappe._("prepared"), d.prepared_on or ""))
-
-	frappe.local.response.filename = "{0}.pdf".format(name)
-	frappe.local.response.filecontent = get_pdf(html, {
-		"page-size": "A6", "orientation": "Landscape",
-		"margin-top": "0mm", "margin-bottom": "0mm",
-		"margin-left": "0mm", "margin-right": "0mm"})
-	frappe.local.response.type = "pdf"
+	return {"name": name, "pieces": t_pc, "html": html}
 
 
 @frappe.whitelist()

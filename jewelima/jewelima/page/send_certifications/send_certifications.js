@@ -26,7 +26,13 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		[data-theme="dark"] .sc-not{color:#e8a24a;}
 		.sc-nums{display:flex;gap:16px;font-size:13px;margin-bottom:12px;}
 		.sc-nums b{font-size:16px;}
-		.sc-actions{display:flex;gap:8px;}
+		/* Five buttons do not fit a 340px card on one line. Flex shrinks its items
+		 * by default, so without this the labels wrapped INSIDE the buttons and the
+		 * row still overflowed — Cancel hung off the card's edge. Let the row wrap
+		 * and hold each label on one line, and the buttons drop to a second row
+		 * intact instead. */
+		.sc-actions{display:flex;gap:8px;flex-wrap:wrap;}
+		.sc-actions .btn{white-space:nowrap;flex:0 0 auto;}
 		.sc-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:22px 0 10px;}
 		table.sc-r{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);}
 		table.sc-r td,table.sc-r th{border:1px solid var(--border-color);padding:5px 10px;text-align:left;}
@@ -158,8 +164,29 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 	// the slip that goes in the packet: A6 landscape, the batch QR and what is
 	// supposed to be inside it, summed by design type
 	root.on("click", ".sc-slip", function () {
-		open_url_post("/api/method/jewelima.jewelima.api.export_cert_batch_slip",
-			{ name: $(this).closest(".sc-card").data("name") });
+		const nm = $(this).closest(".sc-card").data("name");
+		frappe.call({ method: API + ".get_cert_batch_slip", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			if (!m.html) return;
+			// straight to the printer through a hidden iframe, the way the barcode
+			// labels go — a downloaded PDF means somebody has to find it in
+			// Downloads and open it before any paper comes out. The A6 landscape
+			// page size rides in the markup's own @page rule.
+			document.getElementById("jw-slip-frame")?.remove();
+			const fr = document.createElement("iframe");
+			fr.id = "jw-slip-frame";
+			fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+			document.body.appendChild(fr);
+			const doc = fr.contentDocument;
+			doc.open();
+			doc.write(m.html);
+			doc.close();
+			// the QR is an SVG data-URI; printing before it has decoded prints a
+			// slip with a hole where the code should be
+			setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);
+			frappe.show_alert({ indicator: "green",
+				message: __("{0} slip sent to the printer.", [nm]) }, 4);
+		});
 	});
 
 	// one click — no confirm dialog; the record stays, marked Cancelled
