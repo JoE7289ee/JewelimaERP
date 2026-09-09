@@ -14013,10 +14013,17 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 				flags.append("no diamond rows for {0}".format(quality or "?"))
 			else:
 				pcs = cint(r.get("dmd_pcs"))
-				# per-stone cents ROUND AT THE 4TH DIGIT (0.0086 -> 0.009 goes
-				# NEXT bracket; 0.0183 -> 0.018 stays down) and the upper edge
-				# is inclusive — no more between-bracket gaps
-				stone_ct = round(flt(r.get("dmd_ct")) / pcs, 3) if pcs else 0
+				# The per-stone carat is rounded to the SAME four decimals the
+				# brackets are cut at. It used to round to three, which quietly
+				# threw away the fourth digit of every boundary: a chart cut at
+				# 0.0085 behaved exactly like one cut at 0.009. The upper edge
+				# is inclusive, so a chart written the natural way —
+				#   0      -> 0.0085
+				#   0.0086 -> 0.018
+				# covers everything: rounded to 4dp, a stone between the two
+				# lands on 0.0085 (top of the first) or 0.0086 (foot of the
+				# second) and there is no gap to fall through.
+				stone_ct = round(flt(r.get("dmd_ct")) / pcs, 4) if pcs else 0
 				row = None
 				if stone_ct:
 					for d in sorted(dmd_exact, key=lambda d: flt(d.from_ct)):
@@ -14344,7 +14351,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	for p in priced:
 		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
 		if ct > 0 and brackets:
-			gi = bracket_index(round(ct / pcs, 3) if pcs else 0)
+			gi = bracket_index(round(ct / pcs, 4) if pcs else 0)   # 4dp, as the pricing does
 			if gi not in used:
 				used.append(gi)
 	used.sort()
@@ -14488,7 +14495,7 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=C["mc"], value=flt(p.get("mc")))
 		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
 		if ct > 0 and brackets:
-			gi = bracket_index(round(ct / pcs, 3) if pcs else 0)
+			gi = bracket_index(round(ct / pcs, 4) if pcs else 0)   # 4dp, as the pricing does
 			ws.cell(row=r, column=C["g{0}p".format(gi)], value=pcs)
 			ws.cell(row=r, column=C["g{0}c".format(gi)], value=ct)
 			ws.cell(row=r, column=C["g{0}v".format(gi)],
