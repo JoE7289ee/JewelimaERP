@@ -40,7 +40,13 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		.bs-piece .ph input{width:110px;text-align:right;}
 		.bs-piece .ph .lbl{font-size:11px;color:var(--text-muted);}
 		.bs-goldcell{color:#1d7a33;font-weight:600;}
-		.bs-foot{display:none;justify-content:space-between;align-items:center;margin:12px 0;}
+		/* The totals are the thing you are watching WHILE you type into the ten
+		 * piece blocks below, and they used to scroll off the top before the last
+		 * piece was reached — which is exactly when they matter. They stay. */
+		.bs-foot{display:none;justify-content:space-between;align-items:center;margin:0 0 12px;
+			position:sticky;top:0;z-index:5;background:var(--fg-color);
+			padding:10px 12px;border:1px solid var(--border-color);border-radius:10px;
+			box-shadow:0 2px 6px rgba(0,0,0,.06);}
 		.bs-foot.show{display:flex;}
 		.bs-rem{font-size:14px;}.bs-rem b{font-size:18px;}
 		.bs-rem.bad b{color:#b00020;}.bs-rem.ok b{color:#1d7a33;}
@@ -91,7 +97,10 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		const d = state.data, b = d.bag;
 		const cell = (k, v) => `<div><span class="k">${k}</span><br><span class="v">${frappe.utils.escape_html(v == null || v === "" ? "—" : "" + v)}</span></div>`;
 		const totQty = (it) => it.per_piece.reduce((s, p) => s + flt(p.qty), 0);
-		const totWt = (it) => (it.is_gold ? d.gold_total : it.per_piece.reduce((s, p) => s + flt(p.weight), 0));
+		// every row shows ITS OWN weight. A gold row used to show the bag's whole
+		// gold figure, so a card holding two metals printed the full weight twice
+		// and read as if it held double what it does.
+		const totWt = (it) => flt(it.total != null ? it.total : it.per_piece.reduce((s, p) => s + flt(p.weight), 0));
 		const rows = d.items
 			.map((it) => `<tr>
 				<td><b>${frappe.utils.escape_html(it.item)}</b></td>
@@ -111,7 +120,7 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		$foot.removeClass("show");
 		$actions.empty();
 		if (showStart) {
-			$(`<button class="btn btn-primary btn-sm">${__("Start")}</button>`).appendTo($card).wrap('<div style="margin-top:12px;"></div>');
+			$(`<button class="btn btn-primary btn-sm">${__("EXTRACT")}</button>`).appendTo($card).wrap('<div style="margin-top:12px;"></div>');
 			$card.find(".btn-primary").on("click", doStart);
 		}
 	}
@@ -225,9 +234,10 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		}
 		put = Math.round(put * 1000) / 1000;
 		const left = Math.round((productGross - put) * 1000) / 1000;
-		let txt = `Gold remaining in bag: <b>${t.rem.toFixed(3)}</b> g  ·  assigned ${t.used.toFixed(3)} / ${flt(d.gold_total).toFixed(3)} g`;
+		// The gold line said the same thing twice — "remaining" and "left in bag"
+		// are one number — so the gross picture is all that is left, and it leads.
+		let txt = `Product gross: <b>${productGross.toFixed(3)}</b> g  ·  put in pieces: <b>${put.toFixed(3)}</b> g  ·  left in bag: <b>${left.toFixed(3)}</b> g`;
 		if (t.over) txt += ` · <span style="color:#b00020">too much ${frappe.utils.escape_html(t.over)}</span>`;
-		txt += `<div style="font-size:12px;color:var(--text-muted);margin-top:3px;">Product gross: <b>${productGross.toFixed(3)}</b> g  ·  put in pieces: <b>${put.toFixed(3)}</b> g  ·  left in bag: <b>${left.toFixed(3)}</b> g</div>`;
 		$rem.html(txt);
 		$(page.main).find(".bs-splitbtn").prop("disabled", !ok).css("opacity", ok ? 1 : 0.5);
 		// offer "Split remaining" when only a tiny sliver of gold is left (<= 0.010 g)
