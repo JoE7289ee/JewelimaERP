@@ -54,10 +54,12 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 		});
 	}
 
-	// Merge two lots into a NEW one. The dialog offers only lots of the SAME
-	// quality — a lot is priced at one quality, so a mixed one could never be
-	// priced right, and showing only the valid partners says that better than
-	// refusing after the pick does. Neither source is touched.
+	// Merge lots into a NEW one. The dialog offers only lots of the SAME quality
+	// — a lot is priced at one quality, so a mixed one could never be priced
+	// right, and showing only the valid partners says that better than refusing
+	// after the pick does. Tick as many as you like: three shops' lots going into
+	// one is the normal case, and merging them in pairs would leave a throwaway
+	// lot behind on the way. No source is touched.
 	root.on("click", ".si-merge", function () {
 		const name = $(this).data("name");
 		frappe.call({ method: API + ".list_old_format_mergeable", args: { name } }).then((r) => {
@@ -66,35 +68,44 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 				return frappe.msgprint({ title: __("Nothing to merge with"), indicator: "orange",
 					message: __("No other saved lot is {0}. A lot is priced at one quality, so only {0} lots can join this one.", [m.quality]) });
 			}
+			const byName = {};
+			(m.candidates || []).forEach((c) => { byName[c.name] = c; });
 			const opts = m.candidates.map((c) => ({
 				value: c.name,
-				label: `${c.title} — ${c.piece_count || 0} pcs${c.party ? " · " + c.party : ""}`,
+				label: `${esc(c.title)} — ${c.piece_count || 0} pcs${c.party ? " · " + esc(c.party) : ""}`,
+				checked: 0,
 			}));
 			const d = new frappe.ui.Dialog({
 				title: __("Merge {0}", [m.title]),
 				fields: [
 					{ fieldtype: "HTML", fieldname: "head" },
-					{ fieldtype: "Select", fieldname: "other", label: __("Merge with"),
-						options: opts, reqd: 1, default: opts[0].value },
+					{ fieldtype: "MultiCheck", fieldname: "others", label: __("Merge with"),
+						options: opts, columns: 1 },
 					{ fieldtype: "Autocomplete", fieldname: "party", label: __("Shop / party"),
 						options: m.parties || [], reqd: 1,
-						description: __("The merged lot is FOR this shop — it carries the name, not either source's.") },
+						description: __("The merged lot is FOR this shop — it carries the name, not any source's.") },
 					{ fieldtype: "Data", fieldname: "title", label: __("Title"),
-						description: __("Leave blank to name it after both lots.") },
+						description: __("Leave blank to name it after every lot going in.") },
 					{ fieldtype: "HTML", fieldname: "sum" },
 				],
 				primary_action_label: __("Create merged lot"),
 				primary_action(v) {
+					const others = d.get_value("others") || [];
+					// MultiCheck has no reqd of its own, so the check is here
+					if (!others.length) {
+						return frappe.msgprint(__("Tick at least one lot to merge with {0}.", [m.title]));
+					}
 					d.hide();
 					frappe.dom.freeze(__("Merging…"));
 					frappe.call({ method: API + ".merge_old_format_sessions",
-						args: { a: name, b: v.other, party: v.party, title: v.title || "" } })
+						args: { names: JSON.stringify([name].concat(others)),
+							party: v.party, title: v.title || "" } })
 						.then((rr) => {
 							frappe.dom.unfreeze();
 							const n = rr.message || {};
 							frappe.show_alert({ indicator: "green", message:
-								__("{0} — {1} piece(s) for {2}. Both originals are untouched.",
-									[n.title, n.pieces, n.party || "—"]) }, 8);
+								__("{0} — {1} piece(s) from {2} lots for {3}. Every original is untouched.",
+									[n.title, n.pieces, (n.from || []).length, n.party || "—"]) }, 8);
 							load();
 						}).catch(() => frappe.dom.unfreeze());
 				},
@@ -103,16 +114,18 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 				__("{0} — {1} piece(s), quality <b>{2}</b>. Only {2} lots are offered below.",
 					[esc(m.title), m.pieces, esc(m.quality)])}</div>`);
 			const paintSum = () => {
-				// the Select's default is not readable from get_value until the
-				// dialog has painted, so fall back to the first option — otherwise
-				// the total is blank exactly when it is first looked at
-				const chosen = d.get_value("other") || opts[0].value;
-				const pick = (m.candidates || []).find((c) => c.name === chosen);
-				d.fields_dict.sum.$wrapper.html(pick
-					? `<div class="mg-sum">${__("New lot")}: <b>${m.pieces + (pick.piece_count || 0)}</b> ${
-						__("piece(s)")} — ${m.pieces} + ${pick.piece_count || 0}</div>` : "");
+				const picked = d.get_value("others") || [];
+				const parts = [m.title].concat(picked.map((p) => (byName[p] || {}).title || p));
+				const tot = picked.reduce((a, p) => a + ((byName[p] || {}).piece_count || 0), m.pieces);
+				const sums = [m.pieces].concat(picked.map((p) => (byName[p] || {}).piece_count || 0));
+				d.fields_dict.sum.$wrapper.html(picked.length
+					? `<div class="mg-sum">${__("New lot")}: <b>${tot}</b> ${__("piece(s)")} — ${
+						sums.join(" + ")}<br><span style="color:var(--text-muted);">${
+						parts.map(esc).join(" + ")}</span></div>`
+					: `<div class="mg-sum" style="color:var(--text-muted);">${
+						__("Tick the lots to merge into {0}.", [esc(m.title)])}</div>`);
 			};
-			d.fields_dict.other.$input.on("change", paintSum);
+			d.fields_dict.others.$wrapper.on("change", "input[type=checkbox]", paintSum);
 			d.show();
 			paintSum();
 		});

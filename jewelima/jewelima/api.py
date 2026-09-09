@@ -13853,60 +13853,98 @@ def list_old_format_mergeable(name):
 
 
 @frappe.whitelist()
-def merge_old_format_sessions(a, b, party=None, title=None):
-	"""Two saved lots into a NEW one. Neither source is touched.
+def merge_old_format_sessions(names=None, party=None, title=None, a=None, b=None):
+	"""Two OR MORE saved lots into a NEW one. No source is touched.
 
-	A lot is priced at one quality, so both sides must carry the same one. The
-	pieces are concatenated and renumbered; a UNIQUE ID appearing on both sides
-	is refused BY NAME rather than merged over, because the priced view keys its
-	rows by unique id — two rows sharing one would silently show the same money
-	twice and there would be nothing on screen to say so."""
-	if a == b:
-		frappe.throw(frappe._("Pick two different lots."))
-	da, db = frappe.get_doc("Old Format Import", a), frappe.get_doc("Old Format Import", b)
-	qa, qb = (da.quality_token or "EF"), (db.quality_token or "EF")
-	if qa != qb:
-		frappe.throw(frappe._("{0} is {1} and {2} is {3} — a lot is priced at ONE quality.")
-			.format(da.title, qa, db.title, qb))
+	It began as a two-lot merge and the floor immediately had three — Mysore,
+	Rajaji and Udupi, all EF, all wanting to be one lot. Merging in pairs would
+	have left a throwaway lot behind on the way, so it takes a list.
 
-	ba = json.loads(da.data or "{}")
-	bb = json.loads(db.data or "{}")
-	ra, rb = (ba.get("rows") or []), (bb.get("rows") or [])
-	if not ra or not rb:
-		frappe.throw(frappe._("One of the lots has no pieces in it."))
+	A lot is priced at one quality, so every lot picked must carry the same one.
+	The pieces are concatenated in the order picked and renumbered; a UNIQUE ID
+	appearing on more than one lot is refused BY NAME rather than merged over,
+	because the priced view keys its rows by unique id — two rows sharing one
+	would silently show the same money twice and there would be nothing on
+	screen to say so.
 
-	seen = {str(r.get("unique_id") or "").strip().upper() for r in ra}
-	clash = sorted({str(r.get("unique_id") or "").strip().upper() for r in rb} & seen)
+	`a`/`b` are still accepted so a browser holding the old page keeps working.
+	"""
+	picked = names
+	if isinstance(picked, str):
+		picked = json.loads(picked or "[]")
+	picked = list(picked or []) or [x for x in (a, b) if x]
+	# same lot twice is a slip, not a request to double the pieces
+	ordered, seen_nm = [], set()
+	for n in [str(x or "").strip() for x in picked]:
+		if n and n not in seen_nm:
+			seen_nm.add(n)
+			ordered.append(n)
+	if len(ordered) < 2:
+		frappe.throw(frappe._("Pick at least two different lots."))
+
+	docs = [frappe.get_doc("Old Format Import", n) for n in ordered]
+	quality = docs[0].quality_token or "EF"
+	odd = [d for d in docs if (d.quality_token or "EF") != quality]
+	if odd:
+		frappe.throw(frappe._("{0} is {1} but {2} — a lot is priced at ONE quality.").format(
+			docs[0].title, quality,
+			", ".join("{0} is {1}".format(d.title, d.quality_token or "EF") for d in odd)))
+
+	blobs = [json.loads(d.data or "{}") for d in docs]
+	rowsets = [(bl.get("rows") or []) for bl in blobs]
+	empty = [d.title for d, rs in zip(docs, rowsets) if not rs]
+	if empty:
+		frappe.throw(frappe._("{0} has no pieces in it.").format(", ".join(empty)))
+
+	# which lot each unique id came from, so a clash can name BOTH sides — with
+	# three lots on screen "12 pieces are on both lots" would not say which two.
+	# A row with no unique id is left alone; it is not a clash with every other
+	# blank one.
+	owner, clash = {}, []
+	for d, rs in zip(docs, rowsets):
+		for r in rs:
+			uid = str(r.get("unique_id") or "").strip().upper()
+			if not uid:
+				continue
+			if uid in owner and owner[uid] != d.title:
+				clash.append("{0} ({1} and {2})".format(uid, owner[uid], d.title))
+			else:
+				owner.setdefault(uid, d.title)
 	if clash:
-		frappe.throw(frappe._("{0} piece(s) are on both lots — {1}{2}. Remove them from one side first.")
-			.format(len(clash), ", ".join(clash[:6]), "…" if len(clash) > 6 else ""))
+		frappe.throw(frappe._("{0} piece(s) are on more than one lot — {1}{2}. Remove them from one side first.")
+			.format(len(clash), ", ".join(clash[:4]), "…" if len(clash) > 4 else ""))
 
-	rows = [dict(r) for r in ra] + [dict(r) for r in rb]
+	rows = [dict(r) for rs in rowsets for r in rs]
 	for i, r in enumerate(rows, start=1):
 		r["sl"] = i                       # one running number across the merged lot
 
 	shop = (party or "").strip()
+	chains = []
+	for bl in blobs:
+		chains += (bl.get("chains") or [])
 	doc = frappe.get_doc({
 		"doctype": "Old Format Import",
-		"title": (title or "").strip() or "{0} + {1}".format(da.title, db.title),
+		"title": (title or "").strip() or " + ".join(d.title for d in docs),
 		"party": shop,
-		"invoice_no": "",                 # a merged lot is not either source's invoice
-		"source_file": "{0} + {1}".format(da.source_file or da.name, db.source_file or db.name),
-		"quality_token": qa,
+		"invoice_no": "",                 # a merged lot is not any source's invoice
+		"source_file": " + ".join((d.source_file or d.name) for d in docs),
+		"quality_token": quality,
 		"status": "In Progress",
 		"piece_count": len(rows),
 		"data": json.dumps({
 			"rows": rows,
 			# the cover is rebuilt around the shop this lot is now for; the
 			# sources' invoice numbers belong to the sources
-			"cover": {**(ba.get("cover") or {}), "party": shop, "invoice_no": ""},
+			"cover": {**(blobs[0].get("cover") or {}), "party": shop, "invoice_no": ""},
 			"sorted": False,              # the running order changed, so it is not sorted
-			"chains": (ba.get("chains") or []) + (bb.get("chains") or []),
+			"chains": chains,
 		}),
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name, "title": doc.title, "pieces": len(rows),
-		"quality": qa, "party": shop, "from": [a, b]}
+		"quality": quality, "party": shop, "from": ordered,
+		"sources": [{"name": d.name, "title": d.title, "pieces": len(rs)}
+			for d, rs in zip(docs, rowsets)]}
 
 
 @frappe.whitelist()
