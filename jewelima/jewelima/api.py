@@ -14578,6 +14578,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	huid_cols = max([len(_huid_codes(p)) for p in priced] or [0])
 	for i in range(huid_cols):
 		keys.append("huidc{0}".format(i))
+	# SHOP NAME last, and only when the lot carries one. A merged lot is several
+	# branches' work in one bill, so the bill has to say which piece is whose;
+	# a single-branch lot already says it once in the Shop line at A3 and does
+	# not need it repeated down fifty rows.
+	if any(str(p.get("shop") or "").strip() for p in priced):
+		keys.append("shop")
 	C = {k: i + 1 for i, k in enumerate(keys)}
 	NCOLS = len(keys)
 
@@ -14620,7 +14626,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"pspcs": "PS pcs", "pswt": "PS ct", "psv": "PS value",
 		"cspcs": "CS pcs", "cswt": "CS g" if cs_in_g else "CS ct",
 		"csv": "CS value", "total": "Total value",
-		"igi": "IGI", "huid": "HUID", "certlab": "CERT", "certno": "CERT NO", "uid": "UNIQUE ID"}
+		"igi": "IGI", "huid": "HUID", "certlab": "CERT", "certno": "CERT NO", "uid": "UNIQUE ID",
+		"shop": "SHOP NAME"}
 	for i in range(huid_cols):
 		HEAD["huidc{0}".format(i)] = "HUID CODE" if huid_cols == 1 else "HUID {0}".format(i + 1)
 	for gi in used:
@@ -14722,6 +14729,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		for i in range(huid_cols):
 			ws.cell(row=r, column=C["huidc{0}".format(i)],
 				value=codes[i] if i < len(codes) else None)
+		if "shop" in C:
+			ws.cell(row=r, column=C["shop"], value=str(p.get("shop") or "").strip().upper() or None)
 		r += 1
 
 	# blocks: item type -> colour runs -> weight bands. EVERY band run closes
