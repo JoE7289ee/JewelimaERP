@@ -13853,7 +13853,7 @@ def list_old_format_mergeable(name):
 
 
 @frappe.whitelist()
-def merge_old_format_sessions(names=None, party=None, title=None, a=None, b=None):
+def merge_old_format_sessions(names=None, shops=None, party=None, title=None, a=None, b=None):
 	"""Two OR MORE saved lots into a NEW one. No source is touched.
 
 	It began as a two-lot merge and the floor immediately had three — Mysore,
@@ -13866,6 +13866,11 @@ def merge_old_format_sessions(names=None, party=None, title=None, a=None, b=None
 	because the priced view keys its rows by unique id — two rows sharing one
 	would silently show the same money twice and there would be nothing on
 	screen to say so.
+
+	`shops` is {lot: shop name} and stamps every row of that lot with the name
+	it should carry — three branches' work in one lot is still three branches'
+	work, and the desk sorts and prices by that name. It is typed, not picked
+	off a list: these are branch names, not the party the lot is billed to.
 
 	`a`/`b` are still accepted so a browser holding the old page keeps working.
 	"""
@@ -13914,11 +13919,26 @@ def merge_old_format_sessions(names=None, party=None, title=None, a=None, b=None
 		frappe.throw(frappe._("{0} piece(s) are on more than one lot — {1}{2}. Remove them from one side first.")
 			.format(len(clash), ", ".join(clash[:4]), "…" if len(clash) > 4 else ""))
 
-	rows = [dict(r) for rs in rowsets for r in rs]
+	if isinstance(shops, str):
+		shops = json.loads(shops or "{}")
+	shops = {str(k): str(v or "").strip().upper() for k, v in (shops or {}).items()}
+
+	rows = []
+	for d, rs in zip(docs, rowsets):
+		named = shops.get(d.name)
+		for r in rs:
+			r = dict(r)
+			if named:
+				r["shop"] = named         # whose pieces these are, inside the merged lot
+			rows.append(r)
 	for i, r in enumerate(rows, start=1):
 		r["sl"] = i                       # one running number across the merged lot
 
-	shop = (party or "").strip()
+	# the lot-level party is NOT asked for: it is who the lot is billed to, and
+	# merging does not change that. Carried through when the sources agree, and
+	# left blank when they do not rather than guessing one of them.
+	srcp = {(d.party or "").strip() for d in docs}
+	shop = (party or "").strip() or (srcp.pop() if len(srcp) == 1 else "")
 	chains = []
 	for bl in blobs:
 		chains += (bl.get("chains") or [])
@@ -13943,7 +13963,8 @@ def merge_old_format_sessions(names=None, party=None, title=None, a=None, b=None
 	frappe.db.commit()
 	return {"name": doc.name, "title": doc.title, "pieces": len(rows),
 		"quality": quality, "party": shop, "from": ordered,
-		"sources": [{"name": d.name, "title": d.title, "pieces": len(rs)}
+		"sources": [{"name": d.name, "title": d.title, "pieces": len(rs),
+			"shop": shops.get(d.name) or ""}
 			for d, rs in zip(docs, rowsets)]}
 
 

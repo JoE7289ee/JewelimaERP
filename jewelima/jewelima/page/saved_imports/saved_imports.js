@@ -57,9 +57,15 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 	// Merge lots into a NEW one. The dialog offers only lots of the SAME quality
 	// — a lot is priced at one quality, so a mixed one could never be priced
 	// right, and showing only the valid partners says that better than refusing
-	// after the pick does. Tick as many as you like: three shops' lots going into
-	// one is the normal case, and merging them in pairs would leave a throwaway
-	// lot behind on the way. No source is touched.
+	// after the pick does. Tick as many as you like: three branches' lots going
+	// into one is the normal case, and merging them in pairs would leave a
+	// throwaway lot behind on the way.
+	//
+	// Each lot going in is asked what NAME its pieces should carry — Mysore,
+	// Rajaji, Udupi. That is the per-piece shop the OLD FORMAT desk sorts and
+	// prices by, and it is typed rather than picked off a list of parties: a
+	// branch name is not the party the lot is billed to, and offering last
+	// month's party names here only invites the wrong one. No source is touched.
 	root.on("click", ".si-merge", function () {
 		const name = $(this).data("name");
 		frappe.call({ method: API + ".list_old_format_mergeable", args: { name } }).then((r) => {
@@ -68,22 +74,25 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 				return frappe.msgprint({ title: __("Nothing to merge with"), indicator: "orange",
 					message: __("No other saved lot is {0}. A lot is priced at one quality, so only {0} lots can join this one.", [m.quality]) });
 			}
-			const byName = {};
+			const byName = { [name]: { name, title: m.title, piece_count: m.pieces } };
 			(m.candidates || []).forEach((c) => { byName[c.name] = c; });
 			const opts = m.candidates.map((c) => ({
 				value: c.name,
 				label: `${esc(c.title)} — ${c.piece_count || 0} pcs${c.party ? " · " + esc(c.party) : ""}`,
 				checked: 0,
 			}));
+			// what has been typed so far, kept across re-renders — reticking a lot
+			// must not throw away the name already put against it
+			const SHOPS = {};
+			const going = () => [name].concat(d.get_value("others") || []);
+
 			const d = new frappe.ui.Dialog({
 				title: __("Merge {0}", [m.title]),
 				fields: [
 					{ fieldtype: "HTML", fieldname: "head" },
 					{ fieldtype: "MultiCheck", fieldname: "others", label: __("Merge with"),
 						options: opts, columns: 1 },
-					{ fieldtype: "Autocomplete", fieldname: "party", label: __("Shop / party"),
-						options: m.parties || [], reqd: 1,
-						description: __("The merged lot is FOR this shop — it carries the name, not any source's.") },
+					{ fieldtype: "HTML", fieldname: "shops", label: __("Name on the pieces") },
 					{ fieldtype: "Data", fieldname: "title", label: __("Title"),
 						description: __("Leave blank to name it after every lot going in.") },
 					{ fieldtype: "HTML", fieldname: "sum" },
@@ -98,26 +107,50 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 					d.hide();
 					frappe.dom.freeze(__("Merging…"));
 					frappe.call({ method: API + ".merge_old_format_sessions",
-						args: { names: JSON.stringify([name].concat(others)),
-							party: v.party, title: v.title || "" } })
+						args: { names: JSON.stringify(going()),
+							shops: JSON.stringify(SHOPS), title: v.title || "" } })
 						.then((rr) => {
 							frappe.dom.unfreeze();
 							const n = rr.message || {};
+							const named = (n.sources || []).filter((x) => x.shop);
 							frappe.show_alert({ indicator: "green", message:
-								__("{0} — {1} piece(s) from {2} lots for {3}. Every original is untouched.",
-									[n.title, n.pieces, (n.from || []).length, n.party || "—"]) }, 8);
+								__("{0} — {1} piece(s) from {2} lots{3}. Every original is untouched.",
+									[n.title, n.pieces, (n.from || []).length,
+										named.length ? " · " + named.map((x) => x.shop).join(", ") : ""]) }, 8);
 							load();
 						}).catch(() => frappe.dom.unfreeze());
 				},
 			});
+
 			d.fields_dict.head.$wrapper.html(`<div style="font-size:12.5px;color:var(--text-muted);">${
 				__("{0} — {1} piece(s), quality <b>{2}</b>. Only {2} lots are offered below.",
 					[esc(m.title), m.pieces, esc(m.quality)])}</div>`);
+
+			// one line per lot going in: which lot, and the name its pieces carry
+			const paintShops = () => {
+				const lots = going();
+				d.fields_dict.shops.$wrapper.html(`
+					<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${
+						__("What each lot's pieces are called in the merged lot. Leave one blank to leave those pieces as they are.")}</div>
+					<table class="mg-shops" style="width:100%;font-size:12.5px;">${lots.map((n, i) => `
+						<tr>
+							<td style="padding:2px 8px 2px 0;color:var(--text-muted);width:22px;">${i + 1}</td>
+							<td style="padding:2px 8px 2px 0;">${esc((byName[n] || {}).title || n)}
+								<span style="color:var(--text-muted);">· ${(byName[n] || {}).piece_count || 0} pcs</span></td>
+							<td style="padding:2px 0;width:150px;"><input class="form-control input-xs mg-shop"
+								data-lot="${esc(n)}" style="text-transform:uppercase;"
+								placeholder="${__("name")}" value="${esc(SHOPS[n] || "")}"></td>
+						</tr>`).join("")}</table>`);
+			};
+			d.fields_dict.shops.$wrapper.on("input", ".mg-shop", function () {
+				SHOPS[$(this).data("lot")] = (this.value || "").trim().toUpperCase();
+			});
+
 			const paintSum = () => {
 				const picked = d.get_value("others") || [];
 				const parts = [m.title].concat(picked.map((p) => (byName[p] || {}).title || p));
-				const tot = picked.reduce((a, p) => a + ((byName[p] || {}).piece_count || 0), m.pieces);
 				const sums = [m.pieces].concat(picked.map((p) => (byName[p] || {}).piece_count || 0));
+				const tot = sums.reduce((a, b) => a + b, 0);
 				d.fields_dict.sum.$wrapper.html(picked.length
 					? `<div class="mg-sum">${__("New lot")}: <b>${tot}</b> ${__("piece(s)")} — ${
 						sums.join(" + ")}<br><span style="color:var(--text-muted);">${
@@ -125,8 +158,12 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 					: `<div class="mg-sum" style="color:var(--text-muted);">${
 						__("Tick the lots to merge into {0}.", [esc(m.title)])}</div>`);
 			};
-			d.fields_dict.others.$wrapper.on("change", "input[type=checkbox]", paintSum);
+			d.fields_dict.others.$wrapper.on("change", "input[type=checkbox]", () => {
+				paintShops();
+				paintSum();
+			});
 			d.show();
+			paintShops();
 			paintSum();
 		});
 	});
