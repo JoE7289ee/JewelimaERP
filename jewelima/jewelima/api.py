@@ -8190,7 +8190,11 @@ def start_bag_split(order_bag, employee=None):
 		"issued_at": rec[0].issued_at or now, "time_in": rec[0].time_in or now,
 	})
 	frappe.db.commit()
-	return {"ok": 1, "employee": employee, "resumed": rec[0].status == "Ongoing"}
+	# the desk says who it went to, so send back the person's name — the code is
+	# for the record, not for reading off a screen
+	return {"ok": 1, "employee": employee,
+		"employee_name": (frappe.db.get_value("Employee", employee, "employee_name") if employee else None),
+		"resumed": rec[0].status == "Ongoing"}
 
 
 @frappe.whitelist()

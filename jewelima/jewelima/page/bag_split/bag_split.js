@@ -133,7 +133,10 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 			.then((r) => {
 				frappe.dom.unfreeze();
 				state.started = true;
-				frappe.show_alert({ message: __("Started — assigned to {0}", [(r.message || {}).employee || frappe.session.user]), indicator: "blue" }, 4);
+				const who = r.message || {};
+				frappe.show_alert({ message: __("Started — assigned to {0}",
+					[who.employee_name || who.employee || frappe.session.user_fullname || frappe.session.user]),
+					indicator: "blue" }, 4);
 				renderPieces();
 			})
 			.catch(() => frappe.dom.unfreeze());
