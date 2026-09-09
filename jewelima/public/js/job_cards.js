@@ -52,24 +52,39 @@ body { font-family: Arial, Helvetica, sans-serif; color: #000;
 	break-after: page; page-break-after: always;
 	break-inside: avoid; page-break-inside: avoid; }
 .jc-page:last-child { break-after: auto; page-break-after: auto; }
-.card { width: 148mm; height: 105mm; padding: 4mm 5mm; display: flex; flex-direction: column;
+.card { width: 148mm; height: 105mm; padding: 4mm 5.5mm; display: flex; flex-direction: column;
 	overflow: hidden; font-size: 10.5px; line-height: 1.3; }
-.card .hd { display: grid; grid-template-columns: 1.25fr 1fr 0.85fr; gap: 5px;
-	border-bottom: 1.2px solid #000; padding-bottom: 2mm; font-size: 12px; line-height: 1.4; }
+/* the header sits in a touch from the card edge — hard against it reads as an
+   overflow rather than as a margin */
+.card .hd { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 5mm;
+	border-bottom: 1.2px solid #000; padding: 0 0 2mm 1.5mm;
+	font-size: 12px; line-height: 1.45; }
 .card .hd b { font-weight: 700; }
-.card .hd .pur { float: right; font-size: 16px; font-weight: 800; margin-left: 5px; }
-.card .hd .pur2 { float: right; clear: right; font-size: 12.5px; font-weight: 800;
-	margin-left: 5px; margin-top: 1px; }
-.card .md { display: grid; grid-template-columns: 44mm 1fr; gap: 4mm;
+.card .hd .c3 { text-align: right; white-space: nowrap; }
+/* The karat code used to sit up here as a headline badge, which said the same
+   thing as the first line of the items table and ate the corner doing it. The
+   table says it now — the metal row is bold, which is enough to find it. */
+.card .hd .pur2 { display: inline-block; font-size: 10px; font-weight: 800;
+	border: 1px solid #000; border-radius: 1.5mm; padding: 0.1mm 1.2mm; margin-left: 1mm;
+	line-height: 1.35; }
+.card .hd .badges { margin-bottom: 1mm; }
+/* the photo is the thing a bench recognises the piece by, so it gets the room
+   the bigger card freed up: 44mm -> 60mm across, 46mm -> 56mm tall */
+.card .md { display: grid; grid-template-columns: 60mm 1fr; gap: 4.5mm;
 	flex: 1 1 auto; min-height: 0; padding: 2.5mm 0; }
-.card .img { display: flex; flex-direction: column; align-items: center; justify-content: center;
-	border: 1px solid #000; }
-.card .img img { max-width: 100%; max-height: 46mm; object-fit: contain; }
-.card .img .cap { font-size: 9px; margin-top: 1px; }
+/* No caption under the photo: it printed the design variant, which the header
+   already carries as D V, and it was stealing the last few mm from the image. */
+.card .img { display: flex; align-items: center; justify-content: center;
+	border: 1px solid #000; overflow: hidden; padding: 1mm; }
+.card .img img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.card .img .cap { font-size: 10px; color: #444; }
 .card .it { display: flex; flex-direction: column; min-height: 0; }
 .card .it table { width: 100%; border-collapse: collapse; font-size: 10px; }
 .card .it th, .card .it td { border: 1px solid #000; padding: 1px 4px; text-align: left; }
 .card .it th { background: #eee; font-size: 9.5px; }
+/* the raw material — the metal the piece is made of. Bold because it is the one
+   row on the card somebody looks for. */
+.card .it tr.metal td { font-weight: 700; }
 /* Qty + Weight stay EMPTY on print — the floor writes actual weights in; rows are
    tall enough to write in by hand, and A6 finally gives them the room */
 .card .it td { height: 7mm; }
@@ -94,15 +109,15 @@ function pob_cardHTML(c) {
 	// Weight column stays blank for everyone — the floor writes the actual weights.
 	const mats = (c.materials || [])
 		.map((m) => {
-			const qtyCell = (m.uom || "") === "Carat" && flt(m.qty) ? flt(m.qty) : "";
-			return `<tr><td>${pob_esc(m.item)}</td><td>${qtyCell}</td><td></td></tr>`;
+			const stone = (m.uom || "") === "Carat";
+			const qtyCell = stone && flt(m.qty) ? flt(m.qty) : "";
+			// the metal row is the raw material; bolding it is what replaced the
+			// karat badge that used to shout the same thing from the corner
+			return `<tr class="${stone ? "" : "metal"}"><td>${pob_esc(m.item)}</td><td>${qtyCell}</td><td></td></tr>`;
 		})
 		.join("");
-	// top-right badge: the karat gold CODE (22KPG …) — the BOM's metal row, or the
-	// CAD karat target; falls back to the purity % if neither is there
-	const gold = (c.materials || []).find((m) => (m.uom || "") !== "Carat" && flt(m.purity) > 0);
-	const purBadge = gold ? gold.item : (c.cad_karat || "");  // karat+colour code, never a %
-	// extra badges under the karat code — CZ / CVD only, when the card carries them
+	// CZ / CVD badges only — the karat code is no longer badged up here, it is the
+	// bold metal row in the items table
 	const purExtra = [];
 	if (c.cz_no || c.cz_weight) purExtra.push("CZ");
 	if (c.cvd_no || c.cvd_weight) purExtra.push("CVD");
@@ -115,10 +130,14 @@ function pob_cardHTML(c) {
 		<div class="hd">
 			<div><b>D TYPE:</b> ${pob_esc(c.design_type)}<br><b>D NAME:</b> ${pob_esc(c.bank_no || c.design)}<br><b>D V:</b> ${pob_esc(c.design)}<br><b>D SIZE:</b> ${pob_esc(c.size || "NA")}</div>
 			<div>${pob_esc(c.customer)}${c.party_group ? `<br>${pob_esc(c.party_group)}` : ""}<br><b>ORD:</b> ${pob_esc(c.order_date)}<br><b>DUE:</b> ${pob_esc(c.due_date)}</div>
-			<div>${purBadge ? `<span class="pur">${pob_esc(purBadge)}</span>` : ""}${purExtra.map((x) => `<span class="pur2">${x}</span>`).join("")}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
+			<div class="c3">${purExtra.length
+				? `<div class="badges">${purExtra.map((x) => `<span class="pur2">${x}</span>`).join("")}</div>`
+				: ""}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
 		</div>
 		<div class="md">
-			<div class="img">${c.image ? `<img src="${pob_esc(c.image)}">` : ""}<div class="cap">${pob_esc(c.design)}</div></div>
+			<div class="img">${c.image
+				? `<img src="${pob_esc(c.image)}">`
+				: `<div class="cap">${pob_esc(c.design)}</div>`}</div>
 			<div class="it">
 				<table><tr><th>Items</th><th>Qty</th><th>Weight</th></tr>${mats}</table>
 				<div class="sum"><b>G</b> ${flt(c.gross_weight)} · <b>N</b> ${flt(c.nett_weight)}${stones.length ? " · " + stones.join(" · ") : ""}</div>
