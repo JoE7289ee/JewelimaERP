@@ -151,8 +151,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	function rowsHtml(kind) {
 		if (kind === "dmd") return cur.diamond_rates.map((r, i) => `
 			<tr data-i="${i}"><td><input data-f="sieve_label" value="${esc(r.sieve_label || "")}" placeholder="+2 - 6.5"></td>
-			<td><input data-f="from_ct" type="number" step="0.001" value="${num(r.from_ct)}"></td>
-			<td><input data-f="to_ct" type="number" step="0.001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
+			<td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}"></td>
+			<td><input data-f="to_ct" type="number" step="0.0001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td>${qualSel(r.quality || "")}</td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td class="del">&times;</td></tr>`).join("");

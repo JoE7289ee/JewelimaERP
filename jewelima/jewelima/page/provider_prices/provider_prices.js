@@ -181,8 +181,10 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 				${r.ours == null ? "" : `<div class="pct">${inr(r.ours)}</div>`}</td>
 			${P.map((p) => metalCell(r.by[p.name])).join("")}</tr>`).join("");
 
-		const size = (r) => (r.to_ct ? `${flt(r.from_ct).toFixed(3)} – ${flt(r.to_ct).toFixed(3)}`
-			: `${flt(r.from_ct).toFixed(3)} ▸`);
+		// four decimals, trailing zeros trimmed — see the note on costing_chart's ct()
+		const ct4 = (v) => flt(v).toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+		const size = (r) => (r.to_ct ? `${ct4(r.from_ct)} – ${ct4(r.to_ct)}`
+			: `${ct4(r.from_ct)} ▸`);
 		const psRows = (m.precious || []).map((r) => `<tr>
 			<td>${esc(r.supplier)}</td><td>${esc(r.stone) || "—"}</td>
 			<td class="num">${size(r)}</td>
@@ -203,7 +205,7 @@ frappe.pages["provider-prices"].on_page_load = function (wrapper) {
 		const dmdRows = m.diamond.map((r) => `<tr>
 			<td>${esc(r.supplier)}</td>
 			<td>${esc(r.sieve) || "—"}</td>
-			<td class="num">${flt(r.from_ct).toFixed(3)} – ${r.to_ct ? flt(r.to_ct).toFixed(3) : "▸"}</td>
+			<td class="num">${ct4(r.from_ct)} – ${r.to_ct ? ct4(r.to_ct) : "▸"}</td>
 			<td>${esc(r.quality) || "—"}</td>
 			<td class="num">${inr(r.ours)}</td>
 			${mgCell(r).replace("grp", "")}</tr>`).join("");

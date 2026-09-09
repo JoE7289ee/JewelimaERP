@@ -185,8 +185,8 @@ frappe.pages["provider-rates"].on_page_load = function (wrapper) {
 					<th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 					<tbody>${C.diamond_rates.map((r, i) => `<tr data-k="diamond_rates" data-i="${i}">
 						<td><input data-f="sieve_label" value="${esc(r.sieve_label || "")}"></td>
-						<td><input data-f="from_ct" type="number" step="0.001" value="${r.from_ct || ""}"></td>
-						<td><input data-f="to_ct" type="number" step="0.001" value="${r.to_ct || ""}"></td>
+						<td><input data-f="from_ct" type="number" step="0.0001" value="${r.from_ct || ""}"></td>
+						<td><input data-f="to_ct" type="number" step="0.0001" value="${r.to_ct || ""}"></td>
 						<td><input data-f="quality" value="${esc(r.quality || "")}" placeholder="VVS-EF"></td>
 						<td><input data-f="rate" type="number" step="0.01" value="${r.rate || ""}"></td>
 						<td class="pe-del">&times;</td></tr>`).join("")}</tbody></table>

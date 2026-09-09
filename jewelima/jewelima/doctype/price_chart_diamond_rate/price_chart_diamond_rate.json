@@ -21,28 +21,29 @@
   },
   {
    "columns": 2,
+   "description": "Four decimals: a bracket has to sit between sieve averages, and those are 4dp on the sieve chart (0.0023, 0.0027).",
    "fieldname": "from_ct",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "From (ct/stone)",
-   "precision": "3"
+   "precision": "4"
   },
   {
    "columns": 2,
+   "description": "Four decimals: a bracket has to sit between sieve averages, and those are 4dp on the sieve chart (0.0023, 0.0027).",
    "fieldname": "to_ct",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Below (ct/stone)",
-   "precision": "3",
-   "description": "Blank = and above."
+   "precision": "4"
   },
   {
    "columns": 2,
+   "description": "Our diamond quality group (VVS-EF, VS-FG, VVS/VS-GH ...). Blank = any diamond.",
    "fieldname": "quality",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Quality",
-   "description": "Our diamond quality group (VVS-EF, VS-FG, VVS/VS-GH ...). Blank = any diamond."
+   "label": "Quality"
   },
   {
    "columns": 2,

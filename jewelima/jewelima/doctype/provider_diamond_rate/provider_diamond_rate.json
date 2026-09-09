@@ -4,17 +4,6 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "istable": 1,
- "links": [],
- "module": "Jewelima",
- "name": "Provider Diamond Rate",
- "owner": "Administrator",
- "permissions": [],
- "sort_field": "creation",
- "sort_order": "DESC",
- "states": [],
- "modified": "2026-09-07 07:00:00",
- "modified_by": "Administrator",
  "field_order": [
   "sieve_label",
   "from_ct",
@@ -24,44 +13,57 @@
  ],
  "fields": [
   {
+   "columns": 2,
    "fieldname": "sieve_label",
    "fieldtype": "Data",
-   "label": "Sieve",
    "in_list_view": 1,
-   "columns": 2
+   "label": "Sieve"
   },
   {
+   "columns": 2,
+   "description": "Four decimals: a bracket has to sit between sieve averages, and those are 4dp on the sieve chart (0.0023, 0.0027).",
    "fieldname": "from_ct",
    "fieldtype": "Float",
-   "label": "From ct",
    "in_list_view": 1,
-   "columns": 2,
-   "precision": "3"
+   "label": "From ct",
+   "precision": "4"
   },
   {
+   "columns": 2,
+   "description": "Four decimals: a bracket has to sit between sieve averages, and those are 4dp on the sieve chart (0.0023, 0.0027).",
    "fieldname": "to_ct",
    "fieldtype": "Float",
-   "label": "Below ct",
    "in_list_view": 1,
-   "columns": 2,
-   "precision": "3"
+   "label": "Below ct",
+   "precision": "4"
   },
   {
+   "columns": 2,
+   "description": "Match our quality groups (VVS-EF, VS-FG \u2026) so the comparison lines up.",
    "fieldname": "quality",
    "fieldtype": "Data",
-   "label": "Quality",
    "in_list_view": 1,
-   "columns": 2,
-   "description": "Match our quality groups (VVS-EF, VS-FG \u2026) so the comparison lines up."
+   "label": "Quality"
   },
   {
+   "columns": 2,
    "fieldname": "rate",
    "fieldtype": "Float",
-   "label": "Rate / ct",
    "in_list_view": 1,
-   "columns": 2,
+   "label": "Rate / ct",
    "precision": "2",
    "reqd": 1
   }
- ]
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-07 07:00:00",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Provider Diamond Rate",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
 }

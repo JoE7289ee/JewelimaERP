@@ -23,7 +23,10 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 
 	const inr = (v) => (v ? "₹" + Math.round(v).toLocaleString("en-IN") : "—");
 	const inr2 = (v) => (v ? "₹" + flt(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "—");
-	const ct = (v) => (v ? flt(v).toFixed(3) : "");
+	// Carat brackets go to FOUR decimals, because a diamond bracket has to sit
+	// between sieve averages and those are 4dp (0.0023, 0.0027). Trailing zeros
+	// are trimmed, so 0.018 stays 0.018 and only 0.0085 spends the fourth.
+	const ct = (v) => (v ? flt(v).toFixed(4).replace(/0+$/, "").replace(/\.$/, "") : "");
 
 	root.append(`
 		<style>
