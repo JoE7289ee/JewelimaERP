@@ -128,6 +128,14 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		html[data-theme="dark"] table.of-t tbody tr.of-flagged:hover td{background:#2b2617;}
 		.of-flag{font-size:10.5px;color:#8a6d00;white-space:normal;}
 		html[data-theme="dark"] .of-flag{color:#d4ab4a;}
+		/* Why a row is yellow, ON the row. The notes used to live only in the
+		 * tooltip of whichever money cell they belonged to, so "7 rows carry
+		 * notes" was a number nobody could act on without hunting for it. */
+		tr.of-note td{background:#fff8e6;border-bottom:1px solid var(--border-color);
+			padding:2px 8px 6px 34px;white-space:normal;font-size:11px;color:#7a5d00;}
+		html[data-theme="dark"] tr.of-note td{background:#2b2617;color:#d4ab4a;}
+		tr.of-note td b{font-weight:800;}
+		tr.of-note .n + .n::before{content:" · ";color:#b9a05a;}
 		.of-tot{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
 		.of-tile{border:1px solid var(--border-color);border-radius:10px;padding:9px 16px;background:var(--fg-color);}
 		.of-tile .k{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
@@ -528,6 +536,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		// PS and CS earn their columns only when the sheet actually carries them —
 		// every PS/STN flag is raised inside a >0 check, so none can be orphaned
 		const ps = hasPS(), cs = hasCS();
+		// the note line spans the table, so it has to know how wide the table is
+		// today — which depends on those same two
+		const cols = 9 + (ps ? 1 : 0) + (cs ? 1 : 0)
+			+ (priced ? 5 + (ps ? 1 : 0) + (cs ? 1 : 0) : 0);
 		root.find(".of-body").html(`
 			<table class="of-t${priced ? " priced" : ""}"><thead><tr>
 				<th>#</th><th>${__("Unique ID")}</th><th>${__("Item")}</th><th>${__("COLOR")}</th>
@@ -556,7 +568,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				${cs ? `<td class="num" title="${cellTitle(p, "cs", (p.notes || {}).stn)}">₹ ${money(p.stn_va || 0)}</td>` : ""}
 				<td class="num" title="${cellTitle(p, "cert", (p.notes || {}).cert)}">₹ ${money(p.cert_va || 0)}</td>
 				<td class="num" title="${cellTitle(p, "total", (p.notes || {}).total)}"><b>₹ ${money(p.total)}</b></td>` : ""}
-			</tr>`; }).join("")}</tbody></table>
+			</tr>${fl ? `<tr class="of-note"><td colspan="${cols}"><b>${__("Note")}:</b> ${
+				(p.flags || []).map((f) => `<span class="n">${esc(f)}</span>`).join("")}</td></tr>` : ""}`;
+			}).join("")}</tbody></table>
 			${priced ? `<div class="of-tot">
 				<div class="of-tile"><div class="k">${__("Before tax")}</div><div class="v">₹ ${money(PRICED.totals.before_tax)}</div></div>
 				<div class="of-tile"><div class="k">${__("HUID / Hallmark")}</div><div class="v">₹ ${money(PRICED.totals.huid_total)}</div>
