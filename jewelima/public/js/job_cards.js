@@ -3,7 +3,14 @@
 //
 // Job-card printing — ONE renderer for every page that prints bag cards
 // (Print Order Bags is the anywhere/reprint desk; the Ordering desk prints
-// the daily 90%). 6 cards per A4 page, code128 barcode, same format always.
+// the daily 90%). A reprint has to be the same piece of paper as the original,
+// which is why there is one renderer and not two.
+//
+// ONE CARD PER A6 LANDSCAPE PAGE. It used to be six to an A4 sheet, which meant
+// a 99x95mm card that had to be cut apart by hand and left the items table with
+// about 30mm to say everything in. A6 landscape is 148x105mm — half again the
+// area, no cutting, and the table has room for the rows the floor actually
+// writes in.
 // Exposed as jewelima.printJobCards(cards); cards come from
 // jewelima.jewelima.api.get_order_bag_cards.
 
@@ -12,11 +19,12 @@ window.jewelima = window.jewelima || {};
 
 function printCards(cards) {
 	if (!cards.length) return;
-	const pages = [];
-	for (let i = 0; i < cards.length; i += 6) pages.push(cards.slice(i, i + 6));
-	const body = pages
-		.map((group) => `<div class="page">${group.map(pob_cardHTML).join("")}</div>`)
-		.join("");
+	// Every card is its own PAGE, so the printer is handed as many jobs as there
+	// are cards and feeds them one at a time. Each sits in a PLAIN BLOCK wrapper
+	// carrying the break: .card is display:flex, and break properties on a flex
+	// box are unreliable — that is what put the barcode labels all on one sheet
+	// the first time.
+	const body = cards.map((c) => `<div class="jc-page">${pob_cardHTML(c)}</div>`).join("");
 	// print IN PLACE through a hidden iframe (same trick as
 	// jewelima.print_window) — no pop-up window, no pop-up blockers, the
 	// dialog opens right over the current page
@@ -34,33 +42,45 @@ function printCards(cards) {
 }
 
 const POB_PRINT_CSS = `
-@page { size: A4 portrait; margin: 6mm; }
+@page { size: 148mm 105mm; margin: 0; }
 * { box-sizing: border-box; }
-body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; }
-.page { width: 198mm; height: 285mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 3mm; page-break-after: always; }
-.page:last-child { page-break-after: auto; }
-.card { border: 1px solid #000; padding: 2mm 2.5mm; display: flex; flex-direction: column; overflow: hidden; font-size: 9px; line-height: 1.25; }
-.card .hd { display: grid; grid-template-columns: 1.2fr 1fr 0.9fr; gap: 4px; border-bottom: 1px solid #000; padding-bottom: 1.5mm; font-size: 10.5px; line-height: 1.35; }
+html, body { margin: 0; padding: 0; }
+body { font-family: Arial, Helvetica, sans-serif; color: #000;
+	-webkit-print-color-adjust: exact; print-color-adjust: exact; }
+/* the plain block that carries the page break — never the flex card itself */
+.jc-page { width: 148mm; height: 105mm; overflow: hidden;
+	break-after: page; page-break-after: always;
+	break-inside: avoid; page-break-inside: avoid; }
+.jc-page:last-child { break-after: auto; page-break-after: auto; }
+.card { width: 148mm; height: 105mm; padding: 4mm 5mm; display: flex; flex-direction: column;
+	overflow: hidden; font-size: 10.5px; line-height: 1.3; }
+.card .hd { display: grid; grid-template-columns: 1.25fr 1fr 0.85fr; gap: 5px;
+	border-bottom: 1.2px solid #000; padding-bottom: 2mm; font-size: 12px; line-height: 1.4; }
 .card .hd b { font-weight: 700; }
-.card .hd .pur { float: right; font-size: 13px; font-weight: 800; margin-left: 4px; }
-.card .hd .pur2 { float: right; clear: right; font-size: 11px; font-weight: 800; margin-left: 4px; margin-top: 1px; }
-.card .md { display: grid; grid-template-columns: 34mm 1fr; gap: 3px; flex: 1 1 auto; min-height: 0; padding: 1.5mm 0; }
-.card .img { display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #000; }
-.card .img img { max-width: 100%; max-height: 30mm; object-fit: contain; }
-.card .img .cap { font-size: 8px; margin-top: 1px; }
-.card .it table { width: 100%; border-collapse: collapse; font-size: 8.5px; }
-.card .it th, .card .it td { border: 1px solid #000; padding: 1px 3px; text-align: left; }
-.card .it th { background: #eee; }
+.card .hd .pur { float: right; font-size: 16px; font-weight: 800; margin-left: 5px; }
+.card .hd .pur2 { float: right; clear: right; font-size: 12.5px; font-weight: 800;
+	margin-left: 5px; margin-top: 1px; }
+.card .md { display: grid; grid-template-columns: 44mm 1fr; gap: 4mm;
+	flex: 1 1 auto; min-height: 0; padding: 2.5mm 0; }
+.card .img { display: flex; flex-direction: column; align-items: center; justify-content: center;
+	border: 1px solid #000; }
+.card .img img { max-width: 100%; max-height: 46mm; object-fit: contain; }
+.card .img .cap { font-size: 9px; margin-top: 1px; }
+.card .it { display: flex; flex-direction: column; min-height: 0; }
+.card .it table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.card .it th, .card .it td { border: 1px solid #000; padding: 1px 4px; text-align: left; }
+.card .it th { background: #eee; font-size: 9.5px; }
 /* Qty + Weight stay EMPTY on print — the floor writes actual weights in; rows are
-   tall enough to write in by hand */
-.card .it td { height: 6.5mm; }
+   tall enough to write in by hand, and A6 finally gives them the room */
+.card .it td { height: 7mm; }
 .card .it th:nth-child(2), .card .it td:nth-child(2) { width: 17%; }
 .card .it th:nth-child(3), .card .it td:nth-child(3) { width: 30%; }
-.card .it .sum { margin-top: 1mm; font-size: 8.5px; }
-.card .ft { display: grid; grid-template-columns: 42mm 1fr; gap: 3px; align-items: end; border-top: 1px solid #000; padding-top: 1mm; }
-.card .ft .bc svg { width: 38mm; height: 7.5mm; display: block; margin: 0; }
-.card .ft .num { font-size: 9px; font-weight: 700; letter-spacing: .5px; }
-.card .ft .rm { font-size: 8.5px; align-self: start; }
+.card .it .sum { margin-top: 1.5mm; font-size: 10px; }
+.card .ft { display: grid; grid-template-columns: 50mm 1fr; gap: 4mm; align-items: end;
+	border-top: 1.2px solid #000; padding-top: 1.5mm; }
+.card .ft .bc svg { width: 46mm; height: 9mm; display: block; margin: 0; }
+.card .ft .num { font-size: 10.5px; font-weight: 700; letter-spacing: .5px; }
+.card .ft .rm { font-size: 10px; align-self: start; }
 `;
 
 function pob_esc(s) {
