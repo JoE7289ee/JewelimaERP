@@ -22081,7 +22081,11 @@ def get_total_gold():
 REWORK_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin",
 	# the extraction desk already un-finishes work the other way round with
 	# Make Products; sending a finished piece back is the same desk's mirror
-	"JW EXTRACTION")
+	"JW EXTRACTION",
+	# the delivery desk was given the page in 7044e18 — "rework coming the other
+	# way" — but never this guard, so it opened the screen and was refused on
+	# every scan. The grant was always meant to be whole.
+	"JW Delivery")
 
 
 def _convert_pcs(order_bag):
