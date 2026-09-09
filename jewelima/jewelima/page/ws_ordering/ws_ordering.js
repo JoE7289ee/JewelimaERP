@@ -103,17 +103,14 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		q: (root.find(".od-q").val() || "").trim(),
 		order_type: root.find(".od-type").val() || "",
 		kind: root.find(".od-kind").val() || "",
+		sort_key: sortKey,
+		sort_dir: sortDir > 0 ? "asc" : "desc",
 	});
-	function filtered() {
-		// the filters run on the server, over the whole backlog; this only sorts
-		let rows = (D.rows || []);
-		rows = rows.slice().sort((a, b) => {
-			let x = a[sortKey], y = b[sortKey];
-			if (typeof x === "string") { x = (x || "").toUpperCase(); y = (y || "").toUpperCase(); }
-			return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
-		});
-		return rows;
-	}
+	// Both the filters AND the sort run on the server, over the whole backlog.
+	// Sorting here would only order the window that happens to be loaded, which
+	// reads as an answer about ORDERING and is an answer about the last 300
+	// cards down the wire.
+	const filtered = () => D.rows || [];
 
 	function paintTable() {
 		const rows = filtered();
@@ -385,7 +382,9 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 		if (!k) return; // the checkbox column doesn't sort
 		if (sortKey === k) sortDir = -sortDir;
 		else { sortKey = k; sortDir = 1; }
-		paintTable();
+		// back to the top of the backlog in the new order — paging on from a
+		// window sorted under the old one would interleave two orderings
+		load();
 	});
 
 	// ---- job-card printing: filter, tick, Print — same cards, same code as

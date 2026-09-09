@@ -3362,7 +3362,8 @@ def export_daily_orders_xlsx(date=None):
 
 
 @frappe.whitelist()
-def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=None, kind=None):
+def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=None, kind=None,
+		sort_key=None, sort_dir=None):
 	"""The ORDERING desk (standalone — not the bench engine):
 	- top: the day's placement KPIs — orders placed, pieces, and BY WHOM
 	- bottom: the cards still sitting in ORDERING (the un-dispatched backlog)
@@ -3374,7 +3375,12 @@ def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=
 
 	The filters run HERE, not over the window: a backlog of thousands was being
 	searched 300 cards at a time, so a card outside the loaded page looked like
-	it was not in ORDERING at all."""
+	it was not in ORDERING at all.
+
+	THE SORT RUNS HERE TOO, for the same reason. Sorting the loaded window only
+	answers "the oldest of the 300 that happen to be down the wire", which looks
+	like an answer to "the oldest in ORDERING" and is not one. Clicking a column
+	reloads from the top with the order applied across the whole backlog."""
 	date = date or frappe.utils.nowdate()
 	limit, offset = cint(limit), max(cint(offset), 0)
 	cond, vals = [], {"lim": limit, "off": offset}
@@ -3392,6 +3398,35 @@ def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=
 	elif kind == "design":
 		cond.append("IFNULL(b.is_cad, 0) = 0")
 	extra = (" AND " + " AND ".join(cond)) if cond else ""
+
+	# The columns the desk may sort by, each mapped to what it really is in SQL.
+	# A whitelist rather than the passed string: this goes into an ORDER BY, and
+	# there is no version of "the user typed it" that belongs there.
+	#
+	# waiting_days is not a column — it is today minus creation — so it sorts by
+	# creation with the direction flipped: the longest wait is the oldest card.
+	SORTS = {
+		"name": "b.name", "design": "b.design", "qty": "b.qty", "size": "b.size",
+		"party": "jo.customer", "salesman": "jo.salesman", "order_type": "jo.order_type",
+		"order_date": "jo.order_date", "due": "jo.due_date", "creation": "b.creation",
+		"placed_by": "(SELECT u.full_name FROM `tabUser` u WHERE u.name = jo.owner)",
+		"photos": "IFNULL(pf.c, 0)",
+	}
+	sort_key = (sort_key or "creation").strip()
+	if sort_key not in SORTS and sort_key != "waiting_days":
+		sort_key = "creation"
+	desc = str(sort_dir or "").lower() in ("desc", "-1", "-")
+	if sort_key == "waiting_days":
+		col, desc = "b.creation", not desc   # longest wait == oldest card
+	else:
+		col = SORTS[sort_key]
+	# the photo count is a join, and only worth paying for when it is the sort
+	photo_join = ("""LEFT JOIN (SELECT attached_to_name nm, COUNT(*) c FROM `tabFile`
+			WHERE attached_to_doctype = 'Order Bag' GROUP BY attached_to_name) pf ON pf.nm = b.name"""
+		if sort_key == "photos" else "")
+	# b.name last so the order is total — two cards placed in the same second
+	# must not swap places between one page of the backlog and the next
+	order_by = "{0} {1}, b.name ASC".format(col, "DESC" if desc else "ASC")
 	placed = frappe.get_all("Job Order", filters={"order_date": date},
 		fields=["name", "owner", "customer"])
 	bag_counts = {}
@@ -3410,10 +3445,12 @@ def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=
 			jo.name job_order, jo.customer party, jo.salesman, jo.order_type,
 			jo.owner placed_by, jo.order_date, jo.due_date due
 		FROM `tabOrder Bag` b LEFT JOIN `tabJob Order` jo ON jo.name = b.job_order
+		{pj}
 		WHERE b.location = 'ORDERING' AND b.is_finished = 0{extra}
-		ORDER BY b.creation ASC
+		ORDER BY {ob}
 		{lim}
-	""".format(extra=extra, lim=("LIMIT %(lim)s OFFSET %(off)s" if limit > 0 else "")),
+	""".format(extra=extra, pj=photo_join, ob=order_by,
+		lim=("LIMIT %(lim)s OFFSET %(off)s" if limit > 0 else "")),
 		vals, as_dict=True)
 	# the KPI is the WHOLE backlog; the paging count is what matches the filters
 	backlog_total = cint(frappe.db.sql("""
@@ -3451,6 +3488,7 @@ def get_ordering_workstation(date=None, limit=300, offset=0, q=None, order_type=
 		"order_types": order_types,
 		"shown": offset + len(rows),
 		"offset": offset, "limit": limit,
+		"sort_key": sort_key, "sort_dir": "desc" if desc else "asc",
 		"has_more": (offset + len(rows)) < match_total,
 		"kpis": {"orders": len(placed), "bags": sum(cint(v) for v in bag_counts.values()),
 			# the WHOLE backlog, not the window — a KPI that counted the loaded
