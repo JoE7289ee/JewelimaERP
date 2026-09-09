@@ -363,6 +363,9 @@ JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
 # carry no role guard of their own, so holding the page is the whole grant.
 JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split", "workstations",
 	"make-products", "print-barcode", "multi-barcode",
+	# rework is make-products run backwards: a finished piece comes off the shelf
+	# and goes back to the floor. Same desk, same pieces, so the same role.
+	"rework",
 	"transfer-order-bag"]
 # Where a piece may go once it has been cut out: on to the finishing benches, or
 # to REWORK when it has to be done again. Transfer Rules match the FROM as well

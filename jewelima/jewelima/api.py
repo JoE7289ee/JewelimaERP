@@ -22078,7 +22078,10 @@ def get_total_gold():
 # materials come back on its ledger, and the card lands at a bench as work
 # again. Its design, HUID and certificates stay with it.
 # ---------------------------------------------------------------------------
-REWORK_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin")
+REWORK_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Data Admin",
+	# the extraction desk already un-finishes work the other way round with
+	# Make Products; sending a finished piece back is the same desk's mirror
+	"JW EXTRACTION")
 
 
 def _convert_pcs(order_bag):
