@@ -5062,6 +5062,170 @@ def review_delete_photo(name):
 	return {"deleted": name, "selections_touched": len(set(parents))}
 
 
+# --- Stone Lots (Stones > Stone Lots) ------------------------------------------
+# A provider sends a parcel on approval. Nothing in it is ours: we weigh it,
+# sieve it, and say what we are keeping. What is left goes back. So a lot holds
+# three weights — CLAIMED (what the provider says), ACTUAL (our scale) and
+# SELECTED (what we keep, sieve by sieve) — and the rejection is simply what is
+# left of the actual once the selection is off it. It is never stock, so it is
+# never a warehouse; it is a number we hand back with the parcel.
+#
+# Two desks, deliberately: creating the lot is a receiving job (who sent what,
+# on what day, what they say it is), and the selection is a sorting job done
+# later, at the sieve table. Splitting them is what lets a lot sit open.
+STONE_LOT_ROLES = {"System Manager", "JW Manager", "JW Stock Admin", "Jewelima Stock"}
+
+
+def _require_stone_lot():
+	if not STONE_LOT_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Stone lots are for the manager and the stock desk."),
+			frappe.PermissionError)
+
+
+def _lot_row(d, with_items=False):
+	out = {
+		"name": d.name, "supplier": d.supplier, "supplier_code": d.supplier_code or "",
+		"received_on": str(d.received_on or ""), "quality": d.quality or "",
+		"status": d.status or "Open",
+		"returned_on": str(d.returned_on or ""),
+		"claimed": flt(d.claimed_cts), "actual": flt(d.actual_cts),
+		"selected": flt(d.selected_cts), "rejected": flt(d.rejected_cts),
+		"remarks": d.remarks or "",
+		"owner_label": _user_label(d.owner),
+	}
+	# the difference worth seeing at a glance: what they said against what it
+	# actually weighed, once we have weighed it
+	out["short"] = round(flt(d.claimed_cts) - flt(d.actual_cts), 3) if flt(d.actual_cts) else 0
+	if with_items:
+		out["items"] = [{"sieve": r.sieve, "selected": flt(r.selected_cts)}
+			for r in frappe.get_all("Stone Lot Sieve", filters={"parent": d.name},
+				fields=["sieve", "selected_cts"], order_by="idx")]
+	return out
+
+
+@frappe.whitelist()
+def get_stone_lot_context():
+	"""What the two lot pages need to draw themselves: the providers we buy
+	stones from, the qualities we hold, and the sieve chart in chart order."""
+	_require_stone_lot()
+	return {
+		"suppliers": frappe.get_all("Supplier", fields=["name", "supplier_name"],
+			order_by="supplier_name", limit_page_length=0),
+		"qualities": _stocked_diamond_qualities(),
+		"sieves": frappe.get_all("Diamond Sieve", fields=["sieve_size", "mm_size"],
+			order_by="idx_order", limit_page_length=0),
+		"today": frappe.utils.today(),
+	}
+
+
+@frappe.whitelist()
+def create_stone_lot(supplier, received_on=None, quality=None, claimed_cts=0, remarks=None):
+	"""Book a parcel in. Weights per sieve are NOT asked for here — the parcel
+	has not been sieved yet, and pretending otherwise is how a receiving desk
+	ends up guessing."""
+	_require_stone_lot()
+	if not supplier or not frappe.db.exists("Supplier", supplier):
+		frappe.throw(frappe._("Pick the provider."))
+	quality = (quality or "").strip()
+	if quality and quality not in _stocked_diamond_qualities():
+		frappe.throw(frappe._("{0} is not a quality we hold.").format(quality))
+	d = frappe.get_doc({
+		"doctype": "Stone Lot", "supplier": supplier,
+		"received_on": received_on or frappe.utils.today(),
+		"quality": quality, "claimed_cts": flt(claimed_cts),
+		"remarks": (remarks or "").strip(), "status": "Open",
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return _lot_row(d)
+
+
+@frappe.whitelist()
+def get_stone_lots(status=None, supplier=None, limit=200):
+	"""The lot list. Open ones first — they are the ones somebody still has to
+	sit down and sieve."""
+	_require_stone_lot()
+	filters = {}
+	if status:
+		filters["status"] = status
+	if supplier:
+		filters["supplier"] = supplier
+	rows = frappe.get_all("Stone Lot", filters=filters,
+		fields=["name", "supplier", "supplier_code", "received_on", "quality", "status",
+			"returned_on", "claimed_cts", "actual_cts", "selected_cts", "rejected_cts",
+			"remarks", "owner"],
+		order_by="creation desc", limit_page_length=cint(limit) or 200)
+	out = [_lot_row(frappe._dict(r)) for r in rows]
+	open_lots = [r for r in out if r["status"] == "Open"]
+	return {
+		"rows": out,
+		"open": len(open_lots),
+		"open_claimed": round(sum(r["claimed"] for r in open_lots), 3),
+		"selected": round(sum(r["selected"] for r in out), 3),
+		"rejected": round(sum(r["rejected"] for r in out), 3),
+	}
+
+
+@frappe.whitelist()
+def get_stone_lot(name):
+	"""One lot with its sieve lines — what the selection desk opens."""
+	_require_stone_lot()
+	if not frappe.db.exists("Stone Lot", name):
+		frappe.throw(frappe._("{0} does not exist.").format(name or "?"))
+	return _lot_row(frappe.get_doc("Stone Lot", name), with_items=True)
+
+
+@frappe.whitelist()
+def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, remarks=None):
+	"""The sieve table: what the parcel actually weighed, and what we are
+	keeping of it. The rejection is derived, never typed — it is the one figure
+	nobody should be able to get wrong."""
+	_require_stone_lot()
+	d = frappe.get_doc("Stone Lot", name)
+	if d.status == "Cancelled":
+		frappe.throw(frappe._("{0} is cancelled.").format(name))
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	rows = rows or []
+
+	sieves = set(frappe.get_all("Diamond Sieve", pluck="sieve_size"))
+	lines = []
+	for r in rows:
+		sv = (r or {}).get("sieve")
+		ct = flt((r or {}).get("selected"))
+		if not sv or ct <= 0:
+			continue
+		if sv not in sieves:
+			frappe.throw(frappe._("{0} is not a sieve on the chart.").format(sv))
+		lines.append({"sieve": sv, "selected_cts": ct})
+
+	d.actual_cts = flt(actual_cts)
+	d.set("items", lines)
+	if returned_on:
+		d.returned_on = returned_on
+	if remarks is not None:
+		d.remarks = (remarks or "").strip()
+	# Open until something has actually been selected; Returned once the
+	# rejection has gone back, which is the day the lot is finished with.
+	d.status = "Returned" if d.returned_on else ("Selected" if lines else "Open")
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return _lot_row(d, with_items=True)
+
+
+@frappe.whitelist()
+def cancel_stone_lot(name, reason=None):
+	"""A parcel that went back untouched. Kept rather than deleted: the
+	provider sent it, and that it came and went is worth a line."""
+	_require_stone_lot()
+	d = frappe.get_doc("Stone Lot", name)
+	d.status = "Cancelled"
+	if reason:
+		d.remarks = ((d.remarks or "") + ("\n" if d.remarks else "") + reason).strip()
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return _lot_row(d)
+
+
 # --- Diamond Sieve chart (Stones > Sieve Chart) --------------------------------
 @frappe.whitelist()
 def get_sieve_chart():

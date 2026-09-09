@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "autoname": "",
+ "creation": "2026-09-09 09:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "supplier",
+  "supplier_code",
+  "received_on",
+  "quality",
+  "cb1",
+  "status",
+  "returned_on",
+  "sec_weights",
+  "claimed_cts",
+  "actual_cts",
+  "cb2",
+  "selected_cts",
+  "rejected_cts",
+  "sec_items",
+  "items",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Provider",
+   "options": "Supplier",
+   "reqd": 1
+  },
+  {
+   "description": "The token that goes into the lot's name.",
+   "fieldname": "supplier_code",
+   "fieldtype": "Data",
+   "label": "Provider Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "received_on",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Received On",
+   "reqd": 1
+  },
+  {
+   "description": "The quality the provider states \u2014 one of the diamond qualities we hold.",
+   "fieldname": "quality",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Quality Told",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cb1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Open\nSelected\nReturned\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "returned_on",
+   "fieldtype": "Date",
+   "label": "Rejection Returned On"
+  },
+  {
+   "fieldname": "sec_weights",
+   "fieldtype": "Section Break",
+   "label": "Weights"
+  },
+  {
+   "description": "What the provider says the parcel weighs.",
+   "fieldname": "claimed_cts",
+   "fieldtype": "Float",
+   "label": "Claimed (ct)",
+   "precision": "3"
+  },
+  {
+   "description": "What it weighed on our scale.",
+   "fieldname": "actual_cts",
+   "fieldtype": "Float",
+   "label": "Actual (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "cb2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "selected_cts",
+   "fieldtype": "Float",
+   "label": "Selected (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "Actual minus selected \u2014 what goes back to the provider.",
+   "fieldname": "rejected_cts",
+   "fieldtype": "Float",
+   "label": "Rejected (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_items",
+   "fieldtype": "Section Break",
+   "label": "Selection by Sieve"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Sieves",
+   "options": "Stone Lot Sieve"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-09 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stone Lot",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Stock Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Jewelima Stock",
+   "write": 1
+  }
+ ],
+ "search_fields": "supplier,quality,status",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "supplier"
+}

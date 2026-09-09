@@ -1233,6 +1233,40 @@
    "collapsible": 1,
    "indent": 1,
    "keep_closed": 0,
+   "label": "Stone Lots",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Section Break"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "boxes",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Lots",
+   "link_to": "stone-lots",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "filter",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Lot Selection",
+   "link_to": "lot-selection",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "indent": 1,
+   "keep_closed": 0,
    "label": "Stones Report",
    "link_type": "DocType",
    "show_arrow": 0,
@@ -2638,7 +2672,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-08 15:49:06.366528",
+ "modified": "2026-09-09 11:45:27.587296",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

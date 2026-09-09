@@ -216,8 +216,12 @@ JEWELIMA_PURCHASE_READ = ["Item", "Item Group", "Supplier", "Warehouse", "Bin", 
 # JW Stock — the stock desk: buy (purchase page + history), move stock
 # between warehouses, melt gold. Purchase stays the tighter buy-only role.
 JEWELIMA_STOCK_ROLE = "Jewelima Stock"
-JEWELIMA_STOCK_PAGES = ["scrub", "purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold"]
-JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type"]
+JEWELIMA_STOCK_PAGES = ["scrub", "purchase-raw-material", "purchase-history", "stock-transfer", "melt-gold",
+	# Stone Lots — booking a provider's parcel in, and sieving it. Manager and
+	# the stock desk only, by request; the stones desk does not book purchases.
+	"stone-lots", "lot-selection"]
+JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type",
+	"Stone Lot", "Stone Lot Sieve", "Diamond Sieve"]
 # JW Stock Admin — the senior stock desk: everything Jewelima Stock does, plus
 # the whole Loss branch (collection, write-off, report) and the record pages.
 # Write-off is the one destructive button here; it still demands a typed reason.
@@ -240,6 +244,8 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	"card-gold", "card-gold-history",
 	# the old software's stock, brought in piece by piece
 	"import-old-stock",
+	# stone lots: the senior stock desk works these too
+	"stone-lots", "lot-selection",
 ]
 # CAD workstation persona: the CAD tool pages + read on what those pages paint.
 JEWELIMA_CAD_PAGES = ["cad-workstation", "weight-checker", "cad-sheet", "stone-stock", "cad-jobs", "order-bag-photos"]
