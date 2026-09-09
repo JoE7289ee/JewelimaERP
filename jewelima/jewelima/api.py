@@ -16574,6 +16574,113 @@ def email_cert_excel(name, recipient, subject, body, cc=None):
 
 
 @frappe.whitelist()
+def export_cert_batch_slip(name):
+	"""The batch slip: an A6 landscape card that travels WITH the parcel.
+
+	It answers the two questions somebody holding a packet has — which batch is
+	this, and what is supposed to be inside it. The QR is the batch code, so a
+	phone reads it back without anybody transcribing a number, and the table is
+	the packet's contents summarised the way it is counted at the bench: by
+	design type, with pieces, gross grams and diamond carats, and a total.
+
+	Not per piece. A per-piece list is the lab's Excel and is already sent; a
+	slip you can read at arm's length while holding the parcel is a different
+	document, and cramming fifty rows onto A6 would make it neither.
+	"""
+	from frappe.utils.pdf import get_pdf
+
+	d = frappe.get_doc("Certification", name)
+	rows = frappe.get_all("Certification Item", filters={"parent": name},
+		fields=["design_type", "gross", "dmd_ct"], limit_page_length=0)
+	if not rows:
+		frappe.throw(frappe._("Nothing on the batch."))
+
+	# grouped by design type, heaviest first — the eye should land on the bulk
+	by = {}
+	for r in rows:
+		k = (r.design_type or "").strip() or frappe._("—")
+		g = by.setdefault(k, {"pc": 0, "gw": 0.0, "ct": 0.0})
+		g["pc"] += 1
+		g["gw"] += flt(r.gross)
+		g["ct"] += flt(r.dmd_ct)
+	groups = sorted(by.items(), key=lambda kv: -kv[1]["gw"])
+	t_pc = sum(g["pc"] for _, g in groups)
+	t_gw = sum(g["gw"] for _, g in groups)
+	t_ct = sum(g["ct"] for _, g in groups)
+
+	qr = _qr_data_uri(name) or ""
+	centre = (d.center or "").split("-", 1)[-1].strip() if d.center else ""
+	head_bits = [x for x in (d.cert_type or d.certification_type or "", centre, d.quality or "") if x]
+
+	body = "".join(
+		"""<tr><td class="t">{0}</td><td class="n">{1}</td>
+			<td class="n">{2}</td><td class="n">{3}</td></tr>""".format(
+			frappe.utils.escape_html(k), g["pc"],
+			"{0:.3f}".format(g["gw"]), "{0:.3f}".format(g["ct"]) if g["ct"] else "—")
+		for k, g in groups)
+
+	# A6 landscape is 148x105mm; everything is laid out with TABLES because
+	# wkhtmltopdf's WebKit does not lay flexbox out reliably, and no height is a
+	# percentage because it collapses those to nothing.
+	html = """<!doctype html><html><head><meta charset="utf-8"><style>
+	@page {{ margin: 0; }}
+	body {{ margin:0; font-family:Helvetica,Arial,sans-serif; color:#111; }}
+	table {{ border-collapse:collapse; width:100%; }}
+	.hd td {{ vertical-align:top; padding:0; }}
+	.nm {{ font-size:19pt; font-weight:bold; letter-spacing:.5px; line-height:1; }}
+	.sub {{ font-size:8pt; color:#444; padding-top:2mm; }}
+	.pcs {{ font-size:8pt; padding-top:1.5mm; }}
+	.pcs b {{ font-size:12pt; }}
+	.qr {{ width:24mm; }}
+	.qr img {{ width:24mm; height:24mm; display:block; }}
+	.qrc {{ font-size:6pt; color:#666; text-align:center; padding-top:.6mm; }}
+	table.it {{ margin-top:3mm; font-size:8.5pt; }}
+	table.it th {{ text-align:left; font-size:6.5pt; letter-spacing:.6px; text-transform:uppercase;
+		color:#555; border-bottom:.5pt solid #333; padding:0 1.5mm 1mm 0; }}
+	table.it td {{ padding:1.1mm 1.5mm 1.1mm 0; border-bottom:.3pt solid #ddd; }}
+	table.it td.t {{ font-weight:bold; }}
+	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
+	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
+		font-size:9.5pt; padding-top:1.4mm; }}
+	.ft {{ font-size:6pt; color:#888; padding-top:2mm; }}
+	</style></head><body>
+	<div style="padding:4mm 5mm;">
+	<table class="hd"><tr>
+		<td>
+			<div class="nm">{nm}</div>
+			<div class="sub">{sub}</div>
+			<div class="pcs"><b>{pc}</b> {pcl}</div>
+		</td>
+		<td class="qr">{qrimg}<div class="qrc">{nm}</div></td>
+	</tr></table>
+	<table class="it">
+		<thead><tr><th>{h_type}</th><th class="n">{h_pc}</th>
+			<th class="n">{h_gw}</th><th class="n">{h_ct}</th></tr></thead>
+		<tbody>{body}
+		<tr class="tot"><td>{l_tot}</td><td class="n">{t_pc}</td>
+			<td class="n">{t_gw}</td><td class="n">{t_ct}</td></tr></tbody>
+	</table>
+	<div class="ft">{ft}</div>
+	</div></body></html>""".format(
+		nm=frappe.utils.escape_html(name),
+		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
+		pc=t_pc, pcl=frappe._("piece(s)"),
+		qrimg='<img src="{0}">'.format(qr) if qr else "",
+		h_type=frappe._("Design type"), h_pc=frappe._("PC"),
+		h_gw=frappe._("GW (g)"), h_ct=frappe._("Diam (ct)"),
+		body=body, l_tot=frappe._("TOTAL"), t_pc=t_pc,
+		t_gw="{0:.3f}".format(t_gw), t_ct="{0:.3f}".format(t_ct),
+		ft="{0} · {1}".format(frappe._("prepared"), d.prepared_on or ""))
+
+	frappe.local.response.filename = "{0}.pdf".format(name)
+	frappe.local.response.filecontent = get_pdf(html, {
+		"page-size": "A6", "orientation": "Landscape",
+		"margin-top": "0mm", "margin-bottom": "0mm",
+		"margin-left": "0mm", "margin-right": "0mm"})
+	frappe.local.response.type = "pdf"
+
+
+@frappe.whitelist()
 def export_certification_xlsx(name):
 	"""The same sheet the lab is emailed, downloaded instead.
 

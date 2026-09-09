@@ -76,6 +76,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 							: `<button class="btn btn-default btn-sm sc-ask">${__("ASK A MANAGER TO SEND")}</button>`}
 						<button class="btn btn-default btn-sm sc-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
+						<button class="btn btn-default btn-sm sc-slip">${__("Print slip")}</button>
 						${p.can_manage
 							? `<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>`
 							: ""}
@@ -154,6 +155,13 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 			dlg.show();
 		});
 	});
+	// the slip that goes in the packet: A6 landscape, the batch QR and what is
+	// supposed to be inside it, summed by design type
+	root.on("click", ".sc-slip", function () {
+		open_url_post("/api/method/jewelima.jewelima.api.export_cert_batch_slip",
+			{ name: $(this).closest(".sc-card").data("name") });
+	});
+
 	// one click — no confirm dialog; the record stays, marked Cancelled
 	root.on("click", ".sc-cancel", function () {
 		const nm = $(this).closest(".sc-card").data("name");
