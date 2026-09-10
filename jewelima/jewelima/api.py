@@ -5351,12 +5351,14 @@ def get_stone_purchase_requests(lot=None, status=None, limit=100):
 		filters["status"] = status
 	rows = frappe.get_all("Stone Purchase Request", filters=filters,
 		fields=["name", "stone_lot", "supplier", "quality", "status", "total_cts",
-			"requested_by", "requested_on", "decided_by", "decided_on", "remarks"],
+			"requested_by", "requested_on", "decided_by", "decided_on", "remarks",
+			"purchase_record"],
 		order_by="creation desc", limit_page_length=cint(limit) or 100)
 	out = []
 	for r in rows:
 		out.append({**r,
 			"requested_on": str(r.requested_on or ""), "decided_on": str(r.decided_on or ""),
+			"purchase_record": r.get("purchase_record") or "",
 			"requested_label": _user_label(r.requested_by),
 			"decided_label": _user_label(r.decided_by) if r.decided_by else "",
 			"items": [{"sieve": i.sieve, "cts": flt(i.cts)} for i in frappe.get_all(
@@ -5412,9 +5414,51 @@ def create_stone_purchase_request(lot, rows, remarks=None):
 
 
 @frappe.whitelist()
-def decide_stone_purchase_request(name, decision, remarks=None):
+def get_stone_purchase_posting(name):
+	"""What approving this request would BUY — the purchase sheet, filled in.
+
+	A sieve on a lot is an item in stock: the quality and the sieve size are the
+	item code, which is why a lot carries one quality. The manager sees the sheet
+	before it is posted and cannot edit it — everything on it came from the lot
+	and the request, and anything worth changing should be changed there."""
+	_spr_guard_read()
+	doc = frappe.get_doc("Stone Purchase Request", name)
+	lot = frappe.get_doc("Stone Lot", doc.stone_lot)
+	quality = (lot.quality or "").strip()
+	rows, missing = [], []
+	for r in doc.items:
+		code = "{0} {1}".format(quality, r.sieve).strip()
+		if not frappe.db.exists("Item", code):
+			missing.append(code)
+			continue
+		m = frappe.db.get_value("Item", code, ["item_name", "stock_uom", "stone_type"], as_dict=True) or {}
+		# a sized stone is bought by weight AND counted, so the count comes off the
+		# sieve chart's average — the same figure the purchase desk types against,
+		# and the only one anybody has: a lot is weighed, not counted
+		avg = flt(frappe.db.get_value("Diamond Sieve", r.sieve, "avg_cts"))
+		pcs = int(round(flt(r.cts) / avg)) if avg > 0 else 0
+		rows.append({"item": code, "item_name": m.get("item_name") or code,
+			"uom": m.get("stock_uom") or "Carat", "stone_type": m.get("stone_type") or "",
+			"sieve": r.sieve, "carat": flt(r.cts), "avg_cts": avg, "count": max(pcs, 1) if avg > 0 else 0})
+	wh = frappe.db.get_value("Warehouse", {"warehouse_name": "Stone Issue", "is_group": 0}, "name") \
+		or frappe.db.get_value("Warehouse", {"warehouse_name": ["like", "%Stone%"], "is_group": 0}, "name")
+	return {"name": doc.name, "lot": doc.stone_lot, "supplier": doc.supplier,
+		"quality": quality, "status": doc.status,
+		"voucher_type": "SLT" if frappe.db.exists("Voucher Type", "SLT") else "SIN",
+		"warehouse": wh or "", "posting_date": frappe.utils.today(),
+		"rows": rows, "missing": missing,
+		"total_cts": round(sum(r["carat"] for r in rows), 3)}
+
+
+@frappe.whitelist()
+def decide_stone_purchase_request(name, decision, remarks=None, post=1):
 	"""Approve or reject. MANAGER ONLY — the desk that assorts does not commit
-	the money, and an approval is the moment the stones stop being returnable."""
+	the money, and an approval is the moment the stones stop being returnable.
+
+	Approving BUYS the stones: it posts the same purchase the Purchase Raw
+	Material page posts, under its own voucher type, so a parcel bought off a
+	provider lands in Purchase History beside every other purchase instead of
+	being a private arrangement between two stone pages."""
 	if not (STONE_PURCHASE_APPROVE_ROLES & set(frappe.get_roles())):
 		frappe.throw(frappe._("Only a manager can decide a purchase request."),
 			frappe.PermissionError)
@@ -5434,6 +5478,26 @@ def decide_stone_purchase_request(name, decision, remarks=None):
 			if row.sieve in want:
 				row.purchased_cts = round(flt(row.purchased_cts) + want[row.sieve], 3)
 		lot.save(ignore_permissions=True)
+
+		# and the stones are bought — the same posting the purchase desk makes
+		if cint(post):
+			sheet = get_stone_purchase_posting(name)
+			if sheet["missing"]:
+				frappe.throw(frappe._("No stock item for {0}. A lot is bought as its quality and sieve, so the item has to exist first.")
+					.format(", ".join(sheet["missing"])))
+			if not sheet["warehouse"]:
+				frappe.throw(frappe._("No Stone Issue warehouse to buy into."))
+			noavg = [r["sieve"] for r in sheet["rows"] if not flt(r.get("avg_cts"))]
+			if noavg:
+				frappe.throw(frappe._("{0} has no average carats on the sieve chart, so the piece count cannot be worked out.")
+					.format(", ".join(noavg)))
+			res = post_raw_material_purchase(
+				supplier=sheet["supplier"], warehouse=sheet["warehouse"],
+				posting_date=sheet["posting_date"], voucher_type=sheet["voucher_type"],
+				items=json.dumps([{"item": r["item"], "weight": r["carat"],
+					"count": r["count"], "purity": 0} for r in sheet["rows"]]))
+			doc.purchase_record = (res or {}).get("record")
+			doc.purchase_receipt = (res or {}).get("name")
 	else:
 		# rejected — the stones go back on the tray and can be assorted again
 		_spr_move(doc.stone_lot, want, +1)
@@ -5446,7 +5510,9 @@ def decide_stone_purchase_request(name, decision, remarks=None):
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name, "status": doc.status,
-		"decided_label": _user_label(doc.decided_by)}
+		"decided_label": _user_label(doc.decided_by),
+		"purchase_record": doc.purchase_record or "",
+		"purchase_receipt": doc.purchase_receipt or ""}
 
 
 @frappe.whitelist()

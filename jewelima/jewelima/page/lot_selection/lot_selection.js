@@ -199,6 +199,23 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			padding:3px 13px;font-size:11px;font-weight:700;cursor:pointer;}
 		.ls-no{background:var(--fg-color);border:1px solid #b02a2a;color:#b02a2a;border-radius:8px;
 			padding:3px 13px;font-size:11px;font-weight:700;cursor:pointer;}
+		/* the purchase sheet a manager signs off */
+		.ls-po{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 20px;
+			border:1px solid var(--border-color);border-radius:10px;padding:10px 14px;
+			background:var(--control-bg);margin-bottom:12px;}
+		.ls-po .r{display:flex;gap:10px;font-size:12.5px;padding:2px 0;}
+		.ls-po .r span{color:var(--text-muted);min-width:96px;}
+		table.ls-pt{width:100%;border-collapse:collapse;font-size:12.5px;}
+		table.ls-pt th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;
+			color:var(--text-muted);padding:6px 10px;border-bottom:1px solid var(--border-color);}
+		table.ls-pt td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
+		table.ls-pt th.num,table.ls-pt td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.ls-pt tr.tot td{font-weight:800;border-bottom:none;border-top:2px solid var(--gray-400,#aeb6bf);}
+		.ls-pw{margin-top:10px;padding:8px 12px;border-radius:8px;font-size:12.5px;font-weight:700;
+			color:#b02a2a;background:rgba(176,42,42,.08);border:1px solid #b02a2a;}
+		.ls-pn{margin-top:10px;font-size:11.5px;color:var(--text-muted);}
+		.ls-pr{font-size:11px;font-weight:700;color:#7a4fb5;}
+		[data-theme="dark"] .ls-pr{color:#bfa3e8;}
 		.ls-hint{font-size:11.5px;color:var(--text-muted);margin-top:9px;}
 		.ls-empty{padding:46px 20px;text-align:center;color:var(--text-muted);font-size:13.5px;}
 		</style>
@@ -281,9 +298,12 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 				<span class="ls-state idle">${__("nothing to save")}</span>
 			</span>`);
 		F.pick = frappe.ui.form.make_control({
-			df: { fieldtype: "Select", fieldname: "sieve", options: free() },
+			df: { fieldtype: "Select", fieldname: "sieve",
+				// a blank first option, so the button has something to wait for
+				options: [""].concat(free()) },
 			parent: root.find(".ls-pick").get(0), render_input: true });
 		F.pick.refresh();
+		F.pick.$input.on("change", refreshPicker);
 		refreshPicker();
 		paintState();
 	}
@@ -291,9 +311,16 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	function refreshPicker() {
 		if (!F.pick) return;
 		const opts = free();
-		F.pick.df.options = opts;
-		F.pick.refresh();
-		root.find(".ls-addbtn").prop("disabled", !opts.length);
+		const had = F.pick.get_value();
+		const want = [""].concat(opts);
+		if ((F.pick.df.options || []).join("|") !== want.join("|")) {
+			F.pick.df.options = want;
+			F.pick.refresh();
+			if (had && opts.includes(had)) F.pick.set_value(had);
+		}
+		// the button only appears once a sieve is actually picked — an ADD that
+		// does nothing until you have chosen something is a button that lies
+		root.find(".ls-addbtn").toggle(!!(F.pick.get_value() || "").trim());
 	}
 	function paintState() {
 		const map = { saving: __("saving…"), saved: __("saved"), failed: __("NOT SAVED — retrying"), "": __("nothing to save"), dirty: __("unsaved…") };
@@ -339,9 +366,9 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			<div class="ls-kpi sel"><div class="k">${__("Selected %")}</div>
 				<div class="v">${pct.toFixed(1)}<span class="u">%</span></div>
 				<div class="ls-bar2"><i style="width:${Math.min(pct, 100).toFixed(1)}%"></i></div></div>
-			${bought ? `<div class="ls-kpi buy"><div class="k">${__("Bought")}</div>
+			<div class="ls-kpi buy"><div class="k">${__("Purchased")}</div>
 				<div class="v">${ct(bought)}<span class="u">ct</span></div>
-				<div class="sub">${__("kept for stock — off the tray")}</div></div>` : ""}
+				<div class="sub">${__("bought for stock — off the tray")}</div></div>
 			<div class="ls-kpi rej ${overRow() ? "bad" : ""}"><div class="k">${__("Rejection")}</div>
 				<div class="v">${overRow() ? __("over") : ct(rej) + `<span class="u">ct</span>`}</div>
 				<div class="sub">${__("goes back to the provider")}</div></div>`);
@@ -402,6 +429,8 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 					<span class="who">${(q.items || []).map((i) => esc(i.sieve) + " " + ct(i.cts)).join(" · ")}</span>
 					<span class="who">· ${esc(q.requested_label || "")} ${esc((q.requested_on || "").slice(0, 16))}${
 						q.decided_label ? " · " + __("by") + " " + esc(q.decided_label) : ""}</span>
+					${q.purchase_record ? `<a class="ls-pr" href="/app/purchase-history"
+						title="${__("posted to Purchase History")}">${esc(q.purchase_record)}</a>` : ""}
 					${q.status === "Pending" && REQS.can_approve ? `<span class="sp">
 						<button class="ls-yes" data-name="${esc(q.name)}">${__("APPROVE")}</button>
 						<button class="ls-no" data-name="${esc(q.name)}">${__("Reject")}</button></span>` : ""}
@@ -457,25 +486,76 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			});
 	});
 
-	root.on("click", ".ls-yes, .ls-no", function () {
+	root.on("click", ".ls-no", function () {
 		const nm = $(this).data("name");
-		const yes = $(this).hasClass("ls-yes");
-		frappe.confirm(yes
-			? __("Approve {0}? These carats are ours to keep.", [esc(nm)])
-			: __("Reject {0}? The carats go back on the tray.", [esc(nm)]),
-			() => {
-				frappe.dom.freeze(yes ? __("Approving…") : __("Rejecting…"));
-				frappe.call({ method: API + ".decide_stone_purchase_request",
-					args: { name: nm, decision: yes ? "Approved" : "Rejected" } })
-					.then(() => {
-						frappe.dom.unfreeze();
-						frappe.show_alert({ indicator: yes ? "green" : "orange",
-							message: __("{0} {1}.", [nm, yes ? __("approved") : __("rejected")]) }, 6);
-						// the tray changed under the page — take it from the server
-						// rather than trusting what is in memory
-						open(LOT.name);
-					}).catch(() => frappe.dom.unfreeze());
+		frappe.confirm(__("Reject {0}? The carats go back on the tray.", [esc(nm)]), () => {
+			frappe.dom.freeze(__("Rejecting…"));
+			frappe.call({ method: API + ".decide_stone_purchase_request",
+				args: { name: nm, decision: "Rejected" } })
+				.then(() => {
+					frappe.dom.unfreeze();
+					frappe.show_alert({ indicator: "orange", message: __("{0} rejected.", [nm]) }, 6);
+					open(LOT.name);
+				}).catch(() => frappe.dom.unfreeze());
+		});
+	});
+
+	// APPROVING IS BUYING. So it shows the purchase before it makes it — the same
+	// sheet Purchase Raw Material posts, filled in from the lot and the request
+	// and READ ONLY: everything on it came from somewhere, and anything worth
+	// changing should be changed there rather than typed over here.
+	root.on("click", ".ls-yes", function () {
+		const nm = $(this).data("name");
+		frappe.call({ method: API + ".get_stone_purchase_posting", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			const d = new frappe.ui.Dialog({
+				title: __("Purchase {0}", [nm]), size: "large",
+				fields: [{ fieldtype: "HTML", fieldname: "h" }],
+				primary_action_label: __("PURCHASE"),
+				primary_action() {
+					d.hide();
+					frappe.dom.freeze(__("Posting the purchase…"));
+					frappe.call({ method: API + ".decide_stone_purchase_request",
+						args: { name: nm, decision: "Approved" } })
+						.then((rr) => {
+							frappe.dom.unfreeze();
+							const x = rr.message || {};
+							frappe.show_alert({ indicator: "green", message: x.purchase_record
+								? __("{0} approved — posted as {1}.", [nm, x.purchase_record])
+								: __("{0} approved.", [nm]) }, 8);
+							open(LOT.name);
+						}).catch(() => frappe.dom.unfreeze());
+				},
 			});
+			const bad = (m.missing || []).length || !m.warehouse;
+			d.fields_dict.h.$wrapper.html(`
+				<div class="ls-po">
+					<div class="r"><span>${__("Voucher type")}</span><b>${esc(m.voucher_type || "")}</b></div>
+					<div class="r"><span>${__("Provider")}</span><b>${esc(m.supplier || "")}</b></div>
+					<div class="r"><span>${__("Warehouse")}</span><b>${esc(m.warehouse || "—")}</b></div>
+					<div class="r"><span>${__("Date")}</span><b>${esc(m.posting_date || "")}</b></div>
+					<div class="r"><span>${__("From lot")}</span><b>${esc(m.lot || "")} · ${esc(m.quality || "")}</b></div>
+				</div>
+				<table class="ls-pt"><thead><tr><th>${__("Item")}</th><th>${__("Sieve")}</th>
+					<th class="num">${__("Carat")}</th><th class="num">${__("Pieces")}</th>
+					<th>${__("UOM")}</th></tr></thead><tbody>
+					${(m.rows || []).map((x) => `<tr><td><b>${esc(x.item)}</b></td>
+						<td>${esc(x.sieve)}</td><td class="num">${ct(x.carat)}</td>
+						<td class="num">${x.count || "—"}</td>
+						<td>${esc(x.uom)}</td></tr>`).join("")}
+					<tr class="tot"><td colspan="2">${__("Total")}</td>
+						<td class="num">${ct(m.total_cts)}</td>
+						<td class="num">${(m.rows || []).reduce((a, x) => a + (x.count || 0), 0)}</td><td></td></tr>
+				</tbody></table>
+				<div class="ls-pn">${__("The piece count is worked out from the sieve chart's average carats — a lot is weighed, not counted.")}</div>
+				${(m.missing || []).length ? `<div class="ls-pw">${
+					__("No stock item for {0}. A lot is bought as its quality and sieve, so the item has to exist first.",
+						[(m.missing || []).join(", ")])}</div>` : ""}
+				${!m.warehouse ? `<div class="ls-pw">${__("No Stone Issue warehouse to buy into.")}</div>` : ""}
+				<div class="ls-pn">${__("Nothing here can be edited — it all comes from the lot and the request. Purchasing posts it to Purchase History.")}</div>`);
+			d.show();
+			if (bad) d.get_primary_btn().prop("disabled", true);
+		});
 	});
 
 	function loadReqs() {
@@ -611,6 +691,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		if (!sv || used().has(sv)) return;
 		ROWS.push({ sieve: sv, actual: 0, selected: 0, purchased: 0 });
 		paintTable();
+		if (F.pick) F.pick.set_value("");     // and it waits for the next pick
 		refreshPicker();
 		setTimeout(() => root.find(`.ls-in[data-f="actual"][data-i="${ROWS.length - 1}"]`).focus(), 30);
 	});

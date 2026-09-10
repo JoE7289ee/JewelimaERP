@@ -1748,7 +1748,11 @@ def seed_voucher_types():
 	final list is still being confirmed — extend on Setup > Masters."""
 	if not frappe.db.exists("DocType", "Voucher Type"):
 		return
-	for code, title in (("SIN", "Stock Import"), ("OGD", "Recovered Gold")):
+	# SLT is what an approved stone-lot purchase posts under, so a parcel bought
+	# off a provider is findable in Purchase History as its own kind of buying
+	# rather than hiding among the stock imports.
+	for code, title in (("SIN", "Stock Import"), ("OGD", "Recovered Gold"),
+			("SLT", "Stone Lot")):
 		if not frappe.db.exists("Voucher Type", code):
 			frappe.get_doc({"doctype": "Voucher Type", "code": code, "title": title}).insert(ignore_permissions=True)
 	frappe.db.commit()

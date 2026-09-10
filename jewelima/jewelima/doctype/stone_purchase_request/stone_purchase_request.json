@@ -20,6 +20,8 @@
   "cb2",
   "decided_by",
   "decided_on",
+  "purchase_record",
+  "purchase_receipt",
   "remarks"
  ],
  "fields": [
@@ -112,6 +114,19 @@
    "fieldname": "decided_on",
    "fieldtype": "Datetime",
    "label": "Decided On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_record",
+   "fieldtype": "Link",
+   "label": "Purchase Record",
+   "options": "Purchase Record",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_receipt",
+   "fieldtype": "Data",
+   "label": "Purchase Receipt",
    "read_only": 1
   },
   {
