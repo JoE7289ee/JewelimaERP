@@ -5260,9 +5260,8 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 		d.returned_on = returned_on
 	if remarks is not None:
 		d.remarks = (remarks or "").strip()
-	# Open until something has actually been selected; Returned once the
-	# rejection has gone back, which is the day the lot is finished with.
-	d.status = "Returned" if d.returned_on else ("Selected" if lines else "Open")
+	# the status is the controller's — Open while any of the parcel is still
+	# unsorted, Closed when none of it is
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return _lot_row(d, with_items=True)

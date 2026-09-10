@@ -64,11 +64,10 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		.ls-tag{font-size:9.5px;font-weight:800;letter-spacing:.05em;border-radius:20px;
 			padding:2px 10px;text-transform:uppercase;}
 		.ls-tag.open{background:rgba(184,134,11,.18);color:#8a6508;}
-		.ls-tag.selected{background:rgba(29,122,51,.16);color:#1d7a33;}
-		.ls-tag.returned{background:rgba(31,97,141,.16);color:#1f618d;}
+		.ls-tag.closed{background:rgba(29,122,51,.16);color:#1d7a33;}
 		.ls-tag.cancelled{background:rgba(127,140,141,.16);color:var(--text-muted);}
 		[data-theme="dark"] .ls-tag.open{color:#e8b84a;}
-		[data-theme="dark"] .ls-tag.selected{color:#7fc98f;}
+		[data-theme="dark"] .ls-tag.closed{color:#7fc98f;}
 
 		/* ---------------- one lot ---------------- */
 		.ls-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
@@ -221,7 +220,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		const rows = (LOTS || []).filter((r) => !FILTER || r.status === FILTER);
 		root.find(".ls-board").html(`
 			<div class="ls-filters">
-				${["Open", "Selected", ""].map((s) => `
+				${["Open", "Closed", ""].map((s) => `
 					<button class="ls-f ${FILTER === s ? "on" : ""}" data-s="${esc(s)}">${
 						s ? __(s) : __("All")}</button>`).join("")}
 				<span style="font-size:12px;color:var(--text-muted);margin-left:6px;">${
@@ -362,7 +361,9 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 
 	function paintKeep() {
 		if (!LOT) return root.find(".ls-keep").empty();
-		const rows = ROWS.filter((x) => leftS(x) > 0.0005 || flt(x.purchased) > 0);
+		// every sieve on the tray, even one just added with nothing against it —
+		// waiting for it to appear is worse than a row of dashes
+		const rows = ROWS.slice();
 		const asked = Object.keys(ASK).reduce((a, k) => a + flt(ASK[k]), 0);
 		const anyAsk = rows.some((x) => flt(ASK[x.sieve]) > 0);
 		root.find(".ls-keep").html(`
@@ -578,6 +579,12 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		$tr.find("td.ls-rej").toggleClass("zero", !rj && !bad).text(bad ? __("over") : ct(rj));
 		paintTop();
 		paintDots();
+		// the keep table lives on these figures too, so it moves with them — a
+		// sieve added and typed into should be askable straight away, not after
+		// some other thing happens to repaint the page. It is its own region, so
+		// redrawing it cannot disturb the tray box being typed in; the one thing
+		// it must not do is yank a keep box out from under its own cursor.
+		if (!$(document.activeElement).hasClass("ls-kin")) paintKeep();
 		touched();
 	});
 

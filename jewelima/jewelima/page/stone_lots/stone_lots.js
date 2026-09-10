@@ -67,12 +67,10 @@ frappe.pages["stone-lots"].on_page_load = function (wrapper) {
 		.sl-tag{font-size:10px;font-weight:800;letter-spacing:.05em;border-radius:9px;padding:2px 9px;
 			text-transform:uppercase;}
 		.sl-tag.open{background:rgba(184,134,11,.18);color:#8a6508;}
-		.sl-tag.selected{background:rgba(29,122,51,.16);color:#1d7a33;}
-		.sl-tag.returned{background:rgba(31,97,141,.16);color:#1f618d;}
+		.sl-tag.closed{background:rgba(29,122,51,.16);color:#1d7a33;}
 		.sl-tag.cancelled{background:rgba(127,140,141,.16);color:var(--text-muted);}
 		[data-theme="dark"] .sl-tag.open{color:#e8b84a;}
-		[data-theme="dark"] .sl-tag.selected{color:#7fc98f;}
-		[data-theme="dark"] .sl-tag.returned{color:#7FB3DA;}
+		[data-theme="dark"] .sl-tag.closed{color:#7fc98f;}
 		.sl-short{color:#b02a2a;font-weight:700;}
 		.sl-empty{padding:26px;text-align:center;color:var(--text-muted);font-size:13px;}
 		</style>
@@ -91,8 +89,7 @@ frappe.pages["stone-lots"].on_page_load = function (wrapper) {
 		<div class="sl-filters">
 			<button class="sl-f on" data-s="">${__("All")}</button>
 			<button class="sl-f" data-s="Open">${__("Open")}</button>
-			<button class="sl-f" data-s="Selected">${__("Selected")}</button>
-			<button class="sl-f" data-s="Returned">${__("Returned")}</button>
+			<button class="sl-f" data-s="Closed">${__("Closed")}</button>
 		</div>
 		<div class="sl-box"><table class="sl-grid-t"><thead></thead><tbody></tbody></table></div>
 	`);

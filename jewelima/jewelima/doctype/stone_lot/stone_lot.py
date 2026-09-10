@@ -67,6 +67,29 @@ class StoneLot(Document):
 		if flt(self.actual_cts) > 0 and self.selected_cts > flt(self.actual_cts) + 0.0005:
 			frappe.throw(frappe._("Selected {0} ct is more than the {1} ct that came in.")
 				.format(self.selected_cts, flt(self.actual_cts)))
+		self._set_status()
+
+	def _set_status(self):
+		"""OPEN until the whole parcel has been through the sieve, then CLOSED.
+
+		A lot is one job: sort the parcel. It is open while any of it is still
+		unsorted and closed when none of it is — at which point every carat is
+		either kept, bought or going back, and there is nothing left to decide.
+
+		What counts as sorted has to include what has already been BOUGHT.
+		Buying takes carats off the tray, so counting only what is still there
+		would mean a parcel could never finish: the more of it we kept, the
+		further from done it would look.
+
+		A cancelled parcel stays cancelled — it went back untouched and was never
+		a job at all.
+		"""
+		if self.status == "Cancelled":
+			return
+		sorted_ct = round(sum(flt(r.actual_cts) + flt(r.purchased_cts)
+			for r in self.items or []), 3)
+		claimed = flt(self.claimed_cts)
+		self.status = "Closed" if (claimed and sorted_ct >= claimed - 0.0005) else "Open"
 
 
 def _code(supplier):
