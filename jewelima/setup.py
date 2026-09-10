@@ -1101,7 +1101,10 @@ def setup_roles():
 	grant("Sales Person", "JW Party Admin", {"read": 1})
 	if frappe.db.exists("DocType", "Price Chart"):
 		grant("Price Chart", "JW Party Admin", {"read": 1})
-	for _pg in ("parties", "create-party", "party-masters", "party-stock", "party-metal"):
+	# party-stock is the Stock by Party REPORT; party-stone is the stone intake
+	# desk, the twin of party-metal. They were the same route until 607b9d1.
+	for _pg in ("parties", "create-party", "party-masters", "party-stock",
+			"party-metal", "party-stone"):
 		set_page_roles(_pg, ("JW Party Admin",))
 	# the order desk looks parties up all day (old names, branches, who is who) —
 	# read-only: creating and classifying stays with JW Party Admin
