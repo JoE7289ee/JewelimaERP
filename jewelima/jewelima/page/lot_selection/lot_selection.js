@@ -186,7 +186,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 						<span class="ls-tag ${st}">${esc(r.status)}</span></div>
 					<div class="sup">${esc(r.supplier)}${r.quality ? " · " + esc(r.quality) : ""}</div>
 					<div class="nums">
-						<div><div class="n">${__("Sieved")}</div><div class="b">${r.actual ? ct(r.actual) : "—"}</div></div>
+						<div><div class="n">${__("Assorted")}</div><div class="b">${r.actual ? ct(r.actual) : "—"}</div></div>
 						<div class="sel"><div class="n">${__("Selected")}</div><div class="b">${r.selected ? ct(r.selected) : "—"}</div></div>
 						<div class="rej"><div class="n">${__("Rejection")}</div><div class="b">${r.rejected ? ct(r.rejected) : "—"}</div></div>
 					</div></div>`;
@@ -265,10 +265,10 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 					<b>${((x.ct / sum) * 100).toFixed(0)}%</b></div>`).join("")}</div>
 			</div>` : ""}
 			${claimed ? `<div class="ls-kpi ${overLot() ? "bad" : "left"}">
-				<div class="k">${overLot() ? __("Over the parcel") : __("Left to sieve")}</div>
+				<div class="k">${overLot() ? __("Over the parcel") : __("Left to assort")}</div>
 				<div class="v">${ct(overLot() ? a - claimed : Math.max(left, 0))}<span class="u">ct</span></div>
 				<div class="sub">${__("of {0} ct booked in", [ct(claimed)])}</div></div>` : ""}
-			<div class="ls-kpi"><div class="k">${__("Sieved")}</div>
+			<div class="ls-kpi"><div class="k">${__("Assorted")}</div>
 				<div class="v">${ct(a)}<span class="u">ct</span></div>
 				<div class="sub">${__("{0} sieve(s)", [ROWS.length])}</div></div>
 			<div class="ls-kpi sel"><div class="k">${__("Selected")}</div>
