@@ -14146,6 +14146,8 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 	# the old software's item vocabulary -> our Design Type names
 	ITEM_ALIAS = {"NOSPIN": "NOSEPIN", "NP": "NOSEPIN", "PD": "PENDANT", "NECK": "NECKLACE",
 		"CH BRACELET": "CHAIN BRACELET", "CH NECKLACE": "CHAIN NECKLACE"}
+	# the design type a back-chain making rule is written against
+	BACK_CHAIN_TYPE = "BACK CHAIN"
 	making_rules = list(chart.get("making_rules") or [])
 	# certification straight off the chart: flat named rows (HALLMARKING, labs,
 	# ALL LABS) vs weight-slab rows (IGI style, from/to ct)
@@ -14210,6 +14212,37 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		else:
 			flags.append("no making rule for {0}".format(r.get("item") or "?"))
 		mc = round(mc, 2)
+
+		# THE BACK CHAIN. Its row was merged into this piece at import, so its
+		# weight is here and its design type is not — _making_rule_for is asked
+		# about the PIECE (a NECKLACE), and would answer with the necklace's rate.
+		# So the chain gets its own lookup, and an EXACT one: falling back to the
+		# default rule would price a chain at the necklace's making rate without
+		# saying so. No BACK CHAIN rule on the chart means the chain is flagged
+		# unpriced, not quietly charged something plausible.
+		bc_wt = flt(r.get("back_chain_wt"))
+		bc_rate = bc_mc = 0.0
+		if bc_wt:
+			bcr = next((x for x in making_rules
+				if (x.design_type or "").strip().upper() == BACK_CHAIN_TYPE), None)
+			if bcr:
+				bc_rate = flt(bcr.rate)
+				if (bcr.basis or "Per Gram") == "Per Piece":
+					bc_mc = flt(bcr.rate) or flt(bcr.min_per_piece)
+					notes["bc"] = "back chain {0}: flat {1}".format(
+						r.get("back_chain_barcode") or "", _inr(bc_mc))
+				else:
+					bc_mc = bc_wt * bc_rate
+					notes["bc"] = "back chain {0}: {1} g x {2}/g = {3}".format(
+						r.get("back_chain_barcode") or "", bc_wt, bc_rate, _inr(round(bc_mc, 2)))
+				if flt(bcr.min_per_piece) and bc_mc < flt(bcr.min_per_piece):
+					bc_mc = flt(bcr.min_per_piece)
+					notes["bc"] += " -> floored to min {0}".format(flt(bcr.min_per_piece))
+			else:
+				flags.append("back chain {0} ({1} g) is not priced on the chart".format(
+					r.get("back_chain_barcode") or "?", bc_wt))
+		bc_mc = round(bc_mc, 2)
+
 		if "mc" in notes:
 			notes["mc"] += " = " + _inr(mc)
 		# diamonds: per-stone ct inferred = ct / pcs -> the chart bracket
@@ -14338,10 +14371,12 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		cert_va = round(huid_va + cert_only, 2)
 		if cn:
 			notes["cert"] = " + ".join(cn) + " = " + _inr(cert_va)
-		total = round(gold_va + mc + dmd_va + ps_va + stn_va + cert_va, 2)
-		notes["total"] = "gold {0} + making {1} + dmd {2} + ps {3} + stn {4} + cert {5} = {6}".format(
-			_inr(gold_va), _inr(mc), _inr(dmd_va), _inr(ps_va), _inr(stn_va), _inr(cert_va), _inr(total))
+		total = round(gold_va + mc + bc_mc + dmd_va + ps_va + stn_va + cert_va, 2)
+		notes["total"] = "gold {0} + making {1}{2} + dmd {3} + ps {4} + stn {5} + cert {6} = {7}".format(
+			_inr(gold_va), _inr(mc), (" + chain " + _inr(bc_mc)) if bc_mc else "",
+			_inr(dmd_va), _inr(ps_va), _inr(stn_va), _inr(cert_va), _inr(total))
 		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
+			bc_rate=bc_rate, bc_mc=bc_mc,
 			wt_band="below" if flt(r.get("nt")) < band_gm else "above",
 			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
 			ps_rt=ps_rt, ps_va=ps_va, stn_va=stn_va,
@@ -14562,7 +14597,18 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			if gi not in used:
 				used.append(gi)
 	used.sort()
-	keys = ["sl", "item", "size", "style", "colour", "pcs1", "item_color", "gross", "net", "gold", "mc"]
+	# The two back-chain columns are BACK. They were in the old sheet (cols 13
+	# and 15, hidden) and were dropped in 94aa88d with every other hidden column
+	# as legacy — but the chain is a live feature, and without them a chain the
+	# desk assigned is billed nowhere and shown nowhere. Conditional, like every
+	# other optional column here: no chain in the lot, no columns.
+	jos_bc = any(flt(p.get("back_chain_wt")) for p in priced)
+	keys = ["sl", "item", "size", "style", "colour", "pcs1", "item_color", "gross", "net", "gold"]
+	if jos_bc:
+		keys.append("bcwt")
+	keys.append("mc")
+	if jos_bc:
+		keys.append("bcmc")
 	for gi in used:
 		keys += ["g{0}p".format(gi), "g{0}c".format(gi)]
 		if gi == 0:
@@ -14645,7 +14691,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	HEAD = {"sl": "Sl. No.", "item": "Item Description", "size": "Size", "style": "Style",
 		"colour": "Colour", "pcs1": "NO OF PCS", "item_color": "ITEM COLOR",
 		"gross": "Gross Qty (Gm)", "net": "Net Qty (Gm)", "gold": "Gold\nValue",
-		"mc": "Making Charge", "g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
+		"mc": "Making Charge", "bcwt": "back chain wt", "bcmc": "chain mc",
+		"g0avg": "Dimond Rate (Ct.)", "g1rate": "dia.rate",
 		"tp": "pcs", "tc": "cts", "tv": "value",
 		"pspcs": "PS pcs", "pswt": "PS ct", "psv": "PS value",
 		"cspcs": "CS pcs", "cswt": "CS g" if cs_in_g else "CS ct",
@@ -14669,6 +14716,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	def band_of(p):
 		return p.get("wt_band") or ("below" if flt(p.get("nt")) < 1.0 else "above")
 	SUMCOLS = [C["pcs1"], C["gross"], C["net"], C["gold"], C["mc"]]
+	if jos_bc:
+		SUMCOLS += [C["bcwt"], C["bcmc"]]
 	for gi in used:
 		SUMCOLS += [C["g{0}p".format(gi)], C["g{0}c".format(gi)], C["g{0}v".format(gi)]]
 	SUMCOLS += [C["tp"], C["tc"], C["tv"]]
@@ -14706,7 +14755,11 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=C["gross"], value=flt(p.get("gs")))
 		ws.cell(row=r, column=C["net"], value=flt(p.get("nt")))
 		ws.cell(row=r, column=C["gold"], value="={0}{1}*{2}$3".format(Lc("net"), r, Lc("mc")))
+		if "bcwt" in C:
+			ws.cell(row=r, column=C["bcwt"], value=flt(p.get("back_chain_wt")) or None)
 		ws.cell(row=r, column=C["mc"], value=flt(p.get("mc")))
+		if "bcmc" in C:
+			ws.cell(row=r, column=C["bcmc"], value=flt(p.get("bc_mc")) or None)
 		ct, pcs = flt(p.get("dmd_ct")), cint(p.get("dmd_pcs"))
 		if ct > 0 and brackets:
 			gi = bracket_index(round(ct / pcs, 4) if pcs else 0)   # 4dp, as the pricing does
@@ -14738,9 +14791,12 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			ws.cell(row=r, column=C["csv"], value=flt(p.get("stn_va")) or 0)
 			stone_terms.append("{0}{1}".format(Lc("csv"), r))
 		# the row total had been gold + making + diamond only, so any piece
-		# carrying a stone was under-billed by exactly its stone value
+		# carrying a stone was under-billed by exactly its stone value. The back
+		# chain is the same fault a second time: its charge has to be IN the
+		# total, or a chain is billed in its own column and paid for by nobody.
 		ws.cell(row=r, column=C["total"],
-			value="={g}{r}+{m}{r}+{v}{r}{s}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r,
+			value="={g}{r}+{m}{r}{b}+{v}{r}{s}".format(g=Lc("gold"), m=Lc("mc"), v=Lc("tv"), r=r,
+				b=("+{0}{1}".format(Lc("bcmc"), r) if "bcmc" in C else ""),
 				s="".join("+" + t for t in stone_terms)))
 		ws.cell(row=r, column=C["igi"], value=igi_for(ct, pcs) if (not lot_tagged or p.get("cert")) else 0)
 		ws.cell(row=r, column=C["huid"], value=flt(p.get("huid_va")) or 0)
