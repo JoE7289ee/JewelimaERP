@@ -9,7 +9,8 @@
   "sieve",
   "actual_cts",
   "selected_cts",
-  "rejected_cts"
+  "rejected_cts",
+  "purchased_cts"
  ],
  "fields": [
   {
@@ -42,6 +43,15 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Rejected (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "taken into stock by an approved purchase request \u2014 never typed",
+   "fieldname": "purchased_cts",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Purchased (ct)",
    "precision": "3",
    "read_only": 1
   }

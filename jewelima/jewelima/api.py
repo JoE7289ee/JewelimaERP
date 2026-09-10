@@ -5136,9 +5136,15 @@ def _lot_row(d, with_items=False):
 	out["short"] = round(flt(d.claimed_cts) - flt(d.actual_cts), 3) if flt(d.actual_cts) else 0
 	if with_items:
 		out["items"] = [{"sieve": r.sieve, "actual": flt(r.actual_cts),
-			"selected": flt(r.selected_cts), "rejected": flt(r.rejected_cts)}
+			"selected": flt(r.selected_cts), "rejected": flt(r.rejected_cts),
+			# what an approved request has already taken into stock. The desk sees
+			# the tray with this taken off; the stored actual/selected stay as they
+			# were assorted, so an autosave and an approval can never fight over
+			# the same column.
+			"purchased": flt(r.purchased_cts)}
 			for r in frappe.get_all("Stone Lot Sieve", filters={"parent": d.name},
-				fields=["sieve", "actual_cts", "selected_cts", "rejected_cts"], order_by="idx")]
+				fields=["sieve", "actual_cts", "selected_cts", "rejected_cts", "purchased_cts"],
+				order_by="idx")]
 	return out
 
 
@@ -5230,6 +5236,8 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 	rows = rows or []
 
 	sieves = set(frappe.get_all("Diamond Sieve", pluck="sieve_size"))
+	kept = {r.sieve: flt(r.purchased_cts) for r in frappe.get_all("Stone Lot Sieve",
+		filters={"parent": name}, fields=["sieve", "purchased_cts"])}
 	lines = []
 	for r in rows:
 		sv = (r or {}).get("sieve")
@@ -5241,7 +5249,10 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 			continue
 		if sv not in sieves:
 			frappe.throw(frappe._("{0} is not a sieve on the chart.").format(sv))
-		lines.append({"sieve": sv, "actual_cts": act, "selected_cts": ct})
+		# purchased_cts is carried, never taken from the page: it is set by an
+		# approval and the desk has no business overwriting it
+		lines.append({"sieve": sv, "actual_cts": act, "selected_cts": ct,
+			"purchased_cts": flt(kept.get(sv))})
 
 	d.actual_cts = flt(actual_cts)
 	d.set("items", lines)
@@ -5255,6 +5266,173 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return _lot_row(d, with_items=True)
+
+
+# ---------------------------------------------------------------------------
+# KEEPING PART OF A LOT — the purchase request.
+#
+# A parcel comes in on approval. Assorting says what we would keep; this is
+# asking to BUY some of it, so it stops being the provider's and becomes stock.
+#
+# The request changes nothing. Only an APPROVAL takes carats out of the tray,
+# and only a manager can approve — the desk that assorts is not the desk that
+# commits money.
+#
+# An approval writes purchased_cts on the sieve row and NOTHING ELSE. The
+# assorted figures stay exactly as they were assorted, and the desk simply sees
+# the tray with the bought stones taken off: actual - purchased, selected -
+# purchased. The rejection is untouched by design — buying from what we were
+# keeping never changes what goes back. That also keeps an approval and the
+# desk's own autosave off the same column, so neither can undo the other.
+# ---------------------------------------------------------------------------
+STONE_PURCHASE_APPROVE_ROLES = {"System Manager", "JW Manager"}
+
+
+def _spr_can_see():
+	"""Who may look at the requests — the stone room included: they are the ones
+	who will be handed the stones once a request is approved."""
+	return bool((STONE_LOT_ROLES | {"JW Stone Admin"}) & set(frappe.get_roles()))
+
+
+def _spr_guard_read():
+	if not _spr_can_see():
+		frappe.throw(frappe._("Stone purchase requests are for the stock and stone desks."),
+			frappe.PermissionError)
+
+
+def _lot_sieve_state(lot):
+	"""{sieve: (actual, selected, purchased)} as the lot stands now."""
+	return {r.sieve: (flt(r.actual_cts), flt(r.selected_cts), flt(r.purchased_cts))
+		for r in frappe.get_all("Stone Lot Sieve", filters={"parent": lot},
+			fields=["sieve", "actual_cts", "selected_cts", "purchased_cts"])}
+
+
+def _spr_pending(lot, ignore=None):
+	"""{sieve: carats} already asked for on this lot and not yet decided — two
+	requests must not be able to claim the same stones."""
+	out = {}
+	for nm in frappe.get_all("Stone Purchase Request",
+			filters={"stone_lot": lot, "status": "Pending"}, pluck="name"):
+		if ignore and nm == ignore:
+			continue
+		for r in frappe.get_all("Stone Purchase Request Item", filters={"parent": nm},
+				fields=["sieve", "cts"]):
+			out[r.sieve] = round(out.get(r.sieve, 0) + flt(r.cts), 3)
+	return out
+
+
+@frappe.whitelist()
+def get_stone_purchase_requests(lot=None, status=None, limit=100):
+	"""The requests, newest first — for one lot or across the desk."""
+	_spr_guard_read()
+	filters = {}
+	if lot:
+		filters["stone_lot"] = lot
+	if status:
+		filters["status"] = status
+	rows = frappe.get_all("Stone Purchase Request", filters=filters,
+		fields=["name", "stone_lot", "supplier", "quality", "status", "total_cts",
+			"requested_by", "requested_on", "decided_by", "decided_on", "remarks"],
+		order_by="creation desc", limit_page_length=cint(limit) or 100)
+	out = []
+	for r in rows:
+		out.append({**r,
+			"requested_on": str(r.requested_on or ""), "decided_on": str(r.decided_on or ""),
+			"requested_label": _user_label(r.requested_by),
+			"decided_label": _user_label(r.decided_by) if r.decided_by else "",
+			"items": [{"sieve": i.sieve, "cts": flt(i.cts)} for i in frappe.get_all(
+				"Stone Purchase Request Item", filters={"parent": r.name},
+				fields=["sieve", "cts"], order_by="idx")]})
+	return {"rows": out,
+		"can_approve": bool(STONE_PURCHASE_APPROVE_ROLES & set(frappe.get_roles()))}
+
+
+@frappe.whitelist()
+def create_stone_purchase_request(lot, rows, remarks=None):
+	"""Ask to keep some of an assorted lot. Nothing moves until it is approved."""
+	_require_stone_lot()
+	d = frappe.get_doc("Stone Lot", lot)
+	if d.status == "Cancelled":
+		frappe.throw(frappe._("{0} is cancelled.").format(lot))
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+
+	state = _lot_sieve_state(lot)
+	pending = _spr_pending(lot)
+	lines = []
+	for r in rows or []:
+		sv = (r or {}).get("sieve")
+		ct = flt((r or {}).get("cts"))
+		if not sv or ct <= 0:
+			continue
+		if sv not in state:
+			frappe.throw(frappe._("{0} is not on this lot.").format(sv))
+		_actual, selected, purchased = state[sv]
+		# what is still on the tray to be bought: what we kept, less what is
+		# already bought, less what another open request has already claimed
+		free = round(selected - purchased - flt(pending.get(sv)), 3)
+		if ct > free + 0.0005:
+			frappe.throw(frappe._("{0}: only {1} ct is left to keep — {2} assorted, {3} already bought, {4} on an open request.")
+				.format(sv, free, selected, purchased, flt(pending.get(sv))))
+		lines.append({"sieve": sv, "cts": ct})
+	if not lines:
+		frappe.throw(frappe._("Nothing asked for."))
+
+	doc = frappe.get_doc({
+		"doctype": "Stone Purchase Request", "stone_lot": lot,
+		"supplier": d.supplier, "quality": d.quality or "",
+		"status": "Pending", "items": lines,
+		"requested_by": frappe.session.user,
+		"requested_on": frappe.utils.now_datetime(),
+		"remarks": (remarks or "").strip() or None,
+	}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "total_cts": flt(doc.total_cts), "status": doc.status}
+
+
+@frappe.whitelist()
+def decide_stone_purchase_request(name, decision, remarks=None):
+	"""Approve or reject. MANAGER ONLY — the desk that assorts does not commit
+	the money, and an approval is the moment the stones stop being returnable."""
+	if not (STONE_PURCHASE_APPROVE_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Only a manager can decide a purchase request."),
+			frappe.PermissionError)
+	decision = (decision or "").strip().title()
+	if decision not in ("Approved", "Rejected"):
+		frappe.throw(frappe._("A request is approved or rejected."))
+	doc = frappe.get_doc("Stone Purchase Request", name)
+	if doc.status != "Pending":
+		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status.lower()))
+
+	if decision == "Approved":
+		# re-check against the lot as it stands NOW: the tray may have been
+		# re-assorted between the asking and the deciding
+		state = _lot_sieve_state(doc.stone_lot)
+		pending = _spr_pending(doc.stone_lot, ignore=name)
+		for r in doc.items:
+			if r.sieve not in state:
+				frappe.throw(frappe._("{0} is no longer on {1}.").format(r.sieve, doc.stone_lot))
+			_a, selected, purchased = state[r.sieve]
+			free = round(selected - purchased - flt(pending.get(r.sieve)), 3)
+			if flt(r.cts) > free + 0.0005:
+				frappe.throw(frappe._("{0}: only {1} ct is still free on {2} — the lot has changed since this was asked for.")
+					.format(r.sieve, free, doc.stone_lot))
+		lot = frappe.get_doc("Stone Lot", doc.stone_lot)
+		want = {r.sieve: flt(r.cts) for r in doc.items}
+		for row in lot.items:
+			if row.sieve in want:
+				row.purchased_cts = round(flt(row.purchased_cts) + want[row.sieve], 3)
+		lot.save(ignore_permissions=True)
+
+	doc.status = decision
+	doc.decided_by = frappe.session.user
+	doc.decided_on = frappe.utils.now_datetime()
+	if remarks:
+		doc.remarks = ((doc.remarks or "") + ("\n" if doc.remarks else "") + remarks.strip())
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "status": doc.status,
+		"decided_label": _user_label(doc.decided_by)}
 
 
 @frappe.whitelist()

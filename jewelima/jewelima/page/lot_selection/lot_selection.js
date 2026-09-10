@@ -29,6 +29,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
 	let CTX = null, LOT = null, LOTS = [], FILTER = "Open", SAVE = "";
+	let REQS = { rows: [], can_approve: 0 };
 	const ROWS = [];                      // [{sieve, actual, selected}]
 
 	const ct = (v) => flt(v).toFixed(3);
@@ -152,6 +153,53 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		.ls-x:hover{color:#b02a2a !important;}
 
 		.ls-err{margin-top:10px;font-size:12.5px;font-weight:700;color:#b02a2a;}
+		.ls-kpi.buy{border-left:3px solid #7a4fb5;} .ls-kpi.buy .v{color:#7a4fb5;}
+		[data-theme="dark"] .ls-kpi.buy .v{color:#bfa3e8;}
+		.ls-bought{font-size:10px;font-weight:700;color:#7a4fb5;letter-spacing:.02em;}
+		[data-theme="dark"] .ls-bought{color:#bfa3e8;}
+
+		/* keep for stock */
+		.ls-keep{margin-top:16px;border:1px solid var(--border-color);border-radius:16px;
+			background:var(--fg-color);overflow:hidden;}
+		.ls-keep .hd{display:flex;align-items:center;gap:10px;padding:11px 16px;
+			border-bottom:1px solid var(--border-color);}
+		.ls-keep .hd b{font-size:12.5px;letter-spacing:.02em;}
+		.ls-keep .hd span{font-size:11.5px;color:var(--text-muted);}
+		.ls-keep .hd .sp{margin-left:auto;display:flex;gap:8px;align-items:center;}
+		table.ls-kt{width:100%;border-collapse:separate;border-spacing:0;}
+		table.ls-kt th{background:var(--control-bg,var(--fg-color));border-bottom:1px solid var(--border-color);
+			padding:8px 16px;text-align:left;font-size:9.5px;font-weight:800;
+			text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);}
+		table.ls-kt td{border-bottom:1px solid var(--border-color);padding:5px 16px;height:44px;}
+		table.ls-kt tbody tr:last-child td{border-bottom:none;}
+		table.ls-kt th.num,table.ls-kt td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.ls-kt input.ls-kin{width:110px;text-align:right;border:1px solid transparent;
+			border-radius:8px;background:transparent;height:34px;padding:0 10px;font-size:15px;
+			font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-color);-moz-appearance:textfield;}
+		table.ls-kt input.ls-kin:hover{border-color:var(--border-color);}
+		table.ls-kt input.ls-kin:focus{border-color:#7a4fb5;background:var(--fg-color);
+			box-shadow:0 0 0 3px rgba(122,79,181,.13);outline:none;}
+		.ls-full{border:1px solid var(--border-color);background:var(--fg-color);border-radius:8px;
+			padding:3px 10px;font-size:11px;cursor:pointer;color:var(--text-muted);}
+		.ls-full:hover{border-color:#7a4fb5;color:#7a4fb5;}
+		.ls-ask{background:#7a4fb5;border:1px solid #7a4fb5;color:#fff;font-weight:800;
+			border-radius:10px;padding:0 22px;height:36px;font-size:12.5px;cursor:pointer;}
+		.ls-ask[disabled]{opacity:.4;cursor:not-allowed;}
+		.ls-rq{display:flex;align-items:center;gap:10px;padding:8px 16px;
+			border-top:1px solid var(--border-color);font-size:12px;}
+		.ls-rq .who{color:var(--text-muted);}
+		.ls-rq .sp{margin-left:auto;display:flex;gap:6px;}
+		.ls-st{font-size:9.5px;font-weight:800;letter-spacing:.05em;border-radius:20px;
+			padding:2px 9px;text-transform:uppercase;}
+		.ls-st.pending{background:rgba(184,134,11,.18);color:#8a6508;}
+		.ls-st.approved{background:rgba(29,122,51,.16);color:#1d7a33;}
+		.ls-st.rejected{background:rgba(176,42,42,.14);color:#b02a2a;}
+		[data-theme="dark"] .ls-st.pending{color:#e8b84a;}
+		[data-theme="dark"] .ls-st.approved{color:#7fc98f;}
+		.ls-yes{background:#1d7a33;border:1px solid #1d7a33;color:#fff;border-radius:8px;
+			padding:3px 13px;font-size:11px;font-weight:700;cursor:pointer;}
+		.ls-no{background:var(--fg-color);border:1px solid #b02a2a;color:#b02a2a;border-radius:8px;
+			padding:3px 13px;font-size:11px;font-weight:700;cursor:pointer;}
 		.ls-hint{font-size:11.5px;color:var(--text-muted);margin-top:9px;}
 		.ls-empty{padding:46px 20px;text-align:center;color:var(--text-muted);font-size:13.5px;}
 		</style>
@@ -164,6 +212,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			</div></div>
 			<div class="ls-err"></div>
 			<div class="ls-hint"></div>
+			<div class="ls-keep"></div>
 		</div>
 	`);
 
@@ -199,10 +248,24 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	root.on("click", ".ls-card", function () { open($(this).data("name")); });
 
 	// --------------------------------------------------------------- one lot
+	// Everything the desk sees is the tray AFTER an approved purchase has been
+	// taken off it. The stored figures stay as they were assorted — buying does
+	// not un-assort anything — so "left" is the arithmetic, not the record.
+	const leftA = (x) => r3(flt(x.actual) - flt(x.purchased));
+	const leftS = (x) => r3(flt(x.selected) - flt(x.purchased));
 	const tot = (k) => ROWS.reduce((a, x) => a + flt(x[k]), 0);
+	const totLeftA = () => ROWS.reduce((a, x) => a + leftA(x), 0);
+	const totLeftS = () => ROWS.reduce((a, x) => a + leftS(x), 0);
+	const totBought = () => ROWS.reduce((a, x) => a + flt(x.purchased), 0);
 	const used = () => new Set(ROWS.map((x) => x.sieve));
 	const free = () => (CTX.sieves || []).map((s) => s.sieve_size).filter((s) => !used().has(s));
 	const lotWt = () => (LOT ? flt(LOT.claimed) : 0);
+	// what is still free to ask for on a sieve: kept, less bought, less anything
+	// an undecided request has already claimed
+	const claimed = (sv) => (REQS.rows || []).filter((q) => q.status === "Pending")
+		.reduce((a, q) => a + ((q.items || []).filter((i) => i.sieve === sv)
+			.reduce((b, i) => b + flt(i.cts), 0)), 0);
+	const freeFor = (x) => r3(leftS(x) - claimed(x.sieve));
 	const overRow = () => ROWS.some((x) => flt(x.selected) > flt(x.actual) + 0.0005);
 	// the parcel is a ceiling: the sieves cannot hold more stone than came in
 	const overLot = () => lotWt() > 0 && tot("actual") > lotWt() + 0.0005;
@@ -240,14 +303,14 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 
 	function paintTop() {
 		const claimed = lotWt();
-		const a = tot("actual"), s = tot("selected");
+		const a = totLeftA(), s = totLeftS(), bought = totBought();
 		const rej = Math.max(a - s, 0);
 		const left = claimed ? r3(claimed - a) : 0;
 		const pct = a > 0 ? (s / a) * 100 : 0;
 
 		// the ring: which sieves the parcel fell into, by weight
-		const slices = ROWS.filter((x) => flt(x.actual) > 0)
-			.map((x) => ({ sieve: x.sieve, ct: flt(x.actual) }))
+		const slices = ROWS.filter((x) => leftA(x) > 0)
+			.map((x) => ({ sieve: x.sieve, ct: leftA(x) }))
 			.sort((p, q) => q.ct - p.ct);
 		const sum = slices.reduce((t, x) => t + x.ct, 0);
 		let at = 0;
@@ -277,6 +340,9 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			<div class="ls-kpi sel"><div class="k">${__("Selected %")}</div>
 				<div class="v">${pct.toFixed(1)}<span class="u">%</span></div>
 				<div class="ls-bar2"><i style="width:${Math.min(pct, 100).toFixed(1)}%"></i></div></div>
+			${bought ? `<div class="ls-kpi buy"><div class="k">${__("Bought")}</div>
+				<div class="v">${ct(bought)}<span class="u">ct</span></div>
+				<div class="sub">${__("kept for stock — off the tray")}</div></div>` : ""}
 			<div class="ls-kpi rej ${overRow() ? "bad" : ""}"><div class="k">${__("Rejection")}</div>
 				<div class="v">${overRow() ? __("over") : ct(rej) + `<span class="u">ct</span>`}</div>
 				<div class="sub">${__("goes back to the provider")}</div></div>`);
@@ -288,13 +354,147 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		root.find(".ls-hint").text(__("Rejection is worked out for you. Everything saves on its own — there is no save button."));
 	}
 
+	// ---- KEEP FOR STOCK ----------------------------------------------------
+	// Assorting says what we WOULD keep. This asks to buy it, which is the point
+	// at which stones stop being the provider's. So it is a request, it names the
+	// carats per sieve, and only a manager decides it.
+	const ASK = {};                       // sieve -> carats typed, kept across repaints
+
+	function paintKeep() {
+		if (!LOT) return root.find(".ls-keep").empty();
+		const rows = ROWS.filter((x) => leftS(x) > 0.0005 || flt(x.purchased) > 0);
+		const asked = Object.keys(ASK).reduce((a, k) => a + flt(ASK[k]), 0);
+		const anyAsk = rows.some((x) => flt(ASK[x.sieve]) > 0);
+		root.find(".ls-keep").html(`
+			<div class="hd"><b>${__("Keep for stock")}</b>
+				<span>${__("ask to buy part of what you have assorted — a manager decides it")}</span>
+				<span class="sp">
+					${asked ? `<span style="font-size:12px;font-weight:700;">${ct(asked)} ct</span>` : ""}
+					<button class="ls-ask" ${anyAsk ? "" : "disabled"}>${__("REQUEST")}</button>
+				</span></div>
+			${rows.length ? `<table class="ls-kt"><thead><tr>
+				<th>${__("Sieve")}</th><th class="num">${__("Assorted left")}</th>
+				<th class="num">${__("Bought")}</th><th class="num">${__("On request")}</th>
+				<th class="num">${__("Free to keep")}</th><th class="num">${__("Ask for")}</th>
+				<th style="width:70px;"></th></tr></thead><tbody>
+				${rows.map((x) => {
+					const free = freeFor(x);
+					return `<tr data-sv="${esc(x.sieve)}">
+						<td style="font-weight:700;">${esc(x.sieve)}</td>
+						<td class="num">${ct(leftS(x))}</td>
+						<td class="num" style="color:#7a4fb5;">${flt(x.purchased) ? ct(x.purchased) : "—"}</td>
+						<td class="num">${claimed(x.sieve) ? ct(claimed(x.sieve)) : "—"}</td>
+						<td class="num"><b>${ct(free)}</b></td>
+						<td class="num"><input type="number" step="0.001" min="0" class="ls-kin"
+							data-sv="${esc(x.sieve)}" placeholder="0.000"
+							value="${ASK[x.sieve] || ""}" ${free > 0.0005 ? "" : "disabled"}></td>
+						<td>${free > 0.0005
+							? `<button class="ls-full" data-sv="${esc(x.sieve)}">${__("all")}</button>` : ""}</td>
+					</tr>`;
+				}).join("")}</tbody></table>`
+			: `<div class="ls-empty" style="padding:26px;">${
+				__("Assort something first — you can only ask to keep what you have kept.")}</div>`}
+			${(REQS.rows || []).map((q) => `
+				<div class="ls-rq" data-name="${esc(q.name)}">
+					<span class="ls-st ${esc((q.status || "").toLowerCase())}">${esc(q.status)}</span>
+					<b>${ct(q.total_cts)} ct</b>
+					<span class="who">${(q.items || []).map((i) => esc(i.sieve) + " " + ct(i.cts)).join(" · ")}</span>
+					<span class="who">· ${esc(q.requested_label || "")} ${esc((q.requested_on || "").slice(0, 16))}${
+						q.decided_label ? " · " + __("by") + " " + esc(q.decided_label) : ""}</span>
+					${q.status === "Pending" && REQS.can_approve ? `<span class="sp">
+						<button class="ls-yes" data-name="${esc(q.name)}">${__("APPROVE")}</button>
+						<button class="ls-no" data-name="${esc(q.name)}">${__("Reject")}</button></span>` : ""}
+				</div>`).join("")}`);
+	}
+
+	root.on("input", ".ls-kin", function () {
+		const sv = $(this).data("sv");
+		const x = ROWS.find((r) => r.sieve === sv);
+		const v = flt(this.value);
+		if (v > 0) ASK[sv] = v; else delete ASK[sv];
+		// never let somebody ask for more than is free — the server refuses it
+		// anyway, but finding out at REQUEST is finding out too late
+		const over = x && v > freeFor(x) + 0.0005;
+		$(this).css("border-color", over ? "#b02a2a" : "");
+		root.find(".ls-ask").prop("disabled", !Object.keys(ASK).length
+			|| ROWS.some((r) => flt(ASK[r.sieve]) > freeFor(r) + 0.0005));
+	});
+
+	root.on("click", ".ls-full", function () {
+		const sv = $(this).data("sv");
+		const x = ROWS.find((r) => r.sieve === sv);
+		if (!x) return;
+		ASK[sv] = freeFor(x);
+		paintKeep();
+	});
+
+	root.on("click", ".ls-ask", function () {
+		const rows = Object.keys(ASK).map((sieve) => ({ sieve, cts: flt(ASK[sieve]) }))
+			.filter((r) => r.cts > 0);
+		if (!rows.length || !LOT) return;
+		const total = rows.reduce((a, r) => a + r.cts, 0);
+		frappe.confirm(
+			__("Ask to keep <b>{0} ct</b> off {1}?", [ct(total), esc(LOT.name)]) + "<br><br>"
+			+ rows.map((r) => `${esc(r.sieve)} — <b>${ct(r.cts)} ct</b>`).join("<br>")
+			+ "<br><br>" + __("Nothing leaves the tray until a manager approves it."),
+			() => {
+				frappe.dom.freeze(__("Requesting…"));
+				frappe.call({ method: API + ".create_stone_purchase_request",
+					args: { lot: LOT.name, rows: JSON.stringify(rows) } })
+					.then((r) => {
+						frappe.dom.unfreeze();
+						Object.keys(ASK).forEach((k) => delete ASK[k]);
+						frappe.show_alert({ indicator: "green", message:
+							__("{0} — {1} ct asked for. A manager decides it.",
+								[(r.message || {}).name, ct(total)]) }, 7);
+						loadReqs();
+					}).catch(() => frappe.dom.unfreeze());
+			});
+	});
+
+	root.on("click", ".ls-yes, .ls-no", function () {
+		const nm = $(this).data("name");
+		const yes = $(this).hasClass("ls-yes");
+		frappe.confirm(yes
+			? __("Approve {0}? The carats come off the tray and are ours to keep.", [esc(nm)])
+			: __("Reject {0}?", [esc(nm)]),
+			() => {
+				frappe.dom.freeze(yes ? __("Approving…") : __("Rejecting…"));
+				frappe.call({ method: API + ".decide_stone_purchase_request",
+					args: { name: nm, decision: yes ? "Approved" : "Rejected" } })
+					.then(() => {
+						frappe.dom.unfreeze();
+						frappe.show_alert({ indicator: yes ? "green" : "orange",
+							message: __("{0} {1}.", [nm, yes ? __("approved") : __("rejected")]) }, 6);
+						// the tray changed under the page — take it from the server
+						// rather than trusting what is in memory
+						open(LOT.name);
+					}).catch(() => frappe.dom.unfreeze());
+			});
+	});
+
+	function loadReqs() {
+		if (!LOT) return Promise.resolve();
+		return frappe.call({ method: API + ".get_stone_purchase_requests", freeze: false,
+			args: { lot: LOT.name } }).then((r) => {
+			REQS = r.message || REQS;
+			paintKeep();
+			paintTable();
+		});
+	}
+
 	function rowHtml(x, i) {
+		// rejection is actual less selected, and buying takes the same amount off
+		// BOTH — so what goes back to the provider never moves
 		const rj = r3(flt(x.actual) - flt(x.selected));
 		const bad = flt(x.selected) > flt(x.actual) + 0.0005;
+		const bought = flt(x.purchased);
 		return `<tr class="${bad ? "ls-bad" : ""}" data-i="${i}">
-			<td class="ls-sv"><i data-dot="${i}"></i>${esc(x.sieve)}</td>
+			<td class="ls-sv"><i data-dot="${i}"></i>${esc(x.sieve)}${
+				bought ? `<div class="ls-bought">${__("{0} ct bought", [ct(bought)])}</div>` : ""}</td>
 			<td class="num"><input type="number" step="0.001" min="0" class="ls-in"
-				data-f="actual" data-i="${i}" placeholder="0.000" value="${x.actual || ""}"></td>
+				data-f="actual" data-i="${i}" placeholder="0.000" value="${x.actual || ""}"
+				title="${__("as assorted — what has been bought is shown under the sieve")}"></td>
 			<td class="num"><input type="number" step="0.001" min="0" class="ls-in"
 				data-f="selected" data-i="${i}" placeholder="0.000" value="${x.selected || ""}"></td>
 			<td class="num ls-rej ${rj ? "" : "zero"}">${bad ? __("over") : ct(rj)}</td>
@@ -321,6 +521,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 				__("Nothing on the tray yet — add the first sieve above.")}</td></tr>`);
 		paintDots();
 		paintTop();
+		paintKeep();
 	}
 
 	root.on("click", ".ls-back", showBoard);
@@ -386,7 +587,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	root.on("click", ".ls-addbtn", function () {
 		const sv = (F.pick && F.pick.get_value()) || free()[0];
 		if (!sv || used().has(sv)) return;
-		ROWS.push({ sieve: sv, actual: 0, selected: 0 });
+		ROWS.push({ sieve: sv, actual: 0, selected: 0, purchased: 0 });
 		paintTable();
 		refreshPicker();
 		setTimeout(() => root.find(`.ls-in[data-f="actual"][data-i="${ROWS.length - 1}"]`).focus(), 30);
@@ -400,11 +601,15 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	function fill(lot) {
 		ROWS.length = 0;
 		((lot && lot.items) || []).forEach((i) =>
-			ROWS.push({ sieve: i.sieve, actual: flt(i.actual), selected: flt(i.selected) }));
+			ROWS.push({ sieve: i.sieve, actual: flt(i.actual), selected: flt(i.selected),
+				purchased: flt(i.purchased) }));
 	}
 
 	function showBoard() {
 		LOT = null; SAVE = "";
+		REQS = { rows: [], can_approve: 0 };
+		Object.keys(ASK).forEach((k) => delete ASK[k]);
+		root.find(".ls-keep").empty();
 		root.find(".ls-one").hide();
 		root.find(".ls-board").show();
 		page.set_title(__("Lot Selection"));
@@ -422,6 +627,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			page.set_title(LOT.name);
 			paintBar();
 			paintTable();
+			loadReqs();
 		});
 	}
 
