@@ -11670,7 +11670,22 @@ def save_price_chart(payload):
 
 
 def _price_chart_letter_html(d):
-	"""The customer-facing rate letter (A4). d = get_price_chart payload."""
+	"""The customer-facing rate letter (A4).
+
+	It goes out under our name to a party who will hold us to it, so it is laid
+	out as a document rather than a screen: one ruled table per kind of charge,
+	every column headed, every figure right-aligned under the heading that says
+	what it is. A rate with a minimum or a threshold gets its own column instead
+	of being crammed into the rate cell in brackets.
+
+	The closing block is pinned to the FOOT of the sheet with position:fixed,
+	which wkhtmltopdf honours against the page box. That replaced an estimate of
+	how much blank space to insert — it had to guess the rendered height of every
+	row and carried a measured fudge factor, and when it guessed low the
+	signature floated up the page, which is exactly where it was last seen.
+	"""
+	esc = frappe.utils.escape_html
+
 	def money(v):
 		"""Indian grouping: 185000 -> 1,85,000."""
 		n = flt(v)
@@ -11689,14 +11704,27 @@ def _price_chart_letter_html(d):
 			sw = ",".join(parts + [tail])
 		out = sw + ("{:.2f}".format(frac)[1:] if frac >= 0.005 else "")
 		return ("-" if neg else "") + out
-	def bracket(r):
-		if flt(r["to_ct"]):
-			return "{0} – {1} ct".format(r["from_ct"], r["to_ct"])
-		return "{0} ct & above".format(r["from_ct"]) if flt(r["from_ct"]) else "any size"
-	# Diamonds read by QUALITY, not as one run of rows: a party looks up "what do
-	# I pay for EF in this size", and mixing the qualities together makes that a
-	# search. Each quality gets its own block, EF first because it is the one most
-	# charts lead on, then GH, then anything else in its own order.
+
+	def span(frm, to, unit="ct"):
+		"""A weight range as a party reads it."""
+		if flt(to):
+			return "{0} – {1} {2}".format(flt(frm), flt(to), unit)
+		if flt(frm):
+			return "{0} {1} &amp; above".format(flt(frm), unit)
+		return "Any weight"
+
+	def sec(title, head, body, note=""):
+		if not body:
+			return ""
+		return ("<div class='sec'><div class='st'>{0}</div>"
+			"<table class='t'><thead>{1}</thead><tbody>{2}</tbody></table>{3}</div>").format(
+			title, head, body,
+			"<div class='note'>{0}</div>".format(note) if note else "")
+
+	# ---- diamonds: one table, quality carried in its own column -------------
+	# A party looks up "what do I pay for EF at this size", so the quality is a
+	# column they can run a finger down rather than a chip above a sub-table.
+	# It prints once per group; the rule under the group does the separating.
 	def _q_rank(q):
 		u = (q or "").upper()
 		return (0 if "EF" in u else 1 if "GH" in u else 2, u)
@@ -11710,176 +11738,197 @@ def _price_chart_letter_html(d):
 		by_q[q].append(r)
 	order.sort(key=_q_rank)
 
-	def _dmd_rows(rows):
-		return "".join("<tr><td>{0}</td><td class='r'>₹ {1}</td></tr>".format(
-			bracket(r), money(r["rate"]))
-			for r in rows)
+	dmd_rows = []
+	for q in order:
+		rows = sorted(by_q[q], key=lambda r: flt(r["from_ct"]))
+		for i, r in enumerate(rows):
+			dmd_rows.append(
+				"<tr class='{cls}'><td class='q'>{q}</td><td>{sz}</td>"
+				"<td class='r'>₹ {rate}</td></tr>".format(
+					cls="grp" if i == 0 and dmd_rows else "",
+					q=esc(q) if i == 0 else "",
+					sz=span(r["from_ct"], r["to_ct"]),
+					rate=money(r["rate"])))
+	dmd = sec("Diamond Rates",
+		"<tr><th style='width:26%'>Quality</th><th>Size</th>"
+		"<th class='r' style='width:26%'>Rate / ct</th></tr>",
+		"".join(dmd_rows))
 
-	dmd = "".join(
-		"<div class='qblk'><div class='qh'>{0}</div>"
-		"<table><thead><tr><th>Size</th><th class='r'>Rate / ct</th></tr></thead>"
-		"<tbody>{1}</tbody></table></div>".format(
-			frappe.utils.escape_html(q), _dmd_rows(by_q[q])) for q in order)
-	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
-		frappe.utils.escape_html(r["certification"])
-			+ (" ({0} – {1} ct{2})".format(r["from_ct"], r["to_ct"], ", solitaire" if cint(r.get("solitaire")) else "")
-				if flt(r.get("to_ct")) else ""),
-		("₹ {0} / ct (min ₹ {1})".format(money(r["rate"]), money(r.get("min_amount"))) if flt(r.get("min_amount"))
-			else "₹ {0} / ct".format(money(r["rate"]))) if r.get("basis") == "Per Ct"
-		else ("₹ " + money(r["rate"]) + " / piece" if flt(r["rate"]) else "Included"))
-		for r in d.get("certification_charges", []))
-	psr = "".join("<tr><td>{0}{1}</td><td class='r'>₹ {2} / ct</td></tr>".format(
-		frappe.utils.escape_html(r["stone"]),
-		("" if not flt(r.get("from_ct")) and not flt(r.get("to_ct"))
-			else " ({0} – {1} ct)".format(r["from_ct"], r["to_ct"]) if flt(r.get("to_ct"))
-			else " ({0} ct & above)".format(r["from_ct"])),
-		money(r["rate"])) for r in d.get("precious_stone_rates", []))
-	mkr = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}{3}{4}</td></tr>".format(
-		frappe.utils.escape_html(r["design_type"] or "All designs (default)"), r["basis"],
-		money(r["rate"]) + ("/g" if r["basis"] == "Per Gram" else "/pc"),
-		" · min ₹ " + money(r["min_per_piece"]) if flt(r.get("min_per_piece")) else "",
-		" · flat < {0} g".format(flt(r["flat_below_gm"])) if flt(r.get("flat_below_gm")) else "")
+	# ---- coloured / lab-grown buckets: same shape, one table each -----------
+	def bucket(rows):
+		return "".join("<tr><td>{0}</td><td class='r'>₹ {1}</td><td class='r'>{2}</td></tr>".format(
+			span(r["from_ct"], r["to_ct"]), money(r["rate"]),
+			"per piece" if r.get("basis") == "Per Piece" else "per ct") for r in rows)
+	BHEAD = ("<tr><th>Weight</th><th class='r' style='width:26%'>Rate</th>"
+		"<th class='r' style='width:20%'>Basis</th></tr>")
+
+	ps = "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td><td class='r'>per ct</td></tr>".format(
+		esc(r["stone"]), span(r.get("from_ct"), r.get("to_ct")), money(r["rate"]))
+		for r in d.get("precious_stone_rates", []))
+
+	# ---- making: the minimum and the threshold are COLUMNS ------------------
+	# They were parenthetical scraps on the end of the rate. They are conditions
+	# a party is charged under, so they get headed columns of their own and a
+	# dash where they do not apply.
+	mkr = "".join(
+		"<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td>"
+		"<td class='r'>{3}</td><td class='r'>{4}</td></tr>".format(
+			esc(r["design_type"] or "All designs"),
+			esc(r["basis"] or "Per Gram"),
+			money(r["rate"]) + ("&thinsp;/&thinsp;g" if r["basis"] == "Per Gram" else "&thinsp;/&thinsp;pc"),
+			("₹ " + money(r["min_per_piece"])) if flt(r.get("min_per_piece")) else "—",
+			("below {0} g".format(flt(r["flat_below_gm"]))) if flt(r.get("flat_below_gm")) else "—")
 		for r in d.get("making_rules", []))
-	def brk(rows):
-		return "".join("<tr><td>{0}</td><td class='r'>₹ {1} / {2}</td></tr>".format(
-			("any weight" if not flt(r["from_ct"]) and not flt(r["to_ct"])
-				else ("{0} – {1} ct".format(r["from_ct"], r["to_ct"]) if flt(r["to_ct"])
-				else "{0} ct & above".format(r["from_ct"]))), money(r["rate"]),
-			"pc" if r.get("basis") == "Per Piece" else "ct") for r in rows)
-	cs = brk(d.get("cs_rates", []))
-	cz = brk(d.get("cz_rates", []))
-	cvd = brk(d.get("cvd_rates", []))
-	sw = brk(d.get("sw_rates", []))
-	flats = []
-	flat_rows = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(k, v) for k, v in flats)
-	sec = lambda title, table_head, body: (
-		"<div class='sec'><div class='st'>{0}</div><table>{1}<tbody>{2}</tbody></table></div>".format(
-			title, table_head, body) if body else "")
-	esc = frappe.utils.escape_html
-	# one-page discipline: the more rows the chart carries, the denser the type
-	total_rows = (len(d.get("diamond_rates", [])) + len(d.get("precious_stone_rates", []))
-		+ len(d.get("cs_rates", [])) + len(d.get("cz_rates", [])) + len(d.get("cvd_rates", [])) + len(d.get("sw_rates", []))
-		+ len(d.get("making_rules", [])) + len(d.get("certification_charges", [])))
+
+	# ---- certification ------------------------------------------------------
+	certs = "".join(
+		"<tr><td>{0}</td><td>{1}</td><td class='r'>{2}</td><td class='r'>{3}</td></tr>".format(
+			esc(r["certification"]) + (" · solitaire" if cint(r.get("solitaire")) else ""),
+			span(r.get("from_ct"), r.get("to_ct")) if flt(r.get("to_ct")) else "Any weight",
+			("₹ " + money(r["rate"])) if flt(r["rate"]) else "Included",
+			("per ct" if r.get("basis") == "Per Ct" else "per piece") if flt(r["rate"]) else "—")
+		for r in d.get("certification_charges", []))
+	cert_note = ""
+	mins = [r for r in d.get("certification_charges", []) if flt(r.get("min_amount"))]
+	if mins:
+		cert_note = "Minimum " + ", ".join("₹ {0} on {1}".format(
+			money(r["min_amount"]), esc(r["certification"])) for r in mins) + "."
+
+	body = (dmd
+		+ sec("Precious Stone Rates",
+			"<tr><th style='width:26%'>Stone</th><th>Weight</th>"
+			"<th class='r' style='width:20%'>Rate</th><th class='r' style='width:14%'>Basis</th></tr>", ps)
+		+ sec("Colour Stone Rates", BHEAD, bucket(d.get("cs_rates", [])))
+		+ sec("CZ Rates", BHEAD, bucket(d.get("cz_rates", [])))
+		+ sec("CVD Rates", BHEAD, bucket(d.get("cvd_rates", [])))
+		+ sec("Other Stone Rates", BHEAD, bucket(d.get("sw_rates", [])))
+		+ sec("Making Charges",
+			"<tr><th>Design</th><th style='width:16%'>Basis</th>"
+			"<th class='r' style='width:18%'>Rate</th><th class='r' style='width:16%'>Minimum</th>"
+			"<th class='r' style='width:18%'>Flat rate</th></tr>", mkr)
+		+ sec("Certification Charges",
+			"<tr><th style='width:30%'>Certification</th><th>Weight</th>"
+			"<th class='r' style='width:20%'>Charge</th><th class='r' style='width:14%'>Basis</th></tr>",
+			certs, cert_note))
+
+	# one-page discipline: the more the chart carries, the tighter the type
+	total_rows = sum(len(d.get(k, [])) for k in ("diamond_rates", "precious_stone_rates",
+		"cs_rates", "cz_rates", "cvd_rates", "sw_rates", "making_rules", "certification_charges"))
 	if total_rows > 26:
-		density = "font-size:10px;", "3px 6px", "44px"
+		base_font, cell_pad, logo_h = "10px", "3px 8px", "42px"
 	elif total_rows > 14:
-		density = "font-size:11px;", "4px 7px", "52px"
+		base_font, cell_pad, logo_h = "11px", "4px 8px", "50px"
 	else:
-		density = "font-size:12.5px;", "5px 8px", "64px"
-	base_font, cell_pad, logo_h = density
-	# How far to push the signature down so it sits at the FOOT of the sheet.
-	#
-	# wkhtmltopdf's WebKit collapses percentage heights — html/body/table at 100%
-	# gives nothing — so the gap is a measured number of points rather than "the
-	# rest of the page". The content height is estimated from what is actually
-	# being printed (sections, quality blocks, table heads, rows), and the gap is
-	# whatever is left of the A4 text column after the closing block, less a
-	# safety margin. Overshooting costs a second page carrying only a signature,
-	# so the estimate is deliberately generous and the margin absorbs the rest.
-	# The scale is MEASURED, not assumed: wkhtmltopdf renders to a viewport and
-	# scales the result onto the page, so a CSS point does not land as a point.
-	# Bisected against a real render — 240pt was the largest gap that stayed on
-	# one page where the arithmetic said 293pt, so a point here is worth 1.22.
-	SHEET_PT = 774          # A4 297mm less 12mm margins top and bottom
-	CLOSING_PT = 55         # signature line + rule + tagline, measured
-	SAFETY_PT = 20
-	PT_SCALE = 1.22
-	EST_CUSHION = 1.08      # the row estimate ran ~7% under a measured render
-	row_pt = 13.0 if total_rows <= 14 else 11.5 if total_rows <= 26 else 10.0
-	n_qblocks = len({(r["quality"] or "All qualities") for r in d.get("diamond_rates", [])})
-	n_sections = sum(1 for x in (dmd, psr, cs, cz, cvd, mkr, certs) if x)
-	n_tables = n_sections + max(0, n_qblocks - 1)
-	est = (82                       # letterhead + the chart's name and date
-		+ 20 * n_sections           # each section's rule and title
-		+ 22 * n_qblocks            # each quality's own caption
-		+ 14 * n_tables             # each table's column heads
-		+ row_pt * total_rows
-		+ (34 if d.get("payment_terms") else 0)
-		+ (30 if d.get("terms") else 0))
-	gap_h = max(18, int((SHEET_PT - CLOSING_PT - SAFETY_PT - est * EST_CUSHION) / PT_SCALE))
+		base_font, cell_pad, logo_h = "12px", "6px 8px", "60px"
+
 	import base64 as _b64
-	logo_html = ""
 	try:
 		lp = frappe.get_app_path("jewelima", "public", "images", "jewelima-letterhead.png")
-		logo_html = "<img src='data:image/png;base64,{0}'>".format(_b64.b64encode(open(lp, "rb").read()).decode())
+		logo_html = "<img src='data:image/png;base64,{0}'>".format(
+			_b64.b64encode(open(lp, "rb").read()).decode())
 	except Exception:
-		logo_html = "<div style='font-size:21px;font-weight:800;color:#1f4e5f;'>JEWELIMA</div>"
+		logo_html = "<div class='wordmark'>JEWELIMA</div>"
+
+	terms_block = ""
+	if d.get("payment_terms"):
+		terms_block += ("<div class='sec'><div class='st'>Payment Terms</div>"
+			"<div class='terms'>{0}</div></div>").format(esc(d["payment_terms"]))
+	if d.get("terms"):
+		terms_block += ("<div class='sec'><div class='st'>Terms &amp; Conditions</div>"
+			"<div class='terms'>{0}</div></div>").format(esc(d["terms"]))
+
 	return """<!doctype html><html><head><meta charset='utf-8'><style>
 		@page {{ size: A4; margin: 12mm 14mm; }}
-		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; {base_font} }}
-		.head {{ border-bottom: 3px solid #1f4e5f; padding-bottom: 8px; margin-bottom: 12px; }}
-		.head img {{ max-height: {logo_h}; max-width: 320px; }}
-		.foot {{ margin-top: 12px; text-align: center; }}
-		.foot .rule {{ border-top: 1px solid #1f4e5f; margin-bottom: 8px; }}
-		.foot .tag {{ font-size: 12px; letter-spacing: .35em; color: #1f4e5f; text-transform: lowercase; }}
-		.doc {{ font-size: 13px; color: #666; margin-top: 2px; }}
-		.meta {{ margin: 10px 0 4px; }}
-		.meta b {{ font-size: 16px; }}
-		.meta span {{ float: right; color: #666; }}
-		.qnote {{ color: #444; font-size: 12px; }}
-		.sec {{ margin: 10px 0; page-break-inside: avoid; }}
-		.st {{ font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-			color: #1f4e5f; border-bottom: 1px solid #1f4e5f; padding-bottom: 3px; margin-bottom: 6px; }}
-		table {{ width: 100%; border-collapse: collapse; }}
-		th {{ text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
-			color: #888; padding: 4px 8px; border-bottom: 1px solid #ddd; }}
-		td {{ padding: {cell_pad}; border-bottom: 1px solid #eee; }}
-		td.r, th.r {{ text-align: right; white-space: nowrap; }}
-		.terms {{ margin-top: 14px; font-size: 11.5px; color: #444; white-space: pre-wrap; }}
-		/* a quality is a heading over its own small table, not a repeated column */
-		.qblk {{ margin-bottom: 9px; page-break-inside: avoid; }}
-		.qblk:last-child {{ margin-bottom: 0; }}
-		.qh {{ display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .07em;
-			text-transform: uppercase; color: #1f4e5f; background: #eef4f6;
-			border: 1px solid #cfe0e6; border-radius: 3px; padding: 2px 9px; margin-bottom: 4px; }}
-		/* The signature belongs at the FOOT of the page, not wherever the terms
-		   happened to end. wkhtmltopdf lays this out with a table rather than
-		   flexbox — its WebKit is old enough that flex justify-content is not
-		   reliable — and the closing block is pushed down by a spacer cell that
-		   takes whatever height is left. */
-		.sheet {{ width: 100%; border-collapse: collapse; }}
-		.sheet td {{ border: 0; padding: 0; vertical-align: top; }}
-		.sheet td.gap {{ height: {gap_h}pt; }}
-		.closing {{ page-break-inside: avoid; }}
-		.sign {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
+		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a;
+			font-size: {base_font}; margin: 0; }}
+
+		/* letterhead */
+		.head {{ border-bottom: 2.5pt solid #1f4e5f; padding-bottom: 7px; }}
+		.head img {{ max-height: {logo_h}; max-width: 300px; }}
+		.wordmark {{ font-size: 21px; font-weight: 800; color: #1f4e5f; letter-spacing: .04em; }}
+		.kind {{ float: right; font-size: 10px; font-weight: 700; letter-spacing: .22em;
+			text-transform: uppercase; color: #1f4e5f; padding-top: 10px;
+			white-space: nowrap; }}
+
+		/* who it is for, and when */
+		.meta {{ width: 100%; border-collapse: collapse; margin: 11px 0 4px; }}
+		.meta td {{ border: 0; padding: 0; vertical-align: bottom; }}
+		.meta .nm {{ font-size: 17px; font-weight: 800; letter-spacing: -.01em; }}
+		.meta .for {{ font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: #7a8a90; }}
+		.meta .dt {{ text-align: right; font-size: 11px; color: #555; }}
+		.meta .dt b {{ display: block; font-size: 9.5px; letter-spacing: .12em;
+			text-transform: uppercase; color: #7a8a90; font-weight: 700; }}
+		.unitline {{ font-size: 9.5px; color: #7a8a90; letter-spacing: .04em;
+			border-top: 1px solid #e2e8ea; padding-top: 4px; margin-bottom: 2px; }}
+
+		/* sections and their tables */
+		.sec {{ margin: 11px 0 0; page-break-inside: avoid; }}
+		.st {{ font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+			color: #1f4e5f; margin-bottom: 5px; }}
+		table.t {{ width: 100%; border-collapse: collapse; border: 1px solid #d7e0e3; }}
+		table.t th {{ text-align: left; font-size: 8.5px; text-transform: uppercase;
+			letter-spacing: .07em; color: #4b6b76; background: #eef4f6;
+			padding: 5px 8px; border-bottom: 1px solid #cfe0e6; }}
+		table.t td {{ padding: {cell_pad}; border-bottom: 1px solid #edf1f2; }}
+		table.t tbody tr:last-child td {{ border-bottom: 0; }}
+		table.t td.r, table.t th.r {{ text-align: right; white-space: nowrap; }}
+		table.t td.q {{ font-weight: 700; color: #1f4e5f; }}
+		/* a new quality starts a new group — the rule says so without a heading */
+		table.t tr.grp td {{ border-top: 1px solid #cfe0e6; }}
+		.note {{ font-size: 9.5px; color: #667; margin-top: 4px; font-style: italic; }}
+		.terms {{ font-size: 10.5px; color: #333; white-space: pre-wrap; line-height: 1.5;
+			border: 1px solid #d7e0e3; border-left: 2.5pt solid #1f4e5f; padding: 7px 10px; }}
+
+		/* THE FOOT OF THE SHEET.
+		   position:fixed does NOT work here: wkhtmltopdf anchors a fixed element
+		   to the document, not to the page box, so it lands wherever the content
+		   happens to end — which is how the signature came to be floating two
+		   thirds up the sheet.
+		   What does work is an outer table with an explicit height in MILLIMETRES
+		   and a bottom-aligned last row: mm are page units and survive the scaling
+		   wkhtmltopdf applies to everything else. The height is MEASURED, not
+		   assumed — bisected against real renders, 266mm was the largest that
+		   still came out on one page and 268mm tipped to two, so 262mm is the
+		   working figure with a little air. It puts the tagline at ~93% of the
+		   sheet. Content longer than the sheet simply pushes on to a second page
+		   and takes the closing block with it, which is what should happen. */
+		table.sheet {{ width: 100%; height: 262mm; border-collapse: collapse; }}
+		table.sheet > tbody > tr > td {{ border: 0; padding: 0; }}
+		td.pagebody {{ vertical-align: top; }}
+		td.pagefoot {{ vertical-align: bottom; }}
+		.sign {{ width: 100%; border-collapse: collapse; }}
 		.sign td {{ border: 0; padding: 0; vertical-align: bottom; }}
-		.sign .who {{ font-weight: 700; }}
+		.sign .who {{ font-weight: 700; font-size: 11px; }}
+		.sign .ph {{ font-size: 10px; color: #555; }}
 		.sign td.sg {{ text-align: right; }}
-		.sign .line {{ display: inline-block; border-top: 1px solid #999; padding-top: 4px;
-			width: 220px; text-align: center; color: #666; font-size: 11px; }}
+		.sign .line {{ display: inline-block; border-top: 1px solid #98a8ad; padding-top: 3px;
+			width: 210px; text-align: center; color: #667; font-size: 9.5px; }}
+		.rule {{ border-top: 1px solid #1f4e5f; margin: 7px 0 5px; }}
+		.tag {{ text-align: center; font-size: 10.5px; letter-spacing: .35em;
+			color: #1f4e5f; text-transform: lowercase; }}
 	</style></head><body>
-		<table class='sheet'><tr><td>
-			<div class='head'>{logo}<div class='doc'>Rate Chart</div></div>
-			<div class='meta'><b>{chart_name}</b><span>{chart_date}</span></div>
-			{qnote}
-			{dmd_sec}{ps_sec}{cs_sec}{cz_sec}{cvd_sec}{mk_sec}{cert_sec}
-			{payment}{terms}
+		<table class='sheet'><tr><td class='pagebody'>
+			<div class='head'><span class='kind'>Rate Chart</span>{logo}</div>
+			<table class='meta'><tr>
+				<td><div class='for'>Rates for</div><div class='nm'>{chart_name}</div></td>
+				<td class='dt'><b>Dated</b>{chart_date}</td>
+			</tr></table>
+			<div class='unitline'>All rates in Indian Rupees. Weights in carats unless stated otherwise.</div>
+			{body}
+			{terms}
 		</td></tr>
-		<tr><td class='gap'></td></tr>
-		<tr><td>
-			<div class='closing'>
-				<table class='sign'><tr>
-					<td><div class='who'>{signatory}</div><div>{signatory_phone}</div></td>
-					<td class='sg'><div class='line'>Authorised Signatory</div></td>
-				</tr></table>
-				<div class='foot'><div class='rule'></div><div class='tag'>crafting &mdash; for &mdash; you</div></div>
-			</div>
+		<tr><td class='pagefoot'>
+			<table class='sign'><tr>
+				<td><div class='who'>{signatory}</div><div class='ph'>{signatory_phone}</div></td>
+				<td class='sg'><div class='line'>Authorised Signatory</div></td>
+			</tr></table>
+			<div class='rule'></div>
+			<div class='tag'>crafting &mdash; for &mdash; you</div>
 		</td></tr></table>
 	</body></html>""".format(
-		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, gap_h=gap_h,
-		logo=logo_html,
+		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, logo=logo_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
-		qnote="",
-		dmd_sec=("<div class='sec'><div class='st'>Diamond Rates</div>{0}</div>".format(dmd)
-			if dmd else ""),
-		cert_sec=sec("Certification Charges", "", certs),
-		ps_sec=sec("Precious Stone Rates", "", psr),
-		mk_sec=sec("Making Charges", "<thead><tr><th>Design</th><th>Basis</th><th class='r'>Rate</th></tr></thead>", mkr),
-		cs_sec=sec("Colour Stone Rates", "", cs),
-		cz_sec=sec("CZ Rates", "", cz),
-		cvd_sec=sec("CVD Rates", "", cvd),
-		payment="<div class='sec'><div class='st'>Payment Terms</div><div class='terms'>{0}</div></div>".format(esc(d["payment_terms"])) if d["payment_terms"] else "",
-		terms="<div class='terms'>{0}</div>".format(esc(d["terms"])) if d["terms"] else "",
+		body=body, terms=terms_block,
 		signatory=esc(d["signatory"]), signatory_phone=esc(d["signatory_phone"]))
 
 
