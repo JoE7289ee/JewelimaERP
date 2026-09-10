@@ -14787,16 +14787,23 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			ws.cell(row=r, column=C["tc"], value=0)
 			ws.cell(row=r, column=C["tv"], value=0)
 		stone_terms = []
+		# Stone WEIGHTS are written unrounded. Rounding them to 3 here broke the
+		# one sum anybody checks a bill with — net plus the stones should come
+		# back to gross. A carat figure with three decimals converts to FOUR in
+		# grams (0.017 ct x 0.2 = 0.0034 g), so printing 0.003 threw a fraction
+		# away on every line and a lot drifted ~0.002 off its own gross.
+		#
+		# The piece weights beside them (gross, net) were never rounded here, so
+		# the stones were the only column that could not be added back.
 		if jos_ps:
 			ws.cell(row=r, column=C["pspcs"], value=cint(p.get("ps_pcs")) or 0)
-			ws.cell(row=r, column=C["pswt"], value=round(flt(p.get("ps_ct")), 3) or 0)
+			ws.cell(row=r, column=C["pswt"], value=flt(p.get("ps_ct")) or 0)
 			ws.cell(row=r, column=C["psv"], value=flt(p.get("ps_va")) or 0)
 			stone_terms.append("{0}{1}".format(Lc("psv"), r))
 		if jos_cs:
 			cs_ct = flt(p.get("stn_ct"))
 			ws.cell(row=r, column=C["cspcs"], value=cint(p.get("stn_pcs")) or 0)
-			ws.cell(row=r, column=C["cswt"],
-				value=round(cs_ct * CARAT_GRAMS, 3) if cs_in_g else round(cs_ct, 3))
+			ws.cell(row=r, column=C["cswt"], value=(cs_ct * CARAT_GRAMS) if cs_in_g else cs_ct)
 			ws.cell(row=r, column=C["csv"], value=flt(p.get("stn_va")) or 0)
 			stone_terms.append("{0}{1}".format(Lc("csv"), r))
 		# the row total had been gold + making + diamond only, so any piece
