@@ -5,8 +5,15 @@
 // Left: what's being repacked (locked to the Stone Issue warehouse, live stock
 // shown). Right: what it splits into — targets restricted to the source's own
 // family (CZ -> CZ sieves; DIAMOND -> any diamond quality + sieve) and they must
-// add up EXACTLY. Placing only creates a REQUEST; a System/Stock Manager
-// approves below, and only then a Repack Stock Entry moves the stock.
+// add up EXACTLY. Placing only creates a REQUEST; a manager approves it in the
+// table below, and only then a Repack Stock Entry moves the stock.
+//
+// The approvals used to sit on their own page. They are back here because the
+// two halves are one job: the person who splits a parcel needs to see whether
+// the last one went through before they weigh the next, and a manager should
+// not have to change screens to sign off what is in front of them. Approve and
+// Reject only appear for the roles that may use them — and the API refuses the
+// rest outright, so the buttons are a courtesy, not the control.
 // Route: /app/repack-stock
 
 frappe.pages["repack-stock"].on_page_load = function (wrapper) {
@@ -67,6 +74,16 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 		.rp2-st{font-weight:800;font-size:11px;padding:1px 9px;border-radius:9px;}
 		.rp2-st.Pending{background:#fff3cd;color:#8a6d00;} .rp2-st.Approved{background:#e8f5e9;color:#2e7d32;}
 		.rp2-st.Rejected{background:#fdecea;color:#b02a2a;}
+		.rp2-panel{margin-top:18px;border:1px solid var(--border-color);border-radius:12px;
+			background:var(--fg-color);overflow:hidden;}
+		.rp2-panel .hd{display:flex;align-items:center;gap:10px;padding:10px 16px;
+			border-bottom:1px solid var(--border-color);flex-wrap:wrap;}
+		.rp2-panel .hd b{font-size:12.5px;letter-spacing:.02em;}
+		.rp2-panel .hd .note{font-size:11.5px;color:var(--text-muted);}
+		.rp2-panel .hd .sp{margin-left:auto;display:flex;gap:6px;align-items:center;}
+		.rp2-hist{border:1px solid var(--border-color);background:var(--fg-color);border-radius:8px;
+			padding:4px 13px;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--text-muted);}
+		.rp2-hist:hover{border-color:#1f618d;color:#1f618d;}
 		.rp2-tabs{display:flex;gap:6px;margin:0 0 8px;}
 		.rp2-tab{border:1px solid var(--border-color);border-radius:8px;padding:4px 14px;font-size:12px;font-weight:700;cursor:pointer;background:var(--control-bg);}
 		.rp2-tab.on{background:var(--primary);border-color:var(--primary);color:#fff;}
@@ -88,6 +105,20 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				</div>
 				<div class="rp2-sieves"></div>
 			</div>
+		</div>
+		<div class="rp2-panel">
+			<div class="hd">
+				<b>${__("Requests")}</b>
+				<span class="note">${__("nothing moves until one is approved")}</span>
+				<span class="sp">
+					<span class="rp2-tabs" style="margin:0;">
+						<span class="rp2-tab on" data-s="Pending">${__("Pending")}</span>
+						<span class="rp2-tab" data-s="all">${__("Recent")}</span>
+					</span>
+					<button class="rp2-hist">${__("HISTORY")}</button>
+				</span>
+			</div>
+			<div class="rp2-body"></div>
 		</div>
 	`);
 	const root = $(page.main);
@@ -228,12 +259,70 @@ frappe.pages["repack-stock"].on_page_load = function (wrapper) {
 				frappe.show_alert({ message: __("Request {0} placed — awaiting approval.", [(r.message || {}).name]), indicator: "green" }, 4);
 				qty.set_value(""); remarks.set_value("");
 				loadSieves();
+				loadList();
 			});
 		});
 	});
 
-	frappe.call({ method: API + ".get_repack_context" }).then((r) => { CTX = r.message || CTX; });
-	// approvals live on their own desk now — this page only PLACES requests
-	page.add_inner_button(__("Requests"), () => frappe.set_route("repack-requests"));
-	page.set_primary_action(__("Refresh"), () => onSource(), "refresh");
+	// ---- the requests, underneath ------------------------------------------
+	function loadList() {
+		frappe.call({ method: API + ".list_repack_requests", freeze: false, args: { status: listStatus } })
+			.then((r) => {
+				const rows = r.message || [];
+				root.find(".rp2-body").html(rows.length ? `<table class="rp2-reqtbl"><thead><tr>
+					<th>${__("Request")}</th><th>${__("Source")}</th><th>${__("Split into")}</th>
+					<th>${__("By")}</th><th>${__("Status")}</th><th></th></tr></thead><tbody>`
+					+ rows.map((x) => `<tr>
+						<td><b>${esc(x.name)}</b><br><span style="color:var(--text-muted);font-size:11px;">${
+							esc((x.requested_on || "").slice(0, 16))}</span></td>
+						<td>${esc(x.source_item)} · <b>${(x.qty || 0).toFixed(3)} ct</b></td>
+						<td>${x.targets.map((t) => `${esc(t.item)} — ${t.qty.toFixed(3)} ct${
+							t.pcs ? " · " + t.pcs + " pc" : ""}`).join("<br>")}</td>
+						<td>${esc(x.requested_by || "")}</td>
+						<td><span class="rp2-st ${x.status}">${esc(x.status)}</span>
+							${x.stock_entry ? `<br><span style="font-size:11px;color:var(--text-muted);">${esc(x.stock_entry)}</span>` : ""}
+							${x.reject_reason ? `<br><span style="font-size:11px;color:#b02a2a;">${esc(x.reject_reason)}</span>` : ""}</td>
+						<td style="white-space:nowrap;">${x.status === "Pending" && CTX.can_approve
+							? `<button class="btn btn-xs btn-success rp2-ok" data-n="${esc(x.name)}">${__("Approve")}</button>
+							   <button class="btn btn-xs btn-danger rp2-no" data-n="${esc(x.name)}">${__("Reject")}</button>` : ""}</td>
+					</tr>`).join("") + "</tbody></table>"
+					: `<div style="padding:24px;color:var(--text-muted);">${
+						listStatus === "Pending" ? __("Nothing waiting to be approved.") : __("No requests yet.")}</div>`);
+			});
+	}
+	root.on("click", ".rp2-tab", function () {
+		root.find(".rp2-tab").removeClass("on"); $(this).addClass("on");
+		listStatus = $(this).attr("data-s");
+		loadList();
+	});
+	root.on("click", ".rp2-ok", function () {
+		const n = $(this).attr("data-n");
+		frappe.confirm(__("Approve <b>{0}</b>? Stock moves immediately (Repack entry).", [esc(n)]), () => {
+			frappe.dom.freeze(__("Repacking…"));
+			frappe.call({ method: API + ".approve_repack", args: { name: n } }).then((r) => {
+				frappe.dom.unfreeze();
+				frappe.show_alert({ message: __("{0} approved — {1}.", [n, (r.message || {}).stock_entry]), indicator: "green" }, 5);
+				loadList();
+				// the parcel on the left just got smaller — reread it
+				if (src.get_value()) onSource();
+			}).catch(() => frappe.dom.unfreeze());
+		});
+	});
+	root.on("click", ".rp2-no", function () {
+		const n = $(this).attr("data-n");
+		frappe.prompt({ fieldname: "why", label: __("Reason"), fieldtype: "Data" }, (v) => {
+			frappe.call({ method: API + ".reject_repack", args: { name: n, reason: v.why || null } }).then(() => {
+				frappe.show_alert({ message: __("{0} rejected.", [n]), indicator: "red" }, 4);
+				loadList();
+			});
+		}, __("Reject {0}", [n]));
+	});
+	root.on("click", ".rp2-hist", () => frappe.set_route("stone-repack-history"));
+
+	frappe.call({ method: API + ".get_repack_context" }).then((r) => {
+		CTX = r.message || CTX;
+		loadList();
+	});
+	page.set_primary_action(__("Refresh"), () => { onSource(); loadList(); }, "refresh");
+	frappe.pages["repack-stock"].on_page_show = () => loadList();
 };

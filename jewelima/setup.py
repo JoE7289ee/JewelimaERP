@@ -418,6 +418,9 @@ JEWELIMA_STONE_ADMIN_ROLE = "JW Stone Admin"
 JEWELIMA_STONE_ADMIN_PAGES = [
 	"stone-info", "stone-request", "pre-bag", "stone-issue", "stone-return",
 	"stone-history", "stone-stock-info", "sieve-chart", "repack-stock",
+	# reading what became of a repack is not approving one — the buttons stay
+	# manager-only and the API refuses this role either way
+	"stone-repack-history",
 	# assorting a parcel is THIS desk's job and nobody else's — a tray is a
 	# measurement, and the person who took it is the one who may change it. The
 	# stock desk books the parcel in and decides what is bought; the sieving in
@@ -505,6 +508,9 @@ RETIRED_PAGES = ["ws-wax-cleaning", "design-transfer",
 	# the three master screens folded into one (repair-masters)
 	"repair-parties", "repair-tow", "repair-types",
 	"sell-old",
+	# the approvals folded back into Repack Stock (2026-09-10); the record they
+	# leave behind reads on Stone Repack History
+	"repack-requests",
 ]
 
 

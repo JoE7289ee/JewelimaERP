@@ -918,6 +918,18 @@
    "type": "Link"
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "package",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stone Repack History",
+   "link_to": "stone-repack-history",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "folder",
@@ -1213,18 +1225,6 @@
    "keep_closed": 0,
    "label": "Repack Stock",
    "link_to": "repack-stock",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "icon": "package",
-   "indent": 1,
-   "keep_closed": 0,
-   "label": "Repack Requests",
-   "link_to": "repack-requests",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link"
@@ -2758,7 +2758,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-10 19:52:33.433896",
+ "modified": "2026-09-10 23:57:10.748395",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

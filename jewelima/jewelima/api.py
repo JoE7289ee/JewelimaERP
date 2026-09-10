@@ -6060,6 +6060,69 @@ def reject_repack(name, reason=None):
 	return {"name": name}
 
 
+@frappe.whitelist()
+def get_repack_history(period="month", start=None, end=None, status=None, limit=400):
+	"""Every repack ever asked for, and what became of it.
+
+	The requests themselves ARE the record — an approved one carries the Stock
+	Entry it wrote, a rejected one carries the reason — so this reads them back
+	over a window rather than keeping a second ledger that could drift."""
+	frappe.only_for(["System Manager", "Stock Manager", "JW Manager", "JW Stock Admin", "JW Stone Admin"])
+	frm, to, label = _loss_period_range(period, start, end)
+	filters = {}
+	if status in ("Pending", "Approved", "Rejected"):
+		filters["status"] = status
+	if frm and to:
+		filters["requested_on"] = ["between", [str(frm) + " 00:00:00", str(to) + " 23:59:59"]]
+	rows = frappe.get_all("Repack Request", filters=filters,
+		fields=["name", "source_item", "qty", "warehouse", "status", "remarks",
+			"requested_by", "requested_on", "approved_by", "approved_on",
+			"stock_entry", "reject_reason"],
+		order_by="requested_on desc", limit_page_length=cint(limit) or 400)
+
+	tmap = {}
+	if rows:
+		for t in frappe.get_all("Repack Request Item",
+				filters={"parent": ["in", [r.name for r in rows]]},
+				fields=["parent", "item", "qty", "pcs"], order_by="idx"):
+			tmap.setdefault(t.parent, []).append(
+				{"item": t.item, "qty": flt(t.qty), "pcs": cint(t.pcs)})
+
+	who = {r.requested_by for r in rows} | {r.approved_by for r in rows if r.approved_by}
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list(who) or [""]]}, fields=["name", "full_name"])}
+	names = {i.name: (i.item_name or i.name) for i in frappe.get_all("Item",
+		filters={"name": ["in", list({r.source_item for r in rows}) or [""]]},
+		fields=["name", "item_name"])}
+
+	out = {"Pending": 0, "Approved": 0, "Rejected": 0}
+	moved, lines = 0.0, 0
+	res = []
+	for r in rows:
+		tg = tmap.get(r.name, [])
+		out[r.status] = out.get(r.status, 0) + 1
+		if r.status == "Approved":
+			moved += flt(r.qty)
+			lines += len(tg)
+		res.append({
+			"name": r.name, "when": str(r.requested_on or "")[:16],
+			"source_item": r.source_item, "source_name": names.get(r.source_item, r.source_item),
+			"qty": round(flt(r.qty), 3), "warehouse": r.warehouse or "",
+			"targets": tg, "status": r.status,
+			"by": users.get(r.requested_by, r.requested_by or ""),
+			"decided_by": users.get(r.approved_by, r.approved_by or ""),
+			"decided_on": str(r.approved_on or "")[:16],
+			"stock_entry": r.stock_entry or "", "reject_reason": r.reject_reason or "",
+			"remarks": r.remarks or "",
+		})
+	return {"rows": res, "label": label, "totals": {
+		"requests": len(res), "pending": out.get("Pending", 0),
+		"approved": out.get("Approved", 0), "rejected": out.get("Rejected", 0),
+		"moved": round(moved, 3), "lines": lines,
+		"items": len({r["source_item"] for r in res}),
+	}}
+
+
 # --- Selection Tags (their own master — different purpose from the bank's Design Tags)
 @frappe.whitelist()
 def get_selection_tags(with_counts=1):

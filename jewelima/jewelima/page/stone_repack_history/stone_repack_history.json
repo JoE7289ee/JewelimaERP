@@ -1,15 +1,15 @@
 {
  "content": null,
- "creation": "2026-07-31 12:00:00",
+ "creation": "2026-09-10 18:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-01 03:14:03.508277",
+ "modified": "2026-09-10 23:57:18.369853",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "repack-requests",
+ "name": "stone-repack-history",
  "owner": "Administrator",
- "page_name": "repack-requests",
+ "page_name": "stone-repack-history",
  "roles": [
   {
    "role": "System Manager"
@@ -19,11 +19,14 @@
   },
   {
    "role": "JW Manager"
+  },
+  {
+   "role": "JW Stone Admin"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Repack Requests"
+ "title": "Stone Repack History"
 }
