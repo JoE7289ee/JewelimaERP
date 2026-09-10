@@ -1,40 +1,61 @@
 {
- "name": "Stone Lot Sieve",
- "istable": 1,
- "permissions": [],
- "fields": [
-  {
-   "fieldname": "sieve",
-   "fieldtype": "Link",
-   "options": "Diamond Sieve",
-   "label": "Sieve",
-   "reqd": 1,
-   "in_list_view": 1,
-   "columns": 3
-  },
-  {
-   "fieldname": "selected_cts",
-   "fieldtype": "Float",
-   "label": "Selected (ct)",
-   "precision": "3",
-   "in_list_view": 1,
-   "columns": 3
-  }
- ],
  "actions": [],
  "allow_rename": 1,
  "creation": "2026-09-09 09:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "field_order": [
+  "sieve",
+  "actual_cts",
+  "selected_cts",
+  "rejected_cts"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "fieldname": "sieve",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Sieve",
+   "options": "Diamond Sieve",
+   "reqd": 1
+  },
+  {
+   "fieldname": "actual_cts",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Actual (ct)",
+   "precision": "3"
+  },
+  {
+   "columns": 3,
+   "fieldname": "selected_cts",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Selected (ct)",
+   "precision": "3"
+  },
+  {
+   "description": "actual less selected \u2014 derived, never typed",
+   "fieldname": "rejected_cts",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Rejected (ct)",
+   "precision": "3",
+   "read_only": 1
+  }
+ ],
  "index_web_pages_for_search": 1,
+ "istable": 1,
  "links": [],
  "modified": "2026-09-09 09:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
+ "name": "Stone Lot Sieve",
  "owner": "Administrator",
+ "permissions": [],
  "sort_field": "idx",
  "sort_order": "ASC",
- "states": [],
- "field_order": ["sieve", "selected_cts"]
+ "states": []
 }

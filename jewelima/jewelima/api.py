@@ -5135,9 +5135,10 @@ def _lot_row(d, with_items=False):
 	# actually weighed, once we have weighed it
 	out["short"] = round(flt(d.claimed_cts) - flt(d.actual_cts), 3) if flt(d.actual_cts) else 0
 	if with_items:
-		out["items"] = [{"sieve": r.sieve, "selected": flt(r.selected_cts)}
+		out["items"] = [{"sieve": r.sieve, "actual": flt(r.actual_cts),
+			"selected": flt(r.selected_cts), "rejected": flt(r.rejected_cts)}
 			for r in frappe.get_all("Stone Lot Sieve", filters={"parent": d.name},
-				fields=["sieve", "selected_cts"], order_by="idx")]
+				fields=["sieve", "actual_cts", "selected_cts", "rejected_cts"], order_by="idx")]
 	return out
 
 
@@ -5214,9 +5215,12 @@ def get_stone_lot(name):
 
 @frappe.whitelist()
 def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, remarks=None):
-	"""The sieve table: what the parcel actually weighed, and what we are
-	keeping of it. The rejection is derived, never typed — it is the one figure
-	nobody should be able to get wrong."""
+	"""The sieve table: what each sieve weighed, and what we are keeping of it.
+
+	The rejection is derived on every line — that sieve's actual less what we
+	kept — and never typed, on any row. It is the one figure nobody should be
+	able to get wrong, and per sieve it is also the figure the provider is
+	handed back, sieve by sieve, when the parcel goes."""
 	_require_stone_lot()
 	d = frappe.get_doc("Stone Lot", name)
 	if d.status == "Cancelled":
@@ -5229,12 +5233,15 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 	lines = []
 	for r in rows:
 		sv = (r or {}).get("sieve")
+		act = flt((r or {}).get("actual"))
 		ct = flt((r or {}).get("selected"))
-		if not sv or ct <= 0:
+		# a sieve that weighed something and was kept entirely out is a real
+		# line — it IS the rejection — so either weight is enough to keep it
+		if not sv or (act <= 0 and ct <= 0):
 			continue
 		if sv not in sieves:
 			frappe.throw(frappe._("{0} is not a sieve on the chart.").format(sv))
-		lines.append({"sieve": sv, "selected_cts": ct})
+		lines.append({"sieve": sv, "actual_cts": act, "selected_cts": ct})
 
 	d.actual_cts = flt(actual_cts)
 	d.set("items", lines)

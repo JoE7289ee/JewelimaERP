@@ -29,15 +29,31 @@ class StoneLot(Document):
 		# and never let the same sieve be entered twice.
 		seen, rows = set(), []
 		for r in self.items or []:
-			if not r.sieve or flt(r.selected_cts) <= 0:
+			# a row is worth keeping once it carries EITHER weight: a sieve that
+			# weighed 4 ct and none of it kept is a real line — it is the whole
+			# rejection — and dropping it would hide what went back
+			if not r.sieve or (flt(r.actual_cts) <= 0 and flt(r.selected_cts) <= 0):
 				continue
 			if r.sieve in seen:
 				frappe.throw(frappe._("{0} is entered twice.").format(r.sieve))
 			seen.add(r.sieve)
+			# the rejection is per sieve now, and still derived: what that sieve
+			# weighed less what we kept of it. Never typed, on any row.
+			if flt(r.selected_cts) > flt(r.actual_cts) + 0.0005:
+				frappe.throw(frappe._("{0}: kept {1} ct of a sieve that weighed {2} ct.")
+					.format(r.sieve, flt(r.selected_cts), flt(r.actual_cts)))
+			r.rejected_cts = round(max(flt(r.actual_cts) - flt(r.selected_cts), 0), 3)
 			rows.append(r)
 		self.set("items", rows)
 
 		self.selected_cts = round(sum(flt(r.selected_cts) for r in self.items or []), 3)
+		# The lot's ACTUAL is the parcel on our scale, weighed whole before any
+		# sieving — it is what the provider's claim is measured against, so it is
+		# still typed at the top and not inferred from the sieves. Only when it
+		# has not been taken does the sieve total stand in for it.
+		sieved = round(sum(flt(r.actual_cts) for r in self.items or []), 3)
+		if not flt(self.actual_cts) and sieved:
+			self.actual_cts = sieved
 		self.rejected_cts = round(max(flt(self.actual_cts) - self.selected_cts, 0), 3)
 		# Selecting more than came in is a typo, and it is worth stopping at the
 		# save rather than leaving a lot whose rejection reads zero for the
