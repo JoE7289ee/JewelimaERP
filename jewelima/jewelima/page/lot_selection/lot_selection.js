@@ -223,6 +223,19 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		.ls-pn{margin-top:10px;font-size:11.5px;color:var(--text-muted);}
 		.ls-pr{font-size:11px;font-weight:700;color:#7a4fb5;}
 		[data-theme="dark"] .ls-pr{color:#bfa3e8;}
+		/* a closed lot: a record, not a tray */
+		.ls-shut{font-size:11.5px;font-weight:800;letter-spacing:.06em;border-radius:20px;
+			padding:7px 17px;background:rgba(29,122,51,.14);color:#1d7a33;text-transform:uppercase;}
+		[data-theme="dark"] .ls-shut{color:#7fc98f;}
+		td.ls-ro{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;}
+		td.ls-ro.zero{color:var(--text-muted);font-weight:600;}
+		td.ls-buy{color:#7a4fb5;}
+		[data-theme="dark"] td.ls-buy{color:#bfa3e8;}
+		table.ls-t tr.ls-tot td{font-weight:800;font-variant-numeric:tabular-nums;
+			background:var(--control-bg,var(--fg-color));border-top:2px solid var(--gray-400,#aeb6bf);
+			border-bottom:none;text-transform:uppercase;letter-spacing:.04em;font-size:12px;}
+		table.ls-t tr.ls-tot:hover td{background:var(--control-bg,var(--fg-color));}
+		table.ls-t tr.ls-tot td.num{font-size:16px;letter-spacing:0;}
 		.ls-hint{font-size:11.5px;color:var(--text-muted);margin-top:9px;}
 		.ls-empty{padding:46px 20px;text-align:center;color:var(--text-muted);font-size:13.5px;}
 		</style>
@@ -280,6 +293,14 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	const totLeftA = () => tot("actual");
 	const totLeftS = () => tot("selected");
 	const totBought = () => ROWS.reduce((a, x) => a + flt(x.purchased), 0);
+	const totBack = () => ROWS.reduce((a, x) => a + flt(x.returned), 0);
+	// A CLOSED lot is a record, not a tray. Every carat on it has been either
+	// bought or written off, the tray is empty by definition, and nothing on it
+	// may be typed into again — so the page turns into the full picture of what
+	// the parcel finished as: sieve by sieve, kept against returned.
+	const shut = () => !!LOT && LOT.status === "Closed";
+	// what a sieve finally amounted to — on the tray, bought, and written off
+	const thru = (x) => flt(x.actual) + flt(x.purchased) + flt(x.returned);
 	const used = () => new Set(ROWS.map((x) => x.sieve));
 	const free = () => (CTX.sieves || []).map((s) => s.sieve_size).filter((s) => !used().has(s));
 	const lotWt = () => (LOT ? flt(LOT.claimed) : 0);
@@ -302,10 +323,13 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			<span class="nm">${esc(LOT.name)}</span>
 			<span class="meta">${esc(LOT.supplier)}${LOT.quality ? " · " + esc(LOT.quality) : ""}</span>
 			<span class="ls-spacer">
-				<span class="ls-pick"></span>
-				<button class="ls-addbtn">+ ${__("Sieve")}</button>
-				<span class="ls-state idle">${__("nothing to save")}</span>
+				${shut() ? `<span class="ls-shut">${__("Closed")}${LOT.returned_on
+						? " · " + esc(String(LOT.returned_on).slice(0, 10)) : ""}</span>`
+					: `<span class="ls-pick"></span>
+						<button class="ls-addbtn">+ ${__("Sieve")}</button>
+						<span class="ls-state idle">${__("nothing to save")}</span>`}
 			</span>`);
+		if (shut()) { F.pick = null; return; }
 		F.pick = frappe.ui.form.make_control({
 			df: { fieldtype: "Select", fieldname: "sieve",
 				// a blank first option, so the button has something to wait for
@@ -338,19 +362,23 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 
 	function paintTop() {
 		const claimed = lotWt();
-		const onTray = totLeftA(), s = totLeftS(), bought = totBought();
+		const onTray = totLeftA(), s = totLeftS(), bought = totBought(), back = totBack();
 		// ASSORTED counts what has been bought as well. Those carats went through
 		// the sieve and then left the tray, so measuring only what is still there
 		// made a parcel look LESS sorted the more of it we kept — 400 claimed,
 		// 80 on the tray and 135 already bought was reading as 320 left to do.
-		const a = r3(onTray + bought);
-		const rej = Math.max(onTray - s, 0);
+		// and what has gone back to the provider, which only a close does
+		const a = r3(onTray + bought + back);
+		const rej = r3(Math.max(onTray - s, 0) + back);
 		const left = claimed ? r3(claimed - a) : 0;
 		const pct = onTray > 0 ? (s / onTray) * 100 : 0;
+		const keptPct = a > 0 ? (bought / a) * 100 : 0;
 
-		// the ring: which sieves the parcel fell into, by weight
-		const slices = ROWS.filter((x) => leftA(x) > 0)
-			.map((x) => ({ sieve: x.sieve, ct: leftA(x) }))
+		// the ring: which sieves the parcel fell into, by weight. On a closed lot
+		// the tray is empty, so it is drawn from what each sieve finished at
+		const w = (x) => (shut() ? thru(x) : leftA(x));
+		const slices = ROWS.filter((x) => w(x) > 0)
+			.map((x) => ({ sieve: x.sieve, ct: w(x) }))
 			.sort((p, q) => q.ct - p.ct);
 		const sum = slices.reduce((t, x) => t + x.ct, 0);
 		let at = 0;
@@ -359,14 +387,43 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 			return `${HUES[i % HUES.length]} ${from.toFixed(2)}% ${((at / sum) * 100).toFixed(2)}%`;
 		}).join(",");
 
-		root.find(".ls-top").html(`
-			${slices.length ? `<div class="ls-pie">
+		const pie = `${slices.length ? `<div class="ls-pie">
 				<div class="ls-ring" style="background:conic-gradient(${stops});">
 					<div class="ls-ringn">${slices.length}</div></div>
 				<div class="ls-leg">${slices.map((x, i) => `<div>
 					<i style="background:${HUES[i % HUES.length]}"></i>${esc(x.sieve)}
 					<b>${((x.ct / sum) * 100).toFixed(0)}%</b></div>`).join("")}</div>
-			</div>` : ""}
+			</div>` : ""}`;
+
+		// A closed lot answers a different question. Not "how much is left to
+		// do" — nothing is — but "what did this parcel come to": what went
+		// through the sieve, what we kept, what went back.
+		if (shut()) {
+			root.find(".ls-top").html(`
+				${pie}
+				${claimed ? `<div class="ls-kpi"><div class="k">${__("Booked in")}</div>
+					<div class="v">${ct(claimed)}<span class="u">ct</span></div>
+					<div class="sub">${__("what the provider sent")}</div></div>` : ""}
+				<div class="ls-kpi"><div class="k">${__("Assorted")}</div>
+					<div class="v">${ct(a)}<span class="u">ct</span></div>
+					<div class="sub">${__("through {0} sieve(s)", [ROWS.length])}</div></div>
+				<div class="ls-kpi buy"><div class="k">${__("Purchased")}</div>
+					<div class="v">${ct(bought)}<span class="u">ct</span></div>
+					<div class="sub">${__("kept — taken into stock")}</div></div>
+				<div class="ls-kpi rej"><div class="k">${__("Returned")}</div>
+					<div class="v">${ct(back)}<span class="u">ct</span></div>
+					<div class="sub">${__("written off to the provider")}</div></div>
+				<div class="ls-kpi sel"><div class="k">${__("Kept %")}</div>
+					<div class="v">${keptPct.toFixed(1)}<span class="u">%</span></div>
+					<div class="ls-bar2"><i style="width:${Math.min(keptPct, 100).toFixed(1)}%"></i></div></div>`);
+			root.find(".ls-err").empty();
+			root.find(".ls-hint").text(
+				__("This lot is closed. Everything below is what it finished at — nothing on it can be changed."));
+			return;
+		}
+
+		root.find(".ls-top").html(`
+			${pie}
 			${claimed ? `<div class="ls-kpi ${overLot() ? "bad" : "left"}">
 				<div class="k">${overLot() ? __("Over the parcel") : __("Left to assort")}</div>
 				<div class="v">${ct(overLot() ? a - claimed : Math.max(left, 0))}<span class="u">ct</span></div>
@@ -403,6 +460,17 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 
 	function paintKeep() {
 		if (!LOT) return root.find(".ls-keep").empty();
+		// nothing can be asked for off a closed lot, so the panel stops being a
+		// form and becomes the trail: every request raised, and how it went
+		if (shut()) {
+			const rq = REQS.rows || [];
+			return root.find(".ls-keep").html(`
+				<div class="hd"><b>${__("How this lot was settled")}</b>
+					<span>${__("every request raised against it, and who decided it")}</span></div>
+				${rq.length ? rq.map(reqHtml).join("")
+					: `<div class="ls-empty" style="padding:26px;">${
+						__("No requests were raised against this lot.")}</div>`}`);
+		}
 		// every sieve on the tray, even one just added with nothing against it —
 		// waiting for it to appear is worse than a row of dashes
 		const rows = ROWS.slice();
@@ -439,21 +507,26 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 				}).join("")}</tbody></table>`
 			: `<div class="ls-empty" style="padding:26px;">${
 				__("Assort something first — you can only ask to keep what you have kept.")}</div>`}
-			${(REQS.rows || []).map((q) => `
-				<div class="ls-rq" data-name="${esc(q.name)}">
-					<span class="ls-st ${esc((q.status || "").toLowerCase())}">${esc(q.status)}</span>
-					<span class="ls-kind ${q.request_type === "Close" ? "close" : ""}">${
-						esc(q.request_type === "Close" ? __("close") : __("buy"))}</span>
-					<b>${ct(q.total_cts)} ct</b>
-					<span class="who">${(q.items || []).map((i) => esc(i.sieve) + " " + ct(i.cts)).join(" · ")}</span>
-					<span class="who">· ${esc(q.requested_label || "")} ${esc((q.requested_on || "").slice(0, 16))}${
-						q.decided_label ? " · " + __("by") + " " + esc(q.decided_label) : ""}</span>
-					${q.purchase_record ? `<a class="ls-pr" href="/app/purchase-history"
-						title="${__("posted to Purchase History")}">${esc(q.purchase_record)}</a>` : ""}
-					${q.status === "Pending" && REQS.can_approve ? `<span class="sp">
-						<button class="ls-yes" data-name="${esc(q.name)}">${__("APPROVE")}</button>
-						<button class="ls-no" data-name="${esc(q.name)}">${__("Reject")}</button></span>` : ""}
-				</div>`).join("")}`);
+			${(REQS.rows || []).map(reqHtml).join("")}`);
+	}
+
+	// one request, on an open lot and on a closed one alike — the only difference
+	// is that a closed lot has nothing left to decide
+	function reqHtml(q) {
+		return `<div class="ls-rq" data-name="${esc(q.name)}">
+			<span class="ls-st ${esc((q.status || "").toLowerCase())}">${esc(q.status)}</span>
+			<span class="ls-kind ${q.request_type === "Close" ? "close" : ""}">${
+				esc(q.request_type === "Close" ? __("close") : __("buy"))}</span>
+			<b>${ct(q.total_cts)} ct</b>
+			<span class="who">${(q.items || []).map((i) => esc(i.sieve) + " " + ct(i.cts)).join(" · ")}</span>
+			<span class="who">· ${esc(q.requested_label || "")} ${esc((q.requested_on || "").slice(0, 16))}${
+				q.decided_label ? " · " + __("by") + " " + esc(q.decided_label) : ""}</span>
+			${q.purchase_record ? `<a class="ls-pr" href="/app/purchase-history"
+				title="${__("posted to Purchase History")}">${esc(q.purchase_record)}</a>` : ""}
+			${!shut() && q.status === "Pending" && REQS.can_approve ? `<span class="sp">
+				<button class="ls-yes" data-name="${esc(q.name)}">${__("APPROVE")}</button>
+				<button class="ls-no" data-name="${esc(q.name)}">${__("Reject")}</button></span>` : ""}
+		</div>`;
 	}
 
 	root.on("input", ".ls-kin", function () {
@@ -653,23 +726,49 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 				title="${__("take the sieve off")}">&times;</button></td></tr>`;
 	}
 
+	// The same table once the lot is closed: no inputs, no remove, and the two
+	// columns that matter afterwards — what we bought off each sieve and what
+	// went back on it. The tray column is gone because there is no tray.
+	function rowShutHtml(x, i) {
+		const bought = flt(x.purchased), back = flt(x.returned);
+		return `<tr data-i="${i}">
+			<td class="ls-sv"><i data-dot="${i}"></i>${esc(x.sieve)}</td>
+			<td class="num ls-ro ${thru(x) ? "" : "zero"}">${ct(thru(x))}</td>
+			<td class="num ls-ro ls-buy ${bought ? "" : "zero"}">${ct(bought)}</td>
+			<td class="num ls-rej ${back ? "" : "zero"}">${ct(back)}</td>
+			<td></td></tr>`;
+	}
+
+	function totShutHtml() {
+		return `<tr class="ls-tot"><td>${__("Total")}</td>
+			<td class="num">${ct(ROWS.reduce((a, x) => a + thru(x), 0))}</td>
+			<td class="num">${ct(totBought())}</td>
+			<td class="num">${ct(totBack())}</td><td></td></tr>`;
+	}
+
 	// the row dot matches its slice in the ring, so the table and the chart are
 	// obviously the same thing
 	function paintDots() {
-		const order = ROWS.map((x, i) => ({ i, ct: flt(x.actual) }))
+		const order = ROWS.map((x, i) => ({ i, ct: shut() ? thru(x) : flt(x.actual) }))
 			.filter((x) => x.ct > 0).sort((p, q) => q.ct - p.ct);
 		root.find(".ls-sv i").css("background", "transparent");
 		order.forEach((x, k) => root.find(`.ls-sv i[data-dot="${x.i}"]`).css("background", HUES[k % HUES.length]));
 	}
 
 	function paintTable() {
-		root.find(".ls-t thead").html(`<tr>
+		const done = shut();
+		root.find(".ls-t thead").html(done ? `<tr>
+			<th>${__("Sieve")}</th><th class="num">${__("Assorted cts")}</th>
+			<th class="num">${__("Purchased cts")}</th><th class="num">${__("Returned cts")}</th>
+			<th style="width:44px;"></th></tr>` : `<tr>
 			<th>${__("Sieve")}</th><th class="num">${__("Actual cts")}</th>
 			<th class="num">${__("Select cts")}</th><th class="num">${__("Rejection cts")}</th>
 			<th style="width:44px;"></th></tr>`);
-		root.find(".ls-t tbody").html(ROWS.length ? ROWS.map(rowHtml).join("")
-			: `<tr><td colspan="5" class="ls-empty">${
-				__("Nothing on the tray yet — add the first sieve above.")}</td></tr>`);
+		root.find(".ls-t tbody").html(ROWS.length
+			? (done ? ROWS.map(rowShutHtml).join("") + totShutHtml() : ROWS.map(rowHtml).join(""))
+			: `<tr><td colspan="5" class="ls-empty">${done
+				? __("Nothing was ever assorted on this lot.")
+				: __("Nothing on the tray yet — add the first sieve above.")}</td></tr>`);
 		paintDots();
 		paintTop();
 		paintKeep();
@@ -682,7 +781,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	// typing in it; refilling the rows from a save that started two keystrokes
 	// ago would move the cursor and could overwrite what they have just entered.
 	function saveNow() {
-		if (!LOT || blocked()) return Promise.resolve();
+		if (!LOT || shut() || blocked()) return Promise.resolve();
 		SAVE = "saving"; paintState();
 		return frappe.call({ method: API + ".save_stone_lot_selection", freeze: false, args: {
 			name: LOT.name, actual_cts: 0,
@@ -693,7 +792,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	}
 
 	const doSave = frappe.utils.debounce(() => {
-		if (!LOT || blocked()) return;
+		if (!LOT || shut() || blocked()) return;
 		SAVE = "saving"; paintState();
 		frappe.call({ method: API + ".save_stone_lot_selection", freeze: false, args: {
 			name: LOT.name, actual_cts: 0,
@@ -706,6 +805,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	}, 700);
 
 	function touched() {
+		if (shut()) return;
 		SAVE = blocked() ? "" : "dirty";
 		paintState();
 		doSave();
@@ -755,7 +855,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	root.on("click", ".ls-addbtn", function () {
 		const sv = (F.pick && F.pick.get_value()) || free()[0];
 		if (!sv || used().has(sv)) return;
-		ROWS.push({ sieve: sv, actual: 0, selected: 0, purchased: 0 });
+		ROWS.push({ sieve: sv, actual: 0, selected: 0, purchased: 0, returned: 0 });
 		paintTable();
 		if (F.pick) F.pick.set_value("");     // and it waits for the next pick
 		refreshPicker();
@@ -771,7 +871,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		ROWS.length = 0;
 		((lot && lot.items) || []).forEach((i) =>
 			ROWS.push({ sieve: i.sieve, actual: flt(i.actual), selected: flt(i.selected),
-				purchased: flt(i.purchased) }));
+				purchased: flt(i.purchased), returned: flt(i.returned) }));
 	}
 
 	function showBoard() {

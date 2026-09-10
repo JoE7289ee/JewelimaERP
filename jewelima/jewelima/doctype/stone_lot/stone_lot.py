@@ -49,7 +49,6 @@ class StoneLot(Document):
 			rows.append(r)
 		self.set("items", rows)
 
-		self.selected_cts = round(sum(flt(r.selected_cts) for r in self.items or []), 3)
 		# The lot's ACTUAL is the parcel on our scale, weighed whole before any
 		# sieving — it is what the provider's claim is measured against, so it is
 		# still typed at the top and not inferred from the sieves. Only when it
@@ -58,10 +57,17 @@ class StoneLot(Document):
 		# been bought off it. Counting only the tray let a parcel be re-assorted
 		# past its own weight once some of it had gone into stock.
 		on_tray = round(sum(flt(r.actual_cts) for r in self.items or []), 3)
-		sieved = round(on_tray + sum(flt(r.purchased_cts) + flt(r.returned_cts)
-			for r in self.items or []), 3)
-		if not flt(self.actual_cts) and on_tray:
-			self.actual_cts = on_tray
+		bought = round(sum(flt(r.purchased_cts) for r in self.items or []), 3)
+		back = round(sum(flt(r.returned_cts) for r in self.items or []), 3)
+		sieved = round(on_tray + bought + back, 3)
+		# What we are KEEPING is what is still selected on the tray plus whatever
+		# has already been bought off it. A lot does not become less selected as
+		# its stones go into stock, and a closed lot — whose tray is empty by
+		# definition — must still read as the parcel it turned out to be.
+		self.selected_cts = round(
+			sum(flt(r.selected_cts) for r in self.items or []) + bought, 3)
+		if not flt(self.actual_cts) and sieved:
+			self.actual_cts = sieved
 		# the parcel is a CEILING. The desk stops this at the keystroke, but a page
 		# left open since before a lot was re-booked would post past it, and a lot
 		# holding more stone than came in is not something to discover later.

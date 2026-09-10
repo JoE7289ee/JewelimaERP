@@ -5258,6 +5258,11 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 	d = frappe.get_doc("Stone Lot", name)
 	if d.status == "Cancelled":
 		frappe.throw(frappe._("{0} is cancelled.").format(name))
+	# a closed lot is a record, not a tray. Every carat on it has been either
+	# bought or written off, so there is nothing left to assort and nothing on
+	# it may move again — the desk shows it read only and the server means it.
+	if d.status == "Closed":
+		frappe.throw(frappe._("{0} is closed — it can be read but not changed.").format(name))
 	if isinstance(rows, str):
 		rows = json.loads(rows or "[]")
 	rows = rows or []
@@ -5406,6 +5411,8 @@ def create_stone_purchase_request(lot, rows, remarks=None):
 	d = frappe.get_doc("Stone Lot", lot)
 	if d.status == "Cancelled":
 		frappe.throw(frappe._("{0} is cancelled.").format(lot))
+	if d.status == "Closed":
+		frappe.throw(frappe._("{0} is closed — nothing more can be asked for off it.").format(lot))
 	if isinstance(rows, str):
 		rows = json.loads(rows or "[]")
 
