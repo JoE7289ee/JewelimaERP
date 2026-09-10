@@ -69,17 +69,28 @@ frappe.pages["file-share"].on_page_load = function (wrapper) {
 	}
 
 	// ---- upload: click or drop; each file goes up as its own request ----------
+	// The freeze goes on ONCE for the whole batch and comes off ONCE at the end.
+	// frappe.dom.freeze() counts its calls and only lifts the overlay when the
+	// count reaches zero, so freezing per file left three files stuck behind a
+	// screen still reading "Uploading 1 of 3" — every file had landed, but two
+	// freezes were still outstanding and only a reload cleared them. It also
+	// ignores the message on every call after the first, which is why the count
+	// never moved. So the message is written straight into the existing overlay,
+	// and say() never freezes again — that would put the count out of step a
+	// second way.
+	function say(msg) { $("#freeze .freeze-message p.lead").text(msg); }
 	function upload(files) {
 		const list = [...files];
 		if (!list.length) return;
+		frappe.dom.freeze(__("Uploading 1 of {0} — {1}…", [list.length, list[0].name]));
+		const done = () => { frappe.dom.unfreeze(); load(); };
 		const next = (i) => {
 			if (i >= list.length) {
-				frappe.dom.unfreeze();
+				done();
 				frappe.show_alert({ message: __("{0} file(s) shared.", [list.length]), indicator: "green" }, 4);
-				load();
 				return;
 			}
-			frappe.dom.freeze(__("Uploading {0} of {1} — {2}…", [i + 1, list.length, list[i].name]));
+			say(__("Uploading {0} of {1} — {2}…", [i + 1, list.length, list[i].name]));
 			const fd = new FormData();
 			fd.append("file", list[i]);
 			fetch("/api/method/" + API + ".file_share_upload", {
@@ -89,10 +100,11 @@ frappe.pages["file-share"].on_page_load = function (wrapper) {
 				if (!res.ok) throw new Error((j._server_messages && JSON.parse(JSON.parse(j._server_messages)[0]).message) || res.statusText);
 				next(i + 1);
 			})).catch((e) => {
-				frappe.dom.unfreeze();
+				// whatever went up before this one is already shared, so the list
+				// is reloaded either way and the failure names the file it was on
+				done();
 				frappe.msgprint({ title: __("Upload failed"), indicator: "red",
 					message: __("{0}: {1}", [esc(list[i].name), esc(e.message || e)]) });
-				load();
 			});
 		};
 		next(0);

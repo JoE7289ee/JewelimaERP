@@ -21828,10 +21828,13 @@ def file_share_upload():
 @frappe.whitelist()
 def file_share_list():
 	_file_share_guard()
+	# limit_page_length=0 or the share quietly stops at the twenty newest files —
+	# frappe.get_all pages by default, and a drop where older files just vanish is
+	# worse than a long list
 	rows = frappe.get_all("File",
 		filters={"folder": FILE_SHARE_FOLDER, "is_folder": 0},
 		fields=["name", "file_name", "file_size", "owner", "creation"],
-		order_by="creation desc")
+		order_by="creation desc", limit_page_length=0)
 	owners = list({r.owner for r in rows})
 	names = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
 		filters={"name": ["in", owners]}, fields=["name", "full_name"])} if owners else {}
