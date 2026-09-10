@@ -9364,6 +9364,16 @@ def transfer_bucket(bags, to_bucket, remarks=None):
 		frappe.get_doc("Order Bag", nm).add_comment("Comment",
 			frappe._("Bucket {0} \u2192 {1}{2}").format(row.bucket or frappe._("none"), to_bucket,
 				(" \u00b7 " + remarks) if remarks else ""))
+		# and a record of its own. The comment stays — it is what shows on the
+		# piece's own timeline — but a comment cannot be searched across a shelf,
+		# and "who re-filed this, and when" is a question the desk gets asked.
+		frappe.get_doc({
+			"doctype": "Bucket Transfer", "order_bag": nm,
+			"from_bucket": row.bucket or None, "to_bucket": to_bucket,
+			"transfer_time": frappe.utils.now_datetime(),
+			"transferred_by": frappe.session.user,
+			"remarks": (remarks or "").strip() or None,
+		}).insert(ignore_permissions=True)
 		moved.append({"name": nm, "was": row.bucket or "", "now": to_bucket})
 	frappe.db.commit()
 	return {"moved": moved, "count": len(moved), "errors": errors}
@@ -19072,6 +19082,240 @@ def remove_hallmarks(barcodes, reason=None):
 			failed.append({"order_bag": nm,
 				"error": str(e).split("\n")[0][:160] or frappe._("could not be removed")})
 	return {"removed": done, "failed": failed}
+
+
+# ---------------------------------------------------------------------------
+# DELIVERY RECORDS — what happened, after it happened.
+#
+# The delivery desks are all built around work still to do: what is prepared,
+# what is out, what is waiting to be confirmed. None of them answer "when did
+# that piece go to DHC", "who re-filed this into FEMI", "what was on batch
+# HALL-0008". These five pages are that side of it — read only, filtered the
+# same way, and every one of them answering by DATE, by PIECE and by search.
+#
+# They share one shape on purpose: a period, a search box, a table, and totals.
+# A desk that has learnt one of them has learnt all five.
+# ---------------------------------------------------------------------------
+DELIVERY_RECORD_ROLES = ("System Manager", "Stock Manager", "JW Manager",
+	"JW Delivery", "JW Stock Admin", "JW Info")
+
+
+def _records_guard():
+	if not set(DELIVERY_RECORD_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("The delivery records are for the desk."), frappe.PermissionError)
+
+
+def _period(from_date=None, to_date=None):
+	"""A from/to pair that always makes sense — blank means the last 90 days."""
+	to_d = to_date or frappe.utils.today()
+	from_d = from_date or frappe.utils.add_days(to_d, -90)
+	return str(from_d), str(to_d)
+
+
+@frappe.whitelist()
+def get_hallmarking_records(from_date=None, to_date=None, center=None, status=None,
+		search=None, limit=200):
+	"""Every hallmarking batch in a period, with what it carried."""
+	_records_guard()
+	f, t = _period(from_date, to_date)
+	cond = ["date(b.creation) between %(f)s and %(t)s"]
+	vals = {"f": f, "t": t, "lim": cint(limit) or 200}
+	if center:
+		cond.append("b.center = %(center)s")
+		vals["center"] = center
+	if status:
+		cond.append("b.status = %(status)s")
+		vals["status"] = status
+	if search:
+		cond.append("(b.name like %(q)s or b.center like %(q)s)")
+		vals["q"] = "%{0}%".format(search)
+	rows = frappe.db.sql("""select b.name, b.center, b.status, b.prepared_on, b.sent_on,
+			b.collected_on, b.owner, b.creation
+		from `tabHallmarking Batch` b
+		where {0} order by b.creation desc limit %(lim)s""".format(" and ".join(cond)),
+		vals, as_dict=True)
+	out = []
+	for r in rows:
+		items = frappe.get_all("Hallmarking Item", filters={"parent": r.name},
+			fields=["order_bag", "design_type", "gross", "dmd_ct", "huid", "received", "rejected"])
+		out.append({**r, "creation": str(r.creation),
+			"prepared_on": str(r.prepared_on or ""), "sent_on": str(r.sent_on or ""),
+			"collected_on": str(r.collected_on or ""),
+			"owner_label": _user_label(r.owner),
+			"pieces": len(items),
+			"gross": round(sum(flt(i.gross) for i in items), 3),
+			"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3),
+			"stamped": sum(1 for i in items if (i.huid or "").strip()),
+			"rejected": sum(1 for i in items if cint(i.rejected)),
+			"items": [{**i} for i in items]})
+	return {"rows": out, "from_date": f, "to_date": t,
+		"centers": frappe.get_all("Hallmarking Center", pluck="name"),
+		"totals": {"batches": len(out), "pieces": sum(r["pieces"] for r in out),
+			"gross": round(sum(r["gross"] for r in out), 3),
+			"stamped": sum(r["stamped"] for r in out)}}
+
+
+@frappe.whitelist()
+def get_certification_records(from_date=None, to_date=None, cert_type=None, status=None,
+		search=None, limit=200):
+	"""Every certification batch in a period, with what it carried."""
+	_records_guard()
+	f, t = _period(from_date, to_date)
+	cond = ["date(c.creation) between %(f)s and %(t)s"]
+	vals = {"f": f, "t": t, "lim": cint(limit) or 200}
+	if cert_type:
+		cond.append("c.cert_type = %(ct)s")
+		vals["ct"] = cert_type
+	if status:
+		cond.append("c.status = %(status)s")
+		vals["status"] = status
+	if search:
+		cond.append("(c.name like %(q)s or c.center like %(q)s or c.cert_type like %(q)s)")
+		vals["q"] = "%{0}%".format(search)
+	rows = frappe.db.sql("""select c.name, c.cert_type, c.center, c.quality, c.status,
+			c.prepared_on, c.sent_on, c.collected_on, c.owner, c.creation
+		from `tabCertification` c
+		where {0} order by c.creation desc limit %(lim)s""".format(" and ".join(cond)),
+		vals, as_dict=True)
+	out = []
+	for r in rows:
+		items = frappe.get_all("Certification Item", filters={"parent": r.name},
+			fields=["order_bag", "design_type", "gross", "dmd_ct", "received", "rejected"])
+		out.append({**r, "creation": str(r.creation),
+			"prepared_on": str(r.prepared_on or ""), "sent_on": str(r.sent_on or ""),
+			"collected_on": str(r.collected_on or ""),
+			"owner_label": _user_label(r.owner),
+			"pieces": len(items),
+			"gross": round(sum(flt(i.gross) for i in items), 3),
+			"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3),
+			"back": sum(1 for i in items if cint(i.received)),
+			"rejected": sum(1 for i in items if cint(i.rejected)),
+			"items": [{**i} for i in items]})
+	return {"rows": out, "from_date": f, "to_date": t,
+		"cert_types": sorted({r["cert_type"] for r in out if r.get("cert_type")}),
+		"totals": {"batches": len(out), "pieces": sum(r["pieces"] for r in out),
+			"gross": round(sum(r["gross"] for r in out), 3),
+			"back": sum(r["back"] for r in out)}}
+
+
+def _holder_rows(f, t, search=None, limit=400):
+	cond = ["date(h.transfer_time) between %(f)s and %(t)s"]
+	vals = {"f": f, "t": t, "lim": cint(limit) or 400}
+	if search:
+		cond.append("(h.order_bag like %(q)s or h.to_holder like %(q)s or h.from_holder like %(q)s)")
+		vals["q"] = "%{0}%".format(search)
+	return frappe.db.sql("""select h.name, h.order_bag, h.from_holder, h.to_holder,
+			h.transfer_time, h.transferred_by, h.reason
+		from `tabHolder Transfer` h where {0}
+		order by h.transfer_time desc limit %(lim)s""".format(" and ".join(cond)), vals, as_dict=True)
+
+
+def _bucket_rows(f, t, search=None, limit=400):
+	cond = ["date(b.transfer_time) between %(f)s and %(t)s"]
+	vals = {"f": f, "t": t, "lim": cint(limit) or 400}
+	if search:
+		cond.append("(b.order_bag like %(q)s or b.to_bucket like %(q)s or b.from_bucket like %(q)s)")
+		vals["q"] = "%{0}%".format(search)
+	return frappe.db.sql("""select b.name, b.order_bag, b.from_bucket, b.to_bucket,
+			b.transfer_time, b.transferred_by, b.remarks
+		from `tabBucket Transfer` b where {0}
+		order by b.transfer_time desc limit %(lim)s""".format(" and ".join(cond)), vals, as_dict=True)
+
+
+def _rework_rows(f, t, search=None, limit=400):
+	"""A rework is an Order Bag Transfer the rework desk wrote — it is the only
+	one of these that also moves stock, which is why it belongs on this page and
+	the other 500-odd bench-to-bench moves do not."""
+	cond = ["date(o.transfer_time) between %(f)s and %(t)s", "o.remarks like 'Rework:%%'"]
+	vals = {"f": f, "t": t, "lim": cint(limit) or 400}
+	if search:
+		cond.append("(o.order_bag like %(q)s or o.to_location like %(q)s)")
+		vals["q"] = "%{0}%".format(search)
+	return frappe.db.sql("""select o.name, o.order_bag, o.from_location, o.to_location,
+			o.transfer_time, o.transferred_by, o.remarks
+		from `tabOrder Bag Transfer` o where {0}
+		order by o.transfer_time desc limit %(lim)s""".format(" and ".join(cond)), vals, as_dict=True)
+
+
+def _decorate(rows):
+	"""The piece's design and weight, in one query rather than one per row."""
+	bags = list({r["order_bag"] for r in rows if r.get("order_bag")})
+	info = {b.name: b for b in frappe.get_all("Order Bag",
+		filters={"name": ["in", bags or [""]]},
+		fields=["name", "design", "act_gross_weight", "act_dmd_weight", "is_finished"])} if bags else {}
+	for r in rows:
+		b = info.get(r.get("order_bag")) or {}
+		r["design"] = b.get("design") or ""
+		r["design_no"] = design_no_of(b.get("design")) if b.get("design") else ""
+		r["gross"] = flt(b.get("act_gross_weight"))
+		r["dmd_ct"] = flt(b.get("act_dmd_weight"))
+		r["transfer_time"] = str(r.get("transfer_time") or "")
+		r["by_label"] = _user_label(r.get("transferred_by"))
+	return rows
+
+
+@frappe.whitelist()
+def get_holder_transfer_records(from_date=None, to_date=None, search=None, limit=400):
+	"""Every change of holder in a period — whose piece it stopped being."""
+	_records_guard()
+	f, t = _period(from_date, to_date)
+	rows = _decorate(_holder_rows(f, t, search, limit))
+	return {"rows": rows, "from_date": f, "to_date": t,
+		"totals": {"moves": len(rows),
+			"pieces": len({r["order_bag"] for r in rows}),
+			"gross": round(sum(flt(r["gross"]) for r in rows), 3)}}
+
+
+@frappe.whitelist()
+def get_bucket_transfer_records(from_date=None, to_date=None, search=None, limit=400):
+	"""Every re-filing in a period — which shelf a piece stopped being on."""
+	_records_guard()
+	f, t = _period(from_date, to_date)
+	rows = _decorate(_bucket_rows(f, t, search, limit))
+	return {"rows": rows, "from_date": f, "to_date": t,
+		"totals": {"moves": len(rows),
+			"pieces": len({r["order_bag"] for r in rows}),
+			"gross": round(sum(flt(r["gross"]) for r in rows), 3)}}
+
+
+@frappe.whitelist()
+def get_product_transfer_records(from_date=None, to_date=None, kind=None, search=None, limit=400):
+	"""Every product movement in one timeline: holder, bucket and rework.
+
+	These are the three things that happen to a FINISHED piece, and they are
+	three different tables, so a desk asking "what happened to this piece" had
+	to look in three places. Here they are one list ordered by time, each line
+	saying which kind it is, and the kind is a filter.
+
+	The 500-odd bench-to-bench moves are deliberately NOT here: that is the
+	factory routing a card through waxing and casting, not a product going
+	anywhere. Rework is the exception because it is a finished product leaving
+	Finished Goods."""
+	_records_guard()
+	f, t = _period(from_date, to_date)
+	out = []
+	if kind in (None, "", "Holder"):
+		for r in _holder_rows(f, t, search, limit):
+			out.append({**r, "kind": "Holder", "frm": r["from_holder"] or "",
+				"to": r["to_holder"] or "", "note": r.get("reason") or ""})
+	if kind in (None, "", "Bucket"):
+		for r in _bucket_rows(f, t, search, limit):
+			out.append({**r, "kind": "Bucket", "frm": r["from_bucket"] or "",
+				"to": r["to_bucket"] or "", "note": r.get("remarks") or ""})
+	if kind in (None, "", "Rework"):
+		for r in _rework_rows(f, t, search, limit):
+			out.append({**r, "kind": "Rework", "frm": r["from_location"] or "",
+				"to": r["to_location"] or "",
+				"note": (r.get("remarks") or "").replace("Rework: ", "", 1)})
+	out.sort(key=lambda r: str(r.get("transfer_time") or ""), reverse=True)
+	out = _decorate(out[:cint(limit) or 400])
+	by_kind = {}
+	for r in out:
+		by_kind[r["kind"]] = by_kind.get(r["kind"], 0) + 1
+	return {"rows": out, "from_date": f, "to_date": t,
+		"kinds": ["Holder", "Bucket", "Rework"],
+		"totals": {"moves": len(out), "pieces": len({r["order_bag"] for r in out}),
+			"gross": round(sum(flt(r["gross"]) for r in out), 3), "by_kind": by_kind}}
 
 
 @frappe.whitelist()

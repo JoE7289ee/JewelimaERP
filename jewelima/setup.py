@@ -289,6 +289,10 @@ JEWELIMA_DELIVERY_PAGES = [
 	# buckets moved into Delivery Masters under Delivery Settings — settings are
 	# set up once and belong to the manager, not the counter
 	"finished-goods", "party-stock", "transfer-holder", "transfer-bucket", "rework",
+	# the records side of the same desks — read only, and the questions they
+	# answer ("when did that go out", "who re-filed this") land on delivery
+	"hallmarking-records", "certification-records", "product-transfer-records",
+	"holder-transfer-records", "bucket-transfer-records",
 	# Barcode: the roll printer and the sheet printer
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again
