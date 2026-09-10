@@ -54,6 +54,12 @@ class StoneLot(Document):
 		sieved = round(sum(flt(r.actual_cts) for r in self.items or []), 3)
 		if not flt(self.actual_cts) and sieved:
 			self.actual_cts = sieved
+		# the parcel is a CEILING. The desk stops this at the keystroke, but a page
+		# left open since before a lot was re-booked would post past it, and a lot
+		# holding more stone than came in is not something to discover later.
+		if flt(self.claimed_cts) > 0 and sieved > flt(self.claimed_cts) + 0.0005:
+			frappe.throw(frappe._("The sieves add up to {0} ct — more than the {1} ct that came in.")
+				.format(sieved, flt(self.claimed_cts)))
 		self.rejected_cts = round(max(flt(self.actual_cts) - self.selected_cts, 0), 3)
 		# Selecting more than came in is a typo, and it is worth stopping at the
 		# save rather than leaving a lot whose rejection reads zero for the
