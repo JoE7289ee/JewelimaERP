@@ -86,6 +86,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		.then((r) => { CERTS = (r.message || []).map((x) => x.name); });
 	let PSTONES = [];
 	let DTYPES = [];
+	// what a making rule can be charged on — the doctype's own three
+	const MK_BASIS = ["Per Gram", "Per Piece", "Purity Percent"];
 	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Design Type",
 		fields: ["name"], limit_page_length: 0, order_by: "name" } })
 		.then((r) => { DTYPES = (r.message || []).map((x) => x.name); });
@@ -134,8 +136,26 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
 		payment_terms: "", terms: "", signatory: "", signatory_phone: "" });
 
+	// Diamond rows arrive in whatever order they were typed over the years. A
+	// chart is READ by quality — "what do I charge for EF at this size" — so
+	// they are grouped on the way in, and by size inside each quality. Sorted
+	// on OPEN and not on every keystroke: rows must not jump under the cursor
+	// while somebody is retyping a rate.
+	function sortDiamonds(c) {
+		const rank = (q) => {
+			const u = (q || "").toUpperCase();
+			return u ? (u.includes("EF") ? 0 : u.includes("GH") ? 1 : 2) : 3;
+		};
+		(c.diamond_rates || []).sort((a, b) =>
+			(rank(a.quality) - rank(b.quality))
+			|| (a.quality || "").localeCompare(b.quality || "")
+			|| (flt(a.from_ct) - flt(b.from_ct))
+			|| (flt(a.to_ct) - flt(b.to_ct)));
+	}
+
 	function openChart(data) {
 		cur = data || BLANK();
+		sortDiamonds(cur);
 		if (cur.name) markOn(cur.name);
 		root.find(".pc-pick").hide();
 		paintEditor();
@@ -180,6 +200,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				<option value="">${__("DEFAULT (any type)")}</option>
 				${DTYPES.map((t) => `<option ${r.design_type === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
 			</select></td>
+			<td><select data-f="basis">${MK_BASIS.map((x) =>
+				`<option ${(r.basis || "Per Gram") === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</select></td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
 			<td><input data-f="min_per_piece" class="inr" inputmode="numeric" value="${inr(r.min_per_piece)}" placeholder="${__("floor ₹")}"></td>
 			<td><input data-f="flat_below_gm" type="number" step="0.001" value="${num(r.flat_below_gm)}" placeholder="${__("e.g. 1")}"></td>
@@ -230,7 +252,8 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="mk"><thead><tr><th title="${
-				__("blank = any karat; a karat-specific row beats a blank one for the same type")}">${__("Karat")}</th><th>${__("Design Type")}</th><th>${__("Rate ₹/g")}</th><th>${__("Minimum ₹")}</th><th title="${__("NT below this weight pays the Minimum flat; at/above goes per-gram. Blank = classic floor.")}">${__("Flat below g")}</th><th></th></tr></thead>
+				__("blank = any karat; a karat-specific row beats a blank one for the same type")}">${__("Karat")}</th><th>${__("Design Type")}</th><th title="${
+				__("Per Gram bills the nett weight; Per Piece is one figure whatever it weighs. A BACK CHAIN rule is normally Per Gram.")}">${__("Basis")}</th><th>${__("Rate")}</th><th>${__("Minimum ₹")}</th><th title="${__("NT below this weight pays the Minimum flat; at/above goes per-gram. Blank = classic floor.")}">${__("Flat below g")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("mk")}</tbody></table>
 			<div class="pc-sec">${__("Colour Stone Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="csr">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="csr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
@@ -296,7 +319,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[KIND_ARR[k]].push(k === "dmd" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "", from_ct: "", to_ct: "", solitaire: "" }
 			: k === "ps" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
-			: k === "mk" ? { karat: "", design_type: "", rate: "", min_per_piece: "", flat_below_gm: "" }
+			: k === "mk" ? { karat: "", design_type: "", basis: "Per Gram", rate: "", min_per_piece: "", flat_below_gm: "" }
 			: k === "touch" ? { karat: "18K", touch: "" }
 			: ["csr", "czr", "cvr", "swr"].includes(k) ? { from_ct: "", to_ct: "", basis: "Per Ct", rate: "" }
 			: { });
