@@ -18803,7 +18803,8 @@ def get_hallmark_removal(barcode):
 	"""Remove Hallmarking: what one piece's hallmarking looks like right now.
 	Reads only — nothing is undone until remove_hallmark is called."""
 	frappe.only_for(list(HALL_REMOVE_ROLES))
-	nm = (barcode or "").strip()
+	# the E prefix is optional here as on every other scanning desk
+	nm = _resolve_bag_code((barcode or "").strip())
 	if not frappe.db.exists("Order Bag", nm):
 		return {"rejected": frappe._("This card doesn't exist")}
 	b = frappe.db.get_value("Order Bag", nm,
@@ -18835,7 +18836,7 @@ def remove_hallmark(barcode, reason=None):
 	never rewritten: its item keeps the code that was recorded, and the removal
 	is written onto the piece as a comment, so what happened stays readable."""
 	frappe.only_for(list(HALL_REMOVE_ROLES))
-	nm = (barcode or "").strip()
+	nm = _resolve_bag_code((barcode or "").strip())
 	why = (reason or "").strip()
 	if not why:
 		frappe.throw(frappe._("Say why the hallmarking is coming off."))
@@ -18861,6 +18862,43 @@ def remove_hallmark(barcode, reason=None):
 			_user_label(frappe.session.user), had, frappe.utils.escape_html(why)))
 	frappe.db.commit()
 	return {"ok": 1, "order_bag": nm, "was": had}
+
+
+@frappe.whitelist()
+def remove_hallmarks(barcodes, reason=None):
+	"""A table of pieces losing their hallmarking at once, for ONE reason.
+
+	One reason for the lot is the honest shape: a manager clearing a tray does
+	it because a run came back badly stamped, not for twelve unrelated reasons.
+	Where the reasons really differ, the pieces are removed in more than one go
+	— and each piece still gets its own comment carrying that reason, so the
+	story on any single card reads exactly as it did before.
+
+	Each piece is its own write, so one that cannot come off — on an open batch,
+	HUID already gone — leaves the rest alone and comes back BY NAME with why.
+	"""
+	frappe.only_for(list(HALL_REMOVE_ROLES))
+	if isinstance(barcodes, str):
+		barcodes = json.loads(barcodes or "[]")
+	names, seen = [], set()
+	for n in [str(x or "").strip() for x in (barcodes or [])]:
+		if n and n not in seen:
+			seen.add(n)
+			names.append(n)
+	if not names:
+		frappe.throw(frappe._("Nothing to remove."))
+	if not (reason or "").strip():
+		frappe.throw(frappe._("Say why the hallmarking is coming off."))
+
+	done, failed = [], []
+	for nm in names:
+		try:
+			done.append(remove_hallmark(nm, reason=reason))
+		except Exception as e:
+			frappe.db.rollback()
+			failed.append({"order_bag": nm,
+				"error": str(e).split("\n")[0][:160] or frappe._("could not be removed")})
+	return {"removed": done, "failed": failed}
 
 
 @frappe.whitelist()
