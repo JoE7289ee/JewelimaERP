@@ -770,8 +770,8 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			});
 	});
 
-	// the agreed physical order: the item ladder -> YELLOW/ROSE/WHITE ->
-	// below-1g band first -> GW ascending inside the band
+	// the agreed physical order: shop -> SHAPE -> the item ladder ->
+	// YELLOW/ROSE/WHITE -> below-1g band first -> GW ascending inside the band
 	const ITEM_RANK = { NOSEPIN: 0, NOSPIN: 0, NP: 0, PENDANT: 1, PD: 1, STUD: 2, RING: 3,
 		BRACELET: 4, "CH BRACELET": 4, BANGLE: 5, "PIPE BANGLE": 5,
 		"CHAIN NECKLACE": 6, "CH NECKLACE": 6, NECKLACE: 7, NECK: 7 };
@@ -784,9 +784,19 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		// so the shops come apart first and the item ladder runs inside each.
 		// Rows with no shop sort last rather than jumbling in among the named ones.
 		const byShop = ROWS.some((r) => (r.shop || "").trim());
+		// SHAPE is the tier above the item ladder. A shaped piece is a different
+		// thing to make and a different thing to count — CHAIN is not a small
+		// NOSEPIN — so the shapes come apart alphabetically first and the ladder
+		// runs inside each. Unshaped rows sort LAST, the same rule the shops
+		// follow: they are the bulk, and the named groups should be findable.
+		const byShape = ROWS.some((r) => (r.shape || "").trim());
 		ROWS.sort((a, b) => (byShop
 				? (((a.shop || "").trim() ? 0 : 1) - ((b.shop || "").trim() ? 0 : 1))
 					|| (a.shop || "").trim().localeCompare((b.shop || "").trim())
+				: 0)
+			|| (byShape
+				? (((a.shape || "").trim() ? 0 : 1) - ((b.shape || "").trim() ? 0 : 1))
+					|| (a.shape || "").trim().localeCompare((b.shape || "").trim())
 				: 0)
 			|| (rankOf(ITEM_RANK, a.item || "") - rankOf(ITEM_RANK, b.item || ""))
 			|| (a.item || "").localeCompare(b.item || "")
@@ -798,9 +808,10 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		SORTED = true;
 		PRICED = null;
 		paint();
-		frappe.show_alert({ message: (ROWS.some((r) => (r.shop || "").trim())
-			? __("Shop → item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length])
-			: __("Item ladder → YELLOW/ROSE/WHITE → band → GW, numbered 1–{0}.", [ROWS.length])),
+		const tiers = [ROWS.some((r) => (r.shop || "").trim()) ? __("Shop") : null,
+			ROWS.some((r) => (r.shape || "").trim()) ? __("Shape") : null,
+			__("item ladder"), "YELLOW/ROSE/WHITE", __("band"), "GW"].filter(Boolean);
+		frappe.show_alert({ message: __("{0}, numbered 1–{1}.", [tiers.join(" → "), ROWS.length]),
 			indicator: "green" }, 5);
 	});
 

@@ -14820,24 +14820,59 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 			ws.cell(row=r, column=C["shop"], value=str(p.get("shop") or "").strip().upper() or None)
 		r += 1
 
-	# blocks: item type -> colour runs -> weight bands. EVERY band run closes
-	# with an UNLABELLED bold total line (even a single-piece run — their
+	# blocks: SHAPE -> item type -> colour runs -> weight bands. EVERY band run
+	# closes with an UNLABELLED bold total line (even a single-piece run — their
 	# sheet reads that way). No colour totals and no item totals; TOTAL GROSS
 	# sums exactly the band-total rows.
+	#
+	# A SHAPE gets a block of its own with its own LABELLED total, because a
+	# shaped piece is a different thing to count — three CHAIN and five OVAL
+	# inside eighty-one nosepins are what somebody is actually asked about, and
+	# they were previously scattered through the item ladder. The rows arrive
+	# already in that order: Sort & Number puts shape above the ladder.
+	#
+	# In a PRICED row `colour` is the SHAPE and `item_color` is the gold colour
+	# — the two swap on the way here, and the headings say Colour / ITEM COLOR.
+	#
+	# The shape total is a sum of that block's BAND totals, and is deliberately
+	# NOT added to gross_terms: TOTAL GROSS already adds those bands, and adding
+	# their sum as well would count the block twice.
 	from itertools import groupby
 
 	def span(a_, b_):
 		return lambda L, a=a_, b=b_: "=SUM({0}{1}:{0}{2})".format(L, a, b)
 
-	for item, ig in groupby(priced, key=lambda p: (p.get("item") or "")):
-		cgroups = [(k, list(g)) for k, g in groupby(list(ig), key=lambda p: (p.get("item_color") or ""))]
-		for colr, crun in cgroups:
-			for band, brun in groupby(crun, key=band_of):
-				brun = list(brun)
-				bstart = r
-				for p in brun:
-					write_piece(p)
-				gross_terms.append(("cell", sum_row("", span(bstart, r - 1), font=band_bold)))
+	def cells(rows_):
+		return lambda L, rr=tuple(rows_): "=" + "+".join("{0}{1}".format(L, n) for n in rr)
+
+	def ladder(run):
+		"""item -> colour -> band over one run; returns its band-total rows."""
+		made = []
+		for _item, ig in groupby(run, key=lambda p: (p.get("item") or "")):
+			for _colr, crun in groupby(list(ig), key=lambda p: (p.get("item_color") or "")):
+				for _band, brun in groupby(list(crun), key=band_of):
+					bstart = r
+					for p in list(brun):
+						write_piece(p)
+					made.append(sum_row("", span(bstart, r - 1), font=band_bold))
+		return made
+
+	# only a lot that actually carries a shape is blocked by shape; without one
+	# the sheet comes out exactly as it always has
+	if any(str(p.get("colour") or "").strip() for p in priced):
+		for shape, srun in groupby(priced, key=lambda p: str(p.get("colour") or "").strip()):
+			bands = ladder(list(srun))
+			gross_terms.extend(("cell", n) for n in bands)
+			# the unshaped bulk keeps its band totals and takes no block total —
+			# a total labelled with nothing says nothing
+			if shape and len(bands) > 1:
+				sum_row(shape, cells(bands), font=bold)
+			elif shape:
+				# a one-band shape is already totalled by that band; labelling
+				# that row is clearer than printing the same figure twice
+				ws.cell(row=bands[0], column=C["item"], value=shape).font = bold
+	else:
+		gross_terms.extend(("cell", n) for n in ladder(priced))
 
 	last = r - 1
 	for rr in range(r0, last + 1):
