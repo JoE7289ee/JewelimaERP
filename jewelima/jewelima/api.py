@@ -11784,7 +11784,10 @@ def _price_chart_letter_html(d):
 	certs = "".join(
 		"<tr><td>{0}</td><td>{1}</td><td class='r'>{2}</td><td class='r'>{3}</td></tr>".format(
 			esc(r["certification"]) + (" · solitaire" if cint(r.get("solitaire")) else ""),
-			span(r.get("from_ct"), r.get("to_ct")) if flt(r.get("to_ct")) else "Any weight",
+			# span() already says "0.22 ct & above" for an open-ended slab. Falling
+			# back to "Any weight" whenever the TO was blank threw the FROM away,
+			# so the top slab of every ladder printed as if it priced everything.
+			span(r.get("from_ct"), r.get("to_ct")),
 			("₹ " + money(r["rate"])) if flt(r["rate"]) else "Included",
 			("per ct" if r.get("basis") == "Per Ct" else "per piece") if flt(r["rate"]) else "—")
 		for r in d.get("certification_charges", []))
