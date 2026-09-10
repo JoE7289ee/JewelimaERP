@@ -336,6 +336,14 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	function paintInfo() {
 		if (!ROWS.length) return root.find(".of-info").empty();
 		const gw = ROWS.reduce((a, r) => a + flt(r.gs), 0);
+		// the stone weights the lot is priced on. Diamond always — every lot has
+		// some — and colour stone only when the lot carries any, the same rule the
+		// table's own CS columns follow. CS reads in whatever unit the sheet is
+		// set to, so the tile and the rows never disagree.
+		const dwCt = ROWS.reduce((a, r) => a + flt(r.dmd_ct), 0);
+		const dwPcs = ROWS.reduce((a, r) => a + cint(r.dmd_pcs), 0);
+		const csCt = ROWS.reduce((a, r) => a + flt(r.stn_ct), 0);
+		const csPcs = ROWS.reduce((a, r) => a + cint(r.stn_pcs), 0);
 		const huids = ROWS.reduce((a, r) => a + huidCount(r.huid), 0);
 		const labs = {};
 		ROWS.forEach((r) => { if (r.cert) labs[r.cert] = (labs[r.cert] || 0) + 1; });
@@ -361,6 +369,11 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				<div class="sub">${__("click to scan-assign")}</div></div>` : ""}
 			<div class="of-tile"><div class="k">${__("Total GW")}</div><div class="v">${gw.toFixed(3)} g</div>
 				<div class="sub">${ROWS.length} ${__("pieces")}</div></div>
+			<div class="of-tile"><div class="k">${__("Total DW")}</div><div class="v">${dwCt.toFixed(3)} ct</div>
+				<div class="sub">${dwPcs} ${__("stones")}</div></div>
+			${hasCS() ? `<div class="of-tile"><div class="k">${__("Total CS")}</div>
+				<div class="v">${CSG ? (csCt * CT_TO_G).toFixed(3) + " g" : csCt.toFixed(3) + " ct"}</div>
+				<div class="sub">${csPcs} ${__("stones")}</div></div>` : ""}
 			<div class="of-tile"><div class="k">${__("HUIDs")}</div><div class="v">${huids}</div>
 				<div class="sub">${__("incl. PENDING")}</div></div>
 			<div class="of-tile"><div class="k">${__("Certified")}</div><div class="v">${certed}</div>
