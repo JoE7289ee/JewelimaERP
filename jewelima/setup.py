@@ -421,6 +421,9 @@ JEWELIMA_STONE_ADMIN_PAGES = [
 	# reading what became of a repack is not approving one — the buttons stay
 	# manager-only and the API refuses this role either way
 	"stone-repack-history",
+	# counting the tray is this desk's job; writing the gap off is not. Same
+	# split as repack — the page is open, the APPROVE button is not.
+	"stone-adjustment", "stone-adjustment-history",
 	# assorting a parcel is THIS desk's job and nobody else's — a tray is a
 	# measurement, and the person who took it is the one who may change it. The
 	# stock desk books the parcel in and decides what is bought; the sieving in
@@ -430,6 +433,7 @@ JEWELIMA_STONE_ADMIN_PAGES = [
 JEWELIMA_STONE_ADMIN_READ = JEWELIMA_STONE_ISSUE_READ + [
 	"Stone Lot", "Stone Lot Sieve", "Stone Purchase Request", "Stone Purchase Request Item",
 	"Diamond Sieve", "Stone Type", "Repack Request", "Repack Request Item",
+	"Stone Adjustment Request", "Stone Adjustment Request Item",
 	"Pre Bag Record", "Design", "Job Order", "Customer",
 ]
 # Design Bank personas. The base role works the catalog (browse, build cards,

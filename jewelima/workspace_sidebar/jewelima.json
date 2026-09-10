@@ -930,6 +930,18 @@
    "type": "Link"
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "scale",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Stone Adjustment History",
+   "link_to": "stone-adjustment-history",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "folder",
@@ -1225,6 +1237,18 @@
    "keep_closed": 0,
    "label": "Repack Stock",
    "link_to": "repack-stock",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "scale",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Stone Adjustment",
+   "link_to": "stone-adjustment",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link"
@@ -2758,7 +2782,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-10 23:57:10.748395",
+ "modified": "2026-09-11 01:03:53.835060",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

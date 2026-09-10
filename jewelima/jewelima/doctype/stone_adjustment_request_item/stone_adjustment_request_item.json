@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "creation": "2026-09-11 06:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item",
+  "system_qty",
+  "counted_qty",
+  "difference",
+  "counted_pcs",
+  "note"
+ ],
+ "fields": [
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "system_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "On the books (ct)",
+   "precision": "3",
+   "description": "What the warehouse said when the tray was counted. Kept so a stale count can be spotted at approval."
+  },
+  {
+   "fieldname": "counted_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Counted (ct)",
+   "precision": "3"
+  },
+  {
+   "fieldname": "difference",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Difference (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counted_pcs",
+   "fieldtype": "Int",
+   "label": "Counted pcs"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Data",
+   "label": "Note"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-11 06:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stone Adjustment Request Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,15 +1,15 @@
 {
  "content": null,
- "creation": "2026-07-12 16:00:00",
+ "creation": "2026-09-11 06:00:00",
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-11 01:04:05.217751",
+ "modified": "2026-09-11 01:01:33.561681",
  "modified_by": "Administrator",
  "module": "Jewelima",
- "name": "parties",
+ "name": "stone-adjustment-history",
  "owner": "Administrator",
- "page_name": "parties",
+ "page_name": "stone-adjustment-history",
  "roles": [
   {
    "role": "System Manager"
@@ -21,18 +21,12 @@
    "role": "JW Manager"
   },
   {
-   "role": "JW Party Admin"
-  },
-  {
-   "role": "JW Delivery"
-  },
-  {
-   "role": "Jewelima Ordering"
+   "role": "JW Stone Admin"
   }
  ],
  "script": null,
  "standard": "Yes",
  "style": null,
  "system_page": 0,
- "title": "Parties"
+ "title": "Stone Adjustment History"
 }

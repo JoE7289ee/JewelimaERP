@@ -6123,6 +6123,283 @@ def get_repack_history(period="month", start=None, end=None, status=None, limit=
 	}}
 
 
+# ---------------------------------------------------------------- STONE ADJUSTMENT
+# The books say one thing, the tray says another. Nobody moved those carats —
+# they are the gap between the two — so they are WRITTEN OFF rather than issued,
+# against the company's Stock Adjustment account, and a manager signs for it.
+#
+# Only the LOOSE stone room (Stone Issue) is adjustable. Stones sitting in
+# Finished Goods, In Bags, At Certification or Stone Change belong to a card or
+# a piece; their weight is that piece's story and is not something to correct
+# from a tray count.
+STONE_ADJUST_COUNT_ROLES = {"System Manager", "JW Manager", "JW Stock Admin", "JW Stone Admin"}
+STONE_ADJUST_APPROVE_ROLES = {"System Manager", "Stock Manager", "JW Manager", "JW Stock Admin"}
+
+
+def _stone_adjust_wh():
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+	return _wh(STONE_ISSUE_WAREHOUSE)
+
+
+def _require_stone_count():
+	if not (STONE_ADJUST_COUNT_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Counting the stone room is not open to your role."),
+			frappe.PermissionError)
+
+
+def _require_stone_adjust_approve():
+	if not (STONE_ADJUST_APPROVE_ROLES & set(frappe.get_roles())):
+		frappe.throw(frappe._("Only a manager writes a stone difference off."),
+			frappe.PermissionError)
+
+
+def _sieve_avgs():
+	return {r.sieve_size: flt(r.avg_cts) for r in frappe.get_all(
+		"Diamond Sieve", fields=["sieve_size", "avg_cts"], limit_page_length=0) if flt(r.avg_cts) > 0}
+
+
+@frappe.whitelist()
+def get_stone_adjust_context():
+	"""The warehouse being counted, and whether this user may write a gap off."""
+	_require_stone_count()
+	return {
+		"warehouse": _stone_adjust_wh(),
+		"can_approve": bool(STONE_ADJUST_APPROVE_ROLES & set(frappe.get_roles())),
+	}
+
+
+@frappe.whitelist()
+def get_stone_adjust_stock(family=None, search=None):
+	"""Everything loose in the stone room, in one list, ready to be counted."""
+	_require_stone_count()
+	wh = _stone_adjust_wh()
+	bins = frappe.db.sql("""
+		SELECT b.item_code, i.item_group, i.stone_type, i.item_name, b.actual_qty, b.stock_uom
+		FROM `tabBin` b JOIN `tabItem` i ON i.name = b.item_code
+		WHERE b.warehouse = %s AND IFNULL(i.stone_type, '') != '' AND b.actual_qty > 0.0005
+		ORDER BY i.stone_type, i.item_group, b.item_code""", wh, as_dict=True)
+	sieve = _sieve_avgs()
+	rows, fams = [], set()
+	for b in bins:
+		fam = b.stone_type or (b.item_group or "")
+		fams.add(fam)
+		if family and fam != family:
+			continue
+		if search and search.upper() not in (b.item_code + " " + (b.item_name or "")).upper():
+			continue
+		avg = sieve.get(b.item_code.split(" ", 1)[1]) if (b.stone_type == "Diamond" and " " in b.item_code) else None
+		rows.append({
+			"item": b.item_code, "item_name": b.item_name or b.item_code,
+			"group": b.item_group or "", "family": fam,
+			"stock": round(flt(b.actual_qty), 3),
+			"uom": b.stock_uom or "Carat",
+			"avg": round(avg, 4) if avg else None,
+			"est_pcs": int(flt(b.actual_qty) / avg) if avg else None,
+		})
+	return {"rows": rows, "families": sorted(fams), "warehouse": wh,
+		"total": round(sum(r["stock"] for r in rows), 3)}
+
+
+@frappe.whitelist()
+def create_stone_adjustment(rows, reason=None):
+	"""Book a count. Only the lines that DISAGREE are kept — a line that matches
+	is not an adjustment, and carrying it would make the write-off look bigger
+	than it is."""
+	_require_stone_count()
+	if isinstance(rows, str):
+		rows = json.loads(rows or "[]")
+	reason = (reason or "").strip()
+	if not reason:
+		frappe.throw(frappe._("Say what the count found — a write-off with no reason is not a record."))
+
+	wh = _stone_adjust_wh()
+	lines, seen = [], set()
+	for r in rows or []:
+		it = (r or {}).get("item")
+		if not it or it in seen:
+			continue
+		if (r or {}).get("counted") in (None, ""):
+			continue                      # not counted is not the same as zero
+		counted = flt((r or {}).get("counted"))
+		if counted < 0:
+			frappe.throw(frappe._("{0}: a counted weight cannot be negative.").format(it))
+		if not frappe.db.get_value("Item", it, "stone_type"):
+			frappe.throw(frappe._("{0} is not a stone.").format(it))
+		have = flt(frappe.db.get_value("Bin", {"item_code": it, "warehouse": wh}, "actual_qty"))
+		if abs(counted - have) <= 0.0005:
+			continue                      # the books were right — nothing to write off
+		seen.add(it)
+		lines.append({"item": it, "system_qty": round(have, 3), "counted_qty": round(counted, 3),
+			"counted_pcs": cint((r or {}).get("pcs")), "note": ((r or {}).get("note") or "")[:140]})
+	if not lines:
+		frappe.throw(frappe._("Nothing disagrees with the books — there is nothing to adjust."))
+
+	doc = frappe.get_doc({
+		"doctype": "Stone Adjustment Request", "warehouse": wh, "status": "Pending",
+		"reason": reason, "counted_by": frappe.session.user,
+		"counted_on": frappe.utils.now_datetime(), "items": lines,
+	})
+	doc.insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "short": flt(doc.total_short), "over": flt(doc.total_over),
+		"lines": len(lines)}
+
+
+def _stone_adjust_rows(names):
+	imap = {}
+	if not names:
+		return imap
+	for r in frappe.get_all("Stone Adjustment Request Item", filters={"parent": ["in", names]},
+			fields=["parent", "item", "system_qty", "counted_qty", "difference", "counted_pcs", "note"],
+			order_by="idx"):
+		imap.setdefault(r.parent, []).append({
+			"item": r.item, "system_qty": flt(r.system_qty), "counted_qty": flt(r.counted_qty),
+			"difference": flt(r.difference), "pcs": cint(r.counted_pcs), "note": r.note or ""})
+	return imap
+
+
+@frappe.whitelist()
+def list_stone_adjustments(status=None, limit=50):
+	_require_stone_count()
+	filters = {}
+	if status and status != "all":
+		filters["status"] = status.title()
+	rows = frappe.get_all("Stone Adjustment Request", filters=filters,
+		fields=["name", "warehouse", "status", "reason", "reject_reason",
+			"total_short", "total_over", "counted_by", "counted_on",
+			"approved_by", "approved_on", "stock_reconciliation"],
+		order_by="creation desc", limit_page_length=cint(limit) or 50)
+	imap = _stone_adjust_rows([r.name for r in rows])
+	who = {r.counted_by for r in rows} | {r.approved_by for r in rows if r.approved_by}
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list(who) or [""]]}, fields=["name", "full_name"])}
+	for r in rows:
+		r["items"] = imap.get(r.name, [])
+		r["counted_label"] = users.get(r.counted_by, r.counted_by or "")
+		r["decided_label"] = users.get(r.approved_by, r.approved_by or "")
+		r["counted_on"] = str(r.counted_on or "")[:16]
+		r["approved_on"] = str(r.approved_on or "")[:16]
+		r["total_short"] = flt(r.total_short)
+		r["total_over"] = flt(r.total_over)
+	return {"rows": rows,
+		"can_approve": bool(STONE_ADJUST_APPROVE_ROLES & set(frappe.get_roles()))}
+
+
+@frappe.whitelist()
+def approve_stone_adjustment(name):
+	"""Write the difference off.
+
+	A Stock Reconciliation SETS the balance rather than moving it, which is the
+	right shape for a count — but it also means a stale count would erase
+	whatever happened between the counting and the signing. So every line is
+	re-read first, and if the books have moved since the tray was counted the
+	adjustment is refused rather than posted over the top of a real movement."""
+	_require_stone_adjust_approve()
+	doc = frappe.get_doc("Stone Adjustment Request", name)
+	if doc.status != "Pending":
+		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
+
+	moved = []
+	for r in doc.items:
+		now = flt(frappe.db.get_value("Bin", {"item_code": r.item, "warehouse": doc.warehouse}, "actual_qty"))
+		if abs(now - flt(r.system_qty)) > 0.0005:
+			moved.append("{0}: counted against {1} ct, now {2} ct".format(
+				r.item, round(flt(r.system_qty), 3), round(now, 3)))
+	if moved:
+		frappe.throw(frappe._(
+			"The books have moved since this was counted, so writing it off now would erase a real movement. Recount these and raise it again:<br><br>{0}"
+		).format("<br>".join(moved)))
+
+	items = [{
+		"item_code": r.item, "warehouse": doc.warehouse,
+		"qty": flt(r.counted_qty), "valuation_rate": 0,
+		# stones carry no valuation on their bins, so a rate is not something to
+		# invent here — the adjustment is a weight correction, not a revaluation
+		"allow_zero_valuation_rate": 1,
+	} for r in doc.items]
+	sr = frappe.get_doc({
+		"doctype": "Stock Reconciliation", "company": _company(),
+		"purpose": "Stock Reconciliation",
+		"posting_date": frappe.utils.nowdate(), "posting_time": frappe.utils.nowtime(),
+		"set_posting_time": 1, "items": items,
+	})
+	sr.insert(ignore_permissions=True)
+	sr.submit()
+
+	doc.db_set("status", "Approved")
+	doc.db_set("approved_by", frappe.session.user)
+	doc.db_set("approved_on", frappe.utils.now_datetime())
+	doc.db_set("stock_reconciliation", sr.name)
+	frappe.db.commit()
+	return {"name": name, "stock_reconciliation": sr.name,
+		"short": flt(doc.total_short), "over": flt(doc.total_over)}
+
+
+@frappe.whitelist()
+def reject_stone_adjustment(name, reason=None):
+	_require_stone_adjust_approve()
+	doc = frappe.get_doc("Stone Adjustment Request", name)
+	if doc.status != "Pending":
+		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status))
+	doc.db_set("status", "Rejected")
+	doc.db_set("approved_by", frappe.session.user)
+	doc.db_set("approved_on", frappe.utils.now_datetime())
+	if reason:
+		doc.db_set("reject_reason", reason)
+	frappe.db.commit()
+	return {"name": name}
+
+
+@frappe.whitelist()
+def get_stone_adjust_history(period="month", start=None, end=None, status=None, limit=400):
+	"""Every count ever taken and what it came to."""
+	_require_stone_count()
+	frm, to, label = _loss_period_range(period, start, end)
+	filters = {}
+	if status in ("Pending", "Approved", "Rejected"):
+		filters["status"] = status
+	if frm and to:
+		filters["counted_on"] = ["between", [str(frm) + " 00:00:00", str(to) + " 23:59:59"]]
+	rows = frappe.get_all("Stone Adjustment Request", filters=filters,
+		fields=["name", "warehouse", "status", "reason", "reject_reason",
+			"total_short", "total_over", "counted_by", "counted_on",
+			"approved_by", "approved_on", "stock_reconciliation"],
+		order_by="counted_on desc", limit_page_length=cint(limit) or 400)
+	imap = _stone_adjust_rows([r.name for r in rows])
+	who = {r.counted_by for r in rows} | {r.approved_by for r in rows if r.approved_by}
+	users = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list(who) or [""]]}, fields=["name", "full_name"])}
+
+	counts = {"Pending": 0, "Approved": 0, "Rejected": 0}
+	short = over = 0.0
+	lines = 0
+	res = []
+	for r in rows:
+		its = imap.get(r.name, [])
+		counts[r.status] = counts.get(r.status, 0) + 1
+		if r.status == "Approved":
+			short += flt(r.total_short)
+			over += flt(r.total_over)
+			lines += len(its)
+		res.append({
+			"name": r.name, "when": str(r.counted_on or "")[:16],
+			"warehouse": r.warehouse or "", "status": r.status,
+			"short": round(flt(r.total_short), 3), "over": round(flt(r.total_over), 3),
+			"items": its, "reason": r.reason or "",
+			"by": users.get(r.counted_by, r.counted_by or ""),
+			"decided_by": users.get(r.approved_by, r.approved_by or ""),
+			"decided_on": str(r.approved_on or "")[:16],
+			"reconciliation": r.stock_reconciliation or "",
+			"reject_reason": r.reject_reason or "",
+		})
+	return {"rows": res, "label": label, "totals": {
+		"counts": len(res), "pending": counts.get("Pending", 0),
+		"approved": counts.get("Approved", 0), "rejected": counts.get("Rejected", 0),
+		"short": round(short, 3), "over": round(over, 3),
+		"net": round(over - short, 3), "lines": lines,
+	}}
+
+
 # --- Selection Tags (their own master — different purpose from the bank's Design Tags)
 @frappe.whitelist()
 def get_selection_tags(with_counts=1):

@@ -1,0 +1,152 @@
+{
+ "actions": [],
+ "autoname": "SADJ-.#####",
+ "creation": "2026-09-11 06:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "warehouse",
+  "total_short",
+  "total_over",
+  "col_a",
+  "status",
+  "counted_by",
+  "counted_on",
+  "approved_by",
+  "approved_on",
+  "stock_reconciliation",
+  "sec_i",
+  "items",
+  "sec_r",
+  "reason",
+  "reject_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_short",
+   "fieldtype": "Float",
+   "label": "Short (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_over",
+   "fieldtype": "Float",
+   "label": "Over (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_a",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Pending\nApproved\nRejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counted_by",
+   "fieldtype": "Link",
+   "label": "Counted by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counted_on",
+   "fieldtype": "Datetime",
+   "label": "Counted on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Decided by",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_on",
+   "fieldtype": "Datetime",
+   "label": "Decided on",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_reconciliation",
+   "fieldtype": "Link",
+   "label": "Stock Reconciliation",
+   "options": "Stock Reconciliation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_i",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Counted",
+   "options": "Stone Adjustment Request Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_r",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reject_reason",
+   "fieldtype": "Small Text",
+   "label": "Reject reason",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-11 06:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stone Adjustment Request",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Stock User"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
