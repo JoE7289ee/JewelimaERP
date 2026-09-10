@@ -13,6 +13,13 @@
   "quality_token",
   "status",
   "piece_count",
+  "pricing_section",
+  "price_chart",
+  "gold_rate",
+  "cb_pricing",
+  "chart_quality",
+  "gst_percent",
+  "sec_data",
   "data"
  ],
  "fields": [
@@ -61,6 +68,42 @@
    "in_list_view": 1,
    "label": "Pieces",
    "read_only": 1
+  },
+  {
+   "fieldname": "pricing_section",
+   "fieldtype": "Section Break",
+   "label": "Priced with"
+  },
+  {
+   "fieldname": "price_chart",
+   "fieldtype": "Link",
+   "label": "Price Chart",
+   "options": "Price Chart"
+  },
+  {
+   "fieldname": "gold_rate",
+   "fieldtype": "Float",
+   "label": "Gold Rate (/g)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "cb_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "chart_quality",
+   "fieldtype": "Data",
+   "label": "Chart Quality"
+  },
+  {
+   "fieldname": "gst_percent",
+   "fieldtype": "Float",
+   "label": "GST %",
+   "precision": "2"
+  },
+  {
+   "fieldname": "sec_data",
+   "fieldtype": "Section Break"
   },
   {
    "description": "The working rows exactly as the OLD FORMAT page holds them (JSON).",

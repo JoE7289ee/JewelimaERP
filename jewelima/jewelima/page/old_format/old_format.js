@@ -44,6 +44,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	let SESSION = null; // Old Format Import name when saved/loaded
 	let TITLE = "";     // the saved session's name-as-shown (Save as… sets it)
 	let LOADING = false; // guards the session picker's onchange during set_value
+	// the chart quality a reopened lot was priced at. It cannot be set until the
+	// chart has loaded and filled the picker's options, so it waits here.
+	let PRICED_WITH = "";
 	let SORTED = false; // Sort & Number has been run since the last edit
 	const SEL = new Set(); // selected unique_ids (prep bulk ops)
 
@@ -160,6 +163,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="of-btn of-save" style="display:none;">${__("Save as…")}</button>
 			<button class="of-btn of-sortnum" style="display:none;">${__("Sort & Number")}</button>
 			<button class="of-btn of-find" style="display:none;">${__("Find #")}</button>
+			<button class="of-btn of-weights" style="display:none;">${__("Edit weights")}</button>
 			<button class="of-btn go of-goexport" style="display:none;">${__("Continue to Export →")}</button>
 			<span style="flex:1;"></span>
 			<button class="of-btn of-units"></button>
@@ -264,7 +268,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			const quals = [...new Set((m.diamond_rates || []).map((d) => d.quality).filter(Boolean))].sort();
 			fCq.df.options = [""].concat(quals).join("\n");
 			fCq.refresh();
-			if (quals.length === 1) fCq.set_value(quals[0]);
+			// a reopened lot's own quality wins over the convenience pick
+			if (PRICED_WITH && quals.includes(PRICED_WITH)) {
+				LOADING = true;
+				fCq.set_value(PRICED_WITH);
+				LOADING = false;
+				PRICED_WITH = "";
+			} else if (quals.length === 1) {
+				fCq.set_value(quals[0]);
+			}
 			applyToken();
 		});
 	}
@@ -396,10 +408,19 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			FILE = { name: m.source_file || m.title };
 			fParty.set_value(m.party || "");
 			fQual.set_value(m.quality_token || "EF");
+			// the pricing set comes back with it. LOADING keeps these set_values
+			// from firing unprice() — there is nothing priced yet to invalidate,
+			// and the handlers would only fight each other on the way in.
+			LOADING = true;
+			if (m.price_chart) fChart.set_value(m.price_chart);
+			if (m.gold_rate) fRate.set_value(m.gold_rate);
+			if (m.gst_percent) fGst.set_value(m.gst_percent);
+			PRICED_WITH = m.chart_quality || "";
+			LOADING = false;
 			root.find(".of-file").addClass("has").text("💾 " + m.title);
 			root.find(".of-cover").html(__("Saved import <b>{0}</b> ({1}) · party <b>{2}</b> · <b>{3}</b> piece(s)",
 				[esc(m.title), esc(m.status), esc(m.party || "—"), ROWS.length]));
-			root.find(".of-save, .of-sortnum, .of-find, .of-goexport, .of-xlexport").show();
+			root.find(".of-save, .of-sortnum, .of-find, .of-weights, .of-goexport, .of-xlexport").show();
 			root.find(".of-jos").hide();
 			refreshSaveBtn();
 			setState("prep");
@@ -414,6 +435,15 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				party: fParty.get_value() || "", invoice_no: COVER.invoice_no || "",
 				source_file: (FILE && FILE.name) || "", quality_token: fQual.get_value() || "EF",
 				rows: ROWS, chains: CHAINS, cover: COVER, sorted: SORTED, status: status || undefined,
+				// what it was priced WITH, so the same bill comes back out weeks
+				// later. Only sent once it HAS been priced — saving a half-done
+				// lot must not wipe the chart and rate a previous pricing recorded.
+				...(PRICED ? {
+					price_chart: fChart.get_value() || "",
+					gold_rate: fRate.get_value() || 0,
+					chart_quality: fCq.get_value() || "",
+					gst_percent: fGst.get_value() || 0,
+				} : {}),
 			}) } }).then((r) => {
 			const m = r.message || {};
 			SESSION = m.name;
@@ -458,7 +488,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				if (COVER.party && !fParty.get_value()) fParty.set_value(COVER.party);
 				root.find(".of-cover").html(__("Invoice <b>{0}</b> · party <b>{1}</b> · <b>{2}</b> piece(s)",
 					[esc(COVER.invoice_no || "—"), esc(COVER.party || "—"), m.count || 0]));
-				root.find(".of-save, .of-sortnum, .of-find, .of-goexport, .of-xlexport").show();
+				root.find(".of-save, .of-sortnum, .of-find, .of-weights, .of-goexport, .of-xlexport").show();
 				setState("prep");
 			});
 		};
@@ -896,6 +926,133 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	});
 
 	// Find # — scan a piece, read the serial to write on it physically
+	// EDIT WEIGHTS — the piece on the scale disagrees with the sheet.
+	//
+	// Scan it, and what identifies the piece is shown but locked: the unique id,
+	// the item, the design, its colour and shape. What can be corrected is what
+	// a scale and a stone count actually measure — gross, the diamond count and
+	// carats, PS and CS. Nothing is applied until it is confirmed, and the
+	// confirmation says what changes to what, because a weight typed into the
+	// wrong lot is not something the sheet will tell you about later.
+	//
+	// NET is never typed. It is gross less the stones, recomputed here exactly as
+	// the importer computes it, so a corrected piece cannot end up with a net
+	// that its own gross and stones do not support.
+	root.on("click", ".of-weights", () => {
+		if (!ROWS.length) return;
+		let cur = null;
+		const EDIT = [
+			["gs", __("Gross (g)"), 3], ["dmd_pcs", __("DMD PCS"), 0], ["dmd_ct", __("DMD CT"), 3],
+			["ps_pcs", __("PS PCS"), 0], ["ps_ct", __("PS CT"), 3],
+			["stn_pcs", __("CS PCS"), 0], ["stn_ct", __("CS CT"), 3],
+		];
+		const netOf = (r) => flt((flt(r.gs) - 0.2 * (flt(r.ps_ct) + flt(r.dmd_ct) + flt(r.stn_ct))).toFixed(3));
+		const d = new frappe.ui.Dialog({
+			title: __("Edit weights — scan the piece"), size: "large",
+			fields: [
+				{ fieldname: "scan", fieldtype: "Data", label: __("Scan / type bag no") },
+				{ fieldname: "st", fieldtype: "HTML" },
+			],
+		});
+		const $st = () => d.fields_dict.st.$wrapper;
+
+		function draw(msg, color) {
+			if (!cur) {
+				$st().html(`<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">${
+					msg || __("Scan a piece from this lot to correct its weights.")}</div>`);
+				return;
+			}
+			const r = cur;
+			$st().html(`
+				<div style="border:1px solid var(--border-color);border-radius:10px;padding:11px 14px;
+						background:var(--control-bg);font-size:12.5px;margin-bottom:12px;">
+					<b style="font-size:15px;">${esc(r.unique_id)}</b>
+					<span style="color:var(--text-muted);"> · ${esc(r.item || "")} · ${esc(r.design || "—")}
+					· ${esc(r.colour || "—")}${r.shape ? " · " + esc(r.shape) : ""}${r.huid ? " · HUID " + esc(r.huid) : ""}</span>
+					<div style="color:var(--text-muted);margin-top:3px;">${__("These identify the piece and cannot be changed here.")}</div>
+				</div>
+				<table class="of-t"><thead><tr>
+					<th>${__("Field")}</th><th class="num">${__("On the sheet")}</th><th class="num">${__("Correct to")}</th>
+				</tr></thead><tbody>
+				${EDIT.map(([f, label, dp]) => `<tr>
+					<td>${label}</td>
+					<td class="num" style="color:var(--text-muted);">${dp ? flt(r[f]).toFixed(dp) : cint(r[f])}</td>
+					<td class="num"><input class="ofw-in" data-f="${f}" type="number" step="${dp ? "0.001" : "1"}"
+						min="0" value="${dp ? (flt(r[f]) || "") : (cint(r[f]) || "")}" style="width:120px;text-align:right;"></td>
+				</tr>`).join("")}
+				<tr><td><b>${__("Nett (g)")}</b></td>
+					<td class="num" style="color:var(--text-muted);">${flt(r.nt).toFixed(3)}</td>
+					<td class="num"><b class="ofw-nt">${netOf(r).toFixed(3)}</b>
+						<div style="font-size:10.5px;color:var(--text-muted);font-weight:400;">${
+							__("gross less stones — never typed")}</div></td></tr>
+				</tbody></table>
+				${msg ? `<div style="font-size:12.5px;font-weight:700;margin-top:9px;color:${color};">${msg}</div>` : ""}
+				<div style="margin-top:12px;"><button class="btn btn-primary btn-sm ofw-apply">${
+					__("Apply to {0}", [esc(r.unique_id)])}</button></div>`);
+		}
+
+		// what the boxes hold right now, as a row-shaped object
+		const typed = () => {
+			const o = { ...cur };
+			$st().find(".ofw-in").each(function () {
+				o[$(this).data("f")] = flt(this.value);
+			});
+			o.nt = netOf(o);
+			return o;
+		};
+
+		d.$wrapper.on("input", ".ofw-in", () => $st().find(".ofw-nt").text(netOf(typed()).toFixed(3)));
+
+		d.$wrapper.on("click", ".ofw-apply", () => {
+			const was = cur, now = typed();
+			const changed = EDIT.filter(([f]) => Math.abs(flt(now[f]) - flt(was[f])) > 0.0000001)
+				.map(([f, label, dp]) => [label, dp ? flt(was[f]).toFixed(dp) : cint(was[f]),
+					dp ? flt(now[f]).toFixed(dp) : cint(now[f])]);
+			if (!changed.length && Math.abs(now.nt - flt(was.nt)) < 0.0005) {
+				return draw(__("Nothing is different — nothing to apply."), "var(--text-muted)");
+			}
+			frappe.confirm(
+				__("Change <b>{0}</b>?", [esc(was.unique_id)]) + "<br><br>"
+				+ `<table class="table table-bordered" style="font-size:12.5px;margin:0;">
+					<thead><tr><th>${__("Field")}</th><th>${__("From")}</th><th>${__("To")}</th></tr></thead><tbody>`
+				+ changed.map(([l, a, b]) => `<tr><td>${l}</td><td>${a}</td><td><b>${b}</b></td></tr>`).join("")
+				+ `<tr><td>${__("Nett (g)")}</td><td>${flt(was.nt).toFixed(3)}</td>
+					<td><b>${now.nt.toFixed(3)}</b></td></tr></tbody></table>`
+				+ "<br>" + __("This is what the export will carry."),
+				() => {
+					const i = ROWS.indexOf(was);
+					if (i < 0) return;
+					EDIT.forEach(([f, , dp]) => { ROWS[i][f] = dp ? flt(now[f]) : cint(now[f]); });
+					ROWS[i].nt = now.nt;
+					cur = ROWS[i];
+					// the weights moved, so the price and the physical order both
+					// stop being true — GW is what Sort & Number orders by
+					invalidate();
+					draw();          // the dialog, so it shows the corrected figures
+					paint();         // and the SHEET behind it — the page's own painter
+					refreshStatus();
+					frappe.show_alert({ indicator: "green", message:
+						__("{0} corrected — price it again before exporting.", [esc(was.unique_id)]) }, 6);
+				});
+		});
+
+		d.fields_dict.scan.$input.on("keydown", function (e) {
+			if (e.key !== "Enter") return;
+			e.preventDefault();
+			const v = (this.value || "").trim().toUpperCase();
+			this.value = "";
+			if (!v) return;
+			const hit = ROWS.find((x) => (x.unique_id || "").toUpperCase() === v);
+			if (!hit) { cur = null; return draw(__("{0} is not a piece in this lot.", [esc(v)]), "#b02a2a"); }
+			cur = hit;
+			draw();
+		});
+
+		draw();
+		d.show();
+		setTimeout(() => d.fields_dict.scan.$input.focus(), 120);
+	});
+
 	root.on("click", ".of-find", () => {
 		if (!SORTED) return frappe.show_alert({ message: __("Run Sort & Number first — the serials come from it."), indicator: "orange" }, 4);
 		const seen = []; // newest first: {sl, uid, item, colour, gs}

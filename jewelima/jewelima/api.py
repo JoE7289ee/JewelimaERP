@@ -13805,6 +13805,17 @@ def save_old_format_session(payload, name=None):
 	doc.invoice_no = p.get("invoice_no") or ""
 	doc.source_file = p.get("source_file") or ""
 	doc.quality_token = p.get("quality_token") or "EF"
+	# What it was priced WITH. Saved on the record rather than in the blob so a
+	# lot can be reopened weeks later and the same bill comes out — the board
+	# rate especially, which is the day's number and is gone by tomorrow. Only
+	# written when the page actually sends one, so saving a lot before it has
+	# been priced does not wipe what a previous pricing recorded.
+	for fld, key in (("price_chart", "price_chart"), ("chart_quality", "chart_quality")):
+		if p.get(key) is not None:
+			setattr(doc, fld, p.get(key) or None)
+	for fld in ("gold_rate", "gst_percent"):
+		if p.get(fld) is not None:
+			setattr(doc, fld, flt(p.get(fld)))
 	if p.get("status"):
 		doc.status = p.get("status")
 	rows = p.get("rows") or []
@@ -14005,6 +14016,8 @@ def get_old_format_session(name):
 	return {"name": doc.name, "title": doc.title, "party": doc.party or "",
 		"invoice_no": doc.invoice_no or "", "source_file": doc.source_file or "",
 		"quality_token": doc.quality_token or "EF", "status": doc.status,
+		"price_chart": doc.price_chart or "", "gold_rate": flt(doc.gold_rate),
+		"chart_quality": doc.chart_quality or "", "gst_percent": flt(doc.gst_percent),
 		"rows": blob.get("rows") or [], "cover": blob.get("cover") or {},
 		"chains": blob.get("chains") or [], "sorted": bool(blob.get("sorted"))}
 
