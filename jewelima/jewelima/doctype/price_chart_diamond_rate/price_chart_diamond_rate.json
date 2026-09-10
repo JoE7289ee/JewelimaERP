@@ -5,20 +5,12 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "sieve_label",
   "from_ct",
   "to_ct",
   "quality",
   "rate"
  ],
  "fields": [
-  {
-   "columns": 1,
-   "fieldname": "sieve_label",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Sieves"
-  },
   {
    "columns": 2,
    "description": "Four decimals: a bracket has to sit between sieve averages, and those are 4dp on the sieve chart (0.0023, 0.0027).",

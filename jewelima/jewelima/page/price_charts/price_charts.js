@@ -150,8 +150,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	const deinr = (v) => flt(("" + (v || "")).replace(/,/g, ""));
 	function rowsHtml(kind) {
 		if (kind === "dmd") return cur.diamond_rates.map((r, i) => `
-			<tr data-i="${i}"><td><input data-f="sieve_label" value="${esc(r.sieve_label || "")}" placeholder="+2 - 6.5"></td>
-			<td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}"></td>
+			<tr data-i="${i}"><td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}"></td>
 			<td><input data-f="to_ct" type="number" step="0.0001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
 			<td>${qualSel(r.quality || "")}</td>
 			<td><input data-f="rate" class="inr" inputmode="numeric" value="${inr(r.rate)}"></td>
@@ -224,7 +223,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 				__("18K is 75% by assay; a touch of 80 bills its gold at 80% of the 24K board rate")}">${__("Touch %")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("touch")}</tbody></table>
 			<div class="pc-sec">${__("Diamond Rates (₹/ct by size bracket)")}<span class="add" data-k="dmd">+ ${__("row")}</span></div>
-			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("Sieves")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
+			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("dmd")}</tbody></table>
 			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (rows present = a PS stone without a row blocks the scan)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
@@ -294,7 +293,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 	});
 	root.on("click", ".pc-sec .add", function () {
 		const k = $(this).data("k");
-		cur[KIND_ARR[k]].push(k === "dmd" ? { sieve_label: "", from_ct: "", to_ct: "", quality: "", rate: "" }
+		cur[KIND_ARR[k]].push(k === "dmd" ? { from_ct: "", to_ct: "", quality: "", rate: "" }
 			: k === "cert" ? { certification: "", basis: "Per Piece", rate: "", min_amount: "", from_ct: "", to_ct: "", solitaire: "" }
 			: k === "ps" ? { stone: "", from_ct: "", to_ct: "", rate: "" }
 			: k === "mk" ? { karat: "", design_type: "", rate: "", min_per_piece: "", flat_below_gm: "" }

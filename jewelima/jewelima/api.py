@@ -11267,8 +11267,7 @@ def get_costing_board():
 				continue
 			q = (r.quality or "").strip().upper() or "—"
 			curves.setdefault(q, {}).setdefault(d.name, []).append(
-				{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct), "rate": flt(r.rate),
-				 "sieve": r.sieve_label or ""})
+				{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct), "rate": flt(r.rate)})
 	for q in curves:
 		for nm in curves[q]:
 			curves[q][nm].sort(key=lambda x: x["from_ct"])
@@ -11507,7 +11506,7 @@ def get_costing_chart(name=None):
 		"charge_category": r.charge_category or "", "basis": r.basis or "Per Gram",
 		"rate": flt(r.rate), "min_per_piece": flt(r.min_per_piece),
 		"flat_below_gm": flt(r.flat_below_gm)} for r in (d.get("making_rules") or [])]
-	out["diamond"] = [{"sieve": r.sieve_label or "", "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+	out["diamond"] = [{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
 		"quality": (r.quality or "").strip().upper(), "rate": flt(r.rate)}
 		for r in (d.get("diamond_rates") or [])]
 	out["diamond"].sort(key=lambda x: (x["quality"], x["from_ct"]))
@@ -11581,7 +11580,7 @@ def get_price_chart(name):
 	return {
 		"name": d.name, "chart_name": d.chart_name, "chart_date": str(d.chart_date or ""),
 		"status": d.status, "active_version": active,
-		"diamond_rates": [{"sieve_label": r.sieve_label, "from_ct": r.from_ct, "to_ct": r.to_ct,
+		"diamond_rates": [{"from_ct": r.from_ct, "to_ct": r.to_ct,
 			"quality": r.quality, "rate": r.rate} for r in d.diamond_rates],
 		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",
 			"rate": r.rate, "min_amount": r.min_amount, "from_ct": r.from_ct, "to_ct": r.to_ct,
@@ -11619,7 +11618,7 @@ def save_price_chart(payload):
 	doc.status = "Active"
 	for r in p.get("diamond_rates") or []:
 		if r.get("rate"):
-			doc.append("diamond_rates", {"sieve_label": r.get("sieve_label"), "from_ct": flt(r.get("from_ct")),
+			doc.append("diamond_rates", {"from_ct": flt(r.get("from_ct")),
 				"to_ct": flt(r.get("to_ct")), "quality": (r.get("quality") or "").strip(), "rate": flt(r.get("rate"))})
 	cert_rows_in = [(r.get("certification") or "").strip().upper()
 		for r in (p.get("certification_charges") or []) if (r.get("certification") or "").strip()]
@@ -11712,13 +11711,13 @@ def _price_chart_letter_html(d):
 	order.sort(key=_q_rank)
 
 	def _dmd_rows(rows):
-		return "".join("<tr><td>{0}</td><td>{1}</td><td class='r'>₹ {2}</td></tr>".format(
-			frappe.utils.escape_html(r["sieve_label"] or "—"), bracket(r), money(r["rate"]))
+		return "".join("<tr><td>{0}</td><td class='r'>₹ {1}</td></tr>".format(
+			bracket(r), money(r["rate"]))
 			for r in rows)
 
 	dmd = "".join(
 		"<div class='qblk'><div class='qh'>{0}</div>"
-		"<table><thead><tr><th>Sieve</th><th>Size</th><th class='r'>Rate / ct</th></tr></thead>"
+		"<table><thead><tr><th>Size</th><th class='r'>Rate / ct</th></tr></thead>"
 		"<tbody>{1}</tbody></table></div>".format(
 			frappe.utils.escape_html(q), _dmd_rows(by_q[q])) for q in order)
 	certs = "".join("<tr><td>{0}</td><td class='r'>{1}</td></tr>".format(
@@ -14686,11 +14685,14 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	rate_cell = ws.cell(row=3, column=C["mc"], value=gold_rate)
 	rate_cell.font = Font(bold=True, size=16)
 	# the bracket legend rides ABOVE each (used) diamond group, their wording
+	# the legend above each diamond group is the BRACKET and its rate. It used to
+	# print the chart's sieve label when there was one — but the same label sat on
+	# different brackets at different rates, so it named the group ambiguously.
+	# The weight range never does.
 	for gi in used:
 		b = brackets[gi]
 		ws.cell(row=3, column=C["g{0}p".format(gi)],
-			value="({0}){1}/-PER CT".format((b.sieve_label or "").strip() or "{0}-{1}".format(flt(b.from_ct), flt(b.to_ct) or "∞"),
-				int(flt(b.rate))))
+			value="({0}-{1}){2}/-PER CT".format(flt(b.from_ct), flt(b.to_ct) or "∞", int(flt(b.rate))))
 	ws.cell(row=3, column=C["tp"], value="Total diamond")
 	for c in ("A1", "A2", "H2", "M2", "A3"):
 		ws[c].font = bold
