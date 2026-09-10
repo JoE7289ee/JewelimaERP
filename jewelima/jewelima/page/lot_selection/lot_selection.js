@@ -418,7 +418,7 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 					<div class="ls-bar2"><i style="width:${Math.min(keptPct, 100).toFixed(1)}%"></i></div></div>`);
 			root.find(".ls-err").empty();
 			root.find(".ls-hint").text(
-				__("This lot is closed. Everything below is what it finished at — nothing on it can be changed."));
+				__("This lot is closed — these are the figures it finished at, and nothing on it can be changed."));
 			return;
 		}
 
