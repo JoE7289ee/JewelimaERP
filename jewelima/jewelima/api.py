@@ -5274,16 +5274,20 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 # A parcel comes in on approval. Assorting says what we would keep; this is
 # asking to BUY some of it, so it stops being the provider's and becomes stock.
 #
-# The request changes nothing. Only an APPROVAL takes carats out of the tray,
-# and only a manager can approve — the desk that assorts is not the desk that
-# commits money.
+# ASKING is what takes the carats off the tray. The moment a request goes in
+# those stones are spoken for, so they leave the assorted figures and cannot be
+# re-assorted while somebody decides. A REJECTION puts them back. An APPROVAL
+# leaves them where they are and marks them bought.
 #
-# An approval writes purchased_cts on the sieve row and NOTHING ELSE. The
-# assorted figures stay exactly as they were assorted, and the desk simply sees
-# the tray with the bought stones taken off: actual - purchased, selected -
-# purchased. The rejection is untouched by design — buying from what we were
-# keeping never changes what goes back. That also keeps an approval and the
-# desk's own autosave off the same column, so neither can undo the other.
+# Both the actual and the assorted drop by the same amount, so the REJECTION
+# never moves: what goes back to the provider is not changed by us keeping some
+# of what we had already set aside.
+#
+#     60 actual · 40 assorted · 20 rejection   ask to keep 20
+#  -> 40 actual · 20 assorted · 20 rejection   and the 40/20 are still editable
+#
+# Only a manager decides — the desk that assorts is not the desk that commits
+# the money.
 # ---------------------------------------------------------------------------
 STONE_PURCHASE_APPROVE_ROLES = {"System Manager", "JW Manager"}
 
@@ -5305,6 +5309,22 @@ def _lot_sieve_state(lot):
 	return {r.sieve: (flt(r.actual_cts), flt(r.selected_cts), flt(r.purchased_cts))
 		for r in frappe.get_all("Stone Lot Sieve", filters={"parent": lot},
 			fields=["sieve", "actual_cts", "selected_cts", "purchased_cts"])}
+
+
+def _spr_move(lot, want, sign):
+	"""Take `want` {sieve: carats} off the tray (sign -1) or put it back (+1).
+
+	Actual and assorted move together so the rejection stays where it is."""
+	doc = frappe.get_doc("Stone Lot", lot)
+	for row in doc.items:
+		ct = flt(want.get(row.sieve))
+		if not ct:
+			continue
+		row.actual_cts = round(flt(row.actual_cts) + sign * ct, 3)
+		row.selected_cts = round(flt(row.selected_cts) + sign * ct, 3)
+		if row.actual_cts < -0.0005 or row.selected_cts < -0.0005:
+			frappe.throw(frappe._("{0}: that would leave less than nothing on the tray.").format(row.sieve))
+	doc.save(ignore_permissions=True)
 
 
 def _spr_pending(lot, ignore=None):
@@ -5358,7 +5378,6 @@ def create_stone_purchase_request(lot, rows, remarks=None):
 		rows = json.loads(rows or "[]")
 
 	state = _lot_sieve_state(lot)
-	pending = _spr_pending(lot)
 	lines = []
 	for r in rows or []:
 		sv = (r or {}).get("sieve")
@@ -5367,16 +5386,19 @@ def create_stone_purchase_request(lot, rows, remarks=None):
 			continue
 		if sv not in state:
 			frappe.throw(frappe._("{0} is not on this lot.").format(sv))
-		_actual, selected, purchased = state[sv]
-		# what is still on the tray to be bought: what we kept, less what is
-		# already bought, less what another open request has already claimed
-		free = round(selected - purchased - flt(pending.get(sv)), 3)
-		if ct > free + 0.0005:
-			frappe.throw(frappe._("{0}: only {1} ct is left to keep — {2} assorted, {3} already bought, {4} on an open request.")
-				.format(sv, free, selected, purchased, flt(pending.get(sv))))
+		_actual, selected, _purchased = state[sv]
+		# the tray already has every earlier request taken off it, so what is
+		# assorted right now IS what is free to ask for
+		if ct > selected + 0.0005:
+			frappe.throw(frappe._("{0}: only {1} ct is assorted — you cannot keep more than you have kept.")
+				.format(sv, selected))
 		lines.append({"sieve": sv, "cts": ct})
 	if not lines:
 		frappe.throw(frappe._("Nothing asked for."))
+
+	# off the tray NOW: these stones are spoken for and must not be re-assorted
+	# while somebody decides. A rejection puts them back.
+	_spr_move(lot, {r["sieve"]: r["cts"] for r in lines}, -1)
 
 	doc = frappe.get_doc({
 		"doctype": "Stone Purchase Request", "stone_lot": lot,
@@ -5404,25 +5426,18 @@ def decide_stone_purchase_request(name, decision, remarks=None):
 	if doc.status != "Pending":
 		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status.lower()))
 
+	want = {r.sieve: flt(r.cts) for r in doc.items}
 	if decision == "Approved":
-		# re-check against the lot as it stands NOW: the tray may have been
-		# re-assorted between the asking and the deciding
-		state = _lot_sieve_state(doc.stone_lot)
-		pending = _spr_pending(doc.stone_lot, ignore=name)
-		for r in doc.items:
-			if r.sieve not in state:
-				frappe.throw(frappe._("{0} is no longer on {1}.").format(r.sieve, doc.stone_lot))
-			_a, selected, purchased = state[r.sieve]
-			free = round(selected - purchased - flt(pending.get(r.sieve)), 3)
-			if flt(r.cts) > free + 0.0005:
-				frappe.throw(frappe._("{0}: only {1} ct is still free on {2} — the lot has changed since this was asked for.")
-					.format(r.sieve, free, doc.stone_lot))
+		# the carats came off the tray when this was asked for; approving only
+		# settles that they are ours, and records how much of the lot was bought
 		lot = frappe.get_doc("Stone Lot", doc.stone_lot)
-		want = {r.sieve: flt(r.cts) for r in doc.items}
 		for row in lot.items:
 			if row.sieve in want:
 				row.purchased_cts = round(flt(row.purchased_cts) + want[row.sieve], 3)
 		lot.save(ignore_permissions=True)
+	else:
+		# rejected — the stones go back on the tray and can be assorted again
+		_spr_move(doc.stone_lot, want, +1)
 
 	doc.status = decision
 	doc.decided_by = frappe.session.user

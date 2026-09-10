@@ -248,24 +248,24 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	root.on("click", ".ls-card", function () { open($(this).data("name")); });
 
 	// --------------------------------------------------------------- one lot
-	// Everything the desk sees is the tray AFTER an approved purchase has been
-	// taken off it. The stored figures stay as they were assorted — buying does
-	// not un-assort anything — so "left" is the arithmetic, not the record.
-	const leftA = (x) => r3(flt(x.actual) - flt(x.purchased));
-	const leftS = (x) => r3(flt(x.selected) - flt(x.purchased));
+	// The tray IS what is left. Asking to keep stones takes them off it there and
+	// then, so the figures on screen are the figures — nothing to derive, and the
+	// desk can go on assorting whatever is still there.
+	const leftA = (x) => flt(x.actual);
+	const leftS = (x) => flt(x.selected);
 	const tot = (k) => ROWS.reduce((a, x) => a + flt(x[k]), 0);
-	const totLeftA = () => ROWS.reduce((a, x) => a + leftA(x), 0);
-	const totLeftS = () => ROWS.reduce((a, x) => a + leftS(x), 0);
+	const totLeftA = () => tot("actual");
+	const totLeftS = () => tot("selected");
 	const totBought = () => ROWS.reduce((a, x) => a + flt(x.purchased), 0);
 	const used = () => new Set(ROWS.map((x) => x.sieve));
 	const free = () => (CTX.sieves || []).map((s) => s.sieve_size).filter((s) => !used().has(s));
 	const lotWt = () => (LOT ? flt(LOT.claimed) : 0);
-	// what is still free to ask for on a sieve: kept, less bought, less anything
-	// an undecided request has already claimed
+	// an open request has already taken its carats off the tray, so what is
+	// assorted right now IS what is free to ask for
 	const claimed = (sv) => (REQS.rows || []).filter((q) => q.status === "Pending")
 		.reduce((a, q) => a + ((q.items || []).filter((i) => i.sieve === sv)
 			.reduce((b, i) => b + flt(i.cts), 0)), 0);
-	const freeFor = (x) => r3(leftS(x) - claimed(x.sieve));
+	const freeFor = (x) => flt(x.selected);
 	const overRow = () => ROWS.some((x) => flt(x.selected) > flt(x.actual) + 0.0005);
 	// the parcel is a ceiling: the sieves cannot hold more stone than came in
 	const overLot = () => lotWt() > 0 && tot("actual") > lotWt() + 0.0005;
@@ -367,14 +367,14 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		const anyAsk = rows.some((x) => flt(ASK[x.sieve]) > 0);
 		root.find(".ls-keep").html(`
 			<div class="hd"><b>${__("Keep for stock")}</b>
-				<span>${__("ask to buy part of what you have assorted — a manager decides it")}</span>
+				<span>${__("asking takes the carats off the tray at once — a rejection puts them back")}</span>
 				<span class="sp">
 					${asked ? `<span style="font-size:12px;font-weight:700;">${ct(asked)} ct</span>` : ""}
 					<button class="ls-ask" ${anyAsk ? "" : "disabled"}>${__("REQUEST")}</button>
 				</span></div>
 			${rows.length ? `<table class="ls-kt"><thead><tr>
-				<th>${__("Sieve")}</th><th class="num">${__("Assorted left")}</th>
-				<th class="num">${__("Bought")}</th><th class="num">${__("On request")}</th>
+				<th>${__("Sieve")}</th><th class="num">${__("Assorted now")}</th>
+				<th class="num">${__("Bought")}</th><th class="num">${__("Awaiting")}</th>
 				<th class="num">${__("Free to keep")}</th><th class="num">${__("Ask for")}</th>
 				<th style="width:70px;"></th></tr></thead><tbody>
 				${rows.map((x) => {
@@ -436,18 +436,22 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		frappe.confirm(
 			__("Ask to keep <b>{0} ct</b> off {1}?", [ct(total), esc(LOT.name)]) + "<br><br>"
 			+ rows.map((r) => `${esc(r.sieve)} — <b>${ct(r.cts)} ct</b>`).join("<br>")
-			+ "<br><br>" + __("Nothing leaves the tray until a manager approves it."),
+			+ "<br><br>" + __("These come off the tray now and cannot be assorted again while it is decided. A rejection puts them back."),
 			() => {
 				frappe.dom.freeze(__("Requesting…"));
-				frappe.call({ method: API + ".create_stone_purchase_request",
-					args: { lot: LOT.name, rows: JSON.stringify(rows) } })
+				// whatever is half-typed goes in FIRST. A debounced save landing
+				// after the request would write the pre-request tray back over it.
+				saveNow()
+					.then(() => frappe.call({ method: API + ".create_stone_purchase_request",
+						args: { lot: LOT.name, rows: JSON.stringify(rows) } }))
 					.then((r) => {
 						frappe.dom.unfreeze();
 						Object.keys(ASK).forEach((k) => delete ASK[k]);
 						frappe.show_alert({ indicator: "green", message:
-							__("{0} — {1} ct asked for. A manager decides it.",
+							__("{0} — {1} ct off the tray, waiting on a manager.",
 								[(r.message || {}).name, ct(total)]) }, 7);
-						loadReqs();
+						// the tray moved on the server; take it from there
+						open(LOT.name);
 					}).catch(() => frappe.dom.unfreeze());
 			});
 	});
@@ -456,8 +460,8 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		const nm = $(this).data("name");
 		const yes = $(this).hasClass("ls-yes");
 		frappe.confirm(yes
-			? __("Approve {0}? The carats come off the tray and are ours to keep.", [esc(nm)])
-			: __("Reject {0}?", [esc(nm)]),
+			? __("Approve {0}? These carats are ours to keep.", [esc(nm)])
+			: __("Reject {0}? The carats go back on the tray.", [esc(nm)]),
 			() => {
 				frappe.dom.freeze(yes ? __("Approving…") : __("Rejecting…"));
 				frappe.call({ method: API + ".decide_stone_purchase_request",
@@ -530,6 +534,17 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 	// The response is deliberately NOT written back into the table. Somebody is
 	// typing in it; refilling the rows from a save that started two keystrokes
 	// ago would move the cursor and could overwrite what they have just entered.
+	function saveNow() {
+		if (!LOT || blocked()) return Promise.resolve();
+		SAVE = "saving"; paintState();
+		return frappe.call({ method: API + ".save_stone_lot_selection", freeze: false, args: {
+			name: LOT.name, actual_cts: 0,
+			rows: JSON.stringify(ROWS.map((x) => ({ sieve: x.sieve,
+				actual: flt(x.actual), selected: flt(x.selected) }))),
+		} }).then(() => { SAVE = "saved"; paintState(); })
+			.catch(() => { SAVE = "failed"; paintState(); });
+	}
+
 	const doSave = frappe.utils.debounce(() => {
 		if (!LOT || blocked()) return;
 		SAVE = "saving"; paintState();
