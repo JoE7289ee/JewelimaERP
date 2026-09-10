@@ -22200,7 +22200,9 @@ def _rework_guard():
 def get_rework_piece(barcode):
 	"""Scan lookup: the finished piece, what it holds, and whether it may go back."""
 	_rework_guard()
-	nm = (barcode or "").strip()
+	# the E prefix is optional here as on every other scanning desk — scanners
+	# and people both drop it
+	nm = _resolve_bag_code((barcode or "").strip())
 	b = frappe.db.get_value("Order Bag", nm, ["name", "design", "qty",
 		"is_finished", "stock_status", "held_by", "location", "huid", "certifications",
 		"act_gross_weight", "in_stock_on"], as_dict=True)
@@ -22237,7 +22239,11 @@ def get_rework_piece(barcode):
 		"held_by": b.held_by or "", "huid": b.huid or "", "certifications": b.certifications or "",
 		"gross": flt(b.act_gross_weight), "gold": round(flt(gold), 3),
 		"stones": round(flt(stones), 3), "in_stock_on": str(b.in_stock_on or "")[:16],
-		"materials": [{"item": it, "qty": round(flt(q), 3)} for it, q in sorted(mats.items())],
+		# the stone type rides along so the desk can add the brackets up without
+		# asking the server what each item is, one round trip per line
+		"materials": [{"item": it, "qty": round(flt(q), 3),
+			"stone_type": frappe.db.get_value("Item", it, "stone_type") or ""}
+			for it, q in sorted(mats.items())],
 		"open_sale_prep": prep,
 	}
 
@@ -22248,14 +22254,37 @@ def get_rework_piece(barcode):
 # again when the card was moved on.
 REWORK_LOCATION = "REWORK"
 
+# Where a finished piece may be sent back TO. REWORK is the default and the
+# honest answer most of the time — the queue exists so whoever picks the card up
+# decides where it really goes. The finishing benches are offered as well,
+# because a counter that already knows the piece needs polishing should not have
+# to route it through a queue to say so.
+#
+# The wax and casting stages are NOT here on purpose: a finished ornament cannot
+# go back to a tree or a mould, and offering it would only invite a wrong scan.
+REWORK_DESTINATIONS = ("REWORK", "GRINDING", "FILING", "SETTING",
+	"PRE POLISH", "FINAL POLISH")
+
+
+@frappe.whitelist()
+def get_rework_destinations():
+	"""The benches this desk may send a finished piece to, default first."""
+	from jewelima.jewelima.benches import BENCH_DOCTYPE
+	return {"default": REWORK_LOCATION,
+		"locations": [d for d in REWORK_DESTINATIONS if d in BENCH_DOCTYPE]}
+
 
 @frappe.whitelist()
 def rework_piece(order_bag, to_location=None, remarks=None):
-	"""Send a finished piece back to the floor, into the rework queue.
+	"""Send a finished piece back to the floor.
 
-	`to_location` is accepted and ignored: the destination is no longer chosen
-	here. Keeping the argument means a browser still holding the old page does
-	not fall over on an unexpected keyword.
+	The destination was taken away from this counter once, because it was being
+	decided twice — here by somebody holding the piece, and again when the card
+	was moved on. It is back, but as a CHOICE with REWORK as the default rather
+	than a required field: the queue is still the right answer when the counter
+	does not know, and now the counter that does know can say so. Only the
+	benches in REWORK_DESTINATIONS are accepted; anything else is refused by
+	name rather than quietly turned into REWORK.
 	"""
 	_rework_guard()
 	from jewelima.jewelima.benches import BENCH_DOCTYPE, on_bag_arrival
@@ -22266,7 +22295,10 @@ def rework_piece(order_bag, to_location=None, remarks=None):
 		frappe.throw(info.get("error") or frappe._("No such piece."))
 	if not info.get("can_rework"):
 		frappe.throw(info["error"])
-	loc = REWORK_LOCATION
+	order_bag = info["order_bag"]     # the resolved code, E prefix and all
+	loc = (to_location or "").strip().upper() or REWORK_LOCATION
+	if loc not in REWORK_DESTINATIONS:
+		frappe.throw(frappe._("{0} is not somewhere this desk can send a finished piece.").format(loc))
 	if loc not in BENCH_DOCTYPE:
 		frappe.throw(frappe._("The {0} queue is not set up.").format(loc))
 
@@ -22290,17 +22322,61 @@ def rework_piece(order_bag, to_location=None, remarks=None):
 		"in_stock_on": None,
 	})
 	on_bag_arrival(order_bag, loc)     # it queues at that bench like any other card
+	# from_location is a Select of BENCHES, and a finished piece usually stands
+	# with a holder — FEMI, SUMI, WHOLESALE — which is not one. That made the
+	# transfer record refuse the whole rework with a raw validation error, so
+	# two thirds of the shelf could never come back and only pieces still at a
+	# bench worked. The origin goes in the remark instead of being lost.
+	from_bench = was_at if was_at in BENCH_DOCTYPE else None
+	note = remarks or frappe._("sent back to the floor")
+	if was_at and not from_bench:
+		note = "{0} (from {1})".format(note, was_at)
 	frappe.get_doc({
 		"doctype": "Order Bag Transfer", "order_bag": order_bag,
-		"from_location": was_at or None, "to_location": loc,
+		"from_location": from_bench, "to_location": loc,
 		"transfer_time": frappe.utils.now_datetime(),
 		"transferred_by": frappe.session.user,
-		"remarks": "Rework: {0}".format(remarks or frappe._("sent back to the floor")),
+		"remarks": "Rework: {0}".format(note),
 	}).insert(ignore_permissions=True)
 	_recompute_bag_from_contents(order_bag)
 	frappe.db.commit()
 	return {"order_bag": order_bag, "to": loc, "stock_entry": se,
 		"gold": info["gold"], "stones": info["stones"]}
+
+
+@frappe.whitelist()
+def rework_pieces(order_bags, to_location=None, remarks=None):
+	"""A table of finished pieces back to the floor in one press.
+
+	Each piece is its own stock move and its own transfer record, so one that
+	cannot go — sold since the scan, taken onto a sale, already away — does not
+	stop the rest. What failed comes back BY NAME with the reason, because a
+	count of failures is not something anyone can act on while holding twelve
+	pieces at a counter.
+	"""
+	_rework_guard()
+	if isinstance(order_bags, str):
+		order_bags = json.loads(order_bags or "[]")
+	names, seen = [], set()
+	for n in [str(x or "").strip() for x in (order_bags or [])]:
+		if n and n not in seen:
+			seen.add(n)
+			names.append(n)
+	if not names:
+		frappe.throw(frappe._("Nothing to send back."))
+
+	done, failed = [], []
+	for nm in names:
+		try:
+			done.append(rework_piece(nm, to_location=to_location, remarks=remarks))
+		except Exception as e:
+			# one bad piece must not take the other eleven with it
+			frappe.db.rollback()
+			failed.append({"order_bag": nm,
+				"error": str(e).split("\n")[0][:160] or frappe._("could not be sent back")})
+	return {"sent": done, "failed": failed,
+		"gold": round(sum(flt(d["gold"]) for d in done), 3),
+		"stones": round(sum(flt(d["stones"]) for d in done), 3)}
 
 
 # ---------------------------------------------------------------------------
