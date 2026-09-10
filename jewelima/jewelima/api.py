@@ -5111,13 +5111,39 @@ def review_delete_photo(name):
 # Two desks, deliberately: creating the lot is a receiving job (who sent what,
 # on what day, what they say it is), and the selection is a sorting job done
 # later, at the sieve table. Splitting them is what lets a lot sit open.
-STONE_LOT_ROLES = {"System Manager", "JW Manager", "JW Stock Admin", "Jewelima Stock"}
+# Booking a parcel in, assorting it, asking to keep some and deciding that are
+# four different jobs, and they are deliberately not the same people.
+#
+#   BOOK IN   stock admin and the manager — it is their supplier relationship
+#   ASSORT    the stone room, and nobody else. Not even a manager edits a tray:
+#             the figures are a physical measurement and the person who took it
+#             is the only one who should be able to change it.
+#   ASK       the stone room, off the tray they assorted
+#   DECIDE    the manager and stock admin — money is not the sorter's to commit
+STONE_LOT_CREATE_ROLES = {"System Manager", "JW Manager", "JW Stock Admin"}
+STONE_LOT_ASSORT_ROLES = {"System Manager", "JW Stone Admin"}
+STONE_LOT_ROLES = (STONE_LOT_CREATE_ROLES | STONE_LOT_ASSORT_ROLES
+	| {"Jewelima Stock"})
 
 
 def _require_stone_lot():
+	"""Reading a lot — anyone with a hand in the parcel."""
 	if not STONE_LOT_ROLES & set(frappe.get_roles()):
 		frappe.throw(frappe._("Stone lots are for the manager and the stock desk."),
 			frappe.PermissionError)
+
+
+def _require_lot_create():
+	if not STONE_LOT_CREATE_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Booking a parcel in is for the stock desk and the manager."),
+			frappe.PermissionError)
+
+
+def _require_assort():
+	"""Editing a tray. The stone room ONLY — a tray is a measurement somebody
+	took, and the person who took it is the one who may change it."""
+	if not STONE_LOT_ASSORT_ROLES & set(frappe.get_roles()):
+		frappe.throw(frappe._("Only the stone room assorts a lot."), frappe.PermissionError)
 
 
 def _lot_row(d, with_items=False):
@@ -5141,9 +5167,10 @@ def _lot_row(d, with_items=False):
 			# the tray with this taken off; the stored actual/selected stay as they
 			# were assorted, so an autosave and an approval can never fight over
 			# the same column.
-			"purchased": flt(r.purchased_cts)}
+			"purchased": flt(r.purchased_cts), "returned": flt(r.returned_cts)}
 			for r in frappe.get_all("Stone Lot Sieve", filters={"parent": d.name},
-				fields=["sieve", "actual_cts", "selected_cts", "rejected_cts", "purchased_cts"],
+				fields=["sieve", "actual_cts", "selected_cts", "rejected_cts",
+					"purchased_cts", "returned_cts"],
 				order_by="idx")]
 	return out
 
@@ -5168,7 +5195,7 @@ def create_stone_lot(supplier, received_on=None, quality=None, claimed_cts=0, re
 	"""Book a parcel in. Weights per sieve are NOT asked for here — the parcel
 	has not been sieved yet, and pretending otherwise is how a receiving desk
 	ends up guessing."""
-	_require_stone_lot()
+	_require_lot_create()
 	if not supplier or not frappe.db.exists("Supplier", supplier):
 		frappe.throw(frappe._("Pick the provider."))
 	quality = (quality or "").strip()
@@ -5227,7 +5254,7 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 	kept — and never typed, on any row. It is the one figure nobody should be
 	able to get wrong, and per sieve it is also the figure the provider is
 	handed back, sieve by sieve, when the parcel goes."""
-	_require_stone_lot()
+	_require_assort()
 	d = frappe.get_doc("Stone Lot", name)
 	if d.status == "Cancelled":
 		frappe.throw(frappe._("{0} is cancelled.").format(name))
@@ -5236,23 +5263,27 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 	rows = rows or []
 
 	sieves = set(frappe.get_all("Diamond Sieve", pluck="sieve_size"))
-	kept = {r.sieve: flt(r.purchased_cts) for r in frappe.get_all("Stone Lot Sieve",
-		filters={"parent": name}, fields=["sieve", "purchased_cts"])}
+	rows_now = frappe.get_all("Stone Lot Sieve", filters={"parent": name},
+		fields=["sieve", "purchased_cts", "returned_cts"])
+	kept = {r.sieve: flt(r.purchased_cts) for r in rows_now}
+	gone = {r.sieve: flt(r.returned_cts) for r in rows_now}
 	lines = []
 	for r in rows:
 		sv = (r or {}).get("sieve")
 		act = flt((r or {}).get("actual"))
 		ct = flt((r or {}).get("selected"))
 		# a sieve that weighed something and was kept entirely out is a real
-		# line — it IS the rejection — so either weight is enough to keep it
-		if not sv or (act <= 0 and ct <= 0):
+		# line — it IS the rejection — so either weight is enough to keep it,
+		# and so is anything already bought or written off against it
+		if not sv or (act <= 0 and ct <= 0 and flt(kept.get(sv)) <= 0
+				and flt(gone.get(sv)) <= 0):
 			continue
 		if sv not in sieves:
 			frappe.throw(frappe._("{0} is not a sieve on the chart.").format(sv))
 		# purchased_cts is carried, never taken from the page: it is set by an
 		# approval and the desk has no business overwriting it
 		lines.append({"sieve": sv, "actual_cts": act, "selected_cts": ct,
-			"purchased_cts": flt(kept.get(sv))})
+			"purchased_cts": flt(kept.get(sv)), "returned_cts": flt(gone.get(sv))})
 
 	d.actual_cts = flt(actual_cts)
 	d.set("items", lines)
@@ -5288,7 +5319,7 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 # Only a manager decides — the desk that assorts is not the desk that commits
 # the money.
 # ---------------------------------------------------------------------------
-STONE_PURCHASE_APPROVE_ROLES = {"System Manager", "JW Manager"}
+STONE_PURCHASE_APPROVE_ROLES = {"System Manager", "JW Manager", "JW Stock Admin"}
 
 
 def _spr_can_see():
@@ -5350,9 +5381,9 @@ def get_stone_purchase_requests(lot=None, status=None, limit=100):
 	if status:
 		filters["status"] = status
 	rows = frappe.get_all("Stone Purchase Request", filters=filters,
-		fields=["name", "stone_lot", "supplier", "quality", "status", "total_cts",
-			"requested_by", "requested_on", "decided_by", "decided_on", "remarks",
-			"purchase_record"],
+		fields=["name", "request_type", "stone_lot", "supplier", "quality", "status",
+			"total_cts", "requested_by", "requested_on", "decided_by", "decided_on",
+			"remarks", "purchase_record"],
 		order_by="creation desc", limit_page_length=cint(limit) or 100)
 	out = []
 	for r in rows:
@@ -5371,7 +5402,7 @@ def get_stone_purchase_requests(lot=None, status=None, limit=100):
 @frappe.whitelist()
 def create_stone_purchase_request(lot, rows, remarks=None):
 	"""Ask to keep some of an assorted lot. Nothing moves until it is approved."""
-	_require_stone_lot()
+	_require_assort()
 	d = frappe.get_doc("Stone Lot", lot)
 	if d.status == "Cancelled":
 		frappe.throw(frappe._("{0} is cancelled.").format(lot))
@@ -5402,7 +5433,7 @@ def create_stone_purchase_request(lot, rows, remarks=None):
 	_spr_move(lot, {r["sieve"]: r["cts"] for r in lines}, -1)
 
 	doc = frappe.get_doc({
-		"doctype": "Stone Purchase Request", "stone_lot": lot,
+		"doctype": "Stone Purchase Request", "request_type": "Purchase", "stone_lot": lot,
 		"supplier": d.supplier, "quality": d.quality or "",
 		"status": "Pending", "items": lines,
 		"requested_by": frappe.session.user,
@@ -5411,6 +5442,56 @@ def create_stone_purchase_request(lot, rows, remarks=None):
 	}).insert(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name, "total_cts": flt(doc.total_cts), "status": doc.status}
+
+
+@frappe.whitelist()
+def close_stone_lot_request(lot, remarks=None):
+	"""Finish with a parcel.
+
+	Closing raises TWO things, because a tray at the end holds two kinds of
+	stone. Anything still ASSORTED is stone we said we wanted, so it goes up as
+	a purchase request like any other — closing is not a way to buy without
+	asking. Everything else is the rejection, and that goes up as a CLOSE
+	request which writes it off to the provider.
+
+	The close cannot be approved while its purchase is still undecided. If the
+	purchase were rejected afterwards those carats would land back on a lot that
+	had already been closed and written off, and there would be no tray left to
+	put them on.
+	"""
+	_require_assort()
+	d = frappe.get_doc("Stone Lot", lot)
+	if d.status == "Cancelled":
+		frappe.throw(frappe._("{0} is cancelled.").format(lot))
+	if d.status == "Closed":
+		frappe.throw(frappe._("{0} is already closed.").format(lot))
+	open_close = frappe.get_all("Stone Purchase Request",
+		filters={"stone_lot": lot, "request_type": "Close", "status": "Pending"}, pluck="name")
+	if open_close:
+		frappe.throw(frappe._("{0} is already waiting to be closed.").format(open_close[0]))
+
+	keep = [{"sieve": r.sieve, "cts": flt(r.selected_cts)} for r in d.items if flt(r.selected_cts) > 0]
+	back = [{"sieve": r.sieve, "cts": round(flt(r.actual_cts) - flt(r.selected_cts), 3)}
+		for r in d.items if round(flt(r.actual_cts) - flt(r.selected_cts), 3) > 0]
+	if not keep and not back:
+		frappe.throw(frappe._("There is nothing left on this tray to close."))
+
+	made = {}
+	if keep:
+		made["purchase"] = create_stone_purchase_request(lot, json.dumps(keep),
+			remarks=frappe._("raised by closing the lot"))["name"]
+	if back:
+		doc = frappe.get_doc({
+			"doctype": "Stone Purchase Request", "request_type": "Close", "stone_lot": lot,
+			"supplier": d.supplier, "quality": d.quality or "",
+			"status": "Pending", "items": back,
+			"requested_by": frappe.session.user,
+			"requested_on": frappe.utils.now_datetime(),
+			"remarks": (remarks or "").strip() or None,
+		}).insert(ignore_permissions=True)
+		made["close"] = doc.name
+	frappe.db.commit()
+	return made
 
 
 @frappe.whitelist()
@@ -5470,6 +5551,44 @@ def decide_stone_purchase_request(name, decision, remarks=None, post=1):
 		frappe.throw(frappe._("{0} is already {1}.").format(name, doc.status.lower()))
 
 	want = {r.sieve: flt(r.cts) for r in doc.items}
+
+	# A CLOSE writes the tray off to the provider and finishes the parcel. It
+	# cannot go through while its purchase is still undecided: reject that
+	# purchase afterwards and those carats land back on a lot that has already
+	# been closed and written off, with no tray left to put them on.
+	if doc.request_type == "Close":
+		if decision == "Approved":
+			pending = frappe.get_all("Stone Purchase Request",
+				filters={"stone_lot": doc.stone_lot, "request_type": "Purchase",
+					"status": "Pending"}, pluck="name")
+			if pending:
+				frappe.throw(frappe._("{0} is still waiting to be decided. Settle the purchase before closing the lot — if it were rejected later, the stones would come back to a lot that no longer has a tray.")
+					.format(", ".join(pending)))
+			lot = frappe.get_doc("Stone Lot", doc.stone_lot)
+			for row in lot.items:
+				ct = flt(want.get(row.sieve))
+				if not ct:
+					continue
+				row.returned_cts = round(flt(row.returned_cts) + ct, 3)
+				row.actual_cts = round(flt(row.actual_cts) - ct, 3)
+				if row.actual_cts < -0.0005:
+					frappe.throw(frappe._("{0}: more is being written off than is on the tray.").format(row.sieve))
+				# what is left of the tray is what we were keeping
+				row.selected_cts = min(flt(row.selected_cts), flt(row.actual_cts))
+			lot.save(ignore_permissions=True)
+			if lot.status != "Closed":
+				frappe.db.set_value("Stone Lot", lot.name, "status", "Closed", update_modified=False)
+		doc.status = decision
+		doc.decided_by = frappe.session.user
+		doc.decided_on = frappe.utils.now_datetime()
+		if remarks:
+			doc.remarks = ((doc.remarks or "") + ("\n" if doc.remarks else "") + remarks.strip())
+		doc.save(ignore_permissions=True)
+		frappe.db.commit()
+		return {"name": doc.name, "status": doc.status, "request_type": "Close",
+			"decided_label": _user_label(doc.decided_by),
+			"purchase_record": "", "purchase_receipt": ""}
+
 	if decision == "Approved":
 		# the carats came off the tray when this was asked for; approving only
 		# settles that they are ours, and records how much of the lot was bought

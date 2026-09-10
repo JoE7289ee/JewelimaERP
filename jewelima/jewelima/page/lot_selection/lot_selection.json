@@ -4,17 +4,28 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-09 09:00:00.000000",
+ "modified": "2026-09-10 22:20:45.754211",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "lot-selection",
  "owner": "Administrator",
  "page_name": "lot-selection",
  "roles": [
-  {"role": "System Manager"},
-  {"role": "JW Manager"},
-  {"role": "JW Stock Admin"},
-  {"role": "Jewelima Stock"}
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "JW Manager"
+  },
+  {
+   "role": "JW Stock Admin"
+  },
+  {
+   "role": "Jewelima Stock"
+  },
+  {
+   "role": "JW Stone Admin"
+  }
  ],
  "script": null,
  "standard": "Yes",

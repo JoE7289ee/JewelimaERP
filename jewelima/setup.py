@@ -221,7 +221,8 @@ JEWELIMA_STOCK_PAGES = ["scrub", "purchase-raw-material", "purchase-history", "s
 	# the stock desk only, by request; the stones desk does not book purchases.
 	"stone-lots", "lot-selection"]
 JEWELIMA_STOCK_READ = JEWELIMA_PURCHASE_READ + ["Voucher Type", "Purchase Record", "Stone Type",
-	"Stone Lot", "Stone Lot Sieve", "Diamond Sieve"]
+	"Stone Lot", "Stone Lot Sieve", "Stone Purchase Request", "Stone Purchase Request Item",
+	"Diamond Sieve"]
 # JW Stock Admin — the senior stock desk: everything Jewelima Stock does, plus
 # the whole Loss branch (collection, write-off, report) and the record pages.
 # Write-off is the one destructive button here; it still demands a typed reason.
@@ -417,8 +418,14 @@ JEWELIMA_STONE_ADMIN_ROLE = "JW Stone Admin"
 JEWELIMA_STONE_ADMIN_PAGES = [
 	"stone-info", "stone-request", "pre-bag", "stone-issue", "stone-return",
 	"stone-history", "stone-stock-info", "sieve-chart", "repack-stock",
+	# assorting a parcel is THIS desk's job and nobody else's — a tray is a
+	# measurement, and the person who took it is the one who may change it. The
+	# stock desk books the parcel in and decides what is bought; the sieving in
+	# between belongs here.
+	"lot-selection", "stone-lots",
 ]
 JEWELIMA_STONE_ADMIN_READ = JEWELIMA_STONE_ISSUE_READ + [
+	"Stone Lot", "Stone Lot Sieve", "Stone Purchase Request", "Stone Purchase Request Item",
 	"Diamond Sieve", "Stone Type", "Repack Request", "Repack Request Item",
 	"Pre Bag Record", "Design", "Job Order", "Customer",
 ]

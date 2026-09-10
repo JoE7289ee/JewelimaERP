@@ -10,7 +10,8 @@
   "actual_cts",
   "selected_cts",
   "rejected_cts",
-  "purchased_cts"
+  "purchased_cts",
+  "returned_cts"
  ],
  "fields": [
   {
@@ -52,6 +53,15 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Purchased (ct)",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "description": "written off to the provider when the lot was closed",
+   "fieldname": "returned_cts",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Returned (ct)",
    "precision": "3",
    "read_only": 1
   }

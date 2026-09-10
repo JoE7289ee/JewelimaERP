@@ -29,10 +29,13 @@ class StoneLot(Document):
 		# and never let the same sieve be entered twice.
 		seen, rows = set(), []
 		for r in self.items or []:
-			# a row is worth keeping once it carries EITHER weight: a sieve that
-			# weighed 4 ct and none of it kept is a real line — it is the whole
-			# rejection — and dropping it would hide what went back
-			if not r.sieve or (flt(r.actual_cts) <= 0 and flt(r.selected_cts) <= 0):
+			# a row is worth keeping once it carries ANY weight at all — on the
+			# tray, bought, or written off. Keeping only the first two erased a
+			# closed lot's whole history: closing empties the tray, so every row
+			# hit zero actual and zero selected and was dropped, taking the record
+			# of what was bought and what went back with it.
+			if not r.sieve or (flt(r.actual_cts) <= 0 and flt(r.selected_cts) <= 0
+					and flt(r.purchased_cts) <= 0 and flt(r.returned_cts) <= 0):
 				continue
 			if r.sieve in seen:
 				frappe.throw(frappe._("{0} is entered twice.").format(r.sieve))
@@ -51,9 +54,14 @@ class StoneLot(Document):
 		# sieving — it is what the provider's claim is measured against, so it is
 		# still typed at the top and not inferred from the sieves. Only when it
 		# has not been taken does the sieve total stand in for it.
-		sieved = round(sum(flt(r.actual_cts) for r in self.items or []), 3)
-		if not flt(self.actual_cts) and sieved:
-			self.actual_cts = sieved
+		# what has been through the sieve: what is still on the tray PLUS what has
+		# been bought off it. Counting only the tray let a parcel be re-assorted
+		# past its own weight once some of it had gone into stock.
+		on_tray = round(sum(flt(r.actual_cts) for r in self.items or []), 3)
+		sieved = round(on_tray + sum(flt(r.purchased_cts) + flt(r.returned_cts)
+			for r in self.items or []), 3)
+		if not flt(self.actual_cts) and on_tray:
+			self.actual_cts = on_tray
 		# the parcel is a CEILING. The desk stops this at the keystroke, but a page
 		# left open since before a lot was re-booked would post past it, and a lot
 		# holding more stone than came in is not something to discover later.
@@ -70,26 +78,23 @@ class StoneLot(Document):
 		self._set_status()
 
 	def _set_status(self):
-		"""OPEN until the whole parcel has been through the sieve, then CLOSED.
+		"""OPEN until the lot is CLOSED, and closing is something somebody does.
 
-		A lot is one job: sort the parcel. It is open while any of it is still
-		unsorted and closed when none of it is — at which point every carat is
-		either kept, bought or going back, and there is nothing left to decide.
+		Sorting the whole parcel is not the end of the job — it is the point at
+		which the job can be finished. What is assorted still has to be bought
+		and what is left still has to go back, so a lot stays open until a close
+		request has been approved and both of those have actually happened.
 
-		What counts as sorted has to include what has already been BOUGHT.
-		Buying takes carats off the tray, so counting only what is still there
-		would mean a parcel could never finish: the more of it we kept, the
-		further from done it would look.
+		An earlier version closed a lot the moment the last carat had been
+		through the sieve. That put a lot into Closed while its stones were still
+		sitting on the tray undecided, and left nothing to press when somebody
+		did want to finish with it.
 
-		A cancelled parcel stays cancelled — it went back untouched and was never
-		a job at all.
+		Cancelled and Closed are both endings and are left alone.
 		"""
-		if self.status == "Cancelled":
+		if self.status in ("Cancelled", "Closed"):
 			return
-		sorted_ct = round(sum(flt(r.actual_cts) + flt(r.purchased_cts)
-			for r in self.items or []), 3)
-		claimed = flt(self.claimed_cts)
-		self.status = "Closed" if (claimed and sorted_ct >= claimed - 0.0005) else "Open"
+		self.status = "Open"
 
 
 def _code(supplier):

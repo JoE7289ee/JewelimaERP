@@ -6,6 +6,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "request_type",
   "stone_lot",
   "supplier",
   "quality",
@@ -25,6 +26,17 @@
   "remarks"
  ],
  "fields": [
+  {
+   "default": "Purchase",
+   "fieldname": "request_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Purchase\nClose",
+   "read_only": 1,
+   "reqd": 1
+  },
   {
    "fieldname": "stone_lot",
    "fieldtype": "Link",
