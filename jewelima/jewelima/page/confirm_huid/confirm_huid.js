@@ -442,7 +442,14 @@ frappe.pages["confirm-huid"].on_page_load = function (wrapper) {
 		if (dirty()) return frappe.msgprint(__("Save or discard the {0} typed change(s) first.", [dirty()]));
 		load();
 	}, "refresh");
-	frappe.pages["confirm-huid"].on_page_show = focusScan;
+	// Coming back to this page almost always means a batch was just collected on
+	// Hallmark Out, so the pool has changed underneath a page the browser kept.
+	// Reload it — but never over HUIDs somebody has typed and not saved: a stale
+	// list is one click from correct, a lost column of hand-typed codes is not.
+	frappe.pages["confirm-huid"].on_page_show = () => {
+		if (!dirty()) load();
+		focusScan();
+	};
 	load();
 	focusScan();
 };

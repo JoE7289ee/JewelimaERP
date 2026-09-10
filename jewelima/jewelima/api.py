@@ -17975,7 +17975,8 @@ def hall_draft_scan(barcode, existing=None):
 	A rejection comes back as data so the page can log WHY in its history."""
 	if isinstance(existing, str):
 		existing = json.loads(existing or "[]")
-	nm = (barcode or "").strip()
+	# the E prefix is optional here as on every other scanning desk
+	nm = _resolve_bag_code((barcode or "").strip())
 	try:
 		b = _hall_validate_piece(nm, set(existing or []))
 	except frappe.ValidationError as e:
@@ -17996,7 +17997,7 @@ def hall_draft_scan_many(barcodes, existing=None):
 	seen = set(existing or [])
 	out = []
 	for code in barcodes or []:
-		nm = (code or "").strip()
+		nm = _resolve_bag_code((code or "").strip())
 		if not nm:
 			continue
 		try:
@@ -18008,6 +18009,36 @@ def hall_draft_scan_many(barcodes, existing=None):
 		seen.add(nm)
 		out.append({"code": nm, "row": _hall_row(nm, b)})
 	return {"results": out}
+
+
+@frappe.whitelist()
+def hall_draft_stone_brackets(bags):
+	"""The stones on an UNSAVED hallmarking draft, by bracket.
+
+	One call for the whole table rather than one per scan: the picker adds
+	eighty pieces at a stroke, and eighty round trips to learn what is already
+	one query is the kind of thing that makes a desk feel broken.
+
+	Brackets, not a single carat figure, because "0.636 ct of stones" is not
+	something anyone can check a packet against — the sieve is what is counted.
+	"""
+	if isinstance(bags, str):
+		bags = json.loads(bags or "[]")
+	bags = [str(b or "").strip() for b in (bags or []) if str(b or "").strip()]
+	if not bags:
+		return {"brackets": [], "ct": 0}
+	by = {}
+	for mats in (_bag_convert_materials(bags) or {}).values():
+		for it, q in mats.items():
+			st = frappe.db.get_value("Item", it, "stone_type")
+			if not st:
+				continue
+			e = by.setdefault(it, {"item": it, "stone_type": st, "ct": 0.0})
+			e["ct"] += flt(q)
+	rows = sorted(by.values(), key=lambda r: -r["ct"])
+	for r in rows:
+		r["ct"] = round(r["ct"], 3)
+	return {"brackets": rows, "ct": round(sum(r["ct"] for r in rows), 3)}
 
 
 @frappe.whitelist()
@@ -18151,11 +18182,126 @@ def get_hall_preps():
 		r["stones"] = round(stones, 3)
 		r["by_stone"] = [{"stone_type": k, "ct": v} for k, v in
 			sorted(by_stone.items(), key=lambda kv: -kv[1])]
+		# by design type — the way a packet is actually counted at the bench, and
+		# the only breakdown that tells the desk WHAT is in the parcel rather
+		# than only how much it weighs
+		byt = {}
+		for i in frappe.get_all("Hallmarking Item", filters={"parent": r.name},
+				fields=["design_type", "gross", "dmd_ct"]):
+			k = (i.design_type or "").strip() or "—"
+			t = byt.setdefault(k, {"design_type": k, "pieces": 0, "gross": 0.0, "dmd_ct": 0.0})
+			t["pieces"] += 1
+			t["gross"] += flt(i.gross)
+			t["dmd_ct"] += flt(i.dmd_ct)
+		for t in byt.values():
+			t["gross"] = round(t["gross"], 3)
+			t["dmd_ct"] = round(t["dmd_ct"], 3)
+		r["by_type"] = sorted(byt.values(), key=lambda t: -t["gross"])
 		# and where those pieces are kept, so a packet can be traced to a bucket
 		r["buckets"] = sorted({b for b in frappe.get_all("Order Bag",
 			filters={"name": ["in", bags or [""]]}, pluck="bucket") if b})
 		(out["prepared"] if r.status == "Prepared" else out["recent"]).append(r)
 	return out
+
+
+@frappe.whitelist()
+def get_hall_batch_slip(name):
+	"""The hallmarking batch slip, as HTML for the browser to PRINT.
+
+	The same document the certification desk prints, for the same reason: the
+	person holding the packet needs to know which batch it is and what is
+	supposed to be inside it, at arm's length, on one small piece of paper. QR
+	is the batch code so a phone reads it back; the table is the contents the
+	way the bench counts them — by design type, with pieces, gross grams and
+	diamond carats, and a total.
+
+	Not per piece. The per-piece list is the centre's Excel and already travels
+	with the packet; fifty rows on A6 would make it neither document.
+	"""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	rows = frappe.get_all("Hallmarking Item", filters={"parent": name},
+		fields=["design_type", "gross", "dmd_ct"], limit_page_length=0)
+	if not rows:
+		frappe.throw(frappe._("Nothing on the batch."))
+
+	by = {}
+	for r in rows:
+		k = (r.design_type or "").strip() or frappe._("—")
+		g = by.setdefault(k, {"pc": 0, "gw": 0.0, "ct": 0.0})
+		g["pc"] += 1
+		g["gw"] += flt(r.gross)
+		g["ct"] += flt(r.dmd_ct)
+	groups = sorted(by.items(), key=lambda kv: -kv[1]["gw"])
+	t_pc = sum(g["pc"] for _, g in groups)
+	t_gw = sum(g["gw"] for _, g in groups)
+	t_ct = sum(g["ct"] for _, g in groups)
+
+	qr = _qr_data_uri(name) or ""
+	centre = (d.center or "").split("-", 1)[-1].strip() if d.center else ""
+	head_bits = [x for x in (frappe._("HALLMARKING"), centre) if x]
+
+	body = "".join(
+		"""<tr><td class="t">{0}</td><td class="n">{1}</td>
+			<td class="n">{2}</td><td class="n">{3}</td></tr>""".format(
+			frappe.utils.escape_html(k), g["pc"],
+			"{0:.3f}".format(g["gw"]), "{0:.3f}".format(g["ct"]) if g["ct"] else "—")
+		for k, g in groups)
+
+	# A6 landscape is 148x105mm. Laid out with TABLES, not flexbox: this markup
+	# is what a print driver sees, and break/layout behaviour on a flex box has
+	# already cost one wrong print run.
+	html = """<!doctype html><html><head><meta charset="utf-8"><title>{nm}</title><style>
+	@page {{ size: 148mm 105mm; margin: 0; }}
+	html, body {{ margin:0; padding:0; }}
+	body {{ font-family:Helvetica,Arial,sans-serif; color:#111;
+		-webkit-print-color-adjust:exact; print-color-adjust:exact; }}
+	.slip {{ width:148mm; height:105mm; box-sizing:border-box; padding:6mm 7mm; overflow:hidden; }}
+	table {{ border-collapse:collapse; width:100%; }}
+	.hd td {{ vertical-align:top; padding:0; }}
+	.nm {{ font-size:22pt; font-weight:bold; letter-spacing:.5px; line-height:1; }}
+	.sub {{ font-size:8.5pt; color:#444; padding-top:2mm; }}
+	.pcs {{ font-size:8.5pt; padding-top:1.5mm; }}
+	.pcs b {{ font-size:13pt; }}
+	.qr {{ width:26mm; }}
+	.qr img {{ width:26mm; height:26mm; display:block; }}
+	.qrc {{ font-size:6.5pt; color:#666; text-align:center; padding-top:.6mm; }}
+	table.it {{ margin-top:4mm; font-size:9.5pt; }}
+	table.it th {{ text-align:left; font-size:7pt; letter-spacing:.6px; text-transform:uppercase;
+		color:#555; border-bottom:.5pt solid #333; padding:0 2mm 1.2mm 0; }}
+	table.it td {{ padding:1.4mm 2mm 1.4mm 0; border-bottom:.3pt solid #ddd; }}
+	table.it td.t {{ font-weight:bold; }}
+	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
+	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
+		font-size:10.5pt; padding-top:1.6mm; }}
+	.ft {{ font-size:6.5pt; color:#888; padding-top:2.5mm; }}
+	</style></head><body><div class="slip">
+	<table class="hd"><tr>
+		<td>
+			<div class="nm">{nm}</div>
+			<div class="sub">{sub}</div>
+			<div class="pcs"><b>{pc}</b> {pcl}</div>
+		</td>
+		<td class="qr">{qrimg}<div class="qrc">{nm}</div></td>
+	</tr></table>
+	<table class="it">
+		<thead><tr><th>{h_type}</th><th class="n">{h_pc}</th>
+			<th class="n">{h_gw}</th><th class="n">{h_ct}</th></tr></thead>
+		<tbody>{body}
+		<tr class="tot"><td>{l_tot}</td><td class="n">{t_pc}</td>
+			<td class="n">{t_gw}</td><td class="n">{t_ct}</td></tr></tbody>
+	</table>
+	<div class="ft">{ft}</div>
+	</div></body></html>""".format(
+		nm=frappe.utils.escape_html(name),
+		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
+		pc=t_pc, pcl=frappe._("piece(s)"),
+		qrimg='<img src="{0}">'.format(qr) if qr else "",
+		h_type=frappe._("Design type"), h_pc=frappe._("PC"),
+		h_gw=frappe._("GW (g)"), h_ct=frappe._("Diam (ct)"),
+		body=body, l_tot=frappe._("TOTAL"), t_pc=t_pc,
+		t_gw="{0:.3f}".format(t_gw), t_ct="{0:.3f}".format(t_ct),
+		ft="{0} · {1}".format(frappe._("prepared"), d.prepared_on or ""))
+	return {"name": name, "pieces": t_pc, "html": html}
 
 
 @frappe.whitelist()

@@ -3,7 +3,17 @@
 //
 // Send Hallmarking (Delivery > Hallmarking) — the second step: every PREPARED
 // batch with its summary; SEND moves the stock (Finished Goods -> At
-// Certification) and flips the pieces. Collecting is Hallmark Out.
+// Hallmarking) and flips the pieces, then goes on to Hallmark Out, which is
+// where the packet is next dealt with.
+//
+// Each card carries what the packet actually IS — a box per design type — not
+// only what it weighs. And a PRINT that puts the batch, its QR and that same
+// breakdown on an A6 slip to travel with the parcel, exactly as the
+// certification desk does it.
+//
+// The Recent list is gone. It answered "what did I send" with five rows and no
+// way to act on any of them; At Hallmarking and Hallmark Out both answer it
+// properly, and the desk's own screen should be the work that is still to do.
 // Route: /app/send-hallmarking
 
 frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
@@ -54,11 +64,21 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		table.sh-r td,table.sh-r th{border:1px solid var(--border-color);padding:5px 10px;text-align:left;}
 		table.sh-r th{background:var(--control-bg);font-size:10px;text-transform:uppercase;color:var(--text-muted);}
 		.sh-empty{color:var(--text-muted);padding:18px;}
+		/* what the packet IS: one box per design type, in rows, big enough to read
+		   across a counter while holding the parcel */
+		.sh-types{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px;}
+		.sh-ty{flex:1 1 128px;border:1px solid var(--border-color);border-radius:10px;
+			padding:7px 11px;background:var(--control-bg);}
+		.sh-ty .t{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+			color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+		.sh-ty .p{font-size:21px;font-weight:800;line-height:1.15;font-variant-numeric:tabular-nums;}
+		.sh-ty .p span{font-size:11px;font-weight:600;color:var(--text-muted);}
+		.sh-ty .w{font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums;}
+		.sh-print{background:#5b3a8a;border-color:#5b3a8a;color:#fff;}
 		</style>
 		<div class="sh-sec">${__("Prepared — ready to go out")}</div>
 		<div class="sh-grid sh-prep"></div>
-		<div class="sh-sec">${__("Recent (sent / cancelled)")}</div>
-		<div class="sh-recent"></div>
+
 	`);
 	const root = $(page.main);
 
@@ -83,20 +103,20 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					<div class="meta">${(p.buckets || []).length
 						? (p.buckets || []).map((b) => `<span class="sh-bk">${esc(b)}</span>`).join("")
 						: ""} ${__("gross")} ${flt(p.gross).toFixed(3)} g</div>
+					${(p.by_type || []).length ? `<div class="sh-types">${(p.by_type || []).map((t) => `
+						<div class="sh-ty"><div class="t" title="${esc(t.design_type)}">${esc(t.design_type)}</div>
+							<div class="p">${t.pieces}<span> ${__("pc")}</span></div>
+							<div class="w">${flt(t.gross).toFixed(3)} g${
+								flt(t.dmd_ct) ? " · " + flt(t.dmd_ct).toFixed(3) + " ct" : ""}</div></div>`).join("")}</div>` : ""}
 					<div class="sh-actions">
 						${p.can_manage
 							? `<button class="btn btn-primary btn-sm sh-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
 							: `<button class="btn btn-default btn-sm sh-ask">${__("ASK A MANAGER TO SEND")}</button>`}
+						<button class="btn btn-sm sh-print">${__("Print slip")}</button>
 						<button class="btn btn-default btn-sm sh-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-sm sh-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>
 					</div>
 				</div>`).join("") || `<div class="sh-empty">${__("Nothing prepared — build a batch on the Hallmark desk.")}</div>`);
-			root.find(".sh-recent").html(m.recent.length ? `<table class="sh-r"><thead><tr>
-				<th>${__("Batch")}</th><th>${__("Centre")}</th><th>${__("Status")}</th>
-				<th>${__("Pieces")}</th><th>${__("Sent")}</th></tr></thead>
-				<tbody>${m.recent.map((p) => `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.center || "")}</td>
-				<td>${esc(p.status)}</td><td>${p.pieces}</td><td>${esc(p.sent_on || "")}</td></tr>`).join("")}</tbody></table>`
-				: `<div class="sh-empty">${__("Nothing yet.")}</div>`);
 		});
 	}
 
@@ -110,6 +130,32 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	});
 	// the sheet that travels with the packet — its HUID column is blank, so it
 	// comes back as the slip Confirm HUID is typed from
+	// the slip that travels ON the packet: batch, QR, and what is inside it by
+	// design type. Straight to the printer through a hidden iframe the way the
+	// barcode labels go — a downloaded PDF means somebody has to find it in
+	// Downloads before any paper comes out. A6 landscape rides in the @page rule.
+	root.on("click", ".sh-print", function () {
+		const nm = $(this).closest(".sh-card").data("name");
+		frappe.call({ method: API + ".get_hall_batch_slip", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			if (!m.html) return;
+			document.getElementById("jw-slip-frame")?.remove();
+			const fr = document.createElement("iframe");
+			fr.id = "jw-slip-frame";
+			fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+			document.body.appendChild(fr);
+			const doc = fr.contentDocument;
+			doc.open();
+			doc.write(m.html);
+			doc.close();
+			// the QR is a data-URI; printing before it has decoded prints a slip
+			// with a hole where the code should be
+			setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);
+			frappe.show_alert({ indicator: "green",
+				message: __("{0} slip sent to the printer.", [nm]) }, 4);
+		});
+	});
+
 	root.on("click", ".sh-xls", function () {
 		const nm = $(this).closest(".sh-card").data("name");
 		open_url_post("/api/method/jewelima.jewelima.api.export_hallmarking_xlsx", { name: nm });
@@ -173,8 +219,11 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					.then((r) => {
 						frappe.dom.unfreeze();
 						frappe.show_alert({ message: __("{0} sent to {1} — {2} piece(s) out.",
-							[nm, v.center, (r.message || {}).count]), indicator: "green" }, 5);
-						load();
+							[nm, v.center, (r.message || {}).count]), indicator: "green" }, 7);
+						// the packet is out of the building now, so the next thing
+						// anyone does with it is collect it — go where that happens
+						// rather than back to a list it has just left
+						frappe.set_route("hallmark-out");
 					}).catch(() => frappe.dom.unfreeze());
 			},
 		});

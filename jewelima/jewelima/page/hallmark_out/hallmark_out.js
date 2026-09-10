@@ -67,6 +67,10 @@ frappe.pages["hallmark-out"].on_page_load = function (wrapper) {
 					frappe.show_alert({ message: __("{0} collected — {1} piece(s) back. Stamp the HUIDs next.",
 						[nm, (r.message || {}).pieces]), indicator: "green" }, 6);
 					load();
+					// the pieces are back in the building and every one of them is
+					// waiting for its code, so go where that is typed rather than
+					// leaving the desk on a list the batch has just left
+					frappe.set_route("confirm-huid");
 				}).catch(() => frappe.dom.unfreeze());
 		});
 	});

@@ -19,7 +19,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
 	// the draft lives here until PREP — S.rows is the batch-to-be
-	const S = { center: "", rows: [], hist: [] };
+	const S = { center: "", rows: [], hist: [], brackets: [], stone_ct: 0 };
 
 	root.append(`
 		<style>
@@ -46,6 +46,11 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		.hm-tile .v{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.25;}
 		.hm-tile.gold .v{color:#1f618d;}
 		.hm-tile.dmd .v{color:#7a4fb5;}
+		.hm-tile.brk{flex:1 1 260px;}
+		table.hm-bt{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:3px;}
+		table.hm-bt td{padding:1px 0;}
+		table.hm-bt td.t{color:var(--text-muted);padding-right:10px;}
+		table.hm-bt td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
 		[data-theme="dark"] .hm-tile.dmd .v{color:#bfa3e8;}
 		table.hm-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);
 			border:1px solid var(--border-color);border-radius:10px;overflow:hidden;}
@@ -67,7 +72,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		<div class="hm-bar">
 			<div class="hm-f"><label>${__("Centre (optional)")}</label><select class="hm-center"></select></div>
 			<div class="hm-f hm-scan"><label>${__("Scan piece")}</label>
-				<input type="text" placeholder="${__("scan / type card no. + Enter")}"></div>
+				<input type="text" placeholder="${__("scan / type card no. + Enter — the E is optional")}"></div>
 			<button class="hm-btn hm-pick">${__("Add by filter…")}</button>
 			<span class="hm-actions">
 				<button class="hm-go" disabled>${__("PREP")}</button>
@@ -111,6 +116,21 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	}
 	const $histBtn = page.add_inner_button(__("History"), showHistory);
 
+	// the draft's stones in ONE call rather than one per scan — the picker adds
+	// eighty pieces at a stroke. Debounced, so a fast scanner does not queue up a
+	// request per beep.
+	const loadBrackets = frappe.utils.debounce(() => {
+		if (!S.rows.length) { S.brackets = []; S.stone_ct = 0; return paint(); }
+		frappe.call({ method: API + ".hall_draft_stone_brackets", freeze: false,
+			args: { bags: JSON.stringify(S.rows.map((r) => r.order_bag)) } })
+			.then((r) => {
+				const m = r.message || {};
+				S.brackets = m.brackets || [];
+				S.stone_ct = m.ct || 0;
+				paint();
+			});
+	}, 350);
+
 	function paint() {
 		const b = root.find(".hm-body");
 		if (!S.rows.length) {
@@ -131,6 +151,9 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		const g = S.rows.reduce((a, r) => a + flt(r.gross), 0);
 		const d = S.rows.reduce((a, r) => a + flt(r.dmd_ct), 0);
 		if ($histBtn) $histBtn.text(S.hist.length ? __("History ({0})", [S.hist.length]) : __("History"));
+		// the brackets tile is only there when the draft actually carries stones —
+		// an empty "0.000 ct" box on a plain gold batch is furniture
+		const brk = S.brackets || [];
 		root.find(".hm-tiles").html(`
 			<div class="hm-tile"><div class="k">${__("Pieces")}</div>
 				<div class="v">${S.rows.length}</div></div>
@@ -138,6 +161,11 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				<div class="v">${g.toFixed(3)}<span style="font-size:12px;"> g</span></div></div>
 			<div class="hm-tile dmd"><div class="k">${__("Diamond")}</div>
 				<div class="v">${d.toFixed(3)}<span style="font-size:12px;"> ct</span></div></div>
+			${brk.length ? `<div class="hm-tile brk"><div class="k">${
+				__("Stones by bracket")}</div>
+				<div class="v">${flt(S.stone_ct).toFixed(3)}<span style="font-size:12px;"> ct</span></div>
+				<table class="hm-bt">${brk.map((x) => `<tr><td class="t">${esc(x.item)}</td>
+					<td class="n">${flt(x.ct).toFixed(3)}</td></tr>`).join("")}</table></div>` : ""}
 			<div class="hm-tile"><div class="k">${__("Scans")}</div>
 				<div class="v">${S.hist.length}</div></div>`);
 		root.find(".hm-go").prop("disabled", !S.rows.length).attr("title", "")
@@ -164,6 +192,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				}
 				paintHist();
 				paint();
+				loadBrackets();
 			});
 	}
 
@@ -189,6 +218,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 				}
 				paintHist();
 				paint();
+				loadBrackets();
 				return { ok, no };
 			});
 	}
@@ -215,8 +245,9 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 	root.on("click", ".hm-x", function () {
 		S.rows = S.rows.filter((r) => r.order_bag !== $(this).closest("tr").data("n"));
 		paint();
+		loadBrackets();
 	});
-	root.on("click", ".hm-clear", () => { S.rows = []; msg("", ""); paint(); focusScan(); });
+	root.on("click", ".hm-clear", () => { S.rows = []; S.brackets = []; S.stone_ct = 0; msg("", ""); paint(); focusScan(); });
 
 	// Scanning is right for a few pieces; hallmarking is nearly every piece, so the
 	// desk can also pull a whole slice in — "every RING in the JEWELIMA bucket".
@@ -424,10 +455,14 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			.then((r) => {
 				frappe.dom.unfreeze();
 				const m = r.message || {};
-				frappe.show_alert({ message: __("{0} prepped — {1} piece(s). Pick the centre and send it from Send Hallmarking.",
-					[m.name, m.count]), indicator: "green" }, 7);
-				msg("ok", __("Batch <b>{0}</b> is ready to send.", [esc(m.name)]));
-				S.rows = []; paint(); focusScan();
+				frappe.show_alert({ message: __("{0} prepped — {1} piece(s).", [m.name, m.count]),
+					indicator: "green" }, 7);
+				S.rows = []; S.brackets = []; S.stone_ct = 0;
+				paint();
+				// straight on to Send Hallmarking: prepping is never the end of the
+				// job, and leaving the desk on an empty scan box made the batch look
+				// like it had gone nowhere
+				frappe.set_route("send-hallmarking");
 			}).catch(() => frappe.dom.unfreeze());
 	});
 
