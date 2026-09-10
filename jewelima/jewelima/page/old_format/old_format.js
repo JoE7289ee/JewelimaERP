@@ -770,7 +770,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			});
 	});
 
-	// the agreed physical order: shop -> SHAPE -> the item ladder ->
+	// the agreed physical order: shop -> the item ladder -> SHAPE ->
 	// YELLOW/ROSE/WHITE -> below-1g band first -> GW ascending inside the band
 	const ITEM_RANK = { NOSEPIN: 0, NOSPIN: 0, NP: 0, PENDANT: 1, PD: 1, STUD: 2, RING: 3,
 		BRACELET: 4, "CH BRACELET": 4, BANGLE: 5, "PIPE BANGLE": 5,
@@ -784,22 +784,24 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		// so the shops come apart first and the item ladder runs inside each.
 		// Rows with no shop sort last rather than jumbling in among the named ones.
 		const byShop = ROWS.some((r) => (r.shop || "").trim());
-		// SHAPE is the tier above the item ladder. A shaped piece is a different
-		// thing to make and a different thing to count — CHAIN is not a small
-		// NOSEPIN — so the shapes come apart alphabetically first and the ladder
-		// runs inside each. Unshaped rows sort LAST, the same rule the shops
-		// follow: they are the bulk, and the named groups should be findable.
+		// SHAPE sits INSIDE the item, not above it. Above it, one shaped bracelet
+		// dragged every bracelet to the top of the sheet and the item ladder —
+		// which is the order the floor reads — stopped being the order at all.
+		// So the ladder runs first, and within an item the shapes come apart
+		// alphabetically. Unshaped rows sort last inside their item, the same
+		// rule the shops follow: they are the bulk, and the named groups should
+		// be findable.
 		const byShape = ROWS.some((r) => (r.shape || "").trim());
 		ROWS.sort((a, b) => (byShop
 				? (((a.shop || "").trim() ? 0 : 1) - ((b.shop || "").trim() ? 0 : 1))
 					|| (a.shop || "").trim().localeCompare((b.shop || "").trim())
 				: 0)
+			|| (rankOf(ITEM_RANK, a.item || "") - rankOf(ITEM_RANK, b.item || ""))
+			|| (a.item || "").localeCompare(b.item || "")
 			|| (byShape
 				? (((a.shape || "").trim() ? 0 : 1) - ((b.shape || "").trim() ? 0 : 1))
 					|| (a.shape || "").trim().localeCompare((b.shape || "").trim())
 				: 0)
-			|| (rankOf(ITEM_RANK, a.item || "") - rankOf(ITEM_RANK, b.item || ""))
-			|| (a.item || "").localeCompare(b.item || "")
 			|| (rankOf(COLOR_RANK, a.colour || "") - rankOf(COLOR_RANK, b.colour || ""))
 			|| (a.colour || "").localeCompare(b.colour || "")
 			|| ((flt(a.nt) < 1 ? 0 : 1) - (flt(b.nt) < 1 ? 0 : 1))
@@ -809,8 +811,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		PRICED = null;
 		paint();
 		const tiers = [ROWS.some((r) => (r.shop || "").trim()) ? __("Shop") : null,
-			ROWS.some((r) => (r.shape || "").trim()) ? __("Shape") : null,
-			__("item ladder"), "YELLOW/ROSE/WHITE", __("band"), "GW"].filter(Boolean);
+			__("item ladder"),
+			ROWS.some((r) => (r.shape || "").trim()) ? __("shape") : null,
+			"YELLOW/ROSE/WHITE", __("band"), "GW"].filter(Boolean);
 		frappe.show_alert({ message: __("{0}, numbered 1–{1}.", [tiers.join(" → "), ROWS.length]),
 			indicator: "green" }, 5);
 	});
