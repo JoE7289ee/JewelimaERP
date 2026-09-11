@@ -5160,7 +5160,9 @@ def _lot_row(d, with_items=False):
 	}
 	# the difference worth seeing at a glance: what they said against what it
 	# actually weighed, once we have weighed it
-	out["short"] = round(flt(d.claimed_cts) - flt(d.actual_cts), 3) if flt(d.actual_cts) else 0
+	# — less what went back without being sieved, which is not a short weight
+	out["short"] = round(flt(d.claimed_cts) - flt(d.actual_cts)
+		- flt(d.get("unassorted_returned_cts")), 3) if flt(d.actual_cts) else 0
 	if with_items:
 		# what a request still waiting has taken off the tray, and what of the
 		# parcel is left unaccounted for — the close dialog is built on both

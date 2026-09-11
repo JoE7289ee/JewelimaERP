@@ -74,7 +74,11 @@ class StoneLot(Document):
 		# definition — must still read as the parcel it turned out to be.
 		self.selected_cts = round(
 			sum(flt(r.selected_cts) for r in self.items or []) + bought, 3)
-		if not flt(self.actual_cts) and sieved:
+		# the parcel on our scale can never weigh less than what has been through
+		# the sieve. A smaller stored figure is stale — a lot repaired after losing
+		# rows kept its old 110 ct, and its own restored purchases then "exceeded"
+		# what came in — so it is raised to the sieves rather than trusted.
+		if sieved > flt(self.actual_cts) + 0.0005:
 			self.actual_cts = sieved
 		# the parcel is a CEILING. The desk stops this at the keystroke, but a page
 		# left open since before a lot was re-booked would post past it, and a lot
