@@ -107,7 +107,7 @@ frappe.pages["holder-transfer-records"].on_page_load = function (wrapper) {
 			`);
 		root.find(".dr-t thead").html(`<tr>
 			<th>${__("Piece")}</th><th>${__("Design")}</th>
-			<th>${__("From")}</th><th>${__("To")}</th>
+			<th>${__("Stage")}</th><th>${__("From")}</th><th>${__("To")}</th>
 			<th class="num">${__("Gross g")}</th><th>${__("When")}</th>
 			<th>${__("By")}</th><th>${__("Note")}</th></tr>`);
 		root.find(".dr-t tbody").html((DATA.rows || []).length ? DATA.rows.map((r) => `
@@ -115,6 +115,7 @@ frappe.pages["holder-transfer-records"].on_page_load = function (wrapper) {
 				<td class="dr-id"><a href="/app/card-info?bag=${encodeURIComponent(r.order_bag)}"
 					>${esc(r.order_bag)}</a></td>
 				<td>${esc(r.design_no || r.design || "—")}</td>
+				<td>${esc(r.stage === "Floor" ? __("On the floor") : (r.stage === "Product" ? __("Product") : "—"))}</td>
 				<td>${esc(r.from_holder || "—")}</td>
 				<td><b>${esc(r.to_holder || "—")}</b></td>
 				<td class="num">${flt(r.gross).toFixed(3)}</td>
@@ -122,7 +123,7 @@ frappe.pages["holder-transfer-records"].on_page_load = function (wrapper) {
 				<td class="dr-when">${esc(r.by_label || "")}</td>
 				<td class="dr-when">${esc(r.reason || "")}</td>
 			</tr>`).join("")
-			: `<tr><td colspan="8" class="dr-empty">${
+			: `<tr><td colspan="9" class="dr-empty">${
 				__("Nothing in this period. Widen the dates, or clear the search.")}</td></tr>`);
 	}
 

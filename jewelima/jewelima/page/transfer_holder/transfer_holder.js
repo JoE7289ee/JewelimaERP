@@ -1,10 +1,15 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Transfer Holder (Delivery) — move a piece's reservation to another party.
-// Scan cards -> they stack in the left table (current holder, in stock since,
+// Transfer Holder (Delivery) — move a card's reservation to another party.
+// Scan cards -> they stack in the left table (current holder, where it stands,
 // weights); pick the new holder on top; Transfer moves them all, one Holder
-// Transfer record per piece. Bottom strip totals gross / pure / stone buckets.
+// Transfer record per card. Bottom strip totals gross / pure / stone buckets.
+//
+// A hold can move on a card that is still ON THE FLOOR as well as on a finished
+// piece In Stock. A floor card has no weighed figures yet, so it shows its plan
+// weights and marks them PLAN — a plan figure is never passed off as a weighed
+// one, and the totals say how much of what they add up is plan.
 // Route: /app/transfer-holder
 
 frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
@@ -46,6 +51,14 @@ frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
 		.th-ft .who{font-weight:700;}
 		.th-msg{display:none;margin:0 0 8px;padding:6px 11px;border-radius:7px;font-size:12.5px;}
 		.th-msg.err{display:block;background:#fbeaea;color:#b00020;border:1px solid #e6b3b3;}
+		.th-stage{display:inline-block;border-radius:8px;padding:0 7px;font-size:10px;font-weight:800;
+			letter-spacing:.04em;text-transform:uppercase;margin-right:6px;}
+		.th-stage.Floor{background:rgba(184,134,11,.16);color:#8a6508;}
+		.th-stage.Product{background:rgba(29,122,51,.14);color:#1d7a33;}
+		[data-theme="dark"] .th-stage.Floor{color:#e8b84a;}
+		[data-theme="dark"] .th-stage.Product{color:#7fc98f;}
+		.th-plan{font-size:9.5px;font-weight:800;color:#8a6508;margin-left:4px;letter-spacing:.03em;}
+		[data-theme="dark"] .th-plan{color:#e8b84a;}
 		</style>
 		<div class="th-top">
 			<div class="th-scan"></div>
@@ -59,7 +72,7 @@ frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
 			<div class="th-pane">
 				<div class="th-body"><table class="th-tbl">
 					<thead><tr><th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Held By (now)")}</th>
-					<th>${__("In Stock Since")}</th><th class="r">${__("Gross g")}</th><th class="r">${__("Pure g")}</th><th style="width:34px"></th></tr></thead>
+					<th>${__("Where")}</th><th class="r">${__("Gross g")}</th><th class="r">${__("Pure g")}</th><th style="width:34px"></th></tr></thead>
 					<tbody class="th-rows"></tbody></table></div>
 				<div class="th-totals"></div>
 			</div>
@@ -98,21 +111,27 @@ frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
 				<td><span class="th-bar">${esc(r.order_bag)}</span></td>
 				<td>${esc(r.design)}<div class="th-sub">${esc(r.design_type)}</div></td>
 				<td>${esc(r.held_by || "—")}</td>
-				<td>${r.in_stock_on ? frappe.datetime.str_to_user(r.in_stock_on) : "—"}${daysSince(r.in_stock_on)}</td>
-				<td class="r">${fmt(r.gross)}</td>
-				<td class="r">${fmt(r.pure)}</td>
+				<td><span class="th-stage ${esc(r.stage || "Product")}">${esc(r.stage === "Floor" ? __("floor") : __("product"))}</span>${
+					r.stage === "Floor"
+						? `<span class="th-sub">${esc(r.location || "—")}</span>`
+						: `${r.in_stock_on ? frappe.datetime.str_to_user(r.in_stock_on) : "—"}${daysSince(r.in_stock_on)}`}</td>
+				<td class="r">${fmt(r.gross)}${r.basis === "plan" ? `<span class="th-plan">${__("PLAN")}</span>` : ""}</td>
+				<td class="r">${r.pure === null || r.pure === undefined ? "—" : fmt(r.pure)}</td>
 				<td><button class="th-x" data-bag="${esc(r.order_bag)}">✕</button></td>
 			</tr>`).join("")
-			: `<tr><td colspan="7" class="th-empty">${__("Scan pieces to move their reservation.")}</td></tr>`);
+			: `<tr><td colspan="7" class="th-empty">${__("Scan cards or pieces to move their reservation.")}</td></tr>`);
 		const tot = { gross: 0, pure: 0 };
 		BUCKETS.forEach(([k]) => (tot[k] = 0));
+		let planN = 0;
 		S.rows.forEach((r) => {
 			tot.gross += r.gross;
-			tot.pure += r.pure;
+			tot.pure += flt(r.pure);
+			if (r.basis === "plan") planN++;
 			BUCKETS.forEach(([k]) => (tot[k] += flt((r.buckets || {})[k])));
 		});
 		$(root).find(".th-totals").html(`
-			<span class="th-tot-main">${S.rows.length} ${__("piece(s)")}</span>
+			<span class="th-tot-main">${S.rows.length} ${__("card(s)")}</span>
+			${planN ? `<span class="th-plan" style="font-size:11px;">${__("{0} on plan weights", [planN])}</span>` : ""}
 			<span class="th-tot-main">${__("Gross")} <b>${fmt(tot.gross)} g</b></span>
 			<span class="th-tot-main">${__("Pure")} <b>${fmt(tot.pure)} g</b></span>
 			${BUCKETS.map(([k, lb]) => tot[k] > 0.0005 ? `<span>${lb} <b>${fmt(tot[k])} ct</b></span>` : "").join("")}`);
@@ -122,7 +141,7 @@ frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_recent_holder_transfers" }).then((r) => {
 			const rows = r.message || [];
 			$(root).find(".th-feeditems").html(rows.length ? rows.map((t) => `
-				<div class="th-ft"><span class="th-bar">${esc(t.order_bag)}</span>
+				<div class="th-ft">${t.stage ? `<span class="th-stage ${esc(t.stage)}">${esc(t.stage === "Floor" ? __("floor") : __("product"))}</span>` : ""}<span class="th-bar">${esc(t.order_bag)}</span>
 					<span class="who">${esc(t.from_holder || "—")} → ${esc(t.to_holder)}</span>
 					<div class="th-sub">${frappe.datetime.str_to_user(t.transfer_time)}${t.reason ? " · " + esc(t.reason) : ""}</div></div>`).join("")
 				: `<div class="th-sub">${__("No holder moves yet.")}</div>`);
@@ -164,14 +183,14 @@ frappe.pages["transfer-holder"].on_page_load = function (wrapper) {
 			setMsg(__("Pick the new holder (JD Stock = release to our shelf)."));
 			return;
 		}
-		frappe.confirm(__("Move {0} piece(s) to {1}?", [S.rows.length, esc(to)]), () => {
+		frappe.confirm(__("Move {0} card(s) to {1}?", [S.rows.length, esc(to)]), () => {
 			frappe.dom.freeze(__("Transferring..."));
 			frappe.call({
 				method: API + ".transfer_holder",
 				args: { bags: S.rows.map((r) => r.order_bag), to_customer: to, reason: reason.get_value() },
 			}).then((r) => {
 				frappe.dom.unfreeze();
-				frappe.show_alert({ message: __("{0} piece(s) now held by {1}.", [(r.message || {}).count, esc(to)]), indicator: "green" }, 6);
+				frappe.show_alert({ message: __("{0} card(s) now held by {1}.", [(r.message || {}).count, esc(to)]), indicator: "green" }, 6);
 				S.rows = [];
 				paint();
 				loadFeed();

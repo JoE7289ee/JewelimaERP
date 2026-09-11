@@ -9015,6 +9015,10 @@ def split_bag(order_bag, pieces, employee=None):
 			"split_of": order_bag, "piece_no": j,
 			"job_order": bag.job_order, "design": bag.design, "size": bag.size,
 			"location": "BAG EXTRACTION", "customer": bag.customer, "salesman": bag.salesman,
+			# a hold moved while the card was whole belongs to every piece cut from
+			# it — defaulting the children back to the order's party would quietly
+			# undo the transfer
+			"held_by": bag.held_by,
 			"order_type": bag.order_type, "order_date": bag.order_date, "due_date": bag.due_date,
 		})
 		child.insert(ignore_permissions=True)
@@ -10118,7 +10122,7 @@ def make_products(bags, bucket=None):
 	done, errors = [], []
 	for nm in bags or []:
 		try:
-			bag = frappe.db.get_value("Order Bag", nm, ["qty", "is_finished", "customer"], as_dict=True)
+			bag = frappe.db.get_value("Order Bag", nm, ["qty", "is_finished", "customer", "held_by"], as_dict=True)
 			if not bag:
 				errors.append({"name": nm, "error": frappe._("Not found")})
 				continue
@@ -10134,7 +10138,10 @@ def make_products(bags, bucket=None):
 			# leaving the bench name on it had every board still calling it a
 			# card sitting at extraction.
 			frappe.db.set_value("Order Bag", nm, {
-				"stock_status": "In Stock", "held_by": bag.customer or jd,
+				# a card carries its holder from the day it is placed, and that hold
+				# may have been moved while it was being made — finishing the piece
+				# must not put it back to the order's party
+				"stock_status": "In Stock", "held_by": bag.held_by or bag.customer or jd,
 				"in_stock_on": frappe.utils.now_datetime(),
 				"bucket": bucket, "location": bucket,
 			})
@@ -16858,27 +16865,64 @@ def create_product_sale(payload):
 _BUCKET_LABELS = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
 
 
+def _holder_stage(b):
+	"""Where a card stands for the purpose of moving its hold, or why it can't.
+
+	A reservation can move on a card that is still being made — a party that
+	changes its mind should not have to wait for the piece to finish — and on a
+	finished piece sitting In Stock. It cannot move while a piece is away at
+	certification, hallmarking or a stone change, because a piece should not be
+	re-promised while it is out of the building, and it cannot move once the
+	piece is sold or the card is cancelled.
+
+	Returns ("Floor" | "Product", None) or (None, reason). The scan and the
+	transfer both ask this, so they can never disagree about what may move."""
+	if b.stock_status == "Cancelled":
+		return None, frappe._("{0} is cancelled.").format(b.name)
+	if not b.is_finished:
+		if b.stock_status and b.stock_status != "In Production":
+			return None, frappe._("{0} is {1}.").format(b.name, b.stock_status)
+		return "Floor", None
+	if b.stock_status != "In Stock":
+		return None, frappe._("{0} is {1} — a piece has to be In Stock to change holder.").format(
+			b.name, b.stock_status)
+	return "Product", None
+
+
 @frappe.whitelist()
 def get_holder_piece(barcode):
-	"""Resolve a scanned card for the Transfer Holder page: current holder, when it
-	(re)entered stock, and its frozen weights (gross / pure / per stone bucket)."""
+	"""Resolve a scanned card for the Transfer Holder page: current holder, where it
+	stands (on the floor, or a product in stock and since when) and its weights.
+
+	A finished piece carries its frozen weights. A card on the floor has none yet,
+	so it shows the plan weights and says so — the page must never pass a plan
+	figure off as a weighed one."""
 	nm = (barcode or "").strip()
 	if not frappe.db.exists("Order Bag", nm):
 		frappe.throw(frappe._("{0} not found.").format(nm or "?"))
+	meta = frappe.get_meta("Order Bag")
+	plan_b = [f"{x}_weight" for x in _BUCKET_LABELS if meta.has_field(f"{x}_weight")]
 	b = frappe.db.get_value("Order Bag", nm, [
-		"name", "design", "held_by", "stock_status", "is_finished", "in_stock_on",
-		"act_gross_weight", "act_pure_weight",
-	] + [f"act_{x}_weight" for x in _BUCKET_LABELS], as_dict=True)
-	if not b.is_finished:
-		frappe.throw(frappe._("{0} is not a product yet — it's still on the floor.").format(nm))
-	if b.stock_status != "In Stock":
-		frappe.throw(frappe._("{0} is {1} — only pieces In Stock can change holder.").format(nm, b.stock_status))
+		"name", "design", "held_by", "customer", "stock_status", "is_finished", "in_stock_on",
+		"location", "act_gross_weight", "act_pure_weight", "gross_weight",
+	] + [f"act_{x}_weight" for x in _BUCKET_LABELS] + plan_b, as_dict=True)
+	stage, why = _holder_stage(b)
+	if not stage:
+		frappe.throw(why)
+	floor = stage == "Floor"
+	# a split piece on the floor already has actual weights; use them when they exist
+	weighed = flt(b.act_gross_weight) > 0.0005
 	return {
 		"order_bag": b.name, "design": b.design or "",
 		"design_type": (frappe.db.get_value("Design", b.design, "design_type") if b.design else "") or "",
-		"held_by": b.held_by or "", "in_stock_on": str(b.in_stock_on or ""),
-		"gross": flt(b.act_gross_weight), "pure": flt(b.act_pure_weight),
-		"buckets": {x: flt(b.get(f"act_{x}_weight")) for x in _BUCKET_LABELS},
+		"held_by": b.held_by or "", "customer": b.customer or "",
+		"stage": stage, "location": b.location or "",
+		"in_stock_on": "" if floor else str(b.in_stock_on or ""),
+		"basis": "actual" if (not floor or weighed) else "plan",
+		"gross": flt(b.act_gross_weight) if (not floor or weighed) else flt(b.gross_weight),
+		"pure": flt(b.act_pure_weight) if (not floor or weighed) else None,
+		"buckets": {x: (flt(b.get(f"act_{x}_weight")) if (not floor or weighed)
+			else flt(b.get(f"{x}_weight"))) for x in _BUCKET_LABELS},
 	}
 
 
@@ -16895,18 +16939,22 @@ def transfer_holder(bags, to_customer, reason=None):
 		frappe.throw(frappe._("Pick the new holder (JD Stock = our own shelf)."))
 	rows = []
 	for nm in bags:
-		b = frappe.db.get_value("Order Bag", nm, ["is_finished", "stock_status", "held_by"], as_dict=True)
-		if not b or not b.is_finished or b.stock_status != "In Stock":
-			frappe.throw(frappe._("{0} is not a piece In Stock.").format(nm))
+		b = frappe.db.get_value("Order Bag", nm, ["name", "is_finished", "stock_status", "held_by"], as_dict=True)
+		if not b:
+			frappe.throw(frappe._("{0} not found.").format(nm))
+		stage, why = _holder_stage(b)
+		if not stage:
+			frappe.throw(why)
 		if (b.held_by or "") == to_customer:
 			frappe.throw(frappe._("{0} is already held by {1}.").format(nm, to_customer))
-		rows.append((nm, b.held_by or None))
+		rows.append((nm, b.held_by or None, stage))
 	now = frappe.utils.now_datetime()
 	made = []
-	for nm, from_holder in rows:
+	for nm, from_holder, stage in rows:
 		ht = frappe.get_doc({
 			"doctype": "Holder Transfer",
 			"order_bag": nm, "from_holder": from_holder, "to_holder": to_customer,
+			"stage": stage,
 			"transfer_time": now, "transferred_by": frappe.session.user, "reason": reason,
 		})
 		ht.flags.ignore_permissions = True
@@ -16922,7 +16970,7 @@ def get_recent_holder_transfers(limit=25):
 	"""Freshest holder moves — the Transfer Holder page's side feed."""
 	return frappe.get_all(
 		"Holder Transfer",
-		fields=["name", "order_bag", "from_holder", "to_holder", "transfer_time", "reason"],
+		fields=["name", "order_bag", "from_holder", "to_holder", "stage", "transfer_time", "reason"],
 		order_by="transfer_time desc", limit=cint(limit) or 25,
 	)
 
@@ -19928,7 +19976,7 @@ def _holder_rows(f, t, search=None, limit=400):
 	if search:
 		cond.append("(h.order_bag like %(q)s or h.to_holder like %(q)s or h.from_holder like %(q)s)")
 		vals["q"] = "%{0}%".format(search)
-	return frappe.db.sql("""select h.name, h.order_bag, h.from_holder, h.to_holder,
+	return frappe.db.sql("""select h.name, h.order_bag, h.from_holder, h.to_holder, h.stage,
 			h.transfer_time, h.transferred_by, h.reason
 		from `tabHolder Transfer` h where {0}
 		order by h.transfer_time desc limit %(lim)s""".format(" and ".join(cond)), vals, as_dict=True)

@@ -13,6 +13,25 @@ class OrderBag(Document):
 		self.set_design_bank()
 		self.guard_bom_locked()
 		self.set_plan_weights()
+		self.set_held_by()
+
+	def set_held_by(self):
+		"""Every card is held by somebody from the day it is placed — the order's
+		party, or JD Stock when there isn't one — so its reservation can be moved
+		while it is still being made. Only ever FILLS an empty holder: a hold that
+		has been transferred is never put back.
+
+		The party is read off the Job Order directly rather than trusting
+		self.customer, which is a fetch_from and may not be populated yet on the
+		first save."""
+		if self.held_by or self.stock_status == "Cancelled":
+			return
+		party = self.customer or (frappe.db.get_value("Job Order", self.job_order, "customer")
+			if self.job_order else None)
+		if not party and frappe.db.exists("Customer", "JD Stock"):
+			party = "JD Stock"
+		if party:
+			self.held_by = party
 
 	def set_plan_weights(self):
 		"""Plan weights (gross/nett/purity/stones) are derived from the BOM x qty, so

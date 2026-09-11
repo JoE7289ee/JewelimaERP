@@ -46,6 +46,7 @@ def after_install():
 	check_sidebar_icons()
 	ensure_home_block()
 	drop_retired_pages()
+	backfill_floor_holders()
 	setup_roles()
 	seed_benches()
 	seed_bench_work_options()
@@ -147,6 +148,7 @@ def after_migrate():
 	check_sidebar_icons()
 	ensure_home_block()
 	drop_retired_pages()
+	backfill_floor_holders()
 	setup_roles()
 	seed_benches()
 	seed_bench_work_options()
@@ -547,6 +549,24 @@ def retag_swarovski():
 			"act_cs_weight": round(max(flt(b.act_cs_weight) - flt(r.ct), 0), 3),
 			"act_cs_no": max(cint(b.act_cs_no) - cint(r.pcs), 0),
 		}, update_modified=False)
+	frappe.db.commit()
+
+
+def backfill_floor_holders():
+	"""One-time, idempotent (2026-09-11): cards on the floor now carry a holder
+	too, so the ones placed before that get theirs — the order's party, or JD
+	Stock. Only empty holders are filled, so running it again touches nothing,
+	and a cancelled card is left alone."""
+	jd = "JD Stock" if frappe.db.exists("Customer", "JD Stock") else None
+	frappe.db.sql("""UPDATE `tabOrder Bag`
+		SET held_by = customer
+		WHERE is_finished = 0 AND IFNULL(held_by, '') = ''
+		  AND IFNULL(stock_status, '') != 'Cancelled' AND IFNULL(customer, '') != ''""")
+	if jd:
+		frappe.db.sql("""UPDATE `tabOrder Bag`
+			SET held_by = %s
+			WHERE is_finished = 0 AND IFNULL(held_by, '') = ''
+			  AND IFNULL(stock_status, '') != 'Cancelled'""", jd)
 	frappe.db.commit()
 
 

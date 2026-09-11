@@ -9,6 +9,7 @@
   "order_bag",
   "from_holder",
   "to_holder",
+  "stage",
   "col_break",
   "transfer_time",
   "transferred_by",
@@ -42,6 +43,16 @@
    "options": "Customer",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "\nFloor\nProduct",
+   "read_only": 1,
+   "description": "Whether the card was still being made or a finished piece when its hold moved."
   },
   {
    "fieldname": "col_break",

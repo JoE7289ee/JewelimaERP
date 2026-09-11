@@ -354,7 +354,7 @@
    "read_only": 1
   },
   {
-   "description": "Who holds this piece \u2014 the order's party, or JD Stock if it has none.",
+   "description": "Who this card is reserved for \u2014 the order's party, or JD Stock if it has none. Set when the card is placed and moved on Transfer Holder, on the floor or in stock.",
    "fieldname": "held_by",
    "fieldtype": "Link",
    "in_standard_filter": 1,
