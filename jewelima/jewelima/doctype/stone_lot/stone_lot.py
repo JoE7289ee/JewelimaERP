@@ -60,6 +60,14 @@ class StoneLot(Document):
 		bought = round(sum(flt(r.purchased_cts) for r in self.items or []), 3)
 		back = round(sum(flt(r.returned_cts) for r in self.items or []), 3)
 		sieved = round(on_tray + bought + back, 3)
+		# Everything the parcel is already accounted for by, beyond the sieves: a
+		# purchase request still waiting on a manager has taken its carats OFF the
+		# tray without buying them yet, and a close may have sent part of the
+		# parcel back without it ever being sieved. Leaving either out made the
+		# lot look less sorted than it was, and let the ceiling below be beaten.
+		pending = self._pending_purchase_cts()
+		unassorted_back = round(flt(self.unassorted_returned_cts), 3)
+		accounted = round(sieved + pending + unassorted_back, 3)
 		# What we are KEEPING is what is still selected on the tray plus whatever
 		# has already been bought off it. A lot does not become less selected as
 		# its stones go into stock, and a closed lot — whose tray is empty by
@@ -71,10 +79,12 @@ class StoneLot(Document):
 		# the parcel is a CEILING. The desk stops this at the keystroke, but a page
 		# left open since before a lot was re-booked would post past it, and a lot
 		# holding more stone than came in is not something to discover later.
-		if flt(self.claimed_cts) > 0 and sieved > flt(self.claimed_cts) + 0.0005:
+		if flt(self.claimed_cts) > 0 and accounted > flt(self.claimed_cts) + 0.0005:
 			frappe.throw(frappe._("The sieves add up to {0} ct — more than the {1} ct that came in.")
-				.format(sieved, flt(self.claimed_cts)))
-		self.rejected_cts = round(max(flt(self.actual_cts) - self.selected_cts, 0), 3)
+				.format(accounted, flt(self.claimed_cts)))
+		# the rejection is what came off the sieves and was not kept, PLUS what
+		# went back without ever reaching a sieve
+		self.rejected_cts = round(max(flt(self.actual_cts) - self.selected_cts, 0) + unassorted_back, 3)
 		# Selecting more than came in is a typo, and it is worth stopping at the
 		# save rather than leaving a lot whose rejection reads zero for the
 		# wrong reason.
@@ -82,6 +92,21 @@ class StoneLot(Document):
 			frappe.throw(frappe._("Selected {0} ct is more than the {1} ct that came in.")
 				.format(self.selected_cts, flt(self.actual_cts)))
 		self._set_status()
+
+	def _pending_purchase_cts(self):
+		"""Carats off the tray in a purchase request nobody has decided yet.
+
+		A request being settled right now is left out (flags.settling_request):
+		its carats are moving onto the tray or into the bought column in this
+		very save, and counting them as pending too would count them twice."""
+		if self.is_new():
+			return 0.0
+		settling = self.flags.get("settling_request") or ""
+		return round(flt(frappe.db.sql("""SELECT SUM(i.cts)
+			FROM `tabStone Purchase Request Item` i
+			JOIN `tabStone Purchase Request` r ON r.name = i.parent
+			WHERE r.stone_lot = %s AND r.request_type = 'Purchase'
+			  AND r.status = 'Pending' AND r.name != %s""", (self.name, settling))[0][0]), 3)
 
 	def _set_status(self):
 		"""OPEN until the lot is CLOSED, and closing is something somebody does.

@@ -47,6 +47,7 @@ def after_install():
 	ensure_home_block()
 	drop_retired_pages()
 	backfill_floor_holders()
+	repair_stone_lot_history()
 	setup_roles()
 	seed_benches()
 	seed_bench_work_options()
@@ -149,6 +150,7 @@ def after_migrate():
 	ensure_home_block()
 	drop_retired_pages()
 	backfill_floor_holders()
+	repair_stone_lot_history()
 	setup_roles()
 	seed_benches()
 	seed_bench_work_options()
@@ -550,6 +552,78 @@ def retag_swarovski():
 			"act_cs_no": max(cint(b.act_cs_no) - cint(r.pcs), 0),
 		}, update_modified=False)
 	frappe.db.commit()
+
+
+def repair_stone_lot_history():
+	"""Idempotent (2026-09-11). Two repairs to stone lots, both restore-only.
+
+	1. Lost history. The desk's save used to rebuild a lot's sieves from the rows
+	   on screen, so taking a sieve off the tray took its bought and returned
+	   carats with it — LOT-SALONI-00008 lost 100 ct of an approved purchase that
+	   really posted. The approved requests ARE the record, so bought and returned
+	   are restored from them. A figure is only ever raised to what the requests
+	   say, never lowered, and a missing row comes back with an empty tray.
+
+	2. Closed lots with carats never sieved. A close now returns the un-assorted
+	   part of a parcel with the rejection; lots closed before that get it
+	   recorded, so their figures add up to what came in.
+
+	One lot that will not save is logged and skipped — a migrate never fails
+	for it."""
+	if not frappe.db.exists("DocType", "Stone Lot"):
+		return
+	if "unassorted_returned_cts" not in frappe.db.get_table_columns("Stone Lot"):
+		return
+	for name in frappe.get_all("Stone Lot", pluck="name", order_by="creation"):
+		try:
+			_repair_one_stone_lot(name)
+			frappe.db.commit()
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(frappe.get_traceback(), "Stone lot repair skipped: " + name)
+			print("stone lot repair: skipped", name, "(logged)")
+
+
+def _repair_one_stone_lot(name):
+	from frappe.utils import flt
+
+	bought, back = {}, {}
+	for r in frappe.db.sql("""SELECT r.request_type, i.sieve, SUM(i.cts) ct
+			FROM `tabStone Purchase Request Item` i
+			JOIN `tabStone Purchase Request` r ON r.name = i.parent
+			WHERE r.stone_lot = %s AND r.status = 'Approved'
+			GROUP BY r.request_type, i.sieve""", name, as_dict=True):
+		(bought if r.request_type == "Purchase" else back)[r.sieve] = round(flt(r.ct), 3)
+
+	d = frappe.get_doc("Stone Lot", name)
+	notes = []
+	have = {row.sieve: row for row in d.items}
+	for sv in sorted(set(bought) | set(back)):
+		row = have.get(sv)
+		if not row:
+			d.append("items", {"sieve": sv, "actual_cts": 0, "selected_cts": 0,
+				"purchased_cts": bought.get(sv, 0), "returned_cts": back.get(sv, 0)})
+			notes.append("restored {0} (bought {1}, returned {2})".format(sv, bought.get(sv, 0), back.get(sv, 0)))
+			continue
+		if flt(row.purchased_cts) + 0.0005 < bought.get(sv, 0):
+			notes.append("{0} bought {1} -> {2}".format(sv, flt(row.purchased_cts), bought[sv]))
+			row.purchased_cts = bought[sv]
+		if flt(row.returned_cts) + 0.0005 < back.get(sv, 0):
+			notes.append("{0} returned {1} -> {2}".format(sv, flt(row.returned_cts), back[sv]))
+			row.returned_cts = back[sv]
+
+	if d.status == "Closed" and flt(d.claimed_cts) > 0:
+		# a close cannot be approved past a pending purchase, so a closed lot has none
+		acct = sum(flt(r.actual_cts) + flt(r.purchased_cts) + flt(r.returned_cts) for r in d.items) \
+			+ flt(d.unassorted_returned_cts)
+		un = round(flt(d.claimed_cts) - acct, 3)
+		if un > 0.0005:
+			d.unassorted_returned_cts = round(flt(d.unassorted_returned_cts) + un, 3)
+			notes.append("{0} ct never assorted recorded as returned".format(un))
+
+	if notes:
+		d.save(ignore_permissions=True)
+		print("stone lot repair:", name, "—", "; ".join(notes))
 
 
 def backfill_floor_holders():

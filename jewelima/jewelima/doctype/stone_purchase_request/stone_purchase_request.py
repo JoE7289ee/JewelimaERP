@@ -16,7 +16,11 @@ from frappe.utils import flt
 class StonePurchaseRequest(Document):
 	def validate(self):
 		rows = [r for r in (self.items or []) if r.sieve and flt(r.cts) > 0]
-		if not rows:
+		# A CLOSE also carries whatever of the parcel was never sieved. That weight
+		# has no sieve, so it cannot be a line; it rides on the request itself, and
+		# a close can be nothing BUT that — a parcel nobody got round to sorting.
+		unassorted = round(flt(self.unassorted_cts), 3) if self.request_type == "Close" else 0.0
+		if not rows and unassorted <= 0.0005:
 			frappe.throw(frappe._("A request needs at least one sieve with carats against it."))
 		seen = set()
 		for r in rows:
@@ -24,4 +28,5 @@ class StonePurchaseRequest(Document):
 				frappe.throw(frappe._("{0} is on the request twice.").format(r.sieve))
 			seen.add(r.sieve)
 		self.set("items", rows)
-		self.total_cts = round(sum(flt(r.cts) for r in rows), 3)
+		self.unassorted_cts = unassorted
+		self.total_cts = round(sum(flt(r.cts) for r in rows) + unassorted, 3)

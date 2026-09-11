@@ -18,6 +18,7 @@
   "cb2",
   "selected_cts",
   "rejected_cts",
+  "unassorted_returned_cts",
   "sec_items",
   "items",
   "remarks"
@@ -110,6 +111,14 @@
    "label": "Rejected (ct)",
    "precision": "3",
    "read_only": 1
+  },
+  {
+   "fieldname": "unassorted_returned_cts",
+   "fieldtype": "Float",
+   "label": "Returned unassorted (ct)",
+   "precision": "3",
+   "read_only": 1,
+   "description": "What went back to the provider without ever being sieved \u2014 written when the lot is closed. Part of the rejection."
   },
   {
    "fieldname": "sec_items",

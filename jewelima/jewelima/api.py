@@ -5154,6 +5154,7 @@ def _lot_row(d, with_items=False):
 		"returned_on": str(d.returned_on or ""),
 		"claimed": flt(d.claimed_cts), "actual": flt(d.actual_cts),
 		"selected": flt(d.selected_cts), "rejected": flt(d.rejected_cts),
+		"unassorted_returned": flt(d.get("unassorted_returned_cts")),
 		"remarks": d.remarks or "",
 		"owner_label": _user_label(d.owner),
 	}
@@ -5161,6 +5162,11 @@ def _lot_row(d, with_items=False):
 	# actually weighed, once we have weighed it
 	out["short"] = round(flt(d.claimed_cts) - flt(d.actual_cts), 3) if flt(d.actual_cts) else 0
 	if with_items:
+		# what a request still waiting has taken off the tray, and what of the
+		# parcel is left unaccounted for — the close dialog is built on both
+		live = hasattr(d, "_pending_purchase_cts")
+		out["pending_buy"] = d._pending_purchase_cts() if live else 0.0
+		out["left"] = _lot_unassorted(d) if live else 0.0
 		out["items"] = [{"sieve": r.sieve, "actual": flt(r.actual_cts),
 			"selected": flt(r.selected_cts), "rejected": flt(r.rejected_cts),
 			# what an approved request has already taken into stock. The desk sees
@@ -5269,9 +5275,10 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 
 	sieves = set(frappe.get_all("Diamond Sieve", pluck="sieve_size"))
 	rows_now = frappe.get_all("Stone Lot Sieve", filters={"parent": name},
-		fields=["sieve", "purchased_cts", "returned_cts"])
+		fields=["sieve", "actual_cts", "selected_cts", "purchased_cts", "returned_cts"])
 	kept = {r.sieve: flt(r.purchased_cts) for r in rows_now}
 	gone = {r.sieve: flt(r.returned_cts) for r in rows_now}
+	tray = {r.sieve: (flt(r.actual_cts), flt(r.selected_cts)) for r in rows_now}
 	lines = []
 	for r in rows:
 		sv = (r or {}).get("sieve")
@@ -5289,6 +5296,17 @@ def save_stone_lot_selection(name, actual_cts=0, rows=None, returned_on=None, re
 		# approval and the desk has no business overwriting it
 		lines.append({"sieve": sv, "actual_cts": act, "selected_cts": ct,
 			"purchased_cts": flt(kept.get(sv)), "returned_cts": flt(gone.get(sv))})
+
+	# A sieve with bought or returned carats against it is the lot's RECORD, and
+	# the desk cannot take it off. This list used to be rebuilt from the rows on
+	# screen alone, so removing a sieve erased an approved purchase from the lot —
+	# LOT-SALONI-00008 lost 100 ct that way. A row the page did not send comes
+	# back exactly as it was.
+	sent = {x["sieve"] for x in lines}
+	for sv in kept:
+		if sv not in sent and (flt(kept.get(sv)) > 0.0005 or flt(gone.get(sv)) > 0.0005):
+			lines.append({"sieve": sv, "actual_cts": tray[sv][0], "selected_cts": tray[sv][1],
+				"purchased_cts": flt(kept.get(sv)), "returned_cts": flt(gone.get(sv))})
 
 	d.actual_cts = flt(actual_cts)
 	d.set("items", lines)
@@ -5346,11 +5364,25 @@ def _lot_sieve_state(lot):
 			fields=["sieve", "actual_cts", "selected_cts", "purchased_cts"])}
 
 
-def _spr_move(lot, want, sign):
+def _lot_unassorted(d):
+	"""How much of the parcel nothing accounts for — not on the tray, not bought,
+	not returned, not in a request still waiting, not already sent back unsorted.
+	It is what a close returns to the provider without ever sieving it."""
+	if flt(d.claimed_cts) <= 0:
+		return 0.0
+	acct = (sum(flt(r.actual_cts) + flt(r.purchased_cts) + flt(r.returned_cts) for r in d.items or [])
+		+ d._pending_purchase_cts() + flt(d.unassorted_returned_cts))
+	return max(round(flt(d.claimed_cts) - acct, 3), 0.0)
+
+
+def _spr_move(lot, want, sign, settling=None):
 	"""Take `want` {sieve: carats} off the tray (sign -1) or put it back (+1).
 
-	Actual and assorted move together so the rejection stays where it is."""
+	Actual and assorted move together so the rejection stays where it is.
+	`settling` names a request being decided in this same save, so the lot does
+	not count its carats as pending while they land back on the tray."""
 	doc = frappe.get_doc("Stone Lot", lot)
+	doc.flags.settling_request = settling
 	for row in doc.items:
 		ct = flt(want.get(row.sieve))
 		if not ct:
@@ -5387,7 +5419,7 @@ def get_stone_purchase_requests(lot=None, status=None, limit=100):
 		filters["status"] = status
 	rows = frappe.get_all("Stone Purchase Request", filters=filters,
 		fields=["name", "request_type", "stone_lot", "supplier", "quality", "status",
-			"total_cts", "requested_by", "requested_on", "decided_by", "decided_on",
+			"total_cts", "unassorted_cts", "requested_by", "requested_on", "decided_by", "decided_on",
 			"remarks", "purchase_record"],
 		order_by="creation desc", limit_page_length=cint(limit) or 100)
 	out = []
@@ -5395,6 +5427,7 @@ def get_stone_purchase_requests(lot=None, status=None, limit=100):
 		out.append({**r,
 			"requested_on": str(r.requested_on or ""), "decided_on": str(r.decided_on or ""),
 			"purchase_record": r.get("purchase_record") or "",
+			"unassorted_cts": flt(r.get("unassorted_cts")),
 			"requested_label": _user_label(r.requested_by),
 			"decided_label": _user_label(r.decided_by) if r.decided_by else "",
 			"items": [{"sieve": i.sieve, "cts": flt(i.cts)} for i in frappe.get_all(
@@ -5480,18 +5513,24 @@ def close_stone_lot_request(lot, remarks=None):
 	keep = [{"sieve": r.sieve, "cts": flt(r.selected_cts)} for r in d.items if flt(r.selected_cts) > 0]
 	back = [{"sieve": r.sieve, "cts": round(flt(r.actual_cts) - flt(r.selected_cts), 3)}
 		for r in d.items if round(flt(r.actual_cts) - flt(r.selected_cts), 3) > 0]
-	if not keep and not back:
-		frappe.throw(frappe._("There is nothing left on this tray to close."))
+	# The part of the parcel that never reached a sieve goes back with the
+	# rejection: a closed lot has nothing left to assort, and leaving it off the
+	# close let a parcel finish with carats simply never accounted for. Worked out
+	# before the purchase below takes `keep` off the tray — the tray and a pending
+	# request count the same, so the figure does not move.
+	unassorted = _lot_unassorted(d)
+	if not keep and not back and unassorted <= 0.0005:
+		frappe.throw(frappe._("There is nothing left on this lot to close."))
 
-	made = {}
+	made = {"unassorted": unassorted}
 	if keep:
 		made["purchase"] = create_stone_purchase_request(lot, json.dumps(keep),
 			remarks=frappe._("raised by closing the lot"))["name"]
-	if back:
+	if back or unassorted > 0.0005:
 		doc = frappe.get_doc({
 			"doctype": "Stone Purchase Request", "request_type": "Close", "stone_lot": lot,
 			"supplier": d.supplier, "quality": d.quality or "",
-			"status": "Pending", "items": back,
+			"status": "Pending", "items": back, "unassorted_cts": unassorted,
 			"requested_by": frappe.session.user,
 			"requested_on": frappe.utils.now_datetime(),
 			"remarks": (remarks or "").strip() or None,
@@ -5582,6 +5621,14 @@ def decide_stone_purchase_request(name, decision, remarks=None, post=1):
 					frappe.throw(frappe._("{0}: more is being written off than is on the tray.").format(row.sieve))
 				# what is left of the tray is what we were keeping
 				row.selected_cts = min(flt(row.selected_cts), flt(row.actual_cts))
+			# and the part of the parcel nobody ever sieved goes back with it. It is
+			# worked out NOW rather than taken from the request — the desk may have
+			# sieved more since the close was raised — and the request is told the
+			# figure that was actually returned.
+			un = _lot_unassorted(lot)
+			if un > 0.0005:
+				lot.unassorted_returned_cts = round(flt(lot.unassorted_returned_cts) + un, 3)
+			doc.unassorted_cts = un
 			lot.save(ignore_permissions=True)
 			if lot.status != "Closed":
 				frappe.db.set_value("Stone Lot", lot.name, "status", "Closed", update_modified=False)
@@ -5603,6 +5650,7 @@ def decide_stone_purchase_request(name, decision, remarks=None, post=1):
 		for row in lot.items:
 			if row.sieve in want:
 				row.purchased_cts = round(flt(row.purchased_cts) + want[row.sieve], 3)
+		lot.flags.settling_request = doc.name
 		lot.save(ignore_permissions=True)
 
 		# and the stones are bought — the same posting the purchase desk makes
@@ -5626,7 +5674,7 @@ def decide_stone_purchase_request(name, decision, remarks=None, post=1):
 			doc.purchase_receipt = (res or {}).get("name")
 	else:
 		# rejected — the stones go back on the tray and can be assorted again
-		_spr_move(doc.stone_lot, want, +1)
+		_spr_move(doc.stone_lot, want, +1, settling=doc.name)
 
 	doc.status = decision
 	doc.decided_by = frappe.session.user

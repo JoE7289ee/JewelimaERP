@@ -13,6 +13,7 @@
   "cb1",
   "status",
   "total_cts",
+  "unassorted_cts",
   "sec_items",
   "items",
   "sec_who",
@@ -83,6 +84,14 @@
    "read_only": 1
   },
   {
+   "fieldname": "unassorted_cts",
+   "fieldtype": "Float",
+   "label": "Never assorted (ct)",
+   "precision": "3",
+   "read_only": 1,
+   "description": "On a Close: the part of the parcel that was never put through a sieve, returned to the provider with the rejection."
+  },
+  {
    "fieldname": "sec_items",
    "fieldtype": "Section Break",
    "label": "To keep"
@@ -91,8 +100,7 @@
    "fieldname": "items",
    "fieldtype": "Table",
    "label": "Sieves",
-   "options": "Stone Purchase Request Item",
-   "reqd": 1
+   "options": "Stone Purchase Request Item"
   },
   {
    "fieldname": "sec_who",
