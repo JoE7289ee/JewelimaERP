@@ -907,7 +907,11 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		setTimeout(() => root.find(`.ls-in[data-f="actual"][data-i="${ROWS.length - 1}"]`).focus(), 30);
 	});
 
-	// an hour of assorting must not walk away through a closed tab
+	// an hour of assorting must not walk away through a closed tab. The page is
+	// rebuilt every time it is landed on, so the previous build's listener goes
+	// first — otherwise each visit stacks another, and an old one still holding a
+	// "NOT SAVED" from a visit long gone would keep asking to leave.
+	$(window).off("beforeunload.lotsel");
 	$(window).on("beforeunload.lotsel", () => (SAVE === "dirty" || SAVE === "saving" || SAVE === "failed")
 		? __("The tray is still saving.") : undefined);
 	$(wrapper).on("remove", () => $(window).off(".lotsel"));
