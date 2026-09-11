@@ -56,6 +56,12 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 		.ls-card .nm{font-size:15.5px;font-weight:800;letter-spacing:-.01em;}
 		.ls-card .sup{font-size:12px;color:var(--text-muted);margin:3px 0 12px;}
 		.ls-card .nums{display:flex;gap:18px;}
+		/* what the parcel IS, above what became of it: the claimed weight every
+		   other figure on the tile is measured against, and when it came in */
+		.ls-card .head{display:flex;gap:18px;align-items:flex-end;padding-bottom:10px;margin-bottom:10px;
+			border-bottom:1px solid var(--border-color);}
+		.ls-card .head .b{font-size:20px;}
+		.ls-card .head .dt{font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.5;}
 		.ls-card .n{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:600;}
 		.ls-card .b{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.2;}
 		.ls-card .sel .b{color:#1d7a33;} .ls-card .rej .b{color:#b02a2a;}
@@ -274,6 +280,12 @@ frappe.pages["lot-selection"].on_page_load = function (wrapper) {
 						<span class="nm">${esc(r.name)}</span>
 						<span class="ls-tag ${st}">${esc(r.status)}</span></div>
 					<div class="sup">${esc(r.supplier)}${r.quality ? " · " + esc(r.quality) : ""}</div>
+					<div class="head">
+						<div><div class="n">${__("Claimed")}</div>
+							<div class="b">${r.claimed ? ct(r.claimed) : "—"}<span style="font-size:11px;font-weight:600;color:var(--text-muted);margin-left:2px;">ct</span></div></div>
+						<div><div class="n">${__("Received")}</div>
+							<div class="dt">${r.received_on ? esc(frappe.datetime.str_to_user(r.received_on)) : "—"}</div></div>
+					</div>
 					<div class="nums">
 						<div><div class="n">${__("Assorted")}</div><div class="b">${r.actual ? ct(r.actual) : "—"}</div></div>
 						<div class="sel"><div class="n">${__("Selected")}</div><div class="b">${r.selected ? ct(r.selected) : "—"}</div></div>
