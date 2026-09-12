@@ -25,17 +25,28 @@ def _guard():
 
 # --- the two open vocabularies ---------------------------------------------
 def _master(dt, field, value, create=True):
-	"""Find a party / work type by name, adding it if it is new."""
+	"""Find a party / work type by name, adding it if it is new.
+
+	A name that was retired and is now being used again comes back on: the list
+	is only a memory of what has been typed, so typing it is what puts it there.
+	Without this a retired name would attach to work and still never appear in
+	the picker, so it would have to be typed again every single time."""
 	value = " ".join(str(value or "").split())
 	if not value:
 		return None
-	hit = frappe.db.get_value(dt, {field: value}, "name")
+
+	def revive(row):
+		if row and not cint(row.active):
+			frappe.db.set_value(dt, row.name, "active", 1)
+		return row.name if row else None
+
+	hit = frappe.db.get_value(dt, {field: value}, ["name", "active"], as_dict=True)
 	if hit:
-		return hit
+		return revive(hit)
 	# a different case of the same name is the same name
-	hit = frappe.db.get_value(dt, {field: ["like", value]}, "name")
+	hit = frappe.db.get_value(dt, {field: ["like", value]}, ["name", "active"], as_dict=True)
 	if hit:
-		return hit
+		return revive(hit)
 	if not create:
 		frappe.throw(frappe._("{0} {1} not found.").format(dt, value))
 	return frappe.get_doc({"doctype": dt, field: value, "active": 1}).insert(
