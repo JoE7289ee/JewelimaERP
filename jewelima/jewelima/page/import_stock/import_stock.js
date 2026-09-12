@@ -16,7 +16,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 	$(page.main).append(`
 		<style>
 		.is-wrap{display:flex;flex-direction:column;height:calc(100vh - 95px);}
-		.is-head{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px 10px;margin:2px 0 6px;}
+		.is-head{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px 10px;margin:2px 0 6px;}
 		.is-head .frappe-control{margin:0;}
 		.is-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.is-head .control-input-wrapper .control-input,.is-head .control-input input,.is-head .control-input select,.is-head .control-value{min-height:26px;height:26px;line-height:24px;font-size:12px;}
@@ -50,7 +50,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		</style>
 		<div class="is-wrap">
 			<div class="is-head">
-				<div class="is-h-mode"></div><div class="is-h-holder"></div><div class="is-h-supplier"></div><div class="is-h-remarks"></div>
+				<div class="is-h-mode"></div><div class="is-h-bucket"></div><div class="is-h-holder"></div><div class="is-h-supplier"></div><div class="is-h-remarks"></div>
 			</div>
 			<div class="is-gridbox">
 				<table class="is-grid"><thead><tr class="is-headrow">
@@ -83,10 +83,15 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 			{ label: __("New Purchase → Finished Goods"), value: "purchase" },
 		],
 	});
+	state.header.bucket = mk(".is-h-bucket", { fieldtype: "Link", label: __("Bucket"), fieldname: "bucket", options: "Finished Bucket",
+		get_query: () => ({ filters: { active: 1 } }) });
 	state.header.holder = mk(".is-h-holder", { fieldtype: "Link", label: __("Held By (Party)"), fieldname: "customer", options: "Customer" });
 	state.header.supplier = mk(".is-h-supplier", { fieldtype: "Link", label: __("Supplier (purchase mode)"), fieldname: "supplier", options: "Supplier" });
 	state.header.remarks = mk(".is-h-remarks", { fieldtype: "Data", label: __("Remarks"), fieldname: "remarks" });
 	state.header.mode.set_value("issue");
+	frappe.db.get_list("Finished Bucket", { filters: { active: 1 }, pluck: "name", limit: 2 }).then((b) => {
+		if ((b || []).length === 1 && !state.header.bucket.get_value()) state.header.bucket.set_value(b[0]);
+	});
 	frappe.db.get_value("Customer", "JD Stock", "name").then((r) => {
 		if (r.message && r.message.name && !state.header.holder.get_value()) state.header.holder.set_value("JD Stock");
 	});
@@ -278,6 +283,11 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 			frappe.msgprint(__("Pick who holds these pieces (JD Stock = ourselves)."));
 			return;
 		}
+		const bucket = state.header.bucket.get_value();
+		if (!bucket) {
+			frappe.msgprint(__("Pick the bucket these pieces are filed into."));
+			return;
+		}
 		const mode = state.header.mode.get_value();
 		frappe.confirm(
 			__("Import {0} piece(s) held by {1}?<br>{2}", [pieces.length, esc(customer),
@@ -286,7 +296,7 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 				frappe.dom.freeze(__("Importing..."));
 				frappe.call({
 					method: "jewelima.jewelima.api.import_finished_stock",
-					args: { payload: { mode, customer, supplier: state.header.supplier.get_value(), remarks: state.header.remarks.get_value(), pieces } },
+					args: { payload: { mode, customer, bucket, supplier: state.header.supplier.get_value(), remarks: state.header.remarks.get_value(), pieces } },
 				}).then((r) => {
 					frappe.dom.unfreeze();
 					const m = r.message || {};
@@ -303,7 +313,83 @@ frappe.pages["import-stock"].on_page_load = function (wrapper) {
 		);
 	}
 
+	// ---- a supplier's sheet, instead of typing fifty rows --------------------
+	// The mapping itself is done once on Import Design (which is where a new
+	// supplier has to go first anyway, to get its designs made); here we only
+	// pick the format that was saved there.
+	function loadSheet() {
+		frappe.call({ method: "jewelima.jewelima.api.list_supplier_formats" }).then((r) => {
+			const formats = r.message || [];
+			if (!formats.length) {
+				frappe.msgprint({
+					title: __("No supplier formats yet"), indicator: "orange",
+					message: __("A supplier's sheet is mapped once on <a href='/app/import-design'>Import Design</a>, where its designs are made. Do that first and the format will be here."),
+				});
+				return;
+			}
+			const d = new frappe.ui.Dialog({ title: __("Whose sheet is this?"), size: "large" });
+			$(d.body).html(`<table class="is-grid"><thead><tr>
+					<th>${__("Supplier")}</th><th>${__("Format")}</th><th>${__("Code")}</th>
+					<th>${__("Quality")}</th><th>${__("Diamonds")}</th>
+				</tr></thead><tbody>${formats.map((f) => `
+					<tr class="is-fpick" data-n="${esc(f.name)}" style="cursor:pointer;">
+						<td>&nbsp;<b>${esc(f.supplier)}</b></td><td>${esc(f.format_name || "")}</td>
+						<td>${esc(f.supplier_code || "")}</td><td>${esc(f.default_quality || "—")}</td>
+						<td>${esc(f.default_stone_family || "—")}</td></tr>`).join("")}
+				</tbody></table>`);
+			$(d.body).on("click", ".is-fpick", function () {
+				const format = $(this).data("n");
+				d.hide();
+				new frappe.ui.FileUploader({
+					as_dataurl: true, allow_multiple: false,
+					on_success: (file) => {
+						frappe.dom.freeze(__("Reading the sheet…"));
+						frappe.call({
+							method: "jewelima.jewelima.api.resolve_import_stock_rows",
+							args: { filedata: file.dataurl, format },
+						}).then((res) => fillFromSheet(res.message || {}))
+							.always(() => frappe.dom.unfreeze());
+					},
+				});
+			});
+			d.show();
+		});
+	}
+
+	function fillFromSheet(res) {
+		const rows = res.rows || [];
+		if (!rows.length) return;
+		state.rows = [];
+		$body.empty();
+		rows.forEach((r) => addRow({
+			design: r.design, karat: r.karat, gross: String(r.gross || ""), gold: String(r.gold || ""),
+			huid: r.huid || "", size: r.size || "",
+			stones: (r.stones || []).map((x) => Object.assign({}, x)),
+		}));
+		addRow();
+		if (res.supplier && !state.header.supplier.get_value()) state.header.supplier.set_value(res.supplier);
+		const miss = res.missing_designs || [];
+		const warn = res.warnings || [];
+		if (miss.length || warn.length) {
+			frappe.msgprint({
+				title: __("Read {0} piece(s)", [rows.length]),
+				indicator: miss.length ? "orange" : "blue",
+				message: [
+					__("{0} of them are ready to go in.", [res.ready || 0]),
+					warn.length ? warn.map(esc).join("<br>") : "",
+					miss.length
+						? __("Designs not made yet — do them on <a href='/app/import-design'>Import Design</a> first:") +
+							"<br>" + miss.map((m) => `${esc(m.design)} · ${m.pieces} ${__("pc(s)")}`).join("<br>")
+						: "",
+				].filter(Boolean).join("<br><br>"),
+			});
+		} else {
+			frappe.show_alert({ message: __("{0} piece(s) read", [rows.length]), indicator: "green" }, 5);
+		}
+	}
+
 	page.set_primary_action(__("Import Stock"), doImport);
+	page.add_inner_button(__("Load sheet"), loadSheet);
 	page.add_inner_button(__("Add Row"), () => addRow());
 	addRow();
 };

@@ -249,6 +249,8 @@ JEWELIMA_STOCK_ADMIN_PAGES = [
 	"card-gold", "card-gold-history",
 	# the old software's stock, brought in piece by piece
 	"import-old-stock",
+	# a supplier's sheet: its designs first, then its pieces
+	"import-design",
 	# stone lots: the senior stock desk works these too
 	"stone-lots", "lot-selection",
 ]

@@ -1,0 +1,199 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-12 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "supplier",
+  "format_name",
+  "supplier_code",
+  "active",
+  "cb_1",
+  "sheet_name",
+  "header_row",
+  "strip_piece_number",
+  "sec_def",
+  "default_design_type",
+  "cb_2",
+  "default_quality",
+  "cb_3",
+  "default_stone_family",
+  "sec_cols",
+  "columns",
+  "sec_vals",
+  "values"
+ ],
+ "fields": [
+  {
+   "fieldname": "supplier",
+   "fieldtype": "Link",
+   "label": "Supplier",
+   "options": "Supplier",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "format_name",
+   "fieldtype": "Data",
+   "label": "Format",
+   "reqd": 1,
+   "default": "Packing List",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "supplier_code",
+   "fieldtype": "Data",
+   "label": "Short code",
+   "reqd": 1,
+   "description": "Goes in front of every design name, e.g. SAL in SAL-AJBG0261-18EF-P"
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "In use",
+   "default": "1"
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sheet_name",
+   "fieldtype": "Data",
+   "label": "Worksheet",
+   "description": "Leave empty to take the first sheet whose headings match"
+  },
+  {
+   "fieldname": "header_row",
+   "fieldtype": "Int",
+   "label": "Heading row",
+   "default": "1"
+  },
+  {
+   "fieldname": "strip_piece_number",
+   "fieldtype": "Check",
+   "label": "Drop the trailing piece number",
+   "default": "1",
+   "description": "AJBG0261-1 becomes design AJBG0261"
+  },
+  {
+   "fieldname": "sec_def",
+   "fieldtype": "Section Break",
+   "label": "Defaults"
+  },
+  {
+   "fieldname": "default_design_type",
+   "fieldtype": "Link",
+   "label": "Design type",
+   "options": "Design Type"
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_quality",
+   "fieldtype": "Data",
+   "label": "Quality token",
+   "description": "The EF in SAL-AJBG0261-18EF-P"
+  },
+  {
+   "fieldname": "cb_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_stone_family",
+   "fieldtype": "Data",
+   "label": "Diamond family",
+   "description": "The stone item family a sieve is looked up in, e.g. VVS-EF"
+  },
+  {
+   "fieldname": "sec_cols",
+   "fieldtype": "Section Break",
+   "label": "Columns"
+  },
+  {
+   "fieldname": "columns",
+   "fieldtype": "Table",
+   "label": "Columns",
+   "options": "Supplier Sheet Column"
+  },
+  {
+   "fieldname": "sec_vals",
+   "fieldtype": "Section Break",
+   "label": "What their words mean"
+  },
+  {
+   "fieldname": "values",
+   "fieldtype": "Table",
+   "label": "Values",
+   "options": "Supplier Sheet Value"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-12 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Supplier Sheet Format",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Stock Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "JW Stock Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 0,
+ "autoname": "format:{supplier_code}-{format_name}",
+ "title_field": "supplier",
+ "track_changes": 1
+}

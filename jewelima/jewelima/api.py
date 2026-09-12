@@ -13889,7 +13889,8 @@ def get_old_stock_session(name):
 		"name": doc.name, "title": doc.title, "status": doc.status,
 		"source_file": doc.source_file, "invoice_no": doc.invoice_no,
 		"quality_token": doc.quality_token or "", "customer": doc.customer,
-		"supplier": doc.supplier, "job_order": doc.job_order, "imported_on": str(doc.imported_on or ""),
+		"supplier": doc.supplier, "bucket": doc.bucket, "job_order": doc.job_order,
+		"imported_on": str(doc.imported_on or ""),
 		"pieces": pieces,
 		"review": _old_stock_review(pieces, doc.quality_token or ""),
 		"options": _old_stock_options(),
@@ -13913,7 +13914,7 @@ def _old_stock_options():
 
 
 @frappe.whitelist()
-def save_old_stock_session(name, pieces, customer=None, supplier=None,
+def save_old_stock_session(name, pieces, customer=None, supplier=None, bucket=None,
 		invoice_no=None, quality_token=None, title=None):
 	"""Keep the work so far. The sheet is filled over sittings, not in one go."""
 	_old_stock_guard()
@@ -13923,7 +13924,7 @@ def save_old_stock_session(name, pieces, customer=None, supplier=None,
 	rows = json.loads(pieces) if isinstance(pieces, str) else (pieces or [])
 	doc.data = json.dumps(rows)
 	doc.piece_count = len(rows)
-	for field, val in (("customer", customer), ("supplier", supplier),
+	for field, val in (("customer", customer), ("supplier", supplier), ("bucket", bucket),
 			("invoice_no", invoice_no), ("quality_token", quality_token), ("title", title)):
 		if val is not None:
 			setattr(doc, field, val)
@@ -14106,8 +14107,11 @@ def commit_old_stock_import(name):
 		frappe.throw(frappe._("Pick who holds these pieces."))
 	if not doc.supplier:
 		frappe.throw(frappe._("Pick the supplier the stock is booked against."))
+	if not doc.bucket:
+		frappe.throw(frappe._("Pick the bucket these pieces are filed into."))
 
 	payload = {"mode": "purchase", "customer": doc.customer, "supplier": doc.supplier,
+		"bucket": doc.bucket,
 		"remarks": frappe._("Old stock import {0}").format(doc.name), "pieces": []}
 	for p in pieces:
 		gold_item = _gold_item_for(cint(p.get("karat")), (p.get("colour") or "").upper())
@@ -24171,4 +24175,614 @@ def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
 			pluck="name", order_by="name"),
 		"materials": sorted(({"item": v["item"], "qty": round(v["qty"], 3), "stone": v["stone"]}
 			for v in item_totals.values()), key=lambda x: -x["qty"]),
+	}
+
+
+# ---------------------------------------------------------------------------
+# Supplier sheets (Stock > Import Design, Import Stock) — every supplier sends
+# a different excel. One STANDARD sheet is what this app reads; a saved format
+# per supplier says which of their columns is which of ours and what their
+# words mean, so the second file from the same supplier needs no mapping at all.
+# ---------------------------------------------------------------------------
+# (heading, key, kind) — kind: s=text, i=int, f=float
+STD_SHEET_COLS = [
+	("PIECE REF", "piece_ref", "s"), ("DESIGN CODE", "design_code", "s"),
+	("DESIGN TYPE", "design_type", "s"), ("KARAT", "karat", "i"),
+	("COLOUR", "colour", "s"), ("GROSS WT", "gross_wt", "f"), ("NET WT", "net_wt", "f"),
+	("SIZE", "size", "s"), ("HUID", "huid", "s"), ("REMARKS", "remarks", "s"),
+	("STONE", "stone", "s"), ("SHAPE", "shape", "s"), ("SIEVE", "sieve", "s"),
+	("PCS", "pcs", "i"), ("CARATS", "carats", "f"),
+]
+STD_SHEET_KIND = {k: t for _, k, t in STD_SHEET_COLS}
+# the headings seen in the wild, so the first file from a supplier is mostly
+# mapped before anyone touches it
+STD_SHEET_ALIASES = {
+	"piece_ref": ["PIECE REF", "D.NO", "DNO", "D NO", "DESIGN NO", "DESIGN NUMBER",
+		"UNIQUE ID", "TAG NO", "TAG", "BARCODE", "ITEM CODE", "STYLE NO"],
+	"design_code": ["DESIGN CODE", "STYLE", "STYLE CODE", "MODEL", "MODEL NO"],
+	"design_type": ["DESIGN TYPE", "TYPE", "ITEM", "ITEM TYPE", "CATEGORY", "PRODUCT"],
+	"karat": ["KARAT", "KT", "K.T", "PURITY", "CARAT GOLD"],
+	"colour": ["COLOUR", "COLOR", "COL", "GOLD COLOUR", "METAL COLOUR"],
+	"gross_wt": ["GROSS WT", "GR.WT", "GR WT", "GRS WT", "GROSS", "GS WT (GM)", "GS WT"],
+	"net_wt": ["NET WT", "NET.WT", "NT WT", "NETT WT", "NET", "NT WT (GM)"],
+	"size": ["SIZE", "RING SIZE", "LENGTH"],
+	"huid": ["HUID", "HUID NO"],
+	"remarks": ["REMARKS", "REMARK", "NOTE", "NOTES"],
+	"stone": ["STONE", "STONE ITEM", "DIA QLY", "QUALITY", "DIA QUALITY"],
+	"shape": ["SHAPE", "DIA SHP", "DIA SHAPE", "SHP"],
+	"sieve": ["SIEVE", "SIEVE SIZE", "SIZE MM", "MM"],
+	"pcs": ["PCS", "DIA PCS", "PIECES", "NO OF STONES", "STN PCS", "QTY"],
+	"carats": ["CARATS", "DIA WT", "CTS", "CT", "CARAT", "DIA (CT)", "WT CT"],
+}
+
+
+def _ss_norm(v):
+	"""'  Gr.Wt ' -> 'GR.WT' — headings and values are compared this way."""
+	return " ".join(str(v or "").split()).upper()
+
+
+def _ss_guess_field(header):
+	"""Which of our columns a supplier's heading most likely is."""
+	h = _ss_norm(header)
+	if not h:
+		return ""
+	for key, names in STD_SHEET_ALIASES.items():
+		if h in [_ss_norm(n) for n in names]:
+			return key
+	return ""
+
+
+def _ss_sieve(v):
+	"""Suppliers write sieves with zeros, our masters use the letter O:
+	'0000-000' -> 'OOOO-OOO'. Anything already ours is left alone."""
+	s = _ss_norm(v).replace(" ", "")
+	if not s:
+		return ""
+	out = []
+	for part in s.split("-"):
+		out.append("O" * len(part) if part and set(part) == {"0"} else part)
+	return "-".join(out)
+
+
+def _ss_strip_piece(code):
+	"""'AJBG0261-1' -> 'AJBG0261'. The trailing number is the piece, not the design."""
+	s = _ss_norm(code).replace(" ", "")
+	return re.sub(r"-\d+$", "", s) if s else ""
+
+
+def _ss_karat(v):
+	"""'18K' / '18 KT' / 18 -> 18."""
+	m = re.search(r"(\d{1,2})", str(v or ""))
+	return cint(m.group(1)) if m else 0
+
+
+def _ss_cast(key, val):
+	kind = STD_SHEET_KIND.get(key, "s")
+	if kind == "i":
+		return _ss_karat(val) if key == "karat" else cint(val)
+	if kind == "f":
+		return flt(val)
+	return " ".join(str(val or "").split())
+
+
+SUPPLIER_SHEET_ROLES = ("System Manager", "Stock Manager", "JW Manager", "JW Stock Admin")
+
+
+def _ss_guard():
+	if not set(SUPPLIER_SHEET_ROLES) & set(frappe.get_roles()):
+		frappe.throw(frappe._("Supplier sheets are for the stock desk."), frappe.PermissionError)
+
+
+def _ss_workbook(filedata):
+	import base64
+	from io import BytesIO
+
+	from openpyxl import load_workbook
+
+	raw = base64.b64decode((filedata or "").split(",", 1)[-1])
+	return load_workbook(BytesIO(raw), data_only=True)
+
+
+def _ss_headers(ws, header_row=1):
+	"""HEADING -> column index (1-based) for one worksheet's heading row."""
+	out = {}
+	for j, c in enumerate(ws[header_row] if ws.max_row >= header_row else [], start=1):
+		h = _ss_norm(c.value)
+		if h:
+			out.setdefault(h, j)
+	return out
+
+
+def _ss_find_header_row(ws, limit=12):
+	"""Suppliers put a title and blank rows above the headings — the heading row
+	is the first one in which we recognise two or more of our columns."""
+	best, best_hits = 1, 0
+	for r in range(1, min(limit, ws.max_row or 1) + 1):
+		hits = sum(1 for c in ws[r] if _ss_guess_field(c.value))
+		if hits > best_hits:
+			best, best_hits = r, hits
+	return best if best_hits >= 2 else 1
+
+
+@frappe.whitelist()
+def sniff_supplier_sheet(filedata):
+	"""First look at a supplier's file: every worksheet, where its headings are,
+	what we think each heading is, and a few rows to look at. Nothing is saved —
+	this is what the mapping screen is filled from."""
+	_ss_guard()
+	wb = _ss_workbook(filedata)
+	sheets = []
+	for sn in wb.sheetnames:
+		ws = wb[sn]
+		hr = _ss_find_header_row(ws)
+		cols = []
+		for j, c in enumerate(ws[hr] if ws.max_row >= hr else [], start=1):
+			h = _ss_norm(c.value)
+			if h:
+				cols.append({"col": j, "header": h, "field": _ss_guess_field(h)})
+		sample = []
+		for row in ws.iter_rows(min_row=hr + 1, max_row=min(hr + 25, ws.max_row or hr), values_only=True):
+			if any(v is not None for v in row):
+				sample.append(["" if v is None else str(v)[:28] for v in row])
+			if len(sample) >= 8:
+				break
+		sheets.append({"sheet": sn, "header_row": hr, "rows": (ws.max_row or 0) - hr,
+			"columns": cols, "matched": len([c for c in cols if c["field"]]), "sample": sample})
+	# the sheet we recognise most of is the one worth opening on
+	sheets.sort(key=lambda s: (-s["matched"], -s["rows"]))
+	return {"sheets": sheets, "fields": [{"key": k, "label": h} for h, k, _ in STD_SHEET_COLS]}
+
+
+@frappe.whitelist()
+def list_supplier_formats(supplier=None):
+	"""Saved formats, newest touched first."""
+	_ss_guard()
+	filters = {"active": 1}
+	if supplier:
+		filters["supplier"] = supplier
+	return frappe.get_all("Supplier Sheet Format",
+		filters=filters, fields=["name", "supplier", "format_name", "supplier_code",
+			"sheet_name", "header_row", "default_design_type", "default_quality",
+			"default_stone_family", "modified"],
+		order_by="modified desc", limit_page_length=0)
+
+
+@frappe.whitelist()
+def get_supplier_format(name):
+	"""One saved format, columns and value-words included."""
+	_ss_guard()
+	doc = frappe.get_doc("Supplier Sheet Format", name)
+	return {
+		"name": doc.name, "supplier": doc.supplier, "format_name": doc.format_name,
+		"supplier_code": doc.supplier_code, "sheet_name": doc.sheet_name or "",
+		"header_row": cint(doc.header_row) or 1,
+		"strip_piece_number": cint(doc.strip_piece_number),
+		"default_design_type": doc.default_design_type or "",
+		"default_quality": doc.default_quality or "",
+		"default_stone_family": doc.default_stone_family or "",
+		"columns": [{"field": c.field, "header": c.header} for c in doc.columns],
+		"values": [{"field": v.field, "their_value": v.their_value, "our_value": v.our_value}
+			for v in doc.values],
+	}
+
+
+@frappe.whitelist()
+def save_supplier_format(payload):
+	"""Keep a supplier's mapping so their next file needs no work."""
+	_ss_guard()
+	p = frappe.parse_json(payload)
+	if not p.get("supplier"):
+		frappe.throw(frappe._("Pick the supplier this format belongs to."))
+	if not (p.get("supplier_code") or "").strip():
+		frappe.throw(frappe._("Give the supplier a short code — it goes in front of every design name."))
+	name = p.get("name")
+	doc = frappe.get_doc("Supplier Sheet Format", name) if name and frappe.db.exists(
+		"Supplier Sheet Format", name) else frappe.new_doc("Supplier Sheet Format")
+	doc.supplier = p["supplier"]
+	doc.format_name = (p.get("format_name") or "Packing List").strip()
+	doc.supplier_code = _ss_norm(p["supplier_code"]).replace(" ", "")
+	doc.sheet_name = p.get("sheet_name") or ""
+	doc.header_row = cint(p.get("header_row")) or 1
+	doc.strip_piece_number = cint(p.get("strip_piece_number", 1))
+	doc.default_design_type = p.get("default_design_type") or None
+	doc.default_quality = _ss_norm(p.get("default_quality"))
+	doc.default_stone_family = (p.get("default_stone_family") or "").strip()
+	doc.active = 1
+	doc.set("columns", [])
+	for c in p.get("columns") or []:
+		if c.get("field") and c.get("header"):
+			doc.append("columns", {"field": c["field"], "header": _ss_norm(c["header"])})
+	doc.set("values", [])
+	for v in p.get("values") or []:
+		if v.get("field") and (v.get("their_value") or "").strip():
+			doc.append("values", {"field": v["field"], "their_value": _ss_norm(v["their_value"]),
+				"our_value": (v.get("our_value") or "").strip()})
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_supplier_format(doc.name)
+
+
+def _ss_colmap(fmt, ws):
+	"""our key -> column index, from the saved (or ad-hoc) column mapping."""
+	heads = _ss_headers(ws, cint(fmt.get("header_row")) or 1)
+	out = {}
+	for c in fmt.get("columns") or []:
+		j = heads.get(_ss_norm(c.get("header")))
+		if j and c.get("field"):
+			out[c["field"]] = j
+	return out
+
+
+def _ss_valmap(fmt):
+	"""(field, THEIR WORD) -> our word."""
+	out = {}
+	for v in fmt.get("values") or []:
+		if v.get("field") and v.get("their_value"):
+			out[(v["field"], _ss_norm(v["their_value"]))] = (v.get("our_value") or "").strip()
+	return out
+
+
+def _ss_pick_sheet(wb, fmt):
+	want = (fmt.get("sheet_name") or "").strip()
+	if want and want in wb.sheetnames:
+		return wb[want]
+	# no sheet named: the one whose heading row we recognise most of
+	best, hits = wb[wb.sheetnames[0]], -1
+	for sn in wb.sheetnames:
+		ws = wb[sn]
+		hr = cint(fmt.get("header_row")) or _ss_find_header_row(ws)
+		n = len(_ss_colmap(fmt, ws)) if fmt.get("columns") else sum(
+			1 for c in (ws[hr] if ws.max_row >= hr else []) if _ss_guess_field(c.value))
+		if n > hits:
+			best, hits = ws, n
+	return best
+
+
+SS_SKIP_WORDS = {"TOTAL", "GRAND TOTAL", "SUB TOTAL", "SUBTOTAL", "TOTAL :"}
+
+
+@frappe.whitelist()
+def convert_supplier_sheet(filedata, format=None, mapping=None):
+	"""A supplier's file read into our standard shape: one piece, its stone lines
+	under it. Pass a saved format by name, or a mapping from the mapping screen
+	when the supplier is new and nothing is saved yet."""
+	_ss_guard()
+	if mapping:
+		fmt = frappe.parse_json(mapping)
+	elif format:
+		fmt = get_supplier_format(format)
+	else:
+		frappe.throw(frappe._("Pick the supplier's format, or map the columns first."))
+
+	wb = _ss_workbook(filedata)
+	ws = _ss_pick_sheet(wb, fmt)
+	hr = cint(fmt.get("header_row")) or 1
+	cmap = _ss_colmap(fmt, ws)
+	if not cmap:
+		frappe.throw(frappe._("None of the headings on '{0}' match the saved format — check the worksheet and heading row.").format(ws.title))
+	vmap = _ss_valmap(fmt)
+	strip = cint(fmt.get("strip_piece_number", 1))
+
+	def cell(cells, key):
+		j = cmap.get(key)
+		return cells[j - 1] if (j and j <= len(cells)) else None
+
+	def val(cells, key):
+		raw = cell(cells, key)
+		mapped = vmap.get((key, _ss_norm(raw)))
+		return _ss_cast(key, mapped if mapped not in (None, "") else raw)
+
+	pieces, warnings = [], []
+	cur = None
+	for cells in ws.iter_rows(min_row=hr + 1, values_only=True):
+		if not any(v is not None for v in cells):
+			continue
+		ref = val(cells, "piece_ref")
+		code = val(cells, "design_code")
+		if _ss_norm(ref) in SS_SKIP_WORDS or _ss_norm(code) in SS_SKIP_WORDS:
+			continue
+		# the totals line at the foot carries weights but names no piece, and the
+		# word TOTAL usually sits in a column we never mapped
+		if not (ref or code) and any(_ss_norm(c) in SS_SKIP_WORDS for c in cells):
+			continue
+		gross, net = val(cells, "gross_wt"), val(cells, "net_wt")
+		# a row that names a piece (or weighs one) starts a piece; the rest are
+		# that piece's further stone lines
+		if ref or code or gross or net:
+			design_code = code or (_ss_strip_piece(ref) if strip else _ss_norm(ref).replace(" ", ""))
+			cur = {
+				"piece_ref": ref or design_code, "design_code": design_code,
+				"design_type": _ss_norm(val(cells, "design_type")),
+				"karat": val(cells, "karat"), "colour": _ss_norm(val(cells, "colour")),
+				"gross_wt": flt(gross), "net_wt": flt(net),
+				"size": val(cells, "size"), "huid": val(cells, "huid"),
+				"remarks": val(cells, "remarks"), "stones": [],
+			}
+			pieces.append(cur)
+		sieve, pcs, ct = val(cells, "sieve"), val(cells, "pcs"), val(cells, "carats")
+		if cur and (sieve or pcs or ct):
+			cur["stones"].append({
+				"stone": val(cells, "stone"), "shape": _ss_norm(val(cells, "shape")),
+				"sieve": _ss_sieve(sieve), "pcs": cint(pcs), "carats": flt(ct),
+			})
+
+	if not pieces:
+		frappe.throw(frappe._("No pieces found on '{0}' below row {1}.").format(ws.title, hr))
+	unknown = sorted({s["sieve"] for p in pieces for s in p["stones"]
+		if s["sieve"] and not frappe.db.exists("Diamond Sieve", s["sieve"])})
+	if unknown:
+		warnings.append(frappe._("Sieve not in our chart: {0}").format(", ".join(unknown)))
+	bad_colour = sorted({p["colour"] for p in pieces
+		if p["colour"] and p["colour"] not in [c for c, _ in GOLD_COLOURS]})
+	if bad_colour:
+		warnings.append(frappe._("Colour we do not know: {0} — add it to the format's word list (we use Y, W, P).").format(", ".join(bad_colour)))
+
+	return {
+		"sheet": ws.title, "pieces": pieces, "warnings": warnings,
+		"totals": {
+			"pieces": len(pieces),
+			"gross": round(sum(flt(p["gross_wt"]) for p in pieces), 3),
+			"net": round(sum(flt(p["net_wt"]) for p in pieces), 3),
+			"stone_pcs": sum(cint(s["pcs"]) for p in pieces for s in p["stones"]),
+			"carats": round(sum(flt(s["carats"]) for p in pieces for s in p["stones"]), 3),
+			"designs": len({p["design_code"] for p in pieces if p["design_code"]}),
+		},
+	}
+
+
+@frappe.whitelist()
+def download_standard_sheet_template():
+	"""Our standard sheet, empty — what a supplier can be asked to send, and what
+	the converter turns their file into."""
+	_ss_guard()
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Font
+	from openpyxl.utils import get_column_letter
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "JEWELIMA"
+	ws.append([h for h, _, _ in STD_SHEET_COLS])
+	for c in ws[1]:
+		c.font = Font(bold=True)
+	ws.append(["AJBG0261-1", "AJBG0261", "BANGLE", 18, "P", 4.68, 4.654, "", "", "",
+		"", "RD", "O-1", 20, 0.13])
+	ws.append(["", "", "", "", "", "", "", "", "", "", "", "RD", "OOOO-OOO", 39, 0.07])
+	for i, (h, _, _) in enumerate(STD_SHEET_COLS, start=1):
+		ws.column_dimensions[get_column_letter(i)].width = max(len(h) + 2, 11)
+	ws.freeze_panes = "A2"
+	buf = BytesIO()
+	wb.save(buf)
+	frappe.local.response.filename = "JEWELIMA STOCK SHEET.xlsx"
+	frappe.local.response.filecontent = buf.getvalue()
+	frappe.local.response.type = "download"
+
+
+# --- Import Design ---------------------------------------------------------
+# The supplier's sheet says what each piece is made of, and a design is exactly
+# that: a code, a karat/quality/colour variant, and a bill of materials. So the
+# designs are read off the sheet, not typed — the only thing a person supplies
+# is the design type, which no supplier sends.
+def _ss_stone_families():
+	"""'VVS-EF', 'SI-IJ', ... — the diamond item families a sieve hangs off."""
+	sieves = set(frappe.get_all("Diamond Sieve", pluck="name", limit_page_length=0))
+	fams = set()
+	for nm in frappe.get_all("Item", filters={"stone_type": "Diamond"}, pluck="name", limit_page_length=0):
+		head, _, tail = nm.rpartition(" ")
+		if head and tail in sieves:
+			fams.add(head)
+	return sorted(fams)
+
+
+@frappe.whitelist()
+def get_import_design_context():
+	"""Everything the Import Design screen picks from."""
+	_ss_guard()
+	return {
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name", limit_page_length=0),
+		"colours": [{"code": c, "label": l} for c, l in GOLD_COLOURS],
+		"stone_families": _ss_stone_families(),
+		"formats": list_supplier_formats(),
+		"sieves": frappe.get_all("Diamond Sieve", pluck="name", limit_page_length=0),
+	}
+
+
+def _ss_design_name(supplier_code, code, karat, quality, colour):
+	"""SAL-AJBG0261-18EF-P — their code under our short code, then the variant
+	the materials themselves spell out: karat, diamond quality, gold colour."""
+	sc = _ss_norm(supplier_code).replace(" ", "")
+	code = _ss_norm(code).replace(" ", "")
+	if not (sc and code and karat and colour):
+		return ""
+	q = _ss_norm(quality)
+	return "{0}-{1}-{2}{3}-{4}".format(sc, code, cint(karat), q, _ss_norm(colour))
+
+
+def _ss_stone_item(line, family):
+	"""The stone item a sheet line means: what it names, else the batch's family
+	at that sieve."""
+	named = (line.get("stone") or "").strip()
+	if named and frappe.db.exists("Item", named):
+		return named
+	sieve = line.get("sieve") or ""
+	if family and sieve:
+		code = "{0} {1}".format(family, sieve)
+		if frappe.db.exists("Item", code):
+			return code
+	return ""
+
+
+@frappe.whitelist()
+def preview_import_designs(pieces, supplier_code, quality=None, stone_family=None, design_type=None):
+	"""Group the sheet's pieces into the designs they are, each with the bill of
+	materials its pieces average out to. Nothing is created — this is the screen."""
+	_ss_guard()
+	rows = frappe.parse_json(pieces) if isinstance(pieces, str) else (pieces or [])
+	family = (stone_family or "").strip()
+	quality = _ss_norm(quality)
+
+	groups = {}
+	for p in rows:
+		karat, colour = cint(p.get("karat")), _ss_norm(p.get("colour"))
+		code = _ss_norm(p.get("design_code")).replace(" ", "")
+		key = (code, karat, colour)
+		g = groups.setdefault(key, {"code": code, "karat": karat, "colour": colour,
+			"pieces": [], "types": [], "problems": []})
+		g["pieces"].append(p)
+		if p.get("design_type"):
+			g["types"].append(_ss_norm(p["design_type"]))
+
+	out = []
+	for (code, karat, colour), g in sorted(groups.items()):
+		n = len(g["pieces"])
+		gold_item = _gold_item_for(karat, colour)
+		problems = []
+		if not code:
+			problems.append(frappe._("no design code on the sheet"))
+		if not karat:
+			problems.append(frappe._("karat missing"))
+		if not colour:
+			problems.append(frappe._("colour missing"))
+		elif not gold_item:
+			problems.append(frappe._("no gold item for {0}K {1}").format(karat, colour))
+
+		mats = []
+		gold_g = round(sum(flt(p.get("net_wt")) for p in g["pieces"]) / n, 3) if n else 0.0
+		if gold_item and gold_g > 0:
+			mats.append({"item": gold_item, "qty": 0, "weight": gold_g, "stone": 0})
+		elif gold_item:
+			problems.append(frappe._("no net weight to give the design"))
+
+		# stone lines of every piece, averaged per stone item
+		acc = {}
+		for p in g["pieces"]:
+			per = {}
+			for ln in p.get("stones") or []:
+				item = _ss_stone_item(ln, family)
+				if not item:
+					problems.append(frappe._("no stone item for sieve {0}").format(ln.get("sieve") or "?"))
+					continue
+				e = per.setdefault(item, {"pcs": 0, "ct": 0.0})
+				e["pcs"] += cint(ln.get("pcs"))
+				e["ct"] += flt(ln.get("carats"))
+			for item, e in per.items():
+				a = acc.setdefault(item, {"pcs": 0, "ct": 0.0, "n": 0})
+				a["pcs"] += e["pcs"]
+				a["ct"] += e["ct"]
+				a["n"] += 1
+		for item, a in sorted(acc.items()):
+			qty = int(round(a["pcs"] / a["n"])) if a["n"] else 0
+			wt = round(a["ct"] / a["n"], 4) if a["n"] else 0.0
+			if qty <= 0 or wt <= 0:
+				problems.append(frappe._("{0} has no pieces or no carats").format(item))
+				continue
+			mats.append({"item": item, "qty": qty, "weight": wt, "stone": 1})
+
+		name = _ss_design_name(supplier_code, code, karat, quality, colour)
+		dtype = g["types"][0] if g["types"] else (design_type or "")
+		if dtype and not frappe.db.exists("Design Type", dtype):
+			problems.append(frappe._("{0} is not a design type").format(dtype))
+			dtype = ""
+		exists = bool(name and frappe.db.exists("Design", name))
+		if not exists and not mats:
+			problems.append(frappe._("nothing to put in the bill of materials"))
+		out.append({
+			"name": name, "code": code, "karat": karat, "colour": colour, "quality": quality,
+			"design_type": dtype, "piece_count": n, "gold_item": gold_item or "",
+			"gold_g": gold_g, "materials": mats, "exists": exists,
+			"pieces": [p.get("piece_ref") for p in g["pieces"]],
+			"problems": sorted(set(problems)),
+		})
+	return {
+		"designs": out,
+		"summary": {
+			"designs": len(out), "existing": len([d for d in out if d["exists"]]),
+			"new": len([d for d in out if not d["exists"] and not d["problems"]]),
+			"blocked": len([d for d in out if not d["exists"] and d["problems"]]),
+			"pieces": sum(d["piece_count"] for d in out),
+		},
+	}
+
+
+@frappe.whitelist()
+def create_import_designs(designs):
+	"""Make the designs the sheet describes. Each one provisions its own item and
+	BOM through the Design controller, exactly as a hand-made design does."""
+	_ss_guard()
+	rows = frappe.parse_json(designs) if isinstance(designs, str) else (designs or [])
+	made, skipped, failed = [], [], []
+	for d in rows:
+		name = (d.get("name") or "").strip()
+		if not name:
+			failed.append({"name": "?", "why": frappe._("no name")})
+			continue
+		if frappe.db.exists("Design", name):
+			skipped.append(name)
+			continue
+		if not d.get("design_type"):
+			failed.append({"name": name, "why": frappe._("pick a design type")})
+			continue
+		mats = [{"item": m.get("item"), "qty": flt(m.get("qty")), "weight": flt(m.get("weight"))}
+			for m in (d.get("materials") or []) if m.get("item")]
+		if not mats:
+			failed.append({"name": name, "why": frappe._("nothing in the bill of materials")})
+			continue
+		try:
+			doc = frappe.get_doc({
+				"doctype": "Design", "design_name": name,
+				"design_type": d["design_type"], "design_style": d.get("design_style") or None,
+				"materials": mats,
+			})
+			doc.insert(ignore_permissions=True)
+			made.append(doc.name)
+		except Exception as e:
+			frappe.db.rollback()
+			failed.append({"name": name, "why": str(e)[:200]})
+	frappe.db.commit()
+	return {"made": made, "skipped": skipped, "failed": failed}
+
+
+@frappe.whitelist()
+def resolve_import_stock_rows(filedata, format):
+	"""A supplier's sheet turned into Import Stock rows: one piece a row, its
+	design found, its gold item worked out, its stone lines named. A piece whose
+	design is not made yet comes back saying so — Import Design makes it first."""
+	_ss_guard()
+	fmt = get_supplier_format(format)
+	conv = convert_supplier_sheet(filedata, format=format)
+	family = fmt.get("default_stone_family") or ""
+	quality = fmt.get("default_quality") or ""
+	rows, missing = [], {}
+	for p in conv["pieces"]:
+		karat, colour = cint(p.get("karat")), _ss_norm(p.get("colour"))
+		design = _ss_design_name(fmt["supplier_code"], p.get("design_code"), karat, quality, colour)
+		gold_item = _gold_item_for(karat, colour)
+		problems = []
+		if not design or not frappe.db.exists("Design", design):
+			problems.append(frappe._("design not made yet"))
+			if design:
+				missing[design] = missing.get(design, 0) + 1
+		if not gold_item:
+			problems.append(frappe._("no gold item for {0}K {1}").format(karat or "?", colour or "?"))
+		stones = []
+		for ln in p.get("stones") or []:
+			item = _ss_stone_item(ln, family)
+			if not item:
+				problems.append(frappe._("no stone item for sieve {0}").format(ln.get("sieve") or "?"))
+				continue
+			stones.append({"item": item, "pcs": cint(ln.get("pcs")), "ct": flt(ln.get("carats"))})
+		rows.append({
+			"piece_ref": p.get("piece_ref"), "design": design if design and not problems else design,
+			"karat": gold_item or "", "gross": flt(p.get("gross_wt")), "gold": flt(p.get("net_wt")),
+			"size": p.get("size") or "", "huid": p.get("huid") or "",
+			"stones": stones, "problems": problems,
+		})
+	return {
+		"rows": rows, "totals": conv["totals"], "warnings": conv["warnings"],
+		"supplier": fmt.get("supplier") or "",
+		"missing_designs": sorted(({"design": d, "pieces": n} for d, n in missing.items()),
+			key=lambda x: x["design"]),
+		"ready": len([r for r in rows if not r["problems"]]),
 	}

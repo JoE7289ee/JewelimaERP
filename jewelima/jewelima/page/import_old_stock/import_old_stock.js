@@ -319,6 +319,7 @@ frappe.pages["import-old-stock"].on_page_load = function (wrapper) {
 				<div class="h">${__("Bring it in")}</div>
 				<label>${__("Held by")}</label><div class="os-cust"></div>
 				<label>${__("Supplier")}</label><div class="os-supp"></div>
+				<label>${__("Bucket")}</label><div class="os-bucket"></div>
 				<label>${__("Quality (for design names)")}</label>
 				<input class="os-mini os-qual" style="width:100%;" value="${esc(S1.quality_token || "")}" placeholder="EF / GH / SI">
 				<div class="os-act">
@@ -343,6 +344,7 @@ frappe.pages["import-old-stock"].on_page_load = function (wrapper) {
 			};
 			S.custCtl = mk(".os-cust", "Customer", "customer");
 			S.suppCtl = mk(".os-supp", "Supplier", "supplier");
+			S.bucketCtl = mk(".os-bucket", "Finished Bucket", "bucket");
 		}
 	}
 
@@ -451,6 +453,7 @@ frappe.pages["import-old-stock"].on_page_load = function (wrapper) {
 	root.on("click", ".os-save", () => save({
 		customer: (S.custCtl && S.custCtl.get_value()) || null,
 		supplier: (S.suppCtl && S.suppCtl.get_value()) || null,
+		bucket: (S.bucketCtl && S.bucketCtl.get_value()) || null,
 		quality_token: root.find(".os-qual").val() || null,
 	}).then(() => frappe.show_alert({ message: __("Saved"), indicator: "green" }, 3)));
 	root.on("click", ".os-recheck", matchDesigns);
@@ -463,6 +466,7 @@ frappe.pages["import-old-stock"].on_page_load = function (wrapper) {
 				save({
 					customer: (S.custCtl && S.custCtl.get_value()) || null,
 					supplier: (S.suppCtl && S.suppCtl.get_value()) || null,
+					bucket: (S.bucketCtl && S.bucketCtl.get_value()) || null,
 					quality_token: root.find(".os-qual").val() || null,
 				}).then(() => {
 					frappe.dom.freeze(__("Bringing the stock in…"));

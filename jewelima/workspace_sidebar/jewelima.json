@@ -728,6 +728,18 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "edit",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Import Design",
+   "link_to": "import-design",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "circle-plus",
    "indent": 1,
    "keep_closed": 0,
@@ -2782,7 +2794,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-11 01:03:53.835060",
+ "modified": "2026-09-12 08:58:04.747241",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

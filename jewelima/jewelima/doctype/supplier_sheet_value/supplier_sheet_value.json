@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-12 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "field",
+  "their_value",
+  "our_value"
+ ],
+ "fields": [
+  {
+   "fieldname": "field",
+   "fieldtype": "Select",
+   "label": "Column",
+   "options": "\npiece_ref\ndesign_code\ndesign_type\nkarat\ncolour\ngross_wt\nnet_wt\nsize\nhuid\nremarks\nstone\nshape\nsieve\npcs\ncarats",
+   "in_list_view": 1,
+   "columns": 2,
+   "reqd": 1
+  },
+  {
+   "fieldname": "their_value",
+   "fieldtype": "Data",
+   "label": "They write",
+   "in_list_view": 1,
+   "columns": 3,
+   "reqd": 1
+  },
+  {
+   "fieldname": "our_value",
+   "fieldtype": "Data",
+   "label": "We mean",
+   "in_list_view": 1,
+   "columns": 3
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-12 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Supplier Sheet Value",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1
+}
