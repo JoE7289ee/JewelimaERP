@@ -33,20 +33,13 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 	const S = { tiles: [], D: null, picked: new Set(), rates: {}, stoneRates: {},
 		gold: 0, gst: 0, sieves: [], saving: false };
 
-	// The same split the bill does. Keeping it here means the screen shows the
-	// money the server will store, not an estimate of it — see rate_for_karat
-	// in repair_bill.py, which is the one place the derivation lives.
-	// Kept in step with rate_for_karat() in repair_bill.py — the board rate is
-	// quoted WITH GST, so the tax comes out of it (board / 1.03, not board less
-	// 3%) before the karat's purity is taken.
-	const GST = 3;
-	const PURITY = { "22": 91.6, "18": 75, "14": 58.3, "9": 37.5 };
-	const rateForKarat = (board, karat) => {
-		const k = String(karat || "").trim();
-		if (!k) return flt(board);
-		const net = flt(board) / (1 + GST / 100);
-		return net * (PURITY[k] !== undefined ? PURITY[k] : flt(k) * 100 / 24) / 100;
-	};
+	// The same split the bill does, so the screen shows the money the server will
+	// store rather than an estimate of it. It lives in repair_rates.js because
+	// Quick Check quotes off the same sum — see rate_for_karat in repair_bill.py,
+	// which is where the stored figure comes from.
+	const GST = jewelima.REPAIR_GOLD_GST;
+	const PURITY = jewelima.REPAIR_KARAT_PURITY;
+	const rateForKarat = jewelima.repairRateForKarat;
 	const sKey = (st) => `${st.bucket || ""}||${st.sieve || ""}`;
 
 	function priceRow(i) {

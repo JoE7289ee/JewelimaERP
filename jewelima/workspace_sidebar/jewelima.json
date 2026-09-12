@@ -2484,6 +2484,18 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "calculator",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Quick Check",
+   "link_to": "repair-quick-check",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "plus",
    "indent": 1,
    "keep_closed": 0,
@@ -2806,7 +2818,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-12 09:35:56.130982",
+ "modified": "2026-09-12 09:48:38.918201",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

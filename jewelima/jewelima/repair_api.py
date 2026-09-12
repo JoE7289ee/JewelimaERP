@@ -1278,3 +1278,45 @@ def update_repair_order(name, items, narration=None):
 	doc.save(ignore_permissions=True)      # re-stamps the weighing, re-totals the batch
 	frappe.db.commit()
 	return get_repair_order(name)
+
+
+# --- Quick Check ---------------------------------------------------------------
+# The counter question that comes BEFORE a repair is taken in: what would this
+# cost? It is a calculator with a print, and it writes nothing at all — no
+# receipt, no bill, no piece. Everything it needs is what the party was charged
+# last time, so a quote starts from the real rates rather than from nothing.
+@frappe.whitelist()
+def get_quick_check_context(party=None):
+	"""The lists Quick Check picks from, and the last rates a party was charged.
+
+	Nothing is created or updated here. The rates come off that party's most
+	recent bill — quoting from what they actually paid last time is the whole
+	point, and it means the rate boxes are rarely typed twice."""
+	_guard()
+	out = {
+		"parties": frappe.get_all("Repair Party", filters={"active": 1},
+			pluck="name", order_by="name"),
+		"work_types": frappe.get_all("Repair Work Type", filters={"active": 1},
+			pluck="name", order_by="name"),
+		"sieves": get_repair_sieves(),
+		"karats": ["22", "18", "14", "9"],
+		"gold_rate": 0.0, "gst_percent": 0.0,
+		"work_rates": {}, "stone_rates": [], "from_bill": None, "from_date": None,
+	}
+	filters = {"party": party} if party else {}
+	last = frappe.get_all("Repair Bill", filters=filters, fields=["name", "billed_at"],
+		order_by="billed_at desc", limit_page_length=1)
+	if not last:
+		return out
+	bill = frappe.get_doc("Repair Bill", last[0].name)
+	out["from_bill"] = bill.name
+	out["from_date"] = str(bill.billed_at or "")[:16]
+	out["gold_rate"] = flt(bill.gold_rate)
+	out["gst_percent"] = flt(bill.gst_percent)
+	out["work_rates"] = {c.work_type: flt(c.rate) for c in bill.charges if flt(c.rate)}
+	seen = {}
+	for st in bill.stones:
+		if flt(st.rate):
+			seen[(st.bucket or "", st.sieve or "")] = flt(st.rate)
+	out["stone_rates"] = [{"bucket": b, "sieve": s, "rate": r} for (b, s), r in sorted(seen.items())]
+	return out

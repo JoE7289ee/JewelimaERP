@@ -198,3 +198,70 @@ function jwBillPrint(title, html) {
 	doc.close();
 	setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 250);
 }
+
+
+// ---- what it would come to ------------------------------------------------
+// Quick Check's paper. It prints like the bill because it is read like one, and
+// it says QUOTATION at the top and carries no number, because there is nothing
+// behind it — nothing was saved to give it one.
+jewelima.printRepairQuote = function (q) {
+	const esc = frappe.utils.escape_html;
+	const flt = (v) => parseFloat(v) || 0;
+	const cint = (v) => parseInt(v, 10) || 0;
+	const m = (v) => format_currency(flt(v));
+	const rows = (q.items || []).map((i, n) => `<tr>
+		<td class="n">${n + 1}</td>
+		<td><b>${esc(i.item || "")}</b>${i.narration
+			? `<div class="muted">${esc(i.narration)}</div>` : ""}</td>
+		<td class="n">${cint(i.qty) || 1}</td>
+		<td class="n">${esc(i.karat || "—")}</td>
+		<td class="n">${flt(i.weight).toFixed(3)}</td>
+		<td class="n">${flt(i.add_gold) ? flt(i.add_gold).toFixed(3) : "—"}</td>
+		<td>${esc((i.work_types || []).map((w) => (cint((i.work_counts || {})[w]) > 1
+			? `${w} x${cint(i.work_counts[w])}` : w)).join(", ")) || "—"}</td>
+		<td class="n">${m(i.work)}</td>
+		<td class="n">${m(i.metal)}</td>
+		<td class="n">${m(i.stone)}</td>
+		<td class="n">${flt(i.manual) ? m(i.manual) : "—"}</td>
+		<td class="n"><b>${m(i.total)}</b></td></tr>`).join("");
+	const stones = (q.stone_lines || []).map((s) => `<tr><td>${esc(s.bucket || "")}</td>
+		<td>${esc(s.sieve || "—")}</td><td class="n">${cint(s.pcs)}</td>
+		<td class="n">${flt(s.ct).toFixed(3)}</td><td class="n">${m(s.rate)}</td>
+		<td class="n">${m(flt(s.ct) * flt(s.rate))}</td></tr>`).join("");
+
+	const body = `
+		<div class="rb-body">
+		<div class="rb-head">
+			<div class="rb-party">${esc(q.party || "—")}${flt(q.gold_rate)
+				? `<span class="rb-rate">${__("Board Rate")} ${m(q.gold_rate)}/g</span>` : ""}</div>
+			<div class="rb-meta">${__("QUOTATION")}${q.quoted_at
+				? " &nbsp;·&nbsp; " + esc(q.quoted_at) : ""}</div>
+		</div>
+		<table><thead><tr><th class="n"></th><th>${__("Item")}</th><th class="n">${__("Qty")}</th>
+			<th class="n">${__("Purity")}</th><th class="n">${__("Weight")}</th>
+			<th class="n">${__("Add Gold")}</th><th>${__("Type of Work")}</th>
+			<th class="n">${__("Repair Charges")}</th><th class="n">${__("Metal")}</th>
+			<th class="n">${__("Stone")}</th><th class="n">${__("Manual")}</th>
+			<th class="n">${__("Amount")}</th></tr></thead><tbody>${rows}</tbody></table>
+
+		${stones ? `<table><thead><tr><th>${__("Stones")}</th><th>${__("Sieve")}</th>
+			<th class="n">${__("Pcs")}</th><th class="n">${__("Cts")}</th><th class="n">${__("Rate/ct")}</th>
+			<th class="n">${__("Amount")}</th></tr></thead><tbody>${stones}</tbody></table>` : ""}
+
+		<table class="tot">
+			<tr><td>${__("Repair Charges")}</td><td class="n">${m(q.total_work)}</td></tr>
+			<tr><td>${__("Metal")} <span class="muted">(${flt(q.total_add_gold).toFixed(3)} g)</span></td>
+				<td class="n">${m(q.total_metal)}</td></tr>
+			<tr><td>${__("Stones")}</td><td class="n">${m(q.total_stone)}</td></tr>
+			${flt(q.total_manual) ? `<tr><td>${__("Manual")}</td>
+				<td class="n">${m(q.total_manual)}</td></tr>` : ""}
+			${flt(q.gst_percent) ? `<tr><td>${__("GST {0}%", [q.gst_percent])}</td>
+				<td class="n">${m(q.gst_amount)}</td></tr>` : ""}
+			<tr class="g"><td>${__("Total")}</td><td class="n">${m(q.grand_total)}</td></tr></table>
+		<div class="note">${__("An estimate on the weights and work above. The bill is raised on what the piece actually needs.")}${
+			q.narration ? "\n" + esc(q.narration) : ""}</div>
+		</div>
+		<div class="sig"><div>${__("Quoted by")}</div><div>${__("Accepted by")}</div></div>`;
+
+	jwBillPrint(__("Quotation"), body);
+};

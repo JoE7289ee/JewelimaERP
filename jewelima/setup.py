@@ -503,8 +503,8 @@ JEWELIMA_GRAPHICS_PAGES = ["photo-update", "photo-urgent", "photo-queue", "custo
 # One role runs it; everyone else sees nothing. Writes go through
 # repair_api (role-gated + ignore_permissions), same as everywhere.
 JEWELIMA_REPAIR_ROLE = "Jewelima Repair"
-JEWELIMA_REPAIR_PAGES = ["new-repair-order", "repair-status", "repair-billing",
-	"repair-dispatch", "repair-kpi", "repair-masters"]
+JEWELIMA_REPAIR_PAGES = ["repair-quick-check", "new-repair-order", "repair-status",
+	"repair-billing", "repair-dispatch", "repair-kpi", "repair-masters"]
 JEWELIMA_REPAIR_DOCTYPES = ["Repair Order", "Repair Order Item", "Repair Party",
 	"Repair Work Type", "Repair Type", "Repair Bill", "Repair Bill Item", "Repair Bill Charge",
 	"Repair Dispatch Note", "Repair Dispatch Item", "Repair Work Line"]
