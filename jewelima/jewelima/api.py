@@ -12037,32 +12037,193 @@ def get_provider_margins(price_chart=None, providers=None, gold_rate=0):
 	return out
 
 
+# ---------------------------------------------------------------------------
+# The Costing Board — what each party pays us for the WORK.
+#
+# A party pays for the work in one of two ways and the two look nothing alike on
+# paper, which is why this was hard to see before:
+#
+#   * a MAKING RATE — so many rupees a gram, a figure that stands still while
+#     gold moves;
+#   * a TOUCH — gold billed at a purity higher than the piece really is. 18K is
+#     75% gold; billed at 80 touch the party pays for 80, and those 5 points are
+#     the making charge. The sale page already says as much in words: "making
+#     covered by the touch".
+#
+# So a touch IS a making charge, quoted as a percentage of the gold rate instead
+# of in rupees. It moves every morning with the board, which is what makes it
+# worth watching: a party on 7 points earns us ₹7 a gram more for every ₹100 the
+# board rises, and nobody has to agree anything.
+#
+# This board puts both on the same scale — rupees a gram, at one board rate —
+# so the parties can finally be ranked against each other.
+#
+# The rate. Touch is a percentage of whatever board rate the day is billed at,
+# so a rupee figure here is only ever "at this rate". It opens on the Thrissur
+# 995 line because that is the Kerala board, with GST taken out of it, and it
+# stays editable — the feeds are for the eye, and a board rate is a decision
+# somebody makes each morning, not a market fact.
+# ---------------------------------------------------------------------------
+MAKING_BOARD_LINE = "Thrissur 995"
+# The board is an Indian trade rate with duty and GST already inside it (see the
+# feed notes above), so the tax comes OUT before any making is worked off it:
+# board / 1.03, not board less 3%.
+BOARD_GST_PERCENT = 3.0
+
+
+def _fineness_pct(karat):
+	"""How much of a karat really is gold, as a percent — 18K is 75."""
+	return round(flt(KARAT_FINENESS.get((karat or "").strip().upper())) * 100.0, 3)
+
+
+def _making_board_rate():
+	"""Today's Thrissur 995 line, and the same figure with GST taken out.
+
+	Never throws: the board not answering is a thing the page shows, not a thing
+	that stops it."""
+	out = {"line": MAKING_BOARD_LINE, "quoted": None, "net": None,
+		"as_of": "", "gst_percent": BOARD_GST_PERCENT, "error": ""}
+	try:
+		live = _board_rate_live()
+	except Exception as e:
+		out["error"] = str(e)[:200]
+		return out
+	hit = next((h for h in (live.get("hero") or [])
+		if (h.get("name") or "") == MAKING_BOARD_LINE), None)
+	if not hit:
+		out["error"] = frappe._("{0} is not on the board just now.").format(MAKING_BOARD_LINE)
+		return out
+	out["as_of"] = hit.get("as_of") or ""
+	out["of"] = hit.get("of") or ""
+	out["label"] = hit.get("label") or ""
+	if hit.get("error"):
+		out["error"] = hit["error"]
+	fineness = flt(hit.get("fineness")) or 1.0
+	if flt(hit.get("rate")):
+		out["quoted"] = flt(hit["rate"])
+		out["net"] = round(flt(hit["rate"]) / (1.0 + BOARD_GST_PERCENT / 100.0), 2)
+		# TSR quotes 995 metal, while a touch is documented as a percent of the
+		# 24K rate ("80 means 80% of the 24K rate"). The two differ by half a
+		# percent, so both are handed over and the desk picks — rather than this
+		# page deciding quietly which one a morning's board rate meant.
+		out["fineness"] = fineness
+		out["pure"] = round(flt(hit["rate"]) / fineness, 2) if fineness else None
+		out["pure_net"] = round(out["pure"] / (1.0 + BOARD_GST_PERCENT / 100.0), 2) if out["pure"] else None
+	return out
+
+
+def _making_per_gram(chart, karat, base):
+	"""What this chart charges for the work on a gram of this karat, and how.
+
+	Touch first, because a chart carrying a touch for the karat bills its gold
+	that way and the making rule (if any) is not what the metal is charged on.
+	Then the making rules, resolved the way a real piece resolves them. A per-
+	piece rule has no per-gram answer and says so rather than inventing one."""
+	kt = (karat or "").strip().upper()
+	fine = _fineness_pct(kt)
+	touch = _touch_for(chart, kt)
+	if touch and fine:
+		points = round(touch - fine, 3)
+		return {
+			"via": "touch", "touch": touch, "points": points,
+			"per_g": round(base * points / 100.0, 2) if base else None,
+			"moves_with_gold": 1,
+			# what a ₹100 move in the board does to it — the whole reason a touch
+			# is worth watching rather than merely recording
+			"per_100": round(points, 2),
+			"how": frappe._("{0} touch on {1}% gold = {2} points").format(touch, fine, points),
+		}
+	rule = _making_rule_for(list(chart.get("making_rules") or []), None, kt)
+	if rule:
+		basis = (rule.basis or "Per Gram").strip()
+		scope = " ".join(x for x in ((rule.karat or ""), (rule.design_type or "")) if x) or frappe._("DEFAULT")
+		if basis == "Per Gram" and flt(rule.rate):
+			return {"via": "rate", "per_g": round(flt(rule.rate), 2), "rate": flt(rule.rate),
+				"moves_with_gold": 0, "per_100": 0.0,
+				"how": frappe._("{0}/g ({1})").format(flt(rule.rate), scope)}
+		if basis == "Purity Percent" and flt(rule.rate):
+			return {"via": "percent", "points": flt(rule.rate),
+				"per_g": round(base * flt(rule.rate) / 100.0, 2) if base else None,
+				"moves_with_gold": 1, "per_100": round(flt(rule.rate), 2),
+				"how": frappe._("{0}% of the gold rate ({1})").format(flt(rule.rate), scope)}
+		if basis == "Per Piece" and flt(rule.rate):
+			return {"via": "piece", "per_piece": flt(rule.rate), "per_g": None,
+				"moves_with_gold": 0, "per_100": 0.0,
+				"how": frappe._("{0} a piece ({1})").format(flt(rule.rate), scope)}
+	if flt(chart.making_rate):
+		return {"via": "rate", "per_g": round(flt(chart.making_rate), 2),
+			"rate": flt(chart.making_rate), "moves_with_gold": 0, "per_100": 0.0,
+			"how": frappe._("{0}/g (chart rate)").format(flt(chart.making_rate))}
+	return {"via": "", "per_g": None, "moves_with_gold": 0, "per_100": 0.0,
+		"how": frappe._("nothing priced for {0}").format(kt)}
+
+
 @frappe.whitelist()
-def get_costing_board():
-	"""Every price chart as one board: a row per chart, plus the series the page
-	draws — touch by karat, making by karat, and each chart's diamond curve."""
+def get_costing_board(gold_rate=0, karat="18K", ex_gst=1):
+	"""Every active chart's making charge, on one scale, ranked.
+
+	gold_rate overrides the board; leave it and the Thrissur 995 line is used,
+	with GST taken out unless ex_gst is turned off."""
 	_require_costing()
-	charts = [frappe.get_doc("Price Chart", n) for n in frappe.get_all(
+	karat = (karat or "18K").strip().upper()
+	if karat not in KARATS:
+		karat = "18K"
+	board = _making_board_rate()
+	base = flt(gold_rate)
+	if not base:
+		base = flt(board["net"] if cint(ex_gst) else board["quoted"])
+	base = round(base, 2)
+
+	docs = [frappe.get_doc("Price Chart", n) for n in frappe.get_all(
 		"Price Chart", order_by="status asc, chart_date desc, creation desc", pluck="name")]
-	rows = [_chart_summary(d) for d in charts]
+	seen = {}
+	for d in docs:
+		seen[d.chart_name] = seen.get(d.chart_name, 0) + 1
 
-	# A party keeps every chart it has ever had, all under one name, so the NAME
-	# does not identify a chart — the document does. Anything the page keys on
-	# (a series, a colour, a row) keys on d.name, and the label only adds the
-	# version when that name is carried by more than one chart.
-	seen_names = {}
-	for r in rows:
-		seen_names[r["chart_name"]] = seen_names.get(r["chart_name"], 0) + 1
-	for r in rows:
-		r["label"] = (r["chart_name"] if seen_names[r["chart_name"]] == 1
-			else "{0} · {1}".format(r["chart_name"], r["name"]))
+	rows = []
+	for d in docs:
+		if d.status != "Active":
+			continue
+		per_karat = {k: _making_per_gram(d, k, base) for k in KARATS}
+		here = per_karat[karat]
+		rows.append({
+			"name": d.name, "chart_name": d.chart_name,
+			"label": d.chart_name if seen[d.chart_name] == 1 else "{0} · {1}".format(d.chart_name, d.name),
+			"chart_date": str(d.chart_date or ""),
+			"age_days": frappe.utils.date_diff(frappe.utils.nowdate(), d.chart_date) if d.chart_date else None,
+			"by_karat": per_karat,
+			"per_g": here.get("per_g"), "via": here.get("via"),
+			"points": here.get("points"), "touch": here.get("touch"),
+			"per_100": here.get("per_100"), "moves_with_gold": here.get("moves_with_gold"),
+			"how": here.get("how"), "per_piece": here.get("per_piece"),
+		})
 
-	# the diamond curve: rate against the PER-STONE weight the bracket starts at,
-	# one series per CHART DOCUMENT per quality — keyed on the name they share and
-	# the versions would pile into one line that never existed
+	priced = [r for r in rows if r["per_g"] is not None]
+	priced.sort(key=lambda r: -flt(r["per_g"]))
+	for i, r in enumerate(priced, 1):
+		r["rank"] = i
+	vals = [flt(r["per_g"]) for r in priced]
+	median = round(sorted(vals)[len(vals) // 2], 2) if vals else None
+	on_touch = [r for r in priced if r["via"] in ("touch", "percent")]
+
+	# a chart that prices NEITHER cannot bill the work at all — the one shape
+	# here that is a mistake rather than a choice
+	silent = sorted(r["label"] for r in rows if not any(
+		(r["by_karat"][k].get("per_g") is not None or r["by_karat"][k].get("per_piece"))
+		for k in KARATS))
+	names = {d.chart_name for d in docs}
+	no_active = sorted(n for n in names
+		if not any(d.chart_name == n and d.status == "Active" for d in docs))
+
+	# The diamond curve lived only on this page, so it stays: rate against the
+	# per-stone weight the bracket starts at, one line per active chart per
+	# quality. Making is what the page is FOR, but stones are the other half of
+	# what a party pays and nowhere else draws them together.
 	label_of = {r["name"]: r["label"] for r in rows}
 	curves = {}
-	for d in charts:
+	for d in docs:
+		if d.status != "Active":
+			continue
 		for r in (d.get("diamond_rates") or []):
 			if flt(r.rate) <= 0:
 				continue
@@ -12073,32 +12234,29 @@ def get_costing_board():
 		for nm in curves[q]:
 			curves[q][nm].sort(key=lambda x: x["from_ct"])
 
-	active = [r for r in rows if r["status"] == "Active"]
-	# a party whose only chart is superseded cannot be sold to — that IS a problem,
-	# unlike a chart that simply does not price diamonds
-	names = {r["chart_name"] for r in rows}
-	no_active = sorted(n for n in names if not any(
-		r["chart_name"] == n and r["status"] == "Active" for r in rows))
 	return {
-		"rows": rows,
 		"curves": {q: [{"chart": nm, "label": label_of.get(nm, nm), "points": pts}
 			for nm, pts in sorted(curves[q].items())] for q in sorted(curves)},
+		"board": board, "base": base, "karat": karat,
+		"ex_gst": 1 if cint(ex_gst) else 0,
+		"overridden": 1 if flt(gold_rate) else 0,
 		"karats": list(KARATS),
-		"components": [
-			{"key": "gold", "label": frappe._("Gold")},
-			{"key": "making", "label": frappe._("Making")},
-			{"key": "diamond", "label": frappe._("Diamond")},
-			{"key": "precious", "label": frappe._("Precious")},
-			{"key": "buckets", "label": frappe._("CS / CZ / CVD / SW")},
-			{"key": "charges", "label": frappe._("Charges")},
-		],
-		"no_active": no_active,
+		"fineness": {k: _fineness_pct(k) for k in KARATS},
+		"rows": priced + [r for r in rows if r["per_g"] is None],
+		"ranked": priced,
+		"silent": silent, "no_active": no_active,
 		"kpis": {
-			"charts": len(rows), "active": len(active),
-			"superseded": len(rows) - len(active),
-			"parties": len(names),
-			"on_touch": sum(1 for r in active if any(r["touch"].values())),
-			"to_check": sum(1 for r in active if r["checks"]) + len(no_active),
+			"active": len(rows),
+			"priced": len(priced),
+			"on_touch": len(on_touch),
+			"on_rate": len([r for r in priced if r["via"] == "rate"]),
+			"top": priced[0]["label"] if priced else None,
+			"top_per_g": priced[0]["per_g"] if priced else None,
+			"bottom": priced[-1]["label"] if priced else None,
+			"bottom_per_g": priced[-1]["per_g"] if priced else None,
+			"median": median,
+			"point_value": round(base / 100.0, 2) if base else None,
+			"silent": len(silent), "no_active": len(no_active),
 		},
 	}
 
