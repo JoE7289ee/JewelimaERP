@@ -28,7 +28,7 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const root = $(page.main);
-	const S = { data: null, karat: "18K", rate: null, exGst: 1, quality: "", view: "making" };
+	const S = { data: null, karat: "18K", rate: null, exGst: 1, quality: "", ct: null };
 
 	const inr = (v) => (v == null ? "—" : "₹" + Math.round(v).toLocaleString("en-IN"));
 	const inr2 = (v) => (v == null ? "—" : "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -84,9 +84,12 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		.cb-bar .fill{height:100%;border-radius:6px;}
 		.cb-bar .fill.touch{background:#1665A8;}
 		.cb-bar .fill.rate{background:#9AA7B4;}
+		.cb-bar .fill.stone{background:#C25E00;}
 		[data-theme="dark"] .cb-bar .fill.touch{background:#3E92D8;}
 		[data-theme="dark"] .cb-bar .fill.rate{background:#6B7785;}
-		.cb-bar .amt{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;}
+		[data-theme="dark"] .cb-bar .fill.stone{background:#CC6E15;}
+		.cb-bar .amt{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.25;}
+		.cb-bar .amt .cb-how{font-weight:400;}
 		.cb-bar .med{position:absolute;top:0;bottom:0;width:2px;background:var(--text-muted);opacity:.55;}
 		.cb-legend{display:flex;gap:16px;font-size:11.5px;color:var(--text-muted);margin-top:11px;flex-wrap:wrap;}
 		.cb-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;}
@@ -246,31 +249,87 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		return out.length ? `<div class="cb-warn">${out.join("<br>")}</div>` : "";
 	}
 
-	// ---- the stones, which are drawn nowhere else ------------------------------
+	// ---- the stones, which are compared nowhere else ---------------------------
+	// This was a step chart of rate against weight, and it was unreadable for a
+	// plain reason: 23 of the 32 VVS-EF brackets on the book are the SAME band,
+	// 0 to 0.08 ct. Twenty-odd charts have no ladder at all — one bracket, one
+	// rate — so the chart drew twenty flat lines on top of each other and said
+	// nothing. The question here is the same one the rest of the page asks, so
+	// it gets the same answer: pick a stone size, and rank what each party pays
+	// a carat for it. The few charts that DO have a ladder say so beside their
+	// bar, and their own steps are drawn on Chart Detail where they belong.
+	const CT_SIZES = [0.005, 0.01, 0.02, 0.05, 0.1, 0.2];
+	const ctLabel = (v) => flt(v).toFixed(3).replace(/0+$/, "").replace(/\.$/, "") + " ct";
+
+	/** The bracket that holds this per-stone weight — the same rule the provider
+	 * margins use, so the two screens can never disagree about which one fits. */
+	function bracketAt(points, ct) {
+		return (points || []).find((p) =>
+			flt(p.from_ct) <= ct && (!flt(p.to_ct) || ct < flt(p.to_ct))) || null;
+	}
+
+	function stoneRows(quality, ct) {
+		const series = (S.data.curves || {})[quality] || [];
+		const priced = [], missing = [];
+		series.forEach((sv) => {
+			const hit = bracketAt(sv.points, ct);
+			if (hit) {
+				priced.push({ label: sv.label, chart: sv.chart, rate: flt(hit.rate),
+					from_ct: flt(hit.from_ct), to_ct: flt(hit.to_ct),
+					steps: (sv.points || []).length });
+			} else {
+				missing.push(sv.label);
+			}
+		});
+		priced.sort((a, b) => b.rate - a.rate);
+		return { priced, missing, total: series.length };
+	}
+
 	function stones() {
 		const d = S.data;
 		const quals = Object.keys(d.curves || {});
 		if (!quals.length) return "";
-		if (!S.quality || !quals.includes(S.quality)) S.quality = quals[0];
+		if (!S.quality || !quals.includes(S.quality)) {
+			// open on the quality the most charts actually price
+			S.quality = quals.slice().sort((a, b) =>
+				(d.curves[b] || []).length - (d.curves[a] || []).length)[0];
+		}
+		// and on the stone size the most of them cover
+		if (S.ct == null) {
+			S.ct = CT_SIZES.slice().sort((a, b) =>
+				stoneRows(S.quality, b).priced.length - stoneRows(S.quality, a).priced.length)[0];
+		}
+		const { priced, missing, total } = stoneRows(S.quality, S.ct);
+		const hi = priced.length ? priced[0].rate : 1;
+		const qLabel = (q) => (q === "—" ? __("no quality set") : q);
+
 		return `<div class="cb-card">
 			<h3>${__("Diamond rates")}</h3>
-			<div class="sub">${__("rate against the weight a bracket starts at — the other half of what a party pays")}</div>
-			<div class="cb-pills" style="margin-bottom:11px;">${quals.map((q) =>
-				`<span class="cb-pill cb-q ${q === S.quality ? "on" : ""}" data-q="${esc(q)}">${esc(q)}</span>`).join("")}</div>
-			<div class="cb-curve"></div>
+			<div class="sub">${__("what each party pays a carat for one stone of this size")}</div>
+			<div class="cb-pills" style="margin-bottom:9px;">${quals.map((q) =>
+				`<span class="cb-pill cb-q ${q === S.quality ? "on" : ""}" data-q="${esc(q)}">${
+					esc(qLabel(q))} <b style="opacity:.7;">${(d.curves[q] || []).length}</b></span>`).join("")}</div>
+			<div class="cb-pills" style="margin-bottom:13px;">${CT_SIZES.map((c) =>
+				`<span class="cb-pill cb-ct ${c === S.ct ? "on" : ""}" data-c="${c}">${esc(ctLabel(c))}</span>`).join("")}</div>
+			${priced.length ? `
+				<div class="cb-bars">${priced.map((r) => `
+					<div class="cb-bar" data-n="${esc(r.chart)}"
+						title="${esc(__("bracket {0}–{1} ct", [r.from_ct, r.to_ct || "up"]))}">
+						<div class="nm">${esc(r.label)}</div>
+						<div class="track">
+							<div class="fill stone" style="width:${Math.max(1, (r.rate / hi) * 100)}%"></div>
+						</div>
+						<div class="amt">${inr(r.rate)}${r.steps > 1
+							? `<div class="cb-how">${__("{0} brackets", [r.steps])}</div>` : ""}</div>
+					</div>`).join("")}</div>
+				<div class="cb-legend">
+					<span>${__("{0} of {1} charts price a {2} stone of this size", [priced.length, total, esc(qLabel(S.quality))])}</span>
+				</div>
+				${missing.length ? `<div class="cb-legend"><span>${
+					__("nothing at this size: {0}", [missing.slice(0, 8).map(esc).join(", ")
+						+ (missing.length > 8 ? __(" and {0} more", [missing.length - 8]) : "")])}</span></div>` : ""}`
+			: `<div class="cb-empty">${__("No chart prices a {0} stone of {1}.", [esc(qLabel(S.quality)), esc(ctLabel(S.ct))])}</div>`}
 		</div>`;
-	}
-
-	function drawCurve() {
-		const d = S.data;
-		const host = root.find(".cb-curve");
-		if (!host.length) return;
-		const series = (d.curves || {})[S.quality] || [];
-		// the helper takes the bracket rows as they are — from_ct / to_ct / rate
-		jewelima.costStepChart(host.get(0), {
-			series: series.map((s) => ({ name: s.label, points: s.points })),
-			empty: __("No chart prices {0} yet.", [esc(S.quality)]),
-		});
 	}
 
 	function paint() {
@@ -278,7 +337,6 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		paintRate();
 		paintKpis();
 		root.find(".cb-body").html(checks() + ranking() + table() + stones());
-		drawCurve();
 	}
 
 	// ---- events ---------------------------------------------------------------
@@ -287,10 +345,13 @@ frappe.pages["costing-board"].on_page_load = function (wrapper) {
 		load();
 	});
 	root.on("click", ".cb-q", function () {
-		S.quality = $(this).data("q");
-		root.find(".cb-q").removeClass("on");
-		this.classList.add("on");
-		drawCurve();
+		S.quality = String($(this).data("q"));
+		S.ct = null;              // the best size for one quality is not the best for another
+		paint();
+	});
+	root.on("click", ".cb-ct", function () {
+		S.ct = flt($(this).data("c"));
+		paint();
 	});
 	root.on("change", ".cb-exgst", function () {
 		S.exGst = this.checked ? 1 : 0;
