@@ -330,7 +330,15 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		$tr.find("td.num").eq(4).html(`<b>${money(P.total)}</b>`);
 		paintTiles();
 	});
-	$body.on("change", ".c-item,.c-win,.c-wout", () => { grow(); paint(); });
+	// Only redraw the grid when a ROW APPEARS. Redrawing it on every change threw
+	// away the very box being typed in — the element was replaced between the
+	// first keystroke and the rest, so half a weight went nowhere.
+	$body.on("change", ".c-item,.c-win,.c-wout", () => {
+		const before = S.rows.length;
+		grow();
+		if (S.rows.length !== before) paintRows();
+		paintTiles(); paintPanels();
+	});
 	$body.on("click", ".qc-x", function () {
 		S.rows.splice(cint($(this).closest("tr").data("i")), 1);
 		if (!S.rows.length) S.rows.push(blank());
