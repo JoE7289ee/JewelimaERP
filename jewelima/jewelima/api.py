@@ -15211,10 +15211,21 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 			flags.append("row says {0} but priced at {1}".format(tok, quality))
 		row_karat = _karat_of_purity(flt(r.get("pure")) / flt(r.get("nt")) * 100) if flt(r.get("nt")) and flt(r.get("pure")) else ""
 		touch = _touch_for(chart, row_karat)
+		# A back chain's row is merged into its piece at import and its weight is
+		# recorded in the chain columns, NOT added to the piece's own gross and
+		# net. That is right for the making — the chain has its own rate — but it
+		# left the chain's GOLD billed nowhere at all: the row went out of the
+		# chain list and never into the weight anything is charged on. So the
+		# weights the sheet SHOWS, and the gold it charges, carry the whole piece
+		# the customer walks away with; making stays on the piece's own metal.
+		bc_wt = flt(r.get("back_chain_wt"))
+		gs_full = round(flt(r.get("gs")) + bc_wt, 3)
+		nt_full = round(flt(r.get("nt")) + bc_wt, 3)
 		eff_rate = gold_rate * touch / 100.0 if touch else gold_rate
-		gold_va = round(flt(r.get("nt")) * eff_rate, 2)
-		notes["gold"] = ("{0} g NT x {1}/g board x {2}% touch = {3}".format(flt(r.get("nt")), gold_rate, touch, _inr(gold_va))
-			if touch else "{0} g NT x {1}/g = {2}".format(flt(r.get("nt")), gold_rate, _inr(gold_va)))
+		gold_va = round(nt_full * eff_rate, 2)
+		_chain_note = " (incl. {0} g back chain)".format(bc_wt) if bc_wt else ""
+		notes["gold"] = ("{0} g NT{1} x {2}/g board x {3}% touch = {4}".format(nt_full, _chain_note, gold_rate, touch, _inr(gold_va))
+			if touch else "{0} g NT{1} x {2}/g = {3}".format(nt_full, _chain_note, gold_rate, _inr(gold_va)))
 		if not gold_rate:
 			flags.append("no gold rate")
 		# making: the row's ITEM is the design type; blank rule row = DEFAULT
@@ -15254,7 +15265,6 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		# default rule would price a chain at the necklace's making rate without
 		# saying so. No BACK CHAIN rule on the chart means the chain is flagged
 		# unpriced, not quietly charged something plausible.
-		bc_wt = flt(r.get("back_chain_wt"))
 		bc_rate = bc_mc = 0.0
 		if bc_wt:
 			bcr = next((x for x in making_rules
@@ -15410,6 +15420,7 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 			_inr(gold_va), _inr(mc), (" + chain " + _inr(bc_mc)) if bc_mc else "",
 			_inr(dmd_va), _inr(ps_va), _inr(stn_va), _inr(cert_va), _inr(total))
 		out.append(dict(r, gold_rt=gold_rate, gold_va=gold_va, mc_rate=mc_rate, mc=mc,
+			gs_full=gs_full, nt_full=nt_full,
 			bc_rate=bc_rate, bc_mc=bc_mc,
 			wt_band="below" if flt(r.get("nt")) < band_gm else "above",
 			dmd_rt=dmd_rt, dmd_va=dmd_va, stone_ct=round(stone_ct, 4), dmd_bracket=bracket,
@@ -15789,8 +15800,8 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		ws.cell(row=r, column=C["colour"], value=p.get("colour") or None)
 		ws.cell(row=r, column=C["pcs1"], value=1)
 		ws.cell(row=r, column=C["item_color"], value=p.get("item_color") or item_colour or None)
-		ws.cell(row=r, column=C["gross"], value=flt(p.get("gs")))
-		ws.cell(row=r, column=C["net"], value=flt(p.get("nt")))
+		ws.cell(row=r, column=C["gross"], value=flt(p.get("gs_full") or p.get("gs")))
+		ws.cell(row=r, column=C["net"], value=flt(p.get("nt_full") or p.get("nt")))
 		ws.cell(row=r, column=C["gold"], value="={0}{1}*{2}$3".format(Lc("net"), r, Lc("mc")))
 		if "bcwt" in C:
 			ws.cell(row=r, column=C["bcwt"], value=flt(p.get("back_chain_wt")) or None)

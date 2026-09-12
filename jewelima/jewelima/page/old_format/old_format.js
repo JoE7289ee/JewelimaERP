@@ -348,7 +348,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 
 	function paintInfo() {
 		if (!ROWS.length) return root.find(".of-info").empty();
-		const gw = ROWS.reduce((a, r) => a + flt(r.gs), 0);
+		const gw = ROWS.reduce((a, r) => a + gsFull(r), 0);
 		// the stone weights the lot is priced on. Diamond always — every lot has
 		// some — and colour stone only when the lot carries any, the same rule the
 		// table's own CS columns follow. CS reads in whatever unit the sheet is
@@ -529,12 +529,12 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			${ROWS.map((r, i) => `<tr data-i="${i}" class="${SEL.has(r.unique_id) ? "of-rowsel" : ""}" style="background:${tintOf(r.colour)}">
 				<td><input type="checkbox" class="of-sel" data-uid="${esc(r.unique_id)}" ${SEL.has(r.unique_id) ? "checked" : ""}></td>
 				<td>${r.sl}</td>
-				<td><b>${esc(r.unique_id)}</b>${r.back_chain_wt ? ` <span title="${__("back chain {0} ({1} g) merged in", [esc(r.back_chain_barcode || ""), r.back_chain_wt])}" style="cursor:help;">⛓</span>` : ""}</td>
+				<td><b>${esc(r.unique_id)}</b>${r.back_chain_wt ? ` <span title="${__("back chain {0} — {1} g, in the weights above and billed as gold; its making is the chain rate", [esc(r.back_chain_barcode || ""), r.back_chain_wt])}" style="cursor:help;">⛓</span>` : ""}</td>
 				<td class="of-huid"><input data-h="0" value="${esc(huidPart(r.huid, 0))}"
 						style="width:74px;" placeholder="${__("HUID")}"><input data-h="1"
 						value="${esc(huidPart(r.huid, 1))}" style="width:74px;" placeholder="${__("2nd")}"></td>
 				<td>${esc(r.item)}</td><td>${esc(r.design)}</td>
-				<td class="num">${r.gs}</td><td class="num">${r.nt}</td>
+				<td class="num">${gsFull(r)}</td><td class="num">${ntFull(r)}</td>
 				<td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
 				${ps ? `<td class="num">${r.ps_pcs || ""}</td><td class="num">${r.ps_ct || ""}</td>
 				<td>${r.ps_ct ? `<input data-f="ps_stone" list="of-pstones" value="${esc(r.ps_stone || "")}"
@@ -601,7 +601,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				const tint = tintOf(r.colour) || "transparent";
 				return `<tr class="${fl ? "of-flagged" : ""}" style="--of-tint:${tint};background:${tint};">
 				<td>${r.sl}</td><td><b>${esc(r.unique_id)}</b></td><td>${esc(r.item)}</td><td>${esc(r.colour)}</td>
-				<td class="num">${r.nt}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
+				<td class="num">${ntFull(r)}</td><td class="num">${r.dmd_pcs || ""}</td><td class="num">${r.dmd_ct || ""}</td>
 				${ps ? `<td class="num">${r.ps_ct || ""}${r.ps_stone ? `<div class="of-flag">${esc(r.ps_stone)}</div>` : ""}</td>` : ""}
 				${cs ? `<td class="num">${csShow(r.stn_ct)}</td>` : ""}
 				<td>${esc(r.huid)}</td><td>${esc(r.cert)}</td>
@@ -853,6 +853,13 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	// get scanned onto a piece: the piece only RECORDS the chain (bag no +
 	// its GW in the back-chain columns) — weights are NOT merged.
 	const isChain = (r) => (r.item || "").includes("BACK CHAIN");
+	// An assigned chain is recorded on the piece rather than merged into it, so
+	// the row's own gs/nt are the piece WITHOUT its chain. That is what making is
+	// charged on and must stay — but it is not the weight anybody is handed, and
+	// it is not what the gold is billed on either. So the screen adds the chain
+	// back for the eye, the same figures the sheet prints.
+	const gsFull = (r) => flt((flt(r.gs) + flt(r.back_chain_wt)).toFixed(3));
+	const ntFull = (r) => flt((flt(r.nt) + flt(r.back_chain_wt)).toFixed(3));
 
 	function splitChains(all) {
 		ROWS = all.filter((r) => !isChain(r));
