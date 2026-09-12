@@ -107,10 +107,17 @@ function pob_cardHTML(c) {
 	// the planned targets stay on the summary line below the table.
 	// Stones get their PLANNED qty pre-printed; metals stay blank (weighed by hand).
 	// Weight column stays blank for everyone — the floor writes the actual weights.
+	//
+	// The bag's own BOM is written PER PIECE, while the bag's DMD/PS/CS figures on
+	// the summary line below are for the whole bag. So a bag of two printed 26 in
+	// the table and DMD 52 underneath it — the same card disagreeing with itself,
+	// and the setter counting out half the stones. The table is what the floor
+	// works from, so it gets the whole bag too.
+	const pieces = Math.max(cint(c.qty) || 1, 1);
 	const mats = (c.materials || [])
 		.map((m) => {
 			const stone = (m.uom || "") === "Carat";
-			const qtyCell = stone && flt(m.qty) ? flt(m.qty) : "";
+			const qtyCell = stone && flt(m.qty) ? flt(flt(m.qty) * pieces) : "";
 			// the metal row is the raw material; bolding it is what replaced the
 			// karat badge that used to shout the same thing from the corner
 			return `<tr class="${stone ? "" : "metal"}"><td>${pob_esc(m.item)}</td><td>${qtyCell}</td><td></td></tr>`;
