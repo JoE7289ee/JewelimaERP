@@ -30,22 +30,28 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 	};
 
 	function blank() {
-		return { item: "", qty: 1, karat: "18", weight: "", add_gold: "",
+		return { item: "", qty: 1, karat: "18", weight_in: "", weight_out: "",
 			work_types: [], work_counts: {}, stones: [], manual: "", narration: "" };
 	}
+
+	// What the piece comes back heavier by, the way the bill works it out: only a
+	// piece with a weight OUT has a difference, and metal taken off is a credit,
+	// so the sign carries through rather than being clamped at zero.
+	const addedOn = (i) => (flt(i.weight_out) ? flt(i.weight_out) - flt(i.weight_in) : 0);
 
 	function priceRow(i) {
 		const work = (i.work_types || []).reduce(
 			(a, w) => a + flt(S.rates[w]) * (cint((i.work_counts || {})[w]) || 1), 0);
 		const rate = rateForKarat(S.gold, i.karat);
-		const metal = flt(i.add_gold) * rate;
+		const added = addedOn(i);
+		const metal = added * rate;
 		const stone = (i.stones || []).reduce((a, st) => a + flt(st.ct) * flt(S.stoneRates[sKey(st)]), 0);
 		const manual = flt(i.manual);
-		return { work, metal, stone, manual, rate, total: work + metal + stone + manual };
+		return { work, metal, stone, manual, rate, added, total: work + metal + stone + manual };
 	}
 
 	// the row waiting at the bottom is not a piece until something is put on it
-	const filled = (i) => !!(i.item || flt(i.weight) || flt(i.add_gold) || flt(i.manual)
+	const filled = (i) => !!(i.item || flt(i.weight_in) || flt(i.weight_out) || flt(i.manual)
 		|| (i.work_types || []).length || (i.stones || []).length);
 
 	function totals() {
@@ -53,7 +59,7 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		S.rows.filter(filled).forEach((i) => {
 			const P = priceRow(i);
 			work += P.work; metal += P.metal; stone += P.stone; manual += P.manual;
-			wt += flt(i.weight); add += flt(i.add_gold); qty += cint(i.qty) || 1;
+			wt += flt(i.weight_in); add += P.added; qty += cint(i.qty) || 1;
 		});
 		const sub = work + metal + stone + manual;
 		const gst = sub * flt(S.gst) / 100;
@@ -87,7 +93,7 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 				+ ` = ${money(flt(S.rates[n]) * (cint((i.work_counts || {})[n]) || 1))}`).join("\n  ");
 	}
 	function whyMetal(i) {
-		if (!flt(i.add_gold)) return __("No gold to be added on this row.");
+		if (!flt(i.weight_out)) return __("Weigh the piece out and the difference is the metal.");
 		if (!flt(S.gold)) return __("No board rate entered, so metal is not charged.");
 		const P = priceRow(i);
 		const net = flt(S.gold) / (1 + GST / 100);
@@ -96,7 +102,8 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 			__("GST taken out ({0} / 1.0{1}) = {2}", [money(S.gold), GST, money(net)]),
 			i.karat ? __("{0}k is {1}% of that = {2} / g", [i.karat, PURITY[i.karat], money(P.rate)])
 				: __("no karat set, so the board rate is used as it is"),
-			__("{0} g x {1} = {2}", [g3(i.add_gold), money(P.rate), money(P.metal)]),
+			__("{0} g out less {1} g in = {2} g", [g3(i.weight_out), g3(i.weight_in), g3(P.added)]),
+			__("{0} g x {1} = {2}", [g3(P.added), money(P.rate), money(P.metal)]),
 		].join("\n");
 	}
 	function whyStone(i) {
@@ -142,6 +149,8 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		.qc-chip:hover{border-color:var(--primary);}
 		.qc-chip .on{color:var(--primary);font-weight:700;}
 		.qc-why{cursor:help;}
+		.qc-add{color:#1d7a33;font-weight:700;}
+		.qc-less{color:#b02a2a;font-weight:700;}
 		.qc-x{border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 5px;}
 		.qc-x:hover{color:#b02a2a;}
 		.qc-dup{border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 5px;}
@@ -175,8 +184,9 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 				<th style="min-width:150px">${__("Item")}</th>
 				<th style="width:58px">${__("Qty")}</th>
 				<th style="width:76px">${__("Purity")}</th>
-				<th style="width:92px">${__("Weight g")}</th>
-				<th style="width:92px">${__("Add Gold g")}</th>
+				<th style="width:92px">${__("In Wt g")}</th>
+				<th style="width:92px">${__("Out Wt g")}</th>
+				<th class="num" style="width:80px">${__("Added")}</th>
 				<th style="min-width:150px">${__("Type of Work")}</th>
 				<th style="min-width:130px">${__("Stones")}</th>
 				<th style="width:92px">${__("Manual")}</th>
@@ -203,7 +213,7 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 	// ---- rows ---------------------------------------------------------------
 	function paintRows() {
 		$body.html(S.rows.map((i, n) => {
-			const P = priceRow(i);
+			const P = priceRow(i);   // used by the Added cell as well as the money
 			const works = (i.work_types || []);
 			const wlabel = works.length
 				? `<span class="on">${esc(works.map((w) => (cint(i.work_counts[w]) > 1
@@ -216,13 +226,17 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 				: __("+ stones");
 			return `<tr data-i="${n}">
 				<td class="n0">${n + 1}</td>
-				<td><input class="c-item" value="${esc(i.item)}" placeholder="${__("what it is")}"></td>
+				<td><select class="c-item"><option value="">—</option>${
+					(S.ctx.design_types || []).map((t) => `<option value="${esc(t)}"${i.item === t ? " selected" : ""}>${esc(t)}</option>`).join("")
+				}</select></td>
 				<td><input class="c-qty num" type="number" min="1" step="1" value="${cint(i.qty) || 1}"></td>
 				<td><select class="c-karat"><option value="">—</option>${
 					(S.ctx.karats || []).map((k) => `<option value="${k}"${i.karat === k ? " selected" : ""}>${k}k</option>`).join("")
 				}</select></td>
-				<td><input class="c-weight num" type="number" min="0" step="0.001" value="${esc(i.weight)}" placeholder="0.000"></td>
-				<td><input class="c-add num" type="number" step="0.001" value="${esc(i.add_gold)}" placeholder="0.000"></td>
+				<td><input class="c-win num" type="number" min="0" step="0.001" value="${esc(i.weight_in)}" placeholder="0.000"></td>
+				<td><input class="c-wout num" type="number" min="0" step="0.001" value="${esc(i.weight_out)}" placeholder="0.000"></td>
+				<td class="num ${P.added > 0 ? "qc-add" : (P.added < 0 ? "qc-less" : "")}">${
+					flt(i.weight_out) ? (P.added >= 0 ? "+" : "") + g3(P.added) : "—"}</td>
 				<td><span class="qc-chip c-work">${wlabel}</span></td>
 				<td><span class="qc-chip c-stones">${slabel}</span></td>
 				<td><input class="c-manual num" type="number" step="0.01" value="${esc(i.manual)}" placeholder="0"></td>
@@ -242,8 +256,8 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		const tile = (k, v, cls) => `<div class="qc-tile ${cls || ""}"><div class="k">${k}</div><div class="v">${v}</div></div>`;
 		$w.find(".qc-tiles").html(
 			tile(__("Pieces"), T.qty) +
-			tile(__("Weight"), g3(T.wt) + " g") +
-			(T.add ? tile(__("Gold added"), g3(T.add) + " g") : "") +
+			tile(__("Weight in"), g3(T.wt) + " g") +
+			(T.add ? tile(__("Metal added"), (T.add >= 0 ? "+" : "") + g3(T.add) + " g") : "") +
 			tile(__("Work"), money(T.work), "money") +
 			tile(__("Metal"), money(T.metal), "money") +
 			tile(__("Stones"), money(T.stone), "money") +
@@ -290,7 +304,7 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 	function rowOf(el) { return S.rows[cint($(el).closest("tr").data("i"))]; }
 	function grow() {
 		const last = S.rows[S.rows.length - 1];
-		if (!last || last.item || flt(last.weight)) S.rows.push(blank());
+		if (!last || filled(last)) S.rows.push(blank());
 	}
 
 	// ---- typing in the grid --------------------------------------------------
@@ -301,19 +315,22 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		if ($t.hasClass("c-item")) i.item = this.value;
 		else if ($t.hasClass("c-qty")) i.qty = cint(this.value) || 1;
 		else if ($t.hasClass("c-karat")) i.karat = this.value;
-		else if ($t.hasClass("c-weight")) i.weight = this.value;
-		else if ($t.hasClass("c-add")) i.add_gold = this.value;
+		else if ($t.hasClass("c-win")) i.weight_in = this.value;
+		else if ($t.hasClass("c-wout")) i.weight_out = this.value;
 		else if ($t.hasClass("c-manual")) i.manual = this.value;
-		// repainting the whole grid would steal focus mid-type, so only the money
+		// repainting the whole grid would steal focus mid-type, so only the figures
 		const P = priceRow(i);
 		const $tr = $t.closest("tr");
-		$tr.find("td.num").eq(0).attr("title", whyWork(i)).text(money(P.work));
-		$tr.find("td.num").eq(1).attr("title", whyMetal(i)).text(money(P.metal));
-		$tr.find("td.num").eq(2).attr("title", whyStone(i)).text(money(P.stone));
-		$tr.find("td.num").eq(3).html(`<b>${money(P.total)}</b>`);
+		$tr.find("td.num").eq(0)
+			.removeClass("qc-add qc-less").addClass(P.added > 0 ? "qc-add" : (P.added < 0 ? "qc-less" : ""))
+			.text(flt(i.weight_out) ? (P.added >= 0 ? "+" : "") + g3(P.added) : "—");
+		$tr.find("td.num").eq(1).attr("title", whyWork(i)).text(money(P.work));
+		$tr.find("td.num").eq(2).attr("title", whyMetal(i)).text(money(P.metal));
+		$tr.find("td.num").eq(3).attr("title", whyStone(i)).text(money(P.stone));
+		$tr.find("td.num").eq(4).html(`<b>${money(P.total)}</b>`);
 		paintTiles();
 	});
-	$body.on("change", ".c-item,.c-weight", () => { grow(); paint(); });
+	$body.on("change", ".c-item,.c-win,.c-wout", () => { grow(); paint(); });
 	$body.on("click", ".qc-x", function () {
 		S.rows.splice(cint($(this).closest("tr").data("i")), 1);
 		if (!S.rows.length) S.rows.push(blank());
@@ -413,7 +430,7 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 			items: S.rows.filter(filled).map((i) => Object.assign({}, i, priceRow(i))),
 			stone_lines: Object.keys(g).map((k) => Object.assign({}, g[k], { rate: flt(S.stoneRates[k]) })),
 			total_work: T.work, total_metal: T.metal, total_stone: T.stone,
-			total_manual: T.manual, total_add_gold: T.add,
+			total_manual: T.manual, total_added: T.add,
 			gst_amount: T.gst, grand_total: T.grand,
 		};
 	}
@@ -459,11 +476,48 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		onchange: () => { S.narration = S.noteCtl.get_value() || ""; },
 	});
 
+	// ---- today's board -------------------------------------------------------
+	// Which line is "our board rate" is the counter's call, not ours, so the
+	// board is shown as it is quoted and picking a line fills the box. The karat
+	// figures beside each line are derived, so they are labelled as such.
+	function pickBoard() {
+		frappe.dom.freeze(__("Reading the board…"));
+		frappe.call({ method: API + ".get_quick_check_board" })
+			.always(() => frappe.dom.unfreeze())
+			.then((r) => {
+				const lines = ((r.message || {}).lines || []);
+				const live = lines.filter((l) => flt(l.rate));
+				const d = new frappe.ui.Dialog({ title: __("Board rate"), size: "large" });
+				$(d.body).html(live.length ? `
+					<table class="qc-r"><thead><tr>
+						<th>${__("Board")}</th><th>${__("Line")}</th>
+						<th class="num">${__("Rate / g")}</th><th>${__("As of")}</th>
+					</tr></thead><tbody>${live.map((l, n) => `
+						<tr class="qc-bpick" data-n="${n}" style="cursor:pointer;">
+							<td><b>${esc(l.name || "")}</b><div style="font-size:11px;color:var(--text-muted);">${esc(l.of || "")}</div></td>
+							<td>${esc(l.label || "")}</td>
+							<td class="num"><b>${money(l.rate)}</b></td>
+							<td style="font-size:11px;color:var(--text-muted);">${esc(l.as_of || "")}</td></tr>`).join("")}
+					</tbody></table>`
+					: `<div class="qc-none">${__("The board is not answering just now.")}${
+						lines.length ? "<br>" + lines.map((l) => esc(`${l.name}: ${l.error || "—"}`)).join("<br>") : ""}</div>`);
+				$(d.body).on("click", ".qc-bpick", function () {
+					const l = live[cint($(this).data("n"))];
+					S.gold = flt(l.rate);
+					S.goldCtl.set_value(S.gold);
+					d.hide();
+					paint();
+				});
+				d.show();
+			});
+	}
+
 	page.set_primary_action(__("Print Quotation"), () => {
 		const q = quote();
 		if (!q.items.length) return frappe.msgprint(__("Nothing on the sheet yet."));
 		jewelima.printRepairQuote(q);
 	}, "printer");
+	page.add_inner_button(__("Board Rate"), pickBoard);
 	page.add_inner_button(__("Add Row"), () => { S.rows.push(blank()); paint(); });
 	page.add_inner_button(__("Clear"), () => {
 		frappe.confirm(__("Clear the sheet? Nothing here is saved."), () => {

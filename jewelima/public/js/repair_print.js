@@ -215,8 +215,10 @@ jewelima.printRepairQuote = function (q) {
 			? `<div class="muted">${esc(i.narration)}</div>` : ""}</td>
 		<td class="n">${cint(i.qty) || 1}</td>
 		<td class="n">${esc(i.karat || "—")}</td>
-		<td class="n">${flt(i.weight).toFixed(3)}</td>
-		<td class="n">${flt(i.add_gold) ? flt(i.add_gold).toFixed(3) : "—"}</td>
+		<td class="n">${flt(i.weight_in).toFixed(3)}</td>
+		<td class="n">${flt(i.weight_out) ? flt(i.weight_out).toFixed(3) : "—"}</td>
+		<td class="n">${flt(i.weight_out)
+			? (flt(i.added) >= 0 ? "+" : "") + flt(i.added).toFixed(3) : "—"}</td>
 		<td>${esc((i.work_types || []).map((w) => (cint((i.work_counts || {})[w]) > 1
 			? `${w} x${cint(i.work_counts[w])}` : w)).join(", ")) || "—"}</td>
 		<td class="n">${m(i.work)}</td>
@@ -238,8 +240,9 @@ jewelima.printRepairQuote = function (q) {
 				? " &nbsp;·&nbsp; " + esc(q.quoted_at) : ""}</div>
 		</div>
 		<table><thead><tr><th class="n"></th><th>${__("Item")}</th><th class="n">${__("Qty")}</th>
-			<th class="n">${__("Purity")}</th><th class="n">${__("Weight")}</th>
-			<th class="n">${__("Add Gold")}</th><th>${__("Type of Work")}</th>
+			<th class="n">${__("Purity")}</th><th class="n">${__("In Wt")}</th>
+			<th class="n">${__("Out Wt")}</th><th class="n">${__("Added")}</th>
+			<th>${__("Type of Work")}</th>
 			<th class="n">${__("Repair Charges")}</th><th class="n">${__("Metal")}</th>
 			<th class="n">${__("Stone")}</th><th class="n">${__("Manual")}</th>
 			<th class="n">${__("Amount")}</th></tr></thead><tbody>${rows}</tbody></table>
@@ -250,7 +253,8 @@ jewelima.printRepairQuote = function (q) {
 
 		<table class="tot">
 			<tr><td>${__("Repair Charges")}</td><td class="n">${m(q.total_work)}</td></tr>
-			<tr><td>${__("Metal")} <span class="muted">(${flt(q.total_add_gold).toFixed(3)} g)</span></td>
+			<tr><td>${__("Metal")} <span class="muted">(${flt(q.total_added) >= 0 ? "+" : ""}${
+				flt(q.total_added).toFixed(3)} g)</span></td>
 				<td class="n">${m(q.total_metal)}</td></tr>
 			<tr><td>${__("Stones")}</td><td class="n">${m(q.total_stone)}</td></tr>
 			${flt(q.total_manual) ? `<tr><td>${__("Manual")}</td>

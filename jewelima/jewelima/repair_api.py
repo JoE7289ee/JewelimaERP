@@ -1298,6 +1298,7 @@ def get_quick_check_context(party=None):
 			pluck="name", order_by="name"),
 		"work_types": frappe.get_all("Repair Work Type", filters={"active": 1},
 			pluck="name", order_by="name"),
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name"),
 		"sieves": get_repair_sieves(),
 		"karats": ["22", "18", "14", "9"],
 		"gold_rate": 0.0, "gst_percent": 0.0,
@@ -1320,3 +1321,30 @@ def get_quick_check_context(party=None):
 			seen[(st.bucket or "", st.sieve or "")] = flt(st.rate)
 	out["stone_rates"] = [{"bucket": b, "sieve": s, "rate": r} for (b, s), r in sorted(seen.items())]
 	return out
+
+
+@frappe.whitelist()
+def get_quick_check_board():
+	"""Today's board, for the Board Rate box on a quote.
+
+	The lines are read exactly as the Board Rate page reads them and handed over
+	as they are quoted — which line is 'our board rate' is a decision the counter
+	makes, not one to bake in here.
+
+	The board's own per-karat figures are deliberately NOT passed on. The board
+	derives them straight off fineness, while a bill takes the GST out first, so
+	the two disagree by 3% — and a picker quoting 18k at one figure next to a
+	quote charging another is how a total stops being believed. Only the
+	per-gram rate crosses over, which is the one the box actually holds."""
+	_guard()
+	from jewelima.jewelima.api import _board_rate_live
+
+	live = _board_rate_live()
+	out = []
+	for h in live.get("hero") or []:
+		out.append({
+			"name": h.get("name"), "of": h.get("of"), "label": h.get("label"),
+			"rate": h.get("rate"),
+			"as_of": h.get("as_of") or "", "error": h.get("error") or "",
+		})
+	return {"lines": out, "at": live.get("at")}

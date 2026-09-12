@@ -11836,6 +11836,16 @@ def get_board_rate_live():
 	else's problem: however many pages are open, upstream sees at most one call
 	per feed per TTL. A page nobody is looking at polls nothing at all."""
 	_require_costing()
+	return _board_rate_live()
+
+
+def _board_rate_live():
+	"""The live board, with no role check of its own.
+
+	Costing owns the board and guards it; the repair counter only wants today's
+	figure to quote gold at, and asking a repair clerk to hold a costing role for
+	that would be the wrong lock. So the reading is here and each caller brings
+	its own guard."""
 	rows = []
 	for f in BOARD_FEEDS:
 		if not f.get("live"):
