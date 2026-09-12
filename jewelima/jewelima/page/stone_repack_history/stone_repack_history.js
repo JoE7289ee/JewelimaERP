@@ -31,6 +31,7 @@ frappe.pages["stone-repack-history"].on_page_load = function (wrapper) {
 			color:var(--text-muted);border-bottom:1px solid var(--border-color);padding:8px;font-weight:700;}
 		table.rh-t td{padding:8px;border-bottom:1px solid var(--border-color);vertical-align:top;}
 		table.rh-t td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+		table.rh-t th.num{text-align:right;}
 		table.rh-t tr:hover td{background:var(--control-bg);}
 		.rh-sub{color:var(--text-muted);font-size:11.5px;}
 		.rh-st{font-weight:800;font-size:10.5px;padding:2px 9px;border-radius:9px;white-space:nowrap;}

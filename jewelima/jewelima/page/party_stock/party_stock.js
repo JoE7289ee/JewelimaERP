@@ -52,6 +52,7 @@ frappe.pages["party-stock"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);white-space:nowrap;}
 		table.ps-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
 		table.ps-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.ps-t th.num{text-align:right;}
 		table.ps-t tr:hover td{background:var(--control-bg);}
 		.ps-party{font-weight:700;color:#1f618d;cursor:pointer;}
 		.ps-sub{font-size:10.5px;color:var(--text-muted);}

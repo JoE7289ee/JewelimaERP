@@ -157,6 +157,7 @@ frappe.pages["repair-billing"].on_page_load = function (wrapper) {
 		table.rb-t td{padding:5px 10px;border-bottom:1px solid var(--border-color);vertical-align:middle;}
 		table.rb-t tr:last-child td{border-bottom:none;}
 		table.rb-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.rb-t th.num{text-align:right;}
 		table.rb-t input[type=number]{width:100%;box-sizing:border-box;border:1px solid var(--border-color);
 			border-radius:7px;padding:5px 9px;font-size:12.5px;text-align:right;
 			background:var(--fg-color);color:var(--text-color);font-variant-numeric:tabular-nums;}

@@ -30,6 +30,7 @@ frappe.pages["total-gold"].on_page_load = function (wrapper) {
 			padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
 		table.tg-t td{padding:7px 10px;border-bottom:1px solid var(--border-color);}
 		table.tg-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.tg-t th.num{text-align:right;}
 		table.tg-t tfoot td{border-top:2px solid var(--border-color);font-weight:800;}
 		.tg-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;vertical-align:-1px;}
 		.tg-none{padding:40px;text-align:center;color:var(--text-muted);}

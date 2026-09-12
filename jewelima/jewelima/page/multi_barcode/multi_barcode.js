@@ -74,6 +74,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		table.mb-t tbody tr:nth-child(even) td{background:rgba(128,128,128,.055);}
 		table.mb-t tr:last-child td{border-bottom:none;}
 		table.mb-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.mb-t th.num{text-align:right;}
 		.mb-x{color:#b02a2a;cursor:pointer;font-weight:800;}
 		.mb-warn{color:#b02a2a;font-size:10.5px;font-weight:800;}
 		.mb-none{padding:30px;text-align:center;color:var(--text-muted);}

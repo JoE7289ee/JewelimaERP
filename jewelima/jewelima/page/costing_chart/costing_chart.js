@@ -82,6 +82,7 @@ frappe.pages["costing-chart"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:6px 9px;border-bottom:1px solid var(--border-color);white-space:nowrap;}
 		table.cd-t td{padding:6px 9px;border-bottom:1px solid var(--border-color);}
 		table.cd-t td.num{text-align:right;}
+		table.cd-t th.num{text-align:right;}
 		.k-chip{display:inline-block;background:var(--control-bg);border:1px solid var(--border-color);
 			border-radius:7px;padding:0 7px;font-size:10.5px;font-weight:800;}
 		.cd-tools{display:flex;gap:8px;align-items:center;margin-bottom:10px;}

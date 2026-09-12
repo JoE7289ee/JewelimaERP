@@ -33,6 +33,7 @@ frappe.pages["stone-adjustment-history"].on_page_load = function (wrapper) {
 			color:var(--text-muted);border-bottom:1px solid var(--border-color);padding:8px;font-weight:700;}
 		table.ah-t td{padding:8px;border-bottom:1px solid var(--border-color);vertical-align:top;}
 		table.ah-t td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+		table.ah-t th.num{text-align:right;}
 		table.ah-t tr:hover td{background:var(--control-bg);}
 		.ah-sub{color:var(--text-muted);font-size:11.5px;}
 		.ah-neg{color:#b02a2a;} .ah-pos{color:#1d7a33;}

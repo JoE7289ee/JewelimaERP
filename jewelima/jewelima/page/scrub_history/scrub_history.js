@@ -42,6 +42,7 @@ frappe.pages["scrub-history"].on_page_load = function (wrapper) {
 			border-bottom:1px solid var(--border-color);white-space:nowrap;}
 		table.sh-t td{padding:7px 11px;border-bottom:1px solid var(--border-color);}
 		table.sh-t td.num{text-align:right;}
+		table.sh-t th.num{text-align:right;}
 		.wt{font-weight:700;color:#8C6A00;}
 		[data-theme="dark"] .wt{color:#B98D10;}
 		.sh-empty{padding:26px;text-align:center;color:var(--text-muted);font-size:13px;

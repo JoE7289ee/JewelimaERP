@@ -347,6 +347,7 @@ frappe.pages["certify"].on_page_load = function (wrapper) {
 				color:var(--text-muted);padding:7px 9px;border-bottom:1px solid var(--border-color);}
 			table.cp-t td{padding:5px 9px;border-bottom:1px solid var(--border-color);}
 			table.cp-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+			table.cp-t th.num{text-align:right;}
 			table.cp-t tr.on td{background:rgba(31,97,141,.09);}
 			table.cp-t tr.blocked td{opacity:.5;}
 			.cp-qual{font-size:10.5px;font-weight:700;border-radius:7px;padding:0 6px;

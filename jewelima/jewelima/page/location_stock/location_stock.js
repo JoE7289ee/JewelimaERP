@@ -37,6 +37,7 @@ frappe.pages["location-stock"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
 		table.ls-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
 		table.ls-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.ls-t th.num{text-align:right;}
 		.ls-kind{border-radius:9px;padding:1px 9px;font-size:10px;font-weight:800;white-space:nowrap;}
 		.ls-kind.Gold{background:#eef5fa;color:#1f618d;}
 		.ls-kind.Findings{background:#fdeee7;color:#a8431a;}

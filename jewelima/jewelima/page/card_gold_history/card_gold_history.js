@@ -28,6 +28,7 @@ frappe.pages["card-gold-history"].on_page_load = function (wrapper) {
 			color:var(--text-muted);border-bottom:1px solid var(--border-color);padding:8px;font-weight:700;}
 		table.gh-t td{padding:8px;border-bottom:1px solid var(--border-color);vertical-align:top;}
 		table.gh-t td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+		table.gh-t th.num{text-align:right;}
 		table.gh-t tr:hover td{background:var(--control-bg);}
 		.gh-add{color:#1d7a33;} .gh-red{color:#b02a2a;}
 		.gh-card{font-weight:700;cursor:pointer;}

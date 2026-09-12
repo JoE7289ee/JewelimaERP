@@ -116,6 +116,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		table.of-t tbody tr:last-child td{border-bottom:none;}
 		table.of-t tbody tr:hover td{background:var(--control-bg);}
 		table.of-t td.num{text-align:right;}
+		table.of-t th.num{text-align:right;}
 		table.of-t td[title]:not([title=""]){cursor:help;}
 		table.of-t input:not([type=checkbox]), table.of-t select{border:1px solid transparent;border-radius:5px;padding:2px 6px;
 			font-size:11.5px;background:var(--control-bg);color:var(--text-color);transition:border-color .12s,background .12s;}

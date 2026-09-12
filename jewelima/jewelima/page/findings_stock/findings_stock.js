@@ -23,6 +23,7 @@ frappe.pages["findings-stock"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
 		table.fs-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
 		table.fs-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.fs-t th.num{text-align:right;}
 		table.fs-t tr.grp td{background:var(--control-bg);font-weight:800;font-size:11px;
 			text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);}
 		.fs-zero{color:var(--text-muted);}

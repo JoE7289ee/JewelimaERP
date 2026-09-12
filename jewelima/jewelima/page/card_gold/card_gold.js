@@ -70,6 +70,7 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 			color:var(--text-muted);border-bottom:1px solid var(--border-color);padding:7px 8px;font-weight:700;}
 		table.cg-t td{padding:7px 8px;border-bottom:1px solid var(--border-color);}
 		table.cg-t td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+		table.cg-t th.num{text-align:right;}
 		.cg-add{color:#1d7a33;} .cg-red{color:#b02a2a;}
 		.cg-none{padding:26px;text-align:center;color:var(--text-muted);font-size:12.5px;}
 		.cg-empty{padding:44px;text-align:center;color:var(--text-muted);}

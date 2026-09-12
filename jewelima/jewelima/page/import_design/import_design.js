@@ -56,6 +56,7 @@ frappe.pages["import-design"].on_page_load = function (wrapper) {
 			border-bottom:1px solid var(--border-color);padding:7px;font-weight:700;white-space:nowrap;}
 		table.id-t td{padding:5px 7px;border-bottom:1px solid var(--border-color);vertical-align:top;}
 		table.id-t td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+		table.id-t th.num{text-align:right;}
 		table.id-t tr.sel td{background:#eaf2fa;}
 		table.id-t tr.bad td{background:#fdf9f1;}
 		table.id-t tr.have td{opacity:.62;}

@@ -56,6 +56,7 @@ frappe.pages["out-of-house"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
 		table.oh-t td{padding:7px 10px;border-bottom:1px solid var(--border-color);}
 		table.oh-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.oh-t th.num{text-align:right;}
 		table.oh-t tr:hover td{background:var(--control-bg);}
 		.oh-kind{display:inline-block;border-radius:9px;padding:1px 9px;font-size:10px;font-weight:800;color:#fff;}
 		.oh-kind.certification{background:#1f618d;} .oh-kind.hallmarking{background:#b35a00;}

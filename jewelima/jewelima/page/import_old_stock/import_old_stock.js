@@ -58,6 +58,7 @@ frappe.pages["import-old-stock"].on_page_load = function (wrapper) {
 			border-bottom:1px solid var(--border-color);padding:7px 7px;font-weight:700;white-space:nowrap;}
 		table.os-t td{padding:5px 7px;border-bottom:1px solid var(--border-color);white-space:nowrap;}
 		table.os-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.os-t th.num{text-align:right;}
 		table.os-t tr.sel td{background:#eaf2fa;}
 		table.os-t tr.bad td{background:#fdf9f1;}
 		.os-need{color:#b4690e;font-weight:700;font-size:11px;}

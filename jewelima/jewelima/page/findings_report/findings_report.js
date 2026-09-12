@@ -27,6 +27,7 @@ frappe.pages["findings-report"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
 		table.fr-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
 		table.fr-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.fr-t th.num{text-align:right;}
 		.fr-zero td{color:var(--text-muted);}
 		.fr-split{display:flex;gap:8px;margin-top:10px;}
 		.fr-split .p{flex:1;border-radius:8px;padding:8px 12px;background:var(--control-bg);}

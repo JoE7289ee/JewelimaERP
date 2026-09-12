@@ -60,6 +60,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 		table.hm-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
 		table.hm-t tbody tr:nth-child(even) td{background:rgba(128,128,128,.055);}
 		table.hm-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.hm-t th.num{text-align:right;}
 		.hm-x{color:#b02a2a;cursor:pointer;font-weight:800;}
 		.hm-none{padding:26px;text-align:center;color:var(--text-muted);font-size:13px;}
 		.hm-sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
@@ -307,6 +308,7 @@ frappe.pages["hallmark"].on_page_load = function (wrapper) {
 			table.hp-t td{padding:5px 9px;border-bottom:1px solid var(--border-color);}
 			table.hp-t tr.on td{background:rgba(31,97,141,.10);}
 			table.hp-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+			table.hp-t th.num{text-align:right;}
 			.hp-empty{padding:26px;text-align:center;color:var(--text-muted);}
 			</style>
 			<div class="hp-top">

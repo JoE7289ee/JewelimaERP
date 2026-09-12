@@ -38,6 +38,7 @@ frappe.pages["issue-findings"].on_page_load = function (wrapper) {
 		table.if-t tr:hover td{background:var(--control-bg);}
 		table.if-t tr.on td{background:#eef5fa;}
 		table.if-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.if-t th.num{text-align:right;}
 		.if-empty{color:var(--text-muted);}
 		.if-grp{font-size:10px;color:var(--text-muted);}
 		.if-msg{display:none;margin-top:10px;padding:8px 12px;border-radius:8px;font-size:13px;}

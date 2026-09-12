@@ -67,6 +67,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 		table.bk-tbl tbody tr.pick:hover td{background:rgba(31,97,141,.10);}
 		table.bk-tbl tbody tr.on td{background:rgba(31,97,141,.14);}
 		table.bk-tbl td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.bk-tbl th.num{text-align:right;}
 		tr.retired td{opacity:.55;}
 		.bk-nm{font-weight:800;letter-spacing:.02em;}
 		.bk-act{cursor:pointer;font-size:11px;font-weight:700;color:#1f618d;}

@@ -26,6 +26,7 @@ frappe.pages["findings-history"].on_page_load = function (wrapper) {
 			color:var(--text-muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--border-color);}
 		table.fh-t td{padding:6px 10px;border-bottom:1px solid var(--border-color);}
 		table.fh-t td.num{text-align:right;font-variant-numeric:tabular-nums;}
+		table.fh-t th.num{text-align:right;}
 		.fh-k{border-radius:9px;padding:1px 9px;font-size:10px;font-weight:800;}
 		.fh-k.Card{background:#eef5fa;color:#1f618d;}
 		.fh-k.Location{background:#f3eefa;color:#5b3d8f;}
