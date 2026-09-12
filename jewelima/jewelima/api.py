@@ -13873,6 +13873,25 @@ def _old_sale_rows(filedata):
 	return _old_sale_rows_billing(wb)
 
 
+# What the old software calls a thing, renamed to what we call it — applied AT
+# IMPORT, so the row carries our word from the moment it lands and the screen,
+# the sheet and the making rule can never disagree about what the piece is.
+#
+# This is NOT the same job as ITEM_ALIAS in price_old_sale. That one resolves
+# spellings (NOSPIN, CH BRACELET) while the row keeps the word the sheet used;
+# this one is the desk saying a thing is actually something else, so the word
+# itself changes and stays changed.
+OLD_ITEM_RENAME = {
+	"PIPE BANGLE": "BRACELET",
+}
+
+
+def _old_item_name(v):
+	"""The item as WE name it."""
+	t = " ".join(str(v or "").split()).upper()
+	return OLD_ITEM_RENAME.get(t, t)
+
+
 @frappe.whitelist()
 def parse_old_format_excel(filedata):
 	"""OLD FORMAT page: read the old software's QUOTATION excel (the 'Design'
@@ -13920,7 +13939,7 @@ def parse_old_format_excel(filedata):
 		g = lambda k: (r[C[k] - 1] if C.get(k) else None)
 		rows.append({
 			"sl": cint(g("sl")), "unique_id": str(uid), "huid": str(g("huid") or ""),
-			"item": str(g("item") or "").strip().upper(), "design": str(g("design") or ""),
+			"item": _old_item_name(g("item")), "design": str(g("design") or ""),
 			"gs": flt(g("gs")), "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
 			"dmd_pcs": cint(g("dmd_pcs")), "clarity": str(g("clarity") or ""),
 			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
@@ -15085,7 +15104,7 @@ def _old_sale_rows_billing(wb):
 		rows.append({
 			"sl": cint(g("sl")), "unique_id": str(uid).strip(),
 			"huid": " ".join(str(r[j - 1] or "").strip() for j in huid_cols if r[j - 1]),
-			"item": str(g("item") or "").strip().upper(), "design": "",
+			"item": _old_item_name(g("item")), "design": "",
 			"gs": gs, "ps_pcs": cint(g("ps_pcs")), "ps_ct": flt(g("ps_ct")),
 			"dmd_pcs": cint(g("dmd_pcs")), "clarity": tok,
 			"dmd_ct": flt(g("dmd_ct")), "stn_pcs": cint(g("stn_pcs")), "stn_ct": flt(g("stn_ct")),
