@@ -132,7 +132,11 @@ frappe.pages["repair-quick-check"].on_page_load = function (wrapper) {
 		[data-theme="dark"] .qc-tile.grand .v,[data-theme="dark"] .qc-tile.money .v{color:#8fc1e8;}
 
 		.qc-gridbox{overflow:auto;border:1px solid var(--border-color);border-radius:9px;margin-bottom:12px;}
-		table.qc-t{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;background:var(--fg-color);}
+		/* The sheet SCROLLS rather than squeezes. Without a floor the columns just
+		   compress: with the left menu open on a 1280 screen the Qty box came out
+		   27px wide and In Wt 48px, too narrow to read 5.000 back. */
+		table.qc-t{width:100%;min-width:1180px;border-collapse:separate;border-spacing:0;
+			font-size:12px;background:var(--fg-color);}
 		table.qc-t th{position:sticky;top:0;z-index:2;background:var(--control-bg,var(--fg-color));text-align:left;
 			font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);
 			border-bottom:1px solid var(--gray-400,#aeb6bf);padding:5px 6px;font-weight:700;white-space:nowrap;}
