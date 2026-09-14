@@ -60,7 +60,18 @@ body { font-family: Arial, Helvetica, sans-serif; color: #000;
 	border-bottom: 1.2px solid #000; padding: 0 0 2mm 1.5mm;
 	font-size: 12px; line-height: 1.45; }
 .card .hd b { font-weight: 700; }
-.card .hd .c3 { text-align: right; white-space: nowrap; }
+/* Every label used to be inline, so the values started wherever the label
+   happened to end and no two lines agreed. Each column is now a label/value
+   grid: the labels share a fixed track, so the values start on one line down
+   the whole card. */
+.card .hd .kv { display: grid; grid-template-columns: var(--lw, 15mm) 1fr;
+	column-gap: 1.5mm; align-items: baseline; }
+.card .hd .kv > b { font-weight: 700; }
+.card .hd .c3 { --lw: 11mm; white-space: nowrap; }
+/* the party: the store's own name first, its code under it — the code alone
+   told a bench nothing */
+.card .hd .party { font-weight: 700; }
+.card .hd .pcode { font-size: 10.5px; margin-bottom: 0.6mm; }
 /* The karat code used to sit up here as a headline badge, which said the same
    thing as the first line of the items table and ate the corner doing it. The
    table says it now — the metal row is bold, which is enough to find it. */
@@ -94,7 +105,13 @@ body { font-family: Arial, Helvetica, sans-serif; color: #000;
 .card .ft { display: grid; grid-template-columns: 50mm 1fr; gap: 4mm; align-items: end;
 	border-top: 1.2px solid #000; padding-top: 1.5mm; }
 .card .ft .bc svg { width: 46mm; height: 9mm; display: block; margin: 0; }
-.card .ft .num { font-size: 10.5px; font-weight: 700; letter-spacing: .5px; }
+/* The barcode carries a quiet zone inside its own viewBox, so the bars start a
+   little in from the left edge of the svg while the number underneath started
+   at the edge — the two never lined up. The number is indented by exactly that
+   same quiet zone, worked out per code because it is a share of a width that
+   depends on how long the code is. */
+.card .ft .num { font-size: 10.5px; font-weight: 700; letter-spacing: .5px;
+	padding-left: calc(46mm * var(--quiet, 0)); }
 .card .ft .rm { font-size: 10px; align-self: start; }
 `;
 
@@ -135,11 +152,27 @@ function pob_cardHTML(c) {
 	return `
 	<div class="card">
 		<div class="hd">
-			<div><b>D TYPE:</b> ${pob_esc(c.design_type)}<br><b>D NAME:</b> ${pob_esc(c.bank_no || c.design)}<br><b>D V:</b> ${pob_esc(c.design)}<br><b>D SIZE:</b> ${pob_esc(c.size || "NA")}</div>
-			<div>${pob_esc(c.customer)}${c.party_group ? `<br>${pob_esc(c.party_group)}` : ""}<br><b>ORD:</b> ${pob_esc(c.order_date)}<br><b>DUE:</b> ${pob_esc(c.due_date)}</div>
+			<div class="kv">
+				<span>D TYPE</span><b>${pob_esc(c.design_type)}</b>
+				<span>D NAME</span><b>${pob_esc(c.bank_no || c.design)}</b>
+				<span>D VARI</span><b>${pob_esc(c.design)}</b>
+				<span>D SIZE</span><b>${pob_esc(c.size || "NA")}</b>
+			</div>
+			<div>
+				<div class="party">${pob_esc(c.party_group || c.customer)}</div>
+				${c.party_group ? `<div class="pcode">${pob_esc(c.customer)}</div>` : ""}
+				<div class="kv">
+					<span>ORD</span><b>${pob_esc(c.order_date)}</b>
+					<span>DUE</span><b>${pob_esc(c.due_date)}</b>
+				</div>
+			</div>
 			<div class="c3">${purExtra.length
 				? `<div class="badges">${purExtra.map((x) => `<span class="pur2">${x}</span>`).join("")}</div>`
-				: ""}<b>${pob_esc(c.order_type)}</b><br><b>ORD:</b> ${pob_esc(c.job_order)}<br><b>QTY:</b> ${pob_esc(c.qty)}</div>
+				: ""}<div class="party">${pob_esc(c.order_type)}</div>
+				<div class="kv">
+					<span>ORD</span><b>${pob_esc(c.job_order)}</b>
+					<span>QTY</span><b>${pob_esc(c.qty)}</b>
+				</div></div>
 		</div>
 		<div class="md">
 			<div class="img">${c.image
@@ -151,7 +184,8 @@ function pob_cardHTML(c) {
 			</div>
 		</div>
 		<div class="ft">
-			<div class="bc">${pob_barcodeSVG(c.name)}<div class="num">${pob_esc(c.name)}</div></div>
+			<div class="bc">${(() => { const b = pob_barcode(c.name);
+				return `${b.svg}<div class="num" style="--quiet:${b.quiet};">${pob_esc(c.name)}</div>`; })()}</div>
 			<div class="rm"><b>Remarks:</b> ${pob_esc(c.narration)}</div>
 		</div>
 	</div>`;
@@ -172,7 +206,7 @@ const POB_C128 = [
 	"114131", "311141", "411131", "211412", "211214", "211232", "2331112",
 ];
 
-function pob_barcodeSVG(text, module = 1.0, height = 42) {
+function pob_barcode(text, module = 1.0, height = 42) {
 	text = String(text || "");
 	const codes = [104]; // Start B
 	for (let i = 0; i < text.length; i++) codes.push(text.charCodeAt(i) - 32);
@@ -191,7 +225,12 @@ function pob_barcodeSVG(text, module = 1.0, height = 42) {
 		x += w;
 	}
 	const total = x + quiet * module;
-	return `<svg viewBox="0 0 ${total} ${height}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${rects}</svg>`;
+	// the quiet zone as a SHARE of the whole svg, so whatever width the card
+	// draws it at, the number underneath can be indented to meet the first bar
+	return {
+		svg: `<svg viewBox="0 0 ${total} ${height}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">${rects}</svg>`,
+		quiet: total ? (quiet * module) / total : 0,
+	};
 }
 
 jewelima.printJobCards = printCards;
