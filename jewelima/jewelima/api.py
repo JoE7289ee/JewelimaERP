@@ -13781,28 +13781,6 @@ def _cad_store_image_generic(ref, doctype, name, fname=None):
 # confirmation excel for the party, and only THEN Sell (stock moves, bags Sold).
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
-def get_sales_records(q=None, limit=50):
-	"""Sales Records page — the ledger list, newest first."""
-	fields = ["name", "sale_date", "customer", "price_chart", "gold_rate", "grand_total", "status"]
-	if q:
-		rows = frappe.db.sql("""select name, sale_date, customer, price_chart, gold_rate,
-			grand_total, status from `tabProduct Sale`
-			where name like %(q)s or customer like %(q)s
-			order by sale_date desc, creation desc limit %(n)s""",
-			{"q": "%" + q + "%", "n": cint(limit) or 50}, as_dict=True)
-	else:
-		rows = frappe.get_all("Product Sale", fields=fields,
-			order_by="sale_date desc, creation desc", limit_page_length=cint(limit) or 50)
-	pieces = {}
-	if rows:
-		pieces = dict(frappe.db.sql("""select parent, count(*) from `tabProduct Sale Item`
-			where parent in %(p)s group by parent""", {"p": [r.name for r in rows]}))
-	for r in rows:
-		r["pieces"] = cint(pieces.get(r.name))
-	return {"rows": rows}
-
-
-@frappe.whitelist()
 def get_sale_record(sale):
 	"""One sale, floor language: when/to whom/what chart, the pieces with their
 	value split, and every manual override the prep recorded (chart price vs
@@ -20529,28 +20507,31 @@ def _decorate(rows):
 
 @frappe.whitelist()
 def get_sales_history(from_date=None, to_date=None, search=None, limit=400):
-	"""Every parcel that went out on a sale — the parcel side of Sales Records.
+	"""Every sale in a period — the one place a sale is read back.
 
-	Sales Records is the money: what each piece sold for and who overrode what.
-	This is the parcel: which one it was, in what format, how many pieces, sold
-	on which bill, and whether it has been cleared off the Prepare to Sell tiles.
-	Every sold parcel is listed whether or not it has been cleared, so a parcel
-	nobody got round to clearing is never missing from the history."""
+	It used to list only sales that came from a parcel, beside a separate Sales
+	Records page for the money; a sale made straight on Sell appeared on neither
+	list here. Now every sale is a line: when, to whom, the bill, what it came to,
+	how many pieces went off-chart, and — when it came from a parcel — which one,
+	in what format, and whether it has been cleared off the Prepare to Sell tiles.
+	Opening a line reads the sale itself through get_sale_record."""
 	_records_guard()
 	f, t = _period(from_date, to_date)
 	q = (search or "").strip()
-	cond = ["sp.status = 'Sold'", "ps.sale_date between %(f)s and %(t)s"]
+	cond = ["ps.sale_date between %(f)s and %(t)s"]
 	if q:
-		cond.append("(sp.name like %(q)s or sp.customer like %(q)s or sp.sale like %(q)s)")
+		cond.append("""(ps.name like %(q)s or ps.customer like %(q)s or sp.name like %(q)s
+			or exists (select 1 from `tabProduct Sale Item` qi where qi.parent = ps.name and qi.order_bag like %(q)s))""")
 	rows = frappe.db.sql("""
-		select sp.name, sp.customer, sp.price_chart, sp.gold_rate, sp.sale, sp.cleared,
-			sp.cleared_on, sp.cleared_by, sp.owner, sp.board_json,
-			ps.sale_date, ps.grand_total as sale_total,
-			(select count(*) from `tabSale Preparation Item` i where i.parent = sp.name) as pieces
-		from `tabSale Preparation` sp
-		join `tabProduct Sale` ps on ps.name = sp.sale
+		select ps.name as sale, ps.sale_date, ps.customer, ps.price_chart, ps.gold_rate,
+			ps.grand_total as sale_total, ps.owner as sold_by,
+			sp.name as parcel, sp.cleared, sp.cleared_on, sp.cleared_by, sp.board_json,
+			(select count(*) from `tabProduct Sale Item` i where i.parent = ps.name) as pieces,
+			(select count(*) from `tabProduct Sale Item` i where i.parent = ps.name and i.overridden = 1) as off_chart
+		from `tabProduct Sale` ps
+		left join `tabSale Preparation` sp on sp.sale = ps.name and sp.status = 'Sold'
 		where {0}
-		order by ps.sale_date desc, sp.modified desc
+		order by ps.sale_date desc, ps.creation desc
 		limit {1}""".format(" and ".join(cond), cint(limit) or 400),
 		{"f": f, "t": t, "q": "%" + q + "%"}, as_dict=True)
 	for r in rows:
@@ -20558,16 +20539,18 @@ def get_sales_history(from_date=None, to_date=None, search=None, limit=400):
 			board = json.loads(r.pop("board_json") or "{}")
 		except Exception:
 			board = {}
-		r["fmt"] = board.get("fmt") or ("—" if board.get("source") != "prepare" else "DEFAULT")
-		r["source"] = "prepare" if board.get("source") == "prepare" else "sell"
-		r["made_by"] = frappe.utils.get_fullname(r["owner"])
+		r["source"] = "prepare" if board.get("source") == "prepare" else ("sell-board" if r["parcel"] else "sell")
+		r["fmt"] = (board.get("fmt") or "DEFAULT") if r["source"] == "prepare" else ""
+		r["sold_by_name"] = frappe.utils.get_fullname(r["sold_by"])
 		r["cleared_by_name"] = frappe.utils.get_fullname(r["cleared_by"]) if r.get("cleared_by") else ""
 		r["sale_date"] = str(r["sale_date"] or "")
 		r["cleared_on"] = str(r["cleared_on"] or "")
+		r["cleared"] = cint(r["cleared"])
 	return {"rows": rows, "from_date": f, "to_date": t,
-		"totals": {"parcels": len(rows), "pieces": sum(cint(r["pieces"]) for r in rows),
+		"totals": {"sales": len(rows), "pieces": sum(cint(r["pieces"]) for r in rows),
 			"value": round(sum(flt(r["sale_total"]) for r in rows), 2),
-			"on_tiles": len([r for r in rows if not cint(r["cleared"])])}}
+			"off_chart": sum(cint(r["off_chart"]) for r in rows),
+			"on_tiles": len([r for r in rows if r["parcel"] and not r["cleared"]])}}
 
 
 @frappe.whitelist()

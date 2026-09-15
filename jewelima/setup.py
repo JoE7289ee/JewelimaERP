@@ -316,10 +316,10 @@ JEWELIMA_DELIVERY_PAGES = [
 	# combined "what is out" view instead of one half of the pair
 	"out-of-house",
 	# Sales — price and park it; closing the sale belongs to someone else.
-	# sales-records and price-charts are VIEW ONLY: the records page only ever
-	# reads, and save_price_chart refuses this role, so the chart can be looked
-	# up when pricing a bill without being edited.
-	"sell", "prepare-sale", "sales-records", "price-charts",
+	# price-charts is VIEW ONLY: save_price_chart refuses this role, so the chart
+	# can be looked up when pricing a bill without being edited. A sale is read
+	# back on Sales History, under Delivery Records.
+	"sell", "prepare-sale", "price-charts",
 ]
 # read is all the desk needs: every action runs through a page API that writes
 # with ignore_permissions
@@ -521,6 +521,9 @@ RETIRED_PAGES = ["ws-wax-cleaning", "design-transfer",
 	# the approvals folded back into Repack Stock (2026-09-10); the record they
 	# leave behind reads on Stone Repack History
 	"repack-requests",
+	# folded into Sales History (2026-09-15): every sale, with or without a
+	# parcel, opens there with its pieces and the price snapshot
+	"sales-records",
 ]
 
 

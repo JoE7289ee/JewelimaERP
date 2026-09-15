@@ -395,7 +395,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		if ($c.data("status") === "Sold") {
 			// the money side of a sold parcel is its sale
 			frappe.route_options = { sale: $c.data("sale") };
-			return frappe.set_route("sales-records");
+			return frappe.set_route("sales-history");
 		}
 		if ($c.data("src") !== "prepare") {
 			frappe.route_options = { prep: nm };
