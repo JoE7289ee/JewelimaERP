@@ -323,11 +323,6 @@ const S = { ctx: null, fmt: "JOS", rows: [], parked: [], sorted: false, prep: nu
 
 	// ---- saving -----------------------------------------------------------------
 	function saveParcel() {
-		if (!S.rows.length) { frappe.msgprint(__("Scan some pieces first.")); return; }
-		if (!S.chartCtl.get_value()) {
-			frappe.msgprint(__("Pick the price chart before saving — a prep is kept priced."));
-			return;
-		}
 		frappe.call({
 			method: API + ".save_parcel",
 			args: { payload: JSON.stringify({

@@ -16570,11 +16570,9 @@ def save_parcel(payload):
 	open parcel again updates it rather than parking a second copy."""
 	frappe.only_for(("System Manager", "JW Manager", "JW Delivery"))
 	p = frappe.parse_json(payload)
+	# nothing is required: a parcel can be saved half-built — no buyer, no chart,
+	# no pieces yet — and finished later
 	rows = p.get("rows") or []
-	if not rows:
-		frappe.throw(frappe._("Scan at least one piece before saving."))
-	if not p.get("price_chart"):
-		frappe.throw(frappe._("Pick the price chart before saving — a prep is kept priced."))
 
 	items, grand = [], 0.0
 	for r in rows:

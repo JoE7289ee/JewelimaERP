@@ -34,8 +34,7 @@
    "fieldname": "price_chart",
    "fieldtype": "Link",
    "label": "Price Chart",
-   "options": "Price Chart",
-   "reqd": 1
+   "options": "Price Chart"
   },
   {
    "fieldname": "gold_rate",
