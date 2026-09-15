@@ -25390,7 +25390,7 @@ SALE_PREP_FORMATS = {
 			 "note": "what was ordered — no money on it",
 			 "cols": ["sl", "item", "size", "style", "colour", "item_color", "pcs1",
 				"gross", "net", "dmd_pcs", "dmd_ct"]},
-			{"key": "ratecut", "label": "Rate cut", "kind": "jos",
+			{"key": "ratecut", "label": "Delivery Bill", "kind": "jos",
 			 "note": "the billing sheet in full — gold, making, chain, diamonds, total"},
 			{"key": "delivery", "label": "Delivery", "kind": "plain",
 			 "note": "what travels with the parcel — weights and HUIDs, no money",
@@ -25407,7 +25407,7 @@ SALE_PREP_FORMATS = {
 			 "cols": ["sl", "uid", "item", "design", "size", "colour", "pcs1", "gross",
 				"net", "dmd_pcs", "dmd_ct", "ps_ct", "stn_ct", "huid"], "sign": 1},
 			{"key": "ratecut", "label": "Billing sheet", "kind": "jos",
-			 "note": "the full billing sheet, the same one JOS takes as its rate cut"},
+			 "note": "the full billing sheet, the same one JOS takes as its Delivery Bill"},
 		],
 	},
 }

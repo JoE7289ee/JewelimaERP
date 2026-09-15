@@ -101,6 +101,11 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			padding:11px 15px;min-width:190px;cursor:pointer;transition:box-shadow .12s;}
 		.ps-doc:hover{box-shadow:0 3px 12px rgba(0,0,0,.12);border-color:var(--primary);}
 		.ps-doc .l{font-weight:800;font-size:13px;}
+		.ps-doc.off{border-color:#e6b3b3;background:#fbeaea;cursor:not-allowed;}
+		.ps-doc.off:hover{box-shadow:none;border-color:#e6b3b3;}
+		.ps-doc.off .l{color:#b00020;}
+		[data-theme="dark"] .ps-doc.off{background:rgba(176,0,32,.14);border-color:rgba(176,0,32,.5);}
+		[data-theme="dark"] .ps-doc.off .l{color:#f08a9a;}
 		.ps-doc .n{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
 		.ps-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
 			padding:13px 16px;margin-bottom:14px;}
@@ -217,11 +222,15 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	function paintDocs() {
 		const spec = fmtSpec();
 		root.find(".ps-sort").toggle(!!spec.sortable);
-		root.find(".ps-docs").html((spec.docs || []).map((d) => `
-			<div class="ps-doc" data-d="${esc(d.key)}">
+		// a bill is priced off the chart: without one its button is red and dead
+		const noChart = !(S.chartCtl && S.chartCtl.get_value());
+		root.find(".ps-docs").html((spec.docs || []).map((d) => {
+			const off = d.key === "ratecut" && noChart;
+			return `
+			<div class="ps-doc${off ? " off" : ""}" data-d="${esc(d.key)}">
 				<div class="l">${esc(d.label)}</div>
-				<div class="n">${esc(d.note || "")}</div>
-			</div>`).join("") || `<div class="ps-empty">${__("This format produces nothing yet.")}</div>`);
+				<div class="n">${off ? __("Pick a price chart to download") : esc(d.note || "")}</div>
+			</div>`; }).join("") || `<div class="ps-empty">${__("This format produces nothing yet.")}</div>`);
 	}
 
 	// The desk draws this page's header itself, so page.set_indicator never shows —
@@ -253,7 +262,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	}
 
 	// The diamond quality is read off the pieces. Usually one; when a parcel mixes
-	// them every one is shown, with how many pieces carry it. The rate cut sheet
+	// them every one is shown, with how many pieces carry it. The Delivery Bill
 	// picks its diamond columns by a single quality, so it takes the one most
 	// pieces carry — and says so.
 	function qualities() {
@@ -542,11 +551,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	// ---- the papers ----------------------------------------------------------
 	root.on("click", ".ps-doc", function () {
 		if (!S.rows.length) return frappe.msgprint(__("Scan some pieces first."));
-		// a billing sheet is priced off the chart; the download opens in a new tab,
-		// where a refusal would only show as Not Found, so it is caught here
-		if ($(this).data("d") === "ratecut" && !S.chartCtl.get_value()) {
-			return frappe.msgprint(__("Pick a price chart first — the {0} is priced off it.", [((fmtSpec().docs || []).find((x) => x.key === "ratecut") || {}).label || __("Rate cut")]));
-		}
+		if ($(this).hasClass("off")) return;
 		const payload = {
 			customer: S.custCtl.get_value() || "", price_chart: S.chartCtl.get_value() || "",
 			gold_rate: flt(S.rateCtl.get_value()), quality: mainQuality(),
@@ -851,7 +856,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	S.fmtCtl = mk(".h-fmt", { fieldtype: "Select", label: __("Format"), fieldname: "fmt", options: [],
 		onchange: () => { S.fmt = S.fmtCtl.get_value() || "DEFAULT"; if (!S.loading && S.rows.length) S.dirty = true; paint(); } });
 	S.chartCtl = mk(".h-chart", { fieldtype: "Link", label: __("Price chart"), fieldname: "price_chart",
-		options: "Price Chart", onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
+		options: "Price Chart", onchange: () => { paintDocs(); if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 	S.rateCtl = mk(".h-rate", { fieldtype: "Currency", label: __("Gold rate / g"), fieldname: "gold_rate",
 		onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 
