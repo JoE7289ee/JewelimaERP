@@ -15915,18 +15915,37 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	# only a lot that actually carries a shape is broken by shape; without one
 	# the sheet comes out exactly as it always has
 	by_shape = any(str(p.get("colour") or "").strip() for p in priced)
-	for _item, ig in groupby(priced, key=lambda p: (p.get("item") or "")):
-		irun = list(ig)
-		if not by_shape:
-			gross_terms.extend(("cell", n) for n in runs(irun))
-			continue
-		for _shape, srun in groupby(irun, key=lambda p: str(p.get("colour") or "").strip()):
-			bands = runs(list(srun))
+
+	def items_of(run):
+		"""item -> shape -> bands over one run; returns its band-total rows."""
+		made = []
+		for _item, ig in groupby(run, key=lambda p: (p.get("item") or "")):
+			irun = list(ig)
+			if not by_shape:
+				made.extend(runs(irun))
+				continue
+			for _shape, srun in groupby(irun, key=lambda p: str(p.get("colour") or "").strip()):
+				bands = runs(list(srun))
+				made.extend(bands)
+				# one band is already its own total — a second row printing the same
+				# figure again would be noise, not a block
+				if len(bands) > 1:
+					sum_row("", cells(bands), font=bold)
+		return made
+
+	# A lot sorted by SHOP closes each shop with its own total, and this one IS
+	# labelled — the shop's name — since it is what a branch checks its share
+	# against. Like the shape total it sums the shop's band rows and stays out of
+	# gross_terms, so TOTAL GROSS never counts a shop twice. One shop in the lot
+	# is already TOTAL GROSS, so it gets no line of its own.
+	shop_key = lambda p: str(p.get("shop") or "").strip().upper()
+	if len({shop_key(p) for p in priced}) > 1:
+		for shop, shrun in groupby(priced, key=shop_key):
+			bands = items_of(list(shrun))
 			gross_terms.extend(("cell", n) for n in bands)
-			# one band is already its own total — a second row printing the same
-			# figure again would be noise, not a block
-			if len(bands) > 1:
-				sum_row("", cells(bands), font=bold)
+			sum_row("{0} TOTAL".format(shop or "NO SHOP"), cells(bands), font=bold)
+	else:
+		gross_terms.extend(("cell", n) for n in items_of(priced))
 
 	last = r - 1
 	for rr in range(r0, last + 1):
