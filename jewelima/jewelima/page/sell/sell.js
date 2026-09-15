@@ -685,7 +685,11 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 
 	page.add_inner_button(__("Prepared"), () => frappe.set_route("prepare-sale"));
 	page.add_inner_button(__("Scan History"), showHistory);
-	if (frappe.route_options && frappe.route_options.prep) {
+	// A parcel arrives through route_options. Read on every show, not only the
+	// first load: Frappe keeps a page alive, so a second Send to Sell in the same
+	// session used to land on the old page and never open.
+	function restorePrep() {
+		if (!(frappe.route_options && frappe.route_options.prep)) return;
 		const nm = frappe.route_options.prep;
 		frappe.route_options = null;
 		frappe.call({ method: API + ".get_sale_prep_board", args: { name: nm } }).then((r) => {
@@ -700,13 +704,22 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			HOLD = 1;
 			const chartChange = chart.df.onchange;
 			chart.df.onchange = null;
-			Promise.all([
-				m.customer ? buyer.set_value(m.customer) : null,
-				m.price_chart ? chart.set_value(m.price_chart) : null,
-				m.gold_rate ? rate.set_value(m.gold_rate) : null,
-				m.remarks ? remarks.set_value(m.remarks) : null,
-			]).then(() => {
+			// The chart box only offers Active charts, and v16 validates a value set
+			// by code against that same filter — so a parcel saved on a chart that
+			// has since been superseded came back with the box EMPTY. The filter is
+			// lifted while the saved chart goes in; useCurrentChart below then moves
+			// a superseded one to its current version and warns on anything inactive.
+			const chartQuery = chart.df.get_query;
+			chart.df.get_query = null;
+			// one after another, so each value is in before the next goes in
+			Promise.resolve()
+				.then(() => buyer.set_value(m.customer || ""))
+				.then(() => chart.set_value(m.price_chart || ""))
+				.then(() => rate.set_value(flt(m.gold_rate) || ""))
+				.then(() => remarks.set_value(m.remarks || ""))
+				.then(() => {
 				chart.df.onchange = chartChange;
+				chart.df.get_query = chartQuery;
 				if (board.source === "prepare") {
 					// a PARCEL from Prepare to Sell carries paper rows, not board rows —
 					// price each piece here, by this page's own pricer, in scan order
@@ -737,6 +750,8 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			});
 		});
 	}
+	frappe.pages["sell"].on_page_show = restorePrep;
+	restorePrep();
 	paint();
 	focusScan();
 };

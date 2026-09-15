@@ -670,13 +670,17 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	function setHeader(h) {
 		S.loading = true;
 		S.fmt = h.fmt || firstFmt();
+		// the chart box offers Active charts only, and v16 checks a value set by
+		// code against that filter too — lifted while a saved chart goes back in,
+		// so a parcel on a since-superseded chart still opens with it
+		const q = S.chartCtl.df.get_query;
+		S.chartCtl.df.get_query = null;
 		return Promise.all([
 			S.custCtl.set_value(h.customer || ""),
 			S.chartCtl.set_value(h.price_chart || ""),
 			S.rateCtl.set_value(h.gold_rate || ""),
-
 			S.fmtCtl.set_value(S.fmt),
-		]).then(() => { S.loading = false; });
+		]).then(() => { S.chartCtl.df.get_query = q; S.loading = false; });
 	}
 	function lockHeader(on) {
 		[S.custCtl, S.chartCtl, S.rateCtl, S.fmtCtl].forEach((c) => {
@@ -856,7 +860,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	S.fmtCtl = mk(".h-fmt", { fieldtype: "Select", label: __("Format"), fieldname: "fmt", options: [],
 		onchange: () => { S.fmt = S.fmtCtl.get_value() || "DEFAULT"; if (!S.loading && S.rows.length) S.dirty = true; paint(); } });
 	S.chartCtl = mk(".h-chart", { fieldtype: "Link", label: __("Price chart"), fieldname: "price_chart",
-		options: "Price Chart", onchange: () => { paintDocs(); if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
+		options: "Price Chart", get_query: () => ({ filters: { status: "Active" } }), onchange: () => { paintDocs(); if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 	S.rateCtl = mk(".h-rate", { fieldtype: "Currency", label: __("Gold rate / g"), fieldname: "gold_rate",
 		onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 
