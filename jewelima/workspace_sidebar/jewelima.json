@@ -1872,6 +1872,18 @@
    "type": "Link"
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "file-spreadsheet",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Export Formats",
+   "link_to": "export-formats",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "drill",
@@ -2818,7 +2830,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-15 09:32:34.367037",
+ "modified": "2026-09-15 09:41:41.752832",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

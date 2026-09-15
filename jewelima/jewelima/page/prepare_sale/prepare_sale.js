@@ -46,6 +46,13 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		.ps-head .frappe-control{margin:0;}
 		.ps-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.ps-head .help-box,.ps-head .description{display:none !important;}
+		.h-qual .lbl{font-size:11px;color:var(--text-muted);margin:0 0 1px;}
+		.h-qual .val{min-height:26px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;font-size:12px;}
+		.h-qual .q{border:1px solid var(--border-color);background:var(--control-bg);border-radius:7px;
+			padding:1px 8px;font-weight:700;}
+		.h-qual .q .n{font-weight:400;color:var(--text-muted);margin-left:3px;}
+		.h-qual .hint{font-size:10.5px;color:#8a5a00;width:100%;}
+		[data-theme="dark"] .h-qual .hint{color:#e8a24a;}
 		.ps-scan{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
 		.ps-scan input.box{border:1px solid var(--primary);border-radius:9px;height:38px;width:270px;
 			padding:2px 12px;font-size:15px;font-weight:700;background:var(--fg-color);color:var(--text-color);}
@@ -135,6 +142,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		</div>
 		<div class="ps-scan">
 			<input class="box ps-box" placeholder="${__("Scan a bag no")}" autocomplete="off">
+			<button class="btn btn-sm btn-default ps-pick">${__("Add by filter…")}</button>
 			<button class="btn btn-sm btn-default ps-sort" style="display:none;">${__("Sort (JOS order)")}</button>
 			<span class="ps-state" style="display:none;"></span>
 			<span class="ps-msg"></span>
@@ -217,7 +225,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	// the saved state sits in the scan row instead, beside what is being built.
 	function paintState() {
 		const $st = root.find(".ps-state");
-		root.find(".ps-box").toggle(!S.locked);
+		root.find(".ps-box, .ps-pick").toggle(!S.locked);
 		root.find(".ps-sort").toggle(!S.locked && !!fmtSpec().sortable);
 		const out = S.out || [];
 		root.find(".ps-out").prop("hidden", !out.length).html(out.length
@@ -235,7 +243,29 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		}
 	}
 
-	function paint() { paintTiles(); paintRows(); paintDocs(); paintState(); }
+	// The diamond quality is read off the pieces. Usually one; when a parcel mixes
+	// them every one is shown, with how many pieces carry it. The rate cut sheet
+	// picks its diamond columns by a single quality, so it takes the one most
+	// pieces carry — and says so.
+	function qualities() {
+		const count = {};
+		S.rows.forEach((r) => (r.dmd_quality || "").split(",").map((x) => x.trim()).filter(Boolean)
+			.forEach((q) => { count[q] = (count[q] || 0) + 1; }));
+		return Object.keys(count).sort((a, b) => count[b] - count[a] || a.localeCompare(b))
+			.map((q) => ({ q, n: count[q] }));
+	}
+	const mainQuality = () => (qualities()[0] || {}).q || "";
+
+	function paintQuality() {
+		const qs = qualities();
+		root.find(".h-qual").html(`<div class="lbl">${__("Diamond quality")}</div>
+			<div class="val">${qs.length ? qs.map((x) => `<span class="q">${esc(x.q)}${qs.length > 1
+				? `<span class="n">${x.n}</span>` : ""}</span>`).join("")
+				: `<span style="color:var(--text-muted);">${S.rows.length ? __("no diamonds") : "—"}</span>`}
+				${qs.length > 1 ? `<span class="hint">${__("Mixed — the sheets use {0}", [esc(qs[0].q)])}</span>` : ""}</div>`);
+	}
+
+	function paint() { paintTiles(); paintRows(); paintDocs(); paintState(); paintQuality(); }
 
 	// ---- scanning ------------------------------------------------------------
 	function scan(code) {
@@ -296,6 +326,191 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		frappe.show_alert({ message: __("Item ladder → colour → below 1 g → weight."), indicator: "green" }, 5);
 	});
 
+	// ---- Add by filter ------------------------------------------------------------
+	// Scanning is right for a handful; a parcel is often a slice — "every RING
+	// held by JOS" — so this is the certification desk's picker. Pieces already on
+	// another open parcel are never offered, and every ticked piece still goes
+	// through the same checks a scan does.
+	function showPicker() {
+		if (S.locked) return;
+		const P = { bucket: "", design_type: "", karat: "", held_by: "", q: "",
+			rows: [], sel: new Set(), total: 0, hasMore: false, selOnly: false };
+		const PAGE = 60;
+		const onList = (n) => S.rows.some((r) => r.order_bag === n);
+
+		const dlg = new frappe.ui.Dialog({
+			title: __("Add pieces by filter"), size: "extra-large",
+			primary_action_label: __("Add to parcel"),
+			primary_action() {
+				if (!P.sel.size) { frappe.msgprint(__("Tick at least one piece.")); return; }
+				const picked = [...P.sel];
+				dlg.hide();
+				frappe.dom.freeze(__("Adding {0}…", [picked.length]));
+				frappe.call({ method: API + ".scan_sale_prep_many", freeze: false, args: {
+					barcodes: JSON.stringify(picked), price_chart: S.chartCtl.get_value() || null,
+					gold_rate: flt(S.rateCtl.get_value()), prep: S.prep || null,
+					existing: JSON.stringify(S.rows.map((r) => r.order_bag)),
+				} }).then((r) => {
+					const res = (r.message || {}).results || [];
+					const refused = [];
+					res.forEach((x) => { if (x.row) S.rows.push(x.row); else refused.push(`${x.code} ${x.rejected}`); });
+					const ok = res.length - refused.length;
+					if (ok) { S.sorted = false; S.dirty = true; }
+					paint();
+					say(refused.length ? __("{0} added, {1} refused: {2}", [ok, refused.length, refused.join("; ")])
+						: __("{0} added by filter.", [ok]), refused.length > 0);
+				}).always(() => frappe.dom.unfreeze());
+			},
+		});
+		const $b = $(dlg.body);
+		$b.html(`
+			<style>
+			.cp-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+			.cp-top select,.cp-q{border:1px solid var(--border-color);border-radius:7px;height:30px;
+				padding:2px 9px;font-size:12.5px;background:var(--control-bg);color:var(--text-color);}
+			.cp-q{width:200px;}
+			.cp-pill{border:1px solid var(--border-color);border-radius:11px;padding:2px 11px;
+				font-size:12.5px;cursor:pointer;color:var(--text-muted);}
+			.cp-pill.on{background:#1f618d;border-color:#1f618d;color:#fff;font-weight:700;}
+			.cp-count{margin-left:auto;font-size:12px;color:var(--text-muted);}
+			.cp-short{display:none;align-items:center;gap:10px;margin-bottom:9px;padding:7px 11px;
+				border:1px solid #b02a2a;border-left:4px solid #b02a2a;border-radius:7px;
+				background:rgba(176,42,42,.09);color:#b02a2a;font-size:12.5px;font-weight:700;}
+			[data-theme="dark"] .cp-short{color:#f0a0a0;background:rgba(176,42,42,.20);}
+			.cp-box{border:1px solid var(--border-color);border-radius:10px;overflow:auto;max-height:52vh;}
+			table.cp-t{width:100%;border-collapse:collapse;font-size:12.5px;}
+			table.cp-t th{position:sticky;top:0;z-index:1;background:var(--control-bg);text-align:left;font-size:10px;
+				text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:7px 9px;
+				border-bottom:1px solid var(--border-color);}
+			table.cp-t td{padding:5px 9px;border-bottom:1px solid var(--border-color);}
+			table.cp-t td.num,table.cp-t th.num{text-align:right;font-variant-numeric:tabular-nums;}
+			table.cp-t tr.on td{background:rgba(31,97,141,.09);}
+			table.cp-t tr.have td{opacity:.5;}
+			.cp-qual{font-size:10.5px;font-weight:700;border-radius:7px;padding:0 6px;
+				background:var(--control-bg);border:1px solid var(--border-color);}
+			.cp-empty{padding:26px;text-align:center;color:var(--text-muted);}
+			</style>
+			<div class="cp-top">
+				<select class="cp-f" data-f="bucket"><option value="">${__("— bucket —")}</option></select>
+				<select class="cp-f" data-f="design_type"><option value="">${__("— type —")}</option></select>
+				<select class="cp-f" data-f="karat"><option value="">${__("— karat —")}</option></select>
+				<select class="cp-f" data-f="held_by"><option value="">${__("— held by —")}</option></select>
+				<input type="text" class="cp-q" placeholder="${__("Search card / design / holder")}">
+				<span class="cp-pill cp-selonly">${__("Selected only")}</span>
+				<button class="btn btn-xs btn-default cp-reset">${__("Reset")}</button>
+				<button class="btn btn-xs btn-default cp-clear" style="display:none;">${__("Clear selection")}</button>
+				<span class="cp-count"></span>
+			</div>
+			<div class="cp-short"><span class="cp-short-t"></span>
+				<button class="btn btn-xs btn-danger cp-all">${__("Load all")}</button></div>
+			<div class="cp-box"><table class="cp-t">
+				<thead><tr><th style="width:32px;"><input type="checkbox" class="cp-head-cb"
+						title="${__("Select / clear all shown")}"></th>
+					<th>${__("Piece")}</th><th>${__("Design")}</th><th>${__("Type")}</th><th>${__("Quality")}</th>
+					<th>${__("Bucket")}</th><th>${__("Held by")}</th>
+					<th class="num">${__("Gross g")}</th><th class="num">${__("Nett g")}</th><th class="num">${__("DMD ct")}</th></tr></thead>
+				<tbody class="cp-body"></tbody></table></div>`);
+
+		const visible = () => (P.selOnly ? P.rows.filter((r) => P.sel.has(r.name)) : P.rows);
+
+		function paintP() {
+			const rows = visible();
+			$b.find(".cp-body").html(rows.length ? rows.map((r) => {
+				const have = onList(r.name);
+				return `<tr class="${P.sel.has(r.name) ? "on" : ""} ${have ? "have" : ""}">
+					<td><input type="checkbox" data-nm="${esc(r.name)}" ${P.sel.has(r.name) ? "checked" : ""}
+						${have ? `disabled title="${__("Already in this parcel")}"` : ""}></td>
+					<td><b>${esc(r.name)}</b></td><td>${esc(r.design || "")}</td>
+					<td>${esc(r.design_type || "")}</td>
+					<td>${r.quality ? `<span class="cp-qual">${esc(r.quality)}</span>` : "—"}</td>
+					<td>${esc(r.bucket || "")}</td><td>${esc(r.held_by || "")}</td>
+					<td class="num">${flt(r.gross).toFixed(3)}</td>
+					<td class="num">${flt(r.nett).toFixed(3)}</td>
+					<td class="num">${flt(r.dmd_ct).toFixed(3)}</td></tr>`;
+			}).join("") : `<tr><td colspan="10" class="cp-empty">${P.selOnly
+				? __("Nothing ticked yet.") : __("Nothing matches — or everything that does is already in a parcel.")}</td></tr>`);
+
+			const short = !P.selOnly && P.hasMore;
+			$b.find(".cp-short").css("display", short ? "flex" : "none");
+			if (short) {
+				$b.find(".cp-short-t").text(__("Showing {0} of {1} — {2} more match this filter.",
+					[P.rows.length, P.total, P.total - P.rows.length]));
+				$b.find(".cp-all").text(__("Load all {0}", [P.total]));
+			}
+			$b.find(".cp-count").text(__("{0} ticked · {1} shown · {2} available", [P.sel.size, rows.length, P.total]));
+			$b.find(".cp-clear").toggle(P.sel.size > 0).text(__("Clear selection ({0})", [P.sel.size]));
+			if (jewelima.shiftSelect) jewelima.shiftSelect($b, ".cp-body input");
+			$b.find(".cp-body input").on("change", function () {
+				this.checked ? P.sel.add(this.dataset.nm) : P.sel.delete(this.dataset.nm);
+				P.selOnly ? load() : paintP();
+			});
+			const pick = rows.filter((r) => !onList(r.name));
+			const hit = pick.filter((r) => P.sel.has(r.name)).length;
+			const h = $b.find(".cp-head-cb")[0];
+			if (h) { h.checked = pick.length > 0 && hit === pick.length; h.indeterminate = hit > 0 && hit < pick.length; }
+			dlg.get_primary_btn().text(P.sel.size ? __("Add {0} to parcel", [P.sel.size]) : __("Add to parcel"));
+		}
+
+		function load(more, all) {
+			if (jewelima.busy) jewelima.busy($b.find("table.cp-t"), true, all ? __("Loading all…") : __("Looking…"));
+			const args = P.selOnly
+				? { names: JSON.stringify([...P.sel]), limit: Math.max(P.sel.size, PAGE) }
+				: { bucket: P.bucket, design_type: P.design_type, karat: P.karat, held_by: P.held_by, search: P.q,
+					limit: all ? Math.max(P.total, PAGE) : PAGE, offset: all || !more ? 0 : P.rows.length };
+			args.prep = S.prep || null;
+			frappe.call({ method: API + ".get_sellable", freeze: false, args }).then((r) => {
+				const m = r.message || {};
+				P.rows = more && !all ? P.rows.concat(m.rows || []) : (m.rows || []);
+				P.total = m.total || 0;
+				P.hasMore = !!m.has_more;
+				paintP();
+			}).always(() => { if (jewelima.busy) jewelima.busy($b.find("table.cp-t"), false); });
+		}
+
+		$b.on("change", ".cp-f", function () { P[this.dataset.f] = this.value; load(); });
+		$b.on("input", ".cp-q", frappe.utils.debounce(function () { P.q = this.value || ""; load(); }, 300));
+		$b.on("click", ".cp-all", () => load(true, true));
+		$b.on("click", ".cp-selonly", function () {
+			P.selOnly = !P.selOnly;
+			$(this).toggleClass("on", P.selOnly);
+			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
+			$b.find(".cp-f").val(""); $b.find(".cp-q").val("");
+			load();
+		});
+		$b.on("click", ".cp-clear", function () {
+			P.sel.clear();
+			const was = P.selOnly;
+			P.selOnly = false;
+			$b.find(".cp-selonly").removeClass("on");
+			was ? load() : paintP();
+		});
+		$b.on("click", ".cp-reset", function () {
+			P.bucket = P.design_type = P.karat = P.held_by = P.q = "";
+			P.selOnly = false;
+			$b.find(".cp-f").val(""); $b.find(".cp-q").val("");
+			$b.find(".cp-selonly").removeClass("on");
+			load();
+		});
+		$b.on("change", ".cp-head-cb", function () {
+			const on = this.checked;
+			visible().filter((r) => !onList(r.name)).forEach((r) => (on ? P.sel.add(r.name) : P.sel.delete(r.name)));
+			P.selOnly ? load() : paintP();
+		});
+
+		frappe.call({ method: API + ".get_cert_filter_options" }).then((r) => {
+			const o = r.message || {};
+			const fill = (f, blank, list) => $b.find(`.cp-f[data-f="${f}"]`).html(
+				`<option value="">${blank}</option>` + (list || []).map((v) => `<option>${esc(v)}</option>`).join(""));
+			fill("bucket", __("— bucket —"), o.buckets);
+			fill("design_type", __("— type —"), o.design_types);
+			fill("karat", __("— karat —"), o.karats);
+			fill("held_by", __("— held by —"), o.holders);
+			load();
+		});
+		dlg.show();
+	}
+	root.on("click", ".ps-pick", showPicker);
+
 	/** Re-read every piece at the chart and rate now set. The parcel keeps its
 	 * order — only the money changes. */
 	function reprice() {
@@ -320,7 +535,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		if (!S.rows.length) return frappe.msgprint(__("Scan some pieces first."));
 		const payload = {
 			customer: S.custCtl.get_value() || "", price_chart: S.chartCtl.get_value() || "",
-			gold_rate: flt(S.rateCtl.get_value()), quality: S.qualCtl.get_value() || "",
+			gold_rate: flt(S.rateCtl.get_value()), quality: mainQuality(),
 			rows: S.rows.map((r, i) => Object.assign({}, r, { sl: i + 1 })),
 		};
 		open_url_post("/api/method/" + API + ".export_sale_prep_doc",
@@ -440,12 +655,12 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			S.custCtl.set_value(h.customer || ""),
 			S.chartCtl.set_value(h.price_chart || ""),
 			S.rateCtl.set_value(h.gold_rate || ""),
-			S.qualCtl.set_value(h.quality || ""),
+
 			S.fmtCtl.set_value(S.fmt),
 		]).then(() => { S.loading = false; });
 	}
 	function lockHeader(on) {
-		[S.custCtl, S.chartCtl, S.rateCtl, S.qualCtl, S.fmtCtl].forEach((c) => {
+		[S.custCtl, S.chartCtl, S.rateCtl, S.fmtCtl].forEach((c) => {
 			c.df.read_only = on ? 1 : 0;
 			c.refresh();
 		});
@@ -466,7 +681,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			args: { payload: JSON.stringify({
 				name: S.prep, fmt: S.fmt, sorted: S.sorted ? 1 : 0,
 				customer: S.custCtl.get_value() || "", price_chart: S.chartCtl.get_value() || "",
-				gold_rate: flt(S.rateCtl.get_value()), quality: S.qualCtl.get_value() || "",
+				gold_rate: flt(S.rateCtl.get_value()), quality: qualities().map((x) => x.q).join(", "),
 				rows: S.rows,
 			}) },
 		}).then((r) => {
@@ -576,8 +791,6 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		options: "Price Chart", onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 	S.rateCtl = mk(".h-rate", { fieldtype: "Currency", label: __("Gold rate / g"), fieldname: "gold_rate",
 		onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
-	S.qualCtl = mk(".h-qual", { fieldtype: "Data", label: __("Diamond quality"), fieldname: "quality",
-		onchange: () => { if (!S.loading && S.rows.length) { S.dirty = true; paint(); } } });
 
 	frappe.pages["prepare-sale"].on_page_show = () => { if (S.ctx) route(); };
 

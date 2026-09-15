@@ -16691,6 +16691,9 @@ def get_parcel(name):
 	if board.get("source") != "prepare":
 		frappe.throw(frappe._("{0} was parked from Sell — open it there.").format(name))
 	rows = board.get("rows") or []
+	for r in rows:
+		if r.get("order_bag") and "dmd_quality" not in r and frappe.db.exists("Order Bag", r["order_bag"]):
+			r["dmd_quality"] = ", ".join(_bag_diamond_qualities(r["order_bag"]))
 	bags = [r.get("order_bag") for r in rows if r.get("order_bag")]
 	# a parcel saved on Monday can hold a piece that went to hallmarking on
 	# Tuesday — say so the moment it is opened, and where each one is
@@ -25345,6 +25348,115 @@ def get_sale_prep_formats():
 	} for k, v in sorted(SALE_PREP_FORMATS.items(), key=lambda kv: (kv[0] != "DEFAULT", kv[0]))]}
 
 
+@frappe.whitelist()
+def get_sellable(prep=None, design_type=None, bucket=None, held_by=None, karat=None,
+		search=None, limit=60, offset=0, names=None):
+	"""Prepare to Sell's Add by filter: finished pieces In Stock that could go in
+	this parcel, narrowed the way the certification desk narrows — type, bucket,
+	holder, karat, or a search.
+
+	The filters run in SQL, because searching a loaded page would hide the piece
+	you know is there. A piece already on another open parcel is left out: a
+	piece belongs to one parcel, and offering it only to refuse it after is worse
+	than not offering it."""
+	_require_stock(("JW Delivery",))
+	cond = ["b.is_finished = 1", "b.stock_status = 'In Stock'"]
+	vals = {"prep": prep or ""}
+	if isinstance(names, str):
+		names = json.loads(names or "[]")
+	if names is not None:
+		names = [n for n in names if n]
+		if not names:
+			return {"rows": [], "count": 0, "total": 0, "offset": 0, "has_more": False}
+		cond.append("b.name IN %(names)s")
+		vals["names"] = names
+	if karat:
+		cond.append("""EXISTS (SELECT 1 FROM `tabBag Material Ledger` l
+			JOIN `tabItem` i ON i.name = l.item
+			WHERE l.order_bag = b.name AND l.entry_type = 'Convert' AND l.direction = 'Out'
+			  AND IFNULL(i.stone_type, '') = '' AND i.metal_purity = %(karat)s)""")
+		vals["karat"] = karat
+	if design_type:
+		cond.append("d.design_type = %(dt)s"); vals["dt"] = design_type
+	if bucket:
+		cond.append("b.bucket = %(bk)s"); vals["bk"] = bucket
+	if held_by:
+		cond.append("b.held_by = %(hb)s"); vals["hb"] = held_by
+	if search:
+		cond.append("(b.name LIKE %(q)s OR b.design LIKE %(q)s OR b.held_by LIKE %(q)s)")
+		vals["q"] = "%" + search + "%"
+	cond.append("""NOT EXISTS (SELECT 1 FROM `tabSale Preparation Item` pi
+		JOIN `tabSale Preparation` sp ON sp.name = pi.parent
+		WHERE pi.order_bag = b.name AND pi.parenttype = 'Sale Preparation'
+		  AND sp.status IN ('Draft', 'Sent') AND sp.name != %(prep)s)""")
+	W = " AND ".join(cond)
+	FROM = "FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design"
+	vals["lim"] = max(1, min(cint(limit) or 60, 500))
+	vals["off"] = max(0, cint(offset))
+	total = frappe.db.sql("SELECT COUNT(*) {0} WHERE {1}".format(FROM, W), vals)[0][0]
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, d.design_type, b.act_gross_weight AS gross,
+			b.act_nett_weight AS nett, b.act_dmd_weight AS dmd_ct, b.bucket, b.held_by, b.huid
+		{0}
+		WHERE {1}
+		ORDER BY d.design_type, b.design, b.name
+		LIMIT %(lim)s OFFSET %(off)s""".format(FROM, W), vals, as_dict=True)
+	for r in rows:
+		r["quality"] = ", ".join(_bag_diamond_qualities(r.name))
+	return {"rows": rows, "count": len(rows), "total": cint(total),
+		"offset": vals["off"], "has_more": vals["off"] + len(rows) < cint(total)}
+
+
+@frappe.whitelist()
+def scan_sale_prep_many(barcodes, price_chart=None, gold_rate=0, prep=None, existing=None):
+	"""Add by filter's hand-in: every ticked piece goes through the same checks a
+	scan does, one by one, and each comes back added or refused with the reason."""
+	_require_stock(("JW Delivery",))
+	codes = json.loads(barcodes) if isinstance(barcodes, str) else (barcodes or [])
+	have = set(json.loads(existing) if isinstance(existing, str) else (existing or []))
+	out = []
+	for code in codes:
+		nm = (code or "").strip()
+		if not nm:
+			continue
+		if nm in have:
+			out.append({"code": nm, "rejected": frappe._("already in this parcel")})
+			continue
+		try:
+			row = scan_sale_prep_piece(nm, price_chart, gold_rate, prep)
+		except Exception as e:
+			out.append({"code": nm, "rejected": str(e)[:140] or frappe._("could not be read")})
+			continue
+		if row.get("stock_status") != "In Stock":
+			out.append({"code": nm, "rejected": frappe._("is {0}, not In Stock").format(row.get("stock_status") or "?")})
+		elif row.get("prepped"):
+			out.append({"code": nm, "rejected": frappe._("already in parcel {0}").format(", ".join(row["prepped"]))})
+		else:
+			have.add(nm)
+			out.append({"code": nm, "row": row})
+	return {"results": out}
+
+
+@frappe.whitelist()
+def get_export_formats():
+	"""Delivery Settings > Export Formats: every format a parcel can be papered
+	in, each sheet it produces, and exactly which columns that sheet carries."""
+	col = lambda k: SALE_PREP_COLS[k][0] if k in SALE_PREP_COLS else k
+	out = []
+	for k, v in sorted(SALE_PREP_FORMATS.items(), key=lambda kv: (kv[0] != "DEFAULT", kv[0])):
+		docs = []
+		for d in v["docs"]:
+			docs.append({
+				"key": d["key"], "label": d["label"], "note": d.get("note", ""),
+				"kind": d["kind"],
+				"columns": [col(c) for c in d.get("cols", [])],
+				"money": d["kind"] == "jos",
+				"signed": cint(d.get("sign")),
+			})
+		out.append({"key": k, "label": v["label"], "sortable": cint(v.get("sortable")), "docs": docs})
+	return {"formats": out}
+
+
 # the gold colour a variant carries, off the end of its name: A13047A-18EF-Y
 _SALE_COLOUR = {"Y": "YELLOW", "W": "WHITE", "P": "ROSE"}
 
@@ -25388,6 +25500,9 @@ def scan_sale_prep_piece(barcode, price_chart=None, gold_rate=0, prep=None):
 		# on another open parcel? — found without pricing, so an unpriced scan is
 		# held to the same one-piece-one-parcel rule
 		"prepped": _open_preps_holding([nm], exclude=prep).get(nm, []),
+		# read off the diamonds actually in the piece, so the parcel's quality is
+		# fetched, not typed — and a piece carrying two qualities says both
+		"dmd_quality": ", ".join(_bag_diamond_qualities(nm)),
 	}
 	if piece:
 		row.update({
