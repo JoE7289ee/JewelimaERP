@@ -16555,6 +16555,25 @@ def get_prepared_boards():
 	return {"rows": rows}
 
 
+@frappe.whitelist()
+def discard_sale_prep(name):
+	"""Throw away a parked bill.
+
+	A prep is a working note, not a document of record — it holds no stock and
+	moves no money — so a mistaken one should be removable by whoever made it
+	rather than left on the board for ever. Only a prep still Draft or Sent can
+	go; once it has been SOLD it is the trail behind a real sale and stays."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery"))
+	if not frappe.db.exists("Sale Preparation", name):
+		frappe.throw(frappe._("{0} is not a prepared bill.").format(name or "?"))
+	status = frappe.db.get_value("Sale Preparation", name, "status")
+	if status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} — a prep that has been sold is the trail behind the sale and cannot be thrown away.").format(name, status))
+	frappe.delete_doc("Sale Preparation", name, force=True, ignore_permissions=True)
+	frappe.db.commit()
+	return {"deleted": name}
+
+
 def _inr(v):
 	"""Indian-grouped rupees for tooltip working lines: 12750 -> \u20b912,750."""
 	n = flt(v)

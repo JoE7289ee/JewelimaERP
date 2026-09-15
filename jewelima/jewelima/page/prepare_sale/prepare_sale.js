@@ -92,6 +92,10 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		.pp-cust{font-size:14px;font-weight:700;margin:2px 0 5px;}
 		.pp-meta{font-size:11.5px;color:var(--text-muted);line-height:1.6;}
 		.pp-total{font-size:17px;font-weight:800;color:#1d7a33;margin-top:5px;}
+		.pp-card{position:relative;}
+		.pp-x{position:absolute;top:7px;right:9px;border:none;background:none;color:var(--text-muted);
+			cursor:pointer;font-size:15px;line-height:1;padding:2px 5px;border-radius:6px;}
+		.pp-x:hover{color:#b02a2a;background:var(--control-bg);}
 		</style>
 		<div class="ps-head">
 			<div class="h-cust"></div><div class="h-fmt"></div><div class="h-chart"></div>
@@ -278,6 +282,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			const rows = (r.message || {}).rows || [];
 			root.find(".pp-grid").html(rows.length ? rows.map((p) => `
 				<div class="pp-card" data-name="${esc(p.name)}">
+					<button class="pp-x" title="${__("Throw this prep away")}">✕</button>
 					<div class="pp-name">${esc(p.name)} · ${esc(p.status)}</div>
 					<div class="pp-cust">${esc(p.customer || "—")}</div>
 					<div class="pp-meta">${p.pieces} ${__("piece(s)")} · ${esc(p.price_chart || __("no chart"))}<br>
@@ -290,6 +295,17 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	root.on("click", ".pp-card", function () {
 		frappe.route_options = { prep: $(this).data("name") };
 		frappe.set_route("sell");
+	});
+	root.on("click", ".pp-x", function (e) {
+		e.stopPropagation();          // the card itself opens the board
+		const nm = $(this).closest(".pp-card").data("name");
+		frappe.confirm(__("Throw away {0}? The pieces on it go back to being unspoken for.", [nm]), () => {
+			frappe.call({ method: API + ".discard_sale_prep", args: { name: nm } })
+				.then(() => {
+					frappe.show_alert({ message: __("{0} thrown away.", [nm]), indicator: "green" }, 4);
+					loadParked();
+				});
+		});
 	});
 
 	// ---- header --------------------------------------------------------------
