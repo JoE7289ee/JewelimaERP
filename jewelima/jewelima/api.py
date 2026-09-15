@@ -24984,3 +24984,244 @@ def resolve_import_stock_rows(filedata, format):
 			key=lambda x: x["design"]),
 		"ready": len([r for r in rows if not r["problems"]]),
 	}
+
+
+# ---------------------------------------------------------------------------
+# Prepare to Sell — the parcel, before it is a bill.
+#
+# A parcel is scanned together, travels together and is papered together, and
+# every buyer wants that paper differently: JOS takes three sheets at three
+# moments (the order, the rate cut, the delivery), the next buyer will want
+# something else. So the pieces are gathered here in the order they were
+# scanned — that order IS the parcel, and it is what the sheets are numbered by
+# — and the FORMAT decides what comes out.
+#
+# Adding a buyer's format is a block in SALE_PREP_FORMATS below: a name, and the
+# documents it produces. A document is either the full JOS billing sheet (which
+# already exists and is not rebuilt here) or a plain column list.
+# ---------------------------------------------------------------------------
+# Every column a plain sheet can carry: key -> (heading, how to read it off a row)
+SALE_PREP_COLS = {
+	"sl": ("Sl. No.", lambda p: cint(p.get("sl")) or None),
+	"uid": ("Bag No", lambda p: p.get("order_bag") or ""),
+	"item": ("Item Description", lambda p: p.get("item") or ""),
+	"design": ("Design", lambda p: p.get("design") or ""),
+	"size": ("Size", lambda p: p.get("size") or None),
+	"style": ("Style", lambda p: p.get("style") or None),
+	"colour": ("Colour", lambda p: p.get("colour") or None),
+	"item_color": ("Item Color", lambda p: p.get("item_color") or None),
+	"pcs1": ("No of Pcs", lambda p: 1),
+	"gross": ("Gross Qty (Gm)", lambda p: flt(p.get("gs_full") or p.get("gs")) or None),
+	"net": ("Net Qty (Gm)", lambda p: flt(p.get("nt_full") or p.get("nt")) or None),
+	"bcwt": ("Back chain wt", lambda p: flt(p.get("back_chain_wt")) or None),
+	"dmd_pcs": ("Dia Pcs", lambda p: cint(p.get("dmd_pcs")) or None),
+	"dmd_ct": ("Dia Cts", lambda p: flt(p.get("dmd_ct")) or None),
+	"ps_pcs": ("PS Pcs", lambda p: cint(p.get("ps_pcs")) or None),
+	"ps_ct": ("PS Cts", lambda p: flt(p.get("ps_ct")) or None),
+	"stn_pcs": ("CS Pcs", lambda p: cint(p.get("stn_pcs")) or None),
+	"stn_ct": ("CS Cts", lambda p: flt(p.get("stn_ct")) or None),
+	"huid": ("HUID", lambda p: p.get("huid") or None),
+	"cert": ("Cert", lambda p: p.get("cert") or None),
+	"remarks": ("Remarks", lambda p: p.get("remarks") or None),
+}
+# which of those columns get a column total on the foot row
+SALE_PREP_SUMCOLS = ("pcs1", "gross", "net", "bcwt", "dmd_pcs", "dmd_ct",
+	"ps_pcs", "ps_ct", "stn_pcs", "stn_ct")
+
+SALE_PREP_FORMATS = {
+	"JOS": {
+		"label": "JOS",
+		"sortable": 1,          # the agreed physical order — only JOS asks for it
+		"docs": [
+			{"key": "po", "label": "PO", "kind": "plain",
+			 "note": "what was ordered — no money on it",
+			 "cols": ["sl", "item", "size", "style", "colour", "item_color", "pcs1",
+				"gross", "net", "dmd_pcs", "dmd_ct"]},
+			{"key": "ratecut", "label": "Rate cut", "kind": "jos",
+			 "note": "the billing sheet in full — gold, making, chain, diamonds, total"},
+			{"key": "delivery", "label": "Delivery", "kind": "plain",
+			 "note": "what travels with the parcel — weights and HUIDs, no money",
+			 "cols": ["sl", "uid", "item", "size", "colour", "pcs1", "gross", "net",
+				"huid", "cert"], "sign": 1},
+		],
+	},
+	"DEFAULT": {
+		"label": "Default",
+		"sortable": 0,
+		"docs": [
+			{"key": "list", "label": "Parcel list", "kind": "plain",
+			 "note": "every piece in the parcel with its weights and stones",
+			 "cols": ["sl", "uid", "item", "design", "size", "colour", "pcs1", "gross",
+				"net", "dmd_pcs", "dmd_ct", "ps_ct", "stn_ct", "huid"], "sign": 1},
+			{"key": "ratecut", "label": "Billing sheet", "kind": "jos",
+			 "note": "the full billing sheet, the same one JOS takes as its rate cut"},
+		],
+	},
+}
+
+
+@frappe.whitelist()
+def get_sale_prep_formats():
+	"""The formats a parcel can be papered in, and what each one produces."""
+	return {"formats": [{
+		"key": k, "label": v["label"], "sortable": cint(v.get("sortable")),
+		"docs": [{"key": d["key"], "label": d["label"], "note": d.get("note", "")}
+			for d in v["docs"]],
+	} for k, v in sorted(SALE_PREP_FORMATS.items(), key=lambda kv: (kv[0] != "DEFAULT", kv[0]))]}
+
+
+# the gold colour a variant carries, off the end of its name: A13047A-18EF-Y
+_SALE_COLOUR = {"Y": "YELLOW", "W": "WHITE", "P": "ROSE"}
+
+
+def _prep_colour(design):
+	"""YELLOW / WHITE / ROSE off the variant's last segment, or blank."""
+	tail = (design or "").rsplit("-", 1)[-1].strip().upper()
+	return _SALE_COLOUR.get(tail, "")
+
+
+@frappe.whitelist()
+def scan_sale_prep_piece(barcode, price_chart=None, gold_rate=0):
+	"""One piece onto the parcel, priced exactly as the Sell board prices it.
+
+	get_sale_piece is the one pricer and is not duplicated here — this only adds
+	what the PAPER needs and the board does not: the size, the colour, the stone
+	counts, the certificate. The row comes back in the shape the JOS sheet reads,
+	so a parcel and an imported lot paper identically."""
+	nm = (barcode or "").strip()
+	piece = get_sale_piece(nm, price_chart, gold_rate) if price_chart else None
+	b = frappe.get_doc("Order Bag", nm)
+	design_type = ""
+	if b.design and frappe.db.exists("Design", b.design):
+		design_type = frappe.db.get_value("Design", b.design, "design_type") or ""
+	gs = flt(b.act_gross_weight)
+	nt = flt(b.act_nett_weight)
+	row = {
+		"order_bag": nm, "design": b.design or "", "item": design_type,
+		"size": b.size or "", "style": "",
+		"colour": _prep_colour(b.design), "item_color": "",
+		"gs": gs, "nt": nt,
+		"dmd_pcs": cint(b.act_dmd_no) + cint(b.act_pdmd_no),
+		"dmd_ct": round(flt(b.act_dmd_weight) + flt(b.act_pdmd_weight), 3),
+		"ps_pcs": cint(b.act_ps_no), "ps_ct": round(flt(b.act_ps_weight), 3),
+		"stn_pcs": cint(b.act_cs_no) + cint(b.act_cz_no) + cint(b.act_cvd_no) + cint(b.act_sw_no),
+		"stn_ct": round(flt(b.act_cs_weight) + flt(b.act_cz_weight)
+			+ flt(b.act_cvd_weight) + flt(b.act_sw_weight), 3),
+		"huid": b.huid or "", "cert": b.certifications or "",
+		"held_by": b.held_by or "", "stock_status": b.stock_status or "",
+		"back_chain_wt": 0.0, "remarks": "",
+	}
+	if piece:
+		row.update({
+			"gold_va": flt(piece.get("gold_value")), "mc": flt(piece.get("labour_value")),
+			"dmd_va": flt(piece.get("diamond_value")), "stn_va": flt(piece.get("stone_value")),
+			"ps_va": 0.0, "bc_mc": 0.0,
+			"huid_va": 0.0,
+			"charges_va": flt(piece.get("charges_value")),
+			"total": flt(piece.get("gold_value")) + flt(piece.get("labour_value"))
+				+ flt(piece.get("diamond_value")) + flt(piece.get("stone_value"))
+				+ flt(piece.get("charges_value")),
+			"components": piece.get("components") or {},
+			"prepped": piece.get("prepped") or [],
+		})
+	return row
+
+
+def _prep_plain_sheet(doc, rows, head):
+	"""A plain column sheet: a heading block, the columns the document asks for,
+	a total row for the ones worth totalling, and a place to sign if it travels."""
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Alignment, Border, Font, Side
+	from openpyxl.utils import get_column_letter
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = doc["label"][:31]
+	bold = Font(bold=True, size=11)
+	thin = Side(style="thin")
+	box = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+	ws["A1"] = head.get("title") or doc["label"]
+	ws["A1"].font = Font(bold=True, size=14)
+	ws["A2"] = "Party: {0}".format(head.get("customer") or "")
+	ws["A3"] = "Date: {0}".format(head.get("date") or "")
+	if head.get("gold_rate"):
+		ws["D3"] = "Gold rate: {0}".format(head["gold_rate"])
+	for c in ("A2", "A3", "D3"):
+		if ws[c].value:
+			ws[c].font = bold
+
+	cols = [k for k in doc["cols"] if k in SALE_PREP_COLS]
+	HR = 5
+	for i, k in enumerate(cols, start=1):
+		c = ws.cell(row=HR, column=i, value=SALE_PREP_COLS[k][0])
+		c.font = bold
+		c.border = box
+		c.alignment = Alignment(wrap_text=True, vertical="center")
+		ws.column_dimensions[get_column_letter(i)].width = max(len(SALE_PREP_COLS[k][0]) + 2, 11)
+
+	r = HR
+	for p in rows:
+		r += 1
+		for i, k in enumerate(cols, start=1):
+			cell = ws.cell(row=r, column=i, value=SALE_PREP_COLS[k][1](p))
+			cell.border = box
+
+	# the foot: a total under every column worth totalling
+	if rows:
+		r += 1
+		first = True
+		for i, k in enumerate(cols, start=1):
+			if k in SALE_PREP_SUMCOLS:
+				L = get_column_letter(i)
+				cell = ws.cell(row=r, column=i, value="=SUM({0}{1}:{0}{2})".format(L, HR + 1, r - 1))
+				cell.font = bold
+				cell.border = box
+			elif first:
+				cell = ws.cell(row=r, column=i, value="TOTAL")
+				cell.font = bold
+				cell.border = box
+				first = False
+	ws.freeze_panes = ws.cell(row=HR + 1, column=1)
+
+	if cint(doc.get("sign")):
+		r += 3
+		ws.cell(row=r, column=1, value="Handed over by").font = bold
+		ws.cell(row=r, column=max(3, len(cols) - 1), value="Received by").font = bold
+
+	buf = BytesIO()
+	wb.save(buf)
+	return buf.getvalue()
+
+
+@frappe.whitelist()
+def export_sale_prep_doc(payload, fmt, doc):
+	"""One of a format's documents, built from the parcel as it stands."""
+	p = frappe.parse_json(payload)
+	spec = SALE_PREP_FORMATS.get((fmt or "").upper())
+	if not spec:
+		frappe.throw(frappe._("{0} is not a sale format.").format(fmt or "?"))
+	d = next((x for x in spec["docs"] if x["key"] == doc), None)
+	if not d:
+		frappe.throw(frappe._("{0} has no document called {1}.").format(spec["label"], doc or "?"))
+	rows = p.get("rows") or []
+	if not rows:
+		frappe.throw(frappe._("Scan some pieces first."))
+	for i, r in enumerate(rows, 1):
+		r.setdefault("sl", i)
+
+	if d["kind"] == "jos":
+		# the billing sheet already exists and is not rebuilt here
+		return export_old_sale_jos(json.dumps(rows), p.get("price_chart"),
+			flt(p.get("gold_rate")), p.get("quality") or "",
+			karat_label=p.get("karat_label") or "18 KT", party=p.get("customer") or "",
+			filename="{0} {1}.xlsx".format(spec["label"], d["label"]))
+
+	head = {"title": "{0} — {1}".format(spec["label"], d["label"]),
+		"customer": p.get("customer") or "", "gold_rate": flt(p.get("gold_rate")) or "",
+		"date": frappe.utils.formatdate(frappe.utils.nowdate(), "dd-mm-yyyy")}
+	frappe.local.response.filename = "{0} {1}.xlsx".format(spec["label"], d["label"])
+	frappe.local.response.filecontent = _prep_plain_sheet(d, rows, head)
+	frappe.local.response.type = "download"

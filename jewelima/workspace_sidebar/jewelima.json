@@ -1829,7 +1829,7 @@
    "icon": "clipboard-check",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Prepare for Sale",
+   "label": "Prepare to Sell",
    "link_to": "prepare-sale",
    "link_type": "Page",
    "show_arrow": 0,
@@ -2818,7 +2818,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-12 09:48:38.918201",
+ "modified": "2026-09-15 05:51:35.794590",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",
