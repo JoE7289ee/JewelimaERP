@@ -16546,17 +16546,55 @@ def get_sale_prep_board(name):
 
 @frappe.whitelist()
 def get_prepared_boards():
-	"""The Prepare Sale page: every prep not yet sold/cancelled."""
-	rows = frappe.get_all("Sale Preparation", filters={"status": ["in", ["Draft", "Sent"]]},
+	"""The Prepare to Sell tiles: every prep still being worked on, and every
+	SOLD one nobody has cleared off the board yet.
+
+	A sold parcel stays on the tiles on purpose — it is the desk's proof that the
+	parcel went, until someone takes it off. Cleared ones live in Sales History.
+	Each tile also says how many of its pieces are no longer In Stock, because a
+	parcel saved on Monday can hold a piece that went to hallmarking on Tuesday,
+	and nothing else would tell the desk."""
+	rows = frappe.get_all("Sale Preparation",
+		filters=[["status", "in", ["Draft", "Sent", "Sold"]], ["cleared", "=", 0]],
 		fields=["name", "customer", "price_chart", "gold_rate", "grand_total", "status",
-			"modified", "owner"], order_by="modified desc")
+			"sale", "modified", "owner"], order_by="modified desc", limit_page_length=0)
 	for r in rows:
 		r["pieces"] = frappe.db.count("Sale Preparation Item", {"parent": r["name"]})
+		bj = frappe.db.get_value("Sale Preparation", r["name"], "board_json") or ""
+		try:
+			board = json.loads(bj) if bj else {}
+		except Exception:
+			board = {}
 		# a parcel saved on Prepare to Sell reopens THERE; a board parked from Sell
 		# reopens on Sell — each is restored by the page that knows its shape
-		bj = frappe.db.get_value("Sale Preparation", r["name"], "board_json") or ""
-		r["source"] = "prepare" if '"source": "prepare"' in bj else "sell"
+		r["source"] = "prepare" if board.get("source") == "prepare" else "sell"
+		r["fmt"] = board.get("fmt") or ""
+		r["owner_name"] = frappe.utils.get_fullname(r["owner"])
+		r["chart_name"] = frappe.db.get_value("Price Chart", r["price_chart"], "chart_name") if r.get("price_chart") else ""
+		if r["status"] == "Sold":
+			r["sold_on"] = str(frappe.db.get_value("Product Sale", r["sale"], "sale_date") or "") if r.get("sale") else ""
+			r["gone"] = 0
+		else:
+			bags = frappe.get_all("Sale Preparation Item", filters={"parent": r["name"]}, pluck="order_bag")
+			r["gone"] = frappe.db.count("Order Bag", {"name": ["in", bags or ["-"]],
+				"stock_status": ["!=", "In Stock"]}) if bags else 0
 	return {"rows": rows}
+
+
+@frappe.whitelist()
+def clear_sold_prep(name):
+	"""Take a sold parcel off the Prepare to Sell tiles. It is not deleted — it is
+	the parcel side of a real sale — it moves to Sales History."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager"))
+	if not frappe.db.exists("Sale Preparation", name):
+		frappe.throw(frappe._("{0} is not a prepared bill.").format(name or "?"))
+	status = frappe.db.get_value("Sale Preparation", name, "status")
+	if status != "Sold":
+		frappe.throw(frappe._("{0} is {1} — only a sold parcel can be cleared. Throw it away instead if it will not be sold.").format(name, status))
+	frappe.db.set_value("Sale Preparation", name, {"cleared": 1,
+		"cleared_on": frappe.utils.now_datetime(), "cleared_by": frappe.session.user})
+	frappe.db.commit()
+	return {"cleared": name}
 
 
 @frappe.whitelist()
@@ -17184,7 +17222,13 @@ def create_product_sale(payload):
 			continue
 		keep = [it for it in d2.items if it.order_bag not in sold]
 		if not keep:
-			frappe.delete_doc("Sale Preparation", prep_nm, force=True, ignore_permissions=True)
+			# every piece on it has just gone on ANOTHER bill. It used to be deleted,
+			# which erased a parcel the desk had built and could not account for.
+			# It is cancelled instead, with the sale that took its pieces.
+			d2.status = "Cancelled"
+			d2.remarks = ((d2.remarks or "") + "\n" if d2.remarks else "") + frappe._(
+				"Cancelled: all its pieces were sold on {0}.").format(sale.name)
+			d2.save(ignore_permissions=True)
 			continue
 		d2.set("items", keep)
 		d2.grand_total = round(sum(flt(it.piece_total) for it in keep), 2)
@@ -20366,6 +20410,49 @@ def _decorate(rows):
 		r["transfer_time"] = str(r.get("transfer_time") or "")
 		r["by_label"] = _user_label(r.get("transferred_by"))
 	return rows
+
+
+@frappe.whitelist()
+def get_sales_history(from_date=None, to_date=None, search=None, limit=400):
+	"""Every parcel that went out on a sale — the parcel side of Sales Records.
+
+	Sales Records is the money: what each piece sold for and who overrode what.
+	This is the parcel: which one it was, in what format, how many pieces, sold
+	on which bill, and whether it has been cleared off the Prepare to Sell tiles.
+	Every sold parcel is listed whether or not it has been cleared, so a parcel
+	nobody got round to clearing is never missing from the history."""
+	_records_guard()
+	f, t = _period(from_date, to_date)
+	q = (search or "").strip()
+	cond = ["sp.status = 'Sold'", "ps.sale_date between %(f)s and %(t)s"]
+	if q:
+		cond.append("(sp.name like %(q)s or sp.customer like %(q)s or sp.sale like %(q)s)")
+	rows = frappe.db.sql("""
+		select sp.name, sp.customer, sp.price_chart, sp.gold_rate, sp.sale, sp.cleared,
+			sp.cleared_on, sp.cleared_by, sp.owner, sp.board_json,
+			ps.sale_date, ps.grand_total as sale_total,
+			(select count(*) from `tabSale Preparation Item` i where i.parent = sp.name) as pieces
+		from `tabSale Preparation` sp
+		join `tabProduct Sale` ps on ps.name = sp.sale
+		where {0}
+		order by ps.sale_date desc, sp.modified desc
+		limit {1}""".format(" and ".join(cond), cint(limit) or 400),
+		{"f": f, "t": t, "q": "%" + q + "%"}, as_dict=True)
+	for r in rows:
+		try:
+			board = json.loads(r.pop("board_json") or "{}")
+		except Exception:
+			board = {}
+		r["fmt"] = board.get("fmt") or ("—" if board.get("source") != "prepare" else "DEFAULT")
+		r["source"] = "prepare" if board.get("source") == "prepare" else "sell"
+		r["made_by"] = frappe.utils.get_fullname(r["owner"])
+		r["cleared_by_name"] = frappe.utils.get_fullname(r["cleared_by"]) if r.get("cleared_by") else ""
+		r["sale_date"] = str(r["sale_date"] or "")
+		r["cleared_on"] = str(r["cleared_on"] or "")
+	return {"rows": rows, "from_date": f, "to_date": t,
+		"totals": {"parcels": len(rows), "pieces": sum(cint(r["pieces"]) for r in rows),
+			"value": round(sum(flt(r["sale_total"]) for r in rows), 2),
+			"on_tiles": len([r for r in rows if not cint(r["cleared"])])}}
 
 
 @frappe.whitelist()

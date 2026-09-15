@@ -14,6 +14,9 @@
   "cb1",
   "status",
   "sale",
+  "cleared",
+  "cleared_on",
+  "cleared_by",
   "remarks",
   "sec_items",
   "items",
@@ -60,6 +63,29 @@
    "label": "Product Sale",
    "options": "Product Sale",
    "read_only": 1
+  },
+  {
+   "fieldname": "cleared",
+   "fieldtype": "Check",
+   "label": "Cleared from the board",
+   "default": "0",
+   "read_only": 1,
+   "description": "A sold parcel taken off the Prepare to Sell tiles. It stays in Sales History."
+  },
+  {
+   "fieldname": "cleared_on",
+   "fieldtype": "Datetime",
+   "label": "Cleared on",
+   "read_only": 1,
+   "depends_on": "cleared"
+  },
+  {
+   "fieldname": "cleared_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Cleared by",
+   "read_only": 1,
+   "depends_on": "cleared"
   },
   {
    "fieldname": "remarks",

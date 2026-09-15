@@ -281,8 +281,11 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		}).then((r) => r.message);
 	}
 
+	// Raised while a prepared bill is being put back, so the header controls'
+	// own re-pricing cannot land on the rows being restored.
+	let HOLD = 0;
 	function repriceAll() {
-		if (!S.rows.length) return;
+		if (HOLD || !S.rows.length) return;
 		Promise.all(S.rows.map((r) => fetchPiece(r.order_bag))).then((fresh) => {
 			fresh.forEach((m) => Object.values(m.components || {}).forEach((c) => { c.orig = c.value; }));
 			S.rows = fresh;
@@ -687,20 +690,51 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		frappe.route_options = null;
 		frappe.call({ method: API + ".get_sale_prep_board", args: { name: nm } }).then((r) => {
 			const m = r.message || {};
+			const board = m.board || {};
 			S.prep = m.name;
-			if (m.customer) buyer.set_value(m.customer);
-			if (m.price_chart) chart.set_value(m.price_chart);
-			if (m.gold_rate) rate.set_value(m.gold_rate);
-			if (m.remarks) remarks.set_value(m.remarks);
-			// restore AFTER the link fields settle so their onchange repricing
-			// cannot wipe the snapshot's edited values
-			setTimeout(() => {
-				S.rows = (m.board || {}).rows || [];
-				S.adjust = (m.board || {}).adjust || [];
-				if ((m.board || {}).tax !== undefined) tax.set_value(cint(m.board.tax));
-				paint();
-				frappe.show_alert({ message: __("Restored {0} — {1} piece(s).", [m.name, S.rows.length]), indicator: "yellow" }, 5);
-			}, 400);
+			// Put the header back WITHOUT the chart re-pricing anything: its onchange
+			// goes to the server to check the chart is current and then re-prices, and
+			// that round trip used to outrun a 400ms timer on the tunnel and wipe the
+			// edited values it was meant to protect. The hold and the detached onchange
+			// stop it at the source, however slow the network is.
+			HOLD = 1;
+			const chartChange = chart.df.onchange;
+			chart.df.onchange = null;
+			Promise.all([
+				m.customer ? buyer.set_value(m.customer) : null,
+				m.price_chart ? chart.set_value(m.price_chart) : null,
+				m.gold_rate ? rate.set_value(m.gold_rate) : null,
+				m.remarks ? remarks.set_value(m.remarks) : null,
+			]).then(() => {
+				chart.df.onchange = chartChange;
+				if (board.source === "prepare") {
+					// a PARCEL from Prepare to Sell carries paper rows, not board rows —
+					// price each piece here, by this page's own pricer, in scan order
+					const bags = (board.rows || []).map((x) => x.order_bag).filter(Boolean);
+					const skipped = [];
+					useCurrentChart(() => Promise.all(bags.map((b) => fetchPiece(b)
+						.catch(() => { skipped.push(b); return null; })))
+						.then((fresh) => {
+							S.rows = fresh.filter(Boolean);
+							S.rows.forEach((row) => Object.values(row.components || {}).forEach((c) => { c.orig = c.value; }));
+							S.adjust = [];
+							HOLD = 0;
+							paint();
+							frappe.show_alert({ message: skipped.length
+								? __("Opened parcel {0} — {1} piece(s). Left off, no longer sellable: {2}", [m.name, S.rows.length, skipped.join(", ")])
+								: __("Opened parcel {0} — {1} piece(s).", [m.name, S.rows.length]),
+								indicator: skipped.length ? "orange" : "yellow" }, skipped.length ? 10 : 5);
+						}));
+				} else {
+					S.rows = board.rows || [];
+					S.adjust = board.adjust || [];
+					if (board.tax !== undefined) tax.set_value(cint(board.tax));
+					paint();
+					// the snapshot keeps the prices it was left at; only flag a superseded chart
+					useCurrentChart(() => { HOLD = 0; });
+					frappe.show_alert({ message: __("Restored {0} — {1} piece(s).", [m.name, S.rows.length]), indicator: "yellow" }, 5);
+				}
+			});
 		});
 	}
 	paint();

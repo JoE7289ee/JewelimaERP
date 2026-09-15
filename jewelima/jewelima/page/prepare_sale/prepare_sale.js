@@ -1,23 +1,23 @@
 // Copyright (c) 2026, efeone and contributors
 // For license information, please see license.txt
 //
-// Prepare to Sell — the parcel, before it is a bill.
+// Prepare to Sell — the parcels, then the parcel.
 //
-// A parcel is scanned together, travels together and is papered together, and
-// every buyer wants that paper differently: JOS takes three sheets at three
-// moments — the order, the rate cut, the delivery — and the next buyer will
-// want something else. So this is where the parcel is gathered and papered, and
-// the FORMAT decides what comes out of it.
+// It opens on TILES: every parcel still being built, and every one that has
+// sold and not been cleared. Opening a tile opens that parcel on the bench. A
+// sold parcel stays on the tiles as the desk's proof it went, until someone
+// clears it; cleared parcels live in Delivery Records > Sales History.
 //
-// THE ORDER MATTERS. Pieces stay in the order they were scanned, because that
-// is the order the parcel is physically in and the order the sheets are
-// numbered by. Only JOS asks for the agreed physical order instead — the item
-// ladder, then colour, then weight — so only JOS gets the Sort button.
+// On the bench a parcel is scanned, papered and saved. Every buyer wants the
+// paper differently — JOS takes three sheets at three moments — so the FORMAT
+// decides what comes out. Pieces stay in the order they were scanned, which is
+// the order the parcel is physically in and every sheet numbers them by; only
+// JOS gets a Sort into its agreed order.
 //
-// Pricing is not done here. A row is priced by the same call the Sell board
-// uses, so a parcel and a bill can never disagree; selling it is still Sell's
-// job, and the parked boards are still listed below.
-// Route: /app/prepare-sale
+// Pricing is not done here: a row is priced by the same call the Sell board
+// uses, and selling is still Sell's job. Send to Sell saves the parcel and opens
+// it there, so the sale marks this parcel Sold.
+// Routes: /app/prepare-sale (tiles) · /app/prepare-sale/new · /app/prepare-sale/SPREP-00001
 frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Prepare to Sell"), single_column: true });
 	const API = "jewelima.jewelima.api";
@@ -28,7 +28,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 	const root = $(page.main);
 
-const S = { ctx: null, fmt: "JOS", rows: [], parked: [], sorted: false, prep: null, dirty: false };
+const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: false, view: "list" };
 
 	// The agreed physical order, the same ladder the OLD FORMAT sheet numbers by:
 	// the item ladder, then colour, then the below-1g band, then weight. It is a
@@ -88,19 +88,39 @@ const S = { ctx: null, fmt: "JOS", rows: [], parked: [], sorted: false, prep: nu
 			padding:13px 16px;margin-bottom:14px;}
 		.ps-card h3{font-size:12px;margin:0 0 9px;font-weight:800;text-transform:uppercase;
 			letter-spacing:.06em;color:var(--text-muted);}
+		.ps-top{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+		.ps-top h2{font-size:15px;font-weight:800;margin:0;}
+		.ps-sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
+			color:var(--text-muted);margin:16px 0 9px;}
 		.pp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;}
-		.pp-card{border:1px solid var(--border-color);border-left:5px solid #e0a800;border-radius:9px;
-			background:var(--fg-color);padding:12px 14px;cursor:pointer;}
+		.pp-card{position:relative;border:1px solid var(--border-color);border-left:5px solid #e0a800;
+			border-radius:10px;background:var(--fg-color);padding:12px 14px;cursor:pointer;transition:box-shadow .12s;}
 		.pp-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.12);}
-		.pp-name{font-weight:800;font-size:12.5px;}
-		.pp-cust{font-size:14px;font-weight:700;margin:2px 0 5px;}
+		.pp-card.sold{border-left-color:#1d7a33;}
+		.pp-card.new{border:2px dashed var(--border-color);border-left-width:2px;display:flex;align-items:center;
+			justify-content:center;min-height:118px;color:var(--text-muted);font-weight:800;font-size:14px;}
+		.pp-card.new:hover{border-color:var(--primary);color:var(--primary);}
+		.pp-card.unsaved{border-left-color:#b45309;background:rgba(180,83,9,.05);}
+		.pp-name{font-weight:800;font-size:12.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding-right:22px;}
+		.pp-tag{font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:20px;padding:1px 8px;}
+		.pp-tag.draft{background:rgba(224,168,0,.18);color:#8a6508;}
+		.pp-tag.sold{background:rgba(29,122,51,.16);color:#1d7a33;}
+		.pp-tag.fmt{background:var(--control-bg);color:var(--text-muted);}
+		.pp-tag.gone{background:rgba(176,42,42,.13);color:#b02a2a;}
+		[data-theme="dark"] .pp-tag.draft{color:#e8b84a;}
+		[data-theme="dark"] .pp-tag.sold{color:#7fc98f;}
+		.pp-cust{font-size:14px;font-weight:700;margin:3px 0 5px;}
 		.pp-meta{font-size:11.5px;color:var(--text-muted);line-height:1.6;}
-		.pp-total{font-size:17px;font-weight:800;color:#1d7a33;margin-top:5px;}
-		.pp-card{position:relative;}
+		.pp-foot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;}
+		.pp-total{font-size:17px;font-weight:800;color:#1d7a33;}
 		.pp-x{position:absolute;top:7px;right:9px;border:none;background:none;color:var(--text-muted);
 			cursor:pointer;font-size:15px;line-height:1;padding:2px 5px;border-radius:6px;}
 		.pp-x:hover{color:#b02a2a;background:var(--control-bg);}
 		</style>
+		<div class="ps-list">
+			<div class="ps-lists"></div>
+		</div>
+		<div class="ps-work" hidden>
 		<div class="ps-head">
 			<div class="h-cust"></div><div class="h-fmt"></div><div class="h-chart"></div>
 			<div class="h-rate"></div><div class="h-qual"></div>
@@ -122,7 +142,7 @@ const S = { ctx: null, fmt: "JOS", rows: [], parked: [], sorted: false, prep: nu
 			</tr></thead><tbody class="ps-body"></tbody>
 		</table></div>
 		<div class="ps-card ps-docwrap"><h3>${__("Papers")}</h3><div class="ps-docs"></div></div>
-		<div class="ps-card"><h3>${__("Parked bills")}</h3><div class="pp-grid"></div></div>`);
+		</div>`);
 
 	const mk = (sel, df) => {
 		const c = frappe.ui.form.make_control({ df, parent: root.find(sel).get(0), render_input: true });
@@ -286,44 +306,133 @@ const S = { ctx: null, fmt: "JOS", rows: [], parked: [], sorted: false, prep: nu
 			{ payload: JSON.stringify(payload), fmt: S.fmt, doc: $(this).data("d") });
 	});
 
-	// ---- the parked bills, as before -----------------------------------------
-	function loadParked() {
-		frappe.call({ method: API + ".get_prepared_boards", freeze: false }).then((r) => {
+	// ---- the tiles ------------------------------------------------------------
+	function tileHtml(p) {
+		const sold = p.status === "Sold";
+		const kind = p.source === "prepare"
+			? `<span class="pp-tag fmt">${esc(p.fmt || "DEFAULT")}</span>`
+			: `<span class="pp-tag fmt">${__("Sell board")}</span>`;
+		return `<div class="pp-card ${sold ? "sold" : ""}" data-name="${esc(p.name)}"
+			data-src="${esc(p.source)}" data-status="${esc(p.status)}" data-sale="${esc(p.sale || "")}">
+			${sold ? "" : `<button class="pp-x" title="${__("Throw this prep away")}">✕</button>`}
+			<div class="pp-name">${esc(p.name)}
+				<span class="pp-tag ${sold ? "sold" : "draft"}">${esc(sold ? __("Sold") : p.status)}</span>
+				${kind}
+				${p.gone ? `<span class="pp-tag gone">${__("{0} not in stock", [p.gone])}</span>` : ""}</div>
+			<div class="pp-cust">${esc(p.customer || __("No buyer yet"))}</div>
+			<div class="pp-meta">${p.pieces} ${__("piece(s)")} · ${esc(p.chart_name || p.price_chart || __("no chart"))}<br>
+				${sold ? __("Sold on {0}, {1}", [esc(p.sale || ""), esc(p.sold_on || "")])
+					: esc(frappe.datetime.prettyDate(p.modified))} · ${esc(p.owner_name || p.owner)}</div>
+			<div class="pp-foot"><div class="pp-total">${money(p.grand_total)}</div>
+				${sold ? `<button class="btn btn-xs btn-default pp-clear">${__("Clear")}</button>` : ""}</div>
+		</div>`;
+	}
+
+	function loadList() {
+		return frappe.call({ method: API + ".get_prepared_boards", freeze: false }).then((r) => {
 			const rows = (r.message || {}).rows || [];
-				root.find(".pp-grid").html(rows.length ? rows.map((p) => `
-				<div class="pp-card" data-name="${esc(p.name)}" data-src="${esc(p.source || "sell")}">
-					<button class="pp-x" title="${__("Throw this prep away")}">✕</button>
-					<div class="pp-name">${esc(p.name)} · ${esc(p.status)}${p.source === "prepare"
-						? ` · <span style="color:var(--primary);">${__("parcel")}</span>` : ""}</div>
-					<div class="pp-cust">${esc(p.customer || "—")}</div>
-					<div class="pp-meta">${p.pieces} ${__("piece(s)")} · ${esc(p.price_chart || __("no chart"))}<br>
-						${frappe.datetime.prettyDate(p.modified)} · ${esc(p.owner)}</div>
-					<div class="pp-total">${money(p.grand_total)}</div>
-				</div>`).join("")
-				: `<div class="ps-empty">${__("Nothing parked.")}</div>`);
+			const open = rows.filter((p) => p.status !== "Sold");
+			const sold = rows.filter((p) => p.status === "Sold");
+			// a parcel left on the bench unsaved is shown first, so leaving the bench
+			// never quietly loses what was scanned
+			const unsaved = (S.dirty && S.rows.length) ? `
+				<div class="pp-card unsaved pp-bench">
+					<div class="pp-name">${esc(S.prep || __("New parcel"))} <span class="pp-tag gone">${__("not saved")}</span></div>
+					<div class="pp-cust">${esc(S.custCtl.get_value() || __("No buyer yet"))}</div>
+					<div class="pp-meta">${__("{0} piece(s) still on the bench", [S.rows.length])}</div>
+				</div>` : "";
+			root.find(".ps-lists").html(`
+				<div class="ps-sec">${__("Being prepared")} · ${open.length}</div>
+				<div class="pp-grid">${unsaved}<div class="pp-card new">+ ${__("New parcel")}</div>${open.map(tileHtml).join("")}</div>
+				${sold.length ? `<div class="ps-sec">${__("Sold — clear when done")} · ${sold.length}</div>
+					<div class="pp-grid">${sold.map(tileHtml).join("")}</div>` : ""}`);
 		});
 	}
-	root.on("click", ".pp-card", function () {
-		const nm = $(this).data("name");
-		if ($(this).data("src") === "prepare") return openParcel(nm);
-		frappe.route_options = { prep: nm };
-		frappe.set_route("sell");
+
+	/** Leaving an unsaved parcel behind needs a yes. */
+	function leaveBench(then) {
+		if (S.dirty && S.rows.length) {
+			frappe.confirm(__("The parcel on the bench is not saved. Leave it?"), then);
+		} else {
+			then();
+		}
+	}
+
+	root.on("click", ".pp-card.new", () => leaveBench(() => {
+		resetBench();
+		S.keepBench = true;
+		frappe.set_route("prepare-sale", "new");
+	}));
+	root.on("click", ".pp-bench", () => {
+		S.keepBench = true;
+		frappe.set_route("prepare-sale", S.prep || "new");
+	});
+	root.on("click", ".pp-card[data-name]", function () {
+		const $c = $(this);
+		const nm = $c.data("name");
+		if ($c.data("status") === "Sold") {
+			// the money side of a sold parcel is its sale
+			frappe.route_options = { sale: $c.data("sale") };
+			return frappe.set_route("sales-records");
+		}
+		if ($c.data("src") !== "prepare") {
+			frappe.route_options = { prep: nm };
+			return frappe.set_route("sell");
+		}
+		if (nm === S.prep) {
+			S.keepBench = true;
+			return frappe.set_route("prepare-sale", nm);
+		}
+		leaveBench(() => frappe.set_route("prepare-sale", nm));
 	});
 	root.on("click", ".pp-x", function (e) {
-		e.stopPropagation();          // the card itself opens the board
+		e.stopPropagation();          // the card itself opens the parcel
 		const nm = $(this).closest(".pp-card").data("name");
 		frappe.confirm(__("Throw away {0}? The pieces on it go back to being unspoken for.", [nm]), () => {
-			frappe.call({ method: API + ".discard_sale_prep", args: { name: nm } })
-				.then(() => {
-					frappe.show_alert({ message: __("{0} thrown away.", [nm]), indicator: "green" }, 4);
-					loadParked();
-				});
+			frappe.call({ method: API + ".discard_sale_prep", args: { name: nm } }).then(() => {
+				if (S.prep === nm) resetBench();
+				frappe.show_alert({ message: __("{0} thrown away.", [nm]), indicator: "green" }, 4);
+				loadList();
+			});
+		});
+	});
+	root.on("click", ".pp-clear", function (e) {
+		e.stopPropagation();
+		const nm = $(this).closest(".pp-card").data("name");
+		frappe.confirm(__("Clear {0} off the board? It stays in Sales History.", [nm]), () => {
+			frappe.call({ method: API + ".clear_sold_prep", args: { name: nm } }).then(() => {
+				frappe.show_alert({ message: __("{0} moved to Sales History.", [nm]), indicator: "green" }, 5);
+				loadList();
+			});
 		});
 	});
 
-	// ---- saving -----------------------------------------------------------------
-	function saveParcel() {
-		frappe.call({
+	// ---- the bench ----------------------------------------------------------------
+	/** Set the header without each control re-pricing the parcel. A Link validates
+	 * over the network, so the flag comes down when the controls say they are
+	 * done — never on a timer, which the tunnel would outrun. */
+	function setHeader(h) {
+		S.loading = true;
+		S.fmt = h.fmt || firstFmt();
+		return Promise.all([
+			S.custCtl.set_value(h.customer || ""),
+			S.chartCtl.set_value(h.price_chart || ""),
+			S.rateCtl.set_value(h.gold_rate || ""),
+			S.qualCtl.set_value(h.quality || ""),
+			S.fmtCtl.set_value(S.fmt),
+		]).then(() => { S.loading = false; });
+	}
+	const firstFmt = () => ((((S.ctx || {}).formats || [])[0]) || {}).key || "DEFAULT";
+
+	function resetBench() {
+		S.rows = []; S.sorted = false; S.prep = null; S.dirty = false;
+		say("");
+		return setHeader({}).then(() => paint());
+	}
+
+	function saveParcel(opts) {
+		opts = opts || {};
+		return frappe.call({
 			method: API + ".save_parcel",
 			args: { payload: JSON.stringify({
 				name: S.prep, fmt: S.fmt, sorted: S.sorted ? 1 : 0,
@@ -336,76 +445,105 @@ const S = { ctx: null, fmt: "JOS", rows: [], parked: [], sorted: false, prep: nu
 			S.prep = m.name;
 			S.dirty = false;
 			paint();
-			loadParked();
 			frappe.show_alert({ message: __("Saved as {0} — {1} piece(s).", [m.name, m.pieces]), indicator: "green" }, 4);
+			if (opts.route !== false && (frappe.get_route() || [])[1] !== m.name) {
+				S.keepBench = true;
+				frappe.set_route("prepare-sale", m.name);
+			}
+			return m;
 		});
 	}
 
 	function openParcel(nm) {
-		const go = () => frappe.call({ method: API + ".get_parcel", args: { name: nm } }).then((r) => {
+		return frappe.call({ method: API + ".get_parcel", args: { name: nm } }).then((r) => {
 			const m = r.message || {};
 			S.prep = m.name;
 			S.rows = m.rows || [];
 			S.sorted = !!m.sorted;
-			// Set the header without each control re-pricing the whole parcel. A Link
-			// validates over the network, so the flag comes down when the controls say
-			// they are done — not on a timer, which the tunnel would outrun.
-			S.loading = true;
-			S.fmt = m.fmt || "DEFAULT";
-			Promise.all([
-				S.custCtl.set_value(m.customer || ""),
-				S.chartCtl.set_value(m.price_chart || ""),
-				S.rateCtl.set_value(m.gold_rate || ""),
-				S.qualCtl.set_value(m.quality || ""),
-				S.fmtCtl.set_value(S.fmt),
-			]).then(() => { S.loading = false; S.dirty = false; paint(); });
-			say(__("Opened {0}.", [m.name]));
-			window.scrollTo({ top: 0, behavior: "smooth" });
+			S.dirty = false;
+			return setHeader(m).then(() => {
+				paint();
+				say(__("Opened {0}.", [m.name]));
+				showBench();
+			});
+		}).catch(() => {
+			// sold, thrown away, or parked from Sell — back to the tiles, which say which
+			resetBench();
+			frappe.set_route("prepare-sale");
 		});
-		if (S.dirty && S.rows.length) {
-			frappe.confirm(__("The parcel on screen is not saved. Open {0} anyway?", [nm]), go);
-		} else {
-			go();
+	}
+
+	// ---- the two views -------------------------------------------------------------
+	function showList() {
+		S.view = "list";
+		root.find(".ps-work").prop("hidden", true);
+		root.find(".ps-list").prop("hidden", false);
+		page.clear_primary_action();
+		page.clear_inner_toolbar();
+		page.set_primary_action(__("New parcel"), () => { root.find(".pp-card.new").trigger("click"); }, "add");
+		page.add_inner_button(__("Sell"), () => frappe.set_route("sell"));
+		page.add_inner_button(__("Sales History"), () => frappe.set_route("sales-history"));
+		loadList();
+	}
+
+	function showBench() {
+		S.view = "bench";
+		root.find(".ps-list").prop("hidden", true);
+		root.find(".ps-work").prop("hidden", false);
+		page.clear_primary_action();
+		page.clear_inner_toolbar();
+		page.set_primary_action(__("Save"), () => { saveParcel(); }, "save");
+		page.add_inner_button(__("All parcels"), () => {
+			// an unsaved parcel is kept and shown as a tile — nothing is lost by looking
+			frappe.set_route("prepare-sale");
+		});
+		page.add_inner_button(__("Send to Sell"), () => {
+			if (!S.rows.length) { frappe.msgprint(__("Scan some pieces first.")); return; }
+			// saved first, so Sell opens THIS parcel and the sale marks it Sold
+			saveParcel({ route: false }).then((m) => {
+				frappe.route_options = { prep: m.name };
+				frappe.set_route("sell");
+			});
+		});
+		paint();
+		setTimeout(() => root.find(".ps-box").focus(), 150);
+	}
+
+	function route() {
+		const arg = (frappe.get_route() || [])[1];
+		const keep = S.keepBench;
+		S.keepBench = false;
+		if (!arg) return showList();
+		if (arg === "new") {
+			if (keep) return showBench();
+			return resetBench().then(showBench);
 		}
+		// the parcel already on the bench, with unsaved work — show it as it is
+		if (arg === S.prep && (keep || S.dirty)) return showBench();
+		return openParcel(arg);
 	}
 
 	// ---- header --------------------------------------------------------------
-	S.custCtl = mk(".h-cust", { fieldtype: "Link", label: __("Buyer"), fieldname: "customer", options: "Customer" });
+	S.custCtl = mk(".h-cust", { fieldtype: "Link", label: __("Buyer"), fieldname: "customer", options: "Customer",
+		onchange: () => { if (!S.loading && S.rows.length) { S.dirty = true; paint(); } } });
 	S.fmtCtl = mk(".h-fmt", { fieldtype: "Select", label: __("Format"), fieldname: "fmt", options: [],
 		onchange: () => { S.fmt = S.fmtCtl.get_value() || "DEFAULT"; if (!S.loading && S.rows.length) S.dirty = true; paint(); } });
 	S.chartCtl = mk(".h-chart", { fieldtype: "Link", label: __("Price chart"), fieldname: "price_chart",
 		options: "Price Chart", onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 	S.rateCtl = mk(".h-rate", { fieldtype: "Currency", label: __("Gold rate / g"), fieldname: "gold_rate",
 		onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
-	S.qualCtl = mk(".h-qual", { fieldtype: "Data", label: __("Diamond quality"), fieldname: "quality" });
+	S.qualCtl = mk(".h-qual", { fieldtype: "Data", label: __("Diamond quality"), fieldname: "quality",
+		onchange: () => { if (!S.loading && S.rows.length) { S.dirty = true; paint(); } } });
 
-	page.set_primary_action(__("Save"), () => { saveParcel(); }, "save");
-	page.add_inner_button(__("Send to Sell"), () => {
-		if (!S.rows.length) return frappe.msgprint(__("Scan some pieces first."));
-		frappe.route_options = {
-			prep_rows: S.rows.map((r) => r.order_bag),
-			customer: S.custCtl.get_value() || "",
-			price_chart: S.chartCtl.get_value() || "",
-			gold_rate: flt(S.rateCtl.get_value()),
-		};
-		frappe.set_route("sell");
-	});
-	page.add_inner_button(__("New parcel"), () => {
-		const reset = () => { S.rows = []; S.sorted = false; S.prep = null; S.dirty = false; say(""); paint(); };
-		if (S.dirty && S.rows.length) frappe.confirm(__("The parcel on screen is not saved. Start a new one anyway?"), reset);
-		else reset();
-	});
-	page.add_inner_button(__("Sell"), () => frappe.set_route("sell"));
+	frappe.pages["prepare-sale"].on_page_show = () => { if (S.ctx) route(); };
 
 	frappe.call({ method: API + ".get_sale_prep_formats" }).then((r) => {
 		S.ctx = r.message || { formats: [] };
 		const opts = (S.ctx.formats || []).map((f) => ({ label: f.label, value: f.key }));
 		S.fmtCtl.df.options = opts;
 		S.fmtCtl.refresh();
-		S.fmt = (opts[0] || {}).value || "DEFAULT";
-		S.fmtCtl.set_value(S.fmt);
-		paint();
-		setTimeout(() => root.find(".ps-box").focus(), 200);
+		S.fmt = firstFmt();
+		S.loading = true;
+		Promise.resolve(S.fmtCtl.set_value(S.fmt)).then(() => { S.loading = false; route(); });
 	});
-	loadParked();
 };

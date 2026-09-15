@@ -299,7 +299,7 @@ JEWELIMA_DELIVERY_PAGES = [
 	# the records side of the same desks — read only, and the questions they
 	# answer ("when did that go out", "who re-filed this") land on delivery
 	"hallmarking-records", "certification-records", "product-transfer-records",
-	"holder-transfer-records", "bucket-transfer-records",
+	"holder-transfer-records", "bucket-transfer-records", "sales-history",
 	# Barcode: the roll printer and the sheet printer
 	"print-barcode", "multi-barcode",
 	# Certification — away to the lab and back again
