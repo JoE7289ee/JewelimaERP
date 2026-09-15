@@ -21029,6 +21029,33 @@ def _card_gold_check(order_bag):
 	return bag, None
 
 
+CARD_ALLOY_RE = re.compile(r"^\d{2}K(YG|WG|PG)$")
+
+
+def _card_alloy(order_bag, contents=None):
+	"""(item, how it was known) — the one karat gold a card is made in, e.g. 18KPG.
+
+	Read off what the card actually holds first (the heaviest alloy on it), then
+	its BOM, then its design name (A13406NP-18EF-P -> 18KPG) for a card that has
+	no gold on it yet. Findings and pure gold never count: a card is its alloy."""
+	contents = contents or get_bag_contents(order_bag)
+	held = sorted((it for it in contents["items"]
+		if CARD_ALLOY_RE.match(it["item"] or "") and flt(it["qty"]) > 0.0005),
+		key=lambda it: -flt(it["qty"]))
+	if held:
+		return held[0]["item"], "held"
+	for r in frappe.get_all("Order Bag BOM Item", filters={"parent": order_bag, "parenttype": "Order Bag"},
+			fields=["item"], order_by="idx asc"):
+		if CARD_ALLOY_RE.match(r.item or ""):
+			return r.item, "bom"
+	design = frappe.db.get_value("Order Bag", order_bag, "design") or ""
+	colour = (_variant_tokens(design).get("gold_color") or "")[:1]
+	parts = design.split("-")
+	karat = re.match(r"^(\d{2})", parts[-2]) if len(parts) >= 3 else None
+	item = _gold_item_for(karat.group(1), colour) if karat and colour else None
+	return (item, "design") if item else (None, None)
+
+
 @frappe.whitelist()
 def get_card_gold(order_bag):
 	"""Scan lookup: the card, what it holds now, and the gold available in each
@@ -21039,6 +21066,9 @@ def get_card_gold(order_bag):
 		return {"error": err}
 
 	contents = get_bag_contents(order_bag)
+	alloy, alloy_from = _card_alloy(order_bag, contents)
+	if not alloy:
+		return {"error": frappe._("Can't tell which gold {0} is made in — it holds no gold, its BOM has none and its design name carries no karat and colour.").format(order_bag)}
 	held = [{"item": it["item"],
 		"item_name": frappe.db.get_value("Item", it["item"], "item_name") or it["item"],
 		"qty": round(flt(it["qty"]), 3)}
@@ -21053,13 +21083,13 @@ def get_card_gold(order_bag):
 				fields=["item_code", "actual_qty"]):
 			meta = frappe.db.get_value("Item", b.item_code,
 				["item_name", "stone_type", "purity_percentage"], as_dict=True) or {}
-			if meta.get("stone_type"):
+			if meta.get("stone_type") or b.item_code != alloy:
 				continue
 			rows.append({"item": b.item_code, "item_name": meta.get("item_name") or b.item_code,
 				"qty": round(flt(b.actual_qty), 3), "purity": flt(meta.get("purity_percentage"))})
 		stock[label] = sorted(rows, key=lambda r: -r["qty"])
 
-	return {"bag": bag, "held": held, "stock": stock,
+	return {"bag": bag, "held": held, "stock": stock, "alloy": alloy, "alloy_from": alloy_from,
 		"gold": round(flt(contents.get("gold_grams")), 3),
 		"warehouses": list(_card_gold_warehouses().keys()),
 		"history": _card_gold_moves(order_bag)}
@@ -21099,6 +21129,13 @@ def adjust_card_gold(order_bag, direction, item, weight, warehouse, remarks=None
 		frappe.throw(frappe._("Pick the gold being moved."))
 	if frappe.db.get_value("Item", item, "stone_type"):
 		frappe.throw(frappe._("{0} is a stone — this page moves gold.").format(item))
+	# a card is one gold: an 18KPG card takes 18KPG on and gives 18KPG back, nothing else
+	alloy = _card_alloy(order_bag)[0]
+	if not alloy:
+		frappe.throw(frappe._("Can't tell which gold {0} is made in.").format(order_bag))
+	if item != alloy:
+		frappe.throw(frappe._("{0} is a card in {1} — only {1} goes on or comes off it, not {2}.").format(
+			order_bag, alloy, item))
 
 	if side == "add":
 		avail = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": other}, "actual_qty"))

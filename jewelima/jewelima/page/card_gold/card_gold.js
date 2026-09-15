@@ -1,7 +1,8 @@
 // Card Gold (Stock > Card Gold) — put gold onto a card, or take it back off.
 // The card's materials live in the In Bags pool, so adding is Casting or
 // Production -> In Bags and reducing is the exact reverse. A sold, cancelled
-// or finished card is a closed book and is refused at the scan.
+// or finished card is a closed book and is refused at the scan. A card is one
+// gold: an 18KPG card only ever takes 18KPG on or gives 18KPG back.
 // Route: /app/card-gold
 frappe.pages["card-gold"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Card Gold"), single_column: true });
@@ -9,7 +10,7 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const flt = (v) => parseFloat(v) || 0;
 	const g = (v) => flt(v).toFixed(3) + " g";
-	const S = { card: null, side: "add", wh: null, item: null };
+	const S = { card: null, side: "add", wh: null, item: null, cap: 0 };
 
 	$(page.main).append(`
 		<style>
@@ -39,6 +40,9 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 		.cg-chip{font-size:11px;padding:2px 9px;border-radius:999px;background:var(--control-bg);
 			color:var(--text-muted);border:1px solid var(--border-color);}
 		.cg-chip.ok{background:#eaf6ec;color:#1d7a33;border-color:#bfe3c6;}
+		.cg-chip.gold{background:#fdf3e3;color:#8a5a00;border-color:#e6c98f;font-weight:800;}
+		[data-theme="dark"] .cg-chip.gold{background:rgba(180,83,9,.16);color:#e8a24a;border-color:rgba(180,83,9,.5);}
+		.cg-alloy{font-size:17px;font-weight:800;letter-spacing:.02em;padding:6px 0 0;}
 
 		.cg-holds{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;}
 		.cg-hold{min-width:120px;}
@@ -107,6 +111,7 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 						<div class="cg-id"><b>${esc(b.name)}</b>
 							<span class="d">${esc(b.design || "—")}</span></div>
 						<div class="cg-chips">
+							<span class="cg-chip gold">${__("{0} card", [esc(C.alloy)])}</span>
 							<span class="cg-chip ok">${__("In bags")}</span>
 							<span class="cg-chip">${esc(b.location || "—")}</span>
 							<span class="cg-chip">${__("qty")} ${b.qty || 1}</span>
@@ -133,7 +138,7 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 					<select class="cg-wh">${(C.warehouses || []).map((w) =>
 						`<option value="${esc(w)}"${S.wh === w ? " selected" : ""}>${esc(w)}</option>`).join("")}</select>
 					<label>${__("Which gold")}</label>
-					<select class="cg-item"></select>
+					<div class="cg-alloy">${esc(C.alloy)}</div>
 					<div class="cg-avail"></div>
 					<label>${__("Weight (g)")}</label>
 					<input type="number" step="0.001" min="0" class="w cg-w">
@@ -155,25 +160,14 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 		const wh = root.find(".cg-wh").val() || (C.warehouses || [])[0];
 		S.wh = wh;
 		const src = S.side === "add" ? (C.stock || {})[wh] || [] : (C.held || []);
-		const $it = root.find(".cg-item");
-		$it.html(src.length
-			? src.map((r) => `<option value="${esc(r.item)}" data-qty="${r.qty}">${
-				esc(r.item_name || r.item)} — ${r.qty.toFixed(3)} g</option>`).join("")
-			: `<option value="">${S.side === "add"
-				? __("no gold in {0}", [wh]) : __("this card holds no gold")}</option>`);
-		if (S.item && src.some((r) => r.item === S.item)) $it.val(S.item);
-		S.item = $it.val() || null;
-		root.find(".cg-go").prop("disabled", !S.item);
-		showAvail();
-	}
-	function showAvail() {
-		const $o = root.find(".cg-item option:selected");
-		const qty = flt($o.data("qty"));
-		root.find(".cg-avail").text(S.item
-			? (S.side === "add" ? __("{0} available in {1}", [qty.toFixed(3) + " g", S.wh])
-				: __("{0} on this card", [qty.toFixed(3) + " g"]))
-			: "");
-		root.find(".cg-w").attr("max", qty || null);
+		const row = src.find((r) => r.item === C.alloy);
+		S.item = C.alloy;
+		S.cap = row ? flt(row.qty) : 0;
+		root.find(".cg-go").prop("disabled", S.cap <= 0);
+		root.find(".cg-avail").text(S.side === "add"
+			? (S.cap ? __("{0} available in {1}", [S.cap.toFixed(3) + " g", wh]) : __("No {0} in {1}", [C.alloy, wh]))
+			: (S.cap ? __("{0} on this card", [S.cap.toFixed(3) + " g"]) : __("This card holds no {0}", [C.alloy])));
+		root.find(".cg-w").attr("max", S.cap || null);
 		flow();
 	}
 	function flow() {
@@ -224,7 +218,6 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 		paint();
 	});
 	root.on("change", ".cg-wh", fillItems);
-	root.on("change", ".cg-item", function () { S.item = this.value || null; showAvail(); });
 	root.on("input", ".cg-w", flow);
 	root.on("click", ".cg-go", function () {
 		if (!S.card || !S.item) return;
@@ -233,7 +226,7 @@ frappe.pages["card-gold"].on_page_load = function (wrapper) {
 		// the same two limits the server enforces, said here so a typed-over
 		// number is caught before the round trip. The server stays the real gate:
 		// this figure is from the last load and someone else may have moved stock.
-		const cap = flt(root.find(".cg-item option:selected").data("qty"));
+		const cap = S.cap;
 		if (w > cap + 0.0005) {
 			return say(S.side === "add"
 				? __("Only <b>{0} g</b> of {1} in {2}.", [cap.toFixed(3), esc(S.item), esc(S.wh)])
