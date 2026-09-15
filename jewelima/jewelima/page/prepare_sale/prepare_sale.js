@@ -554,7 +554,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		if ($(this).hasClass("off")) return;
 		const payload = {
 			customer: S.custCtl.get_value() || "", price_chart: S.chartCtl.get_value() || "",
-			gold_rate: flt(S.rateCtl.get_value()), quality: mainQuality(),
+			gold_rate: flt(S.rateCtl.get_value()), quality: mainQuality(), title: S.title || "",
 			rows: S.rows.map((r, i) => Object.assign({}, r, { sl: i + 1 })),
 		};
 		open_url_post("/api/method/" + API + ".export_sale_prep_doc",

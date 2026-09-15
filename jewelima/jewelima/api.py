@@ -25409,6 +25409,8 @@ SALE_PREP_FORMATS = {
 				"gross", "net", "dmd_pcs", "dmd_ct"]},
 			{"key": "ratecut", "label": "Delivery Bill", "kind": "jos",
 			 "note": "the billing sheet in full — gold, making, chain, diamonds, total"},
+			{"key": "clean", "label": "Jewelima Sheet", "kind": "clean",
+			 "note": "the parcel on one clean page — only the columns it uses, in the parcel's order"},
 			{"key": "delivery", "label": "Delivery", "kind": "plain",
 			 "note": "what travels with the parcel — weights and HUIDs, no money",
 			 "cols": ["sl", "uid", "item", "size", "colour", "pcs1", "gross", "net",
@@ -25423,6 +25425,8 @@ SALE_PREP_FORMATS = {
 			 "note": "every piece in the parcel with its weights and stones",
 			 "cols": ["sl", "uid", "item", "design", "size", "colour", "pcs1", "gross",
 				"net", "dmd_pcs", "dmd_ct", "ps_ct", "stn_ct", "huid"], "sign": 1},
+			{"key": "clean", "label": "Jewelima Sheet", "kind": "clean",
+			 "note": "the parcel on one clean page — only the columns it uses, in the parcel's order"},
 			{"key": "ratecut", "label": "Billing sheet", "kind": "jos",
 			 "note": "the full billing sheet, the same one JOS takes as its Delivery Bill"},
 		],
@@ -25680,6 +25684,153 @@ def _prep_plain_sheet(doc, rows, head):
 	return buf.getvalue()
 
 
+# The Jewelima Sheet: every column it could carry, in reading order. A column is
+# laid out only when some piece in the parcel has something in it, so a plain
+# gold lot is not a page of empty stone columns. (key, heading, value, kind)
+# kind: t text · i whole number · w grams · c carats · m rupees
+CLEAN_COLS = [
+	("sl", "Sl", lambda p: cint(p.get("sl")) or None, "i"),
+	("bag", "Bag No", lambda p: p.get("order_bag") or None, "t"),
+	("item", "Item", lambda p: p.get("item") or None, "t"),
+	("design", "Design", lambda p: p.get("design") or None, "t"),
+	("size", "Size", lambda p: p.get("size") or None, "t"),
+	("colour", "Colour", lambda p: p.get("colour") or None, "t"),
+	("gross", "Gross (g)", lambda p: flt(p.get("gs_full") or p.get("gs")) or None, "w"),
+	("net", "Net (g)", lambda p: flt(p.get("nt_full") or p.get("nt")) or None, "w"),
+	("bcwt", "Chain (g)", lambda p: flt(p.get("back_chain_wt")) or None, "w"),
+	("dpcs", "Dia Pcs", lambda p: cint(p.get("dmd_pcs")) or None, "i"),
+	("dct", "Dia Ct", lambda p: flt(p.get("dmd_ct")) or None, "c"),
+	("dq", "Dia Quality", lambda p: p.get("dmd_quality") or None, "t"),
+	("ppcs", "PS Pcs", lambda p: cint(p.get("ps_pcs")) or None, "i"),
+	("pct", "PS Ct", lambda p: flt(p.get("ps_ct")) or None, "c"),
+	("spcs", "CS Pcs", lambda p: cint(p.get("stn_pcs")) or None, "i"),
+	("sct", "CS Ct", lambda p: flt(p.get("stn_ct")) or None, "c"),
+	("huid", "HUID", lambda p: p.get("huid") or None, "t"),
+	("cert", "Cert", lambda p: p.get("cert") or None, "t"),
+	("gold_va", "Gold ₹", lambda p: flt(p.get("gold_va")) or None, "m"),
+	("mc", "Making ₹", lambda p: flt(p.get("mc")) or None, "m"),
+	("dmd_va", "Diamond ₹", lambda p: flt(p.get("dmd_va")) or None, "m"),
+	("stn_va", "Stone ₹", lambda p: (flt(p.get("stn_va")) + flt(p.get("ps_va"))) or None, "m"),
+	("charges_va", "Charges ₹", lambda p: flt(p.get("charges_va")) or None, "m"),
+	("total", "Total ₹", lambda p: flt(p.get("total")) or None, "m"),
+]
+
+
+def _prep_clean_sheet(spec, rows, p):
+	"""One tidy, branded page of the parcel: rows in the parcel's own order and
+	serial numbers, only the columns that carry something, totals at the foot."""
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+	from openpyxl.utils import get_column_letter
+
+	GOLD, DEEP, INK, MUTED = "A1742B", "7A5420", "1F2328", "6B6F76"
+	LINE, ZEBRA, FOOT = "E6D9C3", "FBF7F0", "F3E6CF"
+	FONT = "Calibri"
+
+	cols = [c for c in CLEAN_COLS if c[0] in ("sl", "bag") or any(c[2](r) for r in rows)]
+	n = len(cols)
+	last = get_column_letter(n)
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Parcel"
+	ws.sheet_view.showGridLines = False
+
+	# ---- the heading: the name, what this is, and the facts of the parcel
+	ws.row_dimensions[1].height = 30
+	ws["A1"] = "JEWELIMA"
+	ws["A1"].font = Font(name=FONT, size=22, bold=True, color=GOLD)
+	ws.cell(row=1, column=n, value=frappe.utils.formatdate(frappe.utils.nowdate(), "dd MMM yyyy")).font = Font(
+		name=FONT, size=11, color=MUTED)
+	ws.cell(row=1, column=n).alignment = Alignment(horizontal="right", vertical="center")
+	ws["A2"] = "{0} · {1}".format(spec["label"], (p.get("title") or "Parcel Sheet").strip())
+	ws["A2"].font = Font(name=FONT, size=13, bold=True, color=INK)
+	rule = Border(bottom=Side(style="medium", color=GOLD))
+	for c in range(1, n + 1):
+		ws.cell(row=2, column=c).border = rule
+
+	facts = [("Party", p.get("customer")), ("Pieces", len(rows)),
+		("Diamond quality", p.get("quality")),
+		("Gold rate", "₹{0:,.2f}/g".format(flt(p.get("gold_rate"))) if flt(p.get("gold_rate")) else None)]
+	facts = [f for f in facts if f[1] not in (None, "")]
+	col = 1
+	for label, value in facts:
+		ws.cell(row=4, column=col, value=label.upper()).font = Font(name=FONT, size=8.5, bold=True, color=MUTED)
+		ws.cell(row=5, column=col, value=value).font = Font(name=FONT, size=11.5, bold=True, color=INK)
+		ws.cell(row=5, column=col).alignment = Alignment(horizontal="left")
+		col += 3 if n >= 12 else 2
+
+	# ---- the table
+	HR = 7
+	head_fill = PatternFill("solid", fgColor=GOLD)
+	thin = Side(style="thin", color=LINE)
+	grid = Border(bottom=thin)
+	fmt = {"i": "0", "w": "0.000", "c": "0.000", "m": "#,##0", "t": "@"}
+	ws.row_dimensions[HR].height = 22
+	for i, (key, label, _f, kind) in enumerate(cols, start=1):
+		c = ws.cell(row=HR, column=i, value=label)
+		c.font = Font(name=FONT, size=10, bold=True, color="FFFFFF")
+		c.fill = head_fill
+		c.alignment = Alignment(horizontal="left" if kind == "t" else "right", vertical="center")
+
+	r = HR
+	for idx, piece in enumerate(rows):
+		r += 1
+		zebra = PatternFill("solid", fgColor=ZEBRA) if idx % 2 else None
+		for i, (key, label, f, kind) in enumerate(cols, start=1):
+			c = ws.cell(row=r, column=i, value=f(piece))
+			c.font = Font(name=FONT, size=10.5, color=INK, bold=(key == "total"))
+			c.border = grid
+			c.alignment = Alignment(horizontal="left" if kind == "t" else "right", vertical="center")
+			if kind != "t":
+				c.number_format = fmt[kind]
+			if zebra:
+				c.fill = zebra
+
+	# ---- the foot: totals under every measure
+	if rows:
+		r += 1
+		foot_fill = PatternFill("solid", fgColor=FOOT)
+		top = Border(top=Side(style="medium", color=GOLD))
+		for i, (key, label, f, kind) in enumerate(cols, start=1):
+			c = ws.cell(row=r, column=i)
+			c.fill = foot_fill
+			c.border = top
+			c.font = Font(name=FONT, size=10.5, bold=True, color=DEEP)
+			if kind in ("w", "c", "m") or (kind == "i" and key != "sl"):
+				L = get_column_letter(i)
+				c.value = "=SUM({0}{1}:{0}{2})".format(L, HR + 1, r - 1)
+				c.number_format = fmt[kind]
+				c.alignment = Alignment(horizontal="right")
+		ws.cell(row=r, column=2 if n > 1 else 1, value="TOTAL").alignment = Alignment(horizontal="left")
+
+	# ---- widths off the data, so nothing clips and nothing sprawls
+	for i, (key, label, f, kind) in enumerate(cols, start=1):
+		longest = max([len(label)] + [len(str(f(x) or "")) for x in rows])
+		if kind == "m":
+			longest += 3
+		ws.column_dimensions[get_column_letter(i)].width = min(max(longest + 2.5, 6 if key == "sl" else 9), 34)
+
+	ws.freeze_panes = ws.cell(row=HR + 1, column=3 if n > 2 else 1)
+	ws.print_title_rows = "{0}:{0}".format(HR)
+	ws.page_setup.orientation = "landscape" if n > 9 else "portrait"
+	ws.page_setup.paperSize = ws.PAPERSIZE_A4
+	ws.page_setup.fitToWidth = 1
+	ws.page_setup.fitToHeight = 0
+	ws.sheet_properties.pageSetUpPr.fitToPage = True
+	ws.print_options.horizontalCentered = True
+	ws.page_margins.left = ws.page_margins.right = 0.4
+	ws.oddFooter.left.text = "JEWELIMA"
+	ws.oddFooter.right.text = "Page &P of &N"
+	ws.print_area = "A1:{0}{1}".format(last, r)
+
+	buf = BytesIO()
+	wb.save(buf)
+	return buf.getvalue()
+
+
 @frappe.whitelist()
 def export_sale_prep_doc(payload, fmt, doc):
 	"""One of a format's documents, built from the parcel as it stands."""
@@ -25707,6 +25858,13 @@ def export_sale_prep_doc(payload, fmt, doc):
 			flt(p.get("gold_rate")), p.get("quality") or "",
 			karat_label=p.get("karat_label") or "18 KT", party=p.get("customer") or "",
 			filename="{0} {1}.xlsx".format(spec["label"], d["label"]))
+
+	if d["kind"] == "clean":
+		frappe.local.response.filename = "{0} {1}.xlsx".format(
+			(p.get("title") or p.get("customer") or spec["label"]).strip(), d["label"])
+		frappe.local.response.filecontent = _prep_clean_sheet(spec, rows, p)
+		frappe.local.response.type = "download"
+		return
 
 	head = {"title": "{0} — {1}".format(spec["label"], d["label"]),
 		"customer": p.get("customer") or "", "gold_rate": flt(p.get("gold_rate")) or "",
