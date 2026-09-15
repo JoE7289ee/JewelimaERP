@@ -25723,8 +25723,9 @@ def _prep_clean_sheet(spec, rows, p):
 	from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 	from openpyxl.utils import get_column_letter
 
-	GOLD, DEEP, INK, MUTED = "A1742B", "7A5420", "1F2328", "6B6F76"
-	LINE, ZEBRA, FOOT = "E6D9C3", "FBF7F0", "F3E6CF"
+	# the green family: a deep green for the name, header row and rules
+	GOLD, DEEP, INK, MUTED = "1E6B45", "14532D", "1F2328", "6B6F76"
+	LINE, ZEBRA, FOOT = "D3E5DA", "F3F8F5", "DCEFE3"
 	FONT = "Calibri"
 
 	cols = _clean_cols(rows)
@@ -25749,17 +25750,28 @@ def _prep_clean_sheet(spec, rows, p):
 	for c in range(1, n + 1):
 		ws.cell(row=2, column=c).border = rule
 
-	facts = [("Party", p.get("customer")), ("Pieces", len(rows))]
+	# the parcel at a glance: pieces, pure gold, and how many of each item type
+	bag_names = [x.get("order_bag") for x in rows if x.get("order_bag")]
+	pure = sum(flt(v) for (v,) in frappe.db.sql("select act_pure_weight from `tabOrder Bag` where name in %s",
+		[tuple(bag_names) or ("",)])) if bag_names else 0
+	types = {}
+	for x in rows:
+		t = (x.get("item") or "OTHER").upper()
+		types[t] = types.get(t, 0) + 1
+	facts = [("Party", p.get("customer")), ("Pieces", len(rows)),
+		("Pure Wt", "{0:.3f} g".format(pure) if pure else None),
+		("Item Types", "  ·  ".join("{0} {1}".format(t, n) for t, n in sorted(types.items(), key=lambda kv: (-kv[1], kv[0]))))]
 	facts = [f for f in facts if f[1] not in (None, "")]
-	col = 1
-	for label, value in facts:
-		ws.cell(row=4, column=col, value=label.upper()).font = Font(name=FONT, size=8.5, bold=True, color=MUTED)
-		ws.cell(row=5, column=col, value=value).font = Font(name=FONT, size=11.5, bold=True, color=INK)
-		ws.cell(row=5, column=col).alignment = Alignment(horizontal="left")
-		col += 3 if n >= 12 else 2
+	# one fact to a line — label in the first columns, value from the third, so a
+	# long party name or a long list of item types has the whole row to run into
+	for j, (label, value) in enumerate(facts):
+		ws.cell(row=4 + j, column=1, value=label.upper()).font = Font(name=FONT, size=9, bold=True, color=MUTED)
+		v = ws.cell(row=4 + j, column=3, value=value)
+		v.font = Font(name=FONT, size=11.5, bold=True, color=INK)
+		v.alignment = Alignment(horizontal="left")
 
 	# ---- the table
-	HR = 7
+	HR = 5 + len(facts)
 	head_fill = PatternFill("solid", fgColor=GOLD)
 	thin = Side(style="thin", color=LINE)
 	grid = Border(bottom=thin)
