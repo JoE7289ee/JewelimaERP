@@ -277,7 +277,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		const tot = { count: 0, errors: [] };
 		const run = (i) => {
 			if (i >= parts.length) return Promise.resolve();
-			frappe.dom.freeze(parts.length > 1
+			jewelima.freezeStep(parts.length > 1
 				? __("Assigning {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
 				: __("Assigning…"));
 			return frappe.call({
@@ -330,7 +330,7 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 		const tot = { count: 0, transferred: 0, errors: [], transfer_errors: [] };
 		const run = (i) => {
 			if (i >= parts.length) return Promise.resolve();
-			frappe.dom.freeze(parts.length > 1
+			jewelima.freezeStep(parts.length > 1
 				? __("Collecting {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
 				: __("Collecting…"));
 			return frappe.call({

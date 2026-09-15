@@ -67,6 +67,17 @@ $(document).on("keydown", (e) => {
 
 frappe.provide("jewelima");
 
+// A long batch goes to the server in parts, and the freeze says which part is
+// going. frappe.dom.freeze COUNTS its calls: freezing once per part and
+// unfreezing once at the end left the screen frozen on "1 of 2" after the work
+// had already finished. The first part freezes; the later parts only change
+// the words.
+jewelima.freezeStep = function (msg) {
+	const $lead = $("#freeze .freeze-message .lead");
+	if (frappe.dom.freeze_count && $lead.length) $lead.html(msg);
+	else frappe.dom.freeze(msg);
+};
+
 // ---------------------------------------------------------------------------
 // One loading indicator for every Jewelima page.
 //

@@ -169,13 +169,19 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	}
 	function updateLoc() {
 		$(page.main).find(".jw-locval").text(state.location || "—");
+		renderHead();          // the scrub switch follows the bench
 		loadWorkOptions();
 	}
 
 	// ---- rendering -------------------------------------------------------
 	function renderHead() {
 		// scrub is a receipt idea only — there is nothing to hand back on the way out
-		$(page.main).find(".jw-opts").toggle(state.mode === "receipt");
+		// and only FILING hands scrub back
+		if (state.scrub && state.location && state.location !== "FILING") {
+			state.scrub = false;
+			state.rows.forEach((r) => { r.scrub = null; });
+		}
+		$(page.main).find(".jw-opts").toggle(state.mode === "receipt" && state.location === "FILING");
 		$(page.main).find(".jw-scrubbtn").toggleClass("on", !!state.scrub)
 			.text(state.scrub ? __("Scrub on") : __("+ Scrub"));
 		if (state.mode === "issue") {
@@ -269,6 +275,15 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	// the column appears when it is asked for, and clearing it clears the figures
 	// with it — a hidden box holding 2 g would post a scrub nobody could see
 	$(page.main).on("click", ".jw-scrubbtn", function () {
+		// switching it off would silently drop weights somebody typed — refuse
+		// while any card in the lot still carries one
+		const typed = state.scrub ? state.rows.filter((r) => flt(r.scrub) > 0) : [];
+		if (typed.length) {
+			frappe.msgprint({ title: __("Scrub is entered"), indicator: "red",
+				message: __("This lot has scrub entered on {0} card(s): {1}. Clear those before turning scrub off.",
+					[typed.length, typed.map((r) => frappe.utils.escape_html(r.name)).join(", ")]) });
+			return;
+		}
 		state.scrub = !state.scrub;
 		$(this).toggleClass("on", state.scrub).text(state.scrub ? __("Scrub on") : __("+ Scrub"));
 		if (!state.scrub) state.rows.forEach((r) => { r.scrub = null; });
@@ -442,7 +457,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		const tot = { count: 0, errors: [] };
 		const runIssue = (i) => {
 			if (i >= parts.length) return Promise.resolve();
-			frappe.dom.freeze(parts.length > 1
+			jewelima.freezeStep(parts.length > 1
 				? __("Issuing {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
 				: __("Issuing…"));
 			return frappe.call({
@@ -492,7 +507,7 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				const tot = { count: 0, loss: 0, scrub: 0, transferred: 0, errors: [], transfer_errors: [] };
 				const runReceipt = (i) => {
 					if (i >= parts.length) return Promise.resolve();
-					frappe.dom.freeze(parts.length > 1
+					jewelima.freezeStep(parts.length > 1
 						? __("Receipting {0} of {1} — {2} card(s)…", [i + 1, parts.length, parts[i].length])
 						: __("Receipting…"));
 					return frappe.call({
@@ -537,20 +552,18 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 			frappe.msgprint({ title: __("Some skipped"), message: errors.map((e) => `${e.name}: ${e.error}`).join("<br>"), indicator: "orange" });
 		}
 	}
+	// the one action sits in the header, beside Reset, where it is always in
+	// reach however long the batch grows
 	function renderActions() {
 		$actions.empty();
-		if (state.mode === "issue") {
-			// gold never leaves the bench anonymously — the loss on receipt has to
-			// answer to somebody, so there is no employee-less issue
-			$(`<button class="btn btn-primary btn-sm">${__("Issue")}</button>`).appendTo($actions).on("click", issueClicked);
-		} else {
-			$(`<button class="btn btn-primary btn-sm">${__("Receipt")}</button>`).appendTo($actions).on("click", doReceipt);
-		}
+		page.set_primary_action(state.mode === "issue" ? __("Issue") : __("Receipt"),
+			() => { if (state.mode === "issue") issueClicked(); else doReceipt(); });
 	}
 
 	// ---- batch / mode ----------------------------------------------------
 	function clearBatch() {
 		state.rows = [];
+		state.scrub = false;
 		state.location = null;
 		state.batchEmp = null;
 		state.batchEmpName = null;

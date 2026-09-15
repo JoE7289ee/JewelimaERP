@@ -354,7 +354,7 @@ frappe.pages["transfer-order-bag"].on_page_load = function (wrapper) {
 		const runChunk = (idx) => {
 			if (idx >= chunks.length) return Promise.resolve();
 			const part = chunks[idx];
-			frappe.dom.freeze(chunks.length > 1
+			jewelima.freezeStep(chunks.length > 1
 				? __("{0} {1} of {2} — {3} bag(s)…", [plus ? __("Transferring + issuing") : __("Transferring"),
 					idx + 1, chunks.length, part.length])
 				: (plus ? __("Transferring + issuing…") : __("Transferring…")));

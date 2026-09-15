@@ -9673,6 +9673,9 @@ def receipt_bench_cards(lines, location, employee=None, collection_state=None):
 		frappe.throw(frappe._("Job Work (Issue / Receipt) is only for {0}.").format(", ".join(sorted(ISSUE_RECEIPT_LOCATIONS))))
 	collection_state = _valid_bench_option(location, "Collection State", collection_state)
 	loc = (location or "").upper()
+	# scrub is filings handed back, and only FILING hands any back
+	if loc != "FILING" and any(flt((ln or {}).get("scrub")) > 0 for ln in (lines or [])):
+		frappe.throw(frappe._("Scrub is only taken at FILING — this batch is at {0}.").format(loc))
 	done, errors, total_loss, total_gain, total_scrub = [], [], 0.0, 0.0, 0.0
 	for ln in lines or []:
 		nm = ln.get("order_bag")

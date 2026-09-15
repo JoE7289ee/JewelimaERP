@@ -212,7 +212,7 @@ frappe.pages["ws-ordering"].on_page_load = function (wrapper) {
 				const tot = { count: 0, errors: [] };
 				const run = (i) => {
 					if (i >= parts.length) return Promise.resolve();
-					frappe.dom.freeze(parts.length > 1
+					jewelima.freezeStep(parts.length > 1
 						? __("Transferring {0} of {1}…", [i + 1, parts.length]) : __("Transferring…"));
 					return frappe.call({ method: API + ".transfer_order_bags",
 						args: { names: JSON.stringify(parts[i]), to_location: v.to, remarks: "Ordering desk" } })
