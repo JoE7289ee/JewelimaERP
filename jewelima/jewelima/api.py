@@ -25704,13 +25704,13 @@ def _clean_cols(rows):
 		("item", "Item Type", lambda p: p.get("item") or None, "t"),
 		("bag", "Order Bag", lambda p: p.get("order_bag") or None, "t"),
 	]
-	for k, label in CLEAN_BUCKETS:
-		cols.append((k + "_no", label + " Pcs", lambda p, k=k: cint(bag(p).get("act_{0}_no".format(k))) or None, "i"))
-		cols.append((k + "_wt", label + " Ct", lambda p, k=k: flt(bag(p).get("act_{0}_weight".format(k))) or None, "c"))
 	cols += [
 		("gross", "Gross Wt (g)", lambda p: flt(p.get("gs_full") or p.get("gs") or bag(p).get("act_gross_weight")) or None, "w"),
 		("net", "Nett Wt (g)", lambda p: flt(p.get("nt_full") or p.get("nt") or bag(p).get("act_nett_weight")) or None, "w"),
 	]
+	for k, label in CLEAN_BUCKETS:
+		cols.append((k + "_no", label + " Pcs", lambda p, k=k: cint(bag(p).get("act_{0}_no".format(k))) or None, "i"))
+		cols.append((k + "_wt", label + " Ct", lambda p, k=k: flt(bag(p).get("act_{0}_weight".format(k))) or None, "c"))
 	return [c for c in cols if c[0] in ("sl", "item", "bag", "gross", "net") or any(c[2](r) for r in rows)]
 
 
@@ -25796,8 +25796,11 @@ def _prep_clean_sheet(spec, rows, p):
 			c.border = top
 			c.font = Font(name=FONT, size=10.5, bold=True, color=DEEP)
 			if kind in ("w", "c") or (kind == "i" and key != "sl"):
-				L = get_column_letter(i)
-				c.value = "=SUM({0}{1}:{0}{2})".format(L, HR + 1, r - 1)
+				# the figure itself, not a SUM formula: a formula has no value until a
+				# spreadsheet recalculates it, and phone and mail previews never do —
+				# the totals row came out blank there
+				total = sum(flt(f(x)) for x in rows)
+				c.value = cint(total) if kind == "i" else round(total, 3)
 				c.number_format = fmt[kind]
 				c.alignment = Alignment(horizontal="right")
 		ws.cell(row=r, column=2 if n > 1 else 1, value="TOTAL")
