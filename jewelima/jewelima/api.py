@@ -25680,6 +25680,11 @@ def export_sale_prep_doc(payload, fmt, doc):
 		r.setdefault("sl", i)
 
 	if d["kind"] == "jos":
+		# the billing sheet prices every piece off the chart, so without one it has
+		# nothing to bill with — say so instead of a bare Not Found
+		chart = p.get("price_chart")
+		if not chart or not frappe.db.exists("Price Chart", chart):
+			frappe.throw(frappe._("Pick a price chart for the {0}.").format(d["label"]))
 		# the billing sheet already exists and is not rebuilt here
 		return export_old_sale_jos(json.dumps(rows), p.get("price_chart"),
 			flt(p.get("gold_rate")), p.get("quality") or "",

@@ -542,6 +542,11 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	// ---- the papers ----------------------------------------------------------
 	root.on("click", ".ps-doc", function () {
 		if (!S.rows.length) return frappe.msgprint(__("Scan some pieces first."));
+		// a billing sheet is priced off the chart; the download opens in a new tab,
+		// where a refusal would only show as Not Found, so it is caught here
+		if ($(this).data("d") === "ratecut" && !S.chartCtl.get_value()) {
+			return frappe.msgprint(__("Pick a price chart first — the {0} is priced off it.", [((fmtSpec().docs || []).find((x) => x.key === "ratecut") || {}).label || __("Rate cut")]));
+		}
 		const payload = {
 			customer: S.custCtl.get_value() || "", price_chart: S.chartCtl.get_value() || "",
 			gold_rate: flt(S.rateCtl.get_value()), quality: mainQuality(),
