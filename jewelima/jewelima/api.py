@@ -16552,7 +16552,80 @@ def get_prepared_boards():
 			"modified", "owner"], order_by="modified desc")
 	for r in rows:
 		r["pieces"] = frappe.db.count("Sale Preparation Item", {"parent": r["name"]})
+		# a parcel saved on Prepare to Sell reopens THERE; a board parked from Sell
+		# reopens on Sell — each is restored by the page that knows its shape
+		bj = frappe.db.get_value("Sale Preparation", r["name"], "board_json") or ""
+		r["source"] = "prepare" if '"source": "prepare"' in bj else "sell"
 	return {"rows": rows}
+
+
+@frappe.whitelist()
+def save_parcel(payload):
+	"""Keep the parcel being built on Prepare to Sell.
+
+	Written into the same Sale Preparation a parked Sell board uses, so it lists
+	and discards the same way — but its board keeps what the parcel needs and a
+	bill does not: the FORMAT, the diamond quality, and the pieces in the order
+	they were scanned, which is the order every sheet numbers them by. Saving an
+	open parcel again updates it rather than parking a second copy."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery"))
+	p = frappe.parse_json(payload)
+	rows = p.get("rows") or []
+	if not rows:
+		frappe.throw(frappe._("Scan at least one piece before saving."))
+	if not p.get("price_chart"):
+		frappe.throw(frappe._("Pick the price chart before saving — a prep is kept priced."))
+
+	items, grand = [], 0.0
+	for r in rows:
+		dsn = r.get("design")
+		if dsn and not frappe.db.exists("Design", dsn):
+			dsn = frappe.db.get_value("Order Bag", r.get("order_bag"), "design")
+		vals = {"gold_value": flt(r.get("gold_va")), "diamond_value": flt(r.get("dmd_va")),
+			"stone_value": flt(r.get("stn_va")) + flt(r.get("ps_va")),
+			"labour_value": flt(r.get("mc")) + flt(r.get("bc_mc")),
+			"charges_value": flt(r.get("charges_va"))}
+		total = round(sum(vals.values()), 2)
+		grand += total
+		items.append({"order_bag": r.get("order_bag"), "design": dsn or None,
+			"design_type": r.get("item") or None, "nett": flt(r.get("nt")),
+			"dmd_ct": flt(r.get("dmd_ct")),
+			"ostone_ct": round(flt(r.get("ps_ct")) + flt(r.get("stn_ct")), 3),
+			**{k: round(v, 2) for k, v in vals.items()}, "piece_total": total})
+
+	name = p.get("name")
+	if name and frappe.db.exists("Sale Preparation", name):
+		doc = frappe.get_doc("Sale Preparation", name)
+		if doc.status not in ("Draft", "Sent"):
+			frappe.throw(frappe._("{0} is {1} and can no longer be changed.").format(name, doc.status))
+	else:
+		doc = frappe.new_doc("Sale Preparation")
+		doc.status = "Draft"
+	doc.customer = p.get("customer") or None
+	doc.price_chart = p.get("price_chart") or None
+	doc.gold_rate = flt(p.get("gold_rate"))
+	doc.set("items", items)
+	doc.grand_total = round(grand, 2)
+	doc.board_json = frappe.as_json({"source": "prepare", "fmt": p.get("fmt") or "DEFAULT",
+		"quality": p.get("quality") or "", "sorted": cint(p.get("sorted")), "rows": rows})
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"name": doc.name, "pieces": len(items), "grand_total": doc.grand_total}
+
+
+@frappe.whitelist()
+def get_parcel(name):
+	"""Reopen a saved parcel on Prepare to Sell, exactly as it was left."""
+	d = frappe.get_doc("Sale Preparation", name)
+	if d.status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} and can no longer be opened here.").format(name, d.status))
+	board = json.loads(d.board_json) if d.board_json else {}
+	if board.get("source") != "prepare":
+		frappe.throw(frappe._("{0} was parked from Sell — open it there.").format(name))
+	return {"name": d.name, "customer": d.customer or "", "price_chart": d.price_chart or "",
+		"gold_rate": flt(d.gold_rate), "fmt": board.get("fmt") or "DEFAULT",
+		"quality": board.get("quality") or "", "sorted": cint(board.get("sorted")),
+		"rows": board.get("rows") or []}
 
 
 @frappe.whitelist()
