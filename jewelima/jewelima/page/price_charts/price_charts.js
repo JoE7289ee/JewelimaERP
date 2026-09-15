@@ -178,8 +178,9 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		if (kind === "ps") return cur.precious_stone_rates.map((r, i) => `
 			<tr data-i="${i}"><td><select data-f="stone">
 				<option value=""></option>
+				<option value="DEFAULT" ${r.stone === "DEFAULT" ? "selected" : ""}>${__("DEFAULT — any other stone")}</option>
 				${PSTONES.map((p) => `<option ${r.stone === p ? "selected" : ""}>${esc(p)}</option>`).join("")}
-				${r.stone && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
+				${r.stone && r.stone !== "DEFAULT" && !PSTONES.includes(r.stone) ? `<option selected>${esc(r.stone)}</option>` : ""}
 			</select></td>
 			<td><input data-f="from_ct" type="number" step="0.0001" value="${num(r.from_ct)}" placeholder="${__("blank = flat")}"></td>
 			<td><input data-f="to_ct" type="number" step="0.0001" value="${num(r.to_ct)}" placeholder="${__("blank = above")}"></td>
@@ -247,7 +248,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("Diamond Rates (₹/ct by size bracket)")}<span class="add" data-k="dmd">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="dmd"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Quality")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("dmd")}</tbody></table>
-			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (rows present = a PS stone without a row blocks the scan)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
+			<div class="pc-sec">${__("Precious Stone Rates — per stone, flat ₹/ct (DEFAULT prices any stone without its own row)")}<span class="add" data-k="ps">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="ps"><thead><tr><th>${__("Stone")}</th><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Rate ₹/ct")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("ps")}</tbody></table>
 			<div class="pc-sec">${__("Making Charges")}<span class="add" data-k="mk">+ ${__("row")}</span></div>

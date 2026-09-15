@@ -12598,6 +12598,10 @@ def save_price_chart(payload):
 				"solitaire": cint(r.get("solitaire"))})
 	for r in p.get("precious_stone_rates") or []:
 		if (r.get("stone") or "").strip():
+			# the stone is free text so DEFAULT can sit beside real stones — the
+			# check the old Link did is done here instead
+			if r.get("stone").strip() != "DEFAULT" and not frappe.db.exists("Item", r.get("stone").strip()):
+				frappe.throw(frappe._("{0} is not a stone item.").format(r.get("stone").strip()))
 			doc.append("precious_stone_rates", {"stone": r.get("stone").strip(),
 				"from_ct": flt(r.get("from_ct")), "to_ct": flt(r.get("to_ct")), "rate": flt(r.get("rate"))})
 	for field in ("cs_rates", "cz_rates", "cvd_rates", "sw_rates"):
@@ -15337,14 +15341,17 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 		if flt(r.get("ps_ct")) > 0:
 			stone = str(r.get("ps_stone") or "").strip().upper()
 			ps_ct = flt(r.get("ps_ct"))
-			if not stone:
+			# a stone with no row of its own — or no name at all — takes the
+			# chart's DEFAULT rows when it has them
+			use = stone if stone in ps_by_stone else ("DEFAULT" if "DEFAULT" in ps_by_stone else "")
+			if not use and not stone:
 				flags.append("PS {0} ct — name the stone to price it".format(ps_ct))
 			elif not ps_by_stone:
 				flags.append("PS {0} — the chart has no precious stone rates".format(stone))
-			elif stone not in ps_by_stone:
+			elif not use:
 				flags.append("PS {0} is not on the chart".format(stone))
 			else:
-				brackets = sorted(ps_by_stone[stone], key=lambda x: flt(x.from_ct))
+				brackets = sorted(ps_by_stone[use], key=lambda x: flt(x.from_ct))
 				# to_ct is labelled "Below ct" and the CS path treats it that way, so
 				# an inclusive upper edge here put a 1.00 ct stone on contiguous
 				# 0-1.00 / 1.00-2.00 rows into the CHEAPER bracket, silently.
@@ -15355,7 +15362,9 @@ def price_old_sale(rows, price_chart, gold_rate, quality, gst_percent=3,
 				else:
 					ps_rt = flt(row_ps.rate)
 					ps_va = round(ps_ct * ps_rt, 2)
-					notes["ps"] = "{0} {1} ct x {2}/ct = {3}".format(stone, ps_ct, ps_rt, _inr(ps_va))
+					notes["ps"] = "{0} {1} ct x {2}/ct = {3}".format(
+						stone + (" (DEFAULT rate)" if use != stone else "") if stone else "PS at DEFAULT rate",
+						ps_ct, ps_rt, _inr(ps_va))
 		# STN = the CS bucket brackets (total ct; Per Piece rows use pcs)
 		stn_va = 0.0
 		if flt(r.get("stn_ct")) > 0:
@@ -17037,7 +17046,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		for item, qty in mats.items():
 			if frappe.db.get_value("Item", item, "stone_type") != "Precious Stone":
 				continue
-			rows = ps_rows.get(item.upper())
+			rows = ps_rows.get(item.upper()) or ps_rows.get("DEFAULT")
 			if not rows:
 				ps_missing.append(item)
 				continue

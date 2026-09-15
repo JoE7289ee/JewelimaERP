@@ -14,11 +14,11 @@
  "fields": [
   {
    "fieldname": "stone",
-   "fieldtype": "Link",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Stone",
-   "options": "Item",
-   "reqd": 1
+   "reqd": 1,
+   "description": "A precious stone item, or DEFAULT for any stone without its own row"
   },
   {
    "description": "Four decimals, like every other carat bracket.",
