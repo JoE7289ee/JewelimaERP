@@ -865,6 +865,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		options: "Price Chart", get_query: () => ({ filters: { status: "Active" } }), onchange: () => { paintDocs(); if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
 	S.rateCtl = mk(".h-rate", { fieldtype: "Currency", label: __("Gold rate / g"), fieldname: "gold_rate",
 		onchange: () => { if (S.loading) return; S.dirty = S.rows.length > 0; reprice(); } });
+	jewelima.boardRateChips(S.rateCtl);
 
 	frappe.pages["prepare-sale"].on_page_show = () => { if (S.ctx) route(); };
 

@@ -235,6 +235,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const fChart = mk(".of-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
 		get_query: () => ({ filters: { status: "Active" } }), onchange: () => { unprice(); loadQualities(); } });
 	const fRate = mk(".of-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate", onchange: () => unprice() });
+	jewelima.boardRateChips(fRate);
 	const fCq = mk(".of-cq", { fieldtype: "Select", label: __("Chart quality"), fieldname: "cq", options: "", onchange: () => unprice() });
 	const fGst = mk(".of-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3, onchange: () => unprice() });
 	fGst.set_value(3);

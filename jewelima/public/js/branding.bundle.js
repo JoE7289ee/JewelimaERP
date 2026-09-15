@@ -271,6 +271,7 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 // Frappe intends. (Redundant for pages that already set it — harmless.)
 (() => {
 	const JW_PAGES = ["add-employee", "add-findings", "add-user", "all-requests", "assign-collect", "at-certification", "bag-split", "bag-status", "buckets", "bench-info", "bench-work-setup", "cad-jobs", "cad-sheet", "cad-workstation", "cancellation", "card-builder", "card-gold", "card-gold-history", "card-info", "casting-queue", "casting-weigh", "certification-out", "certify", "confirm-certifications", "customer-photos", "customer-update", "delivery-masters", "export-formats", "design-bank-report", "design-duplicates", "design-gallery", "design-info", "design-report", "design-review", "design-tags", "design-types", "due-risk", "due-soon", "due-view", "dye-bank", "dye-find", "dye-info", "dye-manage", "edit-order", "employee-loss", "file-share", "findings-history", "findings-report", "findings-stock", "finished-goods", "finished-stock", "gold-casting", "import-design", "import-old-stock", "import-stock", "in-bags", "issue-access", "issue-findings", "job-order-status", "job-work", "location-stock", "loss-collection", "loss-history", "loss-report", "loss-writeoff", "make-products", "make-tree", "meeting-minutes", "melt-gold", "melt-history", "new-design-bank", "new-repair-order", "old-categories", "old-format", "order-bag-photos", "order-masters", "order-requests", "parties", "party-gold", "party-groups", "party-masters", "party-metal", "party-stock", "photo-approvals", "photo-kpi", "photo-queue", "photo-update", "photo-urgent", "place-order", "prepare-sale", "price-charts", "multi-barcode", "print-barcode", "print-order-bags", "prioritization", "purchase-history", "purchase-masters", "purchase-raw-material", "quick-menu-setup", "raw-materials", "recover-findings", "rejection", "repack-stock", "stone-repack-history", "stone-adjustment", "stone-adjustment-history", "repair-quick-check", "repair-billing", "repair-kpi", "repair-masters", "repair-status", "request-feature", "reset-password", "retire-design", "retired-designs", "rework", "role-access", "sales-history", "saved-imports", "search-design", "select-photos", "selected-pieces", "selection-providers", "selection-review", "selection-tags", "sell", "send-certifications", "sieve-chart", "stock-analysis", "stock-day", "stock-transfer", "stone-audit", "stone-history", "stone-info", "stone-issue", "stone-issues", "stone-request", "stone-return", "stone-stock", "system-information", "total-gold", "transfer-history", "transfer-bucket", "transfer-holder", "transfer-matrix", "transfer-order-bag", "usage", "user-roles", "view-pc", "warehouse-management", "weight-checker", "ws-bag-extraction", "ws-cad-ws", "ws-cam", "ws-filing", "ws-final-polish", "ws-grinding", "ws-ordering", "ws-pre-polish", "ws-setting", "ws-wax-setting", "ws-waxing"];
+	jewelima.JW_PAGES = JW_PAGES;   // the sidebar net below needs to know our pages
 	const st = document.createElement("style");
 	st.textContent = JW_PAGES.map((r) => `#page-${r} .container{max-width:100% !important;}`).join("");
 	document.head.appendChild(st);
@@ -432,9 +433,17 @@ frappe.provide("frappe.ui.toolbar");
 		});
 		if (dirty) localStorage.setItem("sidebar_item_map", JSON.stringify(m));
 	} catch (e) { /* storage unavailable — the net below still covers it */ }
+	// A page opened at a SUB-ROUTE — prepare-sale/new, prepare-sale/SPREP-00012,
+	// costing-chart/PCH-0005 — is looked up by core under its second part ("new"),
+	// which no workspace links to, so a refresh or a deep link drew an EMPTY
+	// sidebar. Any of our pages at a sub-route gets the Jewelima sidebar back.
+	const SUBROUTE_PAGES = ["prepare-sale", "costing-chart"];
 	function orphanNet() {
-		const r = (frappe.get_route() || [])[0];
-		if (ORPHAN_ROUTES.includes(r) && frappe.app && frappe.app.sidebar
+		const route = frappe.get_route() || [];
+		const r = route[0];
+		const ours = ORPHAN_ROUTES.includes(r) || (route.length > 1
+			&& (SUBROUTE_PAGES.includes(r) || (jewelima.JW_PAGES || []).includes(r)));
+		if (ours && frappe.app && frappe.app.sidebar
 			&& frappe.app.sidebar.sidebar_title !== "Jewelima") {
 			try { frappe.app.sidebar.setup("Jewelima"); } catch (e) { /* noop */ }
 		}

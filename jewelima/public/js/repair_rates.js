@@ -26,3 +26,33 @@ jewelima.repairRateForKarat = function (board, karat) {
 	const purity = jewelima.REPAIR_KARAT_PURITY[k];
 	return net * (purity !== undefined ? purity : (parseFloat(k) || 0) * 100 / 24) / 100;
 };
+
+// ---------------------------------------------------------------------------
+// Two small chips under a gold-rate box: today's board at 24K (GST out), or 18K
+// at 75% of it. The board is read when a chip is clicked, never on a timer, and
+// the value lands through the control's own set_value so its onchange re-prices.
+// ---------------------------------------------------------------------------
+jewelima.boardRateChips = function (ctl) {
+	if (!ctl || !ctl.$wrapper || ctl.$wrapper.find(".jw-brchips").length) return;
+	const $c = $(`<div class="jw-brchips" style="display:flex;gap:5px;margin-top:3px;flex-wrap:wrap;">
+		<button type="button" class="btn btn-xs btn-default" data-k="k24">${__("Board 24K")}</button>
+		<button type="button" class="btn btn-xs btn-default" data-k="k18">${__("18K · 75%")}</button>
+	</div>`).appendTo(ctl.$wrapper);
+	$c.on("click", "button", function () {
+		const k = this.dataset.k;
+		const $b = $c.find("button").prop("disabled", true);
+		frappe.call({ method: "jewelima.jewelima.api.get_sale_board_rate", freeze: false })
+			.then((r) => {
+				const m = r.message || {};
+				if (!m[k]) {
+					frappe.msgprint(m.error || __("The board is not answering just now — type the rate in."));
+					return;
+				}
+				ctl.set_value(m[k]);
+				frappe.show_alert({ indicator: "green", message: k === "k18"
+					? __("18K rate {0} — 75% of today's {1} ({2}), GST out", [m.k18, m.k24, m.line])
+					: __("24K rate {0} — {1}, GST out", [m.k24, m.line]) }, 6);
+			})
+			.always(() => $b.prop("disabled", false));
+	});
+};
