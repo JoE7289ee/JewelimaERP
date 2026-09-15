@@ -105,13 +105,25 @@ frappe.pages["sales-records"].on_page_load = function (wrapper) {
 					<td>${esc(x.design_type)}</td>
 					<td>${x.nett || ""}</td><td>${x.dmd_ct || ""}</td>
 					<td><b>₹ ${money(x.piece_total)}</b>${x.overridden
-						? `<div class="sr-ovnote">${__("chart said")} ₹ ${money(x.chart_total)} — ${esc(x.changed_by || "")}${x.override_remark ? ": " + esc(x.override_remark) : ""}</div>`
+						? `<div class="sr-ovnote">${__("chart said")} ₹ ${money(x.chart_total)} — ${esc(x.changed_by || "")}${x.override_remark ? ": " + esc(x.override_remark) : ""}${
+							offChart(x)}</div>`
 						: ""}</td>
 				</tr>`).join("")}</tbody></table>
 
 			${overrides.length ? `<div class="sr-sec" style="margin-top:16px;color:#8a6d00;">
 				${__("{0} piece(s) sold off-chart — highlighted above", [overrides.length])}</div>` : ""}
 		`);
+	}
+
+	// which parts of an off-chart piece were priced by hand, chart figure beside sold
+	function offChart(x) {
+		const c = x.chart || {};
+		if (!Object.keys(c).length) return "";
+		const parts = [["Gold", "gold_value", "gold"], ["Diamond", "diamond_value", "diamond"],
+			["Stone", "stone_value", "stone"], ["Labour", "labour_value", "labour"], ["Charges", "charges_value", "charges"]]
+			.filter(([, s, k]) => Math.abs((x[s] || 0) - (c[k] || 0)) > 0.005)
+			.map(([l, s, k]) => `${__(l)} ₹ ${money(x[s])} (${__("chart")} ₹ ${money(c[k])})`);
+		return parts.length ? "<br>" + parts.join(" · ") : "";
 	}
 
 	function openSale(name) {

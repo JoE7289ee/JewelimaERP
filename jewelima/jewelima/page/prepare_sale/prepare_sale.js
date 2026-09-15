@@ -28,7 +28,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 	const root = $(page.main);
 
-const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: false, view: "list" };
+	const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: false, view: "list", locked: false, out: [] };
 
 	// The agreed physical order, the same ladder the OLD FORMAT sheet numbers by:
 	// the item ladder, then colour, then the below-1g band, then weight. It is a
@@ -54,6 +54,14 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 		.ps-state{font-size:11px;font-weight:800;letter-spacing:.03em;border-radius:999px;padding:3px 11px;white-space:nowrap;}
 		.ps-state.saved{background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		.ps-state.dirty{background:#fdf3e3;color:#8a5a00;border:1px solid #e6c98f;}
+		.ps-state.locked{background:#e9f0f7;color:#1f618d;border:1px solid #b9d0e6;}
+		[data-theme="dark"] .ps-state.locked{background:rgba(31,97,141,.2);color:#8fc1e8;border-color:rgba(31,97,141,.5);}
+		.ps-out{border:1px solid #e6b3b3;background:#fdf1f1;color:#8a2a2a;border-radius:10px;padding:10px 14px;
+			font-size:12.5px;margin-bottom:12px;line-height:1.6;}
+		[data-theme="dark"] .ps-out{background:rgba(176,42,42,.14);border-color:rgba(176,42,42,.5);color:#e8a0a0;}
+		table.ps-t tr.gone td{background:rgba(176,42,42,.06);}
+		.ps-gone{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#b02a2a;margin-left:6px;}
+		.pp-tag.locked{background:rgba(31,97,141,.16);color:#1f618d;}
 		[data-theme="dark"] .ps-state.saved{background:rgba(29,122,51,.18);color:#7fd49a;border-color:rgba(29,122,51,.5);}
 		[data-theme="dark"] .ps-state.dirty{background:rgba(180,83,9,.16);color:#e8a24a;border-color:rgba(180,83,9,.5);}
 		.ps-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
@@ -131,6 +139,7 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 			<span class="ps-state" style="display:none;"></span>
 			<span class="ps-msg"></span>
 		</div>
+		<div class="ps-out" hidden></div>
 		<div class="ps-tiles"></div>
 		<div class="ps-gridbox"><table class="ps-t">
 			<thead><tr>
@@ -172,10 +181,13 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 	}
 
 	function paintRows() {
+		const outOf = {};
+		(S.out || []).forEach((o) => { outOf[o.order_bag] = o.stock_status; });
 		root.find(".ps-body").html(S.rows.length ? S.rows.map((r, i) => `
-			<tr data-i="${i}">
+			<tr data-i="${i}" class="${outOf[r.order_bag] ? "gone" : ""}">
 				<td class="n0">${i + 1}</td>
-				<td><b>${esc(r.order_bag)}</b></td>
+				<td><b>${esc(r.order_bag)}</b>${outOf[r.order_bag]
+					? `<span class="ps-gone">${esc(outOf[r.order_bag])}</span>` : ""}</td>
 				<td>${esc(r.item || "")}</td>
 				<td>${esc(r.design || "")}</td>
 				<td>${esc(r.size || "")}</td>
@@ -186,7 +198,7 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 				<td class="num">${(r.ps_ct || r.stn_ct) ? g3(flt(r.ps_ct) + flt(r.stn_ct)) : "—"}</td>
 				<td>${esc(r.huid || "")}</td>
 				<td class="num">${r.total ? money(r.total) : "—"}</td>
-					<td><button class="ps-x" title="${__("Take it off")}">✕</button></td>
+					<td>${S.locked ? "" : `<button class="ps-x" title="${__("Take it off")}">✕</button>`}</td>
 			</tr>`).join("")
 			: `<tr><td colspan="13" class="ps-empty">${__("Scan the pieces going in this parcel. They stay in the order you scan them.")}</td></tr>`);
 	}
@@ -205,7 +217,16 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 	// the saved state sits in the scan row instead, beside what is being built.
 	function paintState() {
 		const $st = root.find(".ps-state");
-		if (S.dirty && S.rows.length) {
+		root.find(".ps-box").toggle(!S.locked);
+		root.find(".ps-sort").toggle(!S.locked && !!fmtSpec().sortable);
+		const out = S.out || [];
+		root.find(".ps-out").prop("hidden", !out.length).html(out.length
+			? __("{0} of the pieces in this parcel are no longer in stock: {1}", [out.length,
+				out.map((o) => `<b>${esc(o.order_bag)}</b> ${esc(o.stock_status)}`).join(" · ")])
+			: "");
+		if (S.locked) {
+			$st.show().attr("class", "ps-state locked").text(__("{0} · locked", [S.prep]));
+		} else if (S.dirty && S.rows.length) {
 			$st.show().attr("class", "ps-state dirty").text(S.prep ? __("{0} · changed, not saved", [S.prep]) : __("Not saved"));
 		} else if (S.prep) {
 			$st.show().attr("class", "ps-state saved").text(__("{0} · saved", [S.prep]));
@@ -219,7 +240,7 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 	// ---- scanning ------------------------------------------------------------
 	function scan(code) {
 		const nm = (code || "").trim();
-		if (!nm) return;
+		if (!nm || S.locked) return;
 		if (S.rows.some((r) => r.order_bag === nm)) {
 			say(__("{0} is already in the parcel.", [nm]), true);
 			return;
@@ -227,7 +248,7 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 		frappe.call({
 			method: API + ".scan_sale_prep_piece", freeze: false,
 			args: { barcode: nm, price_chart: S.chartCtl.get_value() || null,
-				gold_rate: flt(S.rateCtl.get_value()) },
+				gold_rate: flt(S.rateCtl.get_value()), prep: S.prep || null },
 		}).then((r) => {
 			const row = r.message;
 			if (!row) return;
@@ -236,10 +257,10 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 				return;
 			}
 			if ((row.prepped || []).length) {
-				say(__("{0} is already on prepared bill {1} — scanned anyway.", [nm, row.prepped[0]]));
-			} else {
-				say(__("{0} added.", [nm]));
+				say(__("{0} is already in parcel {1} — a piece can only be in one parcel.", [nm, row.prepped.join(", ")]), true);
+				return;
 			}
+			say(__("{0} added.", [nm]));
 				S.rows.push(row);
 				S.sorted = false;
 				S.dirty = true;
@@ -284,7 +305,7 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 		say(__("Re-pricing {0} piece(s)…", [S.rows.length]));
 		return Promise.all(S.rows.map((r) => frappe.call({
 			method: API + ".scan_sale_prep_piece", freeze: false,
-			args: { barcode: r.order_bag, price_chart: chart, gold_rate: rate },
+			args: { barcode: r.order_bag, price_chart: chart, gold_rate: rate, prep: S.prep || null },
 		}).then((x) => x.message).catch(() => r)))
 			.then((fresh) => {
 				S.rows = fresh.filter(Boolean);
@@ -314,10 +335,11 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 			: `<span class="pp-tag fmt">${__("Sell board")}</span>`;
 		return `<div class="pp-card ${sold ? "sold" : ""}" data-name="${esc(p.name)}"
 			data-src="${esc(p.source)}" data-status="${esc(p.status)}" data-sale="${esc(p.sale || "")}">
-			${sold ? "" : `<button class="pp-x" title="${__("Throw this prep away")}">✕</button>`}
+			${sold || p.locked ? "" : `<button class="pp-x" title="${__("Throw this prep away")}">✕</button>`}
 			<div class="pp-name">${esc(p.name)}
 				<span class="pp-tag ${sold ? "sold" : "draft"}">${esc(sold ? __("Sold") : p.status)}</span>
 				${kind}
+				${p.locked ? `<span class="pp-tag locked">${__("Locked")}</span>` : ""}
 				${p.gone ? `<span class="pp-tag gone">${__("{0} not in stock", [p.gone])}</span>` : ""}</div>
 			<div class="pp-cust">${esc(p.customer || __("No buyer yet"))}</div>
 			<div class="pp-meta">${p.pieces} ${__("piece(s)")} · ${esc(p.chart_name || p.price_chart || __("no chart"))}<br>
@@ -422,10 +444,17 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 			S.fmtCtl.set_value(S.fmt),
 		]).then(() => { S.loading = false; });
 	}
+	function lockHeader(on) {
+		[S.custCtl, S.chartCtl, S.rateCtl, S.qualCtl, S.fmtCtl].forEach((c) => {
+			c.df.read_only = on ? 1 : 0;
+			c.refresh();
+		});
+	}
 	const firstFmt = () => ((((S.ctx || {}).formats || [])[0]) || {}).key || "DEFAULT";
 
 	function resetBench() {
-		S.rows = []; S.sorted = false; S.prep = null; S.dirty = false;
+		S.rows = []; S.sorted = false; S.prep = null; S.dirty = false; S.locked = false; S.out = [];
+		lockHeader(false);
 		say("");
 		return setHeader({}).then(() => paint());
 	}
@@ -461,9 +490,13 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 			S.rows = m.rows || [];
 			S.sorted = !!m.sorted;
 			S.dirty = false;
+			S.locked = !!m.locked;
+			S.out = m.out_of_stock || [];
+			lockHeader(false);
 			return setHeader(m).then(() => {
-				paint();
-				say(__("Opened {0}.", [m.name]));
+				lockHeader(S.locked);
+				say(S.locked ? __("Locked by {0} — open to read and paper, not to change.", [m.locked_by || "?"])
+					: __("Opened {0}.", [m.name]));
 				showBench();
 			});
 		}).catch(() => {
@@ -492,19 +525,30 @@ const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: f
 		root.find(".ps-work").prop("hidden", false);
 		page.clear_primary_action();
 		page.clear_inner_toolbar();
-		page.set_primary_action(__("Save"), () => { saveParcel(); }, "save");
+		if (!S.locked) page.set_primary_action(__("Save"), () => { saveParcel(); }, "save");
 		page.add_inner_button(__("All parcels"), () => {
 			// an unsaved parcel is kept and shown as a tile — nothing is lost by looking
 			frappe.set_route("prepare-sale");
 		});
 		page.add_inner_button(__("Send to Sell"), () => {
 			if (!S.rows.length) { frappe.msgprint(__("Scan some pieces first.")); return; }
-			// saved first, so Sell opens THIS parcel and the sale marks it Sold
-			saveParcel({ route: false }).then((m) => {
-				frappe.route_options = { prep: m.name };
-				frappe.set_route("sell");
-			});
+			const go = (nm) => { frappe.route_options = { prep: nm }; frappe.set_route("sell"); };
+			// a locked parcel is already saved; anything else is saved first, so Sell
+			// opens THIS parcel and the sale marks it Sold
+			if (S.locked) return go(S.prep);
+			saveParcel({ route: false }).then((m) => go(m.name));
 		});
+		if (S.prep && !S.locked) {
+			page.add_inner_button(__("Lock"), () => {
+				if (S.dirty) { frappe.msgprint(__("Save the parcel before locking it.")); return; }
+				frappe.confirm(__("Lock {0}? Anyone can still open it, download its sheets and sell it, but no piece can be added or taken off and it cannot be thrown away. This cannot be undone.", [S.prep]), () => {
+					frappe.call({ method: API + ".lock_parcel", args: { name: S.prep } }).then(() => {
+						frappe.show_alert({ message: __("{0} locked.", [S.prep]), indicator: "blue" }, 4);
+						openParcel(S.prep);
+					});
+				});
+			});
+		}
 		paint();
 		setTimeout(() => root.find(".ps-box").focus(), 150);
 	}

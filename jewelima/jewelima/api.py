@@ -13824,10 +13824,14 @@ def get_sale_record(sale):
 		bankno = {r.name: r.design_no for r in frappe.get_all("Design Bank",
 			filters={"name": ["in", [v for v in bank.values() if v]]}, fields=["name", "design_no"])}
 	items = []
+	seller = frappe.utils.get_fullname(d.owner)
 	for r in d.items:
-		o = ov.get(r.order_bag)
-		chart_total = (flt(o.chart_gold) + flt(o.chart_diamond) + flt(o.chart_stone)
-			+ flt(o.chart_labour) + flt(o.chart_charges)) if o else 0
+		# a sale made since the snapshot carries its chart price on its own line;
+		# older sales fall back to whatever their prep recorded
+		mine = flt(r.get("chart_total")) or cint(r.get("overridden"))
+		o = None if mine else ov.get(r.order_bag)
+		chart_total = flt(r.get("chart_total")) if mine else ((flt(o.chart_gold) + flt(o.chart_diamond)
+			+ flt(o.chart_stone) + flt(o.chart_labour) + flt(o.chart_charges)) if o else 0)
 		items.append({"order_bag": r.order_bag, "design": r.design or "", "design_no": design_no_of(r.design),
 			"bank_code": bankno.get(bank.get(r.order_bag), ""),
 			"design_type": r.design_type or "", "holder": r.holder_at_sale or "",
@@ -13835,10 +13839,13 @@ def get_sale_record(sale):
 			"gold_value": flt(r.gold_value), "diamond_value": flt(r.diamond_value),
 			"stone_value": flt(r.stone_value), "labour_value": flt(r.labour_value),
 			"charges_value": flt(r.charges_value), "piece_total": flt(r.piece_total),
-			"overridden": cint(o.overridden) if o else 0,
+			"overridden": cint(r.get("overridden")) if mine else (cint(o.overridden) if o else 0),
 			"chart_total": round(chart_total, 2),
-			"override_remark": (o.override_remark or "") if o else "",
-			"changed_by": (o.changed_by or "") if o else ""})
+			"chart": {"gold": flt(r.get("chart_gold")), "diamond": flt(r.get("chart_diamond")),
+				"stone": flt(r.get("chart_stone")), "labour": flt(r.get("chart_labour")),
+				"charges": flt(r.get("chart_charges"))} if mine else {},
+			"override_remark": "" if mine else ((o.override_remark or "") if o else ""),
+			"changed_by": seller if mine else ((o.changed_by or "") if o else "")})
 	return {"name": d.name, "sale_date": str(d.sale_date or ""), "customer": d.customer,
 		"status": d.status, "price_chart": d.price_chart or "", "gold_rate": flt(d.gold_rate),
 		"remarks": d.remarks or "", "prep": prep or "",
@@ -16485,6 +16492,33 @@ def export_sale_bill_xlsx(payload):
 	frappe.local.response.type = "download"
 
 
+def _open_preps_holding(bags, exclude=None):
+	"""{bag: [prep, ...]} for every piece already on an OPEN prep other than
+	`exclude`. A piece belongs to one parcel: two open parcels holding it would
+	promise the same piece to two buyers."""
+	bags = [b for b in (bags or []) if b]
+	if not bags:
+		return {}
+	out = {}
+	for r in frappe.db.sql("""
+			select i.order_bag, p.name from `tabSale Preparation Item` i
+			join `tabSale Preparation` p on p.name = i.parent
+			where i.parenttype = 'Sale Preparation' and i.order_bag in %(bags)s
+			  and p.status in ('Draft', 'Sent') and p.name != %(ex)s""",
+			{"bags": bags, "ex": exclude or ""}, as_dict=True):
+		out.setdefault(r.order_bag, [])
+		if r.name not in out[r.order_bag]:
+			out[r.order_bag].append(r.name)
+	return out
+
+
+def _refuse_held_elsewhere(bags, exclude=None):
+	held = _open_preps_holding(bags, exclude)
+	if held:
+		frappe.throw(frappe._("A piece can only be in one parcel. Already on another: {0}").format(
+			"; ".join("{0} ({1})".format(b, ", ".join(p)) for b, p in held.items())))
+
+
 @frappe.whitelist()
 def save_sale_prep_board(payload):
 	"""PREPARE TO SELL: snapshot the whole Sell board (rows with components,
@@ -16495,6 +16529,16 @@ def save_sale_prep_board(payload):
 	rows = p.get("rows") or []
 	if not rows:
 		frappe.throw(frappe._("Scan at least one piece before preparing."))
+	# a board restored from a prep is saved back onto THAT prep, not parked as a
+	# second copy holding the same pieces
+	prep = p.get("prep") if p.get("prep") and frappe.db.exists("Sale Preparation", p.get("prep")) else None
+	if prep:
+		cur = frappe.db.get_value("Sale Preparation", prep, ["status", "board_json", "locked"], as_dict=True)
+		if '"source": "prepare"' in (cur.board_json or ""):
+			frappe.throw(frappe._("{0} is a parcel from Prepare to Sell — change it there, or sell it here.").format(prep))
+		if cur.status not in ("Draft", "Sent"):
+			frappe.throw(frappe._("{0} is {1} and can no longer be changed.").format(prep, cur.status))
+	_refuse_held_elsewhere([r.get("order_bag") for r in rows], exclude=prep)
 	items = []
 	grand = 0.0
 	for r in rows:
@@ -16520,15 +16564,18 @@ def save_sale_prep_board(payload):
 			"design_type": r.get("design_type"), "nett": flt(r.get("nett")),
 			"dmd_ct": flt(r.get("dmd_ct")), "ostone_ct": flt(r.get("ostone_ct")),
 			**vals, "piece_total": total})
-	doc = frappe.get_doc({
-		"doctype": "Sale Preparation", "status": "Draft",
-		"customer": p.get("customer") or None, "price_chart": p.get("price_chart") or None,
-		"gold_rate": flt(p.get("gold_rate")), "remarks": p.get("remarks"),
-		"items": items, "grand_total": round(grand, 2),
-		"board_json": frappe.as_json({"rows": rows, "adjust": p.get("adjust") or [],
-			"tax": cint(p.get("tax", 1))}),
-	})
-	doc.insert(ignore_permissions=True)
+	doc = frappe.get_doc("Sale Preparation", prep) if prep else frappe.new_doc("Sale Preparation")
+	if not prep:
+		doc.status = "Draft"
+	doc.customer = p.get("customer") or None
+	doc.price_chart = p.get("price_chart") or None
+	doc.gold_rate = flt(p.get("gold_rate"))
+	doc.remarks = p.get("remarks")
+	doc.set("items", items)
+	doc.grand_total = round(grand, 2)
+	doc.board_json = frappe.as_json({"rows": rows, "adjust": p.get("adjust") or [],
+		"tax": cint(p.get("tax", 1))})
+	doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return {"name": doc.name, "grand_total": doc.grand_total}
 
@@ -16570,6 +16617,7 @@ def get_prepared_boards():
 		r["source"] = "prepare" if board.get("source") == "prepare" else "sell"
 		r["fmt"] = board.get("fmt") or ""
 		r["owner_name"] = frappe.utils.get_fullname(r["owner"])
+		r["locked"] = cint(frappe.db.get_value("Sale Preparation", r["name"], "locked"))
 		r["chart_name"] = frappe.db.get_value("Price Chart", r["price_chart"], "chart_name") if r.get("price_chart") else ""
 		if r["status"] == "Sold":
 			r["sold_on"] = str(frappe.db.get_value("Product Sale", r["sale"], "sale_date") or "") if r.get("sale") else ""
@@ -16630,13 +16678,19 @@ def save_parcel(payload):
 			**{k: round(v, 2) for k, v in vals.items()}, "piece_total": total})
 
 	name = p.get("name")
+	bags = [r.get("order_bag") for r in rows]
+	if len(set(bags)) != len(bags):
+		frappe.throw(frappe._("The same piece is on this parcel twice."))
 	if name and frappe.db.exists("Sale Preparation", name):
 		doc = frappe.get_doc("Sale Preparation", name)
 		if doc.status not in ("Draft", "Sent"):
 			frappe.throw(frappe._("{0} is {1} and can no longer be changed.").format(name, doc.status))
+		if cint(doc.locked):
+			frappe.throw(frappe._("{0} is locked — it can be opened and papered, but nothing on it can change.").format(name))
 	else:
 		doc = frappe.new_doc("Sale Preparation")
 		doc.status = "Draft"
+	_refuse_held_elsewhere(bags, exclude=doc.name if not doc.is_new() else None)
 	doc.customer = p.get("customer") or None
 	doc.price_chart = p.get("price_chart") or None
 	doc.gold_rate = flt(p.get("gold_rate"))
@@ -16658,10 +16712,41 @@ def get_parcel(name):
 	board = json.loads(d.board_json) if d.board_json else {}
 	if board.get("source") != "prepare":
 		frappe.throw(frappe._("{0} was parked from Sell — open it there.").format(name))
+	rows = board.get("rows") or []
+	bags = [r.get("order_bag") for r in rows if r.get("order_bag")]
+	# a parcel saved on Monday can hold a piece that went to hallmarking on
+	# Tuesday — say so the moment it is opened, and where each one is
+	where = {x.name: x.stock_status for x in frappe.get_all("Order Bag",
+		filters={"name": ["in", bags or ["-"]]}, fields=["name", "stock_status"])}
+	out = [{"order_bag": b, "stock_status": where.get(b) or "missing"}
+		for b in bags if where.get(b) != "In Stock"]
 	return {"name": d.name, "customer": d.customer or "", "price_chart": d.price_chart or "",
 		"gold_rate": flt(d.gold_rate), "fmt": board.get("fmt") or "DEFAULT",
 		"quality": board.get("quality") or "", "sorted": cint(board.get("sorted")),
-		"rows": board.get("rows") or []}
+		"locked": cint(d.locked), "locked_on": str(d.locked_on or ""),
+		"locked_by": frappe.utils.get_fullname(d.locked_by) if d.locked_by else "",
+		"out_of_stock": out, "rows": rows}
+
+
+@frappe.whitelist()
+def lock_parcel(name):
+	"""Lock a parcel the way a sent certification batch is locked: anyone can
+	still open it, download its sheets and sell it, but no piece can be added or
+	taken off and it can no longer be thrown away."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager"))
+	d = frappe.get_doc("Sale Preparation", name)
+	if '"source": "prepare"' not in (d.board_json or ""):
+		frappe.throw(frappe._("{0} was parked from Sell — only a parcel from Prepare to Sell can be locked.").format(name))
+	if d.status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} and cannot be locked.").format(name, d.status))
+	if not d.items:
+		frappe.throw(frappe._("{0} has no pieces — there is nothing to lock.").format(name))
+	if cint(d.locked):
+		return {"locked": name}
+	frappe.db.set_value("Sale Preparation", name, {"locked": 1,
+		"locked_on": frappe.utils.now_datetime(), "locked_by": frappe.session.user})
+	frappe.db.commit()
+	return {"locked": name}
 
 
 @frappe.whitelist()
@@ -16675,9 +16760,11 @@ def discard_sale_prep(name):
 	frappe.only_for(("System Manager", "JW Manager", "JW Delivery"))
 	if not frappe.db.exists("Sale Preparation", name):
 		frappe.throw(frappe._("{0} is not a prepared bill.").format(name or "?"))
-	status = frappe.db.get_value("Sale Preparation", name, "status")
+	status, locked = frappe.db.get_value("Sale Preparation", name, ["status", "locked"])
 	if status not in ("Draft", "Sent"):
 		frappe.throw(frappe._("{0} is {1} — a prep that has been sold is the trail behind the sale and cannot be thrown away.").format(name, status))
+	if cint(locked):
+		frappe.throw(frappe._("{0} is locked and cannot be thrown away.").format(name))
 	frappe.delete_doc("Sale Preparation", name, force=True, ignore_permissions=True)
 	frappe.db.commit()
 	return {"deleted": name}
@@ -17141,6 +17228,19 @@ def create_product_sale(payload):
 		if not b or not b.is_finished or b.stock_status != "In Stock":
 			frappe.throw(frappe._("{0} is not a piece In Stock.").format(nm))
 
+	# THE SNAPSHOT. What each piece sold for comes off the board, because the desk
+	# may have priced it by hand. What the CHART said is read here, by the server,
+	# before anything moves — never taken from the browser, so a hand-priced piece
+	# is always recorded against the price nobody could have edited.
+	chart_nm = p.get("price_chart")
+	sale_rate = flt(p.get("gold_rate"))
+	chart_of = {}
+	for nm in bags:
+		try:
+			chart_of[nm] = get_sale_piece(nm, chart_nm, sale_rate) if chart_nm else None
+		except Exception:
+			chart_of[nm] = None
+
 	# the write-off: everything the pieces hold leaves Finished Goods
 	totals = {}
 	for mats in _bag_convert_materials(bags).values():
@@ -17161,17 +17261,24 @@ def create_product_sale(payload):
 
 	sums = {k: 0.0 for k in ("gold_value", "diamond_value", "stone_value", "labour_value", "charges_value")}
 	rows = []
+	chart_key = {"gold_value": "chart_gold", "diamond_value": "chart_diamond", "stone_value": "chart_stone",
+		"labour_value": "chart_labour", "charges_value": "chart_charges"}
 	for l in lines:
 		nm = l["order_bag"]
 		vals = {k: flt(l.get(k)) for k in sums}
 		total = round(sum(vals.values()), 2)
 		for k in sums:
 			sums[k] += vals[k]
+		pc = chart_of.get(nm)
+		chart = {ck: round(flt(pc.get(k)), 2) for k, ck in chart_key.items()} if pc else {}
 		rows.append({
 			"order_bag": nm, "design": l.get("design"), "design_type": l.get("design_type"),
 			"holder_at_sale": l.get("held_by") or None,
 			"nett": flt(l.get("nett")), "dmd_ct": flt(l.get("dmd_ct")), "ostone_ct": flt(l.get("ostone_ct")),
 			**vals, "piece_total": total,
+			**chart, "chart_total": round(sum(chart.values()), 2) if pc else 0,
+			"overridden": 1 if pc and any(abs(vals[k] - chart[ck]) > 0.005 for k, ck in chart_key.items()) else 0,
+			"components_json": frappe.as_json(l.get("components") or (pc or {}).get("components") or {}),
 		})
 	base_total = round(sum(sums.values()), 2)
 	tax_percent = flt(p.get("tax_percent"))
@@ -17184,6 +17291,14 @@ def create_product_sale(payload):
 		**{k: round(v, 2) for k, v in sums.items()},
 		"tax_percent": tax_percent, "tax_amount": tax_amount,
 		"grand_total": round(base_total + tax_amount, 2),
+		# the board exactly as it stood when it was sold — every component, every
+		# hand edit, the rate and the chart — so the sale can be read back later
+		# without trusting anything that has changed since
+		"snapshot_json": frappe.as_json({
+			"price_chart": chart_nm or "", "gold_rate": sale_rate, "tax_percent": tax_percent,
+			"prep": p.get("prep") or "", "sold_by": frappe.session.user,
+			"sold_at": frappe.utils.now(), "adjustments": p.get("adjustments") or [],
+			"lines": lines}),
 	})
 	sale.insert(ignore_permissions=True)
 
@@ -25258,7 +25373,7 @@ def _prep_colour(design):
 
 
 @frappe.whitelist()
-def scan_sale_prep_piece(barcode, price_chart=None, gold_rate=0):
+def scan_sale_prep_piece(barcode, price_chart=None, gold_rate=0, prep=None):
 	"""One piece onto the parcel, priced exactly as the Sell board prices it.
 
 	get_sale_piece is the one pricer and is not duplicated here — this only adds
@@ -25287,6 +25402,9 @@ def scan_sale_prep_piece(barcode, price_chart=None, gold_rate=0):
 		"huid": b.huid or "", "cert": b.certifications or "",
 		"held_by": b.held_by or "", "stock_status": b.stock_status or "",
 		"back_chain_wt": 0.0, "remarks": "",
+		# on another open parcel? — found without pricing, so an unpriced scan is
+		# held to the same one-piece-one-parcel rule
+		"prepped": _open_preps_holding([nm], exclude=prep).get(nm, []),
 	}
 	if piece:
 		row.update({
@@ -25299,7 +25417,6 @@ def scan_sale_prep_piece(barcode, price_chart=None, gold_rate=0):
 				+ flt(piece.get("diamond_value")) + flt(piece.get("stone_value"))
 				+ flt(piece.get("charges_value")),
 			"components": piece.get("components") or {},
-			"prepped": piece.get("prepped") or [],
 		})
 	return row
 

@@ -25,6 +25,7 @@
   "charges_value",
   "tax_percent",
   "tax_amount",
+  "snapshot_json",
   "grand_total"
  ],
  "fields": [
@@ -165,6 +166,14 @@
    "fieldtype": "Currency",
    "label": "Tax Amount",
    "read_only": 1
+  },
+  {
+   "fieldname": "snapshot_json",
+   "fieldtype": "Long Text",
+   "label": "Board snapshot",
+   "hidden": 1,
+   "read_only": 1,
+   "description": "The Sell board exactly as it stood when the sale was made."
   }
  ],
  "in_create": 1,

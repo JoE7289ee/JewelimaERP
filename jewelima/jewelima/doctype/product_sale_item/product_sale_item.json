@@ -17,7 +17,15 @@
   "stone_value",
   "labour_value",
   "charges_value",
-  "piece_total"
+  "piece_total",
+  "chart_gold",
+  "chart_diamond",
+  "chart_stone",
+  "chart_labour",
+  "chart_charges",
+  "chart_total",
+  "overridden",
+  "components_json"
  ],
  "fields": [
   {
@@ -85,7 +93,7 @@
    "fieldname": "gold_value",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Gold ₹",
+   "label": "Gold \u20b9",
    "precision": "2",
    "read_only": 1
   },
@@ -94,7 +102,7 @@
    "fieldname": "diamond_value",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "DMD ₹",
+   "label": "DMD \u20b9",
    "precision": "2",
    "read_only": 1
   },
@@ -102,7 +110,7 @@
    "columns": 1,
    "fieldname": "stone_value",
    "fieldtype": "Float",
-   "label": "Stones ₹",
+   "label": "Stones \u20b9",
    "precision": "2",
    "read_only": 1
   },
@@ -110,7 +118,7 @@
    "columns": 1,
    "fieldname": "labour_value",
    "fieldtype": "Float",
-   "label": "Labour ₹",
+   "label": "Labour \u20b9",
    "precision": "2",
    "read_only": 1
   },
@@ -118,7 +126,7 @@
    "columns": 1,
    "fieldname": "charges_value",
    "fieldtype": "Float",
-   "label": "Charges ₹",
+   "label": "Charges \u20b9",
    "precision": "2",
    "read_only": 1
   },
@@ -127,8 +135,58 @@
    "fieldname": "piece_total",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Total ₹",
+   "label": "Total \u20b9",
    "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chart_gold",
+   "fieldtype": "Float",
+   "label": "Chart gold",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chart_diamond",
+   "fieldtype": "Float",
+   "label": "Chart diamond",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chart_stone",
+   "fieldtype": "Float",
+   "label": "Chart stone",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chart_labour",
+   "fieldtype": "Float",
+   "label": "Chart labour",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chart_charges",
+   "fieldtype": "Float",
+   "label": "Chart charges",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chart_total",
+   "fieldtype": "Float",
+   "label": "Chart total",
+   "read_only": 1
+  },
+  {
+   "fieldname": "overridden",
+   "fieldtype": "Check",
+   "label": "Sold off-chart",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "components_json",
+   "fieldtype": "Long Text",
+   "label": "Price snapshot",
+   "hidden": 1,
    "read_only": 1
   }
  ],

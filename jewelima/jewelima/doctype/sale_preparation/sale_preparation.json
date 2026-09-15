@@ -17,6 +17,9 @@
   "cleared",
   "cleared_on",
   "cleared_by",
+  "locked",
+  "locked_on",
+  "locked_by",
   "remarks",
   "sec_items",
   "items",
@@ -86,6 +89,29 @@
    "label": "Cleared by",
    "read_only": 1,
    "depends_on": "cleared"
+  },
+  {
+   "fieldname": "locked",
+   "fieldtype": "Check",
+   "label": "Locked",
+   "default": "0",
+   "read_only": 1,
+   "description": "A locked parcel can be opened, papered and sold, but no piece can be added or taken off and it cannot be thrown away."
+  },
+  {
+   "fieldname": "locked_on",
+   "fieldtype": "Datetime",
+   "label": "Locked on",
+   "read_only": 1,
+   "depends_on": "locked"
+  },
+  {
+   "fieldname": "locked_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Locked by",
+   "read_only": 1,
+   "depends_on": "locked"
   },
   {
    "fieldname": "remarks",

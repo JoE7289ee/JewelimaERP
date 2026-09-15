@@ -373,7 +373,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		return {
 			gold_value: g(["gold"]),
 			diamond_value: g(["dmd", "pdmd"]),
-			stone_value: g(["cs", "cz", "cvd", "ps"]),
+			stone_value: g(["cs", "cz", "cvd", "sw", "ps"]),
 			labour_value: g(["making"]),
 			charges_value: g(certKeys),
 		};
@@ -389,11 +389,11 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 			args: { payload: {
 				customer: buyer.get_value(), price_chart: chart.get_value(),
 				gold_rate: flt(rate.get_value()), remarks: remarks.get_value(),
-				rows: S.rows, adjust: S.adjust, tax: cint(tax.get_value()),
+				rows: S.rows, adjust: S.adjust, tax: cint(tax.get_value()), prep: S.prep,
 			} },
 		}).then((r) => {
 			const m = r.message || {};
-			frappe.show_alert({ message: __("Prepared as {0} — find it on Prepare Sale.", [m.name]), indicator: "yellow" }, 6);
+			frappe.show_alert({ message: __("Prepared as {0} — find it on Prepare to Sell.", [m.name]), indicator: "yellow" }, 6);
 			logHist("—", __("Prepared {0} piece(s) as {1}", [S.rows.length, m.name]), "ok");
 			S.rows = [];
 			S.adjust = [];
@@ -425,7 +425,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 					lines: S.rows.map((r) => ({
 						order_bag: r.order_bag, design: r.design, design_no: r.design_no, design_type: r.design_type,
 						held_by: r.held_by, nett: r.nett, dmd_ct: r.dmd_ct, ostone_ct: r.ostone_ct,
-						...buckets(r),
+						...buckets(r), components: r.components || {},
 					})),
 					adjustments: S.adjust,
 					prep: S.prep,
