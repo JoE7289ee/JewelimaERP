@@ -207,13 +207,21 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 				return;
 			}
 			const status = (v.record && v.record.status) || "In Queue";
+			const rec0 = v.record || {};
+			const where = frappe.utils.escape_html(v.location || "");
 			if (state.mode === "assign" && status === "Issued") {
-				setMsg(__("<b>{0}</b> is already assigned.", [safe]), "err");
+				// say where and to whom, so nobody has to go looking
+				setMsg(rec0.employee
+					? __("<b>{0}</b> is already assigned at <b>{1}</b> to <b>{2}</b> (since {3}).",
+						[safe, where, frappe.utils.escape_html(rec0.employee_name || rec0.employee), frappe.utils.escape_html(rec0.since || "")])
+					: __("<b>{0}</b> is already assigned at <b>{1}</b> with no employee named (since {2}).",
+						[safe, where, frappe.utils.escape_html(rec0.since || "")]), "err");
 				logHistory(code, "Already assigned", "err");
 				return;
 			}
 			if (state.mode === "collect" && status !== "Issued") {
-				setMsg(__("<b>{0}</b> is <b>{1}</b> — only assigned cards can be collected.", [safe, frappe.utils.escape_html(status)]), "err");
+				setMsg(__("<b>{0}</b> is <b>{1}</b> at <b>{2}</b> — not assigned, so there is nothing to collect.",
+					[safe, frappe.utils.escape_html(status), where]), "err");
 				logHistory(code, "Not assigned (" + status + ")", "err");
 				return;
 			}

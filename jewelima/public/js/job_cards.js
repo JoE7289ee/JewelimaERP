@@ -56,7 +56,10 @@ body { font-family: Arial, Helvetica, sans-serif; color: #000;
 	overflow: hidden; font-size: 10.5px; line-height: 1.3; }
 /* the header sits in a touch from the card edge — hard against it reads as an
    overflow rather than as a margin */
-.card .hd { display: grid; grid-template-columns: 1.4fr 1fr auto; gap: 5mm;
+/* The first column is only as wide as its longest design name, so the party
+   column starts right after it instead of a fixed share across — at 1.4fr it
+   left a wide empty gap before the party. */
+.card .hd { display: grid; grid-template-columns: auto 1fr auto; gap: 6mm;
 	border-bottom: 1.2px solid #000; padding: 0 0 2mm 1.5mm;
 	font-size: 12px; line-height: 1.45; }
 .card .hd b { font-weight: 700; }
@@ -168,8 +171,8 @@ function pob_cardHTML(c) {
 			</div>
 			<div class="c3">${purExtra.length
 				? `<div class="badges">${purExtra.map((x) => `<span class="pur2">${x}</span>`).join("")}</div>`
-				: ""}<div class="party">${pob_esc(c.order_type)}</div>
-				<div class="kv">
+				: ""}<div class="kv">
+					<span>TYPE</span><b>${pob_esc(c.order_type)}</b>
 					<span>ORD</span><b>${pob_esc(c.job_order)}</b>
 					<span>QTY</span><b>${pob_esc(c.qty)}</b>
 				</div></div>

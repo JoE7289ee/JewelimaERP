@@ -9141,10 +9141,12 @@ def get_bench_card(order_bag):
 	if dt and frappe.db.exists("DocType", dt):
 		recs = frappe.get_all(
 			dt, filters={"order_bag": order_bag},
-			fields=["name", "status", "employee", "weight_out", "weight_in", "loss"],
+			fields=["name", "status", "employee", "weight_out", "weight_in", "loss", "creation"],
 			order_by="creation desc", limit=1,
 		)
 		rec = recs[0] if recs else None
+		if rec:
+			rec["since"] = str(rec.pop("creation") or "")[:16]
 		if rec and rec.employee:
 			rec["employee_name"] = frappe.db.get_value("Employee", rec.employee, "employee_name") or rec.employee
 	return {
@@ -21004,6 +21006,9 @@ def get_card_passport(order_bag):
 		"issues": issue_rows,
 		"reworks": _card_reworks(order_bag),
 		"gold_moves": _card_gold_moves(order_bag),
+		# the bench it sits at right now: queued, or issued and to whom — what the
+		# floor used to open Job Work to find out
+		"bench": (get_bench_card(order_bag) or {}).get("record"),
 		"pre_bag": get_prebag_for_card(order_bag),
 		"materials": _card_materials(order_bag),
 		"today": frappe.utils.nowdate(),

@@ -348,13 +348,21 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 				return;
 			}
 			const status = (v.record && v.record.status) || "In Queue";
+			const rec = v.record || {};
+			const where = frappe.utils.escape_html(v.location);
 			if (state.mode === "issue" && status === "Issued") {
-				setMsg(__("<b>{0}</b> is already issued.", [safe]), "err");
+				// say where and to whom, so nobody has to go looking
+				setMsg(rec.employee
+					? __("<b>{0}</b> is already issued at <b>{1}</b> to <b>{2}</b> (since {3}).",
+						[safe, where, frappe.utils.escape_html(rec.employee_name || rec.employee), frappe.utils.escape_html(rec.since || "")])
+					: __("<b>{0}</b> is already issued at <b>{1}</b> with no employee named (since {2}).",
+						[safe, where, frappe.utils.escape_html(rec.since || "")]), "err");
 				logHistory(code, "Already issued", "err");
 				return;
 			}
 			if (state.mode === "receipt" && status !== "Issued") {
-				setMsg(__("<b>{0}</b> is <b>{1}</b> — only issued cards can be received.", [safe, frappe.utils.escape_html(status)]), "err");
+				setMsg(__("<b>{0}</b> is <b>{1}</b> at <b>{2}</b> — not issued, so there is nothing to receive.",
+					[safe, frappe.utils.escape_html(status), where]), "err");
 				logHistory(code, "Not issued (" + status + ")", "err");
 				return;
 			}

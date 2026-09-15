@@ -51,6 +51,9 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		.cl-where .v{font-size:26px;font-weight:800;line-height:1.2;color:#1f618d;}
 		[data-theme="dark"] .cl-where .v{color:#7FB3DA;}
 		.cl-where .s{font-size:11.5px;color:var(--text-muted);}
+		.cl-where .w{margin-top:6px;font-size:13px;font-weight:700;}
+		.cl-where .w.issued{color:#b7791f;}
+		[data-theme="dark"] .cl-where .w.issued{color:#d2a43f;}
 		.cl-photo img{max-height:84px;border-radius:9px;border:1px solid var(--border-color);cursor:zoom-in;}
 
 		.cl-sec{border:1px solid var(--border-color);border-left:3px solid var(--border-color);
@@ -122,6 +125,16 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 		if ((ex.charge_categories || []).length)
 			chips.push(`${__("Tags")} <b>${ex.charge_categories.map(esc).join(", ")}</b>`);
 
+		// the bench record at its location: issued (to whom, since when) or queued
+		const bn = d.bench || null;
+		const benchLine = !bn ? ""
+			: bn.status === "Issued"
+				? `<div class="w issued">${bn.employee
+					? __("Issued to {0}", [esc(bn.employee_name || bn.employee)])
+					: __("Issued — no employee named")}</div>
+					<div class="s">${__("since {0}", [esc(bn.since ? frappe.datetime.str_to_user(bn.since) : "")])}</div>`
+				: `<div class="w">${esc(bn.status || __("In Queue"))}</div>`;
+
 		const state = b.is_finished
 			? ["prod", __("PRODUCT — {0}", [b.stock_status || __("In Stock")])]
 			: flt(b.act_gross_weight) ? ["wip", __("IN PRODUCTION")] : ["pre", __("IN PREPRODUCTION")];
@@ -140,6 +153,7 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 					<div class="k">${__("Where it is now")}</div>
 					<div class="v">${esc(b.location || "—")}</div>
 					${b.stock_status ? `<div class="s">${esc(b.stock_status)}</div>` : ""}
+					${benchLine}
 				</div>
 			</div>
 
