@@ -25421,10 +25421,6 @@ SALE_PREP_FORMATS = {
 		"label": "Default",
 		"sortable": 0,
 		"docs": [
-			{"key": "list", "label": "Parcel list", "kind": "plain",
-			 "note": "every piece in the parcel with its weights and stones",
-			 "cols": ["sl", "uid", "item", "design", "size", "colour", "pcs1", "gross",
-				"net", "dmd_pcs", "dmd_ct", "ps_ct", "stn_ct", "huid"], "sign": 1},
 			{"key": "clean", "label": "Basic Excel", "kind": "clean",
 			 "note": "serial no, item, bag, stones by bucket, gross and nett — no money"},
 			{"key": "ratecut", "label": "Billing sheet", "kind": "jos",

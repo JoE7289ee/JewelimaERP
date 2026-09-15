@@ -42,7 +42,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	root.append(`
 		<style>
 		#page-prepare-sale .container{max-width:100%;}
-		.ps-head{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px 12px;margin:2px 0 10px;}
+		.ps-head{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) minmax(0,1.4fr);gap:2px 12px;margin:2px 0 10px;}
 		.ps-head .frappe-control{margin:0;}
 		.ps-head .control-label{font-size:11px;margin:0 0 1px;color:var(--text-muted);}
 		.ps-head .help-box,.ps-head .description{display:none !important;}
@@ -96,17 +96,20 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		.ps-x:hover{color:#b02a2a;}
 
 		.ps-empty{padding:34px;text-align:center;color:var(--text-muted);font-size:13px;}
-		.ps-docs{display:flex;gap:10px;flex-wrap:wrap;}
-		.ps-doc{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);
-			padding:11px 15px;min-width:190px;cursor:pointer;transition:box-shadow .12s;}
-		.ps-doc:hover{box-shadow:0 3px 12px rgba(0,0,0,.12);border-color:var(--primary);}
-		.ps-doc .l{font-weight:800;font-size:13px;}
+		/* the papers sit in the header like Diamond quality: a label and a row of
+		   chips, one per download — what each carries is on hover */
+		.h-docs .lbl{font-size:11px;color:var(--text-muted);margin:0 0 1px;}
+		.ps-docs{min-height:26px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
+		.ps-doc{border:1px solid var(--border-color);background:var(--control-bg);border-radius:7px;
+			padding:1px 9px;cursor:pointer;font-size:12px;white-space:nowrap;}
+		.ps-doc:hover{border-color:var(--primary);color:var(--primary);}
+		.ps-doc .l{font-weight:700;}
+		.ps-doc .l::before{content:"↓ ";font-weight:400;}
 		.ps-doc.off{border-color:#e6b3b3;background:#fbeaea;cursor:not-allowed;}
 		.ps-doc.off:hover{box-shadow:none;border-color:#e6b3b3;}
 		.ps-doc.off .l{color:#b00020;}
 		[data-theme="dark"] .ps-doc.off{background:rgba(176,0,32,.14);border-color:rgba(176,0,32,.5);}
 		[data-theme="dark"] .ps-doc.off .l{color:#f08a9a;}
-		.ps-doc .n{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
 		.ps-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
 			padding:13px 16px;margin-bottom:14px;}
 		.ps-card h3{font-size:12px;margin:0 0 9px;font-weight:800;text-transform:uppercase;
@@ -147,6 +150,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		<div class="ps-head">
 			<div class="h-cust"></div><div class="h-fmt"></div><div class="h-chart"></div>
 			<div class="h-rate"></div><div class="h-qual"></div>
+			<div class="h-docs"><div class="lbl">${__("Papers")}</div><div class="ps-docs"></div></div>
 		</div>
 		<div class="ps-scan">
 			<input class="box ps-box" placeholder="${__("Scan a bag no")}" autocomplete="off">
@@ -166,7 +170,6 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 					<th>${__("HUID")}</th><th class="num">${__("Value")}</th><th style="width:34px;"></th>
 			</tr></thead><tbody class="ps-body"></tbody>
 		</table></div>
-		<div class="ps-card ps-docwrap"><h3>${__("Papers")}</h3><div class="ps-docs"></div></div>
 		</div>`);
 
 	const mk = (sel, df) => {
@@ -227,10 +230,9 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		root.find(".ps-docs").html((spec.docs || []).map((d) => {
 			const off = d.key === "ratecut" && noChart;
 			return `
-			<div class="ps-doc${off ? " off" : ""}" data-d="${esc(d.key)}">
-				<div class="l">${esc(d.label)}</div>
-				<div class="n">${off ? __("Pick a price chart to download") : esc(d.note || "")}</div>
-			</div>`; }).join("") || `<div class="ps-empty">${__("This format produces nothing yet.")}</div>`);
+			<span class="ps-doc${off ? " off" : ""}" data-d="${esc(d.key)}"
+				title="${esc(off ? __("Pick a price chart to download") : (d.note || ""))}"><span class="l">${esc(d.label)}</span></span>`;
+		}).join("") || `<span class="lbl">${__("none for this format")}</span>`);
 	}
 
 	// The desk draws this page's header itself, so page.set_indicator never shows —
