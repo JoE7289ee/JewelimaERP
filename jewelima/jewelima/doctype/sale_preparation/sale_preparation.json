@@ -8,6 +8,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "title",
   "customer",
   "price_chart",
   "gold_rate",
@@ -27,6 +28,13 @@
   "board_json"
  ],
  "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Parcel name",
+   "in_list_view": 1,
+   "description": "What the desk calls this parcel. The SPREP number stays its reference."
+  },
   {
    "fieldname": "customer",
    "fieldtype": "Link",
@@ -166,5 +174,6 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "track_changes": 1
+ "track_changes": 1,
+ "title_field": "title"
 }

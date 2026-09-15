@@ -28,7 +28,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 	const root = $(page.main);
 
-	const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, dirty: false, view: "list", locked: false, out: [] };
+	const S = { ctx: null, fmt: "JOS", rows: [], sorted: false, prep: null, title: "", dirty: false, view: "list", locked: false, out: [] };
 
 	// The agreed physical order, the same ladder the OLD FORMAT sheet numbers by:
 	// the item ladder, then colour, then the below-1g band, then weight. It is a
@@ -59,6 +59,9 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		.ps-msg{font-size:12.5px;color:var(--text-muted);}
 		.ps-msg.bad{color:#b02a2a;font-weight:700;}
 		.ps-state{font-size:11px;font-weight:800;letter-spacing:.03em;border-radius:999px;padding:3px 11px;white-space:nowrap;}
+		.ps-state[data-rename]{cursor:pointer;}
+		.ps-state .id{font-weight:600;opacity:.7;margin-left:4px;}
+		.pp-id{font-family:var(--font-family-monospace,monospace);font-size:10.5px;font-weight:600;color:var(--text-muted);}
 		.ps-state.saved{background:#eaf6ec;color:#1d7a33;border:1px solid #bfe3c6;}
 		.ps-state.dirty{background:#fdf3e3;color:#8a5a00;border:1px solid #e6c98f;}
 		.ps-state.locked{background:#e9f0f7;color:#1f618d;border:1px solid #b9d0e6;}
@@ -232,15 +235,21 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			? __("{0} of the pieces in this parcel are no longer in stock: {1}", [out.length,
 				out.map((o) => `<b>${esc(o.order_bag)}</b> ${esc(o.stock_status)}`).join(" · ")])
 			: "");
+		// the parcel's name leads; the SPREP number rides along. A saved parcel's
+		// badge renames it on a click.
+		const label = S.prep
+			? `${esc(S.title || S.prep)}${S.title ? `<span class="id">${esc(S.prep)}</span>` : ""}` : "";
+		$st.removeAttr("data-rename").attr("title", "");
 		if (S.locked) {
-			$st.show().attr("class", "ps-state locked").text(__("{0} · locked", [S.prep]));
+			$st.show().attr("class", "ps-state locked").html(`${label} · ${__("locked")}`);
 		} else if (S.dirty && S.rows.length) {
-			$st.show().attr("class", "ps-state dirty").text(S.prep ? __("{0} · changed, not saved", [S.prep]) : __("Not saved"));
+			$st.show().attr("class", "ps-state dirty").html(S.prep ? `${label} · ${__("changed, not saved")}` : __("Not saved"));
 		} else if (S.prep) {
-			$st.show().attr("class", "ps-state saved").text(__("{0} · saved", [S.prep]));
+			$st.show().attr("class", "ps-state saved").html(`${label} · ${__("saved")}`);
 		} else {
 			$st.hide();
 		}
+		if (S.prep) $st.attr("data-rename", "1").attr("title", __("Rename this parcel"));
 	}
 
 	// The diamond quality is read off the pieces. Usually one; when a parcel mixes
@@ -551,7 +560,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		return `<div class="pp-card ${sold ? "sold" : ""}" data-name="${esc(p.name)}"
 			data-src="${esc(p.source)}" data-status="${esc(p.status)}" data-sale="${esc(p.sale || "")}">
 			${sold || p.locked ? "" : `<button class="pp-x" title="${__("Throw this prep away")}">✕</button>`}
-			<div class="pp-name">${esc(p.name)}
+			<div class="pp-name">${esc(p.title || p.name)}${p.title ? ` <span class="pp-id">${esc(p.name)}</span>` : ""}
 				<span class="pp-tag ${sold ? "sold" : "draft"}">${esc(sold ? __("Sold") : p.status)}</span>
 				${kind}
 				${p.locked ? `<span class="pp-tag locked">${__("Locked")}</span>` : ""}
@@ -574,7 +583,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			// never quietly loses what was scanned
 			const unsaved = (S.dirty && S.rows.length) ? `
 				<div class="pp-card unsaved pp-bench">
-					<div class="pp-name">${esc(S.prep || __("New parcel"))} <span class="pp-tag gone">${__("not saved")}</span></div>
+					<div class="pp-name">${esc(S.title || S.prep || __("New parcel"))} <span class="pp-tag gone">${__("not saved")}</span></div>
 					<div class="pp-cust">${esc(S.custCtl.get_value() || __("No buyer yet"))}</div>
 					<div class="pp-meta">${__("{0} piece(s) still on the bench", [S.rows.length])}</div>
 				</div>` : "";
@@ -668,18 +677,54 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 	const firstFmt = () => ((((S.ctx || {}).formats || [])[0]) || {}).key || "DEFAULT";
 
 	function resetBench() {
-		S.rows = []; S.sorted = false; S.prep = null; S.dirty = false; S.locked = false; S.out = [];
+		S.rows = []; S.sorted = false; S.prep = null; S.title = ""; S.dirty = false; S.locked = false; S.out = [];
 		lockHeader(false);
 		say("");
 		return setHeader({}).then(() => paint());
 	}
 
+	/** Ask what to call the parcel. Offers the buyer, the format and today, which the
+	 * desk can take as it is or overwrite; left empty, the SPREP number stands in.
+	 * Resolves with the name, or null when the dialog is closed without saving. */
+	function askName(current, action) {
+		const fmtLabel = (fmtSpec() || {}).label || S.fmt || "";
+		const offer = current || [S.custCtl.get_value(), fmtLabel,
+			frappe.datetime.str_to_user(frappe.datetime.get_today())].filter(Boolean).join(" · ");
+		return new Promise((resolve) => {
+			let done = false;
+			const d = new frappe.ui.Dialog({
+				title: current ? __("Rename parcel") : __("Save parcel as"),
+				fields: [{ fieldname: "title", fieldtype: "Data", label: __("Parcel name"), default: offer }],
+				primary_action_label: action || __("Save"),
+				primary_action(v) {
+					done = true;
+					d.hide();
+					resolve((v.title || "").trim());
+				},
+			});
+			d.onhide = () => { if (!done) resolve(null); };
+			d.show();
+			const $in = d.get_field("title").$input;
+			$in.on("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); d.get_primary_btn().trigger("click"); } });
+			setTimeout(() => $in.trigger("focus").trigger("select"), 0);
+		});
+	}
+
+	/** Save, asking for a name the first time. Resolves with the saved parcel, or
+	 * null when the desk backs out of the name. */
 	function saveParcel(opts) {
 		opts = opts || {};
+		if (!S.prep && !opts.named) {
+			return askName("", opts.action).then((t) => {
+				if (t === null) return null;
+				S.title = t;
+				return saveParcel(Object.assign({}, opts, { named: true }));
+			});
+		}
 		return frappe.call({
 			method: API + ".save_parcel",
 			args: { payload: JSON.stringify({
-				name: S.prep, fmt: S.fmt, sorted: S.sorted ? 1 : 0,
+				name: S.prep, title: S.title || "", fmt: S.fmt, sorted: S.sorted ? 1 : 0,
 				customer: S.custCtl.get_value() || "", price_chart: S.chartCtl.get_value() || "",
 				gold_rate: flt(S.rateCtl.get_value()), quality: qualities().map((x) => x.q).join(", "),
 				rows: S.rows,
@@ -687,9 +732,10 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		}).then((r) => {
 			const m = r.message || {};
 			S.prep = m.name;
+			S.title = m.title || "";
 			S.dirty = false;
 			paint();
-			frappe.show_alert({ message: __("Saved as {0} — {1} piece(s).", [m.name, m.pieces]), indicator: "green" }, 4);
+			frappe.show_alert({ message: __("Saved as {0} — {1} piece(s).", [m.title || m.name, m.pieces]), indicator: "green" }, 4);
 			if (opts.route !== false && (frappe.get_route() || [])[1] !== m.name) {
 				S.keepBench = true;
 				frappe.set_route("prepare-sale", m.name);
@@ -702,6 +748,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		return frappe.call({ method: API + ".get_parcel", args: { name: nm } }).then((r) => {
 			const m = r.message || {};
 			S.prep = m.name;
+			S.title = m.title || "";
 			S.rows = m.rows || [];
 			S.sorted = !!m.sorted;
 			S.dirty = false;
@@ -751,7 +798,7 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 			// a locked parcel is already saved; anything else is saved first, so Sell
 			// opens THIS parcel and the sale marks it Sold
 			if (S.locked) return go(S.prep);
-			saveParcel({ route: false }).then((m) => go(m.name));
+			saveParcel({ route: false, action: __("Save and send") }).then((m) => { if (m) go(m.name); });
 		});
 		if (S.prep && !S.locked) {
 			page.add_inner_button(__("Lock"), () => {
@@ -767,6 +814,17 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		paint();
 		setTimeout(() => root.find(".ps-box").focus(), 150);
 	}
+
+	root.on("click", ".ps-state[data-rename]", () => {
+		if (!S.prep) return;
+		askName(S.title || S.prep, __("Rename")).then((t) => {
+			if (t === null || t === (S.title || "")) return;
+			frappe.call({ method: API + ".rename_parcel", args: { name: S.prep, title: t } }).then((r) => {
+				S.title = (r.message || {}).title || "";
+				paintState();
+			});
+		});
+	});
 
 	function route() {
 		const arg = (frappe.get_route() || [])[1];

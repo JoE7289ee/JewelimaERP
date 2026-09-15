@@ -13787,6 +13787,7 @@ def get_sale_record(sale):
 	final price, who changed it, why)."""
 	d = frappe.get_doc("Product Sale", sale)
 	prep = frappe.db.get_value("Sale Preparation", {"sale": sale}, "name")
+	prep_title = frappe.db.get_value("Sale Preparation", prep, "title") if prep else ""
 	# overrides live on the PREP lines — join them onto the sold pieces by bag
 	ov = {}
 	if prep:
@@ -13826,7 +13827,7 @@ def get_sale_record(sale):
 			"changed_by": seller if mine else ((o.changed_by or "") if o else "")})
 	return {"name": d.name, "sale_date": str(d.sale_date or ""), "customer": d.customer,
 		"status": d.status, "price_chart": d.price_chart or "", "gold_rate": flt(d.gold_rate),
-		"remarks": d.remarks or "", "prep": prep or "",
+		"remarks": d.remarks or "", "prep": prep or "", "prep_title": prep_title or "",
 		"totals": {"gold": flt(d.gold_value), "diamond": flt(d.diamond_value),
 			"stone": flt(d.stone_value), "labour": flt(d.labour_value),
 			"charges": flt(d.charges_value), "grand": flt(d.grand_total),
@@ -16564,7 +16565,7 @@ def get_sale_prep_board(name):
 	d = frappe.get_doc("Sale Preparation", name)
 	if d.status == "Sold":
 		frappe.throw(frappe._("{0} is already sold ({1}).").format(name, d.sale))
-	return {"name": d.name, "customer": d.customer, "price_chart": d.price_chart,
+	return {"name": d.name, "title": d.title or "", "customer": d.customer, "price_chart": d.price_chart,
 		"gold_rate": flt(d.gold_rate), "remarks": d.remarks, "status": d.status,
 		"board": json.loads(d.board_json) if d.board_json else None}
 
@@ -16581,7 +16582,7 @@ def get_prepared_boards():
 	and nothing else would tell the desk."""
 	rows = frappe.get_all("Sale Preparation",
 		filters=[["status", "in", ["Draft", "Sent", "Sold"]], ["cleared", "=", 0]],
-		fields=["name", "customer", "price_chart", "gold_rate", "grand_total", "status",
+		fields=["name", "title", "customer", "price_chart", "gold_rate", "grand_total", "status",
 			"sale", "modified", "owner"], order_by="modified desc", limit_page_length=0)
 	for r in rows:
 		r["pieces"] = frappe.db.count("Sale Preparation Item", {"parent": r["name"]})
@@ -16669,6 +16670,8 @@ def save_parcel(payload):
 		doc = frappe.new_doc("Sale Preparation")
 		doc.status = "Draft"
 	_refuse_held_elsewhere(bags, exclude=doc.name if not doc.is_new() else None)
+	if p.get("title") is not None:
+		doc.title = (p.get("title") or "").strip() or None
 	doc.customer = p.get("customer") or None
 	doc.price_chart = p.get("price_chart") or None
 	doc.gold_rate = flt(p.get("gold_rate"))
@@ -16678,7 +16681,7 @@ def save_parcel(payload):
 		"quality": p.get("quality") or "", "sorted": cint(p.get("sorted")), "rows": rows})
 	doc.save(ignore_permissions=True)
 	frappe.db.commit()
-	return {"name": doc.name, "pieces": len(items), "grand_total": doc.grand_total}
+	return {"name": doc.name, "title": doc.title or "", "pieces": len(items), "grand_total": doc.grand_total}
 
 
 @frappe.whitelist()
@@ -16701,12 +16704,28 @@ def get_parcel(name):
 		filters={"name": ["in", bags or ["-"]]}, fields=["name", "stock_status"])}
 	out = [{"order_bag": b, "stock_status": where.get(b) or "missing"}
 		for b in bags if where.get(b) != "In Stock"]
-	return {"name": d.name, "customer": d.customer or "", "price_chart": d.price_chart or "",
+	return {"name": d.name, "title": d.title or "", "customer": d.customer or "", "price_chart": d.price_chart or "",
 		"gold_rate": flt(d.gold_rate), "fmt": board.get("fmt") or "DEFAULT",
 		"quality": board.get("quality") or "", "sorted": cint(board.get("sorted")),
 		"locked": cint(d.locked), "locked_on": str(d.locked_on or ""),
 		"locked_by": frappe.utils.get_fullname(d.locked_by) if d.locked_by else "",
 		"out_of_stock": out, "rows": rows}
+
+
+@frappe.whitelist()
+def rename_parcel(name, title):
+	"""Give a parcel a different name. Allowed on a locked parcel too — a name
+	adds and removes nothing — but not once it has sold, when it is history."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager"))
+	status = frappe.db.get_value("Sale Preparation", name, "status")
+	if not status:
+		frappe.throw(frappe._("{0} is not a parcel.").format(name or "?"))
+	if status not in ("Draft", "Sent"):
+		frappe.throw(frappe._("{0} is {1} and keeps the name it sold under.").format(name, status))
+	title = (title or "").strip()
+	frappe.db.set_value("Sale Preparation", name, "title", title or None)
+	frappe.db.commit()
+	return {"name": name, "title": title}
 
 
 @frappe.whitelist()
@@ -20523,12 +20542,12 @@ def get_sales_history(from_date=None, to_date=None, search=None, limit=400):
 	q = (search or "").strip()
 	cond = ["ps.sale_date between %(f)s and %(t)s"]
 	if q:
-		cond.append("""(ps.name like %(q)s or ps.customer like %(q)s or sp.name like %(q)s
+		cond.append("""(ps.name like %(q)s or ps.customer like %(q)s or sp.name like %(q)s or sp.title like %(q)s
 			or exists (select 1 from `tabProduct Sale Item` qi where qi.parent = ps.name and qi.order_bag like %(q)s))""")
 	rows = frappe.db.sql("""
 		select ps.name as sale, ps.sale_date, ps.customer, ps.price_chart, ps.gold_rate,
 			ps.grand_total as sale_total, ps.owner as sold_by,
-			sp.name as parcel, sp.cleared, sp.cleared_on, sp.cleared_by, sp.board_json,
+			sp.name as parcel, sp.title as parcel_title, sp.cleared, sp.cleared_on, sp.cleared_by, sp.board_json,
 			(select count(*) from `tabProduct Sale Item` i where i.parent = ps.name) as pieces,
 			(select count(*) from `tabProduct Sale Item` i where i.parent = ps.name and i.overridden = 1) as off_chart
 		from `tabProduct Sale` ps

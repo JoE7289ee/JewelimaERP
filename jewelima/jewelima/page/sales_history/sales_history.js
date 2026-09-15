@@ -157,7 +157,7 @@ frappe.pages["sales-history"].on_page_load = function (wrapper) {
 				<td class="dr-when">${esc(frappe.datetime.str_to_user(r.sale_date) || "")}</td>
 				<td><b>${esc(r.customer || "—")}</b></td>
 				<td>${r.parcel
-					? `<span class="dr-id">${esc(r.parcel)}</span> <span class="dr-tag fmt">${
+					? `${r.parcel_title ? `<b>${esc(r.parcel_title)}</b> ` : ""}<span class="dr-id">${esc(r.parcel)}</span> <span class="dr-tag fmt">${
 						esc(r.source === "prepare" ? r.fmt : __("Sell board"))}</span>`
 					: `<span class="dr-when">${__("straight from Sell")}</span>`}</td>
 				<td class="num">${cint(r.pieces)}</td>
@@ -203,7 +203,7 @@ frappe.pages["sales-history"].on_page_load = function (wrapper) {
 					&nbsp;·&nbsp; ${__("to")} <b>${esc(D.customer)}</b>
 					&nbsp;·&nbsp; ${__("chart")} <b>${esc(D.price_chart || "—")}</b>
 					&nbsp;·&nbsp; ${__("gold rate")} <b>${money2(D.gold_rate)}</b>
-					${D.prep ? `&nbsp;·&nbsp; ${__("parcel")} <b>${esc(D.prep)}</b>` : ""}
+					${D.prep ? `&nbsp;·&nbsp; ${__("parcel")} <b>${esc(D.prep_title || D.prep)}</b>${D.prep_title ? ` (${esc(D.prep)})` : ""}` : ""}
 					${D.remarks ? "<br>" + __("Remarks") + ": " + esc(D.remarks) : ""}
 				</div>
 				<div class="sr-tiles">${tiles}
