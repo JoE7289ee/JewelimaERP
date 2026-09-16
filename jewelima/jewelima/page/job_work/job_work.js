@@ -314,6 +314,8 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 		$(this).closest("tr").find(".jw-losscell").html(loss == null ? "—" : `<span class="${loss > 0 ? "jw-loss-pos" : ""}">${loss.toFixed(3)}</span>`);
 		updateTotal();
 	});
+	// a second scan while the cursor sits in a weight must not land in the weight
+	jewelima.weightOnly($body, ".jw-win,.jw-scrub", () => state.scan.$input);
 	// Enter in a weight-in box hands control back to the scanner for the next card
 	$body.on("keydown", ".jw-win", function (e) {
 		if (e.which === 13 || e.key === "Enter") {

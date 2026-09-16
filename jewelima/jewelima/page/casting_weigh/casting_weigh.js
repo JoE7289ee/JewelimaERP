@@ -57,6 +57,9 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 	const root = $(page.main)[0];
 	const esc = frappe.utils.escape_html;
 	const $scan = root.querySelector(".cw-scan");
+	// a second scan while the cursor sits in a weight goes to the scan box, not
+	// into the weight (the shared guard — every scan-driven page uses it)
+	jewelima.weightOnly($(root), ".cw-gross", () => $scan);
 	const fmt = (v) => flt(v).toFixed(3);
 
 	function chips() {
@@ -120,21 +123,9 @@ frappe.pages["casting-weigh"].on_page_load = function (wrapper) {
 				if (e.key === "Enter") {
 					e.preventDefault();
 					$scan.focus();
-					return;
-				}
-				// A weight is digits and one point. Anything else typed here is the
-				// scanner firing again (a double read lands a card code like E2928.2.1
-				// in the weight box), so the keystroke is sent to the scan box instead
-				// and the rest of the code follows it there.
-				if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !/[0-9.]/.test(e.key)) {
-					e.preventDefault();
-					$scan.value = e.key;
-					$scan.focus();
 				}
 			});
 			el.addEventListener("input", function () {
-				// a pasted or half-typed code is not a weight
-				if (this.value && !/^\d*\.?\d*$/.test(this.value)) this.value = "";
 				S.selected[this.getAttribute("data-bag")] = this.value;
 				const bag = this.getAttribute("data-bag");
 				const c = S.cards.find((x) => x.order_bag === bag) || {};

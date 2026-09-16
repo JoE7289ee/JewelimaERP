@@ -550,6 +550,8 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	}
 	root.on("input", ".si-pcs,.si-ct", sum);
 
+	// the same guard: a second scan lands in the scan box, never in a figure
+	jewelima.weightOnly(root, ".si-pcs,.si-ct", () => scan.$input);
 	// Enter walks the grid: Pcs -> Ct -> next row's Pcs -> … -> Issue button
 	root.on("keydown", ".si-pcs,.si-ct", function (e) {
 		if (e.key !== "Enter") return;

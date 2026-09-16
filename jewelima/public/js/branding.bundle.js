@@ -72,6 +72,29 @@ frappe.provide("jewelima");
 // unfreezing once at the end left the screen frozen on "1 of 2" after the work
 // had already finished. The first part freezes; the later parts only change
 // the words.
+// A weight box takes digits and one point — nothing else. On a scan-driven page
+// the "something else" is always the scanner firing again while the cursor sits
+// in a weight (the operator scans twice, and E7528.2 lands in a weight box). The
+// keystroke is sent to the scan box instead, and the rest of the code follows it
+// there; a pasted or half-typed code is cleared rather than kept.
+//   jewelima.weightOnly($grid, ".jw-win,.jw-scrub", () => scanInputEl);
+jewelima.weightOnly = function (host, selector, scanEl) {
+	const $host = host && host.jquery ? host : $(host);
+	const el = () => (typeof scanEl === "function" ? scanEl() : scanEl);
+	$host.on("keydown", selector, function (e) {
+		if (e.key === "Enter" || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+		if (/[0-9.]/.test(e.key)) return;
+		const box = el();
+		if (!box) return;
+		e.preventDefault();
+		const $box = box.jquery ? box : $(box);
+		$box.val(e.key).trigger("focus");
+	});
+	$host.on("input", selector, function () {
+		if (this.value && !/^\d*\.?\d*$/.test(this.value)) this.value = "";
+	});
+};
+
 jewelima.freezeStep = function (msg) {
 	const $lead = $("#freeze .freeze-message .lead");
 	if (frappe.dom.freeze_count && $lead.length) $lead.html(msg);
