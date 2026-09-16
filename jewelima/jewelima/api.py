@@ -15031,13 +15031,19 @@ def list_old_format_mergeable(name=None):
 	two of — the OLD FORMAT desk prices a whole lot at ONE quality, so a lot
 	holding EF and GH pieces could never be priced correctly. Offering only the
 	valid partners says that better than refusing after the fact does."""
-	fields = ["name", "title", "party", "piece_count", "status", "modified", "quality_token"]
+	fields = ["name", "title", "party", "piece_count", "status", "modified", "quality_token",
+		"creation", "owner"]
 	doc = frappe.get_doc("Old Format Import", name) if name else None
 	filters = {"name": ["!=", name], "quality_token": doc.quality_token or "EF"} if doc else {}
 	rows = frappe.get_all("Old Format Import", filters=filters, fields=fields,
 		order_by="modified desc", limit=100)
+	# who brought a lot in and when — three lots with near-identical names are told
+	# apart by that, not by their titles
+	who = {u.name: (u.full_name or u.name) for u in frappe.get_all("User",
+		filters={"name": ["in", list({r.owner for r in rows}) or [""]]}, fields=["name", "full_name"])}
 	out = {
-		"candidates": [{**r, "modified": str(r.modified),
+		"candidates": [{**r, "modified": str(r.modified), "creation": str(r.creation)[:16],
+			"owner_name": who.get(r.owner, r.owner),
 			"quality": r.quality_token or "EF"} for r in rows],
 		# the shops already used, so the picker suggests rather than only accepts
 		"parties": sorted({p for p in frappe.get_all("Old Format Import", pluck="party") if p}),

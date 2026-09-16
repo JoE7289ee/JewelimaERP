@@ -83,8 +83,13 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 			all.forEach((c) => { byName[c.name] = c; });
 			const opts = all.map((c) => ({
 				value: c.name,
+				// who brought it in and when, so near-identical titles are still
+				// told apart at a glance
 				label: `${esc(c.title)} — ${c.piece_count || 0} pcs · ${esc(c.quality)}${
-					c.party ? " · " + esc(c.party) : ""}`,
+					c.party ? " · " + esc(c.party) : ""}`
+					+ `<span style="color:var(--text-muted);font-size:11px;"> · ${
+						esc(frappe.datetime.str_to_user(c.creation) || c.creation || "")} · ${
+						esc(c.owner_name || "")}</span>`,
 				checked: 0,
 			}));
 			const SHOPS = {};          // what has been typed, kept across re-renders
@@ -167,7 +172,9 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 						<tr>
 							<td style="padding:2px 8px 2px 0;color:var(--text-muted);width:22px;">${i + 1}</td>
 							<td style="padding:2px 8px 2px 0;">${esc((byName[n] || {}).title || n)}
-								<span style="color:var(--text-muted);">· ${(byName[n] || {}).piece_count || 0} pcs</span></td>
+								<span style="color:var(--text-muted);">· ${(byName[n] || {}).piece_count || 0} pcs
+								· ${esc(frappe.datetime.str_to_user((byName[n] || {}).creation) || "")}
+								· ${esc((byName[n] || {}).owner_name || "")}</span></td>
 							<td style="padding:2px 0;width:150px;"><input class="form-control input-xs mg-shop"
 								data-lot="${esc(n)}" style="text-transform:uppercase;"
 								placeholder="${__("name")}" value="${esc(SHOPS[n] || "")}"></td>
@@ -184,7 +191,9 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 				d.fields_dict.sum.$wrapper.html(lots.length >= 2
 					? `<div class="mg-sum">${__("New lot")}: <b>${tot}</b> ${__("piece(s)")} — ${
 						sums.join(" + ")}<br><span style="color:var(--text-muted);">${
-						lots.map((n) => esc((byName[n] || {}).title || n)).join(" + ")}</span></div>`
+						lots.map((n) => `${esc((byName[n] || {}).title || n)} (${
+							esc(frappe.datetime.str_to_user((byName[n] || {}).creation) || "")}, ${
+							esc((byName[n] || {}).owner_name || "")})`).join(" + ")}</span></div>`
 					: `<div class="mg-sum" style="color:var(--text-muted);">${
 						__("Tick at least two lots.")}</div>`);
 			};
