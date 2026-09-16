@@ -97,12 +97,22 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 					{ fieldtype: "MultiCheck", fieldname: "lots", label: __("Lots to merge"),
 						options: opts, columns: 1 },
 					{ fieldtype: "HTML", fieldname: "shops", label: __("Name on the pieces") },
-					{ fieldtype: "Data", fieldname: "title", label: __("Title"),
-						description: __("Leave blank to name it after every lot going in.") },
+					{ fieldtype: "Data", fieldname: "title", label: __("Name the merged lot"),
+						description: __("e.g. MLR2 204 PCS EF. Leave blank to name it after every lot going in.") },
 					{ fieldtype: "HTML", fieldname: "sum" },
 				],
 				primary_action_label: __("Create merged lot"),
-				primary_action(v) {
+				primary_action(v) { doMerge(v, SHOPS); },
+				// Three lots of the same thing from the same place — MLR2 70, 84 and
+				// 50 PCS EF — are one lot that happened to arrive in three files.
+				// Nothing about them differs, so naming each one's pieces is work
+				// for no reader: this button pours them into one and asks only for
+				// the new lot's name.
+				secondary_action_label: __("Merge without shop names"),
+				secondary_action() { doMerge(d.get_values() || {}, {}); },
+			});
+
+			function doMerge(v, shops) {
 					const lots = d.get_value("lots") || [];
 					// MultiCheck has no reqd of its own, so the check is here
 					if (lots.length < 2) {
@@ -119,7 +129,7 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 					frappe.dom.freeze(__("Merging…"));
 					frappe.call({ method: API + ".merge_old_format_sessions",
 						args: { names: JSON.stringify(lots),
-							shops: JSON.stringify(SHOPS), title: v.title || "" } })
+							shops: JSON.stringify(shops), title: (v || {}).title || "" } })
 						.then((rr) => {
 							frappe.dom.unfreeze();
 							const n = rr.message || {};
@@ -130,8 +140,7 @@ frappe.pages["saved-imports"].on_page_load = function (wrapper) {
 										named.length ? " · " + named.map((x) => x.shop).join(", ") : ""]) }, 8);
 							load();
 						}).catch(() => frappe.dom.unfreeze());
-				},
-			});
+			}
 
 			d.fields_dict.head.$wrapper.html(`<div style="font-size:12.5px;color:var(--text-muted);">${
 				__("Tick the lots going in. The first one picked settles the quality — a lot is priced at one quality, so the rest lock to it.")}</div>`);
