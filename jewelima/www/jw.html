@@ -819,6 +819,7 @@ function jwBuyHtml(d) {
 		<div class="bh"><span class="sup">${esc(r.supplier)}</span>
 			<span class="vno">${esc(r.name)}</span></div>
 		<div class="meta">${esc(r.voucher)} · ${esc(r.when)}${r.warehouse ? " · into " + esc(r.warehouse) : ""}</div>
+		${r.by ? `<div class="meta">by <b style="color:rgba(250,247,239,.92);font-weight:800;">${esc(r.by)}</b></div>` : ""}
 		<div class="fig">
 			${r.pure ? `<span><b>${g3s(r.pure)}</b> <span>pure g</span></span>` : ""}
 			${r.gross ? `<span><b>${g3s(r.gross)}</b> <span>g gross</span></span>` : ""}
