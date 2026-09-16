@@ -38,14 +38,16 @@
 	border-radius: 18px;
 	margin-bottom: 16px;
 }
-/* the heading sits on the emerald, above the card — ivory, not ink */
+/* "Login to Jewelima Diamonds" says nothing the mark above it has not already
+   said, so the heading goes. The headings INSIDE a card (Forgot Password,
+   Create an Account) are real signposts and stay. */
+[data-path="login"] section.for-login .page-card-head h4 { display: none; }
 [data-path="login"] .page-card-head h4 {
 	font-size: 17px;
 	font-weight: 700;
 	letter-spacing: .05em;
 	color: var(--jw-ivory);
 }
-[data-path="login"] .page-card .page-card-head h4 { color: var(--jw-emerald); }
 [data-path="login"] .btn-primary {
 	background: var(--jw-emerald);
 	border-color: var(--jw-emerald);
