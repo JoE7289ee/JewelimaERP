@@ -130,9 +130,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 /* --- a shell screen, for the tiles that are not built yet --- */
 .jw-screen { position: fixed; inset: 0; z-index: 50; background: var(--jw-emerald);
 	display: none; flex-direction: column;
-	padding: max(14px, env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom)); }
+	padding: max(20px, calc(env(safe-area-inset-top) + 8px)) 16px calc(18px + env(safe-area-inset-bottom)); }
 .jw-screen.on { display: flex; }
-.jw-screen .bar { display: flex; align-items: center; gap: 12px; }
+.jw-screen .bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .jw-screen .back {
 	border: 1px solid rgba(250, 247, 239, .28); background: none; color: var(--jw-ivory);
 	border-radius: 10px; width: 38px; height: 38px; font-size: 17px; }
@@ -188,7 +188,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-row b { color: var(--jw-ivory); }
 .jw-err { color: #ffb4b4; font-size: 13.5px; text-align: center; padding: 22px 8px; }
 .jw-body::-webkit-scrollbar { width: 0; height: 0; }
-.jw-body { flex: 1; overflow-y: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
+.jw-body { flex: 1; overflow-y: auto; scrollbar-width: none; padding-top: 2px; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
 
 .jw-foot { margin-top: auto; text-align: center; font-size: 11px; color: rgba(250, 247, 239, .42); }
 .jw-foot a { color: rgba(250, 247, 239, .62); text-decoration: underline; }
