@@ -83,7 +83,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-find.gone { display: none; }
 .jw-pick { display: flex; align-items: baseline; gap: 10px; padding: 13px 4px;
 	border-bottom: 1px solid rgba(250, 247, 239, .09); }
-.jw-pick .nm { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.jw-pick .nm { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: .02em; color: var(--jw-ivory); }
 .jw-pick .dt { font-size: 11px; color: var(--jw-dim); opacity: .85; }
 .jw-pick .go { color: rgba(250, 247, 239, .35); font-size: 15px; }
 .jw-csec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
@@ -209,6 +209,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 
 /* --- a shell screen, for the tiles that are not built yet --- */
 .jw-screen { position: fixed; inset: 0; z-index: 50; background: var(--jw-emerald);
+	/* the screens sit OUTSIDE .jw-app, so they inherited the browser's own ink:
+	   anything without a colour of its own — a chart's name — came out grey */
+	color: var(--jw-ivory);
 	display: none; flex-direction: column;
 	padding: max(20px, calc(env(safe-area-inset-top) + 8px)) 16px calc(18px + env(safe-area-inset-bottom)); }
 .jw-screen.on { display: flex; }
