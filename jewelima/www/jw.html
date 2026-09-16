@@ -599,7 +599,9 @@ function jwChartClose() { document.getElementById("jw-chart").classList.remove("
 function jwQ(el) { el.parentNode.classList.toggle("on"); }
 
 function jwChartHtml(d) {
-	const ct = (r) => `${(r.from_ct || 0).toFixed(2)} – ${r.to_ct ? r.to_ct.toFixed(2) : "∞"} ct`;
+	// three places: a bracket that ends at 0.075 must not read as 0.08, or the
+	// stone on the table looks like it falls in the next bracket up
+	const ct = (r) => `${(r.from_ct || 0).toFixed(3)} – ${r.to_ct ? r.to_ct.toFixed(3) : "∞"} ct`;
 	const table = (rows, label, value, basis) => rows.length
 		? `<div class="jw-rt">${rows.map((r) => `<div class="rr">
 				<span class="l">${label(r)}</span>
