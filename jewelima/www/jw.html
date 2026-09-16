@@ -64,23 +64,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r small { font-size: 12px; font-weight: 700; color: rgba(250, 247, 239, .5); letter-spacing: .02em; }
 .jw-hero .of { font-size: 11.5px; color: rgba(250, 247, 239, .42); }
 .jw-k { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 11px; }
-.jw-k div { background: rgba(250, 247, 239, .07); border-radius: 10px; padding: 7px 2px; text-align: center;
+.jw-k div { background: rgba(250, 247, 239, .12); border-radius: 10px; padding: 7px 2px; text-align: center;
 	min-width: 0; }
-.jw-k .kk { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: rgba(250, 247, 239, .5); }
-.jw-k .kv { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 1px; }
+.jw-k .kk { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: rgba(250, 247, 239, .72); }
+.jw-k .kv { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 1px;
+	color: #FFFFFF; }
+.jw-hero .r .mv { font-size: 12.5px; font-weight: 800; margin-left: 8px; letter-spacing: .02em; }
+.jw-hero .r .mv.up { color: #7BD8A4; }
+.jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: rgba(250, 247, 239, .32); margin-top: 7px; }
-.jw-fsec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
-	color: rgba(250, 247, 239, .45); margin: 18px 0 8px; }
-.jw-line { display: flex; align-items: baseline; gap: 10px; padding: 9px 2px;
-	border-bottom: 1px solid rgba(250, 247, 239, .08); }
-.jw-line .l { flex: 1; font-size: 13px; font-weight: 600; }
-.jw-line .v { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--jw-champagne); }
-.jw-line .hl { font-size: 10.5px; color: rgba(250, 247, 239, .38); font-variant-numeric: tabular-nums;
-	min-width: 84px; text-align: right; }
-.jw-feedhd { display: flex; align-items: baseline; gap: 8px; margin: 20px 0 2px; }
-.jw-feedhd .fn { font-size: 14.5px; font-weight: 800; }
-.jw-feedhd .fa { font-size: 10.5px; color: rgba(250, 247, 239, .4); margin-left: auto; }
-
 /* the door, when the key is missing */
 .jw-shut { align-items: center; justify-content: center; text-align: center; gap: 10px; }
 .jw-shut img { width: 76px; height: 76px; border-radius: 18px; }
@@ -475,44 +467,30 @@ function jwRatesLoad() {
 		});
 }
 
+// what each line read on the LAST fetch, so a move can be shown as a move
+const jwLast = {};
+
 function jwRatesHtml(d) {
 	const karats = ["24K", "22K", "18K", "14K"];
-	const hero = (d.hero || []).map((h) => h.error && h.rate == null
-		? `<div class="jw-hero"><div class="n">${esc(h.name)}</div>
-			<div class="of">${esc(h.error)}</div></div>`
-		: `<div class="jw-hero">
+	return (d.hero || []).map((h) => {
+		if (h.error && h.rate == null) {
+			return `<div class="jw-hero"><div class="n">${esc(h.name)}</div>
+				<div class="of">${esc(h.error)}</div></div>`;
+		}
+		const was = jwLast[h.key + h.prefix];
+		const move = (was == null || was === h.rate) ? 0 : (h.rate > was ? 1 : -1);
+		jwLast[h.key + h.prefix] = h.rate;
+		const arrow = move === 0 ? "" :
+			`<span class="mv ${move > 0 ? "up" : "dn"}">${move > 0 ? "▲" : "▼"} ${
+				whole(Math.abs(h.rate - was))}</span>`;
+		return `<div class="jw-hero">
 			<div class="n">${esc(h.name)}</div>
-			<div class="r">₹${rupee(h.rate)} <small>/ g</small></div>
+			<div class="r">₹${rupee(h.rate)} <small>/ g</small>${arrow}</div>
 			<div class="of">${esc(h.label)} · ${esc(h.of)}${h.as_of ? " · " + esc(h.as_of) : ""}</div>
 			<div class="jw-k">${karats.map((k) => `<div><div class="kk">${k}</div>
 				<div class="kv">${whole((h.by_karat || {})[k])}</div></div>`).join("")}</div>
-		</div>`).join("");
-
-	const feeds = (d.rows || []).map((r) => {
-		const lines = (r.extra || []).map((e) => `<div class="jw-line">
-			<span class="l">${esc(e.label)}</span>
-			<span class="hl">${e.high ? "H " + rupee(e.high) + " · L " + rupee(e.low) : ""}</span>
-			<span class="v">${rupee(e.ask != null ? e.ask : e.bid)}</span></div>`).join("");
-		return `<div class="jw-feedhd"><span class="fn">${esc(r.name)}</span>
-				<span class="fa">${esc(r.as_of || "")}</span></div>
-			${r.error ? `<div class="jw-err">${esc(r.error)}</div>` : ""}
-			${r.detail ? `<div class="jw-derived">${esc(r.detail)}</div>` : ""}
-			${lines}`;
-	}).join("");
-
-	const ib = d.ibja || {};
-	const ibja = (ib.by_karat && Object.keys(ib.by_karat).length)
-		? `<div class="jw-fsec">IBJA — the published Indian trade rate</div>
-			<div class="jw-derived">Duty and GST already inside it${ib.as_of ? " · " + esc(ib.as_of) : ""}</div>
-			${karats.map((k) => `<div class="jw-line"><span class="l">${k}</span>
-				<span class="v">${whole(ib.by_karat[k])}</span></div>`).join("")}`
-		: "";
-
-	return `${hero}
-		<div class="jw-derived">The karat figures are worked out from each line's own fineness — not quoted.</div>
-		${ibja}
-		<div class="jw-fsec">Every line on the boards</div>
-		${feeds}`;
+		</div>`;
+	}).join("") + `<div class="jw-derived">The karat figures are worked out from each line's own fineness — not quoted.</div>`;
 }
 
 // ---------------------------------------------------------------------------

@@ -12017,36 +12017,16 @@ def _board_rate_live():
 
 @frappe.whitelist()
 def get_jw_board():
-	"""The board, read down a phone.
+	"""The three watched lines, read down a phone.
 
 	The costing desk's board is guarded by costing roles; this is the same
 	reading with the phone app's own key on it, because a rate is what a floor
 	asks for all day and holding a costing role to see one would be the wrong
-	lock. The live dealer lines come first, then the published Indian rate that
-	only moves twice a day."""
+	lock. Only the watched lines: a phone is not the place to read a whole
+	dealer board, and the desk is."""
 	frappe.only_for(["JW Phone", "System Manager"])
 	live = _board_rate_live()
-	ibja = {}
-	for f in BOARD_FEEDS:
-		if f["key"] != "ibja":
-			continue
-		ck = "jw_board_feed::" + f["key"]
-		ibja = frappe.cache().get_value(ck) or {}
-		if not ibja:
-			ibja = {"key": f["key"], "name": f["name"]}
-			try:
-				ibja.update(f["fn"]())
-				ibja["error"] = ""
-			except Exception as e:
-				ibja.update({"by_karat": {}, "as_of": "", "error": str(e)[:200]})
-			frappe.cache().set_value(ck, ibja, expires_in_sec=600)
-	return {
-		"hero": live.get("hero") or [],
-		"rows": live.get("rows") or [],
-		"ibja": ibja,
-		"karats": KARAT_FINENESS,
-		"at": frappe.utils.now(),
-	}
+	return {"hero": live.get("hero") or [], "karats": KARAT_FINENESS, "at": frappe.utils.now()}
 
 
 @frappe.whitelist()
