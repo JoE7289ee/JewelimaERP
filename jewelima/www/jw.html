@@ -1,0 +1,191 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Jewelima{% endblock %}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block banner %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block head_include %}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0D2B1E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jewelima">
+<link rel="apple-touch-icon" href="/assets/jewelima/images/brand/favicon-180.png">
+{% endblock %}
+
+{% block style %}
+<style>
+/* the web theme's chrome is not this app's — the page IS the app */
+.navbar, header, footer, .web-footer, .page-breadcrumbs, .web-sidebar, #navbar-search { display: none !important; }
+html, body { margin: 0 !important; padding: 0 !important; height: 100%; background: var(--jw-emerald) !important; }
+main, .main-section, #body, .page_content, .container, .page-content-wrapper {
+	margin: 0 !important; padding: 0 !important; max-width: none !important; width: 100% !important; }
+
+:root {
+	--jw-emerald: #0D2B1E;
+	--jw-forest: #1B4332;
+	--jw-green: #2E7D5B;
+	--jw-gold: #D4AF37;
+	--jw-champagne: #E6C778;
+	--jw-ivory: #FAF7EF;
+	--jw-mist: #EDF4EF;
+	--jw-ink: #1F2328;
+	--jw-muted: #6B6F76;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif; }
+
+.jw-app {
+	min-height: 100vh; min-height: 100dvh;
+	background: radial-gradient(120% 60% at 50% 0%, var(--jw-forest) 0%, var(--jw-emerald) 60%) fixed;
+	color: var(--jw-ivory);
+	padding: max(14px, env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));
+	display: flex; flex-direction: column; gap: 14px;
+}
+
+/* --- the head: who is here, and what this is --- */
+.jw-top { display: flex; align-items: center; gap: 11px; }
+.jw-top img { width: 40px; height: 40px; border-radius: 10px; }
+.jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
+.jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
+.jw-out {
+	margin-left: auto; border: 1px solid rgba(250, 247, 239, .28); background: none;
+	color: rgba(250, 247, 239, .82); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
+}
+
+/* --- the scan bar: the one thing a phone at a bench always wants --- */
+.jw-scan { display: flex; gap: 8px; }
+.jw-scan input {
+	flex: 1; min-width: 0; border: 1px solid rgba(250, 247, 239, .22); border-radius: 12px;
+	background: rgba(250, 247, 239, .08); color: var(--jw-ivory);
+	padding: 13px 15px; font-size: 16px; font-weight: 600;
+}
+.jw-scan input::placeholder { color: rgba(250, 247, 239, .45); font-weight: 500; }
+.jw-scan input:focus { outline: none; border-color: var(--jw-champagne); background: rgba(250, 247, 239, .13); }
+
+/* --- the nine --- */
+.jw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+.jw-tile {
+	position: relative; border: 1px solid rgba(250, 247, 239, .14); border-radius: 16px;
+	background: rgba(250, 247, 239, .07); color: var(--jw-ivory);
+	aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+	gap: 7px; padding: 8px; text-align: center; font: inherit; cursor: pointer;
+	transition: transform .08s ease, background .12s ease;
+}
+.jw-tile:active { transform: scale(.96); background: rgba(250, 247, 239, .13); }
+.jw-tile .ic { font-size: 23px; line-height: 1; }
+.jw-tile .lb { font-size: 11.5px; font-weight: 700; letter-spacing: .02em; line-height: 1.2; }
+.jw-tile .soon {
+	position: absolute; top: 7px; right: 8px; font-size: 8px; font-weight: 800; letter-spacing: .06em;
+	text-transform: uppercase; color: var(--jw-champagne); opacity: .8;
+}
+
+/* --- a shell screen, for the tiles that are not built yet --- */
+.jw-screen { position: fixed; inset: 0; z-index: 50; background: var(--jw-emerald);
+	display: none; flex-direction: column;
+	padding: max(14px, env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom)); }
+.jw-screen.on { display: flex; }
+.jw-screen .bar { display: flex; align-items: center; gap: 12px; }
+.jw-screen .back {
+	border: 1px solid rgba(250, 247, 239, .28); background: none; color: var(--jw-ivory);
+	border-radius: 10px; width: 38px; height: 38px; font-size: 17px; }
+.jw-screen .ttl { font-size: 17px; font-weight: 800; letter-spacing: .03em; color: var(--jw-ivory); }
+.jw-screen .body {
+	flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+	gap: 10px; color: rgba(250, 247, 239, .62); text-align: center; }
+.jw-screen .body .big { font-size: 40px; }
+.jw-screen .body .note { font-size: 13.5px; max-width: 250px; line-height: 1.5; }
+
+.jw-foot { margin-top: auto; text-align: center; font-size: 11px; color: rgba(250, 247, 239, .42); }
+.jw-foot a { color: rgba(250, 247, 239, .62); text-decoration: underline; }
+
+/* a phone app on a monitor looks silly — keep it to a phone's width */
+@media (min-width: 620px) { .jw-app, .jw-screen { max-width: 480px; margin: 0 auto; } }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="jw-app">
+	<div class="jw-top">
+		<img src="/assets/jewelima/images/brand/logo-square.svg" alt="">
+		<div>
+			<div class="t">JEWELIMA</div>
+			<div class="s">{{ jw_full_name }}</div>
+		</div>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
+	</div>
+
+	<div class="jw-scan">
+		<input id="jw-scan" placeholder="Scan a card…" autocomplete="off" autocapitalize="characters">
+	</div>
+
+	<div class="jw-grid" id="jw-grid"></div>
+
+	<div class="jw-foot">
+		Nine shells, nothing wired yet · <a href="/app">open the full desk</a>
+	</div>
+</div>
+
+<div class="jw-screen" id="jw-screen">
+	<div class="bar">
+		<button class="back" onclick="jwClose()">&#8592;</button>
+		<div class="ttl" id="jw-screen-title"></div>
+	</div>
+	<div class="body">
+		<div class="big" id="jw-screen-icon"></div>
+		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
+	</div>
+</div>
+
+<script>
+// The nine. Names and icons only for now: each opens an empty screen, so the
+// LAYOUT can be judged — how big the targets are, how it feels one-handed —
+// before a single job is wired to it.
+const JW_TILES = [
+	{ icon: "🔍", label: "Card Info" },
+	{ icon: "🧰", label: "Job Work" },
+	{ icon: "💎", label: "Stone Issue" },
+	{ icon: "↔️", label: "Transfer" },
+	{ icon: "⚖️", label: "Weigh" },
+	{ icon: "📦", label: "Parcel" },
+	{ icon: "🏷️", label: "Prepare Sale" },
+	{ icon: "📋", label: "My Bench" },
+	{ icon: "⋯", label: "More" },
+];
+
+const grid = document.getElementById("jw-grid");
+grid.innerHTML = JW_TILES.map((t, i) => `
+	<button class="jw-tile" data-i="${i}">
+		<span class="soon">soon</span>
+		<span class="ic">${t.icon}</span>
+		<span class="lb">${t.label}</span>
+	</button>`).join("");
+
+grid.addEventListener("click", (e) => {
+	const el = e.target.closest(".jw-tile");
+	if (!el) return;
+	const t = JW_TILES[Number(el.dataset.i)];
+	document.getElementById("jw-screen-title").textContent = t.label;
+	document.getElementById("jw-screen-icon").textContent = t.icon;
+	document.getElementById("jw-screen").classList.add("on");
+});
+
+function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
+// the back gesture closes a screen rather than leaving the app
+window.addEventListener("popstate", jwClose);
+
+document.getElementById("jw-scan").addEventListener("keydown", (e) => {
+	if (e.key !== "Enter") return;
+	const code = (e.target.value || "").trim();
+	e.target.value = "";
+	if (!code) return;
+	document.getElementById("jw-screen-title").textContent = code;
+	document.getElementById("jw-screen-icon").textContent = "🔍";
+	document.getElementById("jw-screen").classList.add("on");
+});
+
+function jwLogout() { window.location.href = "/api/method/logout"; }
+</script>
+{% endblock %}
