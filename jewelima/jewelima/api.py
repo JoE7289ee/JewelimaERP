@@ -18493,6 +18493,70 @@ def set_cert_submission_no(name, submission_no=""):
 
 
 @frappe.whitelist()
+def get_parcel_queue():
+	"""The packing counter: every batch that is prepped and waiting to go out,
+	certification and hallmarking together.
+
+	Two desks prepare packets and one counter sends them. Making that counter
+	visit both screens to find its work is how a packet sits on a bench all
+	afternoon; this is the one list the courier is waiting on."""
+	frappe.only_for(("System Manager", "JW Manager", "Stock Manager", "JW Delivery", "JW Parcel",
+		"Jewelima Certification", "Jewelima Hallmarking"))
+	out = []
+	for d in frappe.get_all("Certification", filters={"status": "Prepared"},
+			fields=["name", "cert_type", "center", "quality", "prepared_on", "submission_no", "owner"],
+			order_by="prepared_on asc, name asc"):
+		items = frappe.get_all("Certification Item", filters={"parent": d.name},
+			fields=["order_bag", "gross", "dmd_ct"])
+		out.append({"kind": "certification", "name": d.name, "where": d.cert_type or "",
+			"center": d.center or "", "quality": d.quality or "", "prepared_on": str(d.prepared_on or ""),
+			"submission_no": d.submission_no or "", "owner_label": _user_label(d.owner),
+			"pieces": len(items), "gross": round(sum(flt(i.gross) for i in items), 3),
+			"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3)})
+	for d in frappe.get_all("Hallmarking Batch", filters={"status": "Prepared"},
+			fields=["name", "center", "prepared_on", "submission_no", "owner"],
+			order_by="prepared_on asc, name asc"):
+		items = frappe.get_all("Hallmarking Item", filters={"parent": d.name},
+			fields=["order_bag", "gross", "dmd_ct"])
+		out.append({"kind": "hallmarking", "name": d.name, "where": frappe._("Hallmarking"),
+			"center": d.center or "", "quality": "", "prepared_on": str(d.prepared_on or ""),
+			"submission_no": d.submission_no or "", "owner_label": _user_label(d.owner),
+			"pieces": len(items), "gross": round(sum(flt(i.gross) for i in items), 3),
+			"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3)})
+	return {"rows": out,
+		"hall_centers": frappe.get_all("Hallmarking Center", filters={"disabled": 0}, pluck="name")
+			if frappe.db.exists("DocType", "Hallmarking Center") else []}
+
+
+@frappe.whitelist()
+def parcel_scan(code):
+	"""What did the counter just scan? A batch code off a note, or a piece.
+
+	A piece is answered with the batch it belongs to — the slip may be missing
+	and the packet open on the bench, and the pieces inside are the other way of
+	naming it."""
+	code = (code or "").strip()
+	if not code:
+		return {"error": frappe._("Scan a batch or a piece.")}
+	if frappe.db.exists("Certification", code):
+		st = frappe.db.get_value("Certification", code, "status")
+		return ({"batch": code, "kind": "certification"} if st == "Prepared"
+			else {"error": frappe._("{0} is {1} — only prepared batches go out here.").format(code, st)})
+	if frappe.db.exists("Hallmarking Batch", code):
+		st = frappe.db.get_value("Hallmarking Batch", code, "status")
+		return ({"batch": code, "kind": "hallmarking"} if st == "Prepared"
+			else {"error": frappe._("{0} is {1} — only prepared batches go out here.").format(code, st)})
+	# a piece: find the prepared batch holding it
+	for dt, child, kind in (("Certification", "Certification Item", "certification"),
+			("Hallmarking Batch", "Hallmarking Item", "hallmarking")):
+		parents = frappe.get_all(child, filters={"order_bag": code}, pluck="parent")
+		for pnt in parents:
+			if frappe.db.get_value(dt, pnt, "status") == "Prepared":
+				return {"batch": pnt, "kind": kind, "via_piece": code}
+	return {"error": frappe._("{0} is not on any prepared batch.").format(code)}
+
+
+@frappe.whitelist()
 def get_cert_batch_slip(name):
 	"""The batch slip, as HTML for the browser to PRINT.
 
@@ -18638,7 +18702,10 @@ def export_certification_xlsx(name):
 # hand over a packet you are not allowed to look at); adding, removing, sending
 # and cancelling belong to its preparer, and a manager overrides because
 # someone has to when that person is not in today.
-CERT_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
+# JW PARCEL is the packing counter: it does not prep a batch, it hands the packet
+# to the courier. So it may SEND anybody's prepared batch, exactly as a manager
+# can — that is the whole job.
+CERT_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager", "JW Parcel"}
 
 
 def _cert_can_manage(d):
@@ -19627,7 +19694,7 @@ def get_hall_prep_context():
 # allowed to look at — but adding, removing, sending and cancelling belong to
 # whoever prepped it. A manager overrides, because someone has to when that
 # person is not in today.
-HALL_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager"}
+HALL_OVERRIDE_ROLES = {"System Manager", "Stock Manager", "JW Manager", "JW Parcel"}
 # Taking a HUID off is the delivery desk's own job — they are the ones holding
 # the piece when the stamp turns out unreadable. Every removal names who did it
 # and why on the piece itself, which is what makes that safe to hand over.

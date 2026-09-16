@@ -291,6 +291,14 @@ JEWELIMA_CAM_TO = ("WAXING", "CAD")
 # Sell page carries both actions — so create_product_sale refuses the close for
 # this role (see SALE_PREPARE_ONLY_ROLES in api.py) and the page hides the
 # button. Prepare To Sell parks the priced board for whoever does sell.
+# ---- JW Parcel: the packing counter ------------------------------------------
+# One job: take a packet the certification or hallmarking desk has prepared, and
+# hand it to the courier. It prepares nothing and edits nothing — the Parcel page
+# is the whole grant, and CERT_OVERRIDE_ROLES / HALL_OVERRIDE_ROLES in api.py let
+# it send a batch somebody else prepped, which is the point of a counter.
+JEWELIMA_PARCEL_ROLE = "JW Parcel"
+JEWELIMA_PARCEL_PAGES = ["parcel"]
+
 JEWELIMA_DELIVERY_ROLE = "JW Delivery"
 JEWELIMA_DELIVERY_PAGES = [
 	# Delivery
@@ -303,6 +311,8 @@ JEWELIMA_DELIVERY_PAGES = [
 	"holder-transfer-records", "bucket-transfer-records", "sales-history",
 	# Barcode: Multi Print, the label roll printer
 	"multi-barcode",
+	# the packing counter's own screen — prepared packets from both desks, sent
+	"parcel",
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications", "stone-changes",
 	"remove-certification",
@@ -1090,6 +1100,20 @@ def setup_roles():
 		if page not in _costing_ok:
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_COSTING_ROLE])
+			pg.save(ignore_permissions=True)
+
+	# ---- JW Parcel: the packing counter, one page and nothing else ---------------
+	ensure_role(JEWELIMA_PARCEL_ROLE)
+	for dt in ("Certification", "Certification Item", "Hallmarking Batch", "Hallmarking Item", "Order Bag"):
+		if frappe.db.exists("DocType", dt):
+			grant(dt, JEWELIMA_PARCEL_ROLE, {"read": 1})
+	for page in JEWELIMA_PARCEL_PAGES:
+		set_page_roles(page, (JEWELIMA_PARCEL_ROLE,))
+	for page in frappe.get_all("Has Role",
+			filters={"parenttype": "Page", "role": JEWELIMA_PARCEL_ROLE}, pluck="parent"):
+		if page not in set(JEWELIMA_PARCEL_PAGES):
+			pg = frappe.get_doc("Page", page)
+			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_PARCEL_ROLE])
 			pg.save(ignore_permissions=True)
 
 	# ---- JW Delivery: goods out, certification, and a bill it may only prepare --

@@ -4,7 +4,7 @@
  "docstatus": 0,
  "doctype": "Page",
  "idx": 0,
- "modified": "2026-09-16 15:16:10.205518",
+ "modified": "2026-09-16 15:50:24.544260",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "request-feature",
@@ -52,6 +52,9 @@
   },
   {
    "role": "JW Info"
+  },
+  {
+   "role": "JW Parcel"
   },
   {
    "role": "JW Stock Admin"
