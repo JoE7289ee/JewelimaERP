@@ -52,7 +52,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top { display: flex; align-items: center; gap: 11px; }
 .jw-top img { width: 40px; height: 40px; border-radius: 10px; }
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
-.jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
+.jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .85); margin-top: 1px; }
 /* the board */
 .jw-screen .bar .jw-ref { margin-left: auto; }
 .jw-screen .bar .jw-out { margin-left: 0; }
@@ -60,15 +60,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero { border: 1px solid rgba(250, 247, 239, .13); background: rgba(250, 247, 239, .05);
 	border-radius: 15px; padding: 13px 15px; margin-bottom: 11px; }
 .jw-hero .n { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
-	color: rgba(250, 247, 239, .55); }
+	color: var(--jw-dim); }
 .jw-hero .r { font-size: 27px; font-weight: 800; color: var(--jw-champagne); letter-spacing: -.01em;
 	font-variant-numeric: tabular-nums; margin: 2px 0 1px; }
-.jw-hero .r small { font-size: 12px; font-weight: 700; color: rgba(250, 247, 239, .5); letter-spacing: .02em; }
+.jw-hero .r small { font-size: 12px; font-weight: 700; color: rgba(250, 247, 239, .78); letter-spacing: .02em; }
 .jw-hero .of { font-size: 11.5px; color: var(--jw-dim); opacity: .9; }
 .jw-k { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 11px; }
 .jw-k div { background: rgba(250, 247, 239, .12); border-radius: 10px; padding: 7px 2px; text-align: center;
 	min-width: 0; }
-.jw-k .kk { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: rgba(250, 247, 239, .72); }
+.jw-k .kk { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: rgba(250, 247, 239, .9); }
 .jw-k .kv { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 1px;
 	color: #FFFFFF; }
 .jw-hero .r .mv { font-size: 12.5px; font-weight: 800; margin-left: 8px; letter-spacing: .02em; }
@@ -120,10 +120,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-tot { border: 1px solid rgba(212, 175, 55, .35); border-radius: 16px; padding: 15px 16px;
 	background: linear-gradient(180deg, rgba(212, 175, 55, .13), rgba(250, 247, 239, .04)); }
 .jw-tot .n { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
-	color: rgba(250, 247, 239, .62); }
+	color: var(--jw-dim); }
 .jw-tot .g { font-size: 30px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums;
 	letter-spacing: -.01em; margin: 3px 0 0; }
-.jw-tot .g small { font-size: 13px; font-weight: 700; color: rgba(250, 247, 239, .55); }
+.jw-tot .g small { font-size: 13px; font-weight: 700; color: rgba(250, 247, 239, .78); }
 .jw-tot .gross { font-size: 12px; color: var(--jw-dim); margin-top: 1px; }
 .jw-tot .val { font-size: 22px; font-weight: 800; color: var(--jw-champagne); margin-top: 11px;
 	font-variant-numeric: tabular-nums; }
@@ -219,7 +219,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-screen .ttl { font-size: 17px; font-weight: 800; letter-spacing: .03em; color: var(--jw-ivory); }
 .jw-screen .body {
 	flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-	gap: 10px; color: rgba(250, 247, 239, .62); text-align: center; }
+	gap: 10px; color: rgba(250, 247, 239, .8); text-align: center; }
 .jw-screen .body .big { font-size: 40px; }
 .jw-screen .body .note { font-size: 13.5px; max-width: 250px; line-height: 1.5; }
 
@@ -248,7 +248,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 /* --- a card, read on a phone --- */
 .jw-card-hd { padding: 2px 0 10px; }
 .jw-card-hd .code { font-size: 25px; font-weight: 800; letter-spacing: .01em; word-break: break-all; }
-.jw-card-hd .dsn { font-size: 13px; color: rgba(250, 247, 239, .62); margin-top: 2px; }
+.jw-card-hd .dsn { font-size: 13px; color: rgba(250, 247, 239, .88); margin-top: 2px; }
 .jw-badge { display: inline-block; margin-top: 9px; border-radius: 9px; padding: 3px 10px;
 	font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .jw-badge.prod { background: rgba(46, 125, 91, .3); color: #b9e8cf; }
@@ -256,14 +256,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-badge.pre { background: rgba(250, 247, 239, .14); color: rgba(250, 247, 239, .7); }
 .jw-where { border: 1px solid rgba(250, 247, 239, .14); border-radius: 14px;
 	background: rgba(250, 247, 239, .07); padding: 13px 15px; margin-bottom: 11px; }
-.jw-where .k { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: rgba(250, 247, 239, .55); }
+.jw-where .k { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--jw-dim); }
 .jw-where .v { font-size: 22px; font-weight: 800; color: var(--jw-champagne); line-height: 1.2; }
-.jw-where .s { font-size: 12.5px; color: rgba(250, 247, 239, .7); margin-top: 3px; }
+.jw-where .s { font-size: 12.5px; color: rgba(250, 247, 239, .88); margin-top: 3px; }
 .jw-rows { display: flex; flex-direction: column; gap: 9px; }
 .jw-row { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px;
 	background: rgba(250, 247, 239, .05); padding: 11px 14px; }
 .jw-row .t { font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
-	color: rgba(250, 247, 239, .5); margin-bottom: 5px; }
+	color: var(--jw-dim); margin-bottom: 5px; }
 .jw-row .b { font-size: 13.5px; line-height: 1.7; }
 .jw-row b { color: var(--jw-ivory); }
 .jw-err { color: #ffb4b4; font-size: 13.5px; text-align: center; padding: 22px 8px; }
@@ -410,7 +410,7 @@ grid.addEventListener("click", (e) => {
 	if (t.screen === "card") {          // the ones that are built
 		document.getElementById("jw-card").classList.add("on");
 		if (!cardBody.innerHTML.trim()) {
-			cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">`
+			cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">`
 				+ `Scan a card, or type its number on the home screen.</div>`;
 		}
 		return;
@@ -471,7 +471,7 @@ function jwCard(code) {
 		if (/^\d+$/.test(p[0])) code = "E" + p[0].padStart(4, "0") + (p.length > 1 ? "." + p.slice(1).join(".") : "");
 	}
 	document.getElementById("jw-card").classList.add("on");
-	cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading ${esc(code)}…</div>`;
+	cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading ${esc(code)}…</div>`;
 	jwApi("jewelima.jewelima.api.get_card_passport", { order_bag: code })
 		.then((d) => {
 			if (!d.bag) {
@@ -551,7 +551,7 @@ function jwCharts() {
 	document.getElementById("jw-chart-ttl").textContent = "Price Chart";
 	chartFind.classList.remove("gone");
 	if (jwChartList.length) { jwChartPaint(); return; }
-	chartBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading the charts…</div>`;
+	chartBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading the charts…</div>`;
 	jwApi("jewelima.jewelima.api.get_jw_charts", {})
 		.then((rows) => { jwChartList = rows || []; jwChartPaint(); })
 		.catch(() => { chartBody.innerHTML = `<div class="jw-err">The charts could not be read just now.</div>`; });
@@ -564,7 +564,7 @@ function jwChartPaint() {
 		? rows.map((r) => `<div class="jw-pick" onclick="jwChart('${esc(r.name)}')">
 				<span class="nm">${esc(r.chart_name)}</span>
 				<span class="dt">${esc(r.chart_date)}</span><span class="go">&#8250;</span></div>`).join("")
-		: `<div class="jw-err" style="color:rgba(250,247,239,.6)">No party by that name.</div>`;
+		: `<div class="jw-err" style="color:rgba(250,247,239,.85)">No party by that name.</div>`;
 }
 
 chartFind.addEventListener("input", () => { if (!jwChartOpen) jwChartPaint(); });
@@ -572,7 +572,7 @@ chartFind.addEventListener("input", () => { if (!jwChartOpen) jwChartPaint(); })
 function jwChart(name) {
 	jwChartOpen = name;
 	chartFind.classList.add("gone");
-	chartBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading it…</div>`;
+	chartBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading it…</div>`;
 	jwApi("jewelima.jewelima.api.get_jw_chart", { name })
 		.then((d) => {
 			if (!d || !d.name) throw new Error("empty");
@@ -665,7 +665,7 @@ function money(v) {
 function jwGold() {
 	document.getElementById("jw-gold").classList.add("on");
 	if (!goldBody.innerHTML.trim()) {
-		goldBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Counting the gold…</div>`;
+		goldBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Counting the gold…</div>`;
 	}
 	jwApi("jewelima.jewelima.api.get_jw_gold", {})
 		.then((d) => {
@@ -686,7 +686,7 @@ function jwGoldHtml(d) {
 	const row = (b) => `<div class="jw-brow">
 		<div class="t"><span class="l">${esc(b.bucket)}</span>
 			<span class="s">${b.share}%</span>
-			<span class="p">${g3s(b.pure)}<span style="font-size:11px;font-weight:700;color:rgba(250,247,239,.45)"> pure g</span></span></div>
+			<span class="p">${g3s(b.pure)}<span style="font-size:11px;font-weight:700;color:var(--jw-dim)"> pure g</span></span></div>
 		<div class="bar2"><i style="width:${Math.max(1.5, b.share)}%"></i></div>
 		<div class="sub">${g3s(b.weight)} g gross</div>
 	</div>`;
@@ -749,7 +749,7 @@ const whole = (v) => (v == null || v === "") ? "—"
 function jwRates() {
 	document.getElementById("jw-rates").classList.add("on");
 	if (!ratesBody.innerHTML.trim()) {
-		ratesBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading the board…</div>`;
+		ratesBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading the board…</div>`;
 	}
 	jwRatesLoad();
 	jwTick = setInterval(jwRatesLoad, 10000);
