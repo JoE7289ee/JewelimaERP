@@ -18,7 +18,7 @@ import frappe
 no_cache = 1
 
 PHONE_ROLE = "JW Phone"
-ALWAYS_IN = ("System Manager", "JW Manager")
+ALWAYS_IN = ("System Manager",)  # the one account that must never be locked out
 
 
 def get_context(context):

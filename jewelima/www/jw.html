@@ -52,6 +52,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top img { width: 40px; height: 40px; border-radius: 10px; }
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
+/* the board */
+.jw-screen .bar .tick { margin-left: auto; font-size: 11px; color: rgba(250, 247, 239, .45);
+	font-variant-numeric: tabular-nums; }
+.jw-hero { border: 1px solid rgba(250, 247, 239, .13); background: rgba(250, 247, 239, .05);
+	border-radius: 15px; padding: 13px 15px; margin-bottom: 11px; }
+.jw-hero .n { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .55); }
+.jw-hero .r { font-size: 27px; font-weight: 800; color: var(--jw-champagne); letter-spacing: -.01em;
+	font-variant-numeric: tabular-nums; margin: 2px 0 1px; }
+.jw-hero .r small { font-size: 12px; font-weight: 700; color: rgba(250, 247, 239, .5); letter-spacing: .02em; }
+.jw-hero .of { font-size: 11.5px; color: rgba(250, 247, 239, .42); }
+.jw-k { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 11px; }
+.jw-k div { background: rgba(250, 247, 239, .07); border-radius: 10px; padding: 7px 2px; text-align: center;
+	min-width: 0; }
+.jw-k .kk { font-size: 10px; font-weight: 800; letter-spacing: .06em; color: rgba(250, 247, 239, .5); }
+.jw-k .kv { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 1px; }
+.jw-derived { font-size: 10.5px; color: rgba(250, 247, 239, .32); margin-top: 7px; }
+.jw-fsec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .45); margin: 18px 0 8px; }
+.jw-line { display: flex; align-items: baseline; gap: 10px; padding: 9px 2px;
+	border-bottom: 1px solid rgba(250, 247, 239, .08); }
+.jw-line .l { flex: 1; font-size: 13px; font-weight: 600; }
+.jw-line .v { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--jw-champagne); }
+.jw-line .hl { font-size: 10.5px; color: rgba(250, 247, 239, .38); font-variant-numeric: tabular-nums;
+	min-width: 84px; text-align: right; }
+.jw-feedhd { display: flex; align-items: baseline; gap: 8px; margin: 20px 0 2px; }
+.jw-feedhd .fn { font-size: 14.5px; font-weight: 800; }
+.jw-feedhd .fa { font-size: 10.5px; color: rgba(250, 247, 239, .4); margin-left: auto; }
+
 /* the door, when the key is missing */
 .jw-shut { align-items: center; justify-content: center; text-align: center; gap: 10px; }
 .jw-shut img { width: 76px; height: 76px; border-radius: 18px; }
@@ -209,7 +238,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Card Info is live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
+		Card Info and Rates are live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -222,6 +251,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<div class="big" id="jw-screen-icon"></div>
 		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
 	</div>
+</div>
+
+<!-- Rates: the board, read down a phone -->
+<div class="jw-screen" id="jw-rates">
+	<div class="bar">
+		<button class="back" onclick="jwRatesClose()">&#8592;</button>
+		<div class="ttl">Rates</div>
+		<span class="tick" id="jw-tick"></span>
+	</div>
+	<div class="jw-body" id="jw-rates-body"></div>
 </div>
 
 <!-- Card Info: the first tile with something behind it -->
@@ -247,13 +286,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 // before a single job is wired to it.
 const JW_TILES = [
 	{ icon: "🔍", label: "Card Info", screen: "card" },
+	{ icon: "📈", label: "Rates", screen: "rates" },
 	{ icon: "🧰", label: "Job Work" },
 	{ icon: "💎", label: "Stone Issue" },
 	{ icon: "↔️", label: "Transfer" },
 	{ icon: "⚖️", label: "Weigh" },
 	{ icon: "📦", label: "Parcel" },
 	{ icon: "🏷️", label: "Prepare Sale" },
-	{ icon: "📋", label: "My Bench" },
 	{ icon: "⋯", label: "More" },
 ];
 
@@ -269,7 +308,7 @@ grid.addEventListener("click", (e) => {
 	const el = e.target.closest(".jw-tile");
 	if (!el) return;
 	const t = JW_TILES[Number(el.dataset.i)];
-	if (t.screen === "card") {          // the one that is built
+	if (t.screen === "card") {          // the ones that are built
 		document.getElementById("jw-card").classList.add("on");
 		if (!cardBody.innerHTML.trim()) {
 			cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">`
@@ -277,6 +316,7 @@ grid.addEventListener("click", (e) => {
 		}
 		return;
 	}
+	if (t.screen === "rates") { jwRates(); return; }
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
@@ -284,7 +324,7 @@ grid.addEventListener("click", (e) => {
 
 function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
 // the back gesture closes whatever is open rather than leaving the app
-window.addEventListener("popstate", () => { jwClose(); jwCardClose(); jwCamStop(); });
+window.addEventListener("popstate", () => { jwClose(); jwCardClose(); jwRatesClose(); jwCamStop(); });
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
 	if (e.key !== "Enter") return;
@@ -385,6 +425,94 @@ function jwCardHtml(d) {
 			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
 			${row("Remark", b.narration ? esc(b.narration) : "")}
 		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// RATES — the board the floor asks for all day.
+//
+// The same feeds the costing desk watches, read down a phone: the three watched
+// lines first, then every line each dealer is quoting. The karat figures under a
+// line are ARITHMETIC, not a quote — the line's own fineness backed out to fine
+// gold and taken to each karat — and they are labelled as such.
+//
+// It ticks while the screen is open and stops when it is not: the server holds
+// each feed on its own short clock, so a phone polling is one cached read.
+// ---------------------------------------------------------------------------
+let jwTick = null;
+const ratesBody = document.getElementById("jw-rates-body");
+const rupee = (v) => (v == null || v === "") ? "—"
+	: Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+// a karat figure in paise is noise on a phone — and it overflows four columns
+const whole = (v) => (v == null || v === "") ? "—"
+	: Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+
+function jwRates() {
+	document.getElementById("jw-rates").classList.add("on");
+	if (!ratesBody.innerHTML.trim()) {
+		ratesBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading the board…</div>`;
+	}
+	jwRatesLoad();
+	jwTick = setInterval(jwRatesLoad, 10000);
+}
+
+function jwRatesClose() {
+	document.getElementById("jw-rates").classList.remove("on");
+	if (jwTick) clearInterval(jwTick);
+	jwTick = null;
+}
+
+function jwRatesLoad() {
+	return jwApi("jewelima.jewelima.api.get_jw_board", {})
+		.then((d) => {
+			if (!d || (!d.hero && !d.rows)) throw new Error("empty");
+			ratesBody.innerHTML = jwRatesHtml(d);
+			document.getElementById("jw-tick").textContent = (d.at || "").slice(11, 16);
+		})
+		.catch(() => {
+			if (!ratesBody.querySelector(".jw-hero")) {
+				ratesBody.innerHTML = `<div class="jw-err">The board could not be read just now.</div>`;
+			}
+		});
+}
+
+function jwRatesHtml(d) {
+	const karats = ["24K", "22K", "18K", "14K"];
+	const hero = (d.hero || []).map((h) => h.error && h.rate == null
+		? `<div class="jw-hero"><div class="n">${esc(h.name)}</div>
+			<div class="of">${esc(h.error)}</div></div>`
+		: `<div class="jw-hero">
+			<div class="n">${esc(h.name)}</div>
+			<div class="r">₹${rupee(h.rate)} <small>/ g</small></div>
+			<div class="of">${esc(h.label)} · ${esc(h.of)}${h.as_of ? " · " + esc(h.as_of) : ""}</div>
+			<div class="jw-k">${karats.map((k) => `<div><div class="kk">${k}</div>
+				<div class="kv">${whole((h.by_karat || {})[k])}</div></div>`).join("")}</div>
+		</div>`).join("");
+
+	const feeds = (d.rows || []).map((r) => {
+		const lines = (r.extra || []).map((e) => `<div class="jw-line">
+			<span class="l">${esc(e.label)}</span>
+			<span class="hl">${e.high ? "H " + rupee(e.high) + " · L " + rupee(e.low) : ""}</span>
+			<span class="v">${rupee(e.ask != null ? e.ask : e.bid)}</span></div>`).join("");
+		return `<div class="jw-feedhd"><span class="fn">${esc(r.name)}</span>
+				<span class="fa">${esc(r.as_of || "")}</span></div>
+			${r.error ? `<div class="jw-err">${esc(r.error)}</div>` : ""}
+			${r.detail ? `<div class="jw-derived">${esc(r.detail)}</div>` : ""}
+			${lines}`;
+	}).join("");
+
+	const ib = d.ibja || {};
+	const ibja = (ib.by_karat && Object.keys(ib.by_karat).length)
+		? `<div class="jw-fsec">IBJA — the published Indian trade rate</div>
+			<div class="jw-derived">Duty and GST already inside it${ib.as_of ? " · " + esc(ib.as_of) : ""}</div>
+			${karats.map((k) => `<div class="jw-line"><span class="l">${k}</span>
+				<span class="v">${whole(ib.by_karat[k])}</span></div>`).join("")}`
+		: "";
+
+	return `${hero}
+		<div class="jw-derived">The karat figures are worked out from each line's own fineness — not quoted.</div>
+		${ibja}
+		<div class="jw-fsec">Every line on the boards</div>
+		${feeds}`;
 }
 
 // ---------------------------------------------------------------------------
