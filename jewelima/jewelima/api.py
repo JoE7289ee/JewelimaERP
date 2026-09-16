@@ -19949,9 +19949,9 @@ def get_hall_preps():
 		r["owner_label"] = _user_label(owner)
 		r["can_manage"] = bool(set(frappe.get_roles()) & HALL_OVERRIDE_ROLES) or owner == frappe.session.user
 		cuts = frappe.get_all("Hallmarking Cut Piece", filters={"parent": r.name},
-			fields=["item", "qty", "weight", "remarks"], order_by="idx")
-		r["cuts"] = [{"item": c.item, "qty": cint(c.qty) or 1, "weight": flt(c.weight),
-			"remarks": c.remarks or ""} for c in cuts]
+			fields=["design_type", "item", "qty", "weight", "remarks"], order_by="idx")
+		r["cuts"] = [{"design_type": c.design_type or "", "item": c.item, "qty": cint(c.qty) or 1,
+			"weight": flt(c.weight), "remarks": c.remarks or ""} for c in cuts]
 		r["cut_weight"] = round(sum(flt(c.weight) for c in cuts), 3)
 		r["cut_qty"] = sum(cint(c.qty) or 1 for c in cuts)
 		# what the centre is actually being handed: fine gold and stones, off the
@@ -19985,10 +19985,22 @@ def get_hall_preps():
 			t["pieces"] += 1
 			t["gross"] += flt(i.gross)
 			t["dmd_ct"] += flt(i.dmd_ct)
+		# cut pieces are part of what the centre is handed, so they belong in the
+		# same breakdown — marked, because they are samples, not stock pieces
+		for c in cuts:
+			k = (c.design_type or "").strip() or frappe._("Cut piece")
+			t = byt.setdefault(k, {"design_type": k, "pieces": 0, "gross": 0.0, "dmd_ct": 0.0, "cut": 0})
+			t["pieces"] += cint(c.qty) or 1
+			t["gross"] += flt(c.weight)
+			t["cut"] = (t.get("cut") or 0) + (cint(c.qty) or 1)
 		for t in byt.values():
 			t["gross"] = round(t["gross"], 3)
 			t["dmd_ct"] = round(t["dmd_ct"], 3)
 		r["by_type"] = sorted(byt.values(), key=lambda t: -t["gross"])
+		# the headline figures carry them too — the packet on the counter weighs
+		# what it weighs, samples included
+		r["total_pieces"] = cint(r["pieces"]) + cint(r["cut_qty"])
+		r["total_gross"] = round(flt(r["gross"]) + flt(r["cut_weight"]), 3)
 		# and where those pieces are kept, so a packet can be traced to a bucket
 		r["buckets"] = sorted({b for b in frappe.get_all("Order Bag",
 			filters={"name": ["in", bags or [""]]}, pluck="bucket") if b})
@@ -20220,9 +20232,11 @@ CUT_PIECE_SOURCE = "Production"
 def get_hall_cut_pieces(name):
 	"""What cut pieces this batch is carrying."""
 	d = frappe.get_doc("Hallmarking Batch", name)
-	return {"name": name, "rows": [{"item": r.item, "qty": cint(r.qty) or 1,
-		"weight": flt(r.weight), "remarks": r.remarks or ""} for r in (d.cut_pieces or [])],
-		"source": CUT_PIECE_SOURCE}
+	return {"name": name, "rows": [{"design_type": r.design_type or "", "item": r.item,
+		"qty": cint(r.qty) or 1, "weight": flt(r.weight), "remarks": r.remarks or ""}
+		for r in (d.cut_pieces or [])],
+		"source": CUT_PIECE_SOURCE,
+		"design_types": frappe.get_all("Design Type", pluck="name", order_by="name")}
 
 
 @frappe.whitelist()
@@ -20243,8 +20257,12 @@ def set_hall_cut_pieces(name, rows):
 			frappe.throw(frappe._("{0} is a stone — a cut piece is metal.").format(item))
 		if wt <= 0:
 			frappe.throw(frappe._("Give {0} a weight.").format(item))
-		d.append("cut_pieces", {"item": item, "qty": max(cint(r.get("qty")), 1),
-			"weight": wt, "remarks": (r.get("remarks") or "").strip() or None})
+		dt = (r.get("design_type") or "").strip()
+		if dt and not frappe.db.exists("Design Type", dt):
+			frappe.throw(frappe._("{0} is not an item type.").format(dt))
+		d.append("cut_pieces", {"design_type": dt or None, "item": item,
+			"qty": max(cint(r.get("qty")), 1), "weight": wt,
+			"remarks": (r.get("remarks") or "").strip() or None})
 	d.save(ignore_permissions=True)
 	frappe.db.commit()
 	return get_hall_cut_pieces(name)

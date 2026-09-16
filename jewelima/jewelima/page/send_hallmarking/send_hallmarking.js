@@ -37,6 +37,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.sh-cuts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;margin:8px 0 2px;}
 		.sh-cuts .sh-nocut{color:var(--text-muted);}
 		.sh-cuts .sh-cuttot{font-weight:700;}
+		.sh-incl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#8a6508;}
+		[data-theme="dark"] .sh-incl{color:#e8c66b;}
+		.sh-ty.cut{border-style:dashed;}
 		.sh-card .nm{font-size:17px;font-weight:800;}
 		.sh-bk{display:inline-block;border-radius:9px;padding:0 8px;font-size:10.5px;font-weight:700;
 			background:var(--control-bg);color:var(--text-muted);margin-right:4px;}
@@ -109,23 +112,27 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					<div class="meta">${__("prepped by")} <b>${esc(p.owner_label || "")}</b>${
 						p.can_manage ? "" : ` <span class="sh-lock">${__("not yours")}</span>`}</div>
 					<div class="sh-nums">
-						<span><b>${p.pieces}</b> ${__("piece(s)")}</span>
+						<span><b>${p.cut_qty ? p.total_pieces : p.pieces}</b> ${__("piece(s)")}${
+							p.cut_qty ? ` <span class="sh-incl">${__("incl. {0} cut", [p.cut_qty])}</span>` : ""}</span>
 						<span class="pure"><b>${flt(p.pure).toFixed(3)}</b> g ${__("pure")}</span>
 						${(p.by_stone || []).length
 							? (p.by_stone || []).map((x) => `<span><b>${flt(x.ct).toFixed(3)}</b> ct ${esc(x.stone_type)}</span>`).join("")
 							: `<span><b>${flt(p.stones).toFixed(3)}</b> ct ${__("stones")}</span>`}
 					</div>
-					<div class="meta">${(p.buckets || []).length
+					<div class="meta">${p.cut_qty
+						? `${__("gross")} ${flt(p.total_gross).toFixed(3)} g <span class="sh-incl">${
+							__("incl. {0} g cut", [flt(p.cut_weight).toFixed(3)])}</span> · ` : ""}${(p.buckets || []).length
 						? (p.buckets || []).map((b) => `<span class="sh-bk">${esc(b)}</span>`).join("")
 						: ""} ${__("gross")} ${flt(p.gross).toFixed(3)} g</div>
 					${(p.by_type || []).length ? `<div class="sh-types">${(p.by_type || []).map((t) => `
-						<div class="sh-ty"><div class="t" title="${esc(t.design_type)}">${esc(t.design_type)}</div>
+						<div class="sh-ty ${t.cut ? "cut" : ""}"><div class="t" title="${esc(t.design_type)}">${esc(t.design_type)}${
+							t.cut ? ` <span class="sh-incl">${__("cut")}</span>` : ""}</div>
 							<div class="p">${t.pieces}<span> ${__("pc")}</span></div>
 							<div class="w">${flt(t.gross).toFixed(3)} g${
 								flt(t.dmd_ct) ? " · " + flt(t.dmd_ct).toFixed(3) + " ct" : ""}</div></div>`).join("")}</div>` : ""}
 					<div class="sh-cuts">${(p.cuts || []).length
 						? `<b>${__("Cut pieces")}</b> · ${(p.cuts || []).map((c) =>
-							`${esc(c.item)} ${c.qty} no ${flt(c.weight).toFixed(3)} g`).join(" · ")}
+							`${c.design_type ? esc(c.design_type) + " " : ""}${esc(c.item)} ${c.qty} no ${flt(c.weight).toFixed(3)} g`).join(" · ")}
 							<span class="sh-cuttot">${__("total")} ${flt(p.cut_weight).toFixed(3)} g</span>`
 						: `<span class="sh-nocut">${__("no cut pieces")}</span>`}
 						<button class="btn btn-xs btn-default sh-cut">${(p.cuts || []).length
@@ -190,6 +197,8 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 			const draw = () => {
 				const body = rows.map((x, i) => `
 					<tr data-i="${i}">
+						<td style="padding:3px 6px;"><input class="form-control input-xs cut-type" list="cut-types"
+							value="${esc(x.design_type || "")}" placeholder="${__("RING")}"></td>
 						<td style="padding:3px 6px;"><input class="form-control input-xs cut-item" list="cut-items"
 							value="${esc(x.item || "")}" placeholder="${__("18KYG")}"></td>
 						<td style="padding:3px 6px;"><input type="number" min="1" step="1"
@@ -204,28 +213,30 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">${
 						__("These leave {0} when the batch is sent, and are checked against what is in stock there.", [m.source || "Production"])}</div>
 					<table style="width:100%;font-size:12.5px;">
-						<thead><tr>${[__("Item"), __("Qty"), __("Weight (g)"), __("Remarks"), ""].map((h) =>
+						<thead><tr>${[__("Item type"), __("Metal"), __("Qty"), __("Weight (g)"), __("Remarks"), ""].map((h) =>
 							`<th style="text-align:left;padding:2px 6px;font-size:10px;text-transform:uppercase;
 								letter-spacing:.05em;color:var(--text-muted);">${h}</th>`).join("")}</tr></thead>
-						<tbody>${body || `<tr><td colspan="5" style="padding:10px;color:var(--text-muted);">${
+						<tbody>${body || `<tr><td colspan="6" style="padding:10px;color:var(--text-muted);">${
 							__("Nothing yet — add a line.")}</td></tr>`}</tbody>
 					</table>
 					<datalist id="cut-items">${(CUT_ITEMS || []).map((i) => `<option value="${esc(i)}">`).join("")}</datalist>
+					<datalist id="cut-types">${(m.design_types || []).map((i) => `<option value="${esc(i)}">`).join("")}</datalist>
 					<button class="btn btn-xs btn-default cut-add" style="margin-top:8px;">+ ${__("line")}</button>`);
 			};
 			const read = () => {
 				d.get_field("grid").$wrapper.find("tbody tr[data-i]").each(function () {
 					const i = cint($(this).data("i"));
-					rows[i] = { item: ($(this).find(".cut-item").val() || "").trim().toUpperCase(),
+					rows[i] = { design_type: ($(this).find(".cut-type").val() || "").trim().toUpperCase(),
+						item: ($(this).find(".cut-item").val() || "").trim().toUpperCase(),
 						qty: cint($(this).find(".cut-qty").val()) || 1,
 						weight: flt($(this).find(".cut-wt").val()),
 						remarks: ($(this).find(".cut-rm").val() || "").trim() };
 				});
 			};
-			d.$wrapper.on("click", ".cut-add", () => { read(); rows.push({ item: "", qty: 1, weight: "" }); draw(); });
+			d.$wrapper.on("click", ".cut-add", () => { read(); rows.push({ design_type: "", item: "", qty: 1, weight: "" }); draw(); });
 			d.$wrapper.on("click", ".cut-x", function () { read(); rows.splice(cint($(this).closest("tr").data("i")), 1); draw(); });
 			draw();
-			if (!rows.length) { rows.push({ item: "", qty: 1, weight: "" }); draw(); }
+			if (!rows.length) { rows.push({ design_type: "", item: "", qty: 1, weight: "" }); draw(); }
 			d.show();
 		});
 	});
@@ -356,7 +367,10 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	// going and which are coming — a batch is a packet of gold, so "what am I
 	// about to change" should never be a guess.
 	root.on("click", ".sh-card", function (e) {
-		if ($(e.target).closest("button").length) return;   // the card's own buttons win
+		// the card's own controls win: its buttons, and anything typed into
+		// (the submission number lives on the card, and clicking it must not
+		// open the batch editor over what you are about to type)
+		if ($(e.target).closest("button, input, select, textarea, label, a").length) return;
 		openEditor($(this).data("name"));
 	});
 

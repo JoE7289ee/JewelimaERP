@@ -8,6 +8,7 @@
  "istable": 1,
  "description": "A cut piece sent with the packet for assay: metal, how many, what they weigh.",
  "field_order": [
+  "design_type",
   "item",
   "qty",
   "weight",
@@ -15,13 +16,22 @@
  ],
  "fields": [
   {
+   "fieldname": "design_type",
+   "fieldtype": "Link",
+   "options": "Design Type",
+   "label": "Item Type",
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "What the cut piece is a sample of \u2014 RING, PENDANT\u2026"
+  },
+  {
    "fieldname": "item",
    "fieldtype": "Link",
    "options": "Item",
    "label": "Item",
    "reqd": 1,
    "in_list_view": 1,
-   "columns": 3
+   "columns": 2
   },
   {
    "fieldname": "qty",

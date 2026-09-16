@@ -246,7 +246,10 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 	// going and which are coming — a batch is a packet of gold, so "what am I
 	// about to change" should never be a guess.
 	root.on("click", ".sc-card", function (e) {
-		if ($(e.target).closest("button").length) return;   // the card's own buttons win
+		// the card's own controls win: its buttons, and anything typed into
+		// (the submission number lives on the card, and clicking it must not
+		// open the batch editor over what you are about to type)
+		if ($(e.target).closest("button, input, select, textarea, label, a").length) return;
 		openEditor($(this).data("name"));
 	});
 
