@@ -4,7 +4,7 @@ app_publisher = "Joseph Daison"
 app_description = "Jewelry Manufacturing Management System"
 app_email = "joedai555@gmail.com"
 app_license = "mit"
-app_logo_url = "/assets/jewelima/images/brand/logo-square.png"
+app_logo_url = "/assets/jewelima/images/brand/logo-square.svg"
 
 # Apps
 # ------------------
@@ -15,7 +15,7 @@ app_logo_url = "/assets/jewelima/images/brand/logo-square.png"
 add_to_apps_screen = [
 	{
 		"name": "jewelima",
-		"logo": "/assets/jewelima/images/brand/logo-square.png",
+		"logo": "/assets/jewelima/images/brand/logo-square.svg",
 		"title": "Jewelima",
 		"route": "/app/jewelima",
 	}

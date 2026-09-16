@@ -34,7 +34,7 @@ def hex_(name):
 
 # the artwork, served from /assets/jewelima/images/brand/
 ASSETS = "/assets/jewelima/images/brand/"
-LOGO_SQUARE = ASSETS + "logo-square.png"            # app icon, favicon
+LOGO_SQUARE = ASSETS + "logo-square.svg"    # vector — the login, navbar and favicon mark
 LOGO_WIDE = ASSETS + "logo-horizontal-black.png"    # print header
 LETTERHEAD = ASSETS + "letterhead-header.png"       # full-page letter top
 LETTERHEAD_FOOT = ASSETS + "letterhead-footer.png"

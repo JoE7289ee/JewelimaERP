@@ -1619,7 +1619,9 @@ def brand_the_login_page():
 			ws.app_name = "Jewelima Diamonds"
 			dirty = True
 		for field in ("app_logo", "favicon", "splash_image"):
-			if not (ws.get(field) or "").strip():
+			cur = (ws.get(field) or "").strip()
+			# empty, or still pointing at an asset of ours that has moved on
+			if not cur or (cur.startswith(brand.ASSETS) and cur != brand.LOGO_SQUARE):
 				ws.set(field, brand.LOGO_SQUARE)
 				dirty = True
 		if dirty:
