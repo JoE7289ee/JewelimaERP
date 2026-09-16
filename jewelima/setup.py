@@ -107,10 +107,24 @@ def before_migrate():
 		frappe.db.commit()
 
 
+def mint_push_keys():
+	"""The phone app's VAPID pair, minted on the first migrate that can.
+
+	Wrapped because the library is optional: a bench without pywebpush should
+	migrate cleanly and simply not send notifications."""
+	try:
+		from jewelima.jewelima.push import ensure_keys
+
+		ensure_keys()
+	except Exception as e:
+		print("push keys skipped:", e)
+
+
 def after_migrate():
 	# All seeders are idempotent. Items + warehouses need a Company / item groups
 	# that may not exist at install time on a fresh deploy, so re-run them here too.
 	set_default_timezone()
+	mint_push_keys()
 	relax_employee_mandatory()
 	show_employee_names_in_links()
 	create_custom_fields(get_item_custom_fields(), ignore_validate=True)

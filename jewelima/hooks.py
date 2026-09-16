@@ -163,6 +163,10 @@ doc_events = {
 	"Item": {
 		"validate": "jewelima.jewelima.api.set_item_weight_uom",
 	},
+	# a purchase announces itself to the phones that care about stock
+	"Purchase Record": {
+		"after_insert": "jewelima.jewelima.push.on_purchase_recorded",
+	},
 }
 
 # Scheduled Tasks

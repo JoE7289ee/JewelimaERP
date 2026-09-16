@@ -1,0 +1,15 @@
+{
+	"name": "Jewelima",
+	"short_name": "Jewelima",
+	"description": "The floor in your pocket.",
+	"start_url": "/jw",
+	"scope": "/jw",
+	"display": "standalone",
+	"orientation": "portrait",
+	"background_color": "#0D2B1E",
+	"theme_color": "#0D2B1E",
+	"icons": [
+		{ "src": "/assets/jewelima/images/brand/favicon-180.png", "sizes": "180x180", "type": "image/png" },
+		{ "src": "/assets/jewelima/images/brand/logo-square.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+	]
+}

@@ -14,6 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Jewelima">
 <link rel="apple-touch-icon" href="/assets/jewelima/images/brand/favicon-180.png">
+<link rel="manifest" href="/jw-manifest.json">
 <script src="/assets/jewelima/js/zxing.min.js"></script>
 {% endblock %}
 
@@ -302,10 +303,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	animation: jw-fade 1.6s ease forwards;
 }
 @keyframes jw-fade { 0% { opacity: 0; } 12%, 70% { opacity: 1; } 100% { opacity: 0; } }
+.jw-bell { margin-left: auto; font-size: 14px; line-height: 1; padding: 6px 10px; }
+.jw-bell.on { border-color: rgba(230, 199, 120, .6); color: var(--jw-champagne);
+	background: rgba(230, 199, 120, .12); }
+.jw-bell + .jw-ref { margin-left: 0; }
 .jw-ref { margin-left: auto; font-size: 15px; line-height: 1; padding: 6px 11px; }
 .jw-ref.spin { animation: jw-spin .7s linear infinite; border-color: var(--jw-champagne); color: var(--jw-champagne); }
 @keyframes jw-spin { to { transform: rotate(360deg); } }
-.jw-ref, .jw-out {
+.jw-bell, .jw-ref, .jw-out {
 	border: 1px solid rgba(250, 247, 239, .28); background: none;
 	color: rgba(250, 247, 239, .82); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
 }
@@ -462,6 +467,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 			<div class="t">JEWELIMA</div>
 			<div class="s">{{ jw_full_name }}</div>
 		</div>
+		<button class="jw-bell" id="jw-bell" onclick="jwBell()" title="Notifications" hidden>&#128276;</button>
 		<button class="jw-ref" onclick="jwRefresh()" title="Reload the app">&#8635;</button>
 		<button class="jw-out" onclick="jwLogout()">Sign out</button>
 	</div>
@@ -1547,6 +1553,74 @@ function jwReread(btn, fn) {
 // picked up a new build and this button did not. Pull the new page through the
 // network FIRST (cache: reload bypasses whatever is held), and only then go to
 // it, so the navigation lands on what the fetch just put in front of it.
+// ---------------------------------------------------------------------------
+// NOTIFICATIONS
+//
+// iOS gives a web app push only when it has been ADDED TO THE HOME SCREEN, and
+// only from a real tap — so the bell shows itself only where it can work, and
+// says why when it cannot.
+//
+// The app never runs in the background. The notice comes from our server via
+// Apple, and /jw-sw.js is woken for a moment to show it.
+// ---------------------------------------------------------------------------
+const bell = document.getElementById("jw-bell");
+const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+function b64ToBytes(s) {
+	const pad = "=".repeat((4 - (s.length % 4)) % 4);
+	const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+	return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function jwBellInit() {
+	if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+	bell.hidden = false;
+	try {
+		const reg = await navigator.serviceWorker.register("/jw-sw.js", { scope: "/jw" });
+		const sub = await reg.pushManager.getSubscription();
+		if (sub) bell.classList.add("on");
+	} catch (e) { /* registration refused — the bell still explains itself on tap */ }
+}
+
+async function jwBell() {
+	if (!standalone) {
+		alert("Notifications need the app on your home screen.\n\nIn Safari: Share, then Add to Home Screen — then open it from there and tap the bell again.");
+		return;
+	}
+	try {
+		const reg = await navigator.serviceWorker.register("/jw-sw.js", { scope: "/jw" });
+		const existing = await reg.pushManager.getSubscription();
+		if (existing) {                       // already on: this is a way off again
+			await jwApi("jewelima.jewelima.push.unsubscribe", { endpoint: existing.endpoint });
+			await existing.unsubscribe();
+			bell.classList.remove("on");
+			alert("Notifications off on this phone.");
+			return;
+		}
+		const permission = await Notification.requestPermission();
+		if (permission !== "granted") {
+			alert("Notifications were not allowed. You can turn them on in Settings › Notifications › Jewelima.");
+			return;
+		}
+		const k = await jwApi("jewelima.jewelima.push.get_public_key", {});
+		if (!k.key) { alert("Notifications are not set up on the server yet."); return; }
+		const sub = await reg.pushManager.subscribe({
+			userVisibleOnly: true,
+			applicationServerKey: b64ToBytes(k.key),
+		});
+		await jwApi("jewelima.jewelima.push.subscribe", {
+			subscription: JSON.stringify(sub),
+			device: (navigator.platform || "phone"),
+		});
+		bell.classList.add("on");
+		alert("Notifications on. You will hear about stock coming in.");
+	} catch (e) {
+		alert("This phone would not turn notifications on.");
+	}
+}
+
+jwBellInit();
+
 function jwRefresh() {
 	jwCamStop();
 	const b = document.querySelector(".jw-top .jw-ref");

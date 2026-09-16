@@ -13,6 +13,9 @@ dependencies = [
     # cap the majors so a server rebuild can't drift silently.
     "segno>=1.6,<2",       # pure-python QR generation for the Print Barcode labels
     "pytesseract>=0.3.13,<0.4",  # OCR the Design Bank cards. Needs the tesseract binary (apt).
+    # Web Push to the phone app (VAPID + aes128gcm, RFC 8291). Held at 1.x on
+    # purpose: pywebpush 2.x demands cryptography>=47 and frappe pins ~=46.
+    "pywebpush>=1.14,<2",
 ]
 
 [build-system]
