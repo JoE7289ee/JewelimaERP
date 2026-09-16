@@ -3657,25 +3657,82 @@ def _employee_allowed_buckets(employee):
 	return {c.upper() for c in STONE_BUCKET_CODES if acc.get("allow_" + c)}
 
 
+# ---------------------------------------------------------------------------
+# The OPERATOR layer. The employee's own Stone Issue Access says what that
+# person may be handed (the base layer); this says what the DESK USER running
+# the station may do — which employees they may issue to at all, and which
+# buckets they may hand out. The two are ANDed: the stricter wins. A user with
+# no operator record is unrestricted, so nothing changes until somebody is
+# deliberately locked down.
+# ---------------------------------------------------------------------------
+def _operator_row(user=None):
+	user = user or frappe.session.user
+	name = frappe.db.get_value("Stone Issue Operator", {"user": user}, "name")
+	return frappe.get_doc("Stone Issue Operator", name) if name else None
+
+
+def _operator_employees(user=None):
+	"""The employees this user may issue to, or None when they are not limited."""
+	doc = _operator_row(user)
+	if not doc:
+		return None
+	picked = [r.employee for r in (doc.employees or []) if r.employee]
+	return set(picked) if picked else None
+
+
+def _operator_buckets(user=None):
+	"""The buckets this user may hand out (every bucket when unlisted)."""
+	all_codes = {c.upper() for c in STONE_BUCKET_CODES}
+	doc = _operator_row(user)
+	if not doc:
+		return all_codes
+	return {c.upper() for c in STONE_BUCKET_CODES if doc.get("allow_" + c)}
+
+
+def _effective_buckets(employee, user=None):
+	"""What may actually go out: the employee's buckets AND the operator's."""
+	return _employee_allowed_buckets(employee) & _operator_buckets(user)
+
+
+def _refuse_unless_operator_may(employee, user=None):
+	allowed = _operator_employees(user)
+	if allowed is not None and employee not in allowed:
+		frappe.throw(frappe._("You are not set up to issue stones to {0}.").format(
+			frappe.db.get_value("Employee", employee, "employee_name") or employee),
+			frappe.PermissionError)
+
+
 @frappe.whitelist()
 def get_stone_issue_context():
 	"""Who the Stone Issue station will book against, and what they may issue.
 	Admins choose the issuer; a plain Stone Issue user is locked to themselves."""
 	admin = _stone_issue_admin()
 	self_emp = _employee_from_user()
-	effective = None if admin else self_emp
+	picked = _operator_employees()          # None = not limited to a list
+	# a user handed a list of people issues FOR them, admin or not; without a
+	# list an admin still picks anyone and everybody else is locked to themselves
+	issuers = []
+	if picked:
+		issuers = [{"employee": e, "employee_name": frappe.db.get_value("Employee", e, "employee_name") or e}
+			for e in sorted(picked) if frappe.db.exists("Employee", e)]
+	can_choose = bool(picked) or (admin and picked is None)
+	effective = None if (admin and not picked) else (issuers[0]["employee"] if picked else self_emp)
+	base = ({c.upper() for c in STONE_BUCKET_CODES} if (admin and not picked)
+		else _employee_allowed_buckets(effective))
 	return {
-		"can_choose_issuer": bool(admin),
+		"can_choose_issuer": can_choose,
+		"issuers": issuers,                 # [] = no list, pick from every employee
 		"self_employee": self_emp,
 		"self_employee_name": frappe.db.get_value("Employee", self_emp, "employee_name") if self_emp else None,
-		"allowed_buckets": sorted(_employee_allowed_buckets(effective)) if not admin else sorted({c.upper() for c in STONE_BUCKET_CODES}),
+		"allowed_buckets": sorted(base & _operator_buckets()),
 	}
 
 
 @frappe.whitelist()
 def get_employee_buckets(employee):
-	"""The buckets a given employee may issue — used when an admin picks an issuer."""
-	return {"allowed_buckets": sorted(_employee_allowed_buckets(employee))}
+	"""The buckets a given employee may issue, capped by the operator's own."""
+	_refuse_unless_operator_may(employee)
+	return {"allowed_buckets": sorted(_effective_buckets(employee))}
 
 
 def _require_stone_issue_admin():
@@ -3698,11 +3755,28 @@ def get_issue_access():
 		allowed = _employee_allowed_buckets(e)
 		rows.append({"employee": e, "employee_name": frappe.db.get_value("Employee", e, "employee_name"),
 			"buckets": {c: (1 if c in allowed else 0) for c in codes}})
-	return {"buckets": codes, "rows": rows}
+
+	# the operator layer: desk users and who each may issue for
+	ops = []
+	for name in frappe.get_all("Stone Issue Operator", pluck="name", order_by="user"):
+		d = frappe.get_doc("Stone Issue Operator", name)
+		ops.append({
+			"user": d.user, "user_name": frappe.db.get_value("User", d.user, "full_name") or d.user,
+			"buckets": {c: (1 if d.get("allow_" + c.lower()) else 0) for c in codes},
+			"employees": [{"employee": r.employee,
+				"employee_name": frappe.db.get_value("Employee", r.employee, "employee_name") or r.employee}
+				for r in (d.employees or []) if r.employee],
+		})
+	# who could be an operator: anyone holding the Stone Issue role
+	users = frappe.get_all("Has Role", filters={"role": STONE_ISSUE_ROLE, "parenttype": "User"}, pluck="parent")
+	candidates = [{"user": u.name, "user_name": u.full_name or u.name}
+		for u in frappe.get_all("User", filters={"name": ["in", users or [""]], "enabled": 1},
+			fields=["name", "full_name"], order_by="full_name")]
+	return {"buckets": codes, "rows": rows, "operators": ops, "candidates": candidates}
 
 
 @frappe.whitelist()
-def save_issue_access(rows):
+def save_issue_access(rows, operators=None):
 	"""Upsert the per-employee bucket locks from the setup page. Each row carries the
 	employee and a {BUCKET: 0/1} map; a fully-on row leaves the employee unrestricted."""
 	_require_stone_issue_admin()
@@ -3720,8 +3794,36 @@ def save_issue_access(rows):
 			doc.set("allow_" + c, 1 if buckets.get(c.upper(), 1) else 0)
 		doc.save(ignore_permissions=True)
 		saved += 1
+
+	# the operator layer, replaced wholesale: a user taken off the page is a user
+	# with no lock at all, which is the documented "unrestricted" state
+	ops = frappe.parse_json(operators) if isinstance(operators, str) else operators
+	saved_ops = 0
+	if ops is not None:
+		keep = set()
+		for o in ops:
+			user = o.get("user")
+			if not user or not frappe.db.exists("User", user):
+				continue
+			keep.add(user)
+			name = frappe.db.get_value("Stone Issue Operator", {"user": user}, "name")
+			doc = frappe.get_doc("Stone Issue Operator", name) if name else frappe.new_doc("Stone Issue Operator")
+			doc.user = user
+			buckets = o.get("buckets") or {}
+			for c in STONE_BUCKET_CODES:
+				doc.set("allow_" + c, 1 if buckets.get(c.upper(), 1) else 0)
+			doc.set("employees", [])
+			for e in (o.get("employees") or []):
+				emp = e.get("employee") if isinstance(e, dict) else e
+				if emp and frappe.db.exists("Employee", emp):
+					doc.append("employees", {"employee": emp})
+			doc.save(ignore_permissions=True)
+			saved_ops += 1
+		for name in frappe.get_all("Stone Issue Operator",
+				filters={"user": ["not in", list(keep) or [""]]}, pluck="name"):
+			frappe.delete_doc("Stone Issue Operator", name, ignore_permissions=True, force=True)
 	frappe.db.commit()
-	return {"saved": saved}
+	return {"saved": saved, "operators": saved_ops}
 
 
 @frappe.whitelist()
@@ -3851,8 +3953,10 @@ def stone_issue_apply(order_bag, lines, issued_by=None):
 	if not issued_by or not frappe.db.exists("Employee", issued_by):
 		frappe.throw(frappe._("Pick who is issuing these stones."))
 
-	# the issuer may be locked to only certain stone buckets
-	allowed = _employee_allowed_buckets(issued_by)
+	# two locks: what this employee may be handed, and what the desk user running
+	# the station may hand out. The stricter wins.
+	_refuse_unless_operator_may(issued_by)
+	allowed = _effective_buckets(issued_by)
 
 	bag = frappe.get_doc("Order Bag", order_bag)
 	if bag.is_finished or bag.stock_status != "In Production":

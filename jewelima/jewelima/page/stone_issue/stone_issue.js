@@ -144,9 +144,14 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	scan.$input.on("keydown", (e) => { if (e.key === "Enter") loadCard((scan.$input.val() || "").trim()); });
 
 	// who physically hands the stones over — lands on the ledger + Material Issue record
+	// The list a user may pick from: when Issue Access names the employees this
+	// desk user issues for, the box offers exactly those and nothing else.
+	let ISSUERS = [];   // [] = not limited to a list
 	const issuedBy = frappe.ui.form.make_control({
 		df: { fieldtype: "Link", label: __("Issued By"), fieldname: "issued_by", options: "Employee", reqd: 1,
-			get_query: () => ({ filters: { status: "Active" } }) },
+			get_query: () => (ISSUERS.length
+				? { filters: { name: ["in", ISSUERS.map((x) => x.employee)] } }
+				: { filters: { status: "Active" } }) },
 		parent: root.find(".si-by-box").get(0), render_input: true,
 	});
 	issuedBy.refresh();
@@ -181,6 +186,20 @@ frappe.pages["stone-issue"].on_page_load = function (wrapper) {
 	function loadContext() {
 		frappe.call({ method: API + ".get_stone_issue_context" }).then((r) => {
 			ctx = r.message || {};
+			ISSUERS = ctx.issuers || [];
+			if (ISSUERS.length) {
+				// a named list: the user picks from their own people, and the buckets
+				// follow whoever is picked (the server caps them again on save)
+				allowedBuckets = new Set(ctx.allowed_buckets || []);
+				if (ISSUERS.length === 1) {
+					issuedBy.set_value(ISSUERS[0].employee);
+					refreshToday();
+				}
+				issuedBy.set_description(__("You may issue for: {0}",
+					[ISSUERS.map((x) => x.employee_name || x.employee).join(", ")]));
+				applyBucketLocks();
+				return;
+			}
 			if (ctx.can_choose_issuer) { allowedBuckets = null; return; }
 			// locked user — issue only as themselves, only their buckets
 			allowedBuckets = new Set(ctx.allowed_buckets || []);

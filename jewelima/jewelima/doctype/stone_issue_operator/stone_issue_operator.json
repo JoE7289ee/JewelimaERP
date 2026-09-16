@@ -1,0 +1,137 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:user",
+ "creation": "2026-09-16 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "description": "Who a desk user may issue stones to, and which buckets that user may hand out. The employee's own Stone Issue Access still applies \u2014 the stricter of the two wins.",
+ "field_order": [
+  "user",
+  "user_name",
+  "sb_emp",
+  "employees",
+  "sb_buckets",
+  "allow_dmd",
+  "allow_ps",
+  "allow_cs",
+  "allow_cz",
+  "cb_buckets",
+  "allow_cvd",
+  "allow_sw",
+  "allow_pdmd",
+  "allow_poth"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "User",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "user_name",
+   "fieldtype": "Data",
+   "label": "Full Name",
+   "read_only": 1,
+   "fetch_from": "user.full_name",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sb_emp",
+   "fieldtype": "Section Break",
+   "label": "May issue to"
+  },
+  {
+   "fieldname": "employees",
+   "fieldtype": "Table",
+   "options": "Stone Issue Operator Employee",
+   "label": "Employees",
+   "description": "Leave empty to allow every employee this user's role already allows."
+  },
+  {
+   "fieldname": "sb_buckets",
+   "fieldtype": "Section Break",
+   "label": "May hand out"
+  },
+  {
+   "fieldname": "allow_dmd",
+   "fieldtype": "Check",
+   "label": "DMD",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_ps",
+   "fieldtype": "Check",
+   "label": "PS",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_cs",
+   "fieldtype": "Check",
+   "label": "CS",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_cz",
+   "fieldtype": "Check",
+   "label": "CZ",
+   "default": "1"
+  },
+  {
+   "fieldname": "cb_buckets",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allow_cvd",
+   "fieldtype": "Check",
+   "label": "CVD",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_sw",
+   "fieldtype": "Check",
+   "label": "SW",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_pdmd",
+   "fieldtype": "Check",
+   "label": "PDMD",
+   "default": "1"
+  },
+  {
+   "fieldname": "allow_poth",
+   "fieldtype": "Check",
+   "label": "POTH",
+   "default": "1"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-16 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Jewelima",
+ "name": "Stone Issue Operator",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
