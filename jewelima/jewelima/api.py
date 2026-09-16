@@ -18543,7 +18543,7 @@ def get_cert_batch_slip(name):
 	.slip {{ width:148mm; height:105mm; box-sizing:border-box; padding:6mm 7mm; overflow:hidden; }}
 	table {{ border-collapse:collapse; width:100%; }}
 	.hd td {{ vertical-align:top; padding:0; }}
-	.nm {{ font-size:22pt; font-weight:bold; letter-spacing:.5px; line-height:1; }}
+	.nm {{ font-size:17pt; font-weight:bold; letter-spacing:.3px; line-height:1; }}
 	.sub {{ font-size:8.5pt; color:#444; padding-top:2mm; }}
 	.pcs {{ font-size:8.5pt; padding-top:1.5mm; }}
 	.pcs b {{ font-size:13pt; }}
@@ -18567,7 +18567,7 @@ def get_cert_batch_slip(name):
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
 		<td>
-			<div class="nm">{emblem}{nm}</div>
+			<div class="nm">{emblem}{slip_title}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
 			{subno}
@@ -18585,6 +18585,7 @@ def get_cert_batch_slip(name):
 	<div class="tag">{tagline}</div>
 	</div></body></html>""".format(
 		nm=frappe.utils.escape_html(name),
+		slip_title=frappe._("Certification Slip"),
 		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
 		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
@@ -19967,7 +19968,7 @@ def get_hall_batch_slip(name):
 	.slip {{ width:148mm; height:105mm; box-sizing:border-box; padding:6mm 7mm; overflow:hidden; }}
 	table {{ border-collapse:collapse; width:100%; }}
 	.hd td {{ vertical-align:top; padding:0; }}
-	.nm {{ font-size:22pt; font-weight:bold; letter-spacing:.5px; line-height:1; }}
+	.nm {{ font-size:17pt; font-weight:bold; letter-spacing:.3px; line-height:1; }}
 	.sub {{ font-size:8.5pt; color:#444; padding-top:2mm; }}
 	.pcs {{ font-size:8.5pt; padding-top:1.5mm; }}
 	.pcs b {{ font-size:13pt; }}
@@ -19988,7 +19989,7 @@ def get_hall_batch_slip(name):
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
 		<td>
-			<div class="nm">{emblem}{nm}</div>
+			<div class="nm">{emblem}{slip_title}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
 		</td>
@@ -20005,6 +20006,7 @@ def get_hall_batch_slip(name):
 	<div class="tag">{tagline}</div>
 	</div></body></html>""".format(
 		nm=frappe.utils.escape_html(name),
+		slip_title=frappe._("Hallmarking Slip"),
 		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
 		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
