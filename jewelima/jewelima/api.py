@@ -18561,15 +18561,13 @@ def get_cert_batch_slip(name):
 	.sub-no {{ font-size:9pt; padding-top:1.5mm; }}
 	.sub-no b {{ font-size:12pt; letter-spacing:.3px; }}
 	.sub-missing {{ font-size:8pt; color:#8a5a00; padding-top:1.5mm; }}
-	.mark {{ width:13mm; padding-right:3.5mm; }}
-	.mark img {{ width:13mm; display:block; }}
+	.nm img {{ height:9.5mm; vertical-align:-1.6mm; margin-right:2.5mm; }}
 	.ft {{ font-size:6.5pt; color:#888; padding-top:2mm; }}
 	.tag img {{ width:100%; display:block; margin-top:1.5mm; }}
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
-		<td class="mark">{emblem}</td>
 		<td>
-			<div class="nm">{nm}</div>
+			<div class="nm">{emblem}{nm}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
 			{subno}
@@ -19984,15 +19982,13 @@ def get_hall_batch_slip(name):
 	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
 	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
 		font-size:10.5pt; padding-top:1.6mm; }}
-	.mark {{ width:13mm; padding-right:3.5mm; }}
-	.mark img {{ width:13mm; display:block; }}
+	.nm img {{ height:9.5mm; vertical-align:-1.6mm; margin-right:2.5mm; }}
 	.ft {{ font-size:6.5pt; color:#888; padding-top:2mm; }}
 	.tag img {{ width:100%; display:block; margin-top:1.5mm; }}
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
-		<td class="mark">{emblem}</td>
 		<td>
-			<div class="nm">{nm}</div>
+			<div class="nm">{emblem}{nm}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
 		</td>
