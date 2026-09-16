@@ -12927,8 +12927,60 @@ def get_jw_stones():
 		} for gn, gv in v["groups"].items()), key=lambda x: -x["carat"]),
 	} for c, v in buckets.items()), key=lambda x: -x["carat"])
 
-	return {"places": rows, "buckets": kinds,
+	return {"places": rows, "buckets": kinds, "issue": _jw_issue_desk(BUCKET, LABEL),
 		"loss": {"carat": round(loss, 3)}, "at": frappe.utils.now()}
+
+
+def _jw_issue_desk(BUCKET, LABEL):
+	"""The Stone Issue counter on its own: what is on the shelf, what the cards
+	waiting in the queue still need, and where that leaves us.
+
+	Committed is the queue's OUTSTANDING need — every card marked for stone
+	issue and still in production, its BOM less whatever it has already been
+	given. Short is what the shelf cannot cover. Top level only: a bucket
+	either covers its queue or it does not, and the detail is the desk's."""
+	from jewelima.setup import STONE_ISSUE_WAREHOUSE
+	wh = _wh(STONE_ISSUE_WAREHOUSE)
+	if not wh:
+		return {}
+
+	have, need = {}, {}
+	for b in frappe.get_all("Bin", filters={"warehouse": wh, "actual_qty": [">", 0]},
+			fields=["item_code", "actual_qty"], limit_page_length=0):
+		st = frappe.db.get_value("Item", b.item_code, "stone_type")
+		code = BUCKET.get(st or "")
+		if code:
+			have[code] = flt(have.get(code)) + flt(b.actual_qty)
+
+	# the queue's plan, item by item, against what each card already holds
+	rows = frappe.db.sql("""
+		SELECT bom.item, SUM(bom.weight) plan,
+			IFNULL((SELECT SUM(IF(l.direction = 'Out', -l.qty, l.qty))
+				FROM `tabBag Material Ledger` l
+				WHERE l.order_bag = bom.parent AND l.item = bom.item
+					AND l.entry_type = 'Stone Issue'), 0) got
+		FROM `tabOrder Bag BOM Item` bom
+		JOIN `tabOrder Bag` b ON b.name = bom.parent
+		WHERE IFNULL(bom.stone_type, '') != ''
+			AND b.stone_issue = 1 AND b.is_finished = 0 AND b.stock_status = 'In Production'
+		GROUP BY bom.parent, bom.item""", as_dict=True)
+	for r in rows:
+		st = frappe.db.get_value("Item", r.item, "stone_type")
+		code = BUCKET.get(st or "")
+		if not code:
+			continue
+		rem = flt(r.plan) - flt(r.got)
+		if rem > 0.0005:
+			need[code] = flt(need.get(code)) + rem
+
+	out = []
+	for code in set(list(have) + list(need)):
+		h, n = round(flt(have.get(code)), 3), round(flt(need.get(code)), 3)
+		out.append({"code": code, "label": LABEL[code], "have": h, "need": n,
+			"short": round(max(0.0, n - h), 3), "free": round(h - n, 3)})
+	out.sort(key=lambda x: (-x["short"], -x["have"]))
+	return {"warehouse": wh.rsplit(" - ", 1)[0], "rows": out,
+		"short_any": any(r["short"] for r in out)}
 
 
 @frappe.whitelist()
