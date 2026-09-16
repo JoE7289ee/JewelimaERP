@@ -15738,7 +15738,7 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18 KT",
 		gst_percent=3, igi_flat=80, igi_per_ct=325, igi_threshold=0.10,
 		huid_rate=0, party="", item_colour="", filename=None, cs_grams=0,
-		layout="jos", split_above=0, split_every=0):
+		layout="jos", splits=None):
 	"""The JOS BILLING workbook with LIVE formulas: gold = net x the rate cell,
 	diamonds split into the chart's bracket GROUPS (one group per piece), IGI
 	slab (chart-held when present), footer Total -> Hall Marking (HUID) ->
@@ -16056,6 +16056,11 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	# their sum as well would count the block twice.
 	from itertools import groupby
 
+	# {ITEM: block size}; an item missing from the map, or set to 0, keeps a
+	# single subtotal however long it runs
+	split_map = frappe.parse_json(splits) if isinstance(splits, str) else (splits or {})
+	split_map = {str(k).strip().upper(): cint(v) for k, v in (split_map or {}).items()}
+
 	def span(a_, b_):
 		return lambda L, a=a_, b=b_: "=SUM({0}{1}:{0}{2})".format(L, a, b)
 
@@ -16081,19 +16086,17 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 		"""item -> shape -> bands over one run; returns its band-total rows.
 
 		BLR (layout="item") breaks the ladder differently: one subtotal per ITEM
-		and nothing else — no shape break, no colour break, no weight band. A long
-		item is cut into blocks so a page of sixty rows is not read against a
-		single figure at the bottom: over `split_above` pieces, a subtotal every
-		`split_every` (200 pieces at 80 => 80, 80, 40)."""
+		and nothing else — no shape break, no colour break, no weight band. Each
+		item type sets its OWN block size in `splits` ({"NOSEPIN": 80}), because a
+		lot of 120 nosepins and a lot of 12 rings do not want the same treatment:
+		80 there reads 80 + 40, and an item with no number keeps one subtotal."""
 		made = []
 		for _item, ig in groupby(run, key=lambda p: (p.get("item") or "")):
 			irun = list(ig)
 			if layout == "item":
-				step = cint(split_every) or len(irun)
-				# at the threshold, not past it: 200 pieces at 80 is the case the
-				# desk described, and it has to break
+				step = cint(split_map.get((_item or "").strip().upper()))
 				parts = ([irun[i:i + step] for i in range(0, len(irun), step)]
-					if cint(split_above) and len(irun) >= cint(split_above) else [irun])
+					if step > 0 else [irun])
 				for part in parts:
 					bstart = r
 					for piece in part:

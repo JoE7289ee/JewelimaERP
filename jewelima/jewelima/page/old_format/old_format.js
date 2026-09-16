@@ -1259,12 +1259,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					default: (blr ? "JOS BLR BILLING " : "JOS BILLING ")
 						+ (FILE.name || "old-format").replace(/\.xlsx$/i, "") },
 			].concat(blr ? [
-				{ fieldname: "split_sec", fieldtype: "Section Break", label: __("Item types in this lot") },
-				{ fieldname: "split_above", fieldtype: "Int", label: __("Split an item from"), default: 200,
-					description: __("pieces — 0 keeps one subtotal per item however long it runs"),
-					onchange: () => drawCuts() },
-				{ fieldname: "split_every", fieldtype: "Int", label: __("Subtotal every"), default: 80,
-					description: __("pieces"), onchange: () => drawCuts() },
+				{ fieldname: "split_sec", fieldtype: "Section Break", label: __("Subtotals, item by item") },
 				{ fieldname: "cuts", fieldtype: "HTML" },
 			] : []).concat(hasSlab ? [
 				{ fieldname: "slab_note", fieldtype: "HTML",
@@ -1285,8 +1280,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					gst_percent: fGst.get_value() || 0,
 					igi_flat: v.igi_flat || 80, igi_per_ct: v.igi_per_ct || 325, igi_threshold: v.igi_threshold || 0.10,
 					layout: blr ? "item" : "jos",
-					split_above: blr ? (v.split_above || 0) : 0,
-					split_every: blr ? (v.split_every || 0) : 0,
+					splits: blr ? JSON.stringify(SPLITS) : "{}",
 					party: v.party || "", filename: v.fname,
 					// the bill reads in whatever unit the sheet is showing
 					cs_grams: CSG ? 1 : 0,
@@ -1294,12 +1288,11 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			},
 		});
 
-		// The lot, item by item, with the cuts marked as the numbers are typed —
-		// so nobody has to guess what "200 at 80" will do to THIS lot.
-		function drawCuts() {
-			if (!blr) return;
-			const above = cint(d.get_value("split_above"));
-			const every = cint(d.get_value("split_every"));
+		// The lot, item by item: each item type sets its OWN block size, and the
+		// blocks it would make are drawn as the number is typed. 120 nosepins at
+		// 80 reads 80 + 40; the rings beside them can stay on one subtotal.
+		const SPLITS = {};
+		function itemCounts() {
 			const counts = [];
 			(PRICED.rows || []).forEach((p) => {
 				const it = (p.item || "—").toUpperCase();
@@ -1307,33 +1300,55 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				if (last && last.item === it) last.n += 1;
 				else counts.push({ item: it, n: 1 });
 			});
-			const cutsOf = (n) => {
-				if (!above || !every || n < above) return [n];
-				const parts = [];
-				for (let i = 0; i < n; i += every) parts.push(Math.min(every, n - i));
-				return parts;
-			};
+			return counts;
+		}
+		const cutsOf = (n, every) => {
+			if (!every || every >= n) return [n];
+			const parts = [];
+			for (let i = 0; i < n; i += every) parts.push(Math.min(every, n - i));
+			return parts;
+		};
+		function drawCuts() {
+			if (!blr) return;
+			const counts = itemCounts();
+			const th = (t, a) => `<th style="text-align:${a};padding:4px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${t}</th>`;
 			const rows = counts.map((c) => {
-				const parts = cutsOf(c.n);
-				return `<tr>
-					<td style="padding:3px 8px;font-weight:700;">${esc(c.item)}</td>
-					<td style="padding:3px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.n}</td>
-					<td style="padding:3px 8px;color:${parts.length > 1 ? "#1B4332" : "var(--text-muted)"};font-weight:${parts.length > 1 ? 700 : 400};">
+				const every = cint(SPLITS[c.item]);
+				const parts = cutsOf(c.n, every);
+				return `<tr style="border-bottom:1px solid var(--border-color);">
+					<td style="padding:4px 8px;font-weight:700;">${esc(c.item)}</td>
+					<td style="padding:4px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.n}</td>
+					<td style="padding:4px 8px;text-align:right;">
+						<input type="number" min="0" step="1" class="of-split" data-item="${esc(c.item)}"
+							value="${every || ""}" placeholder="${__("all")}"
+							style="width:72px;text-align:right;border:1px solid var(--border-color);border-radius:6px;
+								padding:3px 7px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);"></td>
+					<td style="padding:4px 8px;color:${parts.length > 1 ? "#1B4332" : "var(--text-muted)"};font-weight:${parts.length > 1 ? 700 : 400};">
 						${parts.length > 1 ? parts.join(" · ") : __("one subtotal")}</td>
 				</tr>`;
 			}).join("");
-			const blocks = counts.reduce((n, c) => n + cutsOf(c.n).length, 0);
+			const blocks = counts.reduce((n, c) => n + cutsOf(c.n, cint(SPLITS[c.item])).length, 0);
 			d.get_field("cuts").$wrapper.html(`
+				<div style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px;">${
+					__("Set how many pieces each item type runs before a subtotal. Leave it blank for one subtotal over the whole item.")}</div>
 				<table style="width:100%;border-collapse:collapse;font-size:12.5px;">
 					<thead><tr style="border-bottom:1px solid var(--border-color);">
-						<th style="text-align:left;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${__("Item")}</th>
-						<th style="text-align:right;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${__("Pieces")}</th>
-						<th style="text-align:left;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${__("Subtotals")}</th>
+						${th(__("Item"), "left")}${th(__("Pieces"), "right")}
+						${th(__("Subtotal every"), "right")}${th(__("Reads"), "left")}
 					</tr></thead><tbody>${rows}</tbody></table>
 				<div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">
 					${__("{0} item type(s), {1} piece(s), {2} subtotal line(s) before TOTAL GROSS",
 						[counts.length, (PRICED.rows || []).length, blocks])}</div>`);
 		}
+		d.$wrapper.on("input", ".of-split", function () {
+			SPLITS[this.dataset.item] = cint(this.value);
+			// only the line that changed is re-read; re-drawing would take the caret
+			const c = itemCounts().find((x) => x.item === this.dataset.item) || { n: 0 };
+			const parts = cutsOf(c.n, cint(this.value));
+			$(this).closest("tr").find("td").last()
+				.css({ color: parts.length > 1 ? "#1B4332" : "var(--text-muted)", "font-weight": parts.length > 1 ? 700 : 400 })
+				.text(parts.length > 1 ? parts.join(" · ") : __("one subtotal"));
+		});
 		d.show();
 		drawCuts();
 	}
