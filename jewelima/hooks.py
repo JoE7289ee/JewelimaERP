@@ -15,7 +15,9 @@ app_logo_url = "/assets/jewelima/images/brand/logo-square.svg"
 add_to_apps_screen = [
 	{
 		"name": "jewelima",
-		"logo": "/assets/jewelima/images/brand/logo-square.svg",
+		# the apps screen puts this on a pale ground of its own, so the emblem goes
+		# there bare, in the kit's gold gradient — no emerald tile behind it
+		"logo": "/assets/jewelima/images/brand/emblem-gold-gradient.svg",
 		"title": "Jewelima",
 		"route": "/app/jewelima",
 	}
