@@ -223,9 +223,12 @@ def on_purchase_recorded(doc, method=None):
 		if stones:
 			bits.append("{0} ct".format(round(stones, 3)))
 		what = " · ".join(bits) or "{0} line(s)".format(len(doc.get("items") or []))
+		# whoever wrote it, by the name people know them by
+		who = frappe.db.get_value("User", doc.recorded_by or doc.owner, "full_name") \
+			or doc.recorded_by or doc.owner or ""
 		send_async(
 			title="Stock in — {0}".format(doc.supplier or "purchase"),
-			body="{0} · {1}".format(what, doc.name),
+			body="{0}\n{1}{2}".format(what, doc.name, " · by " + who if who else ""),
 			# the notice is about a purchase, so it opens the Purchases screen
 			url="/jw?open=buy",
 			tag="purchase",
