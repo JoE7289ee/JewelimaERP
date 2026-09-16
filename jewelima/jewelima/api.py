@@ -12838,6 +12838,85 @@ def get_price_chart(name):
 
 
 @frappe.whitelist()
+def get_jw_purchases(limit=20):
+	"""What came IN lately: the last purchases, newest first.
+
+	Every voucher that brings material into the house writes a Purchase Record —
+	the voucher type is the paperwork it came on (SIN, BILL, …) — so this reads
+	those rather than guessing at stock movements.
+
+	Gold is shown as PURE: a purchase is billed on weight and touch, and what
+	the house actually gained is the fine gold inside it. Stones stay in carats,
+	in the buckets the floor counts in."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	BUCKET = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs",
+		"Cubic Zirconia": "cz", "CVD": "cvd", "Swarovski": "sw",
+		"Party Diamond": "pdmd", "Party Other": "poth"}
+	LABEL = {"dmd": "DMD", "ps": "PS", "cs": "CS", "cz": "CZ", "cvd": "CVD",
+		"sw": "SW", "pdmd": "PDMD", "poth": "POTH"}
+	n = max(1, min(cint(limit) or 20, 50))
+
+	recs = frappe.get_all("Purchase Record",
+		fields=["name", "voucher_type", "supplier", "purchase_date", "warehouse",
+			"recorded_by", "total_amount", "creation"],
+		order_by="purchase_date desc, creation desc", limit_page_length=n)
+	vt = {v.name: v.title for v in frappe.get_all("Voucher Type", fields=["name", "title"])}
+	meta, rows = {}, []
+	tot = {"pure": 0.0, "gross": 0.0, "buckets": {}, "amount": 0.0}
+	for r in recs:
+		lines, pure, gross, buckets = [], 0.0, 0.0, {}
+		for it in frappe.get_all("Purchase Record Item", filters={"parent": r.name},
+				fields=["item", "weight", "count", "purity"], order_by="idx"):
+			if it.item not in meta:
+				meta[it.item] = frappe.db.get_value("Item", it.item,
+					["stone_type", "purity_percentage"], as_dict=True) or {}
+			m = meta[it.item]
+			w = flt(it.weight)
+			if m.get("stone_type"):
+				code = BUCKET.get(m["stone_type"]) or "poth"
+				buckets[code] = flt(buckets.get(code)) + w
+				lines.append({"item": it.item, "qty": round(w, 3), "unit": "ct",
+					"pcs": cint(it.count), "stone": 1, "code": code})
+			else:
+				# the line's own touch is what was billed; the item's is the fallback
+				touch = flt(it.purity) or flt(m.get("purity_percentage"))
+				p = w * touch / 100.0
+				pure += p
+				gross += w
+				lines.append({"item": it.item, "qty": round(w, 3), "unit": "g",
+					"pure": round(p, 3), "touch": round(touch, 2), "stone": 0})
+		for c, w in buckets.items():
+			tot["buckets"][c] = flt(tot["buckets"].get(c)) + w
+		tot["pure"] += pure
+		tot["gross"] += gross
+		tot["amount"] += flt(r.total_amount)
+		rows.append({
+			"name": r.name, "voucher": vt.get(r.voucher_type, r.voucher_type),
+			"supplier": r.supplier or "—",
+			"date": str(r.purchase_date or "")[:10],
+			"when": str(r.creation or "")[:16],
+			"warehouse": (r.warehouse or "").rsplit(" - ", 1)[0],
+			"by": frappe.db.get_value("User", r.recorded_by, "full_name") or r.recorded_by or "",
+			"pure": round(pure, 3), "gross": round(gross, 3),
+			"stones": [{"code": c, "label": LABEL[c], "carat": round(w, 3)}
+				for c, w in sorted(buckets.items(), key=lambda x: -x[1])],
+			"lines": lines,
+		})
+
+	return {
+		"rows": rows,
+		"totals": {
+			"count": len(rows),
+			"pure": round(tot["pure"], 3), "gross": round(tot["gross"], 3),
+			"stones": [{"code": c, "label": LABEL[c], "carat": round(w, 3)}
+				for c, w in sorted(tot["buckets"].items(), key=lambda x: -x[1])],
+			"carat": round(sum(tot["buckets"].values()), 3),
+		},
+		"at": frappe.utils.now(),
+	}
+
+
+@frappe.whitelist()
 def get_jw_day():
 	"""The day across every bench: what went out to hands, and what came back.
 
