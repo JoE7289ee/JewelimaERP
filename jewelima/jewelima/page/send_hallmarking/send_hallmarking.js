@@ -28,6 +28,12 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.sh-card{border:1px solid var(--border-color);border-radius:11px;background:var(--fg-color);padding:14px 18px;}
 		.sh-card{cursor:pointer;transition:border-color .12s;}
 		.sh-card:hover{border-color:#1f618d;}
+		.sh-sub{display:flex;align-items:center;gap:7px;margin:8px 0 2px;}
+		.sh-sub label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+			color:var(--text-muted);margin:0;white-space:nowrap;}
+		.sh-sub input{flex:1;min-width:0;border:1px solid var(--border-color);border-radius:6px;
+			padding:3px 8px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+		.sh-sub input.saved{border-color:#2e7d32;}
 		.sh-card .nm{font-size:17px;font-weight:800;}
 		.sh-bk{display:inline-block;border-radius:9px;padding:0 8px;font-size:10.5px;font-weight:700;
 			background:var(--control-bg);color:var(--text-muted);margin-right:4px;}
@@ -108,11 +114,16 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 							<div class="p">${t.pieces}<span> ${__("pc")}</span></div>
 							<div class="w">${flt(t.gross).toFixed(3)} g${
 								flt(t.dmd_ct) ? " · " + flt(t.dmd_ct).toFixed(3) + " ct" : ""}</div></div>`).join("")}</div>` : ""}
+					<div class="sh-sub">
+						<label>${__("Submission no")}</label>
+						<input class="sh-subno" value="${esc(p.submission_no || "")}"
+							placeholder="${__("the centre's number")}">
+					</div>
 					<div class="sh-actions">
 						${p.can_manage
 							? `<button class="btn btn-primary btn-sm sh-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
 							: `<button class="btn btn-default btn-sm sh-ask">${__("ASK A MANAGER TO SEND")}</button>`}
-						<button class="btn btn-sm sh-print">${__("Print slip")}</button>
+						<button class="btn btn-sm sh-print">${__("Print note")}</button>
 						<button class="btn btn-default btn-sm sh-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-sm sh-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>
 					</div>
@@ -134,7 +145,25 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	// design type. Straight to the printer through a hidden iframe the way the
 	// barcode labels go — a downloaded PDF means somebody has to find it in
 	// Downloads before any paper comes out. A6 landscape rides in the @page rule.
+	// the centre's own number for the packet — saved where it is typed
+	root.on("change", ".sh-subno", function () {
+		const nm = $(this).closest(".sh-card").data("name");
+		const el = this;
+		frappe.call({ method: API + ".set_hall_submission_no",
+			args: { name: nm, submission_no: this.value || "" } }).then(() => {
+			$(el).addClass("saved");
+			setTimeout(() => $(el).removeClass("saved"), 1200);
+		});
+	});
+
 	root.on("click", ".sh-print", function () {
+		const $card = $(this).closest(".sh-card");
+		if (!($card.find(".sh-subno").val() || "").trim() && !$card.data("warned")) {
+			$card.data("warned", 1);
+			frappe.msgprint({ title: __("No submission number"), indicator: "orange",
+				message: __("This note will print without the centre's submission number. Type it above if you have it — printing again picks it up. Press Print note once more to go ahead.") });
+			return;
+		}
 		const nm = $(this).closest(".sh-card").data("name");
 		frappe.call({ method: API + ".get_hall_batch_slip", args: { name: nm } }).then((r) => {
 			const m = r.message || {};

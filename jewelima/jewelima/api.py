@@ -18585,7 +18585,7 @@ def get_cert_batch_slip(name):
 	<div class="tag">{tagline}</div>
 	</div></body></html>""".format(
 		nm=frappe.utils.escape_html(name),
-		slip_title=frappe._("Certification Slip"),
+		slip_title=frappe._("Certification Note"),
 		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
 		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
@@ -19859,7 +19859,7 @@ def get_hall_preps():
 	out = {"prepared": [], "recent": []}
 	for r in frappe.get_all("Hallmarking Batch",
 			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]]},
-			fields=["name", "center", "status", "prepared_on", "sent_on"],
+			fields=["name", "center", "status", "prepared_on", "sent_on", "submission_no"],
 			order_by="creation desc", limit=40):
 		items = frappe.get_all("Hallmarking Item", filters={"parent": r.name},
 			fields=["order_bag", "gross", "dmd_ct"])
@@ -19911,6 +19911,18 @@ def get_hall_preps():
 			filters={"name": ["in", bags or [""]]}, pluck="bucket") if b})
 		(out["prepared"] if r.status == "Prepared" else out["recent"]).append(r)
 	return out
+
+
+@frappe.whitelist()
+def set_hall_submission_no(name, submission_no=""):
+	"""The centre's own number for the packet, written at the counter. Never
+	required: it usually arrives after the batch has gone."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager", "Jewelima Hallmarking"))
+	if not frappe.db.exists("Hallmarking Batch", name):
+		frappe.throw(frappe._("No batch {0}.").format(name or "?"))
+	frappe.db.set_value("Hallmarking Batch", name, "submission_no", (submission_no or "").strip() or None)
+	frappe.db.commit()
+	return {"name": name, "submission_no": (submission_no or "").strip()}
 
 
 @frappe.whitelist()
@@ -19984,6 +19996,9 @@ def get_hall_batch_slip(name):
 	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
 		font-size:10.5pt; padding-top:1.6mm; }}
 	.nm img {{ height:9.5mm; vertical-align:-1.6mm; margin-right:2.5mm; }}
+	.sub-no {{ font-size:9pt; padding-top:1.5mm; }}
+	.sub-no b {{ font-size:12pt; letter-spacing:.3px; }}
+	.sub-missing {{ font-size:8pt; color:#8a5a00; padding-top:1.5mm; }}
 	.ft {{ font-size:6.5pt; color:#888; padding-top:2mm; }}
 	.tag img {{ width:100%; display:block; margin-top:1.5mm; }}
 	</style></head><body><div class="slip">
@@ -19992,6 +20007,7 @@ def get_hall_batch_slip(name):
 			<div class="nm">{emblem}{slip_title}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
+			{subno}
 		</td>
 		<td class="qr">{qrimg}<div class="qrc">{nm}</div></td>
 	</tr></table>
@@ -20006,11 +20022,15 @@ def get_hall_batch_slip(name):
 	<div class="tag">{tagline}</div>
 	</div></body></html>""".format(
 		nm=frappe.utils.escape_html(name),
-		slip_title=frappe._("Hallmarking Slip"),
+		slip_title=frappe._("Hallmarking Note"),
 		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
 		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
 		pc=t_pc, pcl=frappe._("piece(s)"),
+		subno=('<div class="sub-no">{0} <b>{1}</b></div>'.format(
+			frappe._("Submission no"), frappe.utils.escape_html(d.submission_no))
+			if d.get("submission_no")
+			else '<div class="sub-missing">{0}</div>'.format(frappe._("Submission no not recorded"))),
 		qrimg='<img src="{0}">'.format(qr) if qr else "",
 		h_type=frappe._("Design type"), h_pc=frappe._("PC"),
 		h_gw=frappe._("GW (g)"), h_ct=frappe._("Diam (ct)"),

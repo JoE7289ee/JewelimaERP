@@ -107,7 +107,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 							: `<button class="btn btn-default btn-sm sc-ask">${__("ASK A MANAGER TO SEND")}</button>`}
 						<button class="btn btn-default btn-sm sc-xls">${__("Excel ⤓")}</button>
 						<button class="btn btn-default btn-sm sc-mail">${__("Email Excel")}</button>
-						<button class="btn btn-default btn-sm sc-slip">${__("Print slip")}</button>
+						<button class="btn btn-default btn-sm sc-slip">${__("Print note")}</button>
 						${p.can_manage
 							? `<button class="btn btn-sm sc-cancel" style="background:#b02a2a;border-color:#b02a2a;color:#fff;">${__("Cancel")}</button>`
 							: ""}
@@ -193,7 +193,7 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		if (!($card.find(".sc-subno").val() || "").trim() && !$card.data("warned")) {
 			$card.data("warned", 1);
 			frappe.msgprint({ title: __("No submission number"), indicator: "orange",
-				message: __("This slip will print without the lab's submission number. Type it above if you have it — printing again picks it up. Press Print slip once more to go ahead.") });
+				message: __("This note will print without the lab's submission number. Type it above if you have it — printing again picks it up. Press Print note once more to go ahead.") });
 			return;
 		}
 		const nm = $(this).closest(".sc-card").data("name");

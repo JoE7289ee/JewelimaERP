@@ -11,6 +11,7 @@
   "sent_on",
   "col_head",
   "collected_on",
+  "submission_no",
   "stock_entry",
   "remarks",
   "sec_items",
@@ -54,6 +55,12 @@
    "fieldname": "collected_on",
    "fieldtype": "Date",
    "label": "Collected On"
+  },
+  {
+   "fieldname": "submission_no",
+   "fieldtype": "Data",
+   "label": "Submission No",
+   "description": "The number the centre gives when the packet is handed over. Not needed to send \u2014 it usually arrives after."
   },
   {
    "fieldname": "stock_entry",
