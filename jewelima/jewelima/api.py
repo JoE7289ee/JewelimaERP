@@ -12838,6 +12838,55 @@ def get_price_chart(name):
 
 
 @frappe.whitelist()
+def get_jw_charts():
+	"""Every live chart, newest first — the picker on the phone.
+
+	Only Active versions: saving a chart supersedes the old one, and a phone
+	quoting a superseded chart is quoting rates nobody charges any more."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	rows = frappe.get_all("Price Chart", filters={"status": "Active"},
+		fields=["name", "chart_name", "chart_date"], order_by="chart_name asc", limit_page_length=0)
+	return [{"name": r.name, "chart_name": r.chart_name or r.name, "chart_date": str(r.chart_date or "")}
+		for r in rows]
+
+
+@frappe.whitelist()
+def get_jw_chart(name):
+	"""One chart on the phone, down to the rates and no further.
+
+	A phone is for looking a rate up mid-conversation, so the terms, the
+	payment words and the signatory stay on the desk. If the name handed in has
+	been superseded, the CURRENT version is read instead — quoting yesterday's
+	chart is the one mistake this screen must not make."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	live = current_price_chart(name)
+	d = frappe.get_doc("Price Chart", live.get("resolved") or name)
+	rng = lambda r: {"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct), "rate": flt(r.rate),
+		"basis": getattr(r, "basis", None) or "Per Ct"}
+	return {
+		"name": d.name, "chart_name": d.chart_name, "chart_date": str(d.chart_date or ""),
+		"moved": bool(live.get("moved")),
+		"touch_rates": [{"karat": r.karat or "", "touch": flt(r.touch)} for r in (d.get("touch_rates") or [])],
+		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
+		"making_rules": [{"karat": r.karat or "", "design_type": r.design_type or "",
+			"basis": r.basis or "Per Gram", "rate": flt(r.rate), "min_per_piece": flt(r.min_per_piece),
+			"flat_below_gm": flt(r.flat_below_gm)} for r in (d.get("making_rules") or [])],
+		"diamond_rates": [{"from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+			"quality": r.quality or "", "rate": flt(r.rate)} for r in (d.get("diamond_rates") or [])],
+		"precious_stone_rates": [{"stone": r.stone, "from_ct": flt(r.from_ct), "to_ct": flt(r.to_ct),
+			"rate": flt(r.rate)} for r in (d.get("precious_stone_rates") or [])],
+		"cs_rates": [rng(r) for r in (d.get("cs_rates") or [])],
+		"cz_rates": [rng(r) for r in (d.get("cz_rates") or [])],
+		"cvd_rates": [rng(r) for r in (d.get("cvd_rates") or [])],
+		"sw_rates": [rng(r) for r in (d.get("sw_rates") or [])],
+		"certification_charges": [{"certification": r.certification, "basis": r.basis or "Per Piece",
+			"rate": flt(r.rate), "min_amount": flt(r.min_amount), "from_ct": flt(r.from_ct),
+			"to_ct": flt(r.to_ct), "solitaire": cint(r.solitaire)}
+			for r in (d.get("certification_charges") or [])],
+	}
+
+
+@frappe.whitelist()
 def save_price_chart(payload):
 	"""Save = a NEW Active version (the controller supersedes the previous Active
 	chart of the same name — history is never edited)."""

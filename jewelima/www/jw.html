@@ -74,6 +74,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: rgba(250, 247, 239, .32); margin-top: 7px; }
+/* price chart */
+.jw-find { width: 100%; font-size: 16px; padding: 11px 14px; border-radius: 12px; margin-bottom: 12px;
+	border: 1px solid rgba(250, 247, 239, .18); background: rgba(250, 247, 239, .07);
+	color: var(--jw-ivory); font-weight: 600; }
+.jw-find:focus { outline: none; border-color: var(--jw-champagne); }
+.jw-find.gone { display: none; }
+.jw-pick { display: flex; align-items: baseline; gap: 10px; padding: 13px 4px;
+	border-bottom: 1px solid rgba(250, 247, 239, .09); }
+.jw-pick .nm { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.jw-pick .dt { font-size: 11px; color: rgba(250, 247, 239, .42); }
+.jw-pick .go { color: rgba(250, 247, 239, .35); font-size: 15px; }
+.jw-csec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .5); margin: 20px 0 8px; }
+.jw-rt { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px; padding: 2px 13px; }
+.jw-rt .rr { display: flex; align-items: baseline; gap: 10px; padding: 10px 0;
+	border-bottom: 1px solid rgba(250, 247, 239, .08); }
+.jw-rt .rr:last-child { border-bottom: 0; }
+.jw-rt .rr .l { flex: 1; font-size: 13px; font-weight: 600; }
+.jw-rt .rr .b { font-size: 10.5px; color: rgba(250, 247, 239, .4); }
+.jw-rt .rr .v { font-size: 14.5px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
+.jw-chd { border: 1px solid rgba(212, 175, 55, .3); border-radius: 14px; padding: 13px 15px;
+	background: rgba(212, 175, 55, .1); margin-bottom: 4px; }
+.jw-chd .nm { font-size: 19px; font-weight: 800; letter-spacing: .04em; }
+.jw-chd .mt { font-size: 11.5px; color: rgba(250, 247, 239, .5); margin-top: 2px; }
+
 /* gold stock */
 .jw-tot { border: 1px solid rgba(212, 175, 55, .35); border-radius: 16px; padding: 15px 16px;
 	background: linear-gradient(180deg, rgba(212, 175, 55, .13), rgba(250, 247, 239, .04)); }
@@ -268,7 +293,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Card Info, Rates and Gold Stock are live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
+		Four tiles are live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -282,6 +307,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<div class="big" id="jw-screen-icon"></div>
 		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
 	</div>
+</div>
+
+<!-- Price Chart: pick a party, read its live rates -->
+<div class="jw-screen" id="jw-chart">
+	<div class="bar">
+		<button class="back" onclick="jwChartBack()">&#8592;</button>
+		<div class="ttl" id="jw-chart-ttl">Price Chart</div>
+		<button class="jw-ref" onclick="jwReread(this, jwChartReload)" title="Read it again">&#8635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
+	</div>
+	<input class="jw-find" id="jw-chart-find" placeholder="Find a party…" autocomplete="off">
+	<div class="jw-body" id="jw-chart-body"></div>
 </div>
 
 <!-- Gold Stock: every gram the house holds, and what it is worth today -->
@@ -332,6 +369,7 @@ const JW_TILES = [
 	{ icon: "🔍", label: "Card Info", screen: "card" },
 	{ icon: "📈", label: "Rates", screen: "rates" },
 	{ icon: "🟡", label: "Gold Stock", screen: "gold" },
+	{ icon: "🧾", label: "Price Chart", screen: "chart" },
 	{ icon: "🧰", label: "Job Work" },
 	{ icon: "💎", label: "Stone Issue" },
 	{ icon: "↔️", label: "Transfer" },
@@ -362,6 +400,7 @@ grid.addEventListener("click", (e) => {
 	}
 	if (t.screen === "rates") { jwRates(); return; }
 	if (t.screen === "gold") { jwGold(); return; }
+	if (t.screen === "chart") { jwCharts(); return; }
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
@@ -369,7 +408,9 @@ grid.addEventListener("click", (e) => {
 
 function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
 // the back gesture closes whatever is open rather than leaving the app
-window.addEventListener("popstate", () => { jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwCamStop(); });
+window.addEventListener("popstate", () => {
+	jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwChartClose(); jwCamStop();
+});
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
 	if (e.key !== "Enter") return;
@@ -470,6 +511,106 @@ function jwCardHtml(d) {
 			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
 			${row("Remark", b.narration ? esc(b.narration) : "")}
 		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// PRICE CHART — pick a party, read what we charge them.
+//
+// Strictly down to the rates: gold touch, making, and every stone table. The
+// terms, the payment words and the signatory stay on the desk — a phone is for
+// looking a rate up mid-conversation.
+//
+// Only Active charts are listed, and opening one resolves to the version that
+// is live TODAY: quoting a superseded chart is the one mistake this screen
+// must not make.
+// ---------------------------------------------------------------------------
+const chartBody = document.getElementById("jw-chart-body");
+const chartFind = document.getElementById("jw-chart-find");
+let jwChartList = [], jwChartOpen = null;
+
+function jwCharts() {
+	document.getElementById("jw-chart").classList.add("on");
+	jwChartOpen = null;
+	document.getElementById("jw-chart-ttl").textContent = "Price Chart";
+	chartFind.classList.remove("gone");
+	if (jwChartList.length) { jwChartPaint(); return; }
+	chartBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading the charts…</div>`;
+	jwApi("jewelima.jewelima.api.get_jw_charts", {})
+		.then((rows) => { jwChartList = rows || []; jwChartPaint(); })
+		.catch(() => { chartBody.innerHTML = `<div class="jw-err">The charts could not be read just now.</div>`; });
+}
+
+function jwChartPaint() {
+	const q = (chartFind.value || "").trim().toUpperCase();
+	const rows = jwChartList.filter((r) => !q || (r.chart_name || "").indexOf(q) > -1);
+	chartBody.innerHTML = rows.length
+		? rows.map((r) => `<div class="jw-pick" onclick="jwChart('${esc(r.name)}')">
+				<span class="nm">${esc(r.chart_name)}</span>
+				<span class="dt">${esc(r.chart_date)}</span><span class="go">&#8250;</span></div>`).join("")
+		: `<div class="jw-err" style="color:rgba(250,247,239,.6)">No party by that name.</div>`;
+}
+
+chartFind.addEventListener("input", () => { if (!jwChartOpen) jwChartPaint(); });
+
+function jwChart(name) {
+	jwChartOpen = name;
+	chartFind.classList.add("gone");
+	chartBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading it…</div>`;
+	jwApi("jewelima.jewelima.api.get_jw_chart", { name })
+		.then((d) => {
+			if (!d || !d.name) throw new Error("empty");
+			document.getElementById("jw-chart-ttl").textContent = d.chart_name || "Price Chart";
+			chartBody.innerHTML = jwChartHtml(d);
+		})
+		.catch(() => { chartBody.innerHTML = `<div class="jw-err">That chart could not be read.</div>`; });
+}
+
+function jwChartReload() { return jwChartOpen ? jwChart(jwChartOpen) : (jwChartList = [], jwCharts()); }
+
+// the back button steps out of a chart before it leaves the screen
+function jwChartBack() {
+	if (jwChartOpen) { jwCharts(); return; }
+	document.getElementById("jw-chart").classList.remove("on");
+}
+
+function jwChartClose() { document.getElementById("jw-chart").classList.remove("on"); }
+
+function jwChartHtml(d) {
+	const ct = (r) => `${(r.from_ct || 0).toFixed(2)} – ${r.to_ct ? r.to_ct.toFixed(2) : "∞"} ct`;
+	const table = (rows, label, value, basis) => rows.length
+		? `<div class="jw-rt">${rows.map((r) => `<div class="rr">
+				<span class="l">${label(r)}</span>
+				<span class="b">${basis ? esc(basis(r)) : ""}</span>
+				<span class="v">${whole(value(r))}</span></div>`).join("")}</div>`
+		: "";
+	const block = (title, html) => html ? `<div class="jw-csec">${title}</div>${html}` : "";
+
+	const touch = table(d.touch_rates || [], (r) => esc(r.karat), (r) => r.touch, () => "touch");
+	const making = (d.making_rules || []).length
+		? table(d.making_rules, (r) => esc([r.karat, r.design_type].filter(Boolean).join(" · ") || "All"),
+			(r) => r.rate, (r) => r.basis + (r.min_per_piece ? " · min ₹" + whole(r.min_per_piece) : ""))
+		: (d.making_rate ? `<div class="jw-rt"><div class="rr"><span class="l">Making</span>
+			<span class="b">per gram${d.making_min_grams ? " · min " + d.making_min_grams + " g" : ""}</span>
+			<span class="v">${whole(d.making_rate)}</span></div></div>` : "");
+	const dmd = table(d.diamond_rates || [], (r) => ct(r), (r) => r.rate, (r) => r.quality || "");
+	const ps = table(d.precious_stone_rates || [], (r) => esc(r.stone),
+		(r) => r.rate, (r) => (r.from_ct || r.to_ct) ? ct(r) : "per ct");
+	const stones = ["cs", "cz", "cvd", "sw"].map((k) => block(k.toUpperCase(),
+		table(d[k + "_rates"] || [], (r) => ct(r), (r) => r.rate, (r) => r.basis))).join("");
+	const cert = table(d.certification_charges || [], (r) => esc(r.certification), (r) => r.rate,
+		(r) => [r.basis, (r.from_ct || r.to_ct) ? ct(r) : "", r.solitaire ? "solitaire" : "",
+			r.min_amount ? "min ₹" + whole(r.min_amount) : ""].filter(Boolean).join(" · "));
+
+	return `<div class="jw-chd">
+			<div class="nm">${esc(d.chart_name)}</div>
+			<div class="mt">${esc(d.name)} · ${esc(d.chart_date)}${d.moved ? " · the version live today" : ""}</div>
+		</div>
+		${block("Gold touch", touch)}
+		${block("Making", making)}
+		${block("Diamond", dmd)}
+		${block("Precious stone", ps)}
+		${stones}
+		${block("Certification", cert)}`;
 }
 
 // ---------------------------------------------------------------------------
