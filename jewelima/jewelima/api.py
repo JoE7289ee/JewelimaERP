@@ -18447,6 +18447,18 @@ def email_cert_excel(name, recipient, subject, body, cc=None):
 
 
 @frappe.whitelist()
+def set_cert_submission_no(name, submission_no=""):
+	"""The lab's own number for the packet, written on the counter when it is
+	handed over. Never required: it usually arrives after the batch has gone."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager", "Jewelima Certification"))
+	if not frappe.db.exists("Certification", name):
+		frappe.throw(frappe._("No batch {0}.").format(name or "?"))
+	frappe.db.set_value("Certification", name, "submission_no", (submission_no or "").strip() or None)
+	frappe.db.commit()
+	return {"name": name, "submission_no": (submission_no or "").strip()}
+
+
+@frappe.whitelist()
 def get_cert_batch_slip(name):
 	"""The batch slip, as HTML for the browser to PRINT.
 
@@ -18521,6 +18533,9 @@ def get_cert_batch_slip(name):
 	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
 	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
 		font-size:10.5pt; padding-top:1.6mm; }}
+	.sub-no {{ font-size:9pt; padding-top:1.5mm; }}
+	.sub-no b {{ font-size:12pt; letter-spacing:.3px; }}
+	.sub-missing {{ font-size:8pt; color:#8a5a00; padding-top:1.5mm; }}
 	.ft {{ font-size:6.5pt; color:#888; padding-top:2.5mm; }}
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
@@ -18528,6 +18543,7 @@ def get_cert_batch_slip(name):
 			<div class="nm">{nm}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
+			{subno}
 		</td>
 		<td class="qr">{qrimg}<div class="qrc">{nm}</div></td>
 	</tr></table>
@@ -18543,13 +18559,18 @@ def get_cert_batch_slip(name):
 		nm=frappe.utils.escape_html(name),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
 		pc=t_pc, pcl=frappe._("piece(s)"),
+		subno=('<div class="sub-no">{0} <b>{1}</b></div>'.format(
+			frappe._("Submission no"), frappe.utils.escape_html(d.submission_no))
+			if d.get("submission_no")
+			else '<div class="sub-missing">{0}</div>'.format(frappe._("Submission no not recorded"))),
 		qrimg='<img src="{0}">'.format(qr) if qr else "",
 		h_type=frappe._("Design type"), h_pc=frappe._("PC"),
 		h_gw=frappe._("GW (g)"), h_ct=frappe._("Diam (ct)"),
 		body=body, l_tot=frappe._("TOTAL"), t_pc=t_pc,
 		t_gw="{0:.3f}".format(t_gw), t_ct="{0:.3f}".format(t_ct),
 		ft="{0} · {1}".format(frappe._("prepared"), d.prepared_on or ""))
-	return {"name": name, "pieces": t_pc, "html": html}
+	return {"name": name, "pieces": t_pc, "html": html,
+		"submission_no": d.get("submission_no") or ""}
 
 
 @frappe.whitelist()
@@ -18694,7 +18715,7 @@ def get_cert_preps():
 	out = {"prepared": [], "recent": []}
 	for r in frappe.get_all("Certification",
 			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]], "cert_type": ["is", "set"]},
-			fields=["name", "cert_type", "center", "quality", "status", "prepared_on",
+			fields=["name", "cert_type", "center", "quality", "status", "prepared_on", "submission_no",
 				"sent_on", "owner"],
 			order_by="creation desc", limit=40):
 		r["pieces"] = frappe.db.count("Certification Item", {"parent": r.name})

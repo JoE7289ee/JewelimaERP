@@ -16,6 +16,7 @@
   "sent_on",
   "col_break_head",
   "lab",
+  "submission_no",
   "stock_entry",
   "remarks",
   "items_section",
@@ -88,6 +89,12 @@
    "fieldname": "lab",
    "fieldtype": "Data",
    "label": "Lab / Centre"
+  },
+  {
+   "fieldname": "submission_no",
+   "fieldtype": "Data",
+   "label": "Submission No",
+   "description": "The number the lab gives when the packet is handed over. Not needed to send \u2014 it usually arrives after."
   },
   {
    "description": "The stock move Finished Goods \u2192 At Certification that backed this batch.",

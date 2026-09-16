@@ -63,6 +63,26 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		<div class="sc-recent"></div>
 	`);
 	const root = $(page.main);
+	$(page.main).append(`<style>
+		.sc-sub{display:flex;align-items:center;gap:7px;margin:6px 0 2px;}
+		.sc-sub label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+			color:var(--text-muted);margin:0;white-space:nowrap;}
+		.sc-sub input{flex:1;min-width:0;border:1px solid var(--border-color);border-radius:6px;
+			padding:3px 8px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
+		.sc-sub input.saved{border-color:#2e7d32;}
+	</style>`);
+
+	// the lab's own number for the packet — typed at the counter when it is
+	// handed over, so it is saved where it is typed rather than behind a button
+	root.on("change", ".sc-subno", function () {
+		const nm = $(this).closest(".sc-card").data("name");
+		const el = this;
+		frappe.call({ method: API + ".set_cert_submission_no",
+			args: { name: nm, submission_no: this.value || "" } }).then(() => {
+			$(el).addClass("saved");
+			setTimeout(() => $(el).removeClass("saved"), 1200);
+		});
+	});
 
 	function load() {
 		frappe.call({ method: API + ".get_cert_preps" }).then((r) => {
@@ -76,6 +96,11 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 					<div class="meta">${__("prepped by")} <b>${esc(p.owner_label || "")}</b>${
 						p.can_manage ? "" : ` <span class="sc-not">${__("not yours")}</span>`}</div>
 					<div class="sc-nums"><span><b>${p.pieces}</b> ${__("piece(s)")}</span></div>
+					<div class="sc-sub">
+						<label>${__("Submission no")}</label>
+						<input class="sc-subno" value="${esc(p.submission_no || "")}"
+							placeholder="${__("the lab's number")}">
+					</div>
 					<div class="sc-actions">
 						${p.can_manage
 							? `<button class="btn btn-primary btn-sm sc-send" style="background:#2e7d32;border-color:#2e7d32;">${__("SEND — move stock")}</button>`
@@ -164,6 +189,13 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 	// the slip that goes in the packet: A6 landscape, the batch QR and what is
 	// supposed to be inside it, summed by design type
 	root.on("click", ".sc-slip", function () {
+		const $card = $(this).closest(".sc-card");
+		if (!($card.find(".sc-subno").val() || "").trim() && !$card.data("warned")) {
+			$card.data("warned", 1);
+			frappe.msgprint({ title: __("No submission number"), indicator: "orange",
+				message: __("This slip will print without the lab's submission number. Type it above if you have it — printing again picks it up. Press Print slip once more to go ahead.") });
+			return;
+		}
 		const nm = $(this).closest(".sc-card").data("name");
 		frappe.call({ method: API + ".get_cert_batch_slip", args: { name: nm } }).then((r) => {
 			const m = r.message || {};
