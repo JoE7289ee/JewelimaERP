@@ -25758,8 +25758,8 @@ SALE_PREP_FORMATS = {
 		"docs": [
 			{"key": "clean", "label": "Basic Excel", "kind": "clean",
 			 "note": "serial no, item, bag, stones by bucket, gross and nett — no money"},
-			{"key": "ratecut", "label": "Billing sheet", "kind": "jos",
-			 "note": "the full billing sheet, the same one JOS takes as its Delivery Bill"},
+			{"key": "ratecut", "label": "Billing sheet", "kind": "bill",
+			 "note": "the counter bill: piece by piece with gold, diamond, making, HM and IGI"},
 		],
 	},
 }
@@ -26045,6 +26045,129 @@ def _clean_cols(rows):
 	return [c for c in cols if c[0] in ("sl", "item", "bag", "gross", "net") or any(c[2](r) for r in rows)]
 
 
+BILL_COLS = [
+	("Sl.No", 6), ("Barcode", 13), ("HUID", 11), ("Item", 12), ("Purity", 11),
+	("G.WT", 9), ("Dim No:", 8), ("Dim WT", 9), ("DIAMOND CHARGE", 15),
+	("DIAMOND VALUE", 15), ("Net wt", 9), ("HM", 8), ("IGI", 9), ("MC", 11),
+	("Product value", 14),
+]
+
+
+def _prep_counter_bill(spec, rows, p):
+	"""The counter bill, in the shape the trade already reads it.
+
+	One line per piece: what it is, what it weighs, what the diamonds in it cost,
+	and the four charges that make the price — gold, making, hallmarking, IGI —
+	ending in the piece's own value. The head carries the day's terms: the
+	diamond quality, the date, the gold rate and the purity being billed.
+
+	The figures come from the SAME components the screen priced with, so the
+	paper and the board can never disagree."""
+	from io import BytesIO
+
+	from openpyxl import Workbook
+	from openpyxl.styles import Alignment, Border, Font, Side
+	from openpyxl.utils import get_column_letter
+
+	wb = Workbook()
+	ws = wb.active
+	ws.title = "Bill"
+	ws.sheet_view.showGridLines = False
+	thin = Side(style="thin", color="000000")
+	box = Border(left=thin, right=thin, top=thin, bottom=thin)
+	bold = Font(name="Calibri", size=11, bold=True)
+	base = Font(name="Calibri", size=11)
+
+	# ---- the head: who it is for on the left, the day's terms on the right
+	n = len(BILL_COLS)
+	ws.cell(row=1, column=1, value=(p.get("customer") or "").upper()).font = Font(
+		name="Calibri", size=12, bold=True)
+	ws.cell(row=2, column=1, value="PHONE :").font = base
+	ws.cell(row=3, column=1, value="TIN :").font = base
+	terms = [
+		("DIAMOND", (p.get("quality") or "").strip()),
+		("DATE", frappe.utils.formatdate(frappe.utils.nowdate(), "dd-MMM-yy")),
+		("GOLD RATE", "{0:.2f}".format(flt(p.get("gold_rate")))),
+		("PURITY", (p.get("karat_label") or "18 K").strip()),
+	]
+	for i, (k, v) in enumerate(terms):
+		c = ws.cell(row=1 + i, column=n - 1, value="{0} : {1}".format(k, v))
+		c.font = bold if i == 0 else base
+		c.alignment = Alignment(horizontal="right")
+
+	# ---- the table
+	HR = 5
+	for i, (label, width) in enumerate(BILL_COLS, start=1):
+		c = ws.cell(row=HR, column=i, value=label)
+		c.font = bold
+		c.border = box
+		c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+		ws.column_dimensions[get_column_letter(i)].width = width
+
+	purity_of = {}
+	for r in rows:
+		bag = r.get("order_bag")
+		if bag and bag not in purity_of:
+			purity_of[bag] = flt(frappe.db.get_value("Order Bag", bag, "act_purity"))
+
+	def comp(r, key):
+		return flt(((r.get("components") or {}).get(key) or {}).get("value"))
+
+	tot = {k: 0.0 for k in ("gs", "dpcs", "dct", "dval", "nt", "hm", "igi", "mc", "val")}
+	r_i = HR
+	for i, row in enumerate(rows, start=1):
+		r_i += 1
+		dct, dpcs = flt(row.get("dmd_ct")), cint(row.get("dmd_pcs"))
+		dval = comp(row, "dmd") + comp(row, "pdmd")
+		gs, nt = flt(row.get("gs_full") or row.get("gs")), flt(row.get("nt_full") or row.get("nt"))
+		hm, igi = comp(row, "hall"), comp(row, "cert")
+		mc = comp(row, "making") + flt(row.get("bc_mc"))
+		val = flt(row.get("total")) or (comp(row, "gold") + mc + dval + hm + igi)
+		pur = purity_of.get(row.get("order_bag")) or 0
+		vals = [i, row.get("order_bag") or "", row.get("huid") or "", row.get("item") or "",
+			("GOLD {0}".format(round(pur, 1)) if pur else ""), gs or None,
+			dpcs or None, dct or None,
+			(round(dval / dct, 0) if dct else None), (dval or None), nt or None,
+			(hm or None), (igi or None), (mc or None), round(val, 2)]
+		for k, v in enumerate(vals, start=1):
+			c = ws.cell(row=r_i, column=k, value=v)
+			c.font = base
+			c.border = box
+			if k >= 6:
+				c.alignment = Alignment(horizontal="right")
+			c.number_format = ("0.000" if k in (6, 8, 11) else
+				"#,##0.00" if k in (9, 10, 14, 15) else "0" if k in (1, 7, 12, 13) else "@")
+		tot["gs"] += gs; tot["dpcs"] += dpcs; tot["dct"] += dct; tot["dval"] += dval
+		tot["nt"] += nt; tot["hm"] += hm; tot["igi"] += igi; tot["mc"] += mc; tot["val"] += val
+
+	# ---- TOTAL, on its own line under the pieces
+	r_i += 1
+	ws.cell(row=r_i, column=4, value="TOTAL").font = bold
+	foot = {6: round(tot["gs"], 3), 7: cint(tot["dpcs"]), 8: round(tot["dct"], 3),
+		10: round(tot["dval"], 2), 11: round(tot["nt"], 3), 12: round(tot["hm"], 2),
+		13: round(tot["igi"], 3), 14: round(tot["mc"], 2), 15: round(tot["val"], 2)}
+	for k in range(1, len(BILL_COLS) + 1):
+		c = ws.cell(row=r_i, column=k)
+		c.border = box
+		c.font = bold
+		if k in foot:
+			c.value = foot[k]
+			c.alignment = Alignment(horizontal="right")
+			c.number_format = ("0.000" if k in (6, 8, 11, 13) else "#,##0.00" if k in (10, 14, 15) else "0")
+
+	ws.freeze_panes = ws.cell(row=HR + 1, column=1)
+	ws.page_setup.orientation = "landscape"
+	ws.page_setup.paperSize = ws.PAPERSIZE_A4
+	ws.page_setup.fitToWidth = 1
+	ws.page_setup.fitToHeight = 0
+	ws.sheet_properties.pageSetUpPr.fitToPage = True
+	ws.print_title_rows = "{0}:{0}".format(HR)
+
+	buf = BytesIO()
+	wb.save(buf)
+	return buf.getvalue()
+
+
 def _prep_clean_sheet(spec, rows, p):
 	"""The Basic Excel: one tidy, branded page of the parcel — rows in its own
 	order and serial numbers, stones by bucket, weights, totals. No money."""
@@ -26198,6 +26321,13 @@ def export_sale_prep_doc(payload, fmt, doc):
 			flt(p.get("gold_rate")), p.get("quality") or "",
 			karat_label=p.get("karat_label") or "18 KT", party=p.get("customer") or "",
 			filename="{0} {1}.xlsx".format(spec["label"], d["label"]))
+
+	if d["kind"] == "bill":
+		frappe.local.response.filename = "{0} {1}.xlsx".format(
+			(p.get("title") or p.get("customer") or spec["label"]).strip(), d["label"])
+		frappe.local.response.filecontent = _prep_counter_bill(spec, rows, p)
+		frappe.local.response.type = "download"
+		return
 
 	if d["kind"] == "clean":
 		frappe.local.response.filename = "{0} {1}.xlsx".format(
