@@ -148,8 +148,11 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		return state.data.items.filter((it) => !it.is_gold).reduce((s, it) => s + flt(it.per_piece[i].weight) * CT_TO_G, 0);
 	}
 	function applyAutoGold(i) {
-		// piece gold = gross - stone weight, distributed across gold items by their share
-		const goldForPiece = Math.round((flt(state.gross[i]) - stoneGrams(i)) * 1000) / 1000;
+		// piece gold = gross - stone weight, distributed across gold items by their share.
+		// A piece with no gross typed is not weighed yet, not a piece of nothing:
+		// it carries no gold, and its stones are still waiting for it.
+		const goldForPiece = flt(state.gross[i]) > 0
+			? Math.round((flt(state.gross[i]) - stoneGrams(i)) * 1000) / 1000 : 0;
 		const totalAll = flt(state.data.gold_total);
 		goldItems().forEach((it, k) => {
 			const w = totalAll > 0 ? goldForPiece * (flt(it.total) / totalAll) : k === 0 ? goldForPiece : 0;
@@ -256,8 +259,24 @@ frappe.pages["bag-split"].on_page_load = function (wrapper) {
 		const left = Math.round((productGross - put) * 1000) / 1000;
 		// The gold line said the same thing twice — "remaining" and "left in bag"
 		// are one number — so the gross picture is all that is left, and it leads.
+		// what is still to be weighed, and what is left for it — the number the
+		// operator actually needs while the pieces are on the scale
+		const blanks = [];
+		for (let i = 0; i < d.n; i++) if (!(flt(state.gross[i]) > 0)) blanks.push(i + 1);
 		let txt = `Product gross: <b>${productGross.toFixed(3)}</b> g  ·  put in pieces: <b>${put.toFixed(3)}</b> g  ·  left in bag: <b>${left.toFixed(3)}</b> g`;
-		if (t.over) txt += ` · <span style="color:#b00020">too much ${frappe.utils.escape_html(t.over)}</span>`;
+		if (left < -0.0005) {
+			txt += ` · <span style="color:#b00020">${__("that is {0} g more than the bag holds — lower a piece",
+				[Math.abs(left).toFixed(3)])}</span>`;
+		} else if (blanks.length) {
+			// the operator types GROSS, so the figure offered has to be gross: the
+			// gold still unplaced PLUS the stones already earmarked for those pieces
+			const blankStones = blanks.reduce((a, n1) => a + stoneGrams(n1 - 1), 0);
+			const grossLeft = Math.round((left + blankStones) * 1000) / 1000;
+			txt += ` · <span style="color:#8a5a00">${__("{0} piece(s) still to weigh — {1} g gross between them",
+				[blanks.length, grossLeft.toFixed(3)])}</span>`;
+		} else if (left > 0.0005) {
+			txt += ` · <span style="color:#8a5a00">${__("{0} g not in any piece", [left.toFixed(3)])}</span>`;
+		}
 		$rem.html(txt);
 		$(page.main).find(".bs-splitbtn").prop("disabled", !ok).css("opacity", ok ? 1 : 0.5);
 		// offer "Split remaining" when only a tiny sliver of gold is left (<= 0.010 g)
