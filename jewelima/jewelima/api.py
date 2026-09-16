@@ -19948,6 +19948,12 @@ def get_hall_preps():
 		r["owner"] = owner
 		r["owner_label"] = _user_label(owner)
 		r["can_manage"] = bool(set(frappe.get_roles()) & HALL_OVERRIDE_ROLES) or owner == frappe.session.user
+		cuts = frappe.get_all("Hallmarking Cut Piece", filters={"parent": r.name},
+			fields=["item", "qty", "weight", "remarks"], order_by="idx")
+		r["cuts"] = [{"item": c.item, "qty": cint(c.qty) or 1, "weight": flt(c.weight),
+			"remarks": c.remarks or ""} for c in cuts]
+		r["cut_weight"] = round(sum(flt(c.weight) for c in cuts), 3)
+		r["cut_qty"] = sum(cint(c.qty) or 1 for c in cuts)
 		# what the centre is actually being handed: fine gold and stones, off the
 		# pieces' own frozen materials rather than the plan
 		pure = stones = 0.0
@@ -20203,6 +20209,47 @@ def hall_prep_cancel(name):
 	return {"name": name}
 
 
+# Cut pieces: the small samples a centre cuts and assays. They are NOT order
+# bags — no barcode, no card — just so many grams of metal that leave the floor
+# with the packet. Their weight comes out of Production, since that is where the
+# scrap and the offcuts live.
+CUT_PIECE_SOURCE = "Production"
+
+
+@frappe.whitelist()
+def get_hall_cut_pieces(name):
+	"""What cut pieces this batch is carrying."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	return {"name": name, "rows": [{"item": r.item, "qty": cint(r.qty) or 1,
+		"weight": flt(r.weight), "remarks": r.remarks or ""} for r in (d.cut_pieces or [])],
+		"source": CUT_PIECE_SOURCE}
+
+
+@frappe.whitelist()
+def set_hall_cut_pieces(name, rows):
+	"""Replace the batch's cut pieces. Only while it is still Prepared: once the
+	packet has gone, what went in it is history."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — cut pieces go in before it is sent.").format(name, d.status))
+	_require_hall_owner(d, frappe._("change"))
+	rows = frappe.parse_json(rows) if isinstance(rows, str) else (rows or [])
+	d.set("cut_pieces", [])
+	for r in rows:
+		item, wt = r.get("item"), flt(r.get("weight"))
+		if not item or not frappe.db.exists("Item", item):
+			frappe.throw(frappe._("{0} is not an item.").format(item or "?"))
+		if frappe.db.get_value("Item", item, "stone_type"):
+			frappe.throw(frappe._("{0} is a stone — a cut piece is metal.").format(item))
+		if wt <= 0:
+			frappe.throw(frappe._("Give {0} a weight.").format(item))
+		d.append("cut_pieces", {"item": item, "qty": max(cint(r.get("qty")), 1),
+			"weight": wt, "remarks": (r.get("remarks") or "").strip() or None})
+	d.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_hall_cut_pieces(name)
+
+
 @frappe.whitelist()
 def send_hall_prep(name, center=None):
 	"""The SEND: one stock move Finished Goods -> At Hallmarking for everything the
@@ -20231,6 +20278,19 @@ def send_hall_prep(name, center=None):
 		for it, q in mats.items():
 			totals[it] = totals.get(it, 0) + q
 	se = _stock_move_many(totals, _wh("Finished Goods"), _wh(HALLMARKING_WAREHOUSE))
+	# the cut pieces travel with the packet, but they were never in Finished
+	# Goods — they come off the floor, so they move on their own entry
+	cuts = {}
+	for r in (d.cut_pieces or []):
+		cuts[r.item] = cuts.get(r.item, 0) + flt(r.weight)
+	if cuts:
+		src = _wh(CUT_PIECE_SOURCE)
+		for item, qty in cuts.items():
+			have = flt(frappe.db.get_value("Bin", {"item_code": item, "warehouse": src}, "actual_qty"))
+			if qty > have + 0.0005:
+				frappe.throw(frappe._("Only {0} g of {1} in {2} — the cut pieces need {3} g.").format(
+					round(have, 3), item, CUT_PIECE_SOURCE, round(qty, 3)))
+		_stock_move_many(cuts, src, _wh(HALLMARKING_WAREHOUSE))
 	d.stock_entry = se
 	d.status = "Sent"
 	d.sent_on = frappe.utils.today()

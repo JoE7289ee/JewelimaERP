@@ -15,7 +15,9 @@
   "stock_entry",
   "remarks",
   "sec_items",
-  "items"
+  "items",
+  "sec_cuts",
+  "cut_pieces"
  ],
  "fields": [
   {
@@ -84,6 +86,18 @@
    "fieldtype": "Table",
    "label": "Pieces",
    "options": "Hallmarking Item"
+  },
+  {
+   "fieldname": "sec_cuts",
+   "fieldtype": "Section Break",
+   "label": "Cut pieces"
+  },
+  {
+   "fieldname": "cut_pieces",
+   "fieldtype": "Table",
+   "options": "Hallmarking Cut Piece",
+   "label": "Cut pieces",
+   "description": "Sent with the packet for assay. Their weight leaves Production when the batch goes."
   }
  ],
  "index_web_pages_for_search": 1,

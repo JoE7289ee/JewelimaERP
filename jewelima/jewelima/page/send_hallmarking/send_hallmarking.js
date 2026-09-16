@@ -34,6 +34,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.sh-sub input{flex:1;min-width:0;border:1px solid var(--border-color);border-radius:6px;
 			padding:3px 8px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
 		.sh-sub input.saved{border-color:#2e7d32;}
+		.sh-cuts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;margin:8px 0 2px;}
+		.sh-cuts .sh-nocut{color:var(--text-muted);}
+		.sh-cuts .sh-cuttot{font-weight:700;}
 		.sh-card .nm{font-size:17px;font-weight:800;}
 		.sh-bk{display:inline-block;border-radius:9px;padding:0 8px;font-size:10.5px;font-weight:700;
 			background:var(--control-bg);color:var(--text-muted);margin-right:4px;}
@@ -87,6 +90,12 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 
 	`);
 	const root = $(page.main);
+	// the karat golds a cut piece is made of — the list the dialog suggests from
+	let CUT_ITEMS = [];
+	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Item",
+		filters: { stone_type: ["in", ["", null]], disabled: 0, item_group: ["like", "%GOLD%"] },
+		fields: ["name"], order_by: "name", limit_page_length: 40 }, freeze: false })
+		.then((r) => { CUT_ITEMS = (r.message || []).map((x) => x.name); });
 
 	function load() {
 		frappe.call({ method: API + ".get_hall_preps" }).then((r) => {
@@ -114,6 +123,14 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 							<div class="p">${t.pieces}<span> ${__("pc")}</span></div>
 							<div class="w">${flt(t.gross).toFixed(3)} g${
 								flt(t.dmd_ct) ? " · " + flt(t.dmd_ct).toFixed(3) + " ct" : ""}</div></div>`).join("")}</div>` : ""}
+					<div class="sh-cuts">${(p.cuts || []).length
+						? `<b>${__("Cut pieces")}</b> · ${(p.cuts || []).map((c) =>
+							`${esc(c.item)} ${c.qty} no ${flt(c.weight).toFixed(3)} g`).join(" · ")}
+							<span class="sh-cuttot">${__("total")} ${flt(p.cut_weight).toFixed(3)} g</span>`
+						: `<span class="sh-nocut">${__("no cut pieces")}</span>`}
+						<button class="btn btn-xs btn-default sh-cut">${(p.cuts || []).length
+							? __("Edit") : __("Add cut piece")}</button>
+					</div>
 					<div class="sh-sub">
 						<label>${__("Submission no")}</label>
 						<input class="sh-subno" value="${esc(p.submission_no || "")}"
@@ -145,6 +162,74 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	// design type. Straight to the printer through a hidden iframe the way the
 	// barcode labels go — a downloaded PDF means somebody has to find it in
 	// Downloads before any paper comes out. A6 landscape rides in the @page rule.
+	// Cut pieces: samples that travel with the packet for assay. They are not
+	// order bags — no barcode, no card — so they are typed here, and their weight
+	// leaves Production when the batch goes.
+	root.on("click", ".sh-cut", function (e) {
+		e.stopPropagation();
+		const nm = $(this).closest(".sh-card").data("name");
+		frappe.call({ method: API + ".get_hall_cut_pieces", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			const rows = (m.rows || []).slice();
+			const d = new frappe.ui.Dialog({
+				title: __("Cut pieces on {0}", [nm]),
+				size: "large",
+				fields: [{ fieldname: "grid", fieldtype: "HTML" }],
+				primary_action_label: __("Save"),
+				primary_action() {
+					read();
+					d.hide();
+					frappe.call({ method: API + ".set_hall_cut_pieces",
+						args: { name: nm, rows: JSON.stringify(rows.filter((x) => x.item && flt(x.weight) > 0)) } })
+						.then(() => {
+							frappe.show_alert({ message: __("Cut pieces saved."), indicator: "green" }, 4);
+							load();
+						});
+				},
+			});
+			const draw = () => {
+				const body = rows.map((x, i) => `
+					<tr data-i="${i}">
+						<td style="padding:3px 6px;"><input class="form-control input-xs cut-item" list="cut-items"
+							value="${esc(x.item || "")}" placeholder="${__("18KYG")}"></td>
+						<td style="padding:3px 6px;"><input type="number" min="1" step="1"
+							class="form-control input-xs cut-qty" value="${cint(x.qty) || 1}"></td>
+						<td style="padding:3px 6px;"><input type="number" min="0" step="0.001"
+							class="form-control input-xs cut-wt" value="${x.weight || ""}"></td>
+						<td style="padding:3px 6px;"><input class="form-control input-xs cut-rm"
+							value="${esc(x.remarks || "")}" placeholder="${__("optional")}"></td>
+						<td style="padding:3px 6px;"><span class="cut-x" style="cursor:pointer;color:#b02a2a;font-weight:700;">&times;</span></td>
+					</tr>`).join("");
+				d.get_field("grid").$wrapper.html(`
+					<div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">${
+						__("These leave {0} when the batch is sent, and are checked against what is in stock there.", [m.source || "Production"])}</div>
+					<table style="width:100%;font-size:12.5px;">
+						<thead><tr>${[__("Item"), __("Qty"), __("Weight (g)"), __("Remarks"), ""].map((h) =>
+							`<th style="text-align:left;padding:2px 6px;font-size:10px;text-transform:uppercase;
+								letter-spacing:.05em;color:var(--text-muted);">${h}</th>`).join("")}</tr></thead>
+						<tbody>${body || `<tr><td colspan="5" style="padding:10px;color:var(--text-muted);">${
+							__("Nothing yet — add a line.")}</td></tr>`}</tbody>
+					</table>
+					<datalist id="cut-items">${(CUT_ITEMS || []).map((i) => `<option value="${esc(i)}">`).join("")}</datalist>
+					<button class="btn btn-xs btn-default cut-add" style="margin-top:8px;">+ ${__("line")}</button>`);
+			};
+			const read = () => {
+				d.get_field("grid").$wrapper.find("tbody tr[data-i]").each(function () {
+					const i = cint($(this).data("i"));
+					rows[i] = { item: ($(this).find(".cut-item").val() || "").trim().toUpperCase(),
+						qty: cint($(this).find(".cut-qty").val()) || 1,
+						weight: flt($(this).find(".cut-wt").val()),
+						remarks: ($(this).find(".cut-rm").val() || "").trim() };
+				});
+			};
+			d.$wrapper.on("click", ".cut-add", () => { read(); rows.push({ item: "", qty: 1, weight: "" }); draw(); });
+			d.$wrapper.on("click", ".cut-x", function () { read(); rows.splice(cint($(this).closest("tr").data("i")), 1); draw(); });
+			draw();
+			if (!rows.length) { rows.push({ item: "", qty: 1, weight: "" }); draw(); }
+			d.show();
+		});
+	});
+
 	// the centre's own number for the packet — saved where it is typed
 	root.on("change", ".sh-subno", function () {
 		const nm = $(this).closest(".sh-card").data("name");
