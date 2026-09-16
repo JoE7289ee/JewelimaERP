@@ -403,7 +403,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-body::-webkit-scrollbar { width: 0; height: 0; }
 .jw-body { flex: 1; overflow-y: auto; scrollbar-width: none; padding-top: 2px; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
 
-.jw-foot { margin-top: auto; text-align: center; font-size: 11px; color: rgba(250, 247, 239, .42); }
+.jw-foot { margin-top: auto; text-align: center; padding-top: 6px;
+	font-family: "Snell Roundhand", "Segoe Script", "Brush Script MT", "Apple Chancery", cursive;
+	font-style: italic; font-size: 19px; letter-spacing: .02em; color: var(--jw-champagne); opacity: .82; }
 .jw-foot a { color: rgba(250, 247, 239, .62); text-decoration: underline; }
 
 /* a phone app on a monitor looks silly — keep it to a phone's width */
@@ -442,7 +444,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 
 	<div class="jw-grid" id="jw-grid"></div>
 
-	<div class="jw-foot">build {{ jw_build }}</div>
+	<div class="jw-foot" onclick="jwStamp(this)" data-build="{{ jw_build }}">Crafting For You</div>
 </div>
 
 <div class="jw-screen" id="jw-screen">
@@ -1468,6 +1470,16 @@ function jwCamStop() {
 }
 
 // logout is POST-only and CSRF-guarded — a plain link gets "no permission"
+// the build stamp still has to be gettable from a home-screen window with no
+// address bar — a tap on the tagline says it, then the tagline comes back
+function jwStamp(el) {
+	if (el.dataset.showing) return;
+	el.dataset.showing = "1";
+	const was = el.textContent;
+	el.textContent = "build " + el.dataset.build;
+	setTimeout(() => { el.textContent = was; delete el.dataset.showing; }, 2500);
+}
+
 function jwLogout() {
 	jwCamStop();
 	fetch("/api/method/logout", {
