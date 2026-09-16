@@ -24612,7 +24612,7 @@ def get_party_stock_options():
 
 @frappe.whitelist()
 def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
-		has_huid=None, certified=None, search=None, limit=300):
+		has_huid=None, certified=None, search=None, limit=100):
 	"""Every finished piece In Stock — the list you read when someone asks what we
 	have, and the numbers that answer "how much".
 
@@ -24625,7 +24625,7 @@ def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
 			"Jewelima Stock", "JW Info"} & set(frappe.get_roles()):
 		frappe.throw(frappe._("Finished Goods is for the desk."), frappe.PermissionError)
 
-	limit = max(1, min(cint(limit) or 300, 1000))
+	limit = max(1, min(cint(limit) or 100, 5000))
 	# every filter as a WHERE fragment, so the row page, the totals and the
 	# breakdowns all describe exactly the same set
 	where = ["b.is_finished = 1", "b.stock_status = 'In Stock'"]
@@ -24741,6 +24741,11 @@ def get_finished_goods(bucket=None, held_by=None, design_type=None, karat=None,
 		"grand": {"pieces": cint(grand.n), "gross": round(flt(grand.gross), 3)},
 		"buckets": [{"bucket": b.bucket or "", "pieces": cint(b.n),
 			"gross": round(flt(b.gross), 3)} for b in buckets],
+		# who holds what, over EVERYTHING that matches — the page shows a share, and
+		# a share of one screenful of rows would be a different, misleading number
+		"by_holder": [{"holder": h.holder or "", "pieces": cint(h.n)} for h in frappe.db.sql(
+			"""SELECT IFNULL(b.held_by, '') holder, COUNT(*) n {0} WHERE {1}
+			GROUP BY IFNULL(b.held_by, '') ORDER BY n DESC""".format(FROM, W), vals, as_dict=True)],
 		"holders": frappe.db.sql_list("""SELECT DISTINCT b.held_by FROM `tabOrder Bag` b
 			WHERE b.is_finished = 1 AND b.stock_status = 'In Stock'
 			  AND IFNULL(b.held_by, '') != '' ORDER BY b.held_by"""),

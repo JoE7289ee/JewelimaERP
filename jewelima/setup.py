@@ -300,8 +300,8 @@ JEWELIMA_DELIVERY_PAGES = [
 	# answer ("when did that go out", "who re-filed this") land on delivery
 	"hallmarking-records", "certification-records", "product-transfer-records",
 	"holder-transfer-records", "bucket-transfer-records", "sales-history",
-	# Barcode: the roll printer and the sheet printer
-	"print-barcode", "multi-barcode",
+	# Barcode: Multi Print, the label roll printer
+	"multi-barcode",
 	# Certification — away to the lab and back again
 	"certify", "send-certifications", "certification-out", "confirm-certifications", "stone-changes",
 	"remove-certification",
@@ -373,7 +373,7 @@ JEWELIMA_EXTRACTION_ROLE = "JW EXTRACTION"
 # pieces, Make Products turns finished pieces into stock. Its four endpoints
 # carry no role guard of their own, so holding the page is the whole grant.
 JEWELIMA_EXTRACTION_PAGES = ["ws-bag-extraction", "bag-split", "workstations",
-	"make-products", "print-barcode", "multi-barcode",
+	"make-products", "multi-barcode",
 	# rework is make-products run backwards: a finished piece comes off the shelf
 	# and goes back to the floor. Same desk, same pieces, so the same role.
 	"rework",
@@ -511,7 +511,7 @@ JEWELIMA_REPAIR_DOCTYPES = ["Repair Order", "Repair Order Item", "Repair Party",
 # the sheet's polish IF-formula, as editable master rows
 # Pages the app no longer ships — migrate does not remove deleted Page docs,
 # so stale rows would keep serving a dead route on every site.
-RETIRED_PAGES = ["ws-wax-cleaning", "design-transfer",
+RETIRED_PAGES = ["print-barcode", "ws-wax-cleaning", "design-transfer",
 	# the repair module was rebuilt from scratch (2026-08-31) — these four and
 	# their doctypes are gone from the app, so their Page docs must go too
 	"repair-intake", "repair-desk", "repair-bills", "repair-setup",
