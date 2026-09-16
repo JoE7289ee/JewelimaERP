@@ -12067,7 +12067,8 @@ def get_jw_gold():
 			return "Standard gold"
 		return "Other gold"
 
-	buckets, kinds, wh_rows, loss = {}, {}, {}, {"weight": 0.0, "pure": 0.0}
+	buckets, kinds, wh_rows, loss_rows = {}, {}, {}, {}
+	loss = {"weight": 0.0, "pure": 0.0}
 	for b in frappe.get_all("Bin", filters={"actual_qty": [">", 0]},
 			fields=["item_code", "warehouse", "actual_qty"], limit_page_length=0):
 		m = frappe.db.get_value("Item", b.item_code,
@@ -12081,6 +12082,12 @@ def get_jw_gold():
 		if frappe.db.get_value("Warehouse", b.warehouse, "custom_is_loss"):
 			loss["weight"] += qty
 			loss["pure"] += pure
+			# a loss bucket is named for the bench that made it — "Filing -LOSS" —
+			# and WHICH bench is the whole question anybody asks of a loss figure
+			lp = loss_rows.setdefault((b.warehouse or "").rsplit(" - ", 1)[0].replace("-LOSS", "").strip(),
+				{"weight": 0.0, "pure": 0.0})
+			lp["weight"] += qty
+			lp["pure"] += pure
 			continue
 		label = bucket_of.get(b.warehouse) or "In Warehouse"
 		e = buckets.setdefault(label, {"weight": 0.0, "pure": 0.0})
@@ -12128,7 +12135,12 @@ def get_jw_gold():
 		"warehouse": {"kinds": kind_rows,
 			"places": sorted(({"place": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3)}
 				for k, v in wh_rows.items()), key=lambda x: -x["pure"])},
-		"loss": {"weight": round(loss["weight"], 3), "pure": round(loss["pure"], 3)},
+		"loss": {
+			"weight": round(loss["weight"], 3), "pure": round(loss["pure"], 3),
+			"value": round(loss["pure"] * rate, 0) if rate else None,
+			"places": sorted(({"place": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3)}
+				for k, v in loss_rows.items()), key=lambda x: -x["pure"]),
+		},
 		"at": frappe.utils.now(),
 	}
 
