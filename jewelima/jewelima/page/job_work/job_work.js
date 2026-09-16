@@ -574,6 +574,11 @@ frappe.pages["job-work"].on_page_load = function (wrapper) {
 	function clearBatch() {
 		state.rows = [];
 		state.scrub = false;
+		// "Transfer right after" belongs to the batch that just went, not to the
+		// next one — a tick left standing sends the following batch somewhere
+		// nobody asked for
+		$(page.main).find(".jw-tpx-on").prop("checked", false);
+		$(page.main).find(".jw-tpx-to").hide().val("");
 		state.location = null;
 		state.batchEmp = null;
 		state.batchEmpName = null;

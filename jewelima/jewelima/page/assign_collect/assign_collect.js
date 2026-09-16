@@ -390,6 +390,9 @@ frappe.pages["assign-collect"].on_page_load = function (wrapper) {
 	function clearBatch() {
 		state.rows = [];
 		state.location = null;
+		// the tick belongs to the batch that just went, not to the next one
+		$(page.main).find(".ac-tpx-on").prop("checked", false);
+		$(page.main).find(".ac-tpx-to").hide().val("");
 		state.scan.set_value("");
 		setMsg("");
 		updateLoc();
