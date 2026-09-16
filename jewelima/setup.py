@@ -299,6 +299,12 @@ JEWELIMA_CAM_TO = ("WAXING", "CAD")
 JEWELIMA_PARCEL_ROLE = "JW Parcel"
 JEWELIMA_PARCEL_PAGES = ["parcel"]
 
+# JW Phone — the key to the phone app at /jw, and nothing else. It grants no
+# page and no doctype: it says only that this person may carry the floor in
+# their pocket. What they can DO there is still their other roles' business, so
+# a filer with JW Phone gets the phone app with a filer's powers in it.
+JEWELIMA_PHONE_ROLE = "JW Phone"
+
 JEWELIMA_DELIVERY_ROLE = "JW Delivery"
 JEWELIMA_DELIVERY_PAGES = [
 	# Delivery
@@ -732,7 +738,7 @@ def setup_roles():
 			JEWELIMA_INFO_ROLE, JEWELIMA_REPAIR_ROLE, JEWELIMA_STOCK_ROLE, "Jewelima Transfer Plus",
 			"JW Party Admin", "JW Selection", JEWELIMA_DATA_ADMIN_ROLE, "JW Dye Admin",
 			"JW Manager", "ESMITH", JEWELIMA_STOCK_ADMIN_ROLE,
-			JEWELIMA_STONE_ADMIN_ROLE) + JEWELIMA_TRANSFER_ROLES:
+			JEWELIMA_STONE_ADMIN_ROLE, JEWELIMA_PHONE_ROLE) + JEWELIMA_TRANSFER_ROLES:
 		ensure_role(name)
 	# belt and braces: the shipped page fixtures are the real source of truth for
 	# which roles must exist — anything they name and we somehow missed is created
@@ -1101,6 +1107,11 @@ def setup_roles():
 			pg = frappe.get_doc("Page", page)
 			pg.set("roles", [r for r in pg.roles if r.role != JEWELIMA_COSTING_ROLE])
 			pg.save(ignore_permissions=True)
+
+	# ---- JW Phone: the door to /jw ----------------------------------------------
+	# deliberately empty of grants. The phone app calls the desk's own methods, so
+	# every rule a user meets there is the one they already have.
+	ensure_role(JEWELIMA_PHONE_ROLE)
 
 	# ---- JW Parcel: the packing counter, one page and nothing else ---------------
 	ensure_role(JEWELIMA_PARCEL_ROLE)

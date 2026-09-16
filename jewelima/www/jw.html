@@ -52,6 +52,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top img { width: 40px; height: 40px; border-radius: 10px; }
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
+/* the door, when the key is missing */
+.jw-shut { align-items: center; justify-content: center; text-align: center; gap: 10px; }
+.jw-shut img { width: 76px; height: 76px; border-radius: 18px; }
+.jw-shut .t { font-size: 20px; font-weight: 800; letter-spacing: .1em; }
+.jw-shut p { margin: 0; font-size: 14px; color: rgba(250, 247, 239, .78); max-width: 300px; }
+.jw-shut p.w { font-size: 12.5px; color: rgba(250, 247, 239, .5); }
+.jw-shut .b { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.jw-shut .jw-go { text-decoration: none; border-radius: 13px; padding: 12px 26px; font-size: 14px; font-weight: 800;
+	background: linear-gradient(180deg, var(--jw-champagne), var(--jw-gold)); color: #2B2109; }
+.jw-shut .jw-alt { font-size: 12.5px; color: rgba(250, 247, 239, .55); }
+
 .jw-toast {
 	position: fixed; left: 50%; transform: translateX(-50%); z-index: 80;
 	bottom: calc(26px + env(safe-area-inset-bottom));
@@ -167,6 +178,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 {% endblock %}
 
 {% block page_content %}
+{% if jw_denied %}
+<div class="jw-app jw-shut">
+	<img src="/assets/jewelima/images/brand/logo-square.svg" alt="">
+	<div class="t">JEWELIMA</div>
+	<p>The phone app is not open to this account yet.</p>
+	<p class="w">Signed in as <b>{{ jw_full_name }}</b>. Ask a manager for the <b>JW Phone</b> role.</p>
+	<div class="b">
+		<a class="jw-go" href="/app?desk=1">Open the full desk</a>
+		<a class="jw-alt" href="/jw-login">Sign in as somebody else</a>
+	</div>
+</div>
+{% else %}
 <div class="jw-app">
 	<div class="jw-top">
 		<img src="/assets/jewelima/images/brand/logo-square.svg" alt="">
@@ -455,4 +478,5 @@ function jwRefresh() {
 // landing here means the phone app is wanted again — forget any "keep the desk"
 try { localStorage.removeItem("jw-force-desk"); } catch (e) { /* nothing to undo */ }
 </script>
+{% endif %}
 {% endblock %}
