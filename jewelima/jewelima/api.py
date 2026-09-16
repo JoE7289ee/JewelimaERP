@@ -12845,9 +12845,9 @@ def get_jw_purchases(limit=20):
 	the voucher type is the paperwork it came on (SIN, BILL, …) — so this reads
 	those rather than guessing at stock movements.
 
-	Gold is shown as PURE: a purchase is billed on weight and touch, and what
-	the house actually gained is the fine gold inside it. Stones stay in carats,
-	in the buckets the floor counts in."""
+	Gold is shown as PURE: the line carries the metal's PURITY, and the fine
+	gold inside a purchase is what the house actually gained. Stones stay in
+	carats, in the buckets the floor counts in."""
 	frappe.only_for(["JW Phone", "System Manager"])
 	BUCKET = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs",
 		"Cubic Zirconia": "cz", "CVD": "cvd", "Swarovski": "sw",
@@ -12878,13 +12878,13 @@ def get_jw_purchases(limit=20):
 				lines.append({"item": it.item, "qty": round(w, 3), "unit": "ct",
 					"pcs": cint(it.count), "stone": 1, "code": code})
 			else:
-				# the line's own touch is what was billed; the item's is the fallback
-				touch = flt(it.purity) or flt(m.get("purity_percentage"))
-				p = w * touch / 100.0
+				# the line's own purity is what was bought at; the item's is the fallback
+				purity = flt(it.purity) or flt(m.get("purity_percentage"))
+				p = w * purity / 100.0
 				pure += p
 				gross += w
 				lines.append({"item": it.item, "qty": round(w, 3), "unit": "g",
-					"pure": round(p, 3), "touch": round(touch, 2), "stone": 0})
+					"pure": round(p, 3), "touch": round(purity, 2), "stone": 0})
 		for c, w in buckets.items():
 			tot["buckets"][c] = flt(tot["buckets"].get(c)) + w
 		tot["pure"] += pure
