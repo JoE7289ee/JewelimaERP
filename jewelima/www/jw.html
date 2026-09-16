@@ -33,6 +33,7 @@ main, .main-section, #body, .page_content, .container, .page-content-wrapper {
 	--jw-champagne: #E6C778;
 	--jw-ivory: #FAF7EF;
 	--jw-mist: #EDF4EF;
+	--jw-dim: #E3D3A0;          /* secondary text — grey vanished on the green */
 	--jw-ink: #1F2328;
 	--jw-muted: #6B6F76;
 }
@@ -63,7 +64,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r { font-size: 27px; font-weight: 800; color: var(--jw-champagne); letter-spacing: -.01em;
 	font-variant-numeric: tabular-nums; margin: 2px 0 1px; }
 .jw-hero .r small { font-size: 12px; font-weight: 700; color: rgba(250, 247, 239, .5); letter-spacing: .02em; }
-.jw-hero .of { font-size: 11.5px; color: rgba(250, 247, 239, .42); }
+.jw-hero .of { font-size: 11.5px; color: var(--jw-dim); opacity: .9; }
 .jw-k { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-top: 11px; }
 .jw-k div { background: rgba(250, 247, 239, .12); border-radius: 10px; padding: 7px 2px; text-align: center;
 	min-width: 0; }
@@ -73,7 +74,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv { font-size: 12.5px; font-weight: 800; margin-left: 8px; letter-spacing: .02em; }
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
-.jw-derived { font-size: 10.5px; color: rgba(250, 247, 239, .32); margin-top: 7px; }
+.jw-derived { font-size: 10.5px; color: var(--jw-dim); opacity: .7; margin-top: 7px; }
 /* price chart */
 .jw-find { width: 100%; font-size: 16px; padding: 11px 14px; border-radius: 12px; margin-bottom: 12px;
 	border: 1px solid rgba(250, 247, 239, .18); background: rgba(250, 247, 239, .07);
@@ -83,21 +84,37 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-pick { display: flex; align-items: baseline; gap: 10px; padding: 13px 4px;
 	border-bottom: 1px solid rgba(250, 247, 239, .09); }
 .jw-pick .nm { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: .02em; }
-.jw-pick .dt { font-size: 11px; color: rgba(250, 247, 239, .42); }
+.jw-pick .dt { font-size: 11px; color: var(--jw-dim); opacity: .85; }
 .jw-pick .go { color: rgba(250, 247, 239, .35); font-size: 15px; }
 .jw-csec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
-	color: rgba(250, 247, 239, .5); margin: 20px 0 8px; }
+	color: var(--jw-dim); margin: 20px 0 8px; }
 .jw-rt { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px; padding: 2px 13px; }
 .jw-rt .rr { display: flex; align-items: baseline; gap: 10px; padding: 10px 0;
 	border-bottom: 1px solid rgba(250, 247, 239, .08); }
 .jw-rt .rr:last-child { border-bottom: 0; }
 .jw-rt .rr .l { flex: 1; font-size: 13px; font-weight: 600; }
-.jw-rt .rr .b { font-size: 10.5px; color: rgba(250, 247, 239, .4); }
+.jw-rt .rr .b { font-size: 10.5px; color: var(--jw-dim); opacity: .85; }
 .jw-rt .rr .v { font-size: 14.5px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
 .jw-chd { border: 1px solid rgba(212, 175, 55, .3); border-radius: 14px; padding: 13px 15px;
 	background: rgba(212, 175, 55, .1); margin-bottom: 4px; }
 .jw-chd .nm { font-size: 19px; font-weight: 800; letter-spacing: .04em; }
-.jw-chd .mt { font-size: 11.5px; color: rgba(250, 247, 239, .5); margin-top: 2px; }
+.jw-chd .mt { font-size: 11.5px; color: var(--jw-dim); margin-top: 2px; }
+
+.jw-q { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px; margin-bottom: 9px;
+	overflow: hidden; }
+.jw-q .qh { display: flex; align-items: center; gap: 10px; padding: 13px 14px; }
+.jw-q .qh .ql { flex: 1; font-size: 14px; font-weight: 800; letter-spacing: .03em; color: var(--jw-ivory); }
+.jw-q .qh .qn { font-size: 11px; color: var(--jw-dim); }
+.jw-q .qh .qc { font-size: 12px; color: var(--jw-dim); transition: transform .18s ease; }
+.jw-q.on .qh { border-bottom: 1px solid rgba(250, 247, 239, .1); }
+.jw-q.on .qh .qc { transform: rotate(180deg); }
+.jw-q .qb { display: none; padding: 2px 14px; }
+.jw-q.on .qb { display: block; }
+.jw-q .rr { display: flex; align-items: baseline; gap: 10px; padding: 10px 0;
+	border-bottom: 1px solid rgba(250, 247, 239, .07); }
+.jw-q .rr:last-child { border-bottom: 0; }
+.jw-q .rr .l { flex: 1; font-size: 13px; font-weight: 600; }
+.jw-q .rr .v { font-size: 14.5px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
 
 /* gold stock */
 .jw-tot { border: 1px solid rgba(212, 175, 55, .35); border-radius: 16px; padding: 15px 16px;
@@ -107,34 +124,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-tot .g { font-size: 30px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums;
 	letter-spacing: -.01em; margin: 3px 0 0; }
 .jw-tot .g small { font-size: 13px; font-weight: 700; color: rgba(250, 247, 239, .55); }
-.jw-tot .gross { font-size: 12px; color: rgba(250, 247, 239, .5); margin-top: 1px; }
+.jw-tot .gross { font-size: 12px; color: var(--jw-dim); margin-top: 1px; }
 .jw-tot .val { font-size: 22px; font-weight: 800; color: var(--jw-champagne); margin-top: 11px;
 	font-variant-numeric: tabular-nums; }
-.jw-tot .rt { font-size: 11px; color: rgba(250, 247, 239, .45); margin-top: 2px; }
+.jw-tot .rt { font-size: 11px; color: var(--jw-dim); opacity: .9; margin-top: 2px; }
 
 .jw-loss { border-color: rgba(240, 154, 154, .3);
 	background: linear-gradient(180deg, rgba(240, 154, 154, .12), rgba(250, 247, 239, .04));
 	margin-bottom: 11px; }
 .jw-loss .val { color: #F0AFAF; font-size: 18px; }
 .jw-gsec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
-	color: rgba(250, 247, 239, .5); margin: 20px 0 9px; }
+	color: var(--jw-dim); margin: 20px 0 9px; }
 .jw-brow { margin-bottom: 11px; }
 .jw-brow .t { display: flex; align-items: baseline; gap: 8px; }
 .jw-brow .t .l { flex: 1; font-size: 13.5px; font-weight: 700; }
 .jw-brow .t .p { font-size: 15px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
-.jw-brow .t .s { font-size: 11px; color: rgba(250, 247, 239, .45); min-width: 38px; text-align: right; }
+.jw-brow .t .s { font-size: 11px; color: var(--jw-dim); min-width: 38px; text-align: right; }
 .jw-brow .bar2 { height: 5px; border-radius: 4px; background: rgba(250, 247, 239, .1); margin-top: 5px; }
 .jw-brow .bar2 i { display: block; height: 100%; border-radius: 4px;
 	background: linear-gradient(90deg, var(--jw-champagne), var(--jw-gold)); }
-.jw-brow .sub { font-size: 11px; color: rgba(250, 247, 239, .4); margin-top: 3px; }
+.jw-brow .sub { font-size: 11px; color: var(--jw-dim); opacity: .8; margin-top: 3px; }
 .jw-split { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px; padding: 4px 13px; }
 .jw-split .sr { display: flex; align-items: baseline; gap: 10px; padding: 10px 0;
 	border-bottom: 1px solid rgba(250, 247, 239, .08); }
 .jw-split .sr:last-child { border-bottom: 0; }
 .jw-split .sr .l { flex: 1; font-size: 13px; font-weight: 600; }
 .jw-split .sr .v { font-size: 14.5px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
-.jw-split .sr .w { font-size: 11px; color: rgba(250, 247, 239, .4); font-variant-numeric: tabular-nums; }
-.jw-note { font-size: 11px; color: rgba(250, 247, 239, .38); margin-top: 10px; }
+.jw-split .sr .w { font-size: 11px; color: var(--jw-dim); opacity: .85; font-variant-numeric: tabular-nums; }
+.jw-note { font-size: 11px; color: var(--jw-dim); opacity: .75; margin-top: 10px; }
 
 /* the door, when the key is missing */
 .jw-shut { align-items: center; justify-content: center; text-align: center; gap: 10px; }
@@ -575,6 +592,9 @@ function jwChartBack() {
 
 function jwChartClose() { document.getElementById("jw-chart").classList.remove("on"); }
 
+// a quality opens to show its brackets, and shuts again
+function jwQ(el) { el.parentNode.classList.toggle("on"); }
+
 function jwChartHtml(d) {
 	const ct = (r) => `${(r.from_ct || 0).toFixed(2)} – ${r.to_ct ? r.to_ct.toFixed(2) : "∞"} ct`;
 	const table = (rows, label, value, basis) => rows.length
@@ -592,7 +612,18 @@ function jwChartHtml(d) {
 		: (d.making_rate ? `<div class="jw-rt"><div class="rr"><span class="l">Making</span>
 			<span class="b">per gram${d.making_min_grams ? " · min " + d.making_min_grams + " g" : ""}</span>
 			<span class="v">${whole(d.making_rate)}</span></div></div>` : "");
-	const dmd = table(d.diamond_rates || [], (r) => ct(r), (r) => r.rate, (r) => r.quality || "");
+	// diamond is read the way it is quoted: pick the quality, then the bracket
+	const byQ = {};
+	(d.diamond_rates || []).forEach((r) => (byQ[r.quality || "—"] = byQ[r.quality || "—"] || []).push(r));
+	const dmd = Object.keys(byQ).length ? Object.keys(byQ).map((q, i) => `<div class="jw-q">
+			<div class="qh" onclick="jwQ(this)">
+				<span class="ql">${esc(q)}</span>
+				<span class="qn">${byQ[q].length} bracket${byQ[q].length > 1 ? "s" : ""}</span>
+				<span class="qc">&#9662;</span>
+			</div>
+			<div class="qb">${byQ[q].map((r) => `<div class="rr">
+				<span class="l">${ct(r)}</span><span class="v">${whole(r.rate)}</span></div>`).join("")}</div>
+		</div>`).join("") : "";
 	const ps = table(d.precious_stone_rates || [], (r) => esc(r.stone),
 		(r) => r.rate, (r) => (r.from_ct || r.to_ct) ? ct(r) : "per ct");
 	const stones = ["cs", "cz", "cvd", "sw"].map((k) => block(k.toUpperCase(),
