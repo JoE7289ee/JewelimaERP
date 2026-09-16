@@ -20229,6 +20229,24 @@ CUT_PIECE_SOURCE = "Production"
 
 
 @frappe.whitelist()
+def set_hall_center(name, center=""):
+	"""Settle the centre on the card, before the packet is anywhere near going.
+
+	send_hall_prep still asks for one, because that is the moment it has to be
+	right — but a batch prepped for a named centre should say so all along."""
+	d = frappe.get_doc("Hallmarking Batch", name)
+	if d.status != "Prepared":
+		frappe.throw(frappe._("{0} is {1} — the centre is settled before it is sent.").format(name, d.status))
+	_require_hall_owner(d, frappe._("change"))
+	center = (center or "").strip()
+	if center and not frappe.db.exists("Hallmarking Center", center):
+		frappe.throw(frappe._("{0} is not a hallmarking centre.").format(center))
+	frappe.db.set_value("Hallmarking Batch", name, "center", center or None)
+	frappe.db.commit()
+	return {"name": name, "center": center}
+
+
+@frappe.whitelist()
 def get_hall_cut_pieces(name):
 	"""What cut pieces this batch is carrying."""
 	d = frappe.get_doc("Hallmarking Batch", name)

@@ -37,6 +37,9 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		.sh-cuts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;margin:8px 0 2px;}
 		.sh-cuts .sh-nocut{color:var(--text-muted);}
 		.sh-cuts .sh-cuttot{font-weight:700;}
+		.sh-sub select{flex:1;min-width:0;border:1px solid var(--border-color);border-radius:6px;
+			padding:3px 8px;font-size:12.5px;background:var(--fg-color);color:var(--text-color);height:28px;}
+		.sh-sub select.saved{border-color:#2e7d32;}
 		.sh-incl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#8a6508;}
 		[data-theme="dark"] .sh-incl{color:#e8c66b;}
 		.sh-ty.cut{border-style:dashed;}
@@ -95,6 +98,8 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	const root = $(page.main);
 	// the karat golds a cut piece is made of — the list the dialog suggests from
 	let CUT_ITEMS = [];
+	// the centres, for the picker on every card
+	let CENTERS = [];
 	frappe.call({ method: "frappe.client.get_list", args: { doctype: "Item",
 		filters: { stone_type: ["in", ["", null]], disabled: 0, item_group: ["like", "%GOLD%"] },
 		fields: ["name"], order_by: "name", limit_page_length: 40 }, freeze: false })
@@ -109,6 +114,14 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 					<div class="nm">${esc(p.name)}</div>
 					<div class="meta">${p.center ? esc(p.center)
 						: `<span class="sh-nocenter">${__("centre not set")}</span>`} · ${esc(p.prepared_on || "")}</div>
+					<div class="sh-sub sh-centre">
+						<label>${__("Centre")}</label>
+						<select class="sh-centreset">
+							<option value="">${__("— not set —")}</option>
+							${(CENTERS || []).map((c) => `<option value="${esc(c.name)}" ${
+								c.name === p.center ? "selected" : ""}>${esc(c.center_name || c.name)}</option>`).join("")}
+						</select>
+					</div>
 					<div class="meta">${__("prepped by")} <b>${esc(p.owner_label || "")}</b>${
 						p.can_manage ? "" : ` <span class="sh-lock">${__("not yours")}</span>`}</div>
 					<div class="sh-nums">
@@ -169,6 +182,18 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 	// design type. Straight to the printer through a hidden iframe the way the
 	// barcode labels go — a downloaded PDF means somebody has to find it in
 	// Downloads before any paper comes out. A6 landscape rides in the @page rule.
+	// the centre, settled on the card — the send dialog still asks, but a batch
+	// prepped for a named centre should say so from the start
+	root.on("change", ".sh-centreset", function () {
+		const nm = $(this).closest(".sh-card").data("name");
+		const el = this;
+		frappe.call({ method: API + ".set_hall_center", args: { name: nm, center: this.value || "" } })
+			.then(() => {
+				$(el).addClass("saved");
+				setTimeout(() => { $(el).removeClass("saved"); load(); }, 700);
+			});
+	});
+
 	// Cut pieces: samples that travel with the packet for assay. They are not
 	// order bags — no barcode, no card — so they are typed here, and their weight
 	// leaves Production when the batch goes.
@@ -317,9 +342,10 @@ frappe.pages["send-hallmarking"].on_page_load = function (wrapper) {
 		});
 	});
 
-	let CENTERS = [];
-	frappe.call({ method: API + ".get_hall_prep_context" })
-		.then((r) => (CENTERS = ((r.message || {}).centers) || []));
+	frappe.call({ method: API + ".get_hall_prep_context" }).then((r) => {
+		CENTERS = ((r.message || {}).centers) || [];
+		load();   // the cards were drawn before the centres landed
+	});
 
 	root.on("click", ".sh-send", function () {
 		const $c = $(this).closest(".sh-card");
