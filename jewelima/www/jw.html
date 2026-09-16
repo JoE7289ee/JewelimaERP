@@ -53,8 +53,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
 /* the board */
-.jw-screen .bar .tick { margin-left: auto; font-size: 11px; color: rgba(250, 247, 239, .45);
-	font-variant-numeric: tabular-nums; }
+.jw-screen .bar .jw-ref { margin-left: auto; }
+.jw-screen .bar .jw-out { margin-left: 0; }
+.jw-screen .bar .jw-scanbtn + .jw-out { margin-left: 0; }
 .jw-hero { border: 1px solid rgba(250, 247, 239, .13); background: rgba(250, 247, 239, .05);
 	border-radius: 15px; padding: 13px 15px; margin-bottom: 11px; }
 .jw-hero .n { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
@@ -275,6 +276,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="bar">
 		<button class="back" onclick="jwClose()">&#8592;</button>
 		<div class="ttl" id="jw-screen-title"></div>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
 	</div>
 	<div class="body">
 		<div class="big" id="jw-screen-icon"></div>
@@ -287,7 +289,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="bar">
 		<button class="back" onclick="jwGoldClose()">&#8592;</button>
 		<div class="ttl">Gold Stock</div>
-		<span class="tick" id="jw-goldtick"></span>
+		<button class="jw-ref" onclick="jwReread(this, jwGold)" title="Read it again">&#8635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
 	</div>
 	<div class="jw-body" id="jw-gold-body"></div>
 </div>
@@ -297,7 +300,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="bar">
 		<button class="back" onclick="jwRatesClose()">&#8592;</button>
 		<div class="ttl">Rates</div>
-		<span class="tick" id="jw-tick"></span>
+		<button class="jw-ref" onclick="jwReread(this, jwRatesLoad)" title="Read it again">&#8635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
 	</div>
 	<div class="jw-body" id="jw-rates-body"></div>
 </div>
@@ -308,6 +312,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<button class="back" onclick="jwCardClose()">&#8592;</button>
 		<div class="ttl">Card Info</div>
 		<button class="jw-scanbtn" style="margin-left:auto;" onclick="jwCam()">&#9635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
 	</div>
 	<div class="jw-body" id="jw-card-body"></div>
 </div>
@@ -494,7 +499,6 @@ function jwGold() {
 		.then((d) => {
 			if (!d || !d.totals) throw new Error("empty");
 			goldBody.innerHTML = jwGoldHtml(d);
-			document.getElementById("jw-goldtick").textContent = (d.at || "").slice(11, 16);
 		})
 		.catch(() => {
 			if (!goldBody.querySelector(".jw-tot")) {
@@ -590,7 +594,6 @@ function jwRatesLoad() {
 		.then((d) => {
 			if (!d || (!d.hero && !d.rows)) throw new Error("empty");
 			ratesBody.innerHTML = jwRatesHtml(d);
-			document.getElementById("jw-tick").textContent = (d.at || "").slice(11, 16);
 		})
 		.catch(() => {
 			if (!ratesBody.querySelector(".jw-hero")) {
@@ -704,6 +707,13 @@ if (new URLSearchParams(window.location.search).has("r")) {
 	t.textContent = "Refreshed";
 	document.body.appendChild(t);
 	setTimeout(() => t.remove(), 1600);
+}
+
+// a re-read inside a screen: the same spin as the header button, so pressing it
+// looks like something even when the numbers come back identical
+function jwReread(btn, fn) {
+	btn.classList.add("spin");
+	Promise.resolve(fn()).catch(() => {}).then(() => setTimeout(() => btn.classList.remove("spin"), 450));
 }
 
 function jwRefresh() {
