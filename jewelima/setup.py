@@ -1618,6 +1618,13 @@ def brand_the_login_page():
 		if (ws.get("app_name") or "").strip() in ("", "Frappe", "ERPNext"):
 			ws.app_name = "Jewelima Diamonds"
 			dirty = True
+		# the desk's own app icon lives in a Desktop Icon row, created when the app
+		# was installed and never touched since — it still pointed at artwork the
+		# brand change deleted, which is what drew a broken image in the sidebar
+		for row in frappe.get_all("Desktop Icon", filters={"app": "jewelima"},
+				fields=["name", "logo_url"]):
+			if (row.logo_url or "") != brand.EMBLEM_GOLD:
+				frappe.db.set_value("Desktop Icon", row.name, "logo_url", brand.EMBLEM_GOLD)
 		for field in ("app_logo", "favicon", "splash_image"):
 			cur = (ws.get(field) or "").strip()
 			# empty, or still pointing at an asset of ours that has moved on
