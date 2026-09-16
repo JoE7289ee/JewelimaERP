@@ -11985,8 +11985,13 @@ def get_board_rate_live():
 	return _board_rate_live()
 
 
-def _board_rate_live():
+def _board_rate_live(only=None):
 	"""The live board, with no role check of its own.
+
+	`only` narrows it to the feeds a caller actually needs. The phone's Rates
+	screen watches three dealer lines and never shows world spot — and spot is
+	the slowest of them by far, well over a second when its minute is up — so
+	asking for it would make every twelfth tick stutter for nothing.
 
 	Costing owns the board and guards it; the repair counter only wants today's
 	figure to quote gold at, and asking a repair clerk to hold a costing role for
@@ -11995,6 +12000,8 @@ def _board_rate_live():
 	rows = []
 	for f in BOARD_FEEDS:
 		if not f.get("live"):
+			continue
+		if only and f["key"] not in only:
 			continue
 		ck = "jw_board_feed::" + f["key"]
 		row = frappe.cache().get_value(ck)
@@ -12025,7 +12032,10 @@ def get_jw_board():
 	lock. Only the watched lines: a phone is not the place to read a whole
 	dealer board, and the desk is."""
 	frappe.only_for(["JW Phone", "System Manager"])
-	live = _board_rate_live()
+	# only the feeds the watched lines come from: the phone ticks every few
+	# seconds, and pulling world spot for a screen that never shows it would
+	# make one tick in twelve wait on a slow endpoint
+	live = _board_rate_live(only={h["key"] for h in BOARD_HERO})
 	return {"hero": live.get("hero") or [], "karats": KARAT_FINENESS, "at": frappe.utils.now()}
 
 

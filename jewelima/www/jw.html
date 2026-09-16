@@ -1345,8 +1345,9 @@ function jwGoldHtml(d) {
 // line are ARITHMETIC, not a quote — the line's own fineness backed out to fine
 // gold and taken to each karat — and they are labelled as such.
 //
-// It ticks while the screen is open and stops when it is not: the server holds
-// each feed on its own short clock, so a phone polling is one cached read.
+// It ticks every five seconds while the screen is open and stops when it is
+// not. The server holds each dealer feed for four, so however many phones are
+// looking, upstream sees at most one call per feed per four seconds.
 // ---------------------------------------------------------------------------
 let jwTick = null;
 const ratesBody = document.getElementById("jw-rates-body");
@@ -1362,7 +1363,7 @@ function jwRates() {
 		ratesBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading the board…</div>`;
 	}
 	jwRatesLoad();
-	jwTick = setInterval(jwRatesLoad, 10000);
+	jwTick = setInterval(jwRatesLoad, 5000);   // the dealer feeds are held 4s server-side
 }
 
 function jwRatesClose() {
