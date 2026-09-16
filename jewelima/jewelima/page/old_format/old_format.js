@@ -236,7 +236,6 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const fChart = mk(".of-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
 		get_query: () => ({ filters: { status: "Active" } }), onchange: () => { unprice(); loadQualities(); } });
 	const fRate = mk(".of-rate", { fieldtype: "Float", label: __("Gold rate (₹/g on NT)"), fieldname: "rate", onchange: () => unprice() });
-	jewelima.boardRateChips(fRate);
 	const fCq = mk(".of-cq", { fieldtype: "Select", label: __("Chart quality"), fieldname: "cq", options: "", onchange: () => unprice() });
 	const fGst = mk(".of-gst", { fieldtype: "Float", label: __("GST %"), fieldname: "gst", default: 3, onchange: () => unprice() });
 	fGst.set_value(3);
@@ -1260,11 +1259,13 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					default: (blr ? "JOS BLR BILLING " : "JOS BILLING ")
 						+ (FILE.name || "old-format").replace(/\.xlsx$/i, "") },
 			].concat(blr ? [
-				{ fieldname: "split_sec", fieldtype: "Section Break", label: __("Long items") },
+				{ fieldname: "split_sec", fieldtype: "Section Break", label: __("Item types in this lot") },
 				{ fieldname: "split_above", fieldtype: "Int", label: __("Split an item from"), default: 200,
-					description: __("pieces — leave 0 to keep one subtotal per item however long it runs") },
+					description: __("pieces — 0 keeps one subtotal per item however long it runs"),
+					onchange: () => drawCuts() },
 				{ fieldname: "split_every", fieldtype: "Int", label: __("Subtotal every"), default: 80,
-					description: __("pieces — 200 at 80 reads 80, 80, 40") },
+					description: __("pieces"), onchange: () => drawCuts() },
+				{ fieldname: "cuts", fieldtype: "HTML" },
 			] : []).concat(hasSlab ? [
 				{ fieldname: "slab_note", fieldtype: "HTML",
 					options: "<div class='text-muted' style='font-size:12px;'>" + __("IGI comes from the price chart's certification slab (single-stone pieces take the Solitaire tiers).") + "</div>" },
@@ -1292,7 +1293,49 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 				});
 			},
 		});
+
+		// The lot, item by item, with the cuts marked as the numbers are typed —
+		// so nobody has to guess what "200 at 80" will do to THIS lot.
+		function drawCuts() {
+			if (!blr) return;
+			const above = cint(d.get_value("split_above"));
+			const every = cint(d.get_value("split_every"));
+			const counts = [];
+			(PRICED.rows || []).forEach((p) => {
+				const it = (p.item || "—").toUpperCase();
+				const last = counts[counts.length - 1];
+				if (last && last.item === it) last.n += 1;
+				else counts.push({ item: it, n: 1 });
+			});
+			const cutsOf = (n) => {
+				if (!above || !every || n < above) return [n];
+				const parts = [];
+				for (let i = 0; i < n; i += every) parts.push(Math.min(every, n - i));
+				return parts;
+			};
+			const rows = counts.map((c) => {
+				const parts = cutsOf(c.n);
+				return `<tr>
+					<td style="padding:3px 8px;font-weight:700;">${esc(c.item)}</td>
+					<td style="padding:3px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.n}</td>
+					<td style="padding:3px 8px;color:${parts.length > 1 ? "#1B4332" : "var(--text-muted)"};font-weight:${parts.length > 1 ? 700 : 400};">
+						${parts.length > 1 ? parts.join(" · ") : __("one subtotal")}</td>
+				</tr>`;
+			}).join("");
+			const blocks = counts.reduce((n, c) => n + cutsOf(c.n).length, 0);
+			d.get_field("cuts").$wrapper.html(`
+				<table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+					<thead><tr style="border-bottom:1px solid var(--border-color);">
+						<th style="text-align:left;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${__("Item")}</th>
+						<th style="text-align:right;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${__("Pieces")}</th>
+						<th style="text-align:left;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);">${__("Subtotals")}</th>
+					</tr></thead><tbody>${rows}</tbody></table>
+				<div style="font-size:11.5px;color:var(--text-muted);margin-top:6px;">
+					${__("{0} item type(s), {1} piece(s), {2} subtotal line(s) before TOTAL GROSS",
+						[counts.length, (PRICED.rows || []).length, blocks])}</div>`);
+		}
 		d.show();
+		drawCuts();
 	}
 
 	// Saved Imports page hands over here: Resume sets route_options.session

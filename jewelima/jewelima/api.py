@@ -12195,18 +12195,6 @@ def _fineness_pct(karat):
 	return round(flt(KARAT_FINENESS.get((karat or "").strip().upper())) * 100.0, 3)
 
 
-@frappe.whitelist()
-def get_sale_board_rate():
-	"""Today's gold rate for a bill: the Thrissur 995 board scaled to 24K with the
-	GST taken out, and 18K at 75% of it. The rate boxes on Prepare to Sell and
-	OLD FORMAT fill from this instead of the desk converting by hand."""
-	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager", "ESMITH", "JW Costing"))
-	b = _making_board_rate()
-	pure = flt(b.get("pure_net"))
-	return {"k24": round(pure, 2) if pure else None, "k18": round(pure * 0.75, 2) if pure else None,
-		"line": b.get("line"), "as_of": b.get("as_of"), "error": b.get("error") or ""}
-
-
 def _making_board_rate():
 	"""Today's Thrissur 995 line, and the same figure with GST taken out.
 
