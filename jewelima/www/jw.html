@@ -627,30 +627,44 @@ grid.innerHTML = JW_TILES.map((t, i) => `
 		<span class="lb">${t.label}</span>
 	</button>`).join("");
 
-grid.addEventListener("click", (e) => {
-	const el = e.target.closest(".jw-tile");
-	if (!el) return;
-	const t = JW_TILES[Number(el.dataset.i)];
-	if (t.screen === "card") {          // the ones that are built
+// One way in to every screen, so a tap on a tile and a tap on a notification
+// land in exactly the same place.
+function jwOpen(screen, label, icon) {
+	if (screen === "card") {
 		document.getElementById("jw-card").classList.add("on");
 		if (!cardBody.innerHTML.trim()) {
 			cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">`
 				+ `Scan a card, or type its number on the home screen.</div>`;
 		}
-		return;
+		return true;
 	}
-	if (t.screen === "rates") { jwRates(); return; }
-	if (t.screen === "gold") { jwGold(); return; }
-	if (t.screen === "chart") { jwCharts(); return; }
-	if (t.screen === "stone") { jwStones(); return; }
-	if (t.screen === "floor") { jwFloor(); return; }
-	if (t.screen === "fg") { jwFg(); return; }
-	if (t.screen === "day") { jwDay(); return; }
-	if (t.screen === "buy") { jwBuy(); return; }
-	document.getElementById("jw-screen-title").textContent = t.label;
-	document.getElementById("jw-screen-icon").textContent = t.icon;
+	if (screen === "rates") { jwRates(); return true; }
+	if (screen === "gold") { jwGold(); return true; }
+	if (screen === "chart") { jwCharts(); return true; }
+	if (screen === "stone") { jwStones(); return true; }
+	if (screen === "floor") { jwFloor(); return true; }
+	if (screen === "fg") { jwFg(); return true; }
+	if (screen === "day") { jwDay(); return true; }
+	if (screen === "buy") { jwBuy(); return true; }
+	if (!label) return false;                     // nothing behind it, and no shell asked for
+	document.getElementById("jw-screen-title").textContent = label;
+	document.getElementById("jw-screen-icon").textContent = icon || "";
 	document.getElementById("jw-screen").classList.add("on");
+	return true;
+}
+
+grid.addEventListener("click", (e) => {
+	const el = e.target.closest(".jw-tile");
+	if (!el) return;
+	const t = JW_TILES[Number(el.dataset.i)];
+	jwOpen(t.screen, t.label, t.icon);
 });
+
+// a notification says which screen it is about: /jw?open=buy
+(() => {
+	const want = new URLSearchParams(window.location.search).get("open");
+	if (want) setTimeout(() => jwOpen(want), 0);
+})();
 
 function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
 // the back gesture closes whatever is open rather than leaving the app

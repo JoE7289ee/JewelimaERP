@@ -226,7 +226,8 @@ def on_purchase_recorded(doc, method=None):
 		send_async(
 			title="Stock in — {0}".format(doc.supplier or "purchase"),
 			body="{0} · {1}".format(what, doc.name),
-			url="/jw",
+			# the notice is about a purchase, so it opens the Purchases screen
+			url="/jw?open=buy",
 			tag="purchase",
 			roles=NOTIFY_ROLES,
 		)
