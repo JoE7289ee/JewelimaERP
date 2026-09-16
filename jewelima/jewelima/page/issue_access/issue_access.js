@@ -18,7 +18,6 @@ frappe.pages["issue-access"].on_page_load = function (wrapper) {
 	let BUCKETS = [];
 	let rows = [];   // [{employee, employee_name, buckets:{CODE:0/1}}]
 	let ops = [];    // [{user, user_name, buckets:{CODE:0/1}, employees:[{employee, employee_name}]}]
-	let CANDIDATES = [];
 
 	$(page.main).append(`
 		<style>
@@ -44,13 +43,12 @@ frappe.pages["issue-access"].on_page_load = function (wrapper) {
 		.ia-addemp:hover{border-color:var(--primary);color:var(--primary);}
 		table.ia-grid td.ia-empcell{text-align:left;font-weight:400;min-width:280px;}
 		</style>
-		<div class="ia-note">${__("Lock which stone buckets each issuer may hand out at the Stone Issue station. A row with every box ticked leaves that person unrestricted; untick a bucket to stop them issuing it. People with the Stone Issue role show up here automatically — add anyone else below.")}</div>
+		<div class="ia-note">${__("Everyone who can open the Stone Issue station is listed here — that is, every active employee whose login holds JW Stone Issue, JW Stone Admin, JW Manager, Stock Manager or System Manager. Not on this list means no access to the station at all. Tick the buckets each may be handed; a fully ticked row is unrestricted.")}</div>
 		<div class="ia-add"><div class="ia-pick"></div><button class="btn btn-default ia-addbtn">${__("Add Employee")}</button></div>
 		<div class="ia-table"></div>
 
 		<div class="ia-sec">${__("Who each desk user may issue for")}</div>
-		<div class="ia-note">${__("A user listed here can only issue to the employees named on their row, and only in the buckets ticked. Leave the employee list empty and they may issue to anyone their role already allows. A user not listed at all is unrestricted.")}</div>
-		<div class="ia-add"><div class="ia-upick"></div><button class="btn btn-default ia-addop">${__("Add User")}</button></div>
+		<div class="ia-note">${__("Every login that can open the station, and who it may issue for. Everyone can always issue for themselves — that chip is fixed. Add names to limit a login to those people (and themselves); leave it empty and they may issue for anyone. The bucket ticks cap what that login may hand out, whoever it is issuing for: the employee's own ticks above still apply, and the stricter of the two wins.")}</div>
 		<div class="ia-optable"></div>
 		<div class="ia-tol" style="margin-top:20px;max-width:900px;">
 			<div style="font-weight:800;font-size:13px;margin-bottom:4px;">${__("Weight validation (± % of the sieve average)")}</div>
@@ -85,12 +83,6 @@ frappe.pages["issue-access"].on_page_load = function (wrapper) {
 	});
 	picker.refresh();
 
-	const upicker = frappe.ui.form.make_control({
-		df: { fieldtype: "Link", label: __("Desk user"), fieldname: "usr", options: "User",
-			get_query: () => ({ filters: { enabled: 1 } }) },
-		parent: root.find(".ia-upick").get(0), render_input: true,
-	});
-	upicker.refresh();
 
 	root.find(".ia-addbtn").on("click", () => {
 		const e = picker.get_value();
@@ -127,44 +119,40 @@ frappe.pages["issue-access"].on_page_load = function (wrapper) {
 	function paintOps() {
 		if (!ops.length) {
 			root.find(".ia-optable").html(`<div class="ia-empty">${
-				__("No user is limited — everyone issues as their role allows.")}</div>`);
+				__("No login can open the Stone Issue station yet.")}</div>`);
 			return;
 		}
 		const head = `<tr><th>${__("Desk user")}</th><th>${__("May issue for")}</th>${
 			BUCKETS.map((b) => `<th>${b}</th>`).join("")}<th></th></tr>`;
 		const body = ops.map((o, i) => `
 			<tr data-o="${i}">
-				<td>${esc(o.user_name || o.user)} <span class="text-muted">(${esc(o.user)})</span></td>
+				<td>${esc(o.user_name || o.user)}
+					<div class="text-muted" style="font-size:11px;">${esc(o.user)}${
+						(o.roles || []).length ? " · " + esc((o.roles || []).join(", ")) : ""}</div></td>
 				<td class="ia-empcell"><div class="ia-emps">
+					${o.self_employee ? `<span class="ia-emp" style="border-style:dashed;" title="${
+						__("Everyone can issue for themselves")}">${esc(o.self_employee_name || o.self_employee)} · ${__("self")}</span>` : ""}
 					${(o.employees || []).map((e, j) => `<span class="ia-emp">${esc(e.employee_name || e.employee)}
 						<span class="x" data-j="${j}" title="${__("Remove")}">&times;</span></span>`).join("")}
 					<button class="ia-addemp">+ ${__("employee")}</button>
 					${(o.employees || []).length ? "" : `<span class="text-muted" style="font-size:11.5px;">${
-						__("anyone their role allows")}</span>`}
+						o.self_employee ? __("themselves only — add names to widen it")
+							: __("anyone, until names are added")}</span>`}
 				</div></td>
 				${BUCKETS.map((b) => `<td><input type="checkbox" class="ia-ob" data-b="${b}" ${
 					o.buckets[b] ? "checked" : ""}></td>`).join("")}
-				<td><span class="ia-oprm" title="${__("Remove the lock — this user goes back to unrestricted")}">&times;</span></td>
+				<td>${(o.employees || []).length ? `<span class="ia-oprm" title="${
+					__("Clear the names — this login goes back to issuing for anyone")}">&times;</span>` : ""}</td>
 			</tr>`).join("");
 		root.find(".ia-optable").html(`<table class="ia-grid"><thead>${head}</thead><tbody>${body}</tbody></table>`);
 	}
 
-	root.find(".ia-addop").on("click", () => {
-		const u = upicker.get_value();
-		if (!u) return;
-		if (ops.some((o) => o.user === u)) return frappe.show_alert({ message: __("Already listed."), indicator: "orange" }, 3);
-		const buckets = {}; BUCKETS.forEach((b) => (buckets[b] = 1));
-		frappe.db.get_value("User", u, "full_name").then((r) => {
-			ops.push({ user: u, user_name: (r.message || {}).full_name || u, buckets, employees: [] });
-			upicker.set_value(""); paintOps();
-		});
-	});
 	root.on("change", ".ia-ob", function () {
 		const i = cint($(this).closest("tr").attr("data-o"));
 		ops[i].buckets[$(this).data("b")] = this.checked ? 1 : 0;
 	});
 	root.on("click", ".ia-oprm", function () {
-		ops.splice(cint($(this).closest("tr").attr("data-o")), 1); paintOps();
+		ops[cint($(this).closest("tr").attr("data-o"))].employees = []; paintOps();
 	});
 	root.on("click", ".ia-emp .x", function () {
 		const i = cint($(this).closest("tr").attr("data-o"));
@@ -208,7 +196,6 @@ frappe.pages["issue-access"].on_page_load = function (wrapper) {
 		BUCKETS = m.buckets || [];
 		rows = m.rows || [];
 		ops = m.operators || [];
-		CANDIDATES = m.candidates || [];
 		paint();
 		paintOps();
 		});

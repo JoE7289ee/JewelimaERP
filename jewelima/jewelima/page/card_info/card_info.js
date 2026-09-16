@@ -158,7 +158,11 @@ frappe.pages["card-info"].on_page_load = function (wrapper) {
 			</div>
 
 			<div class="cl-sec"><h4>${__("Order")}</h4><div class="cl-kvs">
-				${kv(__("Party"), b.customer || b.held_by)}
+				${b.customer || b.held_by ? `<div class="cl-kv"><span class="k">${__("Party")}</span>
+					<span class="v">${esc(b.party_group || b.held_by_group || b.customer || b.held_by)}${
+						(b.party_group || b.held_by_group)
+							? `<div class="cl-sub" style="font-size:11.5px;font-weight:400;color:var(--text-muted);">${
+								esc(b.customer || b.held_by)}</div>` : ""}</span></div>` : ""}
 				${kv(__("Salesman"), b.salesman)}
 				${kv(__("Type"), b.order_type)}
 				${kv(__("Qty"), b.qty)}

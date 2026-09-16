@@ -3672,12 +3672,20 @@ def _operator_row(user=None):
 
 
 def _operator_employees(user=None):
-	"""The employees this user may issue to, or None when they are not limited."""
+	"""The employees this user may issue to, or None when they are not limited.
+
+	Their own employee is always in it: a person issuing stones to themselves is
+	the ordinary case, and nobody should have to be added to their own list."""
 	doc = _operator_row(user)
 	if not doc:
 		return None
-	picked = [r.employee for r in (doc.employees or []) if r.employee]
-	return set(picked) if picked else None
+	picked = {r.employee for r in (doc.employees or []) if r.employee}
+	if not picked:
+		return None
+	self_emp = _employee_from_user(user or frappe.session.user)
+	if self_emp:
+		picked.add(self_emp)
+	return picked
 
 
 def _operator_buckets(user=None):
@@ -3746,8 +3754,14 @@ def get_issue_access():
 	issue. Relevant = has the Stone Issue role, or already has an access record.
 	No record on file = all buckets on (that's the default the grid shows)."""
 	_require_stone_issue_admin()
-	users = frappe.get_all("Has Role", filters={"role": STONE_ISSUE_ROLE, "parenttype": "User"}, pluck="parent")
-	emps = set(frappe.get_all("Employee", filters={"user_id": ["in", users]}, pluck="name")) if users else set()
+	# who can open the station at all — the roles that grant the page. If a login
+	# is not one of these it never reaches Stone Issue, so it does not belong here.
+	users = frappe.get_all("Has Role", filters={"role": ["in", sorted(STONE_ISSUE_ROLES)],
+		"parenttype": "User"}, distinct=True, pluck="parent")
+	users = [u for u in frappe.get_all("User", filters={"name": ["in", users or [""]], "enabled": 1},
+		pluck="name") if u not in ("Guest",)]
+	emps = set(frappe.get_all("Employee", filters={"user_id": ["in", users or [""]], "status": "Active"},
+		pluck="name")) if users else set()
 	emps |= set(frappe.get_all("Stone Issue Access", pluck="employee"))
 	codes = [c.upper() for c in STONE_BUCKET_CODES]
 	rows = []
@@ -3756,23 +3770,26 @@ def get_issue_access():
 		rows.append({"employee": e, "employee_name": frappe.db.get_value("Employee", e, "employee_name"),
 			"buckets": {c: (1 if c in allowed else 0) for c in codes}})
 
-	# the operator layer: desk users and who each may issue for
+	# The matrix: every login that can open the station, listed whether or not it
+	# has been limited yet. Their own employee is always theirs to issue for, so
+	# it is shown as a fixed chip rather than something to add.
+	saved = {d.user: d for d in (frappe.get_doc("Stone Issue Operator", n)
+		for n in frappe.get_all("Stone Issue Operator", pluck="name"))}
 	ops = []
-	for name in frappe.get_all("Stone Issue Operator", pluck="name", order_by="user"):
-		d = frappe.get_doc("Stone Issue Operator", name)
+	for u in sorted(set(users) | set(saved)):
+		d = saved.get(u)
+		self_emp = _employee_from_user(u)
 		ops.append({
-			"user": d.user, "user_name": frappe.db.get_value("User", d.user, "full_name") or d.user,
-			"buckets": {c: (1 if d.get("allow_" + c.lower()) else 0) for c in codes},
+			"user": u, "user_name": frappe.db.get_value("User", u, "full_name") or u,
+			"self_employee": self_emp,
+			"self_employee_name": frappe.db.get_value("Employee", self_emp, "employee_name") if self_emp else "",
+			"roles": sorted(set(frappe.get_roles(u)) & STONE_ISSUE_ROLES),
+			"buckets": {c: (1 if (d.get("allow_" + c.lower()) if d else 1) else 0) for c in codes},
 			"employees": [{"employee": r.employee,
 				"employee_name": frappe.db.get_value("Employee", r.employee, "employee_name") or r.employee}
-				for r in (d.employees or []) if r.employee],
+				for r in ((d.employees if d else []) or []) if r.employee and r.employee != self_emp],
 		})
-	# who could be an operator: anyone holding the Stone Issue role
-	users = frappe.get_all("Has Role", filters={"role": STONE_ISSUE_ROLE, "parenttype": "User"}, pluck="parent")
-	candidates = [{"user": u.name, "user_name": u.full_name or u.name}
-		for u in frappe.get_all("User", filters={"name": ["in", users or [""]], "enabled": 1},
-			fields=["name", "full_name"], order_by="full_name")]
-	return {"buckets": codes, "rows": rows, "operators": ops, "candidates": candidates}
+	return {"buckets": codes, "rows": rows, "operators": ops}
 
 
 @frappe.whitelist()
@@ -21039,6 +21056,10 @@ def get_card_passport(order_bag):
 	)
 	if not bag:
 		return {}
+	# the party code alone ("JOS-MUL-ALLP-KL") does not say WHOSE card this is —
+	# the group's full name does
+	bag["party_group"] = _party_group_name(bag.customer)
+	bag["held_by_group"] = _party_group_name(bag.held_by) if bag.held_by else ""
 	if bag.design:
 		d = frappe.db.get_value("Design", bag.design, ["design_type", "item"], as_dict=True) or {}
 		bag["design_type"] = d.get("design_type")
