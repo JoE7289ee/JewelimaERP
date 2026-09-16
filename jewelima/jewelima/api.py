@@ -12839,14 +12839,27 @@ def get_price_chart(name):
 
 @frappe.whitelist()
 def get_jw_stones():
-	"""Every stone the house holds, in carats. No money anywhere on this screen.
+	"""Every stone the house holds, in carats, by BUCKET. No money on this screen.
 
-	Same shape as the gold: warehouse stock is the truth, so the places add up
-	to the whole. Then the same carats cut a second way — by what the stone IS —
-	with the heaviest items behind each type, because "how much diamond" is
-	always followed by "which diamond"."""
+	The bucket is the language the floor already counts in — DMD, PS, CS, CZ,
+	CVD, SW, PDMD, POTH — the same eight a card carries, so what this screen
+	says and what a bag says are the same words.
+
+	Warehouse stock is the truth, so the places add up to the whole, and each
+	place carries its own bucket split: "where are the stones" and "which
+	stones are there" are one question asked twice."""
 	frappe.only_for(["JW Phone", "System Manager"])
 	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	# stone_type -> the bucket the floor counts it in (the same map the cards use)
+	BUCKET = {"Diamond": "dmd", "Precious Stone": "ps", "Color Stone": "cs",
+		"Cubic Zirconia": "cz", "CVD": "cvd", "Swarovski": "sw",
+		"Party Diamond": "pdmd", "Party Other": "poth"}
+	LABEL = {"dmd": "DMD", "ps": "PS", "cs": "CS", "cz": "CZ", "cvd": "CVD",
+		"sw": "SW", "pdmd": "PDMD", "poth": "POTH"}
+	FULL = {"dmd": "Diamond", "ps": "Precious stone", "cs": "Colour stone",
+		"cz": "Cubic zirconia", "cvd": "CVD", "sw": "Swarovski",
+		"pdmd": "Party diamond", "poth": "Party other"}
 
 	named = [
 		(_wh("At Certification"), "At Certification"),
@@ -12856,44 +12869,48 @@ def get_jw_stones():
 	]
 	bucket_of = {wh: label for wh, label in named if wh}
 
-	places, types, loss = {}, {}, {"carat": 0.0}
+	places, buckets, loss = {}, {}, 0.0
 	for b in frappe.get_all("Bin", filters={"actual_qty": [">", 0]},
 			fields=["item_code", "warehouse", "actual_qty"], limit_page_length=0):
-		m = frappe.db.get_value("Item", b.item_code,
-			["stone_type", "item_name"], as_dict=True) or {}
-		if not m.get("stone_type"):
+		st = frappe.db.get_value("Item", b.item_code, "stone_type")
+		if not st:
 			continue                      # gold is grams, and has its own screen
+		code = BUCKET.get(st)
+		if not code:
+			continue                      # not a bucket the floor counts in
 		ct = flt(b.actual_qty)
 		if frappe.db.get_value("Warehouse", b.warehouse, "custom_is_loss"):
-			loss["carat"] += ct
+			loss += ct
 			continue
 		label = bucket_of.get(b.warehouse) or (b.warehouse or "").rsplit(" - ", 1)[0]
-		places.setdefault(label, 0.0)
-		places[label] += ct
-		t = types.setdefault(m["stone_type"], {"carat": 0.0, "items": {}})
-		t["carat"] += ct
-		t["items"][b.item_code] = flt(t["items"].get(b.item_code)) + ct
+		p = places.setdefault(label, {"carat": 0.0, "by": {}})
+		p["carat"] += ct
+		p["by"][code] = flt(p["by"].get(code)) + ct
+		k = buckets.setdefault(code, {"carat": 0.0, "items": {}})
+		k["carat"] += ct
+		k["items"][b.item_code] = flt(k["items"].get(b.item_code)) + ct
 
-	total = round(sum(places.values()), 3)
-	rows = sorted(({"place": k, "carat": round(v, 3),
-		"share": round(v / total * 100, 1) if total else 0} for k, v in places.items()),
-		key=lambda x: -x["carat"])
-	kinds = sorted(({
-		"type": k,
+	total = sum(p["carat"] for p in places.values())
+	rows = sorted(({
+		"place": k,
 		"carat": round(v["carat"], 3),
-		"items": len(v["items"]),
 		"share": round(v["carat"] / total * 100, 1) if total else 0,
-		# the heaviest first, and only as deep as a phone can be read
-		"top": [{"item": i, "carat": round(c, 3)}
-			for i, c in sorted(v["items"].items(), key=lambda x: -x[1])[:12]],
-	} for k, v in types.items()), key=lambda x: -x["carat"])
-	return {
-		"totals": {"carat": total, "types": len(kinds),
-			"items": sum(k["items"] for k in kinds)},
-		"places": rows, "kinds": kinds,
-		"loss": {"carat": round(loss["carat"], 3)},
-		"at": frappe.utils.now(),
-	}
+		# the segments of this place's own bar, biggest first
+		"by": sorted(({"code": c, "label": LABEL[c], "carat": round(w, 3),
+			"pct": round(w / v["carat"] * 100, 1) if v["carat"] else 0}
+			for c, w in v["by"].items()), key=lambda x: -x["carat"]),
+	} for k, v in places.items()), key=lambda x: -x["carat"])
+
+	kinds = sorted(({
+		"code": c, "label": LABEL[c], "name": FULL[c],
+		"carat": round(v["carat"], 3), "items": len(v["items"]),
+		"share": round(v["carat"] / total * 100, 1) if total else 0,
+		"top": [{"item": i, "carat": round(w, 3)}
+			for i, w in sorted(v["items"].items(), key=lambda x: -x[1])[:12]],
+	} for c, v in buckets.items()), key=lambda x: -x["carat"])
+
+	return {"places": rows, "buckets": kinds,
+		"loss": {"carat": round(loss, 3)}, "at": frappe.utils.now()}
 
 
 @frappe.whitelist()

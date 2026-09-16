@@ -75,6 +75,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: var(--jw-dim); opacity: .7; margin-top: 7px; }
+/* stone stock — one colour per bucket, everywhere it appears */
+.s-dmd  { --c: #8FD3F4; background: var(--c); }   /* diamond — ice */
+.s-ps   { --c: #E58FA8; background: var(--c); }   /* precious — rose */
+.s-cs   { --c: #7BD8A4; background: var(--c); }   /* colour stone — green */
+.s-cz   { --c: #C9A9E8; background: var(--c); }   /* cz — violet */
+.s-cvd  { --c: #F2C57C; background: var(--c); }   /* cvd — amber */
+.s-sw   { --c: #F09A9A; background: var(--c); }   /* swarovski — coral */
+.s-pdmd { --c: #9FB3D9; background: var(--c); }   /* party diamond — steel */
+.s-poth { --c: #C2C7B0; background: var(--c); }   /* party other — sage */
+.jw-brow .bar2.mix { display: flex; gap: 2px; overflow: hidden; background: rgba(250, 247, 239, .08); }
+/* the plain bar is a gold gradient; a mixed bar takes each segment's own
+   colour, and needs the specificity to say so */
+.jw-brow .bar2.mix i { display: block; height: 100%; border-radius: 3px; background: var(--c); }
+.jw-brow .sub .chip { display: inline-block; margin: 5px 6px 0 0; padding: 1px 8px; border-radius: 20px;
+	font-size: 10.5px; font-weight: 800; color: #12271D; letter-spacing: .03em; }
+.jw-q .qh .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 10px; }
+.jw-q .qh .ql { flex: 1; }
+
 /* stone stock */
 .jw-tot.jw-stn { border-color: rgba(140, 200, 235, .32);
 	background: linear-gradient(180deg, rgba(140, 200, 235, .13), rgba(250, 247, 239, .04)); }
@@ -585,19 +603,26 @@ function jwStones() {
 function jwStoneClose() { document.getElementById("jw-stone").classList.remove("on"); }
 
 function jwStoneHtml(d) {
-	const t = d.totals || {}, loss = d.loss || {};
+	const loss = d.loss || {};
+	// one colour per bucket, used in the cards AND in every place's bar, so a
+	// colour means the same thing wherever it appears on the screen
+	const seg = (b) => `<i class="s-${b.code}" style="width:${Math.max(1, b.pct)}%"
+		title="${b.label} ${b.pct}%"></i>`;
 	const place = (p) => `<div class="jw-brow">
 		<div class="t"><span class="l">${esc(p.place)}</span>
 			<span class="s">${p.share}%</span>
 			<span class="p">${ctf(p.carat)}<span style="font-size:11px;font-weight:700;color:var(--jw-dim)"> ct</span></span></div>
-		<div class="bar2"><i style="width:${Math.max(1.5, p.share)}%"></i></div>
+		<div class="bar2 mix">${(p.by || []).map(seg).join("")}</div>
+		<div class="sub">${(p.by || []).map((b) =>
+			`<span class="chip s-${b.code}">${b.label} ${b.pct}%</span>`).join("")}</div>
 	</div>`;
-	const kind = (k) => `<div class="jw-q">
+	const bucket = (k) => `<div class="jw-q b-${k.code}">
 		<div class="qh two" onclick="jwQ(this)">
-			<span class="ql">${esc(k.type)}</span>
+			<span class="dot s-${k.code}"></span>
+			<span class="ql">${k.label}</span>
 			<span class="qv">${ctf(k.carat)} <small>ct</small></span>
 			<span class="qc">&#9662;</span>
-			<span class="qn">${k.share}% of all stones · ${k.items} item${k.items > 1 ? "s" : ""}</span>
+			<span class="qn">${esc(k.name)} · ${k.share}% · ${k.items} item${k.items > 1 ? "s" : ""}</span>
 		</div>
 		<div class="qb">${(k.top || []).map((i) => `<div class="rr">
 			<span class="l">${esc(i.item)}</span>
@@ -607,20 +632,14 @@ function jwStoneHtml(d) {
 					k.items - k.top.length} more item(s)</span></div>` : ""}
 		</div>
 	</div>`;
-	return `<div class="jw-tot jw-stn">
-			<div class="n">Total stones</div>
-			<div class="g">${ctf(t.carat)} <small>ct</small></div>
-			<div class="gross">${t.items} item(s) across ${t.types} type(s)</div>
-		</div>
+	return `<div class="jw-gsec" style="margin-top:2px;">The buckets</div>
+		${(d.buckets || []).map(bucket).join("")}
 
 		<div class="jw-gsec">Where they stand</div>
 		${(d.places || []).map(place).join("")}
 
-		<div class="jw-gsec">By what they are</div>
-		${(d.kinds || []).map(kind).join("")}
-
 		${loss.carat ? `<div class="jw-note">Loss buckets hold a further ${ctf(loss.carat)} ct,
-			kept out of the total above.</div>` : ""}`;
+			kept out of the figures above.</div>` : ""}`;
 }
 
 // ---------------------------------------------------------------------------
