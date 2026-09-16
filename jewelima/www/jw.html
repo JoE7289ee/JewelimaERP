@@ -442,9 +442,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 
 	<div class="jw-grid" id="jw-grid"></div>
 
-	<div class="jw-foot">
-		All nine tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
-	</div>
+	<div class="jw-foot">build {{ jw_build }}</div>
 </div>
 
 <div class="jw-screen" id="jw-screen">
@@ -580,7 +578,6 @@ const JW_TILES = [
 	{ icon: "🏷️", label: "Finished Goods", screen: "fg" },
 	{ icon: "📅", label: "Today", screen: "day" },
 	{ icon: "📥", label: "Purchases", screen: "buy" },
-	{ icon: "📦", label: "Parcel" },
 ];
 
 const grid = document.getElementById("jw-grid");
