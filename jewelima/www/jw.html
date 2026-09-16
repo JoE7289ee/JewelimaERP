@@ -75,6 +75,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: var(--jw-dim); opacity: .7; margin-top: 7px; }
+/* finished goods: two day-tiles, then the standing stock */
+.jw-two { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 4px; }
+.jw-day { border: 1px solid rgba(250, 247, 239, .14); border-radius: 14px; padding: 12px 13px;
+	background: rgba(250, 247, 239, .05); }
+.jw-day.made { border-color: rgba(123, 216, 164, .32); background: rgba(123, 216, 164, .1); }
+.jw-day.sold { border-color: rgba(212, 175, 55, .32); background: rgba(212, 175, 55, .1); }
+.jw-day .dn { font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: var(--jw-dim); }
+.jw-day .dv { font-size: 27px; font-weight: 800; color: #FFFFFF; line-height: 1.05; margin-top: 3px;
+	font-variant-numeric: tabular-nums; }
+.jw-day .dv small { font-size: 11px; font-weight: 700; color: var(--jw-dim); }
+.jw-day .dw { font-size: 12px; font-weight: 700; margin-top: 6px; color: #FFFFFF;
+	font-variant-numeric: tabular-nums; }
+.jw-day .dw span { font-size: 10px; color: var(--jw-dim); font-weight: 700; }
+.jw-day .st { margin-top: 5px; }
+.st .chip { display: inline-block; margin: 3px 4px 0 0; padding: 2px 8px; border-radius: 20px;
+	font-size: 10px; font-weight: 800; color: #12271D; letter-spacing: .02em; }
+.jw-day .none { font-size: 12px; color: var(--jw-dim); margin-top: 8px; }
+
 /* the floor: a tile per location */
 .jw-kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
 .jw-kpi div { background: rgba(250, 247, 239, .08); border-radius: 12px; padding: 10px 6px; text-align: center; }
@@ -95,8 +114,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	font-variant-numeric: tabular-nums; }
 .jw-tile2 .wt span { font-size: 10px; font-weight: 700; color: var(--jw-dim); }
 .jw-tile2 .st { margin-top: 6px; }
-.jw-tile2 .st .chip { display: inline-block; margin: 3px 4px 0 0; padding: 1px 7px; border-radius: 20px;
-	font-size: 9.5px; font-weight: 800; color: #12271D; }
 .jw-tile2 .aw { margin-top: 6px; font-size: 10.5px; font-weight: 700; color: #F2C57C; }
 
 /* the issue counter: three columns, and a row that goes red when short */
@@ -392,7 +409,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Six tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
+		Seven tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -406,6 +423,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<div class="big" id="jw-screen-icon"></div>
 		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
 	</div>
+</div>
+
+<!-- Finished Goods: what is made, what went out -->
+<div class="jw-screen" id="jw-fg">
+	<div class="bar">
+		<button class="back" onclick="jwFgClose()">&#8592;</button>
+		<div class="ttl">Finished Goods</div>
+		<button class="jw-ref" onclick="jwReread(this, jwFg)" title="Read it again">&#8635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
+	</div>
+	<div class="jw-body" id="jw-fg-body"></div>
 </div>
 
 <!-- Floor: where the cards are, and what they carry -->
@@ -493,10 +521,10 @@ const JW_TILES = [
 	{ icon: "🧾", label: "Price Chart", screen: "chart" },
 	{ icon: "💠", label: "Stone Stock", screen: "stone" },
 	{ icon: "🏭", label: "Floor", screen: "floor" },
+	{ icon: "🏷️", label: "Finished Goods", screen: "fg" },
 	{ icon: "🧰", label: "Job Work" },
 	{ icon: "⚖️", label: "Weigh" },
 	{ icon: "📦", label: "Parcel" },
-	{ icon: "🏷️", label: "Prepare Sale" },
 ];
 
 const grid = document.getElementById("jw-grid");
@@ -524,6 +552,7 @@ grid.addEventListener("click", (e) => {
 	if (t.screen === "chart") { jwCharts(); return; }
 	if (t.screen === "stone") { jwStones(); return; }
 	if (t.screen === "floor") { jwFloor(); return; }
+	if (t.screen === "fg") { jwFg(); return; }
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
@@ -533,7 +562,7 @@ function jwClose() { document.getElementById("jw-screen").classList.remove("on")
 // the back gesture closes whatever is open rather than leaving the app
 window.addEventListener("popstate", () => {
 	jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwChartClose(); jwStoneClose();
-	jwFloorClose(); jwCamStop();
+	jwFloorClose(); jwFgClose(); jwCamStop();
 });
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
@@ -635,6 +664,72 @@ function jwCardHtml(d) {
 			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
 			${row("Remark", b.narration ? esc(b.narration) : "")}
 		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// FINISHED GOODS — what stands made, what was made today, what went out today.
+//
+// Today is the house's day, not a rolling 24 hours: a shift asks "what did we
+// make today", and the answer should not change because it is now 9pm.
+// ---------------------------------------------------------------------------
+const fgBody = document.getElementById("jw-fg-body");
+
+function jwFg() {
+	document.getElementById("jw-fg").classList.add("on");
+	if (!fgBody.innerHTML.trim()) {
+		fgBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Counting the products…</div>`;
+	}
+	return jwApi("jewelima.jewelima.api.get_jw_products", {})
+		.then((d) => {
+			if (!d || !d.stock) throw new Error("empty");
+			fgBody.innerHTML = jwFgHtml(d);
+		})
+		.catch(() => {
+			if (!fgBody.querySelector(".jw-day")) {
+				fgBody.innerHTML = `<div class="jw-err">The products could not be counted just now.</div>`;
+			}
+		});
+}
+
+function jwFgClose() { document.getElementById("jw-fg").classList.remove("on"); }
+
+function jwFgHtml(d) {
+	const chips = (x) => (x.stones || []).map((s) =>
+		`<span class="chip s-${s.code}">${s.label} ${ctf(s.carat)}</span>`).join("");
+	const day = (x, cls, name, verb) => `<div class="jw-day ${cls}">
+		<div class="dn">${name}</div>
+		<div class="dv">${whole(x.cards)} <small>piece${x.cards === 1 ? "" : "s"}</small></div>
+		${x.cards ? `<div class="dw">${g3s(x.pure)} <span>pure g</span></div>
+			<div class="st">${chips(x) || `<span style="font-size:11px;color:var(--jw-dim)">no stones</span>`}</div>`
+			: `<div class="none">Nothing ${verb} yet today.</div>`}
+	</div>`;
+	const st = d.stock || {};
+	return `<div class="jw-two">
+			${day(d.made_today || {}, "made", "Made today", "made")}
+			${day(d.sold_today || {}, "sold", "Sold today", "sold")}
+		</div>
+
+		<div class="jw-gsec">Standing stock</div>
+		<div class="jw-tot jw-stn">
+			<div class="n">Finished products</div>
+			<div class="g">${whole(st.cards)} <small>piece${st.cards === 1 ? "" : "s"}</small></div>
+			<div class="gross">${g3s(st.pure)} pure g · ${g3s(st.gross)} g gross</div>
+			<div class="st" style="margin-top:9px;">${chips(st)}</div>
+		</div>
+
+		<div class="jw-gsec">By status</div>
+		<div class="jw-split">${(d.by_status || []).map((r) => `<div class="sr">
+			<span class="l">${esc(r.status)}</span>
+			<span class="w">${g3s(r.pure)} pure g</span>
+			<span class="v">${whole(r.cards)}</span></div>`).join("")}</div>
+
+		<div class="jw-gsec">Who holds them</div>
+		<div class="jw-split">${(d.by_holder || []).map((r) => `<div class="sr">
+			<span class="l">${esc(r.holder)}</span>
+			<span class="w">${g3s(r.pure)} pure g</span>
+			<span class="v">${whole(r.cards)}</span></div>`).join("")}</div>
+
+		<div class="jw-note">Sold and cancelled pieces have left this screen. Today is ${esc(d.today)}.</div>`;
 }
 
 // ---------------------------------------------------------------------------

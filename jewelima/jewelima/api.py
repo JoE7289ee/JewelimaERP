@@ -12838,6 +12838,73 @@ def get_price_chart(name):
 
 
 @frappe.whitelist()
+def get_jw_products():
+	"""Finished goods on the phone: what is in stock, what became a product
+	today, and what went out today.
+
+	A piece becomes a product when Make Products freezes its materials, and the
+	metal and stones it was frozen with are what it carries from then on — so
+	the weights here are the cards' own actual figures, the same ones Card Info
+	and the floor show.
+
+	Today is the house's day, not a rolling 24 hours: a shift asks "what did we
+	make today", and the answer should not change because it is now 9pm."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	BUCKETS = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
+	LABEL = {"dmd": "DMD", "ps": "PS", "cs": "CS", "cz": "CZ", "cvd": "CVD",
+		"sw": "SW", "pdmd": "PDMD", "poth": "POTH"}
+	sums = ", ".join("SUM(IFNULL(b.act_{0}_weight, 0)) {0}".format(x) for x in BUCKETS)
+	today = frappe.utils.today()
+
+	def shape(r):
+		stones = [{"code": x, "label": LABEL[x], "carat": round(flt(r.get(x)), 3)}
+			for x in BUCKETS if flt(r.get(x)) > 0.0005]
+		return {"cards": cint(r.get("cards")), "pieces": cint(r.get("pieces") or r.get("cards")),
+			"pure": round(flt(r.get("pure")), 3), "gross": round(flt(r.get("gross")), 3),
+			"carat": round(sum(s["carat"] for s in stones), 3), "stones": stones}
+
+	base = """SELECT COUNT(*) cards, SUM(IFNULL(b.qty, 1)) pieces,
+			SUM(IFNULL(b.act_pure_weight, 0)) pure, SUM(IFNULL(b.act_gross_weight, 0)) gross, {0}
+		FROM `tabOrder Bag` b""".format(sums)
+
+	# in stock now — everything finished that has not been sold or cancelled
+	stock = frappe.db.sql(base + """
+		WHERE b.is_finished = 1 AND b.stock_status NOT IN ('Sold', 'Cancelled')""", as_dict=True)[0]
+	# made into a product today
+	made = frappe.db.sql(base + """
+		WHERE b.is_finished = 1 AND DATE(b.in_stock_on) = %s""", today, as_dict=True)[0]
+	# sold today — read off the sale itself, which is what a sale IS here
+	sold = frappe.db.sql(base + """
+		JOIN `tabProduct Sale Item` i ON i.order_bag = b.name
+		JOIN `tabProduct Sale` s ON s.name = i.parent AND s.docstatus < 2
+		WHERE DATE(IFNULL(s.sale_date, s.creation)) = %s""", today, as_dict=True)[0]
+
+	# where the stock stands: In Stock, At Certification, At Hallmarking, …
+	by_status = [{"status": r.stock_status or "—", "cards": cint(r.cards),
+		"pure": round(flt(r.pure), 3), "carat": round(flt(r.carat), 3)}
+		for r in frappe.db.sql("""
+			SELECT b.stock_status, COUNT(*) cards, SUM(IFNULL(b.act_pure_weight, 0)) pure,
+				SUM({0}) carat
+			FROM `tabOrder Bag` b
+			WHERE b.is_finished = 1 AND b.stock_status NOT IN ('Sold', 'Cancelled')
+			GROUP BY b.stock_status ORDER BY cards DESC""".format(
+				" + ".join("IFNULL(b.act_{0}_weight, 0)".format(x) for x in BUCKETS)), as_dict=True)]
+
+	# and whose hands it is in
+	by_holder = [{"holder": r.held_by or "—", "cards": cint(r.cards),
+		"pure": round(flt(r.pure), 3)}
+		for r in frappe.db.sql("""
+			SELECT b.held_by, COUNT(*) cards, SUM(IFNULL(b.act_pure_weight, 0)) pure
+			FROM `tabOrder Bag` b
+			WHERE b.is_finished = 1 AND b.stock_status NOT IN ('Sold', 'Cancelled')
+			GROUP BY b.held_by ORDER BY cards DESC LIMIT 12""", as_dict=True)]
+
+	return {"stock": shape(stock), "made_today": shape(made), "sold_today": shape(sold),
+		"by_status": by_status, "by_holder": by_holder,
+		"today": today, "at": frappe.utils.now()}
+
+
+@frappe.whitelist()
 def get_jw_floor():
 	"""The floor at a glance: where the cards are, and what they are carrying.
 
