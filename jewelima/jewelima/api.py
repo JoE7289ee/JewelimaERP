@@ -12838,6 +12838,65 @@ def get_price_chart(name):
 
 
 @frappe.whitelist()
+def get_jw_stones():
+	"""Every stone the house holds, in carats. No money anywhere on this screen.
+
+	Same shape as the gold: warehouse stock is the truth, so the places add up
+	to the whole. Then the same carats cut a second way — by what the stone IS —
+	with the heaviest items behind each type, because "how much diamond" is
+	always followed by "which diamond"."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	from jewelima.setup import IN_PRODUCTION_WAREHOUSE
+
+	named = [
+		(_wh("At Certification"), "At Certification"),
+		(_wh("At Hallmarking"), "At Hallmarking"),
+		(_wh("Finished Goods"), "Finished Goods"),
+		(_wh(IN_PRODUCTION_WAREHOUSE), "In Bags"),
+	]
+	bucket_of = {wh: label for wh, label in named if wh}
+
+	places, types, loss = {}, {}, {"carat": 0.0}
+	for b in frappe.get_all("Bin", filters={"actual_qty": [">", 0]},
+			fields=["item_code", "warehouse", "actual_qty"], limit_page_length=0):
+		m = frappe.db.get_value("Item", b.item_code,
+			["stone_type", "item_name"], as_dict=True) or {}
+		if not m.get("stone_type"):
+			continue                      # gold is grams, and has its own screen
+		ct = flt(b.actual_qty)
+		if frappe.db.get_value("Warehouse", b.warehouse, "custom_is_loss"):
+			loss["carat"] += ct
+			continue
+		label = bucket_of.get(b.warehouse) or (b.warehouse or "").rsplit(" - ", 1)[0]
+		places.setdefault(label, 0.0)
+		places[label] += ct
+		t = types.setdefault(m["stone_type"], {"carat": 0.0, "items": {}})
+		t["carat"] += ct
+		t["items"][b.item_code] = flt(t["items"].get(b.item_code)) + ct
+
+	total = round(sum(places.values()), 3)
+	rows = sorted(({"place": k, "carat": round(v, 3),
+		"share": round(v / total * 100, 1) if total else 0} for k, v in places.items()),
+		key=lambda x: -x["carat"])
+	kinds = sorted(({
+		"type": k,
+		"carat": round(v["carat"], 3),
+		"items": len(v["items"]),
+		"share": round(v["carat"] / total * 100, 1) if total else 0,
+		# the heaviest first, and only as deep as a phone can be read
+		"top": [{"item": i, "carat": round(c, 3)}
+			for i, c in sorted(v["items"].items(), key=lambda x: -x[1])[:12]],
+	} for k, v in types.items()), key=lambda x: -x["carat"])
+	return {
+		"totals": {"carat": total, "types": len(kinds),
+			"items": sum(k["items"] for k in kinds)},
+		"places": rows, "kinds": kinds,
+		"loss": {"carat": round(loss["carat"], 3)},
+		"at": frappe.utils.now(),
+	}
+
+
+@frappe.whitelist()
 def get_jw_charts():
 	"""Every live chart, newest first — the picker on the phone.
 
