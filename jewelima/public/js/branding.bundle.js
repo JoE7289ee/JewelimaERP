@@ -349,6 +349,13 @@ jewelima.BRAND = {
 	[data-theme="dark"] .body-sidebar .divider{border-color:${B.forest};background:${B.forest};}
 	[data-theme="dark"] .body-sidebar input{background:${B.forest};color:${B.ivory};border-color:${B.green};}
 	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:${B.forest};}
+	/* The app mark: the gradient reads beautifully on the dark emerald rail, but
+	   on a pale ground its light stops disappear. Light mode gets the SOLID gold
+	   cut of the same emblem — swapped by CSS, since both themes are served the
+	   same <img> from boot. */
+	:root:not([data-theme="dark"]) img[src*="emblem-gold-gradient"]{
+		content:url("/assets/jewelima/images/brand/emblem-gold.svg");
+	}
 	/* the rail scrolls, but the scrollbar cut a stripe down the panel — the bar
 	   goes, the scrolling stays. Both themes: it is ugly in either. */
 	.body-sidebar,
