@@ -750,8 +750,8 @@ function jwLossHtml(d) {
 			<div class="bar2" style="margin-top:6px;"><i style="width:${(r.loss / peak) * 100}%;
 				background:linear-gradient(90deg,#F0AFAF,#E58FA8);"></i></div>
 		</div>`).join("")}</div>
-		<div class="jw-note">Loss is booked when work is received back, so it belongs to the bench
-			that returned it — not to the bench that issued it.</div>`;
+		<div class="jw-note">Issue and receipt are one record at one bench, so a bench's loss is
+			always its own — weighed out to a pair of hands, weighed back in from them.</div>`;
 }
 
 function jwDayHtml(d) {
@@ -802,8 +802,9 @@ function jwDayHtml(d) {
 				<span class="w">${p.issued} taken</span>
 				<span class="v">${p.done}</span></div>`).join("")}</div>` : ""}
 
-		<div class="jw-note">${esc(d.today)} · a card counts where it was issued and where it
-			was received, so a piece that moved twice today shows on both benches.</div>`;
+		<div class="jw-note">${esc(d.today)} · issued and done are counted at the bench they
+			happened at, so they need not match: work issued late yesterday is finished today, and
+			a card that cleared two benches today is counted at each.</div>`;
 }
 
 // ---------------------------------------------------------------------------
