@@ -18446,6 +18446,30 @@ def email_cert_excel(name, recipient, subject, body, cc=None):
 	return {"sent_to": recipient, "cc": cc_list, "attachment": fname}
 
 
+def _slip_brand():
+	"""The mark and the tagline a packet slip wears, as data URIs.
+
+	Black and white on purpose: these come off a thermal or an office printer
+	onto a small card that travels with a parcel, and a gold gradient at 26mm
+	prints as a grey smudge. Read off disk and inlined so the slip is one
+	self-contained document — the print iframe has no session to fetch with."""
+	import base64 as _b64
+
+	out = {"emblem": "", "tagline": ""}
+	base = frappe.get_app_path("jewelima", "public", "images", "brand")
+	try:
+		with open(base + "/emblem-black.svg", "rb") as fh:
+			out["emblem"] = "data:image/svg+xml;base64," + _b64.b64encode(fh.read()).decode()
+	except Exception:
+		pass
+	try:
+		with open(base + "/letterhead-footer.png", "rb") as fh:
+			out["tagline"] = "data:image/png;base64," + _b64.b64encode(fh.read()).decode()
+	except Exception:
+		pass
+	return out
+
+
 @frappe.whitelist()
 def set_cert_submission_no(name, submission_no=""):
 	"""The lab's own number for the packet, written on the counter when it is
@@ -18497,6 +18521,7 @@ def get_cert_batch_slip(name):
 	t_ct = sum(g["ct"] for _, g in groups)
 
 	qr = _qr_data_uri(name) or ""
+	_brand = _slip_brand()
 	centre = (d.center or "").split("-", 1)[-1].strip() if d.center else ""
 	head_bits = [x for x in (d.cert_type or d.certification_type or "", centre, d.quality or "") if x]
 
@@ -18536,9 +18561,13 @@ def get_cert_batch_slip(name):
 	.sub-no {{ font-size:9pt; padding-top:1.5mm; }}
 	.sub-no b {{ font-size:12pt; letter-spacing:.3px; }}
 	.sub-missing {{ font-size:8pt; color:#8a5a00; padding-top:1.5mm; }}
-	.ft {{ font-size:6.5pt; color:#888; padding-top:2.5mm; }}
+	.mark {{ width:13mm; padding-right:3.5mm; }}
+	.mark img {{ width:13mm; display:block; }}
+	.ft {{ font-size:6.5pt; color:#888; padding-top:2mm; }}
+	.tag img {{ width:100%; display:block; margin-top:1.5mm; }}
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
+		<td class="mark">{emblem}</td>
 		<td>
 			<div class="nm">{nm}</div>
 			<div class="sub">{sub}</div>
@@ -18555,8 +18584,11 @@ def get_cert_batch_slip(name):
 			<td class="n">{t_gw}</td><td class="n">{t_ct}</td></tr></tbody>
 	</table>
 	<div class="ft">{ft}</div>
+	<div class="tag">{tagline}</div>
 	</div></body></html>""".format(
 		nm=frappe.utils.escape_html(name),
+		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
+		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
 		pc=t_pc, pcl=frappe._("piece(s)"),
 		subno=('<div class="sub-no">{0} <b>{1}</b></div>'.format(
@@ -19915,6 +19947,7 @@ def get_hall_batch_slip(name):
 	t_ct = sum(g["ct"] for _, g in groups)
 
 	qr = _qr_data_uri(name) or ""
+	_brand = _slip_brand()
 	centre = (d.center or "").split("-", 1)[-1].strip() if d.center else ""
 	head_bits = [x for x in (frappe._("HALLMARKING"), centre) if x]
 
@@ -19951,9 +19984,13 @@ def get_hall_batch_slip(name):
 	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
 	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
 		font-size:10.5pt; padding-top:1.6mm; }}
-	.ft {{ font-size:6.5pt; color:#888; padding-top:2.5mm; }}
+	.mark {{ width:13mm; padding-right:3.5mm; }}
+	.mark img {{ width:13mm; display:block; }}
+	.ft {{ font-size:6.5pt; color:#888; padding-top:2mm; }}
+	.tag img {{ width:100%; display:block; margin-top:1.5mm; }}
 	</style></head><body><div class="slip">
 	<table class="hd"><tr>
+		<td class="mark">{emblem}</td>
 		<td>
 			<div class="nm">{nm}</div>
 			<div class="sub">{sub}</div>
@@ -19969,8 +20006,11 @@ def get_hall_batch_slip(name):
 			<td class="n">{t_gw}</td><td class="n">{t_ct}</td></tr></tbody>
 	</table>
 	<div class="ft">{ft}</div>
+	<div class="tag">{tagline}</div>
 	</div></body></html>""".format(
 		nm=frappe.utils.escape_html(name),
+		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
+		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
 		sub=frappe.utils.escape_html(" · ".join(head_bits)) or "&nbsp;",
 		pc=t_pc, pcl=frappe._("piece(s)"),
 		qrimg='<img src="{0}">'.format(qr) if qr else "",
