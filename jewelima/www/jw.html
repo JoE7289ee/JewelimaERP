@@ -55,6 +55,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .85); margin-top: 1px; }
 /* the board */
+.jw-livebar { display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+	font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+	color: rgba(123, 216, 164, .85); margin: 0 2px 8px; }
+.jw-live { width: 9px; height: 9px; border-radius: 50%; background: #7BD8A4;
+	animation: jw-breathe 1.6s cubic-bezier(.3, .8, .4, 1); }
+@keyframes jw-breathe {
+	0%   { transform: scale(.7); box-shadow: 0 0 0 0 rgba(123, 216, 164, .55); opacity: .7; }
+	35%  { transform: scale(1.25); box-shadow: 0 0 0 9px rgba(123, 216, 164, 0); opacity: 1; }
+	100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(123, 216, 164, 0); opacity: .9; }
+}
+@media (prefers-reduced-motion: reduce) { .jw-live { animation: none; } }
 .jw-screen .bar .jw-ref { margin-left: auto; }
 .jw-screen .bar .jw-out { margin-left: 0; }
 .jw-screen .bar .jw-scanbtn + .jw-out { margin-left: 0; }
@@ -1453,7 +1464,10 @@ const jwLast = {};
 
 function jwRatesHtml(d) {
 	const karats = ["24K", "22K", "18K", "14K"];
-	return (d.hero || []).map((h) => {
+	// the board can tick without a single figure moving, which reads as a dead
+	// screen — so the dot breathes on every answer, news or not
+	const live = `<div class="jw-livebar"><span class="jw-live"></span>live</div>`;
+	return live + (d.hero || []).map((h) => {
 		if (h.error && h.rate == null) {
 			return `<div class="jw-hero"><div class="n">${esc(h.name)}</div>
 				<div class="of">${esc(h.error)}</div></div>`;
