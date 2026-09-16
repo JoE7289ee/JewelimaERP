@@ -2963,6 +2963,16 @@ def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employe
 		"entry_type": entry_type, "bench": bench or None, "employee": employee or None,
 		"datetime": frappe.utils.now_datetime(), "reference": reference, "remarks": remarks,
 	}).insert(ignore_permissions=True)
+	# The card's ACTUAL weights follow its ledger, always. They used to be stamped
+	# at casting and left there, so a gram written off as loss the next day never
+	# reached them: Card Info read 17.150 while the bag held 16.065. Every movement
+	# now re-reads the bag. A finished product is the exception and refresh_actual_
+	# weights knows it — its materials are consumed, so its weights are frozen.
+	try:
+		refresh_actual_weights(order_bag)
+	except Exception:
+		# a weight that cannot be recomputed must never lose the ledger row itself
+		frappe.log_error(frappe.get_traceback(), "refresh_actual_weights({0})".format(order_bag))
 	frappe.db.commit()
 	return doc.name
 
