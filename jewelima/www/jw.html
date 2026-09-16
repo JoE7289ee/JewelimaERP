@@ -124,7 +124,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Nine shells, nothing wired yet · <a href="/app">open the full desk</a>
+		Nine shells, nothing wired yet · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -187,5 +187,8 @@ document.getElementById("jw-scan").addEventListener("keydown", (e) => {
 });
 
 function jwLogout() { window.location.href = "/api/method/logout"; }
+
+// landing here means the phone app is wanted again — forget any "keep the desk"
+try { localStorage.removeItem("jw-force-desk"); } catch (e) { /* nothing to undo */ }
 </script>
 {% endblock %}

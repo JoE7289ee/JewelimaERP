@@ -95,6 +95,31 @@ jewelima.weightOnly = function (host, selector, scanEl) {
 	});
 };
 
+// ---------------------------------------------------------------------------
+// A PHONE gets the phone app, not the desk shrunk to a quarter of itself.
+//
+// The desk is built for a monitor: a 14-column grid on a 390px screen is
+// unusable however politely it wraps. A narrow screen is sent to /jw, which is
+// one screen built for a thumb.
+//
+// Two ways out, both deliberate: the "open the full desk" link on /jw carries
+// ?desk=1 and that choice is remembered for this browser, so a manager who
+// wants the real thing on a tablet keeps it; opening /jw again clears it.
+// ---------------------------------------------------------------------------
+(() => {
+	const PHONE = 760;   // tablets keep the desk; phones do not
+	try {
+		const q = new URLSearchParams(window.location.search);
+		if (q.get("desk") === "1") localStorage.setItem("jw-force-desk", "1");
+		if (q.get("desk") === "0") localStorage.removeItem("jw-force-desk");
+		if (localStorage.getItem("jw-force-desk") === "1") return;
+	} catch (e) { /* storage blocked — judge on width alone */ }
+	const w = Math.min(window.innerWidth || 9999, (window.screen && window.screen.width) || 9999);
+	if (w > PHONE) return;
+	if ((window.location.pathname || "").startsWith("/jw")) return;
+	window.location.replace("/jw");
+})();
+
 jewelima.freezeStep = function (msg) {
 	const $lead = $("#freeze .freeze-message .lead");
 	if (frappe.dom.freeze_count && $lead.length) $lead.html(msg);
