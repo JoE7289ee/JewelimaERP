@@ -204,11 +204,17 @@ jewelima.print_header = function (b, title) {
 		? `<img class="jw-plogo" src="${window.location.origin}${art}" alt="${esc(b.company || "Jewelima")}">`
 		: `<div class="jw-pco">${esc(b.company || "Jewelima")}</div>`;
 
+	// No phone, no email, no address on a printout: these sheets travel between
+	// our own desks and our buyers' desks, and the stationery already says whose
+	// they are. A paper that wants the contact line can ask for it with
+	// show_contact — nothing does today.
 	const items = [];
-	if (b.phone) items.push(`<span class="jw-ci">${I.phone}${esc(b.phone)}</span>`);
-	if (b.address) items.push(`<span class="jw-ci">${I.pin}${esc(b.address)}</span>`);
-	if (b.website) items.push(`<span class="jw-ci">${I.web}${esc(b.website)}</span>`);
-	else if (b.email) items.push(`<span class="jw-ci">${I.mail}${esc(b.email)}</span>`);
+	if (b.show_contact) {
+		if (b.phone) items.push(`<span class="jw-ci">${I.phone}${esc(b.phone)}</span>`);
+		if (b.address) items.push(`<span class="jw-ci">${I.pin}${esc(b.address)}</span>`);
+		if (b.website) items.push(`<span class="jw-ci">${I.web}${esc(b.website)}</span>`);
+		else if (b.email) items.push(`<span class="jw-ci">${I.mail}${esc(b.email)}</span>`);
+	}
 	const contact = items.join('<span class="jw-sep">|</span>');
 
 	return `<div class="jw-phead">${logo}${contact ? `<div class="jw-pcontact">${contact}</div>` : ""}</div>
