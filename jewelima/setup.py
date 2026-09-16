@@ -145,6 +145,7 @@ def after_migrate():
 	seed_salesmen()
 	seed_standard_golds()
 	retag_swarovski()
+	brand_the_login_page()
 	sync_workspace_sidebar()
 	check_sidebar_icons()
 	ensure_home_block()
@@ -1601,6 +1602,32 @@ def seed_findings():
 
 
 
+def brand_the_login_page():
+	"""Our name and our mark on the login screen.
+
+	Frappe reads the login logo from Website Settings, then Navbar Settings, then
+	the app's hook — the hook already hands it our mark, but the heading reads
+	"Login to Frappe" until app_name is set, and that is a site setting nobody
+	would think to look for. Setting it here means a fresh site comes up branded.
+	A name somebody has deliberately chosen is never overwritten."""
+	from jewelima.jewelima import brand
+
+	try:
+		ws = frappe.get_single("Website Settings")
+		dirty = False
+		if (ws.get("app_name") or "").strip() in ("", "Frappe", "ERPNext"):
+			ws.app_name = "Jewelima Diamonds"
+			dirty = True
+		for field in ("app_logo", "favicon", "splash_image"):
+			if not (ws.get(field) or "").strip():
+				ws.set(field, brand.LOGO_SQUARE)
+				dirty = True
+		if dirty:
+			ws.flags.ignore_mandatory = True
+			ws.save(ignore_permissions=True)
+	except Exception:
+		# branding is never worth failing a migrate over
+		frappe.log_error(frappe.get_traceback(), "brand_the_login_page")
 def set_default_workspace(force=False):
 	"""Everyone lands on the Jewelima workspace when they log in.
 

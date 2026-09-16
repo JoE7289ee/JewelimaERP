@@ -1,0 +1,57 @@
+/* Copyright (c) 2026, efeone and contributors
+ *
+ * The LOGIN screen, in the brand's colours. Loaded on website pages through
+ * web_include_css and scoped to the login path, so our own web dashboards
+ * (intake, board, tv, overview) keep their own styling.
+ *
+ * Palette: emerald 0D2B1E · forest 1B4332 · gold D4AF37 · ivory FAF7EF.
+ */
+[data-path="login"] {
+	--jw-emerald: #0D2B1E;
+	--jw-forest: #1B4332;
+	--jw-gold: #D4AF37;
+	--jw-champagne: #E6C778;
+	--jw-ivory: #FAF7EF;
+	background: radial-gradient(120% 90% at 50% 0%, var(--jw-forest) 0%, var(--jw-emerald) 62%) fixed;
+	color: var(--jw-ivory);
+}
+[data-path="login"] .page-card {
+	background: var(--jw-ivory);
+	border: 1px solid rgba(212, 175, 55, .45);
+	border-radius: 16px;
+	box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+	padding: 30px 30px 26px;
+}
+/* the mark sits on the emerald ABOVE the card, at a size worth looking at */
+[data-path="login"] .page-card-head img.app-logo {
+	width: 74px;
+	height: 74px;
+	border-radius: 14px;
+	margin-bottom: 12px;
+}
+/* the heading sits on the emerald, above the card — ivory, not ink */
+[data-path="login"] .page-card-head h4 {
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: .05em;
+	color: var(--jw-ivory);
+}
+[data-path="login"] .page-card .page-card-head h4 { color: var(--jw-emerald); }
+[data-path="login"] .btn-primary {
+	background: var(--jw-emerald);
+	border-color: var(--jw-emerald);
+	font-weight: 700;
+	letter-spacing: .03em;
+}
+[data-path="login"] .btn-primary:hover,
+[data-path="login"] .btn-primary:focus {
+	background: var(--jw-forest);
+	border-color: var(--jw-gold);
+}
+[data-path="login"] a { color: var(--jw-forest); }
+[data-path="login"] a:hover { color: var(--jw-emerald); }
+[data-path="login"] .page-card-actions,
+[data-path="login"] .forgot-password-message { font-size: 12.5px; }
+/* the footer line under the card sits on the dark ground, not on the card */
+[data-path="login"] .web-footer,
+[data-path="login"] .footer-powered { color: rgba(250, 247, 239, .55); }

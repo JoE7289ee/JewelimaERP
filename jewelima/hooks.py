@@ -32,7 +32,7 @@ app_include_css = ["jewelima.bundle.css"]
 app_include_js = ["branding.bundle.js", "viz.bundle.js", "sidebar.bundle.js"]
 
 # include js, css files in header of web template
-# web_include_css = "/assets/jewelima/css/jewelima.css"
+web_include_css = ["jewelima_web.bundle.css"]
 # web_include_js = "/assets/jewelima/js/jewelima.js"
 
 # include custom scss in every website theme (without file extension ".scss")
