@@ -12886,9 +12886,15 @@ def get_jw_stones():
 		p = places.setdefault(label, {"carat": 0.0, "by": {}})
 		p["carat"] += ct
 		p["by"][code] = flt(p["by"].get(code)) + ct
-		k = buckets.setdefault(code, {"carat": 0.0, "items": {}})
+		k = buckets.setdefault(code, {"carat": 0.0, "items": {}, "groups": {}})
 		k["carat"] += ct
 		k["items"][b.item_code] = flt(k["items"].get(b.item_code)) + ct
+		# the item group carries the quality — "DIAMOND VVS-EF" — which is how
+		# the floor asks for a stone: the quality first, the sieve size after
+		g = k["groups"].setdefault(frappe.db.get_value("Item", b.item_code, "item_group") or "—",
+			{"carat": 0.0, "items": {}})
+		g["carat"] += ct
+		g["items"][b.item_code] = flt(g["items"].get(b.item_code)) + ct
 
 	total = sum(p["carat"] for p in places.values())
 	rows = sorted(({
@@ -12901,12 +12907,24 @@ def get_jw_stones():
 			for c, w in v["by"].items()), key=lambda x: -x["carat"]),
 	} for k, v in places.items()), key=lambda x: -x["carat"])
 
+	def strip_kind(group, full):
+		"""'DIAMOND VVS-EF' under Diamond is just 'VVS-EF'. The bucket is already
+		the heading above it; repeating it in every row is noise."""
+		g = (group or "").strip()
+		lead = (full or "").upper()
+		return g[len(lead):].strip(" -") if g.upper().startswith(lead) and len(g) > len(lead) else g
+
 	kinds = sorted(({
 		"code": c, "label": LABEL[c], "name": FULL[c],
 		"carat": round(v["carat"], 3), "items": len(v["items"]),
 		"share": round(v["carat"] / total * 100, 1) if total else 0,
-		"top": [{"item": i, "carat": round(w, 3)}
-			for i, w in sorted(v["items"].items(), key=lambda x: -x[1])[:12]],
+		"groups": sorted(({
+			"label": strip_kind(gn, FULL[c]),
+			"carat": round(gv["carat"], 3),
+			"items": len(gv["items"]),
+			"top": [{"item": i, "carat": round(w, 3)}
+				for i, w in sorted(gv["items"].items(), key=lambda x: -x[1])[:14]],
+		} for gn, gv in v["groups"].items()), key=lambda x: -x["carat"]),
 	} for c, v in buckets.items()), key=lambda x: -x["carat"])
 
 	return {"places": rows, "buckets": kinds,
