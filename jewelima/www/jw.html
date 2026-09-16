@@ -75,6 +75,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: var(--jw-dim); opacity: .7; margin-top: 7px; }
+/* the floor: a tile per location */
+.jw-kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+.jw-kpi div { background: rgba(250, 247, 239, .08); border-radius: 12px; padding: 10px 6px; text-align: center; }
+.jw-kpi .kk { font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+	color: var(--jw-dim); }
+.jw-kpi .kv { font-size: 18px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums;
+	margin-top: 2px; }
+.jw-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.jw-tile2 { border: 1px solid rgba(250, 247, 239, .13); border-radius: 14px; padding: 11px 12px;
+	background: rgba(250, 247, 239, .05); }
+.jw-tile2 .ln { font-size: 12px; font-weight: 800; letter-spacing: .05em; color: var(--jw-champagne);
+	text-transform: uppercase; }
+.jw-tile2 .cd { font-size: 23px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums;
+	margin-top: 3px; line-height: 1.1; }
+.jw-tile2 .cd small { font-size: 11px; font-weight: 700; color: var(--jw-dim); }
+.jw-tile2 .pc { font-size: 11px; color: var(--jw-dim); }
+.jw-tile2 .wt { font-size: 12px; font-weight: 700; margin-top: 7px; color: #FFFFFF;
+	font-variant-numeric: tabular-nums; }
+.jw-tile2 .wt span { font-size: 10px; font-weight: 700; color: var(--jw-dim); }
+.jw-tile2 .st { margin-top: 6px; }
+.jw-tile2 .st .chip { display: inline-block; margin: 3px 4px 0 0; padding: 1px 7px; border-radius: 20px;
+	font-size: 9.5px; font-weight: 800; color: #12271D; }
+.jw-tile2 .aw { margin-top: 6px; font-size: 10.5px; font-weight: 700; color: #F2C57C; }
+
 /* the issue counter: three columns, and a row that goes red when short */
 .jw-iss .ih, .jw-iss .ir { display: flex; align-items: baseline; gap: 8px; padding: 9px 0;
 	border-bottom: 1px solid rgba(250, 247, 239, .08); }
@@ -368,7 +392,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Five tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
+		Six tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -382,6 +406,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<div class="big" id="jw-screen-icon"></div>
 		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
 	</div>
+</div>
+
+<!-- Floor: where the cards are, and what they carry -->
+<div class="jw-screen" id="jw-floor">
+	<div class="bar">
+		<button class="back" onclick="jwFloorClose()">&#8592;</button>
+		<div class="ttl">Floor</div>
+		<button class="jw-ref" onclick="jwReread(this, jwFloor)" title="Read it again">&#8635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
+	</div>
+	<div class="jw-body" id="jw-floor-body"></div>
 </div>
 
 <!-- Stone Stock: every carat the house holds -->
@@ -457,8 +492,8 @@ const JW_TILES = [
 	{ icon: "🟡", label: "Gold Stock", screen: "gold" },
 	{ icon: "🧾", label: "Price Chart", screen: "chart" },
 	{ icon: "💠", label: "Stone Stock", screen: "stone" },
+	{ icon: "🏭", label: "Floor", screen: "floor" },
 	{ icon: "🧰", label: "Job Work" },
-	{ icon: "↔️", label: "Transfer" },
 	{ icon: "⚖️", label: "Weigh" },
 	{ icon: "📦", label: "Parcel" },
 	{ icon: "🏷️", label: "Prepare Sale" },
@@ -488,6 +523,7 @@ grid.addEventListener("click", (e) => {
 	if (t.screen === "gold") { jwGold(); return; }
 	if (t.screen === "chart") { jwCharts(); return; }
 	if (t.screen === "stone") { jwStones(); return; }
+	if (t.screen === "floor") { jwFloor(); return; }
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
@@ -496,7 +532,8 @@ grid.addEventListener("click", (e) => {
 function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
 // the back gesture closes whatever is open rather than leaving the app
 window.addEventListener("popstate", () => {
-	jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwChartClose(); jwStoneClose(); jwCamStop();
+	jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwChartClose(); jwStoneClose();
+	jwFloorClose(); jwCamStop();
 });
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
@@ -598,6 +635,65 @@ function jwCardHtml(d) {
 			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
 			${row("Remark", b.narration ? esc(b.narration) : "")}
 		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// FLOOR — where the cards are, and what they are carrying.
+//
+// One tile per location: cards, pieces, the pure gold on that bench and its
+// stones by bucket. The weights are the cards' ACTUAL figures, so a tile says
+// what is physically there rather than what was planned for it. Nothing is
+// per-card here — opening a card is the desk's job, or Card Info's.
+// ---------------------------------------------------------------------------
+const floorBody = document.getElementById("jw-floor-body");
+
+function jwFloor() {
+	document.getElementById("jw-floor").classList.add("on");
+	if (!floorBody.innerHTML.trim()) {
+		floorBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading the floor…</div>`;
+	}
+	return jwApi("jewelima.jewelima.api.get_jw_floor", {})
+		.then((d) => {
+			if (!d || !d.rows) throw new Error("empty");
+			floorBody.innerHTML = jwFloorHtml(d);
+		})
+		.catch(() => {
+			if (!floorBody.querySelector(".jw-tiles")) {
+				floorBody.innerHTML = `<div class="jw-err">The floor could not be read just now.</div>`;
+			}
+		});
+}
+
+function jwFloorClose() { document.getElementById("jw-floor").classList.remove("on"); }
+
+function jwFloorHtml(d) {
+	const t = d.totals || {};
+	const tile = (r) => `<div class="jw-tile2">
+		<div class="ln">${esc(r.location)}</div>
+		<div class="cd">${whole(r.cards)} <small>card${r.cards === 1 ? "" : "s"}</small></div>
+		<div class="pc">${whole(r.pieces)} piece${r.pieces === 1 ? "" : "s"}</div>
+		${r.pure ? `<div class="wt">${g3s(r.pure)} <span>pure g</span></div>` : ""}
+		${r.stones.length ? `<div class="st">${r.stones.map((x) =>
+			`<span class="chip s-${x.code}">${x.label} ${ctf(x.carat)}</span>`).join("")}</div>` : ""}
+		${r.awaiting_stones ? `<div class="aw">${r.awaiting_stones} waiting on stones</div>` : ""}
+	</div>`;
+	return `<div class="jw-kpi">
+			<div><div class="kk">Cards</div><div class="kv">${whole(t.cards)}</div></div>
+			<div><div class="kk">Pieces</div><div class="kv">${whole(t.pieces)}</div></div>
+			<div><div class="kk">Places</div><div class="kv">${whole(t.places)}</div></div>
+		</div>
+		<div class="jw-kpi">
+			<div style="grid-column:span 3;display:flex;gap:18px;justify-content:center;">
+				<span><span class="kk">Gold</span> <b class="kv" style="font-size:15px">${g3s(t.pure)}</b>
+					<span class="kk">pure g</span></span>
+				<span><span class="kk">Stones</span> <b class="kv" style="font-size:15px">${ctf(t.carat)}</b>
+					<span class="kk">ct</span></span>
+			</div>
+		</div>
+
+		<div class="jw-gsec">By location</div>
+		<div class="jw-tiles">${(d.rows || []).map(tile).join("")}</div>
+		<div class="jw-note">Cards still in production only — a finished piece has left the floor.</div>`;
 }
 
 // ---------------------------------------------------------------------------

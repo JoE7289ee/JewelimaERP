@@ -12838,6 +12838,51 @@ def get_price_chart(name):
 
 
 @frappe.whitelist()
+def get_jw_floor():
+	"""The floor at a glance: where the cards are, and what they are carrying.
+
+	One row per location — how many cards, how many pieces, the pure gold in
+	them and their stones by bucket. The weights are the cards' ACTUAL figures,
+	so a location's total is what is physically on that bench, not what was
+	planned for it. Nothing here is per-card: this is the shape of the floor,
+	and the desk is where a card is opened."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	BUCKETS = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
+	LABEL = {"dmd": "DMD", "ps": "PS", "cs": "CS", "cz": "CZ", "cvd": "CVD",
+		"sw": "SW", "pdmd": "PDMD", "poth": "POTH"}
+	sums = ", ".join("SUM(IFNULL(act_{0}_weight, 0)) {0}".format(b) for b in BUCKETS)
+	rows = frappe.db.sql("""
+		SELECT IFNULL(location, '—') location, COUNT(*) cards, SUM(IFNULL(qty, 1)) pieces,
+			SUM(IFNULL(act_pure_weight, 0)) pure, SUM(IFNULL(act_gross_weight, 0)) gross,
+			SUM(IF(stone_issue = 1, 1, 0)) awaiting_stones, {0}
+		FROM `tabOrder Bag`
+		WHERE is_finished = 0 AND stock_status = 'In Production'
+		GROUP BY location
+		ORDER BY cards DESC""".format(sums), as_dict=True)
+	out = []
+	for r in rows:
+		stones = [{"code": b, "label": LABEL[b], "carat": round(flt(r.get(b)), 3)}
+			for b in BUCKETS if flt(r.get(b)) > 0.0005]
+		out.append({
+			"location": r.location, "cards": cint(r.cards), "pieces": cint(r.pieces),
+			"pure": round(flt(r.pure), 3), "gross": round(flt(r.gross), 3),
+			"awaiting_stones": cint(r.awaiting_stones),
+			"carat": round(sum(s["carat"] for s in stones), 3), "stones": stones,
+		})
+	return {
+		"rows": out,
+		"totals": {
+			"cards": sum(r["cards"] for r in out),
+			"pieces": sum(r["pieces"] for r in out),
+			"pure": round(sum(r["pure"] for r in out), 3),
+			"carat": round(sum(r["carat"] for r in out), 3),
+			"places": len(out),
+		},
+		"at": frappe.utils.now(),
+	}
+
+
+@frappe.whitelist()
 def get_jw_stones():
 	"""Every stone the house holds, in carats, by BUCKET. No money on this screen.
 
