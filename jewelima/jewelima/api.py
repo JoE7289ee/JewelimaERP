@@ -15622,7 +15622,8 @@ def export_old_sale_xlsx(filedata, priced, totals, filename=None):
 @frappe.whitelist()
 def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18 KT",
 		gst_percent=3, igi_flat=80, igi_per_ct=325, igi_threshold=0.10,
-		huid_rate=0, party="", item_colour="", filename=None, cs_grams=0):
+		huid_rate=0, party="", item_colour="", filename=None, cs_grams=0,
+		layout="jos", split_above=0, split_every=0):
 	"""The JOS BILLING workbook with LIVE formulas: gold = net x the rate cell,
 	diamonds split into the chart's bracket GROUPS (one group per piece), IGI
 	slab (chart-held when present), footer Total -> Hall Marking (HUID) ->
@@ -15962,10 +15963,28 @@ def export_old_sale_jos(priced, price_chart, gold_rate, quality, karat_label="18
 	by_shape = any(str(p.get("colour") or "").strip() for p in priced)
 
 	def items_of(run):
-		"""item -> shape -> bands over one run; returns its band-total rows."""
+		"""item -> shape -> bands over one run; returns its band-total rows.
+
+		BLR (layout="item") breaks the ladder differently: one subtotal per ITEM
+		and nothing else — no shape break, no colour break, no weight band. A long
+		item is cut into blocks so a page of sixty rows is not read against a
+		single figure at the bottom: over `split_above` pieces, a subtotal every
+		`split_every` (200 pieces at 80 => 80, 80, 40)."""
 		made = []
 		for _item, ig in groupby(run, key=lambda p: (p.get("item") or "")):
 			irun = list(ig)
+			if layout == "item":
+				step = cint(split_every) or len(irun)
+				# at the threshold, not past it: 200 pieces at 80 is the case the
+				# desk described, and it has to break
+				parts = ([irun[i:i + step] for i in range(0, len(irun), step)]
+					if cint(split_above) and len(irun) >= cint(split_above) else [irun])
+				for part in parts:
+					bstart = r
+					for piece in part:
+						write_piece(piece)
+					made.append(sum_row("", span(bstart, r - 1), font=bold))
+				continue
 			if not by_shape:
 				made.extend(runs(irun))
 				continue

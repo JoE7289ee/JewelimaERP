@@ -199,6 +199,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			<button class="of-btn go of-price">${__("Price it")}</button>
 			<button class="of-btn of-rules" style="display:none;">${__("Pricing Rules")}</button>
 			<button class="of-btn of-jos" style="display:none;">${__("JOS Billing ⤓")}</button>
+			<button class="of-btn of-josblr" style="display:none;">${__("JOS BLR Billing ⤓")}</button>
 			<button class="of-btn of-dl">${__("NEW format ⤓")}</button>
 			<span style="flex:1;"></span>
 			<button class="of-btn of-units"></button>
@@ -229,7 +230,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	const unprice = () => {
 		if (!PRICED) return;
 		PRICED = null;
-		root.find(".of-jos, .of-rules").hide();
+		root.find(".of-jos, .of-josblr, .of-rules").hide();
 		paint();
 	};
 	const fChart = mk(".of-chart", { fieldtype: "Link", label: __("Price Chart"), fieldname: "chart", options: "Price Chart", only_select: 1,
@@ -303,7 +304,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 	function invalidate() {
 		SORTED = false;
 		PRICED = null;
-		root.find(".of-jos, .of-rules").hide();
+		root.find(".of-jos, .of-josblr, .of-rules").hide();
 	}
 
 	// each row wears a whisper of its assigned colour (selection/flags win —
@@ -423,7 +424,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			root.find(".of-cover").html(__("Saved import <b>{0}</b> ({1}) · party <b>{2}</b> · <b>{3}</b> piece(s)",
 				[esc(m.title), esc(m.status), esc(m.party || "—"), ROWS.length]));
 			root.find(".of-save, .of-sortnum, .of-find, .of-weights, .of-goexport, .of-xlexport").show();
-			root.find(".of-jos").hide();
+			root.find(".of-jos, .of-josblr").hide();
 			refreshSaveBtn();
 			setState("prep");
 		});
@@ -1165,7 +1166,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			PRICED = r.message || null;
 			if (!PRICED) return;
 			paint();
-			root.find(".of-jos, .of-rules").show();
+			root.find(".of-jos, .of-josblr, .of-rules").show();
 			const flagged = PRICED.rows.filter((x) => (x.flags || []).length).length;
 			if (flagged) frappe.show_alert({ message: __("{0} row(s) carry notes — check the yellow lines.", [flagged]), indicator: "orange" }, 5);
 		});
@@ -1242,18 +1243,29 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 		d.show();
 	});
 
-	root.on("click", ".of-jos", () => {
+	// BLR wants the same bill broken differently: a subtotal per ITEM and nothing
+	// else, and a long item cut into blocks so the eye has somewhere to rest.
+	root.on("click", ".of-josblr", () => josDialog(true));
+	root.on("click", ".of-jos", () => josDialog(false));
+	function josDialog(blr) {
 		if (!PRICED) return;
 		const hasSlab = ((CHART && CHART.certification_charges) || []).some((c) => flt(c.to_ct) > 0);
 		const d = new frappe.ui.Dialog({
-			title: __("JOS Billing export"),
+			title: blr ? __("JOS BLR Billing export") : __("JOS Billing export"),
 			fields: [
 				{ fieldname: "karat", fieldtype: "Data", label: __("Metal purity label"), default: "18 KT", reqd: 1 },
 				{ fieldname: "item_colour", fieldtype: "Data", label: __("Item colour (rows without one)"), default: "YELLOW" },
 				{ fieldname: "party", fieldtype: "Data", label: __("Shop / party"), default: fParty.get_value() || "" },
 				{ fieldname: "fname", fieldtype: "Data", label: __("File name"), reqd: 1,
-					default: "JOS BILLING " + (FILE.name || "old-format").replace(/\.xlsx$/i, "") },
-			].concat(hasSlab ? [
+					default: (blr ? "JOS BLR BILLING " : "JOS BILLING ")
+						+ (FILE.name || "old-format").replace(/\.xlsx$/i, "") },
+			].concat(blr ? [
+				{ fieldname: "split_sec", fieldtype: "Section Break", label: __("Long items") },
+				{ fieldname: "split_above", fieldtype: "Int", label: __("Split an item from"), default: 200,
+					description: __("pieces — leave 0 to keep one subtotal per item however long it runs") },
+				{ fieldname: "split_every", fieldtype: "Int", label: __("Subtotal every"), default: 80,
+					description: __("pieces — 200 at 80 reads 80, 80, 40") },
+			] : []).concat(hasSlab ? [
 				{ fieldname: "slab_note", fieldtype: "HTML",
 					options: "<div class='text-muted' style='font-size:12px;'>" + __("IGI comes from the price chart's certification slab (single-stone pieces take the Solitaire tiers).") + "</div>" },
 			] : [
@@ -1271,6 +1283,9 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 					karat_label: v.karat, item_colour: (v.item_colour || "").toUpperCase().trim(),
 					gst_percent: fGst.get_value() || 0,
 					igi_flat: v.igi_flat || 80, igi_per_ct: v.igi_per_ct || 325, igi_threshold: v.igi_threshold || 0.10,
+					layout: blr ? "item" : "jos",
+					split_above: blr ? (v.split_above || 0) : 0,
+					split_every: blr ? (v.split_every || 0) : 0,
 					party: v.party || "", filename: v.fname,
 					// the bill reads in whatever unit the sheet is showing
 					cs_grams: CSG ? 1 : 0,
@@ -1278,7 +1293,7 @@ frappe.pages["old-format"].on_page_load = function (wrapper) {
 			},
 		});
 		d.show();
-	});
+	}
 
 	// Saved Imports page hands over here: Resume sets route_options.session
 	wrapper.of_load_session = loadSession;
