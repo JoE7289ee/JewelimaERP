@@ -590,11 +590,11 @@ function jwStones() {
 	}
 	return jwApi("jewelima.jewelima.api.get_jw_stones", {})
 		.then((d) => {
-			if (!d || !d.totals) throw new Error("empty");
+			if (!d || !d.buckets) throw new Error("empty");
 			stoneBody.innerHTML = jwStoneHtml(d);
 		})
 		.catch(() => {
-			if (!stoneBody.querySelector(".jw-tot")) {
+			if (!stoneBody.querySelector(".jw-q")) {
 				stoneBody.innerHTML = `<div class="jw-err">The stones could not be counted just now.</div>`;
 			}
 		});
