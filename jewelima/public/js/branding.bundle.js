@@ -266,6 +266,40 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	document.head.appendChild(st);
 })();
 
+// ---------------------------------------------------------------------------
+// DARK MODE ONLY: the sidebar is a light green panel. Light mode is left exactly
+// as it is. Core paints the rail from --surface-menu-bar with light text, so the
+// text, icons and the hover/active states are turned back to dark green here or
+// they would vanish on the pale ground.
+// ---------------------------------------------------------------------------
+(() => {
+	const st = document.createElement("style");
+	st.textContent = `
+	[data-theme="dark"] .body-sidebar{
+		background:#e6f2ea;
+		border-right-color:#c7e0d1;
+		--sidebar-hover-color:#d6eadd;
+		--sidebar-active-color:#c6e3d2;
+		--sidebar-border-color:#c7e0d1;
+		--divider-color:#cfe5d7;
+	}
+	[data-theme="dark"] .body-sidebar,
+	[data-theme="dark"] .body-sidebar *:not(svg):not(path){color:#14532d;}
+	[data-theme="dark"] .body-sidebar .sidebar-item-label,
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item span,
+	[data-theme="dark"] .body-sidebar .standard-sidebar-label{color:#14532d !important;}
+	[data-theme="dark"] .body-sidebar .sidebar-item-icon svg,
+	[data-theme="dark"] .body-sidebar .drop-icon svg,
+	[data-theme="dark"] .body-sidebar svg{stroke:#1e6b45;color:#1e6b45;}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item:hover{background:#d6eadd;}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item.selected{background:#c6e3d2;}
+	[data-theme="dark"] .body-sidebar hr,
+	[data-theme="dark"] .body-sidebar .divider{border-color:#cfe5d7;background:#cfe5d7;}
+	[data-theme="dark"] .body-sidebar input{background:#f2f9f5;color:#14532d;border-color:#c7e0d1;}
+	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:#d6eadd;}`;
+	document.head.appendChild(st);
+})();
+
 // Full-width: our desk pages should use the whole monitor, not Frappe's narrow
 // centred container. Scoped to Jewelima page routes so core forms/lists stay as
 // Frappe intends. (Redundant for pages that already set it — harmless.)
