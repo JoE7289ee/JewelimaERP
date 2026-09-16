@@ -10018,7 +10018,15 @@ def get_finished_buckets(include_inactive=0):
 		WHERE IFNULL(bucket,'') != '' AND is_finished = 1 AND stock_status = 'In Stock'
 		GROUP BY bucket""", as_dict=True):
 		counts[r.bucket] = cint(r.n)
-	return [{**r, "pieces": counts.get(r["name"], 0)} for r in rows]
+	# what KIND of pieces are in each bucket — a count alone does not say whether
+	# a bucket holds rings or chains
+	types = {}
+	for r in frappe.db.sql("""SELECT b.bucket, IFNULL(d.design_type, '') dt, COUNT(*) n
+		FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design
+		WHERE IFNULL(b.bucket,'') != '' AND b.is_finished = 1 AND b.stock_status = 'In Stock'
+		GROUP BY b.bucket, IFNULL(d.design_type, '') ORDER BY n DESC""", as_dict=True):
+		types.setdefault(r.bucket, []).append({"type": r.dt or frappe._("untyped"), "pieces": cint(r.n)})
+	return [{**r, "pieces": counts.get(r["name"], 0), "types": types.get(r["name"], [])} for r in rows]
 
 
 @frappe.whitelist()

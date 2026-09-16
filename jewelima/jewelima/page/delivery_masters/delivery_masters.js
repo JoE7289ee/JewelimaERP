@@ -50,7 +50,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 		[data-theme="dark"] .bk-tile.green .v{color:#7fc98f;}
 
 		.bk-cols{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
-		.bk-card{flex:1 1 430px;min-width:340px;border:1px solid var(--border-color);border-radius:12px;
+		.bk-card{flex:1 1 100%;min-width:340px;border:1px solid var(--border-color);border-radius:12px;
 			background:var(--fg-color);overflow:hidden;border-left:3px solid #1f618d;}
 		.bk-card > .h{padding:9px 14px;border-bottom:1px solid var(--border-color);
 			background:rgba(31,97,141,.09);color:#1f618d;font-size:11px;font-weight:800;
@@ -116,9 +116,6 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 					<input class="bk-name" placeholder="${__("new bucket name")}">
 					<button class="btn btn-sm btn-default bk-add">${__("Add")}</button>
 				</div>
-			</div>
-			<div class="bk-card bk-in"><div class="h"><span class="bk-in-t">${__("In this bucket")}</span></div>
-				<div class="bk-inbody"><div class="bk-none">${__("Pick a bucket.")}</div></div>
 			</div>
 		</div>
 	`);
@@ -198,18 +195,20 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 				<div class="v">${d.unfiled}</div></div>`);
 
 		const rows = (d.buckets || []).map((b) => `
-			<tr class="pick ${b.active ? "" : "retired"} ${S.open === b.name ? "on" : ""}" data-n="${esc(b.name)}">
+			<tr class="${b.active ? "" : "retired"}" data-n="${esc(b.name)}">
 				<td><span class="bk-nm">${esc(b.name)}</span>
 					${b.active ? "" : ` <span class="bk-tag">${__("retired")}</span>`}</td>
 				<td class="num">${cint(b.pieces)}</td>
+				<td class="bk-types">${(b.types || []).map((t) => `${esc(t.type)} <b>${t.pieces}</b>`).join("  ·  ")
+					|| `<span style="color:var(--text-muted);">—</span>`}</td>
 				<td class="num"><span class="bk-act bk-toggle" data-n="${esc(b.name)}" data-a="${b.active ? 0 : 1}">${
 					b.active ? __("retire") : __("use again")}</span></td>
 			</tr>`).join("");
 		root.find(".bk-listbody").html((d.buckets || []).length
 			? `<table class="bk-tbl"><thead><tr><th>${__("Bucket")}</th>
-				<th class="num">${__("Pieces")}</th><th class="num"></th></tr></thead><tbody>${rows}
-				${d.unfiled ? `<tr class="pick ${S.open === "__none__" ? "on" : ""}" data-n="__none__">
-					<td><i>${__("not filed")}</i></td><td class="num">${d.unfiled}</td><td></td></tr>` : ""}
+				<th class="num">${__("Pieces")}</th><th>${__("Item types")}</th><th class="num"></th></tr></thead><tbody>${rows}
+				${d.unfiled ? `<tr data-n="__none__">
+					<td><i>${__("not filed")}</i></td><td class="num">${d.unfiled}</td><td></td><td></td></tr>` : ""}
 				</tbody></table>`
 			: `<div class="bk-none">${__("No buckets yet — add the first one below.")}</div>`);
 	}
@@ -218,36 +217,10 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 		frappe.call({ method: API + ".get_bucket_overview", freeze: false }).then((r) => {
 			S.data = r.message || {};
 			paintBuckets();
-			if (S.open) openBucket(S.open);
 		});
 	}
 
-	function openBucket(name) {
-		S.open = name;
-		// Only move the highlight. Re-rendering the whole list here would replace
-		// the row that was just clicked while its event is still bubbling, and the
-		// delegated handlers then re-match against a DOM that no longer exists —
-		// which fired the retire action on a plain row selection.
-		root.find(".bk-listbody tbody tr").removeClass("on");
-		root.find(`.bk-listbody tbody tr[data-n="${name}"]`).addClass("on");
-		root.find(".bk-in-t").text(name === "__none__" ? __("Not filed") : name);
-		frappe.call({ method: API + ".get_bucket_pieces", args: { bucket: name }, freeze: false })
-			.then((r) => {
-				const rows = r.message || [];
-				root.find(".bk-inbody").html(rows.length
-					? `<table class="bk-tbl"><thead><tr><th>${__("Piece")}</th><th>${__("Design")}</th>
-						<th>${__("HUID")}</th><th>${__("Held by")}</th></tr></thead><tbody>`
-						+ rows.map((p) => `<tr><td><b>${esc(p.name)}</b></td>
-							<td>${esc(p.design_no || p.design || "")}</td><td>${esc(p.huid || "")}</td>
-							<td>${esc(p.held_by || "")}</td></tr>`).join("") + `</tbody></table>`
-					: `<div class="bk-none">${__("Nothing in here.")}</div>`);
-			});
-	}
 
-	root.on("click", "tr.pick", function (e) {
-		if ($(e.target).closest(".bk-toggle").length) return;   // the retire link is not a pick
-		openBucket($(this).data("n"));
-	});
 	root.on("click", ".bk-toggle", function (e) {
 		e.stopPropagation();
 		// read the row, not just the element: it survives a re-render
