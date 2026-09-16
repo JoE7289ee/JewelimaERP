@@ -65,4 +65,8 @@ frappe.pages["design-duplicates"].on_page_load = function (wrapper) {
 	});
 	root.find(".dd-more").on("click", () => load());
 	load(true);
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["design-duplicates"].on_page_show = () => { load(true); };
 };

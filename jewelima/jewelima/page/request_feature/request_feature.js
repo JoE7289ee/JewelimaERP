@@ -204,4 +204,8 @@ frappe.pages["request-feature"].on_page_load = function (wrapper) {
 	});
 
 	load();
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["request-feature"].on_page_show = () => { load(); };
 };

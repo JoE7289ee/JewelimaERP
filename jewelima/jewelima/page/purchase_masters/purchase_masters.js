@@ -86,4 +86,8 @@ frappe.pages["purchase-masters"].on_page_load = function (wrapper) {
 	root.on("click", ".pm-cust .x", function () { $(this).closest(".pm-cust").hide(); });
 
 	load();
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["purchase-masters"].on_page_show = () => { load(); };
 };

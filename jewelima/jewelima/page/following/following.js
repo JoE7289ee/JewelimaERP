@@ -179,4 +179,8 @@ frappe.pages["following"].on_page_load = function (wrapper) {
 	root.find(".fw-duef").on("change", function () { S.due = this.value; paint(); });
 	page.add_inner_button(__("Refresh"), load);
 	load();
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["following"].on_page_show = () => { load(); };
 };

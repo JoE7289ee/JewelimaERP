@@ -147,4 +147,8 @@ frappe.pages["stone-info"].on_page_load = function (wrapper) {
 	load();
 	const t = setInterval(() => { if ($(wrapper).is(":visible")) load(); }, 30000);
 	$(wrapper).on("remove", () => clearInterval(t));
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["stone-info"].on_page_show = () => { load(); };
 };

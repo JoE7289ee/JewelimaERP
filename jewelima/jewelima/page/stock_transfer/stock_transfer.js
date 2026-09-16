@@ -151,4 +151,8 @@ frappe.pages["stock-transfer"].on_page_load = function (wrapper) {
 			<div class="text-muted" style="font-size:12px;">From <b>${frappe.utils.escape_html(shortName(fw))}</b> → <b>${frappe.utils.escape_html(shortName(tw))}</b>. Weights pre-filled to the full available amount — edit to send less.</div>`);
 		d.show();
 	}
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["stock-transfer"].on_page_show = () => { loadFrom(); loadTo(); };
 };

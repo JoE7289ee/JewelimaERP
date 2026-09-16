@@ -391,11 +391,21 @@ frappe.provide("frappe.ui.toolbar");
 			const pg = frappe.pages[cur];
 			if (pg && pg.__jw_stale && pg.on_page_load) {
 				pg.__jw_stale = false;
-				const wrapper = document.getElementById("page-" + cur);
-				if (wrapper) {
+				// AFTER core has finished showing the page, never during. Core fires
+				// on_page_show on the way in — rebuilding on top of that threw away
+				// the freshly loaded page and left an empty shell (Casting Queue came
+				// back blank; Job Work came back with no tabs). So: rebuild on the
+				// next tick, then run the page's own on_page_show, which is where
+				// every one of our pages does its loading.
+				setTimeout(() => {
+					const wrapper = document.getElementById("page-" + cur);
+					if (!wrapper || (frappe.get_route() || [])[0] !== cur) return;
 					$(wrapper).empty();
 					pg.on_page_load(wrapper);
-				}
+					if (pg.on_page_show) {
+						try { pg.on_page_show(wrapper); } catch (e) { /* a loader that throws must not eat the page */ }
+					}
+				}, 0);
 			}
 		}
 		last = cur;

@@ -112,5 +112,9 @@ jewelima.buildFinishedMatrix = function (wrapper, OPTS) {
 		render();
 	}, 200));
 	page.add_inner_button(__("Refresh"), load);
+	// the three pages built from this bundle (Finished Stock, At Certification,
+	// At Hallmarking) are desk pages: built once, only re-shown. Re-read on show.
+	const route = (frappe.get_route() || [])[0];
+	if (route && frappe.pages[route]) frappe.pages[route].on_page_show = load;
 	load();
 };

@@ -91,4 +91,8 @@ frappe.pages["warehouse-management"].on_page_load = function (wrapper) {
 	$search.addEventListener("input", renderBody);
 	page.add_inner_button(__("Refresh"), load);
 	load();
+
+	// come back to the page, come back to fresh figures: frappe builds a desk
+	// page once and only re-shows it, so the read has to be re-run on show.
+	frappe.pages["warehouse-management"].on_page_show = () => { load(); };
 };
