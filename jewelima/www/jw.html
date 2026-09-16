@@ -52,8 +52,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top img { width: 40px; height: 40px; border-radius: 10px; }
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
-.jw-out {
-	margin-left: auto; border: 1px solid rgba(250, 247, 239, .28); background: none;
+.jw-ref { margin-left: auto; }
+.jw-ref, .jw-out {
+	border: 1px solid rgba(250, 247, 239, .28); background: none;
 	color: rgba(250, 247, 239, .82); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
 }
 
@@ -163,6 +164,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 			<div class="t">JEWELIMA</div>
 			<div class="s">{{ jw_full_name }}</div>
 		</div>
+		<button class="jw-ref" onclick="jwRefresh()" title="Reload the app">&#8635;</button>
 		<button class="jw-out" onclick="jwLogout()">Sign out</button>
 	</div>
 
@@ -396,6 +398,14 @@ function jwCamStop() {
 }
 
 function jwLogout() { window.location.href = "/api/method/logout"; }
+
+// Installed to the home screen there is no address bar and no pull-to-refresh,
+// so the only way back to a clean app is a button. The stamp defeats the cache
+// a standalone window otherwise holds on to.
+function jwRefresh() {
+	jwCamStop();
+	window.location.replace("/jw?r=" + Date.now());
+}
 
 // landing here means the phone app is wanted again — forget any "keep the desk"
 try { localStorage.removeItem("jw-force-desk"); } catch (e) { /* nothing to undo */ }
