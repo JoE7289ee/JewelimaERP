@@ -12030,6 +12030,110 @@ def get_jw_board():
 
 
 @frappe.whitelist()
+def get_jw_gold():
+	"""The house's gold, read down a phone, and what it is worth today.
+
+	Warehouse stock is the truth — every gram lives in some warehouse — so the
+	split is by what a warehouse MEANS and the parts add up to the whole with
+	nothing counted twice. Loss buckets are carried separately: that gold is
+	real but it is not stock anybody can reach for.
+
+	The value is PURE grams at the Thrissur 995 line, taken to fine gold first
+	(a 995 quote divided by 0.995), so a 22K gram and an 18K gram are worth what
+	their gold is worth and nothing hangs on which karat it happens to be in."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	from jewelima.setup import GOLD_ISSUE_WAREHOUSE, IN_PRODUCTION_WAREHOUSE, PRODUCTION_WAREHOUSE
+
+	# the four the floor asks about, in the order it asks. Everything else is a
+	# warehouse the stock desk keeps, and those are split by WHAT the gold is.
+	named = [
+		(_wh("At Certification"), "At Certification"),
+		(_wh("At Hallmarking"), "At Hallmarking"),
+		(_wh("Finished Goods"), "Finished Goods"),
+		(_wh(IN_PRODUCTION_WAREHOUSE), "In Bags"),
+	]
+	bucket_of = {wh: label for wh, label in named if wh}
+	warehouse_labels = {
+		_wh(GOLD_ISSUE_WAREHOUSE): "Gold Issue",
+		_wh(PRODUCTION_WAREHOUSE): "Production",
+		_wh("Casting"): "Casting",
+	}
+
+	def kind_of(item_group):
+		g = (item_group or "").upper()
+		if "FINDING" in g:
+			return "Findings"
+		if "STANDARD" in g:
+			return "Standard gold"
+		return "Other gold"
+
+	buckets, kinds, wh_rows, loss = {}, {}, {}, {"weight": 0.0, "pure": 0.0}
+	for b in frappe.get_all("Bin", filters={"actual_qty": [">", 0]},
+			fields=["item_code", "warehouse", "actual_qty"], limit_page_length=0):
+		m = frappe.db.get_value("Item", b.item_code,
+			["stone_type", "purity_percentage", "item_group"], as_dict=True) or {}
+		if m.get("stone_type"):
+			continue                      # stones are carats, not gold
+		purity = flt(m.get("purity_percentage"))
+		if purity <= 0:
+			continue                      # alloy and the like carry no fine gold
+		qty, pure = flt(b.actual_qty), flt(b.actual_qty) * purity / 100.0
+		if frappe.db.get_value("Warehouse", b.warehouse, "custom_is_loss"):
+			loss["weight"] += qty
+			loss["pure"] += pure
+			continue
+		label = bucket_of.get(b.warehouse) or "In Warehouse"
+		e = buckets.setdefault(label, {"weight": 0.0, "pure": 0.0})
+		e["weight"] += qty
+		e["pure"] += pure
+		if label == "In Warehouse":
+			k = kinds.setdefault(kind_of(m.get("item_group")), {"weight": 0.0, "pure": 0.0})
+			k["weight"] += qty
+			k["pure"] += pure
+			w = wh_rows.setdefault(warehouse_labels.get(b.warehouse)
+				or (b.warehouse or "").rsplit(" - ", 1)[0], {"weight": 0.0, "pure": 0.0})
+			w["weight"] += qty
+			w["pure"] += pure
+
+	order = ["In Bags", "Finished Goods", "At Certification", "At Hallmarking", "In Warehouse"]
+	rows = sorted(({"bucket": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3)}
+		for k, v in buckets.items()),
+		key=lambda x: (order.index(x["bucket"]) if x["bucket"] in order else 99))
+	total_pure = round(sum(r["pure"] for r in rows), 3)
+	total_weight = round(sum(r["weight"] for r in rows), 3)
+	for r in rows:
+		r["share"] = round(r["pure"] / total_pure * 100, 1) if total_pure else 0
+
+	# today's Thrissur line, taken to fine gold. No rate: no value, and the
+	# screen says which — a made-up number here would be believed.
+	rate, rate_as_of, rate_err = None, "", ""
+	try:
+		hero = _board_hero(_board_rate_live().get("rows") or [])
+		tsr = next((h for h in hero if h.get("prefix") == "GLD TSR 995"), None) or {}
+		rate_as_of = tsr.get("as_of") or ""
+		rate_err = tsr.get("error") or ""
+		if tsr.get("rate"):
+			rate = flt(tsr["rate"]) / flt(tsr.get("fineness") or 0.995)
+	except Exception as e:
+		rate_err = str(e)[:200]
+
+	kind_rows = sorted(({"kind": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3)}
+		for k, v in kinds.items()), key=lambda x: -x["pure"])
+	return {
+		"totals": {"pure": total_pure, "weight": total_weight,
+			"value": round(total_pure * rate, 0) if rate else None},
+		"rate": {"per_pure_g": round(rate, 2) if rate else None,
+			"line": "GLD TSR 995", "as_of": rate_as_of, "error": rate_err},
+		"rows": rows,
+		"warehouse": {"kinds": kind_rows,
+			"places": sorted(({"place": k, "weight": round(v["weight"], 3), "pure": round(v["pure"], 3)}
+				for k, v in wh_rows.items()), key=lambda x: -x["pure"])},
+		"loss": {"weight": round(loss["weight"], 3), "pure": round(loss["pure"], 3)},
+		"at": frappe.utils.now(),
+	}
+
+
+@frappe.whitelist()
 def get_board_rate_feeds(refresh=0):
 	"""Every free gold-rate feed we can read without a key, side by side.
 

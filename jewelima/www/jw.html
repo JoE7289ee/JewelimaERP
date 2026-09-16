@@ -73,6 +73,39 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: rgba(250, 247, 239, .32); margin-top: 7px; }
+/* gold stock */
+.jw-tot { border: 1px solid rgba(212, 175, 55, .35); border-radius: 16px; padding: 15px 16px;
+	background: linear-gradient(180deg, rgba(212, 175, 55, .13), rgba(250, 247, 239, .04)); }
+.jw-tot .n { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .62); }
+.jw-tot .g { font-size: 30px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums;
+	letter-spacing: -.01em; margin: 3px 0 0; }
+.jw-tot .g small { font-size: 13px; font-weight: 700; color: rgba(250, 247, 239, .55); }
+.jw-tot .gross { font-size: 12px; color: rgba(250, 247, 239, .5); margin-top: 1px; }
+.jw-tot .val { font-size: 22px; font-weight: 800; color: var(--jw-champagne); margin-top: 11px;
+	font-variant-numeric: tabular-nums; }
+.jw-tot .rt { font-size: 11px; color: rgba(250, 247, 239, .45); margin-top: 2px; }
+
+.jw-gsec { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .5); margin: 20px 0 9px; }
+.jw-brow { margin-bottom: 11px; }
+.jw-brow .t { display: flex; align-items: baseline; gap: 8px; }
+.jw-brow .t .l { flex: 1; font-size: 13.5px; font-weight: 700; }
+.jw-brow .t .p { font-size: 15px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
+.jw-brow .t .s { font-size: 11px; color: rgba(250, 247, 239, .45); min-width: 38px; text-align: right; }
+.jw-brow .bar2 { height: 5px; border-radius: 4px; background: rgba(250, 247, 239, .1); margin-top: 5px; }
+.jw-brow .bar2 i { display: block; height: 100%; border-radius: 4px;
+	background: linear-gradient(90deg, var(--jw-champagne), var(--jw-gold)); }
+.jw-brow .sub { font-size: 11px; color: rgba(250, 247, 239, .4); margin-top: 3px; }
+.jw-split { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px; padding: 4px 13px; }
+.jw-split .sr { display: flex; align-items: baseline; gap: 10px; padding: 10px 0;
+	border-bottom: 1px solid rgba(250, 247, 239, .08); }
+.jw-split .sr:last-child { border-bottom: 0; }
+.jw-split .sr .l { flex: 1; font-size: 13px; font-weight: 600; }
+.jw-split .sr .v { font-size: 14.5px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
+.jw-split .sr .w { font-size: 11px; color: rgba(250, 247, 239, .4); font-variant-numeric: tabular-nums; }
+.jw-note { font-size: 11px; color: rgba(250, 247, 239, .38); margin-top: 10px; }
+
 /* the door, when the key is missing */
 .jw-shut { align-items: center; justify-content: center; text-align: center; gap: 10px; }
 .jw-shut img { width: 76px; height: 76px; border-radius: 18px; }
@@ -230,7 +263,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Card Info and Rates are live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
+		Card Info, Rates and Gold Stock are live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -243,6 +276,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<div class="big" id="jw-screen-icon"></div>
 		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
 	</div>
+</div>
+
+<!-- Gold Stock: every gram the house holds, and what it is worth today -->
+<div class="jw-screen" id="jw-gold">
+	<div class="bar">
+		<button class="back" onclick="jwGoldClose()">&#8592;</button>
+		<div class="ttl">Gold Stock</div>
+		<span class="tick" id="jw-goldtick"></span>
+	</div>
+	<div class="jw-body" id="jw-gold-body"></div>
 </div>
 
 <!-- Rates: the board, read down a phone -->
@@ -279,13 +322,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 const JW_TILES = [
 	{ icon: "🔍", label: "Card Info", screen: "card" },
 	{ icon: "📈", label: "Rates", screen: "rates" },
+	{ icon: "🟡", label: "Gold Stock", screen: "gold" },
 	{ icon: "🧰", label: "Job Work" },
 	{ icon: "💎", label: "Stone Issue" },
 	{ icon: "↔️", label: "Transfer" },
 	{ icon: "⚖️", label: "Weigh" },
 	{ icon: "📦", label: "Parcel" },
 	{ icon: "🏷️", label: "Prepare Sale" },
-	{ icon: "⋯", label: "More" },
 ];
 
 const grid = document.getElementById("jw-grid");
@@ -309,6 +352,7 @@ grid.addEventListener("click", (e) => {
 		return;
 	}
 	if (t.screen === "rates") { jwRates(); return; }
+	if (t.screen === "gold") { jwGold(); return; }
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
@@ -316,7 +360,7 @@ grid.addEventListener("click", (e) => {
 
 function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
 // the back gesture closes whatever is open rather than leaving the app
-window.addEventListener("popstate", () => { jwClose(); jwCardClose(); jwRatesClose(); jwCamStop(); });
+window.addEventListener("popstate", () => { jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwCamStop(); });
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
 	if (e.key !== "Enter") return;
@@ -417,6 +461,82 @@ function jwCardHtml(d) {
 			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
 			${row("Remark", b.narration ? esc(b.narration) : "")}
 		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// GOLD STOCK — every gram the house holds, and what it is worth today.
+//
+// Warehouse stock is the truth, so the parts add up to the whole. The value is
+// PURE grams at the Thrissur line taken to fine gold: a 22K gram and an 18K
+// gram are worth what their gold is worth, and nothing hangs on the karat.
+// ---------------------------------------------------------------------------
+const goldBody = document.getElementById("jw-gold-body");
+const g3s = (v) => (Number(v) || 0).toLocaleString("en-IN", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+// a floor reads crores and lakhs, not nine digits
+function money(v) {
+	if (v == null) return "—";
+	const n = Number(v);
+	if (n >= 1e7) return "₹" + (n / 1e7).toFixed(2) + " Cr";
+	if (n >= 1e5) return "₹" + (n / 1e5).toFixed(2) + " L";
+	return "₹" + whole(n);
+}
+
+function jwGold() {
+	document.getElementById("jw-gold").classList.add("on");
+	if (!goldBody.innerHTML.trim()) {
+		goldBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Counting the gold…</div>`;
+	}
+	jwApi("jewelima.jewelima.api.get_jw_gold", {})
+		.then((d) => {
+			if (!d || !d.totals) throw new Error("empty");
+			goldBody.innerHTML = jwGoldHtml(d);
+			document.getElementById("jw-goldtick").textContent = (d.at || "").slice(11, 16);
+		})
+		.catch(() => {
+			if (!goldBody.querySelector(".jw-tot")) {
+				goldBody.innerHTML = `<div class="jw-err">The gold could not be counted just now.</div>`;
+			}
+		});
+}
+
+function jwGoldClose() { document.getElementById("jw-gold").classList.remove("on"); }
+
+function jwGoldHtml(d) {
+	const t = d.totals || {}, r = d.rate || {}, wh = d.warehouse || {};
+	const row = (b) => `<div class="jw-brow">
+		<div class="t"><span class="l">${esc(b.bucket)}</span>
+			<span class="s">${b.share}%</span>
+			<span class="p">${g3s(b.pure)}<span style="font-size:11px;font-weight:700;color:rgba(250,247,239,.45)"> pure g</span></span></div>
+		<div class="bar2"><i style="width:${Math.max(1.5, b.share)}%"></i></div>
+		<div class="sub">${g3s(b.weight)} g gross</div>
+	</div>`;
+	const split = (rows, key) => `<div class="jw-split">${rows.map((x) => `<div class="sr">
+			<span class="l">${esc(x[key])}</span>
+			<span class="w">${g3s(x.weight)} g</span>
+			<span class="v">${g3s(x.pure)}</span></div>`).join("")}</div>`;
+	const loss = d.loss || {};
+	return `<div class="jw-tot">
+			<div class="n">Total gold</div>
+			<div class="g">${g3s(t.pure)} <small>pure g</small></div>
+			<div class="gross">${g3s(t.weight)} g gross, across every warehouse</div>
+			<div class="val">${money(t.value)}</div>
+			<div class="rt">${r.per_pure_g
+				? "at ₹" + rupee(r.per_pure_g) + " / pure g · " + esc(r.line) + (r.as_of ? " · " + esc(r.as_of) : "")
+				: "no rate on the board just now — value not shown"}</div>
+		</div>
+
+		<div class="jw-gsec">Where it stands</div>
+		${(d.rows || []).map(row).join("")}
+
+		<div class="jw-gsec">In warehouse, by what it is</div>
+		${split(wh.kinds || [], "kind")}
+
+		<div class="jw-gsec">In warehouse, by where</div>
+		${split(wh.places || [], "place")}
+
+		${loss.pure ? `<div class="jw-note">Loss buckets hold a further ${g3s(loss.pure)} pure g
+			(${g3s(loss.weight)} g gross). That gold is real, but it is not stock anybody can reach for,
+			so it stays out of the total above.</div>` : ""}`;
 }
 
 // ---------------------------------------------------------------------------
