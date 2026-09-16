@@ -61,7 +61,7 @@ frappe.pages["party-gold"].on_page_load = function (wrapper) {
 		tr.pg-party.stmt{cursor:pointer;}
 		td.pg-old{color:#a15c00;font-weight:700;}
 		.pg-none{padding:34px;text-align:center;color:var(--text-muted);border:1px dashed var(--border-color);border-radius:10px;}
-		.pg-kpi{background:#0f766e;display:none;}
+		.pg-kpi{background:#2E7D5B;display:none;}
 		.pg-ksec{margin-bottom:16px;}
 		.pg-kh{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:7px;}
 		.pg-khs{font-weight:400;text-transform:none;letter-spacing:0;}

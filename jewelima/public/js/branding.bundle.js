@@ -267,36 +267,50 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 })();
 
 // ---------------------------------------------------------------------------
-// DARK MODE ONLY: the sidebar is a light green panel. Light mode is left exactly
-// as it is. Core paints the rail from --surface-menu-bar with light text, so the
-// text, icons and the hover/active states are turned back to dark green here or
-// they would vanish on the pale ground.
+// THE BRAND, in one place: the kit's palette as CSS variables every page can
+// read, the favicon, and the dark-mode sidebar painted in it. Light mode is
+// left exactly as it is.
+//   emerald 0D2B1E · forest 1B4332 · green 2E7D5B · sage 6F8F7B
+//   gold D4AF37 · champagne E6C778 · soft gold F2E6C1 · ivory FAF7EF
 // ---------------------------------------------------------------------------
+jewelima.BRAND = {
+	emerald: "#0D2B1E", forest: "#1B4332", green: "#2E7D5B", sage: "#6F8F7B",
+	gold: "#D4AF37", champagne: "#E6C778", softGold: "#F2E6C1", ivory: "#FAF7EF",
+	black: "#111111", white: "#FFFFFF",
+	logo: "/assets/jewelima/images/brand/logo-square.png",
+	wordmark: "/assets/jewelima/images/brand/logo-horizontal-black.png",
+	wordmarkLight: "/assets/jewelima/images/brand/logo-horizontal-white.svg",
+};
 (() => {
+	const B = jewelima.BRAND;
 	const st = document.createElement("style");
 	st.textContent = `
+	:root{
+		--jw-emerald:${B.emerald};--jw-forest:${B.forest};--jw-green:${B.green};--jw-sage:${B.sage};
+		--jw-gold:${B.gold};--jw-champagne:${B.champagne};--jw-soft-gold:${B.softGold};--jw-ivory:${B.ivory};
+	}
 	[data-theme="dark"] .body-sidebar{
-		background:#0b3b2e;
-		border-right-color:#0a4d39;
-		--sidebar-hover-color:#124f3d;
-		--sidebar-active-color:#17624c;
-		--sidebar-border-color:#0a4d39;
-		--divider-color:#125040;
+		background:${B.emerald};
+		border-right-color:${B.forest};
+		--sidebar-hover-color:${B.forest};
+		--sidebar-active-color:${B.green};
+		--sidebar-border-color:${B.forest};
+		--divider-color:${B.forest};
 	}
 	[data-theme="dark"] .body-sidebar,
-	[data-theme="dark"] .body-sidebar *:not(svg):not(path){color:#d8f0e3;}
+	[data-theme="dark"] .body-sidebar *:not(svg):not(path){color:${B.ivory};}
 	[data-theme="dark"] .body-sidebar .sidebar-item-label,
 	[data-theme="dark"] .body-sidebar .standard-sidebar-item span,
-	[data-theme="dark"] .body-sidebar .standard-sidebar-label{color:#d8f0e3 !important;}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-label{color:${B.ivory} !important;}
 	[data-theme="dark"] .body-sidebar .sidebar-item-icon svg,
 	[data-theme="dark"] .body-sidebar .drop-icon svg,
-	[data-theme="dark"] .body-sidebar svg{stroke:#7fd4a8;color:#7fd4a8;}
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item:hover{background:#124f3d;}
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item.selected{background:#17624c;}
+	[data-theme="dark"] .body-sidebar svg{stroke:${B.champagne};color:${B.champagne};}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item:hover{background:${B.forest};}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item.selected{background:${B.green};}
 	[data-theme="dark"] .body-sidebar hr,
-	[data-theme="dark"] .body-sidebar .divider{border-color:#125040;background:#125040;}
-	[data-theme="dark"] .body-sidebar input{background:#0f4a39;color:#d8f0e3;border-color:#0a4d39;}
-	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:#124f3d;}
+	[data-theme="dark"] .body-sidebar .divider{border-color:${B.forest};background:${B.forest};}
+	[data-theme="dark"] .body-sidebar input{background:${B.forest};color:${B.ivory};border-color:${B.green};}
+	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:${B.forest};}
 	/* the rail scrolls, but the scrollbar cut a stripe down the panel — the bar
 	   goes, the scrolling stays. Both themes: it is ugly in either. */
 	.body-sidebar,
@@ -304,6 +318,15 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	.body-sidebar ::-webkit-scrollbar,
 	.body-sidebar::-webkit-scrollbar{width:0;height:0;display:none;}`;
 	document.head.appendChild(st);
+
+	// the browser tab: core ships frappe's own favicon and Website Settings is
+	// empty, so the mark is put on the tab here rather than as a site setting
+	// somebody has to remember to re-upload.
+	const icon = document.querySelector("link[rel~='icon']") || document.createElement("link");
+	icon.rel = "icon";
+	icon.type = "image/png";
+	icon.href = "/assets/jewelima/images/brand/favicon-180.png";
+	document.head.appendChild(icon);
 })();
 
 // Full-width: our desk pages should use the whole monitor, not Frappe's narrow

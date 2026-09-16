@@ -31,13 +31,13 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 			padding:11px 15px;background:var(--fg-color);}
 		.sx-kpi .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
 		.sx-kpi .v{font-size:24px;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;}
-		.sx-kpi.hold{border-left:3px solid #b8860b;} .sx-kpi.hold .v{color:#b8860b;}
+		.sx-kpi.hold{border-left:3px solid #D4AF37;} .sx-kpi.hold .v{color:#D4AF37;}
 		.sx-sec{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
 			color:var(--text-muted);margin:22px 0 10px;padding-bottom:5px;
 			border-bottom:1px solid var(--border-color);}
-		.sx-card{border:1px solid var(--border-color);border-left:3px solid #b8860b;
+		.sx-card{border:1px solid var(--border-color);border-left:3px solid #D4AF37;
 			border-radius:12px;background:var(--fg-color);margin-bottom:14px;overflow:hidden;}
-		.sx-card.processing{border-left-color:#b8860b;}
+		.sx-card.processing{border-left-color:#D4AF37;}
 		.sx-card.prep{border-left-color:#117a65;}
 		.sx-card.sent{border-left-color:#1f618d;}
 		.sx-card.closed{border-left-color:#7f8c8d;opacity:.85;}
@@ -54,7 +54,7 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		.sx-send{background:#117a65;border:1px solid #117a65;color:#fff;font-weight:700;
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
-		.sx-prep{background:#b8860b;border:1px solid #b8860b;color:#fff;font-weight:700;
+		.sx-prep{background:#D4AF37;border:1px solid #D4AF37;color:#fff;font-weight:700;
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		.sx-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 16px;
 			background:var(--control-bg);border-bottom:1px solid var(--border-color);}
@@ -62,7 +62,7 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 		.sx-head .meta{font-size:12px;color:var(--text-muted);}
 		.sx-head .act{margin-left:auto;display:flex;gap:8px;}
 		.sx-age{font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 9px;
-			background:rgba(184,134,11,.16);color:#b8860b;text-transform:uppercase;letter-spacing:.04em;}
+			background:rgba(184,134,11,.16);color:#D4AF37;text-transform:uppercase;letter-spacing:.04em;}
 		[data-theme="dark"] .sx-age{color:#e8b84a;}
 		table.sx-t{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.sx-t th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;

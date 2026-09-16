@@ -24,7 +24,7 @@ frappe.pages["in-bags"].on_page_load = function (wrapper) {
 		.ib-card:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.09);}
 		.ib-card .lb{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.ib-card .v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;}
-		.ib-card.gold{box-shadow:inset 3px 0 0 #b8860b;}
+		.ib-card.gold{box-shadow:inset 3px 0 0 #D4AF37;}
 		.ib-card.stone{box-shadow:inset 3px 0 0 #1c5da8;}
 		.ib-top{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap;}
 		.ib-search{width:260px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}

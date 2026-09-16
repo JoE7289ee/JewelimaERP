@@ -1447,7 +1447,7 @@ HOME_BLOCK_STYLE = """.jwh { padding: 6px 2px 26px; }
   border-radius: 14px; background: var(--card-bg, #fff); color: var(--text-color, #1a1a1a);
   font-size: 16px; font-weight: 700; letter-spacing: .2px; cursor: pointer; text-decoration: none;
   transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease; }
-.jwh-card:hover { transform: translateY(-2px); border-color: #c9a227; box-shadow: 0 6px 18px rgba(0,0,0,.09); }
+.jwh-card:hover { transform: translateY(-2px); border-color: #D4AF37; box-shadow: 0 6px 18px rgba(0,0,0,.09); }
 .jwh-note { color: var(--text-muted, #8d8d8d); font-size: 14px; padding: 26px 6px; }
 .jwh-empty { color: var(--text-muted, #8d8d8d); font-size: 15px; padding: 30px 6px; text-align: center; }"""
 HOME_BLOCK_SCRIPT = """frappe.call({ method: "jewelima.jewelima.api.get_my_workstations" }).then(function (r) {

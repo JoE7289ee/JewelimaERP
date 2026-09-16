@@ -21,7 +21,7 @@
 		--serif: "Cormorant Garamond","Hoefler Text","Iowan Old Style",Georgia,"Times New Roman",serif;
 		--sans: -apple-system,"Helvetica Neue","Segoe UI",Roboto,Arial,sans-serif;
 		--ink:#26312a; --muted:#8d9387; --line:#ece7da; --paper:#ffffff;
-		--gold:#b0892f; --gold-deep:#9a7522; --green:#1f7a5a; --sage:#9bb38a;
+		--gold:#D4AF37; --gold-deep:#B08D2C; --green:#2E7D5B; --sage:#6F8F7B;
 	}
 
 	.od { position: fixed; inset: 0; display: flex; flex-direction: column; color: var(--ink); font-family: var(--sans);
@@ -112,7 +112,7 @@
 
 <script>
 (function () {
-	var K = { K22: "#b0892f", K18: "#1f7a5a", K14: "#9bb38a", Other: "#b9b09a" };
+	var K = { K22: "#D4AF37", K18: "#2E7D5B", K14: "#6F8F7B", Other: "#b9b09a" };
 	var charts = {
 		donut: echarts.init(document.getElementById("c-donut")),
 		bar: echarts.init(document.getElementById("c-bar")),
@@ -182,7 +182,7 @@
 			xAxis:Object.assign({type:"value"},axis()),
 			yAxis:{type:"category", data:cs.map(function(c){return c.customer;}), axisLine:{show:false}, axisTick:{show:false}, axisLabel:{color:"#5d6358",fontSize:14}},
 			series:[{ type:"bar", barWidth:"52%", data:cs.map(function(c){return c.pure;}),
-				itemStyle:{borderRadius:[0,6,6,0], color:"#b0892f"},
+				itemStyle:{borderRadius:[0,6,6,0], color:"#D4AF37"},
 				label:{show:true,position:"right",color:"#3a4138",fontWeight:600,fontFamily:'-apple-system,"Helvetica Neue",Arial,sans-serif'} }],
 			animationDuration:900 };
 

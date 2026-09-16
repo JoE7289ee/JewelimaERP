@@ -21,7 +21,7 @@ frappe.pages["loss-report"].on_page_load = function (wrapper) {
 		.lr-card .lb{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;}
 		.lr-card .v{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;}
 		.lr-card.loss{box-shadow:inset 3px 0 0 #b02a2a;}
-		.lr-card.pure{box-shadow:inset 3px 0 0 #b8860b;}
+		.lr-card.pure{box-shadow:inset 3px 0 0 #D4AF37;}
 		.lr-card.pure .v{color:#8a6d1a;}
 		.lr-top{display:flex;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap;}
 		.lr-search{width:220px;border:1px solid var(--gray-400,#aeb6bf);background:var(--fg-color);padding:4px 10px;height:30px;border-radius:5px;box-sizing:border-box;color:var(--text-color);font-size:13px;}

@@ -11,6 +11,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from jewelima.jewelima import brand
+
 
 def _company():
 	return frappe.defaults.get_defaults().get("company") or frappe.db.get_single_value(
@@ -12814,7 +12816,7 @@ def _price_chart_letter_html(d):
 
 	import base64 as _b64
 	try:
-		lp = frappe.get_app_path("jewelima", "public", "images", "jewelima-letterhead.png")
+		lp = frappe.get_app_path("jewelima", "public", "images", "brand", "letterhead-header.png")
 		logo_html = "<img src='data:image/png;base64,{0}'>".format(
 			_b64.b64encode(open(lp, "rb").read()).decode())
 	except Exception:
@@ -12834,11 +12836,11 @@ def _price_chart_letter_html(d):
 			font-size: {base_font}; margin: 0; }}
 
 		/* letterhead */
-		.head {{ border-bottom: 2.5pt solid #1f4e5f; padding-bottom: 7px; }}
+		.head {{ border-bottom: 2.5pt solid #1B4332; padding-bottom: 7px; }}
 		.head img {{ max-height: {logo_h}; max-width: 300px; }}
-		.wordmark {{ font-size: 21px; font-weight: 800; color: #1f4e5f; letter-spacing: .04em; }}
+		.wordmark {{ font-size: 21px; font-weight: 800; color: #1B4332; letter-spacing: .04em; }}
 		.kind {{ float: right; font-size: 10px; font-weight: 700; letter-spacing: .22em;
-			text-transform: uppercase; color: #1f4e5f; padding-top: 10px;
+			text-transform: uppercase; color: #1B4332; padding-top: 10px;
 			white-space: nowrap; }}
 
 		/* who it is for, and when */
@@ -12855,7 +12857,7 @@ def _price_chart_letter_html(d):
 		/* sections and their tables */
 		.sec {{ margin: 11px 0 0; page-break-inside: avoid; }}
 		.st {{ font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-			color: #1f4e5f; margin-bottom: 5px; }}
+			color: #1B4332; margin-bottom: 5px; }}
 		table.t {{ width: 100%; border-collapse: collapse; border: 1px solid #d7e0e3; }}
 		table.t th {{ text-align: left; font-size: 8.5px; text-transform: uppercase;
 			letter-spacing: .07em; color: #4b6b76; background: #eef4f6;
@@ -12863,12 +12865,12 @@ def _price_chart_letter_html(d):
 		table.t td {{ padding: {cell_pad}; border-bottom: 1px solid #edf1f2; }}
 		table.t tbody tr:last-child td {{ border-bottom: 0; }}
 		table.t td.r, table.t th.r {{ text-align: right; white-space: nowrap; }}
-		table.t td.q {{ font-weight: 700; color: #1f4e5f; }}
+		table.t td.q {{ font-weight: 700; color: #1B4332; }}
 		/* a new quality starts a new group — the rule says so without a heading */
 		table.t tr.grp td {{ border-top: 1px solid #cfe0e6; }}
 		.note {{ font-size: 9.5px; color: #667; margin-top: 4px; font-style: italic; }}
 		.terms {{ font-size: 10.5px; color: #333; white-space: pre-wrap; line-height: 1.5;
-			border: 1px solid #d7e0e3; border-left: 2.5pt solid #1f4e5f; padding: 7px 10px; }}
+			border: 1px solid #d7e0e3; border-left: 2.5pt solid #1B4332; padding: 7px 10px; }}
 
 		/* THE FOOT OF THE SHEET.
 		   position:fixed does NOT work here: wkhtmltopdf anchors a fixed element
@@ -12894,9 +12896,9 @@ def _price_chart_letter_html(d):
 		.sign td.sg {{ text-align: right; }}
 		.sign .line {{ display: inline-block; border-top: 1px solid #98a8ad; padding-top: 3px;
 			width: 210px; text-align: center; color: #667; font-size: 9.5px; }}
-		.rule {{ border-top: 1px solid #1f4e5f; margin: 7px 0 5px; }}
+		.rule {{ border-top: 1px solid #1B4332; margin: 7px 0 5px; }}
 		.tag {{ text-align: center; font-size: 10.5px; letter-spacing: .35em;
-			color: #1f4e5f; text-transform: lowercase; }}
+			color: #1B4332; text-transform: lowercase; }}
 	</style></head><body>
 		<table class='sheet'><tr><td class='pagebody'>
 			<div class='head'><span class='kind'>Rate Chart</span>{logo}</div>
@@ -16200,7 +16202,7 @@ def export_sale_prep_xlsx(name):
 	wb = Workbook()
 	ws = wb.active
 	ws.title = "Sale Confirmation"
-	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1B4332")
 	ws.append(["Sale Confirmation", "", d["customer"], "", "Chart: " + (d["price_chart"] or ""),
 		"", "Gold rate: " + str(d["gold_rate"])])
 	ws.append([])
@@ -16316,13 +16318,13 @@ def export_sale_bill_pdf(payload):
 	body{{font-family:Helvetica,Arial,sans-serif;font-size:11px;color:#111;}}
 	h2{{margin:0 0 2px;}} .muted{{color:#666;font-size:10px;margin-bottom:10px;}}
 	table{{width:100%;border-collapse:collapse;}}
-	th{{background:#1f4e5f;color:#fff;padding:5px 7px;text-align:left;font-size:10px;}}
+	th{{background:#1B4332;color:#fff;padding:5px 7px;text-align:left;font-size:10px;}}
 	td{{padding:4px 7px;border-bottom:1px solid #ddd;white-space:nowrap;}}
 	td.r,th.r{{text-align:right;}} td.b{{font-weight:bold;}}
-	tr.tot td{{border-top:2px solid #1f4e5f;border-bottom:none;font-weight:bold;}}
-	.sum{{margin-top:14px;width:280px;margin-left:auto;border:1px solid #1f4e5f;border-radius:6px;padding:10px 14px;}}
+	tr.tot td{{border-top:2px solid #1B4332;border-bottom:none;font-weight:bold;}}
+	.sum{{margin-top:14px;width:280px;margin-left:auto;border:1px solid #1B4332;border-radius:6px;padding:10px 14px;}}
 	.sum div{{display:flex;justify-content:space-between;padding:2px 0;}}
-	.sum .g{{font-size:14px;font-weight:bold;border-top:1px solid #1f4e5f;margin-top:4px;padding-top:6px;}}
+	.sum .g{{font-size:14px;font-weight:bold;border-top:1px solid #1B4332;margin-top:4px;padding-top:6px;}}
 	</style></head><body>
 	<h2>{title}</h2>
 	<div class='muted'>{sub}</div>
@@ -16488,7 +16490,7 @@ def export_sale_bill_xlsx(payload):
 	wb = Workbook()
 	ws = wb.active
 	ws.title = "Sale Bill"
-	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+	head_font, head_fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1B4332")
 	ws.append(["Sale Bill", p.get("customer") or "(no buyer yet)", "",
 		"Chart: " + _chart_label(p.get("price_chart")), "Gold rate: " + str(flt(p.get("gold_rate")))])
 	ws.append([])
@@ -18030,7 +18032,7 @@ def _lab_xlsx_bytes(bags, cert_type, tag=""):
 	ws.append(["Sl", "Barcode", "Item", "Type", "HUID", "Gross (g)", "Dmd Pcs", "Dmd (ct)",
 		"Quality", "Other Stones (ct)"])
 	for c in ws[1]:
-		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1B4332")
 	tg = tdc = tpc = tost = 0.0
 	for i, nm in enumerate(bags, 1):
 		b = frappe.db.get_value("Order Bag", nm, [
@@ -19965,7 +19967,7 @@ def export_hallmarking_xlsx(name):
 		"Stones (ct)", "HUID"]
 	ws.append(head)
 	for c in ws[ws.max_row]:
-		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1F4E5F")
+		c.font, c.fill = Font(bold=True, color="FFFFFF"), PatternFill("solid", fgColor="1B4332")
 		c.alignment = Alignment(horizontal="center")
 	tg = ts = 0.0
 	for i, r in enumerate(d.items, 1):
@@ -20804,7 +20806,7 @@ def get_print_branding():
 		"company": c.get("company_name") or company or "Jewelima",
 		"address": addr, "phone": c.get("phone_no") or "", "email": c.get("email") or "",
 		"gstin": c.get("tax_id") or "", "website": c.get("website") or "",
-		"logo_url": "/assets/jewelima/images/jewelima-letterhead.png",
+		"logo_url": brand.LOGO_WIDE,
 	}
 
 
@@ -25745,8 +25747,8 @@ def _prep_clean_sheet(spec, rows, p):
 	from openpyxl.utils import get_column_letter
 
 	# the green family: a deep green for the name, header row and rules
-	GOLD, DEEP, INK, MUTED = "1E6B45", "14532D", "1F2328", "6B6F76"
-	LINE, ZEBRA, FOOT = "D3E5DA", "F3F8F5", "DCEFE3"
+	GOLD, DEEP, INK, MUTED = brand.FOREST, brand.EMERALD, brand.INK, brand.MUTED
+	LINE, ZEBRA, FOOT = brand.LINE, brand.ZEBRA, brand.FOOT_FILL
 	FONT = "Calibri"
 
 	cols = _clean_cols(rows)
@@ -25767,7 +25769,7 @@ def _prep_clean_sheet(spec, rows, p):
 	ws.cell(row=1, column=n).alignment = Alignment(horizontal="right", vertical="center")
 	ws["A2"] = "{0} · {1}".format(spec["label"], (p.get("title") or "Basic Excel").strip())
 	ws["A2"].font = Font(name=FONT, size=13, bold=True, color=INK)
-	rule = Border(bottom=Side(style="medium", color=GOLD))
+	rule = Border(bottom=Side(style="medium", color=brand.GOLD))   # the kit's gold rule
 	for c in range(1, n + 1):
 		ws.cell(row=2, column=c).border = rule
 
@@ -25822,7 +25824,7 @@ def _prep_clean_sheet(spec, rows, p):
 	if rows:
 		r += 1
 		foot_fill = PatternFill("solid", fgColor=FOOT)
-		top = Border(top=Side(style="medium", color=GOLD))
+		top = Border(top=Side(style="medium", color=brand.GOLD))
 		for i, (key, label, f, kind) in enumerate(cols, start=1):
 			c = ws.cell(row=r, column=i)
 			c.fill = foot_fill

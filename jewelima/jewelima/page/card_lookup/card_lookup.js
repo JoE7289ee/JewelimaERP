@@ -68,7 +68,7 @@ frappe.pages["card-lookup"].on_page_load = function (wrapper) {
 	.ci-sec.acc-green{border-left-color:#1d7a33;}
 	.ci-sec.acc-green h4{color:#1d7a33;}
 	.ci-sec.acc-red{border-left-color:#b02a2a;}
-	.ci-sec.acc-amber{border-left-color:#b8860b;}
+	.ci-sec.acc-amber{border-left-color:#D4AF37;}
 	.ci-sec.acc-red h4{color:#b02a2a;}
 	.ci-mtbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
 	.ci-mtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;color:#8a8a8a;border-bottom:1px solid #e3e3e3;padding:2px 4px;}

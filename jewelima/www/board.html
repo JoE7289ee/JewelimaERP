@@ -22,7 +22,7 @@
 		font-family: -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif; }
 	.bd-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
 	.bd-title { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
-	.bd-title span { color: #f2c14e; }
+	.bd-title span { color: #D4AF37; }
 	.bd-clock { font-size: 26px; font-weight: 700; color: #cfd6dd; font-variant-numeric: tabular-nums; }
 	.bd-clock small { display: block; font-size: 13px; font-weight: 400; color: #6b7785; text-align: right; }
 
@@ -49,7 +49,7 @@
 	</div>
 
 	<div class="kpis">
-		<div class="kpi" style="--ac:#f2c14e"><div class="v" id="k-orders">0</div><div class="l">Orders Today</div><div class="s" id="k-orders-sub"></div></div>
+		<div class="kpi" style="--ac:#D4AF37"><div class="v" id="k-orders">0</div><div class="l">Orders Today</div><div class="s" id="k-orders-sub"></div></div>
 		<div class="kpi" style="--ac:#5b9bff"><div class="v" id="k-wip">0</div><div class="l">In Production</div><div class="s">pieces being made</div></div>
 		<div class="kpi" style="--ac:#57d9a3"><div class="v" id="k-done">0</div><div class="l">Done Today</div><div class="s">completed at benches</div></div>
 		<div class="kpi" style="--ac:#4fd1c5"><div class="v" id="k-workers">0</div><div class="l">Workers Active</div><div class="s">work in hand now</div></div>
@@ -68,7 +68,7 @@
 	var bar = echarts.init(document.getElementById("chart-bar"));
 	var donut = echarts.init(document.getElementById("chart-donut"));
 	window.addEventListener("resize", function () { bar.resize(); donut.resize(); });
-	var PALETTE = ["#5b9bff","#57d9a3","#f2c14e","#4fd1c5","#f0795f","#b58bff","#7fb4ff","#9fe6c4","#f6d488","#f2a48f"];
+	var PALETTE = ["#5b9bff","#57d9a3","#D4AF37","#4fd1c5","#f0795f","#b58bff","#7fb4ff","#9fe6c4","#f6d488","#f2a48f"];
 
 	function clock() {
 		var d = new Date();

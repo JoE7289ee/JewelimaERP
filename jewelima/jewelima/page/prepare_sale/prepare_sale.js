@@ -75,8 +75,8 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		[data-theme="dark"] .ps-state.saved{background:rgba(29,122,51,.18);color:#7fd49a;border-color:rgba(29,122,51,.5);}
 		[data-theme="dark"] .ps-state.dirty{background:rgba(180,83,9,.16);color:#e8a24a;border-color:rgba(180,83,9,.5);}
 		.ps-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
-		.ps-tile{border:1px solid var(--border-color);border-left:3px solid #1e6b45;border-radius:11px;
-			background:linear-gradient(180deg,rgba(30,107,69,.07),transparent 70%),var(--fg-color);
+		.ps-tile{border:1px solid var(--border-color);border-left:3px solid #1B4332;border-radius:11px;
+			background:linear-gradient(180deg,rgba(27,67,50,.07),transparent 70%),var(--fg-color);
 			padding:9px 15px;min-width:104px;}
 		.ps-tile .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);}
 		.ps-tile .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;}
@@ -85,12 +85,12 @@ frappe.pages["prepare-sale"].on_page_load = function (wrapper) {
 		.ps-gridbox{overflow:auto;border:1px solid var(--border-color);border-radius:9px;margin-bottom:12px;}
 		table.ps-t{width:100%;min-width:1080px;border-collapse:separate;border-spacing:0;font-size:12px;
 			background:var(--fg-color);font-variant-numeric:tabular-nums;}
-		table.ps-t th{position:sticky;top:0;z-index:2;background:#e6f2ea;color:#14532d;text-align:left;
+		table.ps-t th{position:sticky;top:0;z-index:2;background:#EAF2EC;color:#0D2B1E;text-align:left;
 			font-size:10px;text-transform:uppercase;letter-spacing:.04em;
-			border-bottom:2px solid #1e6b45;padding:7px;font-weight:800;white-space:nowrap;}
-		[data-theme="dark"] table.ps-t th{background:rgba(30,107,69,.28);color:#bfe6cf;border-bottom-color:#2f8a5c;}
-		table.ps-t tr:nth-child(even) td{background:rgba(30,107,69,.04);}
-		[data-theme="dark"] table.ps-t tr:nth-child(even) td{background:rgba(30,107,69,.10);}
+			border-bottom:2px solid #1B4332;padding:7px;font-weight:800;white-space:nowrap;}
+		[data-theme="dark"] table.ps-t th{background:rgba(27,67,50,.28);color:#E6C778;border-bottom-color:#2E7D5B;}
+		table.ps-t tr:nth-child(even) td{background:rgba(27,67,50,.04);}
+		[data-theme="dark"] table.ps-t tr:nth-child(even) td{background:rgba(27,67,50,.10);}
 		table.ps-t th.num{text-align:right;}
 		table.ps-t td{padding:5px 7px;border-bottom:1px solid var(--border-color);white-space:nowrap;}
 		table.ps-t td.num{text-align:right;}
