@@ -159,10 +159,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .s-sw   { --c: #F09A9A; background: var(--c); }   /* swarovski — coral */
 .s-pdmd { --c: #9FB3D9; background: var(--c); }   /* party diamond — steel */
 .s-poth { --c: #C2C7B0; background: var(--c); }   /* party other — sage */
-.jw-brow .bar2.mix { display: flex; gap: 2px; overflow: hidden; background: rgba(250, 247, 239, .08); }
+.bar2.mix { display: flex; gap: 2px; overflow: hidden; background: rgba(250, 247, 239, .08); }
 /* the plain bar is a gold gradient; a mixed bar takes each segment's own
    colour, and needs the specificity to say so */
-.jw-brow .bar2.mix i { display: block; height: 100%; border-radius: 3px; background: var(--c); }
+.bar2.mix i { display: block; height: 100%; border-radius: 3px; background: var(--c); }
 .jw-brow .sub .chip { display: inline-block; margin: 5px 6px 0 0; padding: 1px 8px; border-radius: 20px;
 	font-size: 10.5px; font-weight: 800; color: #12271D; letter-spacing: .03em; }
 .jw-q .qh .dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 10px; }
@@ -254,8 +254,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-brow .t .l { flex: 1; font-size: 13.5px; font-weight: 700; }
 .jw-brow .t .p { font-size: 15px; font-weight: 800; color: #FFFFFF; font-variant-numeric: tabular-nums; }
 .jw-brow .t .s { font-size: 11px; color: var(--jw-dim); min-width: 38px; text-align: right; }
-.jw-brow .bar2 { height: 5px; border-radius: 4px; background: rgba(250, 247, 239, .1); margin-top: 5px; }
-.jw-brow .bar2 i { display: block; height: 100%; border-radius: 4px;
+.bar2 { height: 5px; border-radius: 4px; background: rgba(250, 247, 239, .1); margin-top: 5px; }
+.bar2 i { display: block; height: 100%; border-radius: 4px;
 	background: linear-gradient(90deg, var(--jw-champagne), var(--jw-gold)); }
 .jw-brow .sub { font-size: 11px; color: var(--jw-dim); opacity: .8; margin-top: 3px; }
 .jw-split { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px; padding: 4px 13px; }
@@ -724,6 +724,36 @@ function jwDay() {
 
 function jwDayClose() { document.getElementById("jw-day").classList.remove("on"); }
 
+// The day's loss, gathered. It is already on each bench's line, but a manager
+// asks "what did we lose today" as its own question — and the answer is the
+// sum, with the benches that made it up ranked under it.
+function jwLossHtml(d) {
+	const rows = (d.rows || []).filter((r) => r.loss > 0).sort((a, b) => b.loss - a.loss);
+	const total = (d.totals || {}).loss || 0;
+	if (!total) {
+		return `<div class="jw-gsec">Loss booked today</div>
+			<div class="jw-note" style="margin-top:0;">Nothing booked yet today.</div>`;
+	}
+	const peak = rows[0].loss;
+	return `<div class="jw-gsec">Loss booked today</div>
+		<div class="jw-tot jw-loss">
+			<div class="n">Booked at the benches</div>
+			<div class="g">${g3s(total)} <small>g</small></div>
+			<div class="gross">across ${rows.length} bench${rows.length === 1 ? "" : "es"}</div>
+		</div>
+		<div class="jw-split" style="margin-top:10px;">${rows.map((r) => `<div class="sr" style="display:block;">
+			<div style="display:flex;align-items:baseline;gap:10px;">
+				<span class="l">${esc(r.location)}</span>
+				<span class="w">${r.done} done</span>
+				<span class="v">${g3s(r.loss)}</span>
+			</div>
+			<div class="bar2" style="margin-top:6px;"><i style="width:${(r.loss / peak) * 100}%;
+				background:linear-gradient(90deg,#F0AFAF,#E58FA8);"></i></div>
+		</div>`).join("")}</div>
+		<div class="jw-note">Loss is booked when work is received back, so it belongs to the bench
+			that returned it — not to the bench that issued it.</div>`;
+}
+
 function jwDayHtml(d) {
 	const t = d.totals || {};
 	const peak = Math.max(1, ...(d.rows || []).map((r) => Math.max(r.issued, r.done)));
@@ -763,6 +793,8 @@ function jwDayHtml(d) {
 		<div class="jw-legend"><span><i style="background:#F2C57C"></i>issued today</span>
 			<span><i style="background:#7BD8A4"></i>done today</span></div>
 		<div class="jw-split" style="padding:2px 13px;">${(d.rows || []).map(bench).join("")}</div>
+
+		${jwLossHtml(d)}
 
 		${(d.people || []).length ? `<div class="jw-gsec">Whose hands</div>
 			<div class="jw-split">${d.people.map((p) => `<div class="sr">
