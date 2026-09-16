@@ -177,16 +177,19 @@ jewelima._icons = {
 // Neutral print CSS (a fresh print window has no app styles, so keep it self-contained).
 jewelima.print_css = `
 body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,sans-serif;color:#1a1a1a;}
-.jw-phead{display:flex;justify-content:space-between;align-items:center;gap:24px;border-bottom:1.5px solid #111;padding-bottom:10px;margin-bottom:2px;}
-.jw-plogo{height:56px;width:auto;display:block;}
+/* the stationery is a whole piece: the header artwork runs the full width and
+   carries its own rule, so nothing of ours is drawn across it */
+.jw-phead{margin-bottom:2px;}
+.jw-plogo{width:100%;display:block;}
 .jw-pco{font-size:20px;font-weight:800;letter-spacing:.5px;}
-.jw-pcontact{display:flex;align-items:center;gap:13px;font-size:11px;color:#333;flex-wrap:wrap;justify-content:flex-end;}
+.jw-pcontact{display:flex;align-items:center;gap:13px;font-size:11px;color:#333;flex-wrap:wrap;justify-content:center;margin-top:5px;}
 .jw-ci{display:flex;align-items:center;gap:5px;}
 .jw-ci svg{width:13px;height:13px;flex:0 0 auto;color:#111;}
 .jw-sep{color:#cfd4da;font-weight:300;}
 .jw-ptitle{font-size:12px;font-weight:700;color:#6b7785;text-transform:uppercase;letter-spacing:.09em;margin:8px 0 12px;}
-.jw-pfoot{margin-top:16px;padding-top:6px;border-top:1px solid #e2e6ea;font-size:10px;color:#9aa6b2;display:flex;justify-content:space-between;align-items:center;}
+.jw-pfoot{margin-top:16px;font-size:10px;color:#9aa6b2;display:flex;justify-content:space-between;align-items:center;}
 .jw-pfoot .jw-fbrand{font-style:italic;letter-spacing:.3px;}
+.jw-pfootart{width:100%;display:block;margin-top:10px;}
 @media print{.jw-phead,.jw-ci svg{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 `;
 
@@ -195,8 +198,10 @@ jewelima.print_header = function (b, title) {
 	b = b || {};
 	const esc = frappe.utils.escape_html;
 	const I = jewelima._icons;
-	const logo = b.logo_url
-		? `<img class="jw-plogo" src="${window.location.origin}${b.logo_url}" alt="${esc(b.company || "Jewelima")}">`
+	// the stationery's own header, whole and full width
+	const art = b.letterhead_url || "/assets/jewelima/images/brand/letterhead-header.png";
+	const logo = art
+		? `<img class="jw-plogo" src="${window.location.origin}${art}" alt="${esc(b.company || "Jewelima")}">`
 		: `<div class="jw-pco">${esc(b.company || "Jewelima")}</div>`;
 
 	const items = [];
@@ -206,7 +211,7 @@ jewelima.print_header = function (b, title) {
 	else if (b.email) items.push(`<span class="jw-ci">${I.mail}${esc(b.email)}</span>`);
 	const contact = items.join('<span class="jw-sep">|</span>');
 
-	return `<div class="jw-phead"><div>${logo}</div>${contact ? `<div class="jw-pcontact">${contact}</div>` : ""}</div>
+	return `<div class="jw-phead">${logo}${contact ? `<div class="jw-pcontact">${contact}</div>` : ""}</div>
 		${title ? `<div class="jw-ptitle">${esc(title)}</div>` : ""}`;
 };
 
@@ -215,10 +220,14 @@ jewelima.print_footer = function (b) {
 	const esc = frappe.utils.escape_html;
 	const co = esc(b.company || "Jewelima Diamonds");
 	const extra = b.gstin ? " &middot; GSTIN: " + esc(b.gstin) : "";
+	// the stationery's own footer, whole and full width, with the working line
+	// (GSTIN, printed-at) above it in small type
+	const art = b.letterhead_foot_url || "/assets/jewelima/images/brand/letterhead-footer.png";
 	return `<div class="jw-pfoot">
-		<span class="jw-fbrand">${co} — Crafting for You${extra}</span>
+		<span class="jw-fbrand">${co}${extra}</span>
 		<span>Printed ${frappe.datetime.str_to_user(frappe.datetime.now_datetime())}</span>
-	</div>`;
+	</div>
+	<img class="jw-pfootart" src="${window.location.origin}${art}" alt="">`;
 };
 
 // Open a clean, branded print window. `bodyHTML` = the page-specific content;

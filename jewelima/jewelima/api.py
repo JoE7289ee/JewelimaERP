@@ -12817,10 +12817,15 @@ def _price_chart_letter_html(d):
 	import base64 as _b64
 	try:
 		lp = frappe.get_app_path("jewelima", "public", "images", "brand", "letterhead-header.png")
+		fp = frappe.get_app_path("jewelima", "public", "images", "brand", "letterhead-footer.png")
 		logo_html = "<img src='data:image/png;base64,{0}'>".format(
 			_b64.b64encode(open(lp, "rb").read()).decode())
+		foot_html = "<div class='footart'><img src='data:image/png;base64,{0}'></div>".format(
+			_b64.b64encode(open(fp, "rb").read()).decode())
 	except Exception:
 		logo_html = "<div class='wordmark'>JEWELIMA</div>"
+		foot_html = ("<div class='rule'></div>"
+			"<div class='tag'>crafting &mdash; for &mdash; you</div>")
 
 	terms_block = ""
 	if d.get("payment_terms"):
@@ -12835,13 +12840,17 @@ def _price_chart_letter_html(d):
 		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a;
 			font-size: {base_font}; margin: 0; }}
 
-		/* letterhead */
-		.head {{ border-bottom: 2.5pt solid #1B4332; padding-bottom: 7px; }}
-		.head img {{ max-height: {logo_h}; max-width: 300px; }}
-		.wordmark {{ font-size: 21px; font-weight: 800; color: #1B4332; letter-spacing: .04em; }}
-		.kind {{ float: right; font-size: 10px; font-weight: 700; letter-spacing: .22em;
-			text-transform: uppercase; color: #1B4332; padding-top: 10px;
-			white-space: nowrap; }}
+		/* THE STATIONERY. The header and footer artwork are whole pieces: they run
+		   the full width of the text block, carry their own rules, and nothing of
+		   ours is drawn over them. */
+		.head {{ margin: 0 0 2px; }}
+		.head img {{ width: 100%; display: block; }}
+		.wordmark {{ font-size: 21px; font-weight: 800; color: #1B4332; letter-spacing: .04em;
+			text-align: center; }}
+		.kind {{ text-align: right; font-size: 10px; font-weight: 700; letter-spacing: .22em;
+			text-transform: uppercase; color: #1B4332; margin: 2px 0 0; white-space: nowrap; }}
+		.footart {{ margin-top: 8px; }}
+		.footart img {{ width: 100%; display: block; }}
 
 		/* who it is for, and when */
 		.meta {{ width: 100%; border-collapse: collapse; margin: 11px 0 4px; }}
@@ -12901,7 +12910,8 @@ def _price_chart_letter_html(d):
 			color: #1B4332; text-transform: lowercase; }}
 	</style></head><body>
 		<table class='sheet'><tr><td class='pagebody'>
-			<div class='head'><span class='kind'>Rate Chart</span>{logo}</div>
+			<div class='head'>{logo}</div>
+			<div class='kind'>Rate Chart</div>
 			<table class='meta'><tr>
 				<td><div class='for'>Rates for</div><div class='nm'>{chart_name}</div></td>
 				<td class='dt'><b>Dated</b>{chart_date}</td>
@@ -12915,11 +12925,10 @@ def _price_chart_letter_html(d):
 				<td><div class='who'>{signatory}</div><div class='ph'>{signatory_phone}</div></td>
 				<td class='sg'><div class='line'>Authorised Signatory</div></td>
 			</tr></table>
-			<div class='rule'></div>
-			<div class='tag'>crafting &mdash; for &mdash; you</div>
+			{foot}
 		</td></tr></table>
 	</body></html>""".format(
-		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, logo=logo_html,
+		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, logo=logo_html, foot=foot_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		body=body, terms=terms_block,
 		signatory=esc(d["signatory"]), signatory_phone=esc(d["signatory_phone"]))
@@ -20807,6 +20816,8 @@ def get_print_branding():
 		"address": addr, "phone": c.get("phone_no") or "", "email": c.get("email") or "",
 		"gstin": c.get("tax_id") or "", "website": c.get("website") or "",
 		"logo_url": brand.LOGO_WIDE,
+		# the whole stationery, for printouts that wear it end to end
+		"letterhead_url": brand.LETTERHEAD, "letterhead_foot_url": brand.LETTERHEAD_FOOT,
 	}
 
 
