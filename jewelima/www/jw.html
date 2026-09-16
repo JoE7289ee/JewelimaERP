@@ -321,20 +321,49 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-scan input:focus { outline: none; border-color: var(--jw-champagne); background: rgba(250, 247, 239, .13); }
 
 /* --- the nine --- */
-.jw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+.jw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .jw-tile {
-	position: relative; border: 1px solid rgba(250, 247, 239, .14); border-radius: 16px;
-	background: rgba(250, 247, 239, .07); color: var(--jw-ivory);
+	position: relative; overflow: hidden;
+	border: 1px solid rgba(250, 247, 239, .12); border-radius: 20px;
+	background:
+		radial-gradient(75% 55% at 50% 12%, rgba(250, 247, 239, .12), rgba(250, 247, 239, 0) 70%),
+		linear-gradient(180deg, rgba(250, 247, 239, .085), rgba(250, 247, 239, .035));
+	color: var(--jw-ivory);
 	aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-	gap: 7px; padding: 8px; text-align: center; font: inherit; cursor: pointer;
-	transition: transform .08s ease, background .12s ease;
+	gap: 10px; padding: 8px 6px; text-align: center; font: inherit; cursor: pointer;
+	box-shadow: inset 0 1px 0 rgba(250, 247, 239, .06), 0 2px 10px rgba(0, 0, 0, .18);
+	transition: transform .12s cubic-bezier(.2, .8, .3, 1), border-color .18s ease, box-shadow .18s ease;
+	/* each tile arrives a beat after the one before it */
+	animation: jw-in .34s cubic-bezier(.2, .8, .3, 1) backwards;
 }
-.jw-tile:active { transform: scale(.96); background: rgba(250, 247, 239, .13); }
-.jw-tile .ic { font-size: 23px; line-height: 1; }
-.jw-tile .lb { font-size: 11.5px; font-weight: 700; letter-spacing: .02em; line-height: 1.2; }
-.jw-tile .soon {
-	position: absolute; top: 7px; right: 8px; font-size: 8px; font-weight: 800; letter-spacing: .06em;
-	text-transform: uppercase; color: var(--jw-champagne); opacity: .8;
+@keyframes jw-in { from { opacity: 0; transform: translateY(10px) scale(.96); } }
+.jw-tile:active {
+	transform: scale(.94);
+	border-color: rgba(230, 199, 120, .45);
+	box-shadow: inset 0 1px 0 rgba(250, 247, 239, .08), 0 0 0 3px rgba(230, 199, 120, .14);
+}
+/* the icon sits on its own disc, so emoji of different weights still line up */
+.jw-tile .ic {
+	width: 52px; height: 52px; flex: 0 0 52px; border-radius: 16px;
+	display: flex; align-items: center; justify-content: center;
+	font-size: 27px; line-height: 1;
+	background: radial-gradient(70% 70% at 50% 30%, rgba(250, 247, 239, .16), rgba(250, 247, 239, .05));
+	box-shadow: inset 0 0 0 1px rgba(250, 247, 239, .1);
+	transition: transform .18s cubic-bezier(.2, .8, .3, 1);
+}
+.jw-tile:active .ic { transform: scale(1.08); }
+.jw-tile .lb {
+	font-size: 10.5px; font-weight: 800; letter-spacing: .07em; line-height: 1.25;
+	text-transform: uppercase; color: rgba(250, 247, 239, .92);
+}
+/* a thread of the screen's own colour along the top edge */
+.jw-tile::before {
+	content: ""; position: absolute; top: 0; left: 26%; right: 26%; height: 2px; border-radius: 0 0 3px 3px;
+	background: var(--tint, var(--jw-champagne)); opacity: .75;
+}
+@media (prefers-reduced-motion: reduce) {
+	.jw-tile { animation: none; }
+	.jw-tile, .jw-tile .ic { transition: none; }
 }
 
 /* --- a shell screen, for the tiles that are not built yet --- */
@@ -570,22 +599,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 // The nine. Names and icons only for now: each opens an empty screen, so the
 // LAYOUT can be judged — how big the targets are, how it feels one-handed —
 // before a single job is wired to it.
+// the tint is the colour that screen already uses, so the grid is a legend for
+// the app rather than nine decorations
 const JW_TILES = [
-	{ icon: "🔍", label: "Card Info", screen: "card" },
-	{ icon: "📈", label: "Rates", screen: "rates" },
-	{ icon: "🟡", label: "Gold Stock", screen: "gold" },
-	{ icon: "🧾", label: "Price Chart", screen: "chart" },
-	{ icon: "💠", label: "Stone Stock", screen: "stone" },
-	{ icon: "🏭", label: "Floor", screen: "floor" },
-	{ icon: "🏷️", label: "Finished Goods", screen: "fg" },
-	{ icon: "📅", label: "Today", screen: "day" },
-	{ icon: "📥", label: "Purchases", screen: "buy" },
+	{ icon: "🔍", label: "Card Info", screen: "card", tint: "#E6C778" },
+	{ icon: "📈", label: "Rates", screen: "rates", tint: "#F2C57C" },
+	{ icon: "🟡", label: "Gold Stock", screen: "gold", tint: "#D4AF37" },
+	{ icon: "🧾", label: "Price Chart", screen: "chart", tint: "#C9A9E8" },
+	{ icon: "💠", label: "Stone Stock", screen: "stone", tint: "#8FD3F4" },
+	{ icon: "🏭", label: "Floor", screen: "floor", tint: "#7BD8A4" },
+	{ icon: "🏷️", label: "Finished Goods", screen: "fg", tint: "#9FB3D9" },
+	{ icon: "📅", label: "Today", screen: "day", tint: "#E58FA8" },
+	{ icon: "📥", label: "Purchases", screen: "buy", tint: "#C2C7B0" },
 ];
 
 const grid = document.getElementById("jw-grid");
 grid.innerHTML = JW_TILES.map((t, i) => `
-	<button class="jw-tile" data-i="${i}">
-		${t.screen ? "" : `<span class="soon">soon</span>`}
+	<button class="jw-tile" data-i="${i}"
+		style="--tint:${t.tint};animation-delay:${i * 35}ms">
 		<span class="ic">${t.icon}</span>
 		<span class="lb">${t.label}</span>
 	</button>`).join("");
