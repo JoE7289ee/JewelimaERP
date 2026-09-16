@@ -13,9 +13,23 @@
 # their other roles' business, so a filer with JW Phone gets the phone app with a
 # filer's powers in it.
 
+import os
+
 import frappe
 
 no_cache = 1
+
+
+def _build():
+	"""When this app was last changed, as a stamp the screen can show.
+
+	Installed to a home screen there is no address bar and no view-source, so
+	"did the refresh actually take?" is otherwise unanswerable from the floor.
+	The file's own mtime is the honest answer and costs one stat."""
+	try:
+		return str(int(os.path.getmtime(os.path.join(os.path.dirname(__file__), "jw.html"))))[-6:]
+	except OSError:
+		return "?"
 
 PHONE_ROLE = "JW Phone"
 ALWAYS_IN = ("System Manager",)  # the one account that must never be locked out
@@ -31,6 +45,7 @@ def get_context(context):
 	context.jw_user = frappe.session.user
 	context.jw_full_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
 	context.jw_roles = sorted(roles)
+	context.jw_build = _build()
 	# no key: say so plainly rather than throw a 403 page at somebody standing at
 	# a bench — they signed in correctly, they simply do not hold this role
 	context.jw_denied = not roles.intersection({PHONE_ROLE, *ALWAYS_IN})

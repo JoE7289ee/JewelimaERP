@@ -313,7 +313,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Four tiles are live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
+		Four tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -893,11 +893,19 @@ function jwReread(btn, fn) {
 	Promise.resolve(fn()).catch(() => {}).then(() => setTimeout(() => btn.classList.remove("spin"), 450));
 }
 
+// A home-screen window holds on to the page it launched with, and a plain
+// navigation can be answered out of that hold — which is why closing the app
+// picked up a new build and this button did not. Pull the new page through the
+// network FIRST (cache: reload bypasses whatever is held), and only then go to
+// it, so the navigation lands on what the fetch just put in front of it.
 function jwRefresh() {
 	jwCamStop();
-	const b = document.querySelector(".jw-ref");
+	const b = document.querySelector(".jw-top .jw-ref");
 	if (b) b.classList.add("spin");            // a reload is silent; the button should not be
-	window.location.replace("/jw?r=" + Date.now());
+	const url = "/jw?r=" + Date.now();
+	fetch(url, { cache: "reload", credentials: "same-origin" })
+		.catch(() => { /* offline: go anyway and let the browser say so */ })
+		.then(() => window.location.replace(url));
 }
 
 // landing here means the phone app is wanted again — forget any "keep the desk"
