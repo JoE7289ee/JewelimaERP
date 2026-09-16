@@ -296,7 +296,13 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	[data-theme="dark"] .body-sidebar hr,
 	[data-theme="dark"] .body-sidebar .divider{border-color:#cfe5d7;background:#cfe5d7;}
 	[data-theme="dark"] .body-sidebar input{background:#f2f9f5;color:#14532d;border-color:#c7e0d1;}
-	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:#d6eadd;}`;
+	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:#d6eadd;}
+	/* the rail scrolls, but core's dark scrollbar cut a black stripe down the
+	   green panel — the bar goes, the scrolling stays */
+	[data-theme="dark"] .body-sidebar,
+	[data-theme="dark"] .body-sidebar *{scrollbar-width:none;-ms-overflow-style:none;}
+	[data-theme="dark"] .body-sidebar ::-webkit-scrollbar,
+	[data-theme="dark"] .body-sidebar::-webkit-scrollbar{width:0;height:0;display:none;}`;
 	document.head.appendChild(st);
 })();
 

@@ -50,7 +50,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 		[data-theme="dark"] .bk-tile.green .v{color:#7fc98f;}
 
 		.bk-cols{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
-		.bk-card{flex:1 1 100%;min-width:340px;border:1px solid var(--border-color);border-radius:12px;
+		.bk-card{flex:1 1 100%;min-width:0;border:1px solid var(--border-color);border-radius:12px;
 			background:var(--fg-color);overflow:hidden;border-left:3px solid #1f618d;}
 		.bk-card > .h{padding:9px 14px;border-bottom:1px solid var(--border-color);
 			background:rgba(31,97,141,.09);color:#1f618d;font-size:11px;font-weight:800;
@@ -94,6 +94,23 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 		.pm-cust table{width:100%;border-collapse:collapse;font-size:12px;}
 		.pm-cust td{padding:4px 14px;border-top:1px solid var(--border-color);}
 		.pm-cust .empty{padding:12px 14px;color:var(--text-muted);font-size:12px;}
+
+		/* narrow screens: nothing pushes the PAGE sideways. The cards may be as
+		   small as the window, and a table that still cannot fit scrolls inside
+		   its own card instead of dragging the whole page with it. */
+		#page-delivery-masters .layout-main-section{overflow-x:hidden;}
+		.pm-card,.bk-card{min-width:0;max-width:100%;}
+		.bk-listbody,.pm-card > table.pm-tbl,.pm-cust .cb{overflow-x:auto;}
+		.pm-addrow,.bk-addrow{flex-wrap:wrap;}
+		.pm-addrow input,.bk-addrow input{min-width:0;}
+		@media (max-width:640px){
+			.pm-card .h{flex-direction:column;gap:2px;}
+			.pm-card .h .s{display:none;}
+			.bk-tile{flex:1 1 120px;padding:9px 13px;}
+			table.bk-tbl th,table.bk-tbl td{padding:6px 8px;}
+			table.pm-tbl td{padding:6px 9px;}
+			.pm-addrow .code{width:auto;flex:1 1 90px;}
+		}
 		</style>
 		<div class="pm-grid"><div class="pm-card">
 			<div class="h"><span class="t">${__("Certifications")}</span><span class="s">${__("labs; code leads the batch series (IGI-0001) — click for centers; more delivery masters land here later")}</span></div>
