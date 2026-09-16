@@ -679,9 +679,18 @@ const cardBody = document.getElementById("jw-card-body");
 
 // one way to the server: the desk's own whitelisted methods, over the session
 // cookie we already hold. No second API, no second copy of any rule.
-function jwApi(method, args) {
+function jwApi(method, args, write) {
 	const q = new URLSearchParams(args || {}).toString();
-	return fetch(`/api/method/${method}?${q}`, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+	// a GET may not write: frappe runs read requests in a read-only transaction,
+	// so anything that saves has to go by POST, with the session's CSRF token
+	const init = write
+		? { method: "POST", credentials: "same-origin",
+			headers: { Accept: "application/json",
+				"Content-Type": "application/x-www-form-urlencoded",
+				"X-Frappe-CSRF-Token": (window.frappe && frappe.csrf_token) || "" },
+			body: q }
+		: { headers: { Accept: "application/json" }, credentials: "same-origin" };
+	return fetch(write ? `/api/method/${method}` : `/api/method/${method}?${q}`, init)
 		.then((r) => {
 			if (r.status === 403) { window.location.replace("/jw-login"); throw new Error("no session"); }
 			if (!r.ok) throw new Error(r.status);
@@ -1578,7 +1587,16 @@ async function jwBellInit() {
 	try {
 		const reg = await navigator.serviceWorker.register("/jw-sw.js", { scope: "/jw" });
 		const sub = await reg.pushManager.getSubscription();
-		if (sub) bell.classList.add("on");
+		if (sub) {
+			bell.classList.add("on");
+			// this phone believes it is subscribed; make sure WE know about it,
+			// because a registration that never reached the server is a bell
+			// that lights up and never rings
+			jwApi("jewelima.jewelima.push.subscribe", {
+				subscription: JSON.stringify(sub),
+				device: (navigator.platform || "phone"),
+			}, true).catch(() => { /* next open will try again */ });
+		}
 	} catch (e) { /* registration refused — the bell still explains itself on tap */ }
 }
 
@@ -1591,7 +1609,7 @@ async function jwBell() {
 		const reg = await navigator.serviceWorker.register("/jw-sw.js", { scope: "/jw" });
 		const existing = await reg.pushManager.getSubscription();
 		if (existing) {                       // already on: this is a way off again
-			await jwApi("jewelima.jewelima.push.unsubscribe", { endpoint: existing.endpoint });
+			await jwApi("jewelima.jewelima.push.unsubscribe", { endpoint: existing.endpoint }, true);
 			await existing.unsubscribe();
 			bell.classList.remove("on");
 			alert("Notifications off on this phone.");
@@ -1611,7 +1629,7 @@ async function jwBell() {
 		await jwApi("jewelima.jewelima.push.subscribe", {
 			subscription: JSON.stringify(sub),
 			device: (navigator.platform || "phone"),
-		});
+		}, true);
 		bell.classList.add("on");
 		alert("Notifications on. You will hear about stock coming in.");
 	} catch (e) {
