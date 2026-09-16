@@ -276,33 +276,33 @@ jewelima.print_window = function (branding, title, bodyHTML, extraCss) {
 	const st = document.createElement("style");
 	st.textContent = `
 	[data-theme="dark"] .body-sidebar{
-		background:#e6f2ea;
-		border-right-color:#c7e0d1;
-		--sidebar-hover-color:#d6eadd;
-		--sidebar-active-color:#c6e3d2;
-		--sidebar-border-color:#c7e0d1;
-		--divider-color:#cfe5d7;
+		background:#0b3b2e;
+		border-right-color:#0a4d39;
+		--sidebar-hover-color:#124f3d;
+		--sidebar-active-color:#17624c;
+		--sidebar-border-color:#0a4d39;
+		--divider-color:#125040;
 	}
 	[data-theme="dark"] .body-sidebar,
-	[data-theme="dark"] .body-sidebar *:not(svg):not(path){color:#14532d;}
+	[data-theme="dark"] .body-sidebar *:not(svg):not(path){color:#d8f0e3;}
 	[data-theme="dark"] .body-sidebar .sidebar-item-label,
 	[data-theme="dark"] .body-sidebar .standard-sidebar-item span,
-	[data-theme="dark"] .body-sidebar .standard-sidebar-label{color:#14532d !important;}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-label{color:#d8f0e3 !important;}
 	[data-theme="dark"] .body-sidebar .sidebar-item-icon svg,
 	[data-theme="dark"] .body-sidebar .drop-icon svg,
-	[data-theme="dark"] .body-sidebar svg{stroke:#1e6b45;color:#1e6b45;}
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item:hover{background:#d6eadd;}
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item.selected{background:#c6e3d2;}
+	[data-theme="dark"] .body-sidebar svg{stroke:#7fd4a8;color:#7fd4a8;}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item:hover{background:#124f3d;}
+	[data-theme="dark"] .body-sidebar .standard-sidebar-item.selected{background:#17624c;}
 	[data-theme="dark"] .body-sidebar hr,
-	[data-theme="dark"] .body-sidebar .divider{border-color:#cfe5d7;background:#cfe5d7;}
-	[data-theme="dark"] .body-sidebar input{background:#f2f9f5;color:#14532d;border-color:#c7e0d1;}
-	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:#d6eadd;}
-	/* the rail scrolls, but core's dark scrollbar cut a black stripe down the
-	   green panel — the bar goes, the scrolling stays */
-	[data-theme="dark"] .body-sidebar,
-	[data-theme="dark"] .body-sidebar *{scrollbar-width:none;-ms-overflow-style:none;}
-	[data-theme="dark"] .body-sidebar ::-webkit-scrollbar,
-	[data-theme="dark"] .body-sidebar::-webkit-scrollbar{width:0;height:0;display:none;}`;
+	[data-theme="dark"] .body-sidebar .divider{border-color:#125040;background:#125040;}
+	[data-theme="dark"] .body-sidebar input{background:#0f4a39;color:#d8f0e3;border-color:#0a4d39;}
+	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:#124f3d;}
+	/* the rail scrolls, but the scrollbar cut a stripe down the panel — the bar
+	   goes, the scrolling stays. Both themes: it is ugly in either. */
+	.body-sidebar,
+	.body-sidebar *{scrollbar-width:none;-ms-overflow-style:none;}
+	.body-sidebar ::-webkit-scrollbar,
+	.body-sidebar::-webkit-scrollbar{width:0;height:0;display:none;}`;
 	document.head.appendChild(st);
 })();
 
