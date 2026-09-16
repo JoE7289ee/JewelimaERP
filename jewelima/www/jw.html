@@ -9,10 +9,12 @@
 {% block head_include %}
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#0D2B1E">
+<meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Jewelima">
 <link rel="apple-touch-icon" href="/assets/jewelima/images/brand/favicon-180.png">
+<script src="/assets/jewelima/js/zxing.min.js"></script>
 {% endblock %}
 
 {% block style %}
@@ -98,6 +100,52 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-screen .body .big { font-size: 40px; }
 .jw-screen .body .note { font-size: 13.5px; max-width: 250px; line-height: 1.5; }
 
+/* --- the camera --- */
+.jw-cam { position: fixed; inset: 0; z-index: 60; background: #000; display: none; flex-direction: column; }
+.jw-cam.on { display: flex; }
+.jw-cam video { flex: 1; width: 100%; object-fit: cover; }
+.jw-cam .frame {
+	position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+	width: 74vw; max-width: 330px; aspect-ratio: 1.35 / 1;
+	border: 2px solid var(--jw-champagne); border-radius: 14px;
+	box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .45); }
+.jw-cam .hint {
+	position: absolute; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom));
+	text-align: center; color: rgba(255, 255, 255, .85); font-size: 13px; }
+.jw-cam .close {
+	position: absolute; left: 50%; transform: translateX(-50%);
+	bottom: calc(26px + env(safe-area-inset-bottom));
+	border: none; border-radius: 26px; padding: 13px 30px; font-size: 15px; font-weight: 800;
+	background: var(--jw-ivory); color: var(--jw-emerald); }
+.jw-scanbtn {
+	flex: 0 0 auto; border: 1px solid rgba(250, 247, 239, .22); border-radius: 12px;
+	background: rgba(250, 247, 239, .08); color: var(--jw-ivory); font-size: 20px; width: 52px; }
+.jw-scanbtn:active { background: rgba(250, 247, 239, .16); }
+
+/* --- a card, read on a phone --- */
+.jw-card-hd { padding: 2px 0 10px; }
+.jw-card-hd .code { font-size: 25px; font-weight: 800; letter-spacing: .01em; word-break: break-all; }
+.jw-card-hd .dsn { font-size: 13px; color: rgba(250, 247, 239, .62); margin-top: 2px; }
+.jw-badge { display: inline-block; margin-top: 9px; border-radius: 9px; padding: 3px 10px;
+	font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.jw-badge.prod { background: rgba(46, 125, 91, .3); color: #b9e8cf; }
+.jw-badge.wip { background: rgba(212, 175, 55, .22); color: var(--jw-champagne); }
+.jw-badge.pre { background: rgba(250, 247, 239, .14); color: rgba(250, 247, 239, .7); }
+.jw-where { border: 1px solid rgba(250, 247, 239, .14); border-radius: 14px;
+	background: rgba(250, 247, 239, .07); padding: 13px 15px; margin-bottom: 11px; }
+.jw-where .k { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: rgba(250, 247, 239, .55); }
+.jw-where .v { font-size: 22px; font-weight: 800; color: var(--jw-champagne); line-height: 1.2; }
+.jw-where .s { font-size: 12.5px; color: rgba(250, 247, 239, .7); margin-top: 3px; }
+.jw-rows { display: flex; flex-direction: column; gap: 9px; }
+.jw-row { border: 1px solid rgba(250, 247, 239, .12); border-radius: 13px;
+	background: rgba(250, 247, 239, .05); padding: 11px 14px; }
+.jw-row .t { font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .5); margin-bottom: 5px; }
+.jw-row .b { font-size: 13.5px; line-height: 1.7; }
+.jw-row b { color: var(--jw-ivory); }
+.jw-err { color: #ffb4b4; font-size: 13.5px; text-align: center; padding: 22px 8px; }
+.jw-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
+
 .jw-foot { margin-top: auto; text-align: center; font-size: 11px; color: rgba(250, 247, 239, .42); }
 .jw-foot a { color: rgba(250, 247, 239, .62); text-decoration: underline; }
 
@@ -118,13 +166,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	</div>
 
 	<div class="jw-scan">
-		<input id="jw-scan" placeholder="Scan a card…" autocomplete="off" autocapitalize="characters">
+		<input id="jw-scan" placeholder="Scan or type a card…" autocomplete="off" autocapitalize="characters">
+		<button class="jw-scanbtn" id="jw-cambtn" title="Scan with the camera">&#9635;</button>
 	</div>
 
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Nine shells, nothing wired yet · <a href="/app?desk=1">open the full desk</a>
+		Card Info is live · the rest are shells · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -139,12 +188,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	</div>
 </div>
 
+<!-- Card Info: the first tile with something behind it -->
+<div class="jw-screen" id="jw-card">
+	<div class="bar">
+		<button class="back" onclick="jwCardClose()">&#8592;</button>
+		<div class="ttl">Card Info</div>
+		<button class="jw-scanbtn" style="margin-left:auto;" onclick="jwCam()">&#9635;</button>
+	</div>
+	<div class="jw-body" id="jw-card-body"></div>
+</div>
+
+<div class="jw-cam" id="jw-cam">
+	<video id="jw-video" playsinline muted></video>
+	<div class="frame"></div>
+	<div class="hint">Hold the barcode or QR inside the frame</div>
+	<button class="close" onclick="jwCamStop()">Close</button>
+</div>
+
 <script>
 // The nine. Names and icons only for now: each opens an empty screen, so the
 // LAYOUT can be judged — how big the targets are, how it feels one-handed —
 // before a single job is wired to it.
 const JW_TILES = [
-	{ icon: "🔍", label: "Card Info" },
+	{ icon: "🔍", label: "Card Info", screen: "card" },
 	{ icon: "🧰", label: "Job Work" },
 	{ icon: "💎", label: "Stone Issue" },
 	{ icon: "↔️", label: "Transfer" },
@@ -158,7 +224,7 @@ const JW_TILES = [
 const grid = document.getElementById("jw-grid");
 grid.innerHTML = JW_TILES.map((t, i) => `
 	<button class="jw-tile" data-i="${i}">
-		<span class="soon">soon</span>
+		${t.screen ? "" : `<span class="soon">soon</span>`}
 		<span class="ic">${t.icon}</span>
 		<span class="lb">${t.label}</span>
 	</button>`).join("");
@@ -167,24 +233,166 @@ grid.addEventListener("click", (e) => {
 	const el = e.target.closest(".jw-tile");
 	if (!el) return;
 	const t = JW_TILES[Number(el.dataset.i)];
+	if (t.screen === "card") {          // the one that is built
+		document.getElementById("jw-card").classList.add("on");
+		if (!cardBody.innerHTML.trim()) {
+			cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">`
+				+ `Scan a card, or type its number on the home screen.</div>`;
+		}
+		return;
+	}
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
 });
 
 function jwClose() { document.getElementById("jw-screen").classList.remove("on"); }
-// the back gesture closes a screen rather than leaving the app
-window.addEventListener("popstate", jwClose);
+// the back gesture closes whatever is open rather than leaving the app
+window.addEventListener("popstate", () => { jwClose(); jwCardClose(); jwCamStop(); });
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
 	if (e.key !== "Enter") return;
 	const code = (e.target.value || "").trim();
 	e.target.value = "";
-	if (!code) return;
-	document.getElementById("jw-screen-title").textContent = code;
-	document.getElementById("jw-screen-icon").textContent = "🔍";
-	document.getElementById("jw-screen").classList.add("on");
+	if (code) jwCard(code);
 });
+document.getElementById("jw-cambtn").addEventListener("click", jwCam);
+
+// ---------------------------------------------------------------------------
+// CARD INFO — the first tile with something behind it.
+//
+// One call, the same get_card_passport the desk's Card Info uses, read down a
+// phone: where it is now, what it weighs, what it holds, who has it.
+// ---------------------------------------------------------------------------
+const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const g3 = (v) => (parseFloat(v) || 0).toFixed(3);
+const cardBody = document.getElementById("jw-card-body");
+
+// one way to the server: the desk's own whitelisted methods, over the session
+// cookie we already hold. No second API, no second copy of any rule.
+function jwApi(method, args) {
+	const q = new URLSearchParams(args || {}).toString();
+	return fetch(`/api/method/${method}?${q}`, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+		.then((r) => {
+			if (r.status === 403) { window.location.href = "/login?redirect-to=/jw"; throw new Error("no session"); }
+			if (!r.ok) throw new Error(r.status);
+			return r.json();
+		})
+		.then((j) => (j && j.message) || {});
+}
+
+function jwCardClose() { document.getElementById("jw-card").classList.remove("on"); }
+
+function jwCard(code) {
+	code = (code || "").trim().toUpperCase();
+	if (!code) return;
+	// a bare number is an E-card: 114.1.1 means E0114.1.1, as on the desk
+	if (/^\d/.test(code)) {
+		const p = code.split(".");
+		if (/^\d+$/.test(p[0])) code = "E" + p[0].padStart(4, "0") + (p.length > 1 ? "." + p.slice(1).join(".") : "");
+	}
+	document.getElementById("jw-card").classList.add("on");
+	cardBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.6)">Reading ${esc(code)}…</div>`;
+	jwApi("jewelima.jewelima.api.get_card_passport", { order_bag: code })
+		.then((d) => {
+			if (!d.bag) {
+				cardBody.innerHTML = `<div class="jw-err">No card <b>${esc(code)}</b>.</div>`;
+				return;
+			}
+			cardBody.innerHTML = jwCardHtml(d);
+		})
+		.catch(() => { cardBody.innerHTML = `<div class="jw-err">Could not read ${esc(code)}.</div>`; });
+}
+
+function jwCardHtml(d) {
+	const b = d.bag || {};
+	const state = b.is_finished
+		? ["prod", "Product — " + (b.stock_status || "In Stock")]
+		: (parseFloat(b.act_gross_weight) ? ["wip", "In production"] : ["pre", "In preproduction"]);
+	const bn = d.bench || null;
+	const stones = [["DMD", "dmd"], ["PS", "ps"], ["CS", "cs"], ["CZ", "cz"], ["CVD", "cvd"], ["SW", "sw"],
+		["PDMD", "pdmd"], ["POTH", "poth"]]
+		.map(([lb, k]) => {
+			const no = b["act_" + k + "_no"], w = b["act_" + k + "_weight"];
+			return (no || parseFloat(w)) ? `${lb} <b>${no || 0}</b>/<b>${g3(w)}</b> ct` : "";
+		}).filter(Boolean).join(" · ");
+	const weights = [
+		parseFloat(b.act_gross_weight) ? `Gross <b>${g3(b.act_gross_weight)}</b> g` : "",
+		parseFloat(b.act_nett_weight) ? `Nett <b>${g3(b.act_nett_weight)}</b> g` : "",
+		parseFloat(b.act_pure_weight) ? `Pure <b>${g3(b.act_pure_weight)}</b> g` : "",
+	].filter(Boolean).join(" · ");
+	const holds = ((d.contents || {}).items || [])
+		.map((m) => `${esc(m.item)} <b>${m.pcs ? m.pcs + " / " : ""}${m.qty}</b> ${esc(m.uom || "")}`).join("<br>");
+	const party = b.party_group || b.held_by_group || b.customer || b.held_by || "";
+	const row = (t, body) => body ? `<div class="jw-row"><div class="t">${t}</div><div class="b">${body}</div></div>` : "";
+	return `
+		<div class="jw-card-hd">
+			<div class="code">${esc(b.name)}</div>
+			<div class="dsn">${esc(b.design || "")}${b.design_type ? " · " + esc(b.design_type) : ""}</div>
+			<span class="jw-badge ${state[0]}">${esc(state[1])}</span>
+		</div>
+		<div class="jw-where">
+			<div class="k">Where it is now</div>
+			<div class="v">${esc(b.location || "—")}</div>
+			${b.stock_status ? `<div class="s">${esc(b.stock_status)}</div>` : ""}
+			${bn ? `<div class="s">${bn.status === "Issued"
+				? "Issued to <b>" + esc(bn.employee_name || bn.employee || "—") + "</b>" + (bn.since ? " · since " + esc(bn.since) : "")
+				: esc(bn.status || "In Queue")}</div>` : ""}
+		</div>
+		<div class="jw-rows">
+			${row("Weights now", weights || "No actual weight yet")}
+			${row("Stones", stones)}
+			${row("Holds", holds || (b.is_finished ? "Made into the product" : "Nothing issued yet"))}
+			${row("Party", party ? esc(party) + (b.customer && party !== b.customer ? `<br><span style="color:rgba(250,247,239,.55)">${esc(b.customer)}</span>` : "") : "")}
+			${row("Order", [b.job_order ? "Job " + esc(b.job_order) : "", b.qty ? "Qty " + esc(b.qty) : "",
+				b.size ? "Size " + esc(b.size) : "", b.due_date ? "Due " + esc(b.due_date) : ""].filter(Boolean).join(" · "))}
+			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
+			${row("Remark", b.narration ? esc(b.narration) : "")}
+		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// THE CAMERA. Safari gives a video stream over https and ZXing reads the frames
+// — the same QR we print on stock and the Code128 on a job card. The stream is
+// stopped the moment it is not needed: a camera left running is a hot phone.
+// ---------------------------------------------------------------------------
+let jwReader = null, jwStream = null;
+
+function jwCam() {
+	const box = document.getElementById("jw-cam");
+	const video = document.getElementById("jw-video");
+	if (!navigator.mediaDevices || !window.ZXing) {
+		alert("This phone will not give the page a camera. Type the number instead.");
+		return;
+	}
+	box.classList.add("on");
+	navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
+		.then((stream) => {
+			jwStream = stream;
+			video.srcObject = stream;
+			video.play();
+			jwReader = new ZXing.BrowserMultiFormatReader();
+			jwReader.decodeFromVideoElement(video, (result) => {
+				if (!result) return;
+				const text = (result.getText() || "").trim();
+				if (!text) return;
+				if (navigator.vibrate) navigator.vibrate(40);
+				jwCamStop();
+				jwCard(text);
+			});
+		})
+		.catch(() => {
+			box.classList.remove("on");
+			alert("The camera was refused. Allow camera access for this site in Settings, or type the number.");
+		});
+}
+
+function jwCamStop() {
+	document.getElementById("jw-cam").classList.remove("on");
+	try { if (jwReader) jwReader.reset(); } catch (e) { /* already stopped */ }
+	try { if (jwStream) jwStream.getTracks().forEach((t) => t.stop()); } catch (e) { /* already stopped */ }
+	jwReader = null; jwStream = null;
+}
 
 function jwLogout() { window.location.href = "/api/method/logout"; }
 
