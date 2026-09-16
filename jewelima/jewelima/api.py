@@ -12838,6 +12838,89 @@ def get_price_chart(name):
 
 
 @frappe.whitelist()
+def get_jw_day():
+	"""The day across every bench: what went out to hands, and what came back.
+
+	A bench that issues work to a person records issued_at / receipted_at and
+	books the loss; the lighter assign/collect benches record only times. Both
+	are read here, because "how much work got done today" does not care which
+	kind of bench did it.
+
+	Loss is shown as it was booked — it is the day's honest cost of doing the
+	work, and hiding it on a summary screen would be the wrong kind of tidy."""
+	frappe.only_for(["JW Phone", "System Manager"])
+	from jewelima.jewelima.benches import (ASSIGN_COLLECT_LOCATIONS, BENCH_DOCTYPE,
+		ISSUE_RECEIPT_LOCATIONS)
+
+	today = frappe.utils.today()
+	rows, people = [], {}
+	for loc, dt in BENCH_DOCTYPE.items():
+		if not frappe.db.exists("DocType", dt):
+			continue
+		meta = frappe.get_meta(dt)
+		has_issue = meta.has_field("issued_at") and meta.has_field("receipted_at")
+		has_times = meta.has_field("time_in") and meta.has_field("time_out")
+		if not (has_issue or has_times):
+			continue
+		out_f = "issued_at" if has_issue else "time_in"
+		in_f = "receipted_at" if has_issue else "time_out"
+		loss_f = "SUM(IF(DATE(`{0}`) = %(d)s, IFNULL(loss, 0), 0))".format(in_f) \
+			if meta.has_field("loss") else "0"
+		r = frappe.db.sql("""
+			SELECT
+				SUM(IF(DATE(`{out}`) = %(d)s, 1, 0)) issued,
+				SUM(IF(DATE(`{inn}`) = %(d)s, 1, 0)) done,
+				{loss} loss,
+				SUM(IF(status IN ('Issued', 'Ongoing'), 1, 0)) open_now,
+				SUM(IF(status = 'In Queue', 1, 0)) queue_now
+			FROM `tab{dt}`""".format(out=out_f, inn=in_f, loss=loss_f, dt=dt),
+			{"d": today}, as_dict=True)[0]
+		issued, done = cint(r.issued), cint(r.done)
+		if not (issued or done or cint(r.open_now) or cint(r.queue_now)):
+			continue
+		rows.append({
+			"location": loc, "issued": issued, "done": done,
+			"loss": round(flt(r.loss), 3),
+			"open_now": cint(r.open_now), "queue_now": cint(r.queue_now),
+			"kind": "issue" if loc in ISSUE_RECEIPT_LOCATIONS else (
+				"assign" if loc in ASSIGN_COLLECT_LOCATIONS else "queue"),
+		})
+		# who did the work, gathered across every bench
+		if meta.has_field("employee"):
+			for e in frappe.db.sql("""
+				SELECT employee, SUM(IF(DATE(`{inn}`) = %(d)s, 1, 0)) done,
+					SUM(IF(DATE(`{out}`) = %(d)s, 1, 0)) issued
+				FROM `tab{dt}` WHERE IFNULL(employee, '') != ''
+					AND (DATE(`{inn}`) = %(d)s OR DATE(`{out}`) = %(d)s)
+				GROUP BY employee""".format(out=out_f, inn=in_f, dt=dt), {"d": today}, as_dict=True):
+				p = people.setdefault(e.employee, {"done": 0, "issued": 0})
+				p["done"] += cint(e.done)
+				p["issued"] += cint(e.issued)
+
+	rows.sort(key=lambda x: (-(x["issued"] + x["done"]), x["location"]))
+	names = {}
+	if people:
+		for e in frappe.get_all("Employee", filters={"name": ["in", list(people)]},
+				fields=["name", "employee_name"]):
+			names[e.name] = e.employee_name or e.name
+	hands = sorted(({"who": names.get(k, k), "done": v["done"], "issued": v["issued"]}
+		for k, v in people.items()), key=lambda x: (-x["done"], -x["issued"]))[:12]
+
+	return {
+		"today": today, "rows": rows, "people": hands,
+		"totals": {
+			"issued": sum(r["issued"] for r in rows),
+			"done": sum(r["done"] for r in rows),
+			"loss": round(sum(r["loss"] for r in rows), 3),
+			"open_now": sum(r["open_now"] for r in rows),
+			"benches": len(rows),
+			"hands": len(people),
+		},
+		"at": frappe.utils.now(),
+	}
+
+
+@frappe.whitelist()
 def get_jw_products():
 	"""Finished goods on the phone: what is in stock, what became a product
 	today, and what went out today.

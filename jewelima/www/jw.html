@@ -75,6 +75,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-hero .r .mv.up { color: #7BD8A4; }
 .jw-hero .r .mv.dn { color: #F09A9A; }
 .jw-derived { font-size: 10.5px; color: var(--jw-dim); opacity: .7; margin-top: 7px; }
+/* the day: a line per bench, issued against done */
+.jw-bench { padding: 11px 0; border-bottom: 1px solid rgba(250, 247, 239, .08); }
+.jw-bench:last-child { border-bottom: 0; }
+.jw-bench .bt { display: flex; align-items: baseline; gap: 9px; }
+.jw-bench .bt .l { flex: 1; font-size: 13.5px; font-weight: 800; letter-spacing: .03em; }
+.jw-bench .bt .num { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.jw-bench .bt .num.i { color: #F2C57C; }
+.jw-bench .bt .num.d { color: #7BD8A4; }
+.jw-bench .bt .sep { color: rgba(250, 247, 239, .25); font-size: 12px; }
+.jw-bench .bb { display: flex; gap: 3px; margin-top: 6px; height: 5px; }
+.jw-bench .bb i { display: block; height: 100%; border-radius: 3px; }
+.jw-bench .bb .i { background: #F2C57C; }
+.jw-bench .bb .d { background: #7BD8A4; }
+.jw-bench .bs { font-size: 10.5px; color: var(--jw-dim); margin-top: 5px; }
+.jw-bench .bs b { color: rgba(250, 247, 239, .9); font-weight: 800; }
+.jw-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--jw-dim); margin: -2px 0 10px; }
+.jw-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+
 /* finished goods: two day-tiles, then the standing stock */
 .jw-two { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 4px; }
 .jw-day { border: 1px solid rgba(250, 247, 239, .14); border-radius: 14px; padding: 12px 13px;
@@ -409,7 +427,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 	<div class="jw-grid" id="jw-grid"></div>
 
 	<div class="jw-foot">
-		Seven tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
+		Eight tiles are live · build {{ jw_build }} · <a href="/app?desk=1">open the full desk</a>
 	</div>
 </div>
 
@@ -423,6 +441,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 		<div class="big" id="jw-screen-icon"></div>
 		<div class="note">Nothing here yet — this is the shell, so the shape and the feel can be judged before anything is built into it.</div>
 	</div>
+</div>
+
+<!-- Today: the day across every bench -->
+<div class="jw-screen" id="jw-day">
+	<div class="bar">
+		<button class="back" onclick="jwDayClose()">&#8592;</button>
+		<div class="ttl">Today</div>
+		<button class="jw-ref" onclick="jwReread(this, jwDay)" title="Read it again">&#8635;</button>
+		<button class="jw-out" onclick="jwLogout()">Sign out</button>
+	</div>
+	<div class="jw-body" id="jw-day-body"></div>
 </div>
 
 <!-- Finished Goods: what is made, what went out -->
@@ -522,7 +551,7 @@ const JW_TILES = [
 	{ icon: "💠", label: "Stone Stock", screen: "stone" },
 	{ icon: "🏭", label: "Floor", screen: "floor" },
 	{ icon: "🏷️", label: "Finished Goods", screen: "fg" },
-	{ icon: "🧰", label: "Job Work" },
+	{ icon: "📅", label: "Today", screen: "day" },
 	{ icon: "⚖️", label: "Weigh" },
 	{ icon: "📦", label: "Parcel" },
 ];
@@ -553,6 +582,7 @@ grid.addEventListener("click", (e) => {
 	if (t.screen === "stone") { jwStones(); return; }
 	if (t.screen === "floor") { jwFloor(); return; }
 	if (t.screen === "fg") { jwFg(); return; }
+	if (t.screen === "day") { jwDay(); return; }
 	document.getElementById("jw-screen-title").textContent = t.label;
 	document.getElementById("jw-screen-icon").textContent = t.icon;
 	document.getElementById("jw-screen").classList.add("on");
@@ -562,7 +592,7 @@ function jwClose() { document.getElementById("jw-screen").classList.remove("on")
 // the back gesture closes whatever is open rather than leaving the app
 window.addEventListener("popstate", () => {
 	jwClose(); jwCardClose(); jwRatesClose(); jwGoldClose(); jwChartClose(); jwStoneClose();
-	jwFloorClose(); jwFgClose(); jwCamStop();
+	jwFloorClose(); jwFgClose(); jwDayClose(); jwCamStop();
 });
 
 document.getElementById("jw-scan").addEventListener("keydown", (e) => {
@@ -664,6 +694,84 @@ function jwCardHtml(d) {
 			${row("Identity", [b.huid ? "HUID " + esc(b.huid) : "", b.certifications ? "Cert " + esc(b.certifications) : ""].filter(Boolean).join(" · "))}
 			${row("Remark", b.narration ? esc(b.narration) : "")}
 		</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// TODAY — the day across every bench: what went out to hands, what came back.
+//
+// Issued and done sit on one line per bench, each with a bar, so a bench that
+// took in more than it gave back is visible without reading a number. Loss is
+// shown as booked: it is the day's honest cost of the work.
+// ---------------------------------------------------------------------------
+const dayBody = document.getElementById("jw-day-body");
+
+function jwDay() {
+	document.getElementById("jw-day").classList.add("on");
+	if (!dayBody.innerHTML.trim()) {
+		dayBody.innerHTML = `<div class="jw-err" style="color:rgba(250,247,239,.85)">Reading the day…</div>`;
+	}
+	return jwApi("jewelima.jewelima.api.get_jw_day", {})
+		.then((d) => {
+			if (!d || !d.rows) throw new Error("empty");
+			dayBody.innerHTML = jwDayHtml(d);
+		})
+		.catch(() => {
+			if (!dayBody.querySelector(".jw-kpi")) {
+				dayBody.innerHTML = `<div class="jw-err">The day could not be read just now.</div>`;
+			}
+		});
+}
+
+function jwDayClose() { document.getElementById("jw-day").classList.remove("on"); }
+
+function jwDayHtml(d) {
+	const t = d.totals || {};
+	const peak = Math.max(1, ...(d.rows || []).map((r) => Math.max(r.issued, r.done)));
+	const bench = (r) => `<div class="jw-bench">
+		<div class="bt">
+			<span class="l">${esc(r.location)}</span>
+			<span class="num i">${whole(r.issued)}</span>
+			<span class="sep">issued ·</span>
+			<span class="num d">${whole(r.done)}</span>
+			<span class="sep">done</span>
+		</div>
+		${(r.issued || r.done) ? `<div class="bb">
+			<i class="i" style="width:${(r.issued / peak) * 50}%"></i>
+			<i class="d" style="width:${(r.done / peak) * 50}%"></i>
+		</div>` : ""}
+		<div class="bs">${[
+			r.open_now ? `<b>${r.open_now}</b> in hand now` : "",
+			r.queue_now ? `<b>${r.queue_now}</b> waiting` : "",
+			r.loss ? `<b>${g3s(r.loss)}</b> g loss booked` : "",
+		].filter(Boolean).join(" · ") || "nothing moving"}</div>
+	</div>`;
+	return `<div class="jw-kpi">
+			<div><div class="kk">Issued</div><div class="kv" style="color:#F2C57C">${whole(t.issued)}</div></div>
+			<div><div class="kk">Done</div><div class="kv" style="color:#7BD8A4">${whole(t.done)}</div></div>
+			<div><div class="kk">In hand</div><div class="kv">${whole(t.open_now)}</div></div>
+		</div>
+		<div class="jw-kpi">
+			<div style="grid-column:span 3;display:flex;gap:18px;justify-content:center;">
+				<span><span class="kk">Hands</span> <b class="kv" style="font-size:15px">${whole(t.hands)}</b></span>
+				<span><span class="kk">Benches</span> <b class="kv" style="font-size:15px">${whole(t.benches)}</b></span>
+				<span><span class="kk">Loss</span> <b class="kv" style="font-size:15px">${g3s(t.loss)}</b>
+					<span class="kk">g</span></span>
+			</div>
+		</div>
+
+		<div class="jw-gsec">Bench by bench</div>
+		<div class="jw-legend"><span><i style="background:#F2C57C"></i>issued today</span>
+			<span><i style="background:#7BD8A4"></i>done today</span></div>
+		<div class="jw-split" style="padding:2px 13px;">${(d.rows || []).map(bench).join("")}</div>
+
+		${(d.people || []).length ? `<div class="jw-gsec">Whose hands</div>
+			<div class="jw-split">${d.people.map((p) => `<div class="sr">
+				<span class="l">${esc(p.who)}</span>
+				<span class="w">${p.issued} taken</span>
+				<span class="v">${p.done}</span></div>`).join("")}</div>` : ""}
+
+		<div class="jw-note">${esc(d.today)} · a card counts where it was issued and where it
+			was received, so a piece that moved twice today shows on both benches.</div>`;
 }
 
 // ---------------------------------------------------------------------------
