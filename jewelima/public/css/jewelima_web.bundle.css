@@ -12,11 +12,15 @@
 	--jw-gold: #D4AF37;
 	--jw-champagne: #E6C778;
 	--jw-ivory: #FAF7EF;
+	--jw-mist: #EDF4EF;      /* the card: a very light green, not white */
+	--jw-mist-deep: #E1EBE5; /* the fields on it */
 	background: radial-gradient(120% 90% at 50% 0%, var(--jw-forest) 0%, var(--jw-emerald) 62%) fixed;
 	color: var(--jw-ivory);
 }
+/* frappe's own login sheet loads after ours and paints this card white at the
+   same specificity, so the colour is claimed outright */
 [data-path="login"] .page-card {
-	background: var(--jw-ivory);
+	background: var(--jw-mist) !important;
 	border: 1px solid rgba(212, 175, 55, .45);
 	border-radius: 16px;
 	box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
@@ -52,6 +56,20 @@
 [data-path="login"] .btn-primary:focus {
 	background: var(--jw-forest);
 	border-color: var(--jw-gold);
+}
+/* the fields sit a shade deeper than the card, so they still read as fields */
+[data-path="login"] .page-card .form-control,
+[data-path="login"] .page-card .email-field,
+[data-path="login"] .page-card .password-field,
+[data-path="login"] .page-card .btn-default,
+[data-path="login"] .page-card .btn-secondary {
+	background: var(--jw-mist-deep) !important;
+	border-color: transparent;
+	color: #1F2328;
+}
+[data-path="login"] .page-card .form-control:focus {
+	border-color: var(--jw-green);
+	box-shadow: 0 0 0 3px rgba(46, 125, 91, .16);
 }
 [data-path="login"] a { color: var(--jw-forest); }
 [data-path="login"] a:hover { color: var(--jw-emerald); }
