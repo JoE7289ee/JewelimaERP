@@ -725,7 +725,9 @@ function jwFgHtml(d) {
 
 		<div class="jw-gsec">Who holds them</div>
 		<div class="jw-split">${(d.by_holder || []).map((r) => `<div class="sr">
-			<span class="l">${esc(r.holder)}</span>
+			<span class="l">${esc(r.holder)}${r.parties > 1
+				? `<span style="color:var(--jw-dim);font-weight:600;font-size:11px;"> · ${r.parties} counters</span>`
+				: ""}</span>
 			<span class="w">${g3s(r.pure)} pure g</span>
 			<span class="v">${whole(r.cards)}</span></div>`).join("")}</div>
 

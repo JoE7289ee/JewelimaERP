@@ -12890,14 +12890,24 @@ def get_jw_products():
 			GROUP BY b.stock_status ORDER BY cards DESC""".format(
 				" + ".join("IFNULL(b.act_{0}_weight, 0)".format(x) for x in BUCKETS)), as_dict=True)]
 
-	# and whose hands it is in
-	by_holder = [{"holder": r.held_by or "—", "cards": cint(r.cards),
-		"pure": round(flt(r.pure), 3)}
-		for r in frappe.db.sql("""
-			SELECT b.held_by, COUNT(*) cards, SUM(IFNULL(b.act_pure_weight, 0)) pure
-			FROM `tabOrder Bag` b
-			WHERE b.is_finished = 1 AND b.stock_status NOT IN ('Sold', 'Cancelled')
-			GROUP BY b.held_by ORDER BY cards DESC LIMIT 12""", as_dict=True)]
+	# and whose hands it is in — by GROUP, which is who a holder actually is.
+	# "JOS-MUL-ALLP-KL" is one counter of a chain; the question on a phone is how
+	# much the chain is holding, so the parties are gathered under their group.
+	groups = {}
+	for r in frappe.db.sql("""
+		SELECT IFNULL(b.held_by, '') held_by, COUNT(*) cards,
+			SUM(IFNULL(b.act_pure_weight, 0)) pure
+		FROM `tabOrder Bag` b
+		WHERE b.is_finished = 1 AND b.stock_status NOT IN ('Sold', 'Cancelled')
+		GROUP BY b.held_by""", as_dict=True):
+		name = _party_group_name(r.held_by) or (r.held_by or "—")
+		g = groups.setdefault(name, {"cards": 0, "pure": 0.0, "parties": 0})
+		g["cards"] += cint(r.cards)
+		g["pure"] += flt(r.pure)
+		g["parties"] += 1
+	by_holder = sorted(({"holder": k, "cards": v["cards"], "pure": round(v["pure"], 3),
+		"parties": v["parties"]} for k, v in groups.items()),
+		key=lambda x: -x["cards"])[:12]
 
 	return {"stock": shape(stock), "made_today": shape(made), "sold_today": shape(sold),
 		"by_status": by_status, "by_holder": by_holder,
