@@ -52,7 +52,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 .jw-top img { width: 40px; height: 40px; border-radius: 10px; }
 .jw-top .t { font-size: 17px; font-weight: 800; letter-spacing: .04em; line-height: 1.1; }
 .jw-top .s { font-size: 12px; color: rgba(250, 247, 239, .62); margin-top: 1px; }
-.jw-ref { margin-left: auto; }
+.jw-toast {
+	position: fixed; left: 50%; transform: translateX(-50%); z-index: 80;
+	bottom: calc(26px + env(safe-area-inset-bottom));
+	background: var(--jw-ivory); color: var(--jw-emerald); font-size: 13px; font-weight: 800;
+	padding: 9px 20px; border-radius: 22px; box-shadow: 0 6px 22px rgba(0, 0, 0, .35);
+	animation: jw-fade 1.6s ease forwards;
+}
+@keyframes jw-fade { 0% { opacity: 0; } 12%, 70% { opacity: 1; } 100% { opacity: 0; } }
+.jw-ref { margin-left: auto; font-size: 15px; line-height: 1; padding: 6px 11px; }
+.jw-ref.spin { animation: jw-spin .7s linear infinite; border-color: var(--jw-champagne); color: var(--jw-champagne); }
+@keyframes jw-spin { to { transform: rotate(360deg); } }
 .jw-ref, .jw-out {
 	border: 1px solid rgba(250, 247, 239, .28); background: none;
 	color: rgba(250, 247, 239, .82); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 700;
@@ -204,7 +214,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helve
 <div class="jw-cam" id="jw-cam">
 	<video id="jw-video" playsinline muted></video>
 	<div class="frame"></div>
-	<div class="hint">Hold the barcode or QR inside the frame</div>
+	<div class="hint" id="jw-camsay">Starting the camera…</div>
 	<button class="close" onclick="jwCamStop()">Close</button>
 </div>
 
@@ -359,42 +369,55 @@ function jwCardHtml(d) {
 // — the same QR we print on stock and the Code128 on a job card. The stream is
 // stopped the moment it is not needed: a camera left running is a hot phone.
 // ---------------------------------------------------------------------------
-let jwReader = null, jwStream = null;
+let jwReader = null;
+
+function jwCamSay(text) { document.getElementById("jw-camsay").textContent = text || ""; }
 
 function jwCam() {
 	const box = document.getElementById("jw-cam");
 	const video = document.getElementById("jw-video");
-	if (!navigator.mediaDevices || !window.ZXing) {
-		alert("This phone will not give the page a camera. Type the number instead.");
+	if (!window.ZXing) { jwCamFail("The scanner did not load. Pull the app down with ↻ and try again."); return; }
+	if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+		jwCamFail(window.isSecureContext === false
+			? "The camera only works over https. Open the app at erp.jdserveraccess.in."
+			: "This phone will not give the page a camera. Type the number instead.");
 		return;
 	}
 	box.classList.add("on");
-	navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false })
-		.then((stream) => {
-			jwStream = stream;
-			video.srcObject = stream;
-			video.play();
-			jwReader = new ZXing.BrowserMultiFormatReader();
-			jwReader.decodeFromVideoElement(video, (result) => {
-				if (!result) return;
-				const text = (result.getText() || "").trim();
-				if (!text) return;
-				if (navigator.vibrate) navigator.vibrate(40);
-				jwCamStop();
-				jwCard(text);
-			});
-		})
-		.catch(() => {
-			box.classList.remove("on");
-			alert("The camera was refused. Allow camera access for this site in Settings, or type the number.");
+	jwCamSay("Starting the camera…");
+	// ZXing opens the stream ITSELF and hands it to the video element. Attaching a
+	// stream by hand first does not work: its first act is a reset() that drops it.
+	jwReader = new ZXing.BrowserMultiFormatReader();
+	jwReader.decodeFromConstraints(
+		{ video: { facingMode: { ideal: "environment" } }, audio: false },
+		video,
+		(result, err) => {
+			if (!result) return;
+			const text = (result.getText() || "").trim();
+			if (!text) return;
+			if (navigator.vibrate) navigator.vibrate(40);
+			jwCamStop();
+			jwCard(text);
+		}
+	).then(() => jwCamSay("Hold the code inside the frame"))
+		.catch((e) => {
+			jwCamStop();
+			jwCamFail((e && (e.name === "NotAllowedError" || e.name === "SecurityError"))
+				? "Camera access was refused. Allow it for this site in Settings › Safari, then try again."
+				: "The camera would not start. Type the number instead.");
 		});
+}
+
+function jwCamFail(text) {
+	document.getElementById("jw-cam").classList.remove("on");
+	alert(text);
 }
 
 function jwCamStop() {
 	document.getElementById("jw-cam").classList.remove("on");
+	jwCamSay("");
 	try { if (jwReader) jwReader.reset(); } catch (e) { /* already stopped */ }
-	try { if (jwStream) jwStream.getTracks().forEach((t) => t.stop()); } catch (e) { /* already stopped */ }
-	jwReader = null; jwStream = null;
+	jwReader = null;
 }
 
 // logout is POST-only and CSRF-guarded — a plain link gets "no permission"
@@ -412,8 +435,20 @@ function jwLogout() {
 // Installed to the home screen there is no address bar and no pull-to-refresh,
 // so the only way back to a clean app is a button. The stamp defeats the cache
 // a standalone window otherwise holds on to.
+// coming back from a refresh, say so — a reload that looks identical to the
+// screen you were already on reads as a button that did nothing
+if (new URLSearchParams(window.location.search).has("r")) {
+	const t = document.createElement("div");
+	t.className = "jw-toast";
+	t.textContent = "Refreshed";
+	document.body.appendChild(t);
+	setTimeout(() => t.remove(), 1600);
+}
+
 function jwRefresh() {
 	jwCamStop();
+	const b = document.querySelector(".jw-ref");
+	if (b) b.classList.add("spin");            // a reload is silent; the button should not be
 	window.location.replace("/jw?r=" + Date.now());
 }
 
