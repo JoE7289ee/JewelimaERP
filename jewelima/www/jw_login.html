@@ -1,0 +1,133 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Jewelima{% endblock %}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block banner %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block head_include %}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0D2B1E">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jewelima">
+<link rel="apple-touch-icon" href="/assets/jewelima/images/brand/favicon-180.png">
+{% endblock %}
+
+{% block style %}
+<style>
+.navbar, header, footer, .web-footer, .page-breadcrumbs, .web-sidebar, #navbar-search { display: none !important; }
+html, body { margin: 0 !important; padding: 0 !important; height: 100%; background: #0D2B1E !important; }
+main, .main-section, #body, .page_content, .container, .page-content-wrapper {
+	margin: 0 !important; padding: 0 !important; max-width: none !important; width: 100% !important; }
+
+:root {
+	--jw-emerald: #0D2B1E;
+	--jw-forest: #1B4332;
+	--jw-gold: #D4AF37;
+	--jw-champagne: #E6C778;
+	--jw-ivory: #FAF7EF;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif; }
+
+.jw-door {
+	min-height: 100vh; min-height: 100dvh;
+	background: radial-gradient(120% 60% at 50% 0%, var(--jw-forest) 0%, var(--jw-emerald) 60%) fixed;
+	color: var(--jw-ivory);
+	padding: max(26px, env(safe-area-inset-top)) 22px calc(22px + env(safe-area-inset-bottom));
+	display: flex; flex-direction: column; justify-content: center; gap: 22px;
+}
+.jw-mark { text-align: center; }
+.jw-mark img { width: 82px; height: 82px; border-radius: 20px; }
+.jw-mark .t { font-size: 22px; font-weight: 800; letter-spacing: .1em; margin-top: 12px; }
+.jw-mark .s { font-size: 12.5px; color: rgba(250, 247, 239, .58); margin-top: 3px; letter-spacing: .04em; }
+
+.jw-form { display: flex; flex-direction: column; gap: 11px; }
+.jw-form label { font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+	color: rgba(250, 247, 239, .55); margin-bottom: -4px; }
+.jw-form input {
+	width: 100%; font-size: 16px; padding: 13px 15px; border-radius: 13px;
+	border: 1px solid rgba(250, 247, 239, .18); background: rgba(250, 247, 239, .07);
+	color: var(--jw-ivory); font-weight: 600;
+}
+.jw-form input:focus { outline: none; border-color: var(--jw-champagne); background: rgba(250, 247, 239, .11); }
+.jw-go {
+	margin-top: 4px; width: 100%; border: 0; border-radius: 13px; padding: 14px;
+	background: linear-gradient(180deg, var(--jw-champagne), var(--jw-gold));
+	color: #2B2109; font-size: 15px; font-weight: 800; letter-spacing: .04em;
+}
+.jw-go[disabled] { opacity: .6; }
+.jw-say { min-height: 18px; font-size: 12.5px; font-weight: 600; text-align: center; color: #F6B4B4; }
+.jw-alt { text-align: center; font-size: 12px; color: rgba(250, 247, 239, .45); }
+.jw-alt a { color: rgba(250, 247, 239, .72); text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="jw-door">
+	<div class="jw-mark">
+		<img src="/assets/jewelima/images/brand/logo-square.svg" alt="">
+		<div class="t">JEWELIMA</div>
+		<div class="s">DIAMONDS</div>
+	</div>
+
+	<form class="jw-form" id="jw-form" autocomplete="on">
+		<label for="jw-usr">Email or username</label>
+		<input id="jw-usr" name="username" type="text" inputmode="email" autocapitalize="none"
+			autocorrect="off" autocomplete="username" required>
+		<label for="jw-pwd">Password</label>
+		<input id="jw-pwd" name="password" type="password" autocomplete="current-password" required>
+		<button class="jw-go" id="jw-go" type="submit">Sign in</button>
+	</form>
+
+	<div class="jw-say" id="jw-say"></div>
+	<div class="jw-alt"><a href="/login">the full login page</a> · <a href="/app?desk=1">the desk</a></div>
+</div>
+
+<script>
+// Frappe's own /api/method/login: same session, same lockout, same rules. This
+// page only carries what the user typed to it and reads the answer.
+const say = document.getElementById("jw-say");
+const go = document.getElementById("jw-go");
+
+document.getElementById("jw-form").addEventListener("submit", (e) => {
+	e.preventDefault();
+	const usr = document.getElementById("jw-usr").value.trim();
+	const pwd = document.getElementById("jw-pwd").value;
+	if (!usr || !pwd) return;
+	say.textContent = "";
+	go.disabled = true;
+	go.textContent = "Signing in…";
+	const body = new URLSearchParams({ cmd: "login", usr: usr, pwd: pwd });
+	fetch("/api/method/login", {
+		method: "POST",
+		credentials: "same-origin",
+		headers: {
+			"Content-Type": "application/x-www-form-urlencoded",
+			"Accept": "application/json",
+			"X-Frappe-CSRF-Token": (window.frappe && frappe.csrf_token) || "",
+		},
+		body: body.toString(),
+	})
+		.then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+		.then(({ ok, j }) => {
+			if (ok && (j.message === "Logged In" || j.full_name)) {
+				window.location.replace("/jw");
+				return;
+			}
+			throw new Error((j && (j.message || j._server_messages)) || "Invalid login");
+		})
+		.catch((err) => {
+			go.disabled = false;
+			go.textContent = "Sign in";
+			say.textContent = String(err.message || err).indexOf("Invalid") > -1
+				? "That email or password is not right."
+				: "Could not sign in. Check the connection and try again.";
+			document.getElementById("jw-pwd").value = "";
+		});
+});
+</script>
+{% endblock %}

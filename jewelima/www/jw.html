@@ -277,7 +277,7 @@ function jwApi(method, args) {
 	const q = new URLSearchParams(args || {}).toString();
 	return fetch(`/api/method/${method}?${q}`, { headers: { Accept: "application/json" }, credentials: "same-origin" })
 		.then((r) => {
-			if (r.status === 403) { window.location.href = "/login?redirect-to=/jw"; throw new Error("no session"); }
+			if (r.status === 403) { window.location.replace("/jw-login"); throw new Error("no session"); }
 			if (!r.ok) throw new Error(r.status);
 			return r.json();
 		})
@@ -397,7 +397,17 @@ function jwCamStop() {
 	jwReader = null; jwStream = null;
 }
 
-function jwLogout() { window.location.href = "/api/method/logout"; }
+// logout is POST-only and CSRF-guarded — a plain link gets "no permission"
+function jwLogout() {
+	jwCamStop();
+	fetch("/api/method/logout", {
+		method: "POST",
+		credentials: "same-origin",
+		headers: { Accept: "application/json", "X-Frappe-CSRF-Token": (window.frappe && frappe.csrf_token) || "" },
+	})
+		.catch(() => { /* signed out locally either way */ })
+		.then(() => window.location.replace("/jw-login"));
+}
 
 // Installed to the home screen there is no address bar and no pull-to-refresh,
 // so the only way back to a clean app is a button. The stamp defeats the cache
