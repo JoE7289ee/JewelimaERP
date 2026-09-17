@@ -22624,12 +22624,34 @@ def _variant_tokens(design):
 	return out
 
 
+# purity as printed on a tag: the karat it is sold as, not the assay figure
+_KARAT_BY_PURITY = ((99.0, "24"), (90.0, "22"), (72.0, "18"), (56.0, "14"), (40.0, "9"))
+
+
 def _gold_code(name, design):
-	"""The tag's colour token: karat digits + colour letter, e.g. 18Y / 18W / 18P."""
+	"""The tag's colour token: karat digits + colour letter, e.g. 18Y / 18W / 18P.
+
+	The karat comes off the gold the piece was CONVERTED from, which is the
+	honest answer — but a piece whose convert rows do not name a metal purity
+	used to lose the karat and print a bare "Y". Two fallbacks, in order of
+	trust: the karat written into the variant's own name (A7327-18EF-P), then
+	the piece's own purity. A tag that says 18P is worth more than one saying P.
+	"""
 	colour = (_variant_tokens(design).get("gold_color") or "")[:1]   # YG -> Y
-	karat = _piece_karat(name, design) or ""                         # 18K
-	digits = karat.rstrip("Kk")
-	return "{0}{1}".format(digits, colour) if digits and colour else ""
+	if not colour:
+		return ""
+	digits = (_piece_karat(name, design) or "").rstrip("Kk")
+	if not digits and design:
+		m = re.search(r"-(\d{2})[A-Z]{2,}-", design.upper())        # …-18EF-P
+		if m:
+			digits = m.group(1)
+	if not digits:
+		purity = flt(frappe.db.get_value("Order Bag", name, "act_purity"))
+		for floor_, k in _KARAT_BY_PURITY:
+			if purity >= floor_:
+				digits = k
+				break
+	return "{0}{1}".format(digits, colour) if digits else ""
 
 
 @frappe.whitelist()
