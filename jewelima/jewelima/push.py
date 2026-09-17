@@ -204,7 +204,9 @@ def send_async(**kwargs):
 # began with quietly dropped people who had gone to the trouble of registering a
 # phone — a notification nobody receives is worse than no notification. If any
 # notice ever needs a smaller audience, it passes its own roles to send().
-NOTIFY_ROLES = ("JW Phone",)
+# System Manager sits beside it for the same reason it does on the app's own
+# door: the account that can always get in should not be the one that never hears.
+NOTIFY_ROLES = ("JW Phone", "System Manager")
 
 
 def on_purchase_recorded(doc, method=None):
