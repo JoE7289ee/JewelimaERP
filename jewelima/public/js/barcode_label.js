@@ -219,7 +219,7 @@ jewelima.barcodeStoneLine = function (c, inGrams) {
 // opts come from barcodeOpts. stoneGrams prints stone weights in grams; showFamily
 // prints the stone family (EF / GH …) beside them, and familyText replaces the
 // card's own family for this run; gwLine rewords the weight line ({gw} = grams);
-// showColor adds the gold colour (YG / WG / PG); freeText is one line the
+// showColor adds the gold token (18Y / 18W / 18P); freeText is one line the
 // operator types for this run.
 jewelima.buildBarcodeLabel = function (c, opts) {
 	const o = opts || jewelima.barcodeOpts();
@@ -284,7 +284,10 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// the colour prints as karat + letter — 18Y, 18W, 18P — which is what the
 	// floor reads it as. A piece whose karat could not be resolved still gets the
 	// plain YG rather than nothing, because a colour is worth having either way.
-	const colCode = c.gold_code || c.gold_color || "";
+	// the token the floor reads is karat + colour letter: 18Y, 18P, 18W. When the
+	// piece's own gold code is missing, the variant's YG/PG is all there is — the
+	// trailing G says "gold", which on a gold tag is a wasted character
+	const colCode = c.gold_code || (c.gold_color || "").replace(/G$/i, "");
 	const colLine = colCode
 		? (o.showColor ? `<div ${ln("colour")}>${esc(colCode)}</div>` : slot("colour"))
 		: "";
