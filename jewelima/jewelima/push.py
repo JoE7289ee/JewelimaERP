@@ -200,7 +200,11 @@ def send_async(**kwargs):
 # ---------------------------------------------------------------------------
 # the one notice we send today
 # ---------------------------------------------------------------------------
-NOTIFY_ROLES = ("JW Manager", "System Manager", "Jewelima Purchase", "JW Stock Admin")
+# Anyone carrying the app hears about stock coming in. The narrower list this
+# began with quietly dropped people who had gone to the trouble of registering a
+# phone — a notification nobody receives is worse than no notification. If any
+# notice ever needs a smaller audience, it passes its own roles to send().
+NOTIFY_ROLES = ("JW Phone",)
 
 
 def on_purchase_recorded(doc, method=None):
