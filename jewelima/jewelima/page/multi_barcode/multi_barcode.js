@@ -257,7 +257,21 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		doc.close();
 		setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);
 		msg("ok", __("Sent {0} label(s) to the printer.", [S.cards.length]));
+		clearRunText();
 	});
+
+	// What the operator typed belongs to THE RUN THAT JUST WENT OUT: a shop name,
+	// a tray mark, a family override. Leaving it in the boxes is how the next run
+	// quietly inherits the last one's markings — so Print clears them. The two
+	// checkboxes and the weight-line wording stay: those are settings, not
+	// markings, and re-ticking them every run would be its own annoyance.
+	function clearRunText() {
+		S.freeText = "";
+		S.freeText2 = "";
+		S.familyText = "";
+		root.find(".mb-free").not(".mb-gwline").val("");
+		paint();
+	}
 
 	// Arriving from Bag Split, which hands over the pieces it has just cut so they
 	// can be looked at before any label stock is spent. Added one at a time
