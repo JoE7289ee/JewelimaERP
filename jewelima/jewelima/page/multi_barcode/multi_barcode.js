@@ -307,8 +307,12 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 		+ '<rect x="24" y="6" width="10" height="10" fill="#000"/>'
 		+ '<rect x="6" y="24" width="10" height="10" fill="#000"/>'
 		+ '<rect x="24" y="26" width="6" height="6" fill="#000"/></svg>');
+	// the sample carries TWO buckets on purpose: a layout tuned against a
+	// diamond-only piece looked right and then overflowed the moment a set piece
+	// with CZ came through. Tune against the busier tag, not the kind one.
 	const SAMPLE = { name: "E0001.1.1", design: "A13010NP-18EF-Y", design_no: "A 13010",
 		design_type: "NOSEPIN", party: "JOS TRICHUR", gw: 2.487, dmd_no: 12, dmd_wt: 0.108,
+		cz_no: 18, cz_wt: 0.426,
 		stone_family: "EF", gold_color: "YG", gold_code: "18Y", qr: QR_STUB };
 
 	function showLayout() {

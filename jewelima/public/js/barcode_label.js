@@ -162,6 +162,9 @@ jewelima.BARCODE_LABEL_CSS = `
 .bc-label .bc-b{flex-direction:column;justify-content:flex-start;align-items:stretch;line-height:.82;}
 .bc-label .bc-col{display:flex;flex-direction:column;justify-content:flex-start;min-width:0;}
 .bc-label .bc-left{flex:1 1 auto;white-space:nowrap;}
+/* the stone line is the one line that can carry several buckets — it wraps
+   rather than disappearing behind the QR, which is what clipping did */
+.bc-label [data-stone]{white-space:normal;}
 .bc-label .bc-qr{flex:0 0 auto;}
 .bc-label .bc-qr img{height:var(--bc-qr,0.41in);width:var(--bc-qr,0.41in);display:block;}
 .bc-label .bc-right{white-space:nowrap;text-align:left;width:100%;}
@@ -172,15 +175,39 @@ jewelima.BARCODE_LABEL_CSS = `
 // `inGrams` prints the same weight in grams instead — one carat is exactly 0.2 g,
 // so this is a conversion, not a different number. Grams get three decimals
 // because two would round a small stone away (0.05 ct is 0.010 g).
-jewelima.barcodeStoneParts = function (c, inGrams) {
+// Every bucket a card can carry, in the order the trade reads them. The tag
+// knew only the first three until now, so a piece set with CZ — and there are
+// hundreds — printed no stone line at all: the weight was on the card, the tag
+// simply had no word for it.
+jewelima.BARCODE_BUCKETS = [
+	{ key: "dmd", label: "DIA" },
+	{ key: "pdmd", label: "PDMD" },
+	{ key: "cvd", label: "CVD" },
+	{ key: "ps", label: "PS" },
+	{ key: "cs", label: "CS" },
+	{ key: "cz", label: "CZ" },
+	{ key: "sw", label: "SW" },
+	{ key: "poth", label: "OTH" },
+];
+
+// every bucket this card actually carries, each as its own head/weight pair
+jewelima.barcodeStoneList = function (c, inGrams) {
 	const flt = (v) => parseFloat(v) || 0;
 	const w = (ct) => (inGrams
 		? `${(flt(ct) * 0.2).toFixed(3)}g`
 		: `${flt(ct).toFixed(2)}ct`);
-	if (c.dmd_no || c.dmd_wt) return { head: `DIA:${c.dmd_no}`, wt: w(c.dmd_wt) };
-	if (c.ps_no || c.ps_wt) return { head: `PS:${c.ps_no}`, wt: w(c.ps_wt) };
-	if (c.cs_no || c.cs_wt) return { head: `CS:${c.cs_no}`, wt: w(c.cs_wt) };
-	return { head: "", wt: "" };
+	return jewelima.BARCODE_BUCKETS.map((b) => {
+		const no = c[b.key + "_no"], wt = c[b.key + "_wt"];
+		if (!no && !flt(wt)) return null;
+		// a bucket with no piece count (POTH is weighed, not counted) prints
+		// just its weight rather than a bare "OTH:0"
+		return { head: no ? `${b.label}:${no}` : b.label, wt: w(wt) };
+	}).filter(Boolean);
+};
+
+// the first bucket alone — kept for anything still asking the old question
+jewelima.barcodeStoneParts = function (c, inGrams) {
+	return jewelima.barcodeStoneList(c, inGrams)[0] || { head: "", wt: "" };
 };
 
 // the one-line form every tag has printed until now: DIA:12/0.11ct
@@ -226,12 +253,17 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 
 	// A — what the piece weighs and what is in it, then the code square
 	const gwText = (o.gwLine || D.gwLine).replace("{gw}", flt(c.gw).toFixed(3));
-	const sp = jewelima.barcodeStoneParts(c, o.stoneGrams);
+	const stones = jewelima.barcodeStoneList(c, o.stoneGrams);
+	const sp = stones[0] || { head: "", wt: "" };
 	const famRaw = (o.familyText || "").trim() || c.stone_family || "";
 	const fam = o.showFamily && famRaw ? esc(famRaw) : "";
 	// split: what the stones are on one line, what they weigh on the next, each
 	// placeable on its own. Joined: the single line every tag has carried.
-	let stoneRows = sp.head ? `<div ${ln("stone")}>${sp.head}/${sp.wt}</div>` : "";
+	// every bucket on the one line: DIA:12/0.11ct CZ:18/0.43ct. A piece rarely
+	// carries more than two, and the layout can size the line for the ones that do
+	let stoneRows = stones.length
+		? `<div ${ln("stone")} data-stone="1">${stones.map((p) => `${p.head}/${p.wt}`).join(" ")}</div>`
+		: "";
 	if (fam) stoneRows += `<div ${ln("family")}>${fam}</div>`;
 	else if (famRaw) stoneRows += slot("family");     // switched off, not absent
 	const left = `<div class="bc-col bc-left"><div ${ln("gw")}>${esc(gwText)}</div>`

@@ -22657,9 +22657,17 @@ def get_barcode_card(order_bag):
 		"gw": gw,
 		"nett": flt(b.act_nett_weight),
 		"purity": flt(b.act_purity),
+		# every bucket a card can carry. The tag used to know only three, so a
+		# piece set with CZ — and there are hundreds — printed no stone line at
+		# all: the weight was there, the tag simply could not say it.
 		"dmd_no": int(b.act_dmd_no or 0), "dmd_wt": flt(b.act_dmd_weight),
 		"ps_no": int(b.act_ps_no or 0), "ps_wt": flt(b.act_ps_weight),
 		"cs_no": int(b.act_cs_no or 0), "cs_wt": flt(b.act_cs_weight),
+		"cz_no": int(b.act_cz_no or 0), "cz_wt": flt(b.act_cz_weight),
+		"cvd_no": int(b.act_cvd_no or 0), "cvd_wt": flt(b.act_cvd_weight),
+		"sw_no": int(b.act_sw_no or 0), "sw_wt": flt(b.act_sw_weight),
+		"pdmd_no": int(b.act_pdmd_no or 0), "pdmd_wt": flt(b.act_pdmd_weight),
+		"poth_wt": flt(b.act_poth_weight),
 		"actual_empty": not gw,
 		# the tag can carry the stone family (EF / GH / …) and the gold colour
 		# (YG / WG / PG); both live only in the variant name
