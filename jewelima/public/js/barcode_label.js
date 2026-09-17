@@ -181,13 +181,13 @@ jewelima.BARCODE_LABEL_CSS = `
 // simply had no word for it.
 jewelima.BARCODE_BUCKETS = [
 	{ key: "dmd", label: "DIA" },
-	{ key: "pdmd", label: "PDMD" },
+	{ key: "pdmd", label: "PD" },
 	{ key: "cvd", label: "CVD" },
 	{ key: "ps", label: "PS" },
 	{ key: "cs", label: "CS" },
 	{ key: "cz", label: "CZ" },
 	{ key: "sw", label: "SW" },
-	{ key: "poth", label: "OTH" },
+	{ key: "poth", label: "PO" },
 ];
 
 // every bucket this card actually carries, each as its own head/weight pair
@@ -199,8 +199,8 @@ jewelima.barcodeStoneList = function (c, inGrams) {
 	return jewelima.BARCODE_BUCKETS.map((b) => {
 		const no = c[b.key + "_no"], wt = c[b.key + "_wt"];
 		if (!no && !flt(wt)) return null;
-		// a bucket with no piece count (POTH is weighed, not counted) prints
-		// just its weight rather than a bare "OTH:0"
+		// a bucket with no piece count (PO is weighed, not counted) prints just
+		// its weight rather than a bare "PO:0"
 		return { head: no ? `${b.label}:${no}` : b.label, wt: w(wt) };
 	}).filter(Boolean);
 };
