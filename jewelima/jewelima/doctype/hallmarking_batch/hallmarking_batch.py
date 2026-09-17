@@ -6,7 +6,7 @@
 # doctype, but it is not a certification: there is no lab format, no colour or
 # clarity to lock, nearly every piece goes, and the whole point of the trip is
 # the six-character code that comes back. It has its own desk pages, its own
-# centre master and its own HALL-0001 series.
+# centre master and its own HM-0001 series.
 
 import frappe
 from frappe.model.document import Document
@@ -15,7 +15,7 @@ from frappe.model.document import Document
 class HallmarkingBatch(Document):
 	def autoname(self):
 		from frappe.model.naming import make_autoname
-		self.name = make_autoname("HALL-.####")
+		self.name = make_autoname("HM-.####")
 
 	def on_trash(self):
 		# a batch with pieces still out cannot just vanish — the stock move and

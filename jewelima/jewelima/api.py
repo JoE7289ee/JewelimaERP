@@ -20238,7 +20238,7 @@ def export_igi_xlsx(bags, metal_type=None):
 # Hallmarking used to ride the Certification doctype. It is not a certification:
 # no lab format, nothing to lock a batch to, nearly every piece goes, and the
 # trip exists to bring back a six-character HUID per piece. So it has its own
-# batch (HALL-0001), its own centre master, and the four desk pages the floor
+# batch (HM-0001), its own centre master, and the four desk pages the floor
 # already knows: Hallmark (prepare) -> Send Hallmarking -> Hallmark Out
 # (collect) -> Confirm HUID (stamp the codes).
 #
@@ -20456,7 +20456,7 @@ def hall_draft_stone_brackets(bags):
 @frappe.whitelist()
 def hall_prep_create(center=None, bags=None):
 	"""PREP: the draft becomes the batch in one shot, re-validated piece by
-	piece, named HALL-0001. The centre is optional here — a packet is made up
+	piece, named HM-0001. The centre is optional here — a packet is made up
 	before anyone decides who it goes to — and required at SEND."""
 	if isinstance(bags, str):
 		bags = json.loads(bags or "[]")
@@ -21502,7 +21502,7 @@ def remove_hallmarks(barcodes, reason=None):
 # The delivery desks are all built around work still to do: what is prepared,
 # what is out, what is waiting to be confirmed. None of them answer "when did
 # that piece go to DHC", "who re-filed this into FEMI", "what was on batch
-# HALL-0008". These five pages are that side of it — read only, filtered the
+# HM-0008". These five pages are that side of it — read only, filtered the
 # same way, and every one of them answering by DATE, by PIECE and by search.
 #
 # They share one shape on purpose: a period, a search box, a table, and totals.
