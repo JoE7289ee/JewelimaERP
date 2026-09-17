@@ -63,6 +63,18 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 			padding:2px 10px;font-size:12.5px;width:190px;
 			background:var(--control-bg);color:var(--text-color);}
 		.mb-free:focus{outline:2px solid rgba(31,97,141,.35);outline-offset:1px;}
+		/* saved formats — a run set-up somebody already got right, one tap away */
+		.mb-formats{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;
+			margin:0 0 8px;align-items:center;}
+		.mb-fmt{border:1px solid var(--border-color);border-radius:8px;background:var(--fg-color);
+			padding:4px 10px;font-size:11.5px;font-weight:600;cursor:pointer;display:inline-flex;
+			align-items:center;gap:7px;}
+		.mb-fmt:hover{border-color:var(--primary);}
+		.mb-fmt .x{color:var(--text-muted);font-weight:800;font-size:12px;}
+		.mb-fmt .x:hover{color:#b00020;}
+		.mb-fmt-new{border-style:dashed;color:var(--text-muted);}
+		.mb-fmt-lbl{font-size:10.5px;color:var(--text-muted);margin-right:2px;
+			text-transform:uppercase;letter-spacing:.06em;font-weight:700;}
 		.mb-msg{margin:8px 0;font-size:12.5px;min-height:18px;}
 		.mb-msg.ok{color:#1d7a33;} .mb-msg.err{color:#b02a2a;} .mb-msg.warn{color:#8a6d00;}
 		table.mb-t{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--fg-color);
@@ -115,6 +127,7 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 				<button class="mb-btn mb-clear">${__("Clear")}</button>
 			</span>
 		</div>
+		<div class="mb-formats"></div>
 		<div class="mb-msg"></div>
 		<div class="mb-body"></div>
 		<div class="mb-preview"></div>
@@ -225,6 +238,89 @@ frappe.pages["multi-barcode"].on_page_load = function (wrapper) {
 	// repaint on toggle, so the preview shows exactly what will come off the printer
 	root.on("change", ".mb-grams", function () { S.stoneGrams = this.checked; paint(); });
 	root.on("click", ".mb-clear", () => { S.cards = []; msg("", ""); paint(); focusScan(); });
+
+	// ---- saved formats --------------------------------------------------------
+	// A format is one operator's whole answer to "print it like this": the free
+	// line, the tray mark, the family override, the weight wording, the ticks and
+	// the geometry in force. Getting that right once and tapping it forever is the
+	// point — the alternative is re-typing it and getting one field wrong.
+	S.formats = [];
+
+	function paintFormats() {
+		const tiles = (S.formats || []).map((f) => `
+			<span class="mb-fmt" data-fmt="${esc(f.name)}" title="${
+				esc([f.freeText, f.freeText2, f.familyText, f.gwLine].filter(Boolean).join(" · ")
+					|| __("no wording — the ticks and the layout"))}">
+				${esc(f.name)}${CAN_LAYOUT ? `<span class="x" data-del="${esc(f.name)}">&times;</span>` : ""}
+			</span>`).join("");
+		root.find(".mb-formats").html(
+			(tiles || CAN_LAYOUT)
+				? `<span class="mb-fmt-lbl">${__("Formats")}</span>${tiles}`
+					+ (CAN_LAYOUT ? `<span class="mb-fmt mb-fmt-new">+ ${__("save this set-up")}</span>` : "")
+				: "");
+	}
+
+	function loadFormats() {
+		return frappe.call({ method: API + ".get_barcode_formats", freeze: false })
+			.then((r) => { S.formats = (r.message || {}).formats || []; paintFormats(); })
+			.catch(() => { /* the page still prints without them */ });
+	}
+
+	root.on("click", ".mb-fmt-new", () => {
+		frappe.prompt([{ fieldname: "name", label: __("Name this set-up"), fieldtype: "Data",
+			reqd: 1, description: __("what the floor will call it — JOS, SHOP TAGS, TRAY 2") }],
+			(v) => {
+				frappe.call({ method: API + ".save_barcode_format", args: { name: v.name,
+					data: JSON.stringify({
+						freeText: S.freeText, freeText2: S.freeText2, familyText: S.familyText,
+						gwLine: S.gwLine || D.gwLine, showFamily: S.showFamily,
+						showColor: S.showColor, stoneGrams: S.stoneGrams,
+						// the geometry in force right now, so a format restores the
+						// whole tag and not half of it
+						layout: jewelima.BARCODE_LAYOUT || null,
+					}) } })
+					.then((r) => {
+						S.formats = (r.message || {}).formats || [];
+						paintFormats();
+						msg("ok", __("Saved as {0}.", [v.name]));
+					});
+			}, __("Save format"), __("Save"));
+	});
+
+	root.on("click", ".mb-fmt .x", function (e) {
+		e.stopPropagation();                       // the tile underneath must not load
+		const nm = $(this).data("del");
+		frappe.confirm(__("Delete the format <b>{0}</b>?", [nm]), () => {
+			frappe.call({ method: API + ".delete_barcode_format", args: { name: nm } })
+				.then((r) => { S.formats = (r.message || {}).formats || []; paintFormats(); });
+		});
+	});
+
+	root.on("click", ".mb-fmt:not(.mb-fmt-new)", function () {
+		const nm = $(this).data("fmt");
+		const f = (S.formats || []).find((x) => x.name === nm);
+		if (!f) return;
+		S.freeText = f.freeText || "";
+		S.freeText2 = f.freeText2 || "";
+		S.familyText = f.familyText || "";
+		S.gwLine = f.gwLine || D.gwLine;
+		S.showFamily = f.showFamily !== 0 && f.showFamily !== false;
+		S.showColor = f.showColor !== 0 && f.showColor !== false;
+		S.stoneGrams = !!f.stoneGrams;
+		if (f.layout) jewelima.BARCODE_LAYOUT = f.layout;   // for THIS page, not saved over
+		// the boxes have to show what was loaded, or the bar and the tag disagree
+		root.find(".mb-free").not(".mb-famtext").not(".mb-gwline").not(".mb-free2").val(S.freeText);
+		root.find(".mb-free2").val(S.freeText2);
+		root.find(".mb-famtext").val(S.familyText);
+		root.find(".mb-gwline").val(S.gwLine);
+		root.find(".mb-fam").prop("checked", S.showFamily);
+		root.find(".mb-col").prop("checked", S.showColor);
+		root.find(".mb-grams").prop("checked", S.stoneGrams);
+		paint();
+		msg("ok", __("{0} loaded.", [nm]));
+	});
+
+	loadFormats();
 
 	root.on("click", ".mb-go", () => {
 		if (!S.cards.length) return;

@@ -21229,6 +21229,66 @@ def get_barcode_layout():
 
 
 @frappe.whitelist()
+def get_barcode_formats():
+	"""The named run set-ups: what the bar said and how the tag was measured.
+
+	A format is one operator's whole answer to "print it like this" — the free
+	line, the tray mark, the family override, the weight wording, the ticks, and
+	the geometry that was in force. Kept beside the layout because that is where
+	people look for it."""
+	raw = frappe.db.get_single_value("Barcode Layout", "formats", cache=False)
+	if not raw:
+		return {"formats": []}
+	try:
+		rows = json.loads(raw)
+		return {"formats": rows if isinstance(rows, list) else []}
+	except Exception:
+		# a broken store must not take the page down with it
+		return {"formats": [], "error": frappe._("The saved formats are not readable.")}
+
+
+@frappe.whitelist()
+def save_barcode_format(name, data):
+	"""Add or replace one named format. Saving over a name replaces it."""
+	frappe.only_for(list(BARCODE_LAYOUT_ROLES))
+	label = (name or "").strip()
+	if not label:
+		frappe.throw(frappe._("Give the format a name."))
+	if len(label) > 24:
+		frappe.throw(frappe._("Keep the name short — it prints as a tile."))
+	payload = frappe.parse_json(data) if isinstance(data, str) else (data or {})
+	keep = ("freeText", "freeText2", "familyText", "gwLine",
+		"showFamily", "showColor", "stoneGrams", "layout")
+	clean = {k: payload[k] for k in keep if k in payload}
+
+	rows = get_barcode_formats().get("formats") or []
+	rows = [r for r in rows if (r.get("name") or "").lower() != label.lower()]
+	rows.append({"name": label, "by": _user_label(frappe.session.user),
+		"on": frappe.utils.now(), **clean})
+	if len(rows) > 12:
+		frappe.throw(frappe._("Twelve formats is plenty — delete one first."))
+	doc = frappe.get_single("Barcode Layout")
+	doc.formats = json.dumps(rows, indent=1, sort_keys=True)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"formats": rows}
+
+
+@frappe.whitelist()
+def delete_barcode_format(name):
+	"""Drop one format by name."""
+	frappe.only_for(list(BARCODE_LAYOUT_ROLES))
+	label = (name or "").strip().lower()
+	rows = [r for r in (get_barcode_formats().get("formats") or [])
+		if (r.get("name") or "").lower() != label]
+	doc = frappe.get_single("Barcode Layout")
+	doc.formats = json.dumps(rows, indent=1, sort_keys=True)
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return {"formats": rows}
+
+
+@frappe.whitelist()
 def save_barcode_layout(layout):
 	"""Lock in what the Tag layout dialog measured. Geometry only — the per-run wording
 	(free text, family override, the GW line) is never saved, because that is a

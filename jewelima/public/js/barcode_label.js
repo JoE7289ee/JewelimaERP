@@ -162,9 +162,14 @@ jewelima.BARCODE_LABEL_CSS = `
 .bc-label .bc-b{flex-direction:column;justify-content:flex-start;align-items:stretch;line-height:.82;}
 .bc-label .bc-col{display:flex;flex-direction:column;justify-content:flex-start;min-width:0;}
 .bc-label .bc-left{flex:1 1 auto;white-space:nowrap;}
-/* the stone line is the one line that can carry several buckets — it wraps
-   rather than disappearing behind the QR, which is what clipping did */
-.bc-label [data-stone]{white-space:normal;}
+/* The stone line is the one line that can carry several buckets. It must NOT
+   wrap: every other line is placed from the top of its box, so a line that grows
+   to two rows moves the family line on that tag alone — 22 pieces printed
+   together came out subtly out of step with each other. It shrinks instead, in
+   two steps, and keeps its single row. */
+.bc-label [data-stone]{white-space:nowrap;}
+.bc-label [data-stone].s-two{font-size:86%;letter-spacing:-.3px;}
+.bc-label [data-stone].s-many{font-size:72%;letter-spacing:-.35px;}
 .bc-label .bc-qr{flex:0 0 auto;}
 .bc-label .bc-qr img{height:var(--bc-qr,0.41in);width:var(--bc-qr,0.41in);display:block;}
 .bc-label .bc-right{white-space:nowrap;text-align:left;width:100%;}
@@ -232,9 +237,9 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// one line's own placement: alignment inside its box, its own type size if it
 	// was given one, and a nudge that moves it without moving the box
 	const L = Object.assign({}, D.lines, o.lines || {});
-	const ln = (k, hide) => {
+	const ln = (k, hide, extra) => {
 		const s = L[k] || {};
-		return `class="bc-ln" style="text-align:${s.align || "left"};`
+		return `class="bc-ln${extra ? " " + extra : ""}" style="text-align:${s.align || "left"};`
 			+ (flt(s.pt) ? `font-size:${flt(s.pt)}pt;` : "")
 			+ (flt(s.dx) ? `left:${flt(s.dx).toFixed(3)}in;` : "")
 			+ (flt(s.dy) ? `top:${flt(s.dy).toFixed(3)}in;` : "")
@@ -261,8 +266,12 @@ jewelima.buildBarcodeLabel = function (c, opts) {
 	// placeable on its own. Joined: the single line every tag has carried.
 	// every bucket on the one line: DIA:12/0.11ct CZ:18/0.43ct. A piece rarely
 	// carries more than two, and the layout can size the line for the ones that do
+	// one row, always — the type steps down as the line gets longer rather than
+	// the line growing downward into the one beneath it
+	const stoneText = stones.map((p) => `${p.head}/${p.wt}`).join(" ");
+	const stoneFit = stoneText.length > 26 ? " s-many" : (stoneText.length > 15 ? " s-two" : "");
 	let stoneRows = stones.length
-		? `<div ${ln("stone")} data-stone="1">${stones.map((p) => `${p.head}/${p.wt}`).join(" ")}</div>`
+		? `<div ${ln("stone", false, stoneFit.trim())} data-stone="1">${stoneText}</div>`
 		: "";
 	if (fam) stoneRows += `<div ${ln("family")}>${fam}</div>`;
 	else if (famRaw) stoneRows += slot("family");     // switched off, not absent

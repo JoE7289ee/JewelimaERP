@@ -5,7 +5,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "layout"
+  "layout",
+  "formats"
  ],
  "fields": [
   {
@@ -14,6 +15,12 @@
    "label": "Layout (JSON)",
    "options": "JSON",
    "description": "Saved from Multi Print > Tag layout. Every page that prints a tag reads this."
+  },
+  {
+   "fieldname": "formats",
+   "fieldtype": "Long Text",
+   "label": "Saved Formats",
+   "description": "Named run set-ups: the wording, the ticks and the geometry, as JSON."
   }
  ],
  "index_web_pages_for_search": 0,
