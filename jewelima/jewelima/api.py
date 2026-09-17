@@ -2968,8 +2968,15 @@ def _bag_ledger(order_bag, item, direction, qty, entry_type, bench=None, employe
 	# reached them: Card Info read 17.150 while the bag held 16.065. Every movement
 	# now re-reads the bag. A finished product is the exception and refresh_actual_
 	# weights knows it — its materials are consumed, so its weights are frozen.
+	#
+	# A CONVERT is that freezing act itself, and it is not exempt by the is_finished
+	# check: the flag is only set AFTER these rows are written. Re-reading the bag
+	# here saw an emptied card and zeroed the very figures the convert had just
+	# frozen — 36 pieces imported today lost their stones and their pure weight
+	# that way. A convert moves nothing; it records what the piece became.
 	try:
-		refresh_actual_weights(order_bag)
+		if entry_type != "Convert":
+			refresh_actual_weights(order_bag)
 	except Exception:
 		# a weight that cannot be recomputed must never lose the ledger row itself
 		frappe.log_error(frappe.get_traceback(), "refresh_actual_weights({0})".format(order_bag))
