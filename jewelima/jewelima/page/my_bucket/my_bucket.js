@@ -78,6 +78,10 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 		return `
 			<div class="mb2-kpi"><div class="k">${__("Pieces")}</div><div class="v">${t.shown}${
 				t.shown !== t.all ? ` <small>${__("of")} ${t.all}</small>` : ""}</div></div>
+			<div class="mb2-kpi"><div class="k">${__("In finished")}</div><div class="v">${t.home || 0}${
+				t.prepped ? ` <small>${t.prepped} ${__("prepped for sale")}</small>` : ""}</div></div>
+			<div class="mb2-kpi"><div class="k">${__("Out · Certification")}</div><div class="v">${t.cert || 0}</div></div>
+			<div class="mb2-kpi"><div class="k">${__("Out · Hallmarking")}</div><div class="v">${t.hall || 0}</div></div>
 			<div class="mb2-kpi"><div class="k">${__("Gross")}</div><div class="v">${g3(t.gross)} <small>g</small></div></div>
 			<div class="mb2-kpi"><div class="k">${__("Pure")}</div><div class="v">${g3(t.pure)} <small>g</small></div></div>
 			<div class="mb2-kpi"><div class="k">${__("Stones")}</div><div class="v">${g3(t.ct)} <small>ct</small></div></div>`;

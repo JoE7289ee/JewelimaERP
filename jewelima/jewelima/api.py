@@ -10491,8 +10491,17 @@ def get_my_bucket(bucket=None, q=None, design_type=None, karat=None, status=None
 		return True
 	shown = [p for p in pieces if keep(p)]
 	out["pieces"] = shown
+	# where the shelf actually is: home, or out of the house at a lab
+	prepped = set(frappe.db.sql_list("""SELECT i.order_bag FROM `tabSale Preparation Item` i
+		JOIN `tabSale Preparation` p ON p.name = i.parent
+		WHERE i.parenttype = 'Sale Preparation' AND p.status IN ('Draft', 'Sent')
+			AND i.order_bag IN %(n)s""", {"n": [p["name"] for p in shown] or [""]}))
+	home = [p for p in shown if p["status"] not in ("At Certification", "At Hallmarking")]
 	out["totals"] = {
 		"all": len(pieces), "shown": len(shown),
+		"home": len(home), "prepped": sum(1 for p in home if p["name"] in prepped),
+		"cert": sum(1 for p in shown if p["status"] == "At Certification"),
+		"hall": sum(1 for p in shown if p["status"] == "At Hallmarking"),
 		"gross": round(sum(p["gross"] for p in shown), 3),
 		"pure": round(sum(p["pure"] for p in shown), 3),
 		"ct": round(sum(p["ct"] for p in shown), 3),
