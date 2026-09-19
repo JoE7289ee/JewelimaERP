@@ -19,7 +19,7 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 	const g3 = (v) => flt(v).toFixed(3);
 	const root = $(page.main);
-	const S = { bucket: null, is_admin: false, tab: "shelf",
+	const S = { cf: {}, bucket: null, is_admin: false, tab: "shelf",
 		f: { q: "", design_type: "", karat: "", status: "", stone: "" },
 		data: null, days: 30 };
 
@@ -44,6 +44,10 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 		.mb2-count{font-size:12px;color:var(--text-muted);}
 		.mb2-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);overflow:hidden;}
 		.mb2-wrap{overflow-x:auto;max-height:620px;overflow-y:auto;}
+		table.mb2-tbl tr.mb2-cf th{top:31px;padding:4px 6px;}
+		.mb2-cf input{width:100%;min-width:50px;border:1px solid var(--border-color);border-radius:6px;
+			padding:3px 6px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0;
+			background:var(--control-bg);color:var(--text-color);}
 		table.mb2-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
 		table.mb2-tbl th{position:sticky;top:0;background:var(--fg-color);z-index:1;text-align:left;
 			font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);
@@ -111,6 +115,8 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 					<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Type")}</th><th>${__("Karat")}</th>
 					<th class="num">${__("Gross")}</th><th class="num">${__("Pure")}</th>
 					<th>${__("Stones")}</th><th>${__("Status")}</th><th>${__("HUID")}</th><th>${__("Since")}</th>
+				</tr><tr class="mb2-cf">${Array.from({ length: 10 }, (_, i) =>
+					`<th><input data-col="${i}" value="${esc(S.cf[i] || "")}" placeholder="${__("filter")}"></th>`).join("")}
 				</tr></thead><tbody>${rows.map((p) => `
 					<tr data-card="${esc(p.name)}">
 						<td class="card">${esc(p.name)}</td>
@@ -123,7 +129,28 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 				: `<div class="mb2-empty">${d.totals && d.totals.all
 					? __("Nothing on this shelf matches those filters.")
 					: __("This shelf is empty.")}</div>`}</div></div>`);
+		applyColFilters();
 	}
+
+	// per-column filters, typed under each heading: every word must appear in
+	// that column's cell; filtering is on the rows already on screen
+	function applyColFilters() {
+		const $rows = root.find(".mb2-tbl tbody tr");
+		$rows.each(function () {
+			const cells = this.children;
+			const ok = Object.keys(S.cf).every((i) => {
+				const want = (S.cf[i] || "").trim().toLowerCase();
+				if (!want) return true;
+				const txt = (cells[i] ? cells[i].textContent : "").toLowerCase();
+				return want.split(/\s+/).every((w) => txt.includes(w));
+			});
+			this.style.display = ok ? "" : "none";
+		});
+	}
+	root.on("input", ".mb2-cf input", function () {
+		S.cf[$(this).data("col")] = this.value;
+		applyColFilters();
+	});
 
 	function loadShelf() {
 		return frappe.call({ method: API + ".get_my_bucket", freeze: false,
