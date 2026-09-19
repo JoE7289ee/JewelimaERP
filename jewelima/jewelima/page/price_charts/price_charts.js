@@ -51,6 +51,13 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		table.pc-t td{padding:3px 6px;}
 		table.pc-t input, table.pc-t select{width:100%;border:1px solid var(--border-color);border-radius:5px;padding:4px 8px;background:var(--control-bg);font-size:13px;}
 		table.pc-t .del{cursor:pointer;color:#b02a2a;font-weight:700;width:24px;text-align:center;}
+		.pc-pts .pc-pt{display:flex;align-items:center;gap:8px;margin-top:5px;}
+		.pc-pts .pc-pt .n{width:22px;text-align:right;font-size:12px;font-weight:700;color:var(--text-muted);}
+		.pc-pts .pc-pt input{flex:1;border:1px solid var(--border-color);border-radius:5px;padding:5px 9px;
+			background:var(--control-bg);font-size:12.5px;}
+		.pc-pts .pc-pt .x{cursor:pointer;color:var(--text-muted);font-weight:800;font-size:15px;width:16px;}
+		.pc-pts .pc-pt .x:hover{color:#b00020;}
+		.pc-pts .pc-pt-add{display:inline-block;margin:6px 0 0 30px;cursor:pointer;font-size:12px;color:var(--primary);font-weight:600;}
 		.pc-flats{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 16px;}
 		.pc-flats label{font-size:11px;color:var(--text-muted);display:block;}
 		.pc-flats input{width:100%;border:1px solid var(--border-color);border-radius:5px;padding:4px 8px;background:var(--control-bg);}
@@ -134,7 +141,7 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		certification_charges: [], precious_stone_rates: [], making_rules: [], touch_rates: [],
 		colour_stone_rate: 0, precious_stone_rate: 0, job_work_pty_rate: 0,
 		making_rate: 0, making_min_grams: 1, hallmark_charge: 0, certification_charge: 0,
-		payment_terms: "", terms: "", signatory: "", signatory_phone: "" });
+		payment_terms: "", terms: "", signatory: "", signatory_phone: "", party_stone_handling: 0 });
 
 	// Diamond rows arrive in whatever order they were typed over the years. A
 	// chart is READ by quality — "what do I charge for EF at this size" — so
@@ -268,14 +275,18 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			<div class="pc-sec">${__("CVD Rates — brackets by total ct; one blank-range row = flat. Empty = scan denied when the piece carries it")}<span class="add" data-k="cvr">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="cvr"><thead><tr><th>${__("From ct")}</th><th>${__("Below ct")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cvr")}</tbody></table>
+			<div class="pc-sec">${__("Party Stones — the customer's own PD and PO stones: we set them, we charge for handling")}</div>
+			<div class="pc-flats">
+				<div><label>${__("Handling ₹ per ct")}</label><input class="pc-f" data-f="party_stone_handling"
+					type="number" step="1" min="0" value="${num(cur.party_stone_handling)}"
+					placeholder="${__("blank = party diamonds priced by hand")}"></div>
+			</div>
 			<div class="pc-sec">${__("Certification Charges — a cert on the bag missing here BLOCKS the scan")}<span class="add" data-k="cert">+ ${__("row")}</span></div>
 			<table class="pc-t" data-k="cert"><thead><tr><th>${__("Certification")}</th><th>${__("Basis")}</th><th>${__("Rate ₹")}</th><th>${__("Minimum ₹")}</th><th title="${__("fill From/To ct to make this a weight-slab row (IGI style); Solitaire rows apply only to single-stone pieces")}">${__("From ct")}</th><th>${__("To ct")}</th><th>${__("Solitaire")}</th><th></th></tr></thead>
 				<tbody>${rowsHtml("cert")}</tbody></table>
 			<div class="pc-sec">${__("Letter — Terms & Signatory")}</div>
-			<div class="pc-wide"><label style="font-size:11px;color:var(--text-muted);">${__("Payment terms")}</label>
-				<textarea class="pc-f" data-f="payment_terms">${esc(cur.payment_terms)}</textarea></div>
-			<div class="pc-wide" style="margin-top:8px;"><label style="font-size:11px;color:var(--text-muted);">${__("Other terms")}</label>
-				<textarea class="pc-f" data-f="terms">${esc(cur.terms)}</textarea></div>
+			${pointsHtml("payment_terms", __("Payment terms"))}
+			${pointsHtml("terms", __("Other terms"))}
 			<div class="pc-flats" style="margin-top:8px;">
 				<div><label>${__("Signatory")}</label><input class="pc-f" data-f="signatory" value="${esc(cur.signatory)}"></div>
 				<div><label>${__("Signatory phone")}</label><input class="pc-f" data-f="signatory_phone" value="${esc(cur.signatory_phone)}"></div>
@@ -296,6 +307,60 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 			parent: $ed.find(".pc-dt").get(0), render_input: true }); dtC.refresh(); dtC.set_value(cur.chart_date);
 		dtC.$input.on("change", () => { cur.chart_date = dtC.get_value(); });
 	}
+
+	// ---- terms as POINTS ------------------------------------------------------
+	// A party reads terms as a list — each condition on its own line, numbered.
+	// Stored one point per line, so a chart written as a paragraph before this
+	// opens with each of its lines as a point, and nothing needs migrating.
+	function pointsOf(v) {
+		return String(v || "").split("\n").map((x) => x.replace(/^\s*(?:[-•*]|\d+[.)])\s*/, "").trim()).filter(Boolean);
+	}
+	function pointsHtml(field, label) {
+		const pts = pointsOf(cur[field]);
+		return `<div class="pc-pts" data-pf="${field}" style="margin-top:8px;">
+			<label style="font-size:11px;color:var(--text-muted);">${label}</label>
+			${(pts.length ? pts : [""]).map((t, i) => `<div class="pc-pt">
+				<span class="n">${i + 1}.</span>
+				<input value="${esc(t)}" placeholder="${__("one condition")}">
+				<span class="x" title="${__("remove this point")}">&times;</span></div>`).join("")}
+			<span class="add pc-pt-add">+ ${__("point")}</span>
+		</div>`;
+	}
+	function savePoints(box) {
+		const field = box.data("pf");
+		cur[field] = box.find(".pc-pt input").map(function () { return this.value.trim(); }).get()
+			.filter(Boolean).join("\n");
+	}
+	function repaintPoints(box) {
+		const field = box.data("pf");
+		const label = box.find("> label").text();
+		box.replaceWith(pointsHtml(field, label));
+	}
+	root.on("input", ".pc-pt input", function () { savePoints($(this).closest(".pc-pts")); });
+	root.on("keydown", ".pc-pt input", function (e) {
+		if (e.key !== "Enter") return;
+		e.preventDefault();                        // Enter starts the next point
+		const box = $(this).closest(".pc-pts");
+		const field = box.data("pf");
+		savePoints(box);
+		cur[field] = (cur[field] ? cur[field] + "\n" : "") + " ";
+		repaintPoints(box);
+		root.find(`.pc-pts[data-pf="${field}"] .pc-pt input`).last().val("").trigger("focus");
+	});
+	root.on("click", ".pc-pt-add", function () {
+		const box = $(this).closest(".pc-pts");
+		const field = box.data("pf");
+		savePoints(box);
+		cur[field] = (cur[field] ? cur[field] + "\n" : "") + " ";
+		repaintPoints(box);
+		root.find(`.pc-pts[data-pf="${field}"] .pc-pt input`).last().val("").trigger("focus");
+	});
+	root.on("click", ".pc-pt .x", function () {
+		const box = $(this).closest(".pc-pts");
+		$(this).closest(".pc-pt").remove();
+		savePoints(box);
+		repaintPoints(box);
+	});
 
 	// simple field edits land straight on cur
 	root.on("input change", ".pc-f", function () {

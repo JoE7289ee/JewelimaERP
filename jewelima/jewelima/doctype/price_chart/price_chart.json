@@ -21,6 +21,7 @@
   "cz_rates",
   "sw_rates",
   "cvd_rates",
+  "party_stone_handling",
   "col_break_stones",
   "making_section",
   "making_rate",
@@ -39,7 +40,7 @@
  ],
  "fields": [
   {
-   "description": "Free text \u2014 usually the party's name (e.g. KAVITHA), or GENERAL for the house chart.",
+   "description": "Free text — usually the party's name (e.g. KAVITHA), or GENERAL for the house chart.",
    "fieldname": "chart_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -57,7 +58,7 @@
   },
   {
    "default": "Active",
-   "description": "Saving an Active chart supersedes the previous Active chart with the same name \u2014 old charts stay for history.",
+   "description": "Saving an Active chart supersedes the previous Active chart with the same name — old charts stay for history.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -84,7 +85,7 @@
   {
    "fieldname": "diamond_section",
    "fieldtype": "Section Break",
-   "label": "Diamond Cents Brackets (per-STONE weight \u2192 \u20b9/ct)"
+   "label": "Diamond Cents Brackets (per-STONE weight → ₹/ct)"
   },
   {
    "fieldname": "diamond_rates",
@@ -105,7 +106,7 @@
    "label": "Other Stones"
   },
   {
-   "description": "Per-stone \u20b9/ct (Ruby 1ct = 200). When rows exist they are THE price \u2014 a PS stone without a row blocks the scan; the flat rate above only applies when this table is empty.",
+   "description": "Per-stone ₹/ct (Ruby 1ct = 200). When rows exist they are THE price — a PS stone without a row blocks the scan; the flat rate above only applies when this table is empty.",
    "fieldname": "precious_stone_rates",
    "fieldtype": "Table",
    "label": "Precious Stone Rates",
@@ -137,11 +138,17 @@
    "options": "Price Chart Bucket Rate"
   },
   {
+   "fieldname": "party_stone_handling",
+   "fieldtype": "Currency",
+   "label": "Party Stone Handling (per ct)",
+   "description": "Charged per carat on the party's own stones (PD and PO) — we set them, we do not sell them."
+  },
+  {
    "fieldname": "col_break_stones",
    "fieldtype": "Column Break"
   },
   {
-   "description": "Flat rule: pieces under the minimum grams are billed AS the minimum; above it, nett weight \u00d7 rate.",
+   "description": "Flat rule: pieces under the minimum grams are billed AS the minimum; above it, nett weight × rate.",
    "fieldname": "making_section",
    "fieldtype": "Section Break",
    "label": "Making Charges"
@@ -149,7 +156,7 @@
   {
    "fieldname": "making_rate",
    "fieldtype": "Float",
-   "label": "Making Charge (\u20b9 / g on nett)",
+   "label": "Making Charge (₹ / g on nett)",
    "precision": "2"
   },
   {
@@ -174,7 +181,7 @@
   {
    "fieldname": "setting_section",
    "fieldtype": "Section Break",
-   "label": "Setting Ladder (\u20b9 per stone, by stone size)"
+   "label": "Setting Ladder (₹ per stone, by stone size)"
   },
   {
    "fieldname": "special_section",

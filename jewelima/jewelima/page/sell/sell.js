@@ -18,7 +18,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 	const esc = frappe.utils.escape_html;
 	const money = (v) => "₹" + flt(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	// canonical column order; cert:* columns slot in after hall, alphabetically
-	const ORDER = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall", "cert"];
+	const ORDER = ["gold", "dmd", "pdmd", "poth", "cs", "cz", "cvd", "ps", "making", "hall", "cert"];
 
 	$(page.main).append(`
 		<style>
@@ -373,7 +373,7 @@ frappe.pages["sell"].on_page_load = function (wrapper) {
 		return {
 			gold_value: g(["gold"]),
 			diamond_value: g(["dmd", "pdmd"]),
-			stone_value: g(["cs", "cz", "cvd", "sw", "ps"]),
+			stone_value: g(["cs", "cz", "cvd", "sw", "ps", "poth"]),
 			labour_value: g(["making"]),
 			charges_value: g(certKeys),
 		};

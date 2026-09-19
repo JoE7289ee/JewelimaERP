@@ -13103,6 +13103,7 @@ def get_price_chart(name):
 			"rate": r.rate, "min_per_piece": r.min_per_piece,
 			"flat_below_gm": r.flat_below_gm} for r in (d.get("making_rules") or [])],
 		"payment_terms": d.payment_terms or "", "terms": d.terms or "",
+		"party_stone_handling": flt(d.get("party_stone_handling")),
 		"signatory": d.signatory or "", "signatory_phone": d.signatory_phone or "",
 	}
 
@@ -13568,6 +13569,7 @@ def get_jw_chart(name):
 		"moved": bool(live.get("moved")),
 		"touch_rates": [{"karat": r.karat or "", "touch": flt(r.touch)} for r in (d.get("touch_rates") or [])],
 		"making_rate": flt(d.making_rate), "making_min_grams": flt(d.making_min_grams),
+		"party_stone_handling": flt(d.get("party_stone_handling")),
 		"making_rules": [{"karat": r.karat or "", "design_type": r.design_type or "",
 			"basis": r.basis or "Per Gram", "rate": flt(r.rate), "min_per_piece": flt(r.min_per_piece),
 			"flat_below_gm": flt(r.flat_below_gm)} for r in (d.get("making_rules") or [])],
@@ -13649,6 +13651,7 @@ def save_price_chart(payload):
 				"min_per_piece": flt(r.get("min_per_piece")),
 				"flat_below_gm": flt(r.get("flat_below_gm"))})
 	doc.payment_terms = p.get("payment_terms") or ""
+	doc.party_stone_handling = flt(p.get("party_stone_handling"))
 	doc.terms = p.get("terms") or ""
 	doc.signatory = p.get("signatory") or ""
 	doc.signatory_phone = p.get("signatory_phone") or ""
@@ -13816,6 +13819,13 @@ def _price_chart_letter_html(d, for_browser=False):
 		+ sec("CZ Rates", BHEAD, bucket(d.get("cz_rates", [])))
 		+ sec("CVD Rates", BHEAD, bucket(d.get("cvd_rates", [])))
 		+ sec("Other Stone Rates", BHEAD, bucket(d.get("sw_rates", [])))
+		+ sec("Party Stone Handling",
+			"<tr><th>Applies to</th><th class='r' style='width:20%'>Rate</th>"
+			"<th class='r' style='width:14%'>Basis</th></tr>",
+			("<tr><td>Party diamonds and party stones supplied by you</td>"
+			 "<td class='r'>₹ {0}</td><td class='r'>per ct</td></tr>").format(money(d.get("party_stone_handling")))
+			if flt(d.get("party_stone_handling")) else "",
+			"For setting stones you supply. Charged on handling only — the stones remain yours.")
 		+ sec("Gold Touch",
 			"<tr><th>Karat</th><th class='r' style='width:18%'>Karat purity</th>"
 			"<th class='r' style='width:18%'>Touch</th><th class='r' style='width:18%'>Over the karat</th></tr>",
@@ -13853,13 +13863,22 @@ def _price_chart_letter_html(d, for_browser=False):
 		foot_html = ("<div class='rule'></div>"
 			"<div class='tag'>crafting &mdash; for &mdash; you</div>")
 
+	# terms go out as numbered points, one condition to a line — stored that way,
+	# and any leading "1." or "-" someone typed is dropped so it never doubles up
+	def points(text):
+		pts = [re.sub(r"^\s*(?:[-•*]|\d+[.)])\s*", "", x).strip() for x in (text or "").split("\n")]
+		pts = [x for x in pts if x]
+		if not pts:
+			return ""
+		return "<ol class='pts'>{0}</ol>".format("".join("<li>{0}</li>".format(esc(x)) for x in pts))
+
 	terms_block = ""
-	if d.get("payment_terms"):
+	if points(d.get("payment_terms")):
 		terms_block += ("<div class='sec'><div class='st'>Payment Terms</div>"
-			"<div class='terms'>{0}</div></div>").format(esc(d["payment_terms"]))
-	if d.get("terms"):
+			"<div class='terms'>{0}</div></div>").format(points(d["payment_terms"]))
+	if points(d.get("terms")):
 		terms_block += ("<div class='sec'><div class='st'>Terms &amp; Conditions</div>"
-			"<div class='terms'>{0}</div></div>").format(esc(d["terms"]))
+			"<div class='terms'>{0}</div></div>").format(points(d["terms"]))
 
 	return """<!doctype html><html><head><meta charset='utf-8'><style>
 		/* A browser prints its own header and footer — the URL, the date, "1/1" —
@@ -13909,8 +13928,10 @@ def _price_chart_letter_html(d, for_browser=False):
 		/* a new quality starts a new group — the rule says so without a heading */
 		table.t tr.grp td {{ border-top: 1px solid #cfe0e6; }}
 		.note {{ font-size: 9.5px; color: #667; margin-top: 4px; font-style: italic; }}
-		.terms {{ font-size: 10.5px; color: #333; white-space: pre-wrap; line-height: 1.5;
+		.terms {{ font-size: 10.5px; color: #333; line-height: 1.5;
 			border: 1px solid #d7e0e3; border-left: 2.5pt solid #1B4332; padding: 7px 10px; }}
+		.terms ol.pts {{ margin: 0; padding-left: 18px; }}
+		.terms ol.pts li {{ margin: 1px 0; padding-left: 2px; }}
 
 		/* THE FOOT OF THE SHEET.
 		   position:fixed does NOT work here: wkhtmltopdf anchors a fixed element
@@ -17349,7 +17370,7 @@ def export_sale_bill_pdf(payload):
 	rows = p.get("rows") or []
 	if not rows:
 		frappe.throw(frappe._("Nothing on the bill."))
-	order = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall", "cert"]
+	order = ["gold", "dmd", "pdmd", "poth", "cs", "cz", "cvd", "ps", "making", "hall", "cert"]
 	keys = []
 	labels = {}
 	for r in rows:
@@ -17547,7 +17568,7 @@ def export_sale_bill_xlsx(payload):
 	rows = p.get("rows") or []
 	if not rows:
 		frappe.throw(frappe._("Nothing on the bill."))
-	order = ["gold", "dmd", "pdmd", "cs", "cz", "cvd", "ps", "making", "hall", "cert"]
+	order = ["gold", "dmd", "pdmd", "poth", "cs", "cz", "cvd", "ps", "making", "hall", "cert"]
 	labels = {}
 	for r in rows:
 		for k, c in (r.get("components") or {}).items():
@@ -17656,7 +17677,7 @@ def save_sale_prep_board(payload):
 		vals = {
 			"gold_value": _sum(["gold"]),
 			"diamond_value": _sum(["dmd", "pdmd"]),
-			"stone_value": _sum(["cs", "cz", "cvd", "sw", "ps"]),
+			"stone_value": _sum(["cs", "cz", "cvd", "sw", "ps", "poth"]),
 			"labour_value": _sum(["making"]),
 			"charges_value": _sum([k for k in comps if k in ("hall", "cert") or k.startswith("cert:")]),
 		}
@@ -18103,10 +18124,27 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 	else:
 		dmd_detail = []
 
-	# ---- party diamonds: no job-work route on the chart yet -> always manual
+	# ---- party stones: the customer's own, which we SET but do not sell. They
+	# are billed for handling, per carat, at the chart's handling rate — the job
+	# work, never the stone. Party diamonds with no rate on the chart still come
+	# back as a cell to price by hand; party OTHER stones were never billed at
+	# all, and a chart without the rate keeps them that way rather than blocking
+	# a sale that went through yesterday.
+	handling = flt(chart.get("party_stone_handling")) if chart else 0.0
 	if flt(b.act_pdmd_weight) > 0:
-		comp("pdmd", "Party DMD", needs=True,
-			note="{0} ct party diamonds — no job-work pricing on the chart".format(round(flt(b.act_pdmd_weight), 3)))
+		pd_ct = round(flt(b.act_pdmd_weight), 3)
+		if handling:
+			comp("pdmd", "Party DMD", pd_ct * handling,
+				note="{0} ct party diamonds x {1}/ct handling = {2}".format(pd_ct, handling, _inr(pd_ct * handling)),
+				rate=handling, qty=pd_ct, unit="ct")
+		else:
+			comp("pdmd", "Party DMD", needs=True,
+				note="{0} ct party diamonds — no handling rate on the chart".format(pd_ct))
+	if flt(b.act_poth_weight) > 0 and handling:
+		po_ct = round(flt(b.act_poth_weight), 3)
+		comp("poth", "Party Stones", po_ct * handling,
+			note="{0} ct party stones x {1}/ct handling = {2}".format(po_ct, handling, _inr(po_ct * handling)),
+			rate=handling, qty=po_ct, unit="ct")
 
 	# ---- coloured buckets: CS / CZ / CVD from their own bracket tables. Blank
 	# range = flat; out-of-bracket = 0 (ignored); NO rows at all -> manual cell.
@@ -18273,7 +18311,7 @@ def get_sale_piece(barcode, price_chart, gold_rate=0):
 		"ostone_ct": round(ostone_ct, 3),
 		"gold_value": _v("gold"),
 		"diamond_value": _v("dmd", "pdmd"),
-		"stone_value": _v("cs", "cz", "cvd", "sw", "ps"),
+		"stone_value": _v("cs", "cz", "cvd", "sw", "ps", "poth"),
 		"labour_value": _v("making"),
 		"charges_value": _v(*[k for k in comps if k in ("hall", "cert") or k.startswith("cert:")]),
 		"dmd_detail": dmd_detail, "cert_detail": cert_detail, "ps_detail": ps_detail,
