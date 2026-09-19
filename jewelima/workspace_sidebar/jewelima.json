@@ -1458,7 +1458,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "gem",
+   "icon": "paint-bucket",
    "indent": 1,
    "keep_closed": 0,
    "label": "My Bucket",
