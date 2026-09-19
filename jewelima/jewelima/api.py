@@ -13657,7 +13657,12 @@ def save_price_chart(payload):
 	return {"name": doc.name, "chart_name": doc.chart_name}
 
 
-def _price_chart_letter_html(d):
+# the karat as the trade quotes it, not the assay figure on the item — a touch of
+# 82 on 18K is "7% over", and 82 − 75.10 would print a 6.9 nobody recognises
+KARAT_NOMINAL = {"24K": 99.9, "22K": 91.6, "20K": 83.3, "18K": 75.0, "14K": 58.5, "9K": 37.5}
+
+
+def _price_chart_letter_html(d, for_browser=False):
 	"""The customer-facing rate letter (A4).
 
 	It goes out under our name to a party who will hold us to it, so it is laid
@@ -13768,6 +13773,24 @@ def _price_chart_letter_html(d):
 			("below {0} g".format(flt(r["flat_below_gm"]))) if flt(r.get("flat_below_gm")) else "—")
 		for r in d.get("making_rules", []))
 
+	# ---- gold touch: what the gold is billed at, and what that is OVER the karat
+	# A touch of 82 on 18K bills the gold at 82% of the 24K board rate; 18K is 75%
+	# gold, so the party is paying 7% over it. Both figures, because the party
+	# negotiates in the second one.
+	def pct(v):
+		v = flt(v)
+		return ("{0:.1f}".format(v).rstrip("0").rstrip(".")) + "%"
+
+	touch = "".join(
+		"<tr><td>{0}</td><td class='r'>{1}</td><td class='r'><b>{2}</b></td><td class='r'>{3}</td></tr>".format(
+			esc(r["karat"] or "—"),
+			pct(KARAT_NOMINAL[r["karat"].upper()]) if (r["karat"] or "").upper() in KARAT_NOMINAL else "—",
+			pct(r["touch"]),
+			(("+" if flt(r["touch"]) >= KARAT_NOMINAL[r["karat"].upper()] else "")
+				+ pct(flt(r["touch"]) - KARAT_NOMINAL[r["karat"].upper()]))
+				if (r["karat"] or "").upper() in KARAT_NOMINAL else "—")
+		for r in d.get("touch_rates", []) if flt(r.get("touch")))
+
 	# ---- certification ------------------------------------------------------
 	certs = "".join(
 		"<tr><td>{0}</td><td>{1}</td><td class='r'>{2}</td><td class='r'>{3}</td></tr>".format(
@@ -13793,6 +13816,10 @@ def _price_chart_letter_html(d):
 		+ sec("CZ Rates", BHEAD, bucket(d.get("cz_rates", [])))
 		+ sec("CVD Rates", BHEAD, bucket(d.get("cvd_rates", [])))
 		+ sec("Other Stone Rates", BHEAD, bucket(d.get("sw_rates", [])))
+		+ sec("Gold Touch",
+			"<tr><th>Karat</th><th class='r' style='width:18%'>Karat purity</th>"
+			"<th class='r' style='width:18%'>Touch</th><th class='r' style='width:18%'>Over the karat</th></tr>",
+			touch, "Gold is billed at the touch % of the 24K board rate.")
 		+ sec("Making Charges",
 			"<tr><th>Design</th><th style='width:16%'>Basis</th>"
 			"<th class='r' style='width:18%'>Rate</th><th class='r' style='width:16%'>Minimum</th>"
@@ -13804,7 +13831,8 @@ def _price_chart_letter_html(d):
 
 	# one-page discipline: the more the chart carries, the tighter the type
 	total_rows = sum(len(d.get(k, [])) for k in ("diamond_rates", "precious_stone_rates",
-		"cs_rates", "cz_rates", "cvd_rates", "sw_rates", "making_rules", "certification_charges"))
+		"cs_rates", "cz_rates", "cvd_rates", "sw_rates", "making_rules", "certification_charges",
+		"touch_rates"))
 	if total_rows > 26:
 		base_font, cell_pad, logo_h = "10px", "3px 8px", "42px"
 	elif total_rows > 14:
@@ -13834,9 +13862,14 @@ def _price_chart_letter_html(d):
 			"<div class='terms'>{0}</div></div>").format(esc(d["terms"]))
 
 	return """<!doctype html><html><head><meta charset='utf-8'><style>
-		@page {{ size: A4; margin: 12mm 14mm; }}
+		/* A browser prints its own header and footer — the URL, the date, "1/1" —
+		   INTO the page margin, on paper that goes to a party. Giving it no margin
+		   gives it nowhere to print them; the same 12/14 mm becomes padding inside
+		   the page, so everything lands exactly where it did. The PDF keeps the
+		   real margin: its sheet height was measured against it. */
+		{page_rule}
 		body {{ font-family: Helvetica, Arial, sans-serif; color: #1a1a1a;
-			font-size: {base_font}; margin: 0; }}
+			font-size: {base_font}; margin: 0; {body_pad} }}
 
 		/* THE STATIONERY. The header and footer artwork are whole pieces: they run
 		   the full width of the text block, carry their own rules, and nothing of
@@ -13929,13 +13962,16 @@ def _price_chart_letter_html(d):
 		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, logo=logo_html, foot=foot_html,
 		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
 		body=body, terms=terms_block,
+		page_rule=("@page { size: A4; margin: 0; }" if for_browser
+			else "@page { size: A4; margin: 12mm 14mm; }"),
+		body_pad=("padding: 12mm 14mm; box-sizing: border-box;" if for_browser else ""),
 		signatory=esc(d["signatory"]), signatory_phone=esc(d["signatory_phone"]))
 
 
 @frappe.whitelist()
 def price_chart_letter(name):
 	"""The rate letter as HTML — the page prints it in place (hidden iframe)."""
-	return {"html": _price_chart_letter_html(get_price_chart(name))}
+	return {"html": _price_chart_letter_html(get_price_chart(name), for_browser=True)}
 
 
 @frappe.whitelist()
