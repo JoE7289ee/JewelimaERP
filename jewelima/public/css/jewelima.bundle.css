@@ -41,7 +41,7 @@ body {
 .body-sidebar .standard-sidebar-item .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .sidebar-item-label {
 	font-weight: 600;
-	color: #1c2620;
+	color: #FAF7EF;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -81,9 +81,9 @@ body {
  * values are re-asserted so this override cannot leak into it.
  */
 .body-sidebar-container {
-	--surface-menu-bar: #b3cfb9;
-	--sidebar-hover-color: #a0c2a8;
-	--sidebar-border-color: #8fb598;
+	--surface-menu-bar: #0D2B1E;
+	--sidebar-hover-color: #1B4332;
+	--sidebar-border-color: #1B4332;
 }
 [data-theme="dark"] .body-sidebar-container {
 	--surface-menu-bar: #0f0f0f;
@@ -98,7 +98,7 @@ body {
  */
 .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
-	color: #3d4a41;
+	color: #E6C778;
 }
 [data-theme="dark"] .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
 [data-theme="dark"] .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
@@ -125,13 +125,13 @@ body {
  */
 .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {
-	background: #92b89c;
+	background: rgba(60, 110, 70, 0.45);
 	box-shadow: var(--shadow-sm);
 	border-radius: 8px;
 }
 .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item .sidebar-item-label {
-	color: #16201a;
+	color: #FAF7EF;
 }
 [data-theme="dark"] .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {

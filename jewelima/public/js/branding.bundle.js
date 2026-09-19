@@ -352,7 +352,8 @@ jewelima.BRAND = {
 		--jw-emerald:${B.emerald};--jw-forest:${B.forest};--jw-green:${B.green};--jw-sage:${B.sage};
 		--jw-gold:${B.gold};--jw-champagne:${B.champagne};--jw-soft-gold:${B.softGold};--jw-ivory:${B.ivory};
 	}
-	[data-theme="dark"] .body-sidebar{
+	/* the sidebar is the dark emerald rail in BOTH themes */
+	.body-sidebar{
 		background:${B.emerald};
 		border-right-color:${B.forest};
 		--sidebar-hover-color:${B.forest};
@@ -360,20 +361,20 @@ jewelima.BRAND = {
 		--sidebar-border-color:${B.forest};
 		--divider-color:${B.forest};
 	}
-	[data-theme="dark"] .body-sidebar,
-	[data-theme="dark"] .body-sidebar *:not(svg):not(path){color:${B.ivory};}
-	[data-theme="dark"] .body-sidebar .sidebar-item-label,
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item span,
-	[data-theme="dark"] .body-sidebar .standard-sidebar-label{color:${B.ivory} !important;}
-	[data-theme="dark"] .body-sidebar .sidebar-item-icon svg,
-	[data-theme="dark"] .body-sidebar .drop-icon svg,
-	[data-theme="dark"] .body-sidebar svg{stroke:${B.champagne};color:${B.champagne};}
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item:hover{background:${B.forest};}
-	[data-theme="dark"] .body-sidebar .standard-sidebar-item.selected{background:${B.green};}
-	[data-theme="dark"] .body-sidebar hr,
-	[data-theme="dark"] .body-sidebar .divider{border-color:${B.forest};background:${B.forest};}
-	[data-theme="dark"] .body-sidebar input{background:${B.forest};color:${B.ivory};border-color:${B.green};}
-	[data-theme="dark"] .body-sidebar .sidebar-user-button:hover{background:${B.forest};}
+	.body-sidebar,
+	.body-sidebar *:not(svg):not(path){color:${B.ivory};}
+	.body-sidebar .sidebar-item-label,
+	.body-sidebar .standard-sidebar-item span,
+	.body-sidebar .standard-sidebar-label{color:${B.ivory} !important;}
+	.body-sidebar .sidebar-item-icon svg,
+	.body-sidebar .drop-icon svg,
+	.body-sidebar svg{stroke:${B.champagne};color:${B.champagne};}
+	.body-sidebar .standard-sidebar-item:hover{background:${B.forest};}
+	.body-sidebar .standard-sidebar-item.selected{background:${B.green};}
+	.body-sidebar hr,
+	.body-sidebar .divider{border-color:${B.forest};background:${B.forest};}
+	.body-sidebar input{background:${B.forest};color:${B.ivory};border-color:${B.green};}
+	.body-sidebar .sidebar-user-button:hover{background:${B.forest};}
 	/* The app mark: the gradient reads beautifully on the dark emerald rail, but
 	   on a pale ground its light stops disappear. Light mode gets the SOLID gold
 	   cut of the same emblem — swapped by CSS, since both themes are served the
