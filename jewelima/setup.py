@@ -325,6 +325,8 @@ JEWELIMA_DELIVERY_PAGES = [
 	# buckets moved into Delivery Masters under Delivery Settings — settings are
 	# set up once and belong to the manager, not the counter
 	"finished-goods", "party-stock", "transfer-holder", "transfer-bucket", "rework",
+	# a bucket keeper's own shelf — which shelf is theirs is set on Delivery Masters
+	"my-bucket",
 	# the records side of the same desks — read only, and the questions they
 	# answer ("when did that go out", "who re-filed this") land on delivery
 	"hallmarking-records", "certification-records", "product-transfer-records",

@@ -1458,6 +1458,18 @@
   {
    "child": 1,
    "collapsible": 1,
+   "icon": "gem",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "My Bucket",
+   "link_to": "my-bucket",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
+   "child": 1,
+   "collapsible": 1,
    "icon": "users",
    "indent": 1,
    "keep_closed": 0,
@@ -2830,7 +2842,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-17 13:25:50.823383",
+ "modified": "2026-09-19 10:25:58.436427",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

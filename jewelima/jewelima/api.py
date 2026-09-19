@@ -10310,6 +10310,262 @@ def transfer_bucket(bags, to_bucket, remarks=None):
 	return {"moved": moved, "count": len(moved), "errors": errors}
 
 
+# ---------------------------------------------------------------------------
+# Bucket Access — who looks after which bucket.
+#
+# A bucket is a shelf of finished stock, and each shelf has a keeper. Delivery
+# Masters sets that up as a matrix of people against buckets; My Bucket is the
+# keeper's own view of their shelf. One person keeps ONE bucket: the Bucket
+# Access row is named by the user, so a second bucket for somebody cannot exist
+# — reassigning them replaces the row.
+#
+# Hallmarking and certification are deliberately NOT restricted by this yet.
+# ---------------------------------------------------------------------------
+BUCKET_ACCESS_ADMIN = ("System Manager", "JW Manager")
+MY_BUCKET_ROLES = ("System Manager", "JW Manager", "JW Delivery", "Stock Manager")
+
+
+def _is_bucket_admin():
+	return bool(set(BUCKET_ACCESS_ADMIN) & set(frappe.get_roles()))
+
+
+def _my_access(user=None):
+	"""This person's Bucket Access row, or None."""
+	return frappe.db.get_value("Bucket Access", user or frappe.session.user,
+		["bucket", "can_transfer"], as_dict=True)
+
+
+@frappe.whitelist()
+def get_bucket_access():
+	"""The matrix: every active bucket, every person who could keep one, and who
+	keeps which."""
+	frappe.only_for(list(BUCKET_ACCESS_ADMIN))
+	buckets = frappe.get_all("Finished Bucket", filters={"active": 1},
+		pluck="name", order_by="name")
+	users = frappe.get_all("User",
+		filters={"enabled": 1, "user_type": "System User",
+			"name": ["not in", ["Administrator", "Guest"]]},
+		fields=["name", "full_name"], order_by="full_name")
+	rows = {r.user: r for r in frappe.get_all("Bucket Access",
+		fields=["user", "bucket", "can_transfer", "assigned_by", "assigned_on"])}
+	held = {}
+	for r in rows.values():
+		held.setdefault(r.bucket, 0)
+		held[r.bucket] += 1
+	return {
+		"buckets": buckets,
+		"counts": {b: frappe.db.count("Order Bag",
+			{"bucket": b, "is_finished": 1, "stock_status": ["not in", ["Sold", "Cancelled"]]})
+			for b in buckets},
+		"keepers": held,
+		"users": [{
+			"user": u.name, "name": u.full_name or u.name,
+			"bucket": (rows.get(u.name) or {}).get("bucket") or "",
+			"can_transfer": cint((rows.get(u.name) or {}).get("can_transfer")),
+		} for u in users],
+	}
+
+
+@frappe.whitelist()
+def set_bucket_access(user, bucket=None, can_transfer=0):
+	"""Give this person a bucket, move them to another, or take theirs away.
+	An empty bucket removes the row — they keep nothing."""
+	frappe.only_for(list(BUCKET_ACCESS_ADMIN))
+	if not frappe.db.exists("User", user):
+		frappe.throw(frappe._("No user {0}.").format(user))
+	bucket = (bucket or "").strip()
+	if not bucket:
+		if frappe.db.exists("Bucket Access", user):
+			frappe.delete_doc("Bucket Access", user, ignore_permissions=True, force=1)
+		frappe.db.commit()
+		return {"user": user, "bucket": "", "can_transfer": 0}
+	bucket = _require_bucket(bucket)
+	vals = {"bucket": bucket, "can_transfer": cint(can_transfer),
+		"assigned_by": frappe.session.user, "assigned_on": frappe.utils.now_datetime()}
+	if frappe.db.exists("Bucket Access", user):
+		doc = frappe.get_doc("Bucket Access", user)
+		doc.update(vals)
+		doc.save(ignore_permissions=True)
+	else:
+		frappe.get_doc({"doctype": "Bucket Access", "user": user, **vals}).insert(ignore_permissions=True)
+	frappe.db.commit()
+	return {"user": user, "bucket": bucket, "can_transfer": cint(can_transfer)}
+
+
+def _resolve_my_bucket(bucket=None):
+	"""Which bucket this request may look at. A keeper sees their own and nothing
+	else, whatever they ask for; a manager may look at any shelf, and starts on
+	their own if they keep one."""
+	mine = _my_access()
+	if _is_bucket_admin():
+		want = (bucket or "").strip() or (mine.bucket if mine else "")
+		return (want or None), True, True           # a manager may always move stock
+	if not mine:
+		return None, False, False
+	return mine.bucket, False, bool(cint(mine.can_transfer))
+
+
+@frappe.whitelist()
+def get_my_bucket(bucket=None, q=None, design_type=None, karat=None, status=None, stone=None):
+	"""A keeper's shelf: every finished piece in their bucket that has not been
+	sold or cancelled, with only what the counter needs to know about each."""
+	frappe.only_for(list(MY_BUCKET_ROLES))
+	b, is_admin, can_move = _resolve_my_bucket(bucket)
+	out = {"bucket": b, "is_admin": is_admin, "can_transfer": can_move,
+		"buckets": frappe.get_all("Finished Bucket", filters={"active": 1}, pluck="name", order_by="name")
+			if is_admin else [], "pieces": [], "facets": {}, "totals": {}}
+	if not b:
+		return out
+
+	BUCKETS = ("dmd", "ps", "cs", "cz", "cvd", "sw", "pdmd", "poth")
+	LABEL = {"dmd": "DMD", "ps": "PS", "cs": "CS", "cz": "CZ", "cvd": "CVD",
+		"sw": "SW", "pdmd": "PD", "poth": "PO"}
+	rows = frappe.db.sql("""
+		SELECT b.name, b.design, d.design_type, b.stock_status, b.held_by, b.huid,
+			b.act_gross_weight gross, b.act_nett_weight nett, b.act_pure_weight pure,
+			b.act_purity purity, b.in_stock_on, {0}
+		FROM `tabOrder Bag` b LEFT JOIN `tabDesign` d ON d.name = b.design
+		WHERE b.is_finished = 1 AND b.bucket = %(b)s
+			AND b.stock_status NOT IN ('Sold', 'Cancelled')
+		ORDER BY b.in_stock_on DESC""".format(
+			", ".join("b.act_{0}_weight {0}_wt, b.act_{0}_no {0}_no".format(x) for x in BUCKETS)),
+		{"b": b}, as_dict=True)
+
+	def karat_of(r):
+		p = flt(r.purity)
+		for floor_, k in _KARAT_BY_PURITY:
+			if p >= floor_:
+				return k + "K"
+		return ""
+
+	pieces = []
+	for r in rows:
+		stones = [{"code": x, "label": LABEL[x], "no": cint(r.get(x + "_no")),
+			"ct": round(flt(r.get(x + "_wt")), 3)} for x in BUCKETS if flt(r.get(x + "_wt")) > 0.0005]
+		pieces.append({
+			"name": r.name, "design": r.design or "", "design_type": r.design_type or "",
+			"status": r.stock_status or "", "holder": r.held_by or "", "huid": r.huid or "",
+			"gross": round(flt(r.gross), 3), "nett": round(flt(r.nett), 3),
+			"pure": round(flt(r.pure), 3), "karat": karat_of(r),
+			"since": str(r.in_stock_on or "")[:10], "stones": stones,
+			"ct": round(sum(x["ct"] for x in stones), 3),
+		})
+
+	# the filter choices are what is ACTUALLY on this shelf, not every option there is
+	out["facets"] = {
+		"design_type": sorted({p["design_type"] for p in pieces if p["design_type"]}),
+		"karat": sorted({p["karat"] for p in pieces if p["karat"]}),
+		"status": sorted({p["status"] for p in pieces if p["status"]}),
+		"stone": sorted({s["label"] for p in pieces for s in p["stones"]}),
+	}
+
+	ql = (q or "").strip().upper()
+	def keep(p):
+		if ql and ql not in p["name"].upper() and ql not in p["design"].upper() \
+				and ql not in (p["huid"] or "").upper():
+			return False
+		if design_type and p["design_type"] != design_type:
+			return False
+		if karat and p["karat"] != karat:
+			return False
+		if status and p["status"] != status:
+			return False
+		if stone == "none" and p["stones"]:
+			return False
+		if stone and stone != "none" and stone not in [s["label"] for s in p["stones"]]:
+			return False
+		return True
+	shown = [p for p in pieces if keep(p)]
+	out["pieces"] = shown
+	out["totals"] = {
+		"all": len(pieces), "shown": len(shown),
+		"gross": round(sum(p["gross"] for p in shown), 3),
+		"pure": round(sum(p["pure"] for p in shown), 3),
+		"ct": round(sum(p["ct"] for p in shown), 3),
+	}
+	return out
+
+
+@frappe.whitelist()
+def get_my_bucket_history(bucket=None, days=30):
+	"""What came onto this shelf and what left it.
+
+	Two ways in: a piece MADE into this bucket, and a piece TRANSFERRED in from
+	another. A made piece's first bucket is read off its transfer trail — the
+	earliest move's "from" — because once a piece has been re-filed, its current
+	bucket says nothing about where it was made."""
+	frappe.only_for(list(MY_BUCKET_ROLES))
+	b, _admin, _move = _resolve_my_bucket(bucket)
+	if not b:
+		return {"bucket": None, "events": [], "days": []}
+	since = frappe.utils.add_days(frappe.utils.today(), -max(1, min(cint(days) or 30, 365)))
+
+	events = []
+	# every transfer touching this bucket, in or out
+	for t in frappe.get_all("Bucket Transfer",
+			filters={"transfer_time": [">=", since]},
+			or_filters={"to_bucket": b, "from_bucket": b},
+			fields=["order_bag", "from_bucket", "to_bucket", "transfer_time", "transferred_by"],
+			order_by="transfer_time desc", limit_page_length=2000):
+		inbound = t.to_bucket == b
+		events.append({"kind": "in" if inbound else "out", "how": "transfer",
+			"card": t.order_bag, "when": str(t.transfer_time or "")[:16],
+			"other": (t.from_bucket if inbound else t.to_bucket) or "",
+			"by": _user_label(t.transferred_by) if t.transferred_by else ""})
+
+	# pieces made in the window whose FIRST bucket was this one
+	made = frappe.get_all("Order Bag",
+		filters={"is_finished": 1, "in_stock_on": [">=", since]},
+		fields=["name", "bucket", "in_stock_on", "owner"], limit_page_length=5000)
+	first_move = {}
+	if made:
+		for t in frappe.get_all("Bucket Transfer",
+				filters={"order_bag": ["in", [m.name for m in made]]},
+				fields=["order_bag", "from_bucket", "transfer_time"], order_by="transfer_time asc"):
+			first_move.setdefault(t.order_bag, t.from_bucket)
+	for m in made:
+		origin = first_move.get(m.name, m.bucket)
+		if origin == b:
+			events.append({"kind": "in", "how": "made", "card": m.name,
+				"when": str(m.in_stock_on or "")[:16], "other": "", "by": ""})
+
+	events.sort(key=lambda e: e["when"], reverse=True)
+
+	# the same, as a day-by-day tally
+	per_day = {}
+	for e in events:
+		d = per_day.setdefault(e["when"][:10], {"date": e["when"][:10], "made": 0, "in": 0, "out": 0})
+		if e["how"] == "made":
+			d["made"] += 1
+		elif e["kind"] == "in":
+			d["in"] += 1
+		else:
+			d["out"] += 1
+	return {"bucket": b, "since": since, "events": events[:500],
+		"days": sorted(per_day.values(), key=lambda x: x["date"], reverse=True),
+		"totals": {"made": sum(1 for e in events if e["how"] == "made"),
+			"in": sum(1 for e in events if e["how"] == "transfer" and e["kind"] == "in"),
+			"out": sum(1 for e in events if e["kind"] == "out")}}
+
+
+@frappe.whitelist()
+def my_bucket_transfer(bags, to_bucket, remarks=None):
+	"""A keeper moving pieces OFF their own shelf. Only a keeper who has been
+	allowed to, and only pieces that are actually on their shelf."""
+	frappe.only_for(list(MY_BUCKET_ROLES))
+	b, is_admin, can_move = _resolve_my_bucket(None)
+	if not is_admin:
+		if not b:
+			frappe.throw(frappe._("You do not keep a bucket."))
+		if not can_move:
+			frappe.throw(frappe._("You can look after {0} but not move goods out of it.").format(b))
+		names = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
+		strays = [n for n in names if frappe.db.get_value("Order Bag", n, "bucket") != b]
+		if strays:
+			frappe.throw(frappe._("Not on your shelf: {0}").format(", ".join(strays[:6])))
+	return transfer_bucket(bags, to_bucket, remarks)
+
+
 @frappe.whitelist()
 def make_products(bags, bucket=None):
 	"""Turn selected qty-1 bags into finished stock products: consume their materials

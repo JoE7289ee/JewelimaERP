@@ -76,6 +76,32 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 			border:1px solid var(--border-color);border-radius:9px;padding:0 6px;color:var(--text-muted);}
 		.bk-addrow{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border-color);
 			background:var(--control-bg);}
+		/* the access matrix: people down the side, buckets across the top */
+		.ba-card{border:1px solid var(--border-color);border-radius:12px;background:var(--fg-color);
+			overflow:hidden;border-left:3px solid #1B4332;}
+		.ba-h{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;
+			border-bottom:1px solid var(--border-color);background:rgba(27,67,50,.08);
+			font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#1B4332;}
+		[data-theme="dark"] .ba-h{color:#8fd0aa;}
+		.ba-find{border:1px solid var(--border-color);border-radius:7px;padding:4px 10px;font-size:12px;
+			width:200px;background:var(--fg-color);color:var(--text-color);text-transform:none;letter-spacing:0;font-weight:500;}
+		.ba-wrap{overflow-x:auto;max-height:540px;overflow-y:auto;}
+		table.ba-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+		table.ba-tbl th{position:sticky;top:0;background:var(--fg-color);z-index:1;
+			font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);
+			padding:7px 10px;border-bottom:1px solid var(--border-color);text-align:center;white-space:nowrap;}
+		table.ba-tbl th:first-child{text-align:left;}
+		table.ba-tbl th .cnt{display:block;font-size:9.5px;font-weight:600;letter-spacing:0;text-transform:none;}
+		table.ba-tbl td{padding:6px 10px;border-bottom:1px solid var(--border-color);text-align:center;}
+		table.ba-tbl td:first-child{text-align:left;white-space:nowrap;}
+		table.ba-tbl td .em{font-size:10.5px;color:var(--text-muted);}
+		table.ba-tbl tr.has td{background:rgba(27,67,50,.05);}
+		table.ba-tbl input[type=radio],table.ba-tbl input[type=checkbox]{width:15px;height:15px;cursor:pointer;
+			accent-color:#1B4332;}
+		table.ba-tbl td.mv{border-left:1px solid var(--border-color);}
+		table.ba-tbl input:disabled{opacity:.3;cursor:not-allowed;}
+		.ba-foot{font-size:11px;color:var(--text-muted);padding:8px 14px;border-top:1px solid var(--border-color);
+			background:var(--control-bg);}
 		.bk-addrow input{flex:1;border:1px solid var(--border-color);border-radius:7px;padding:6px 11px;
 			background:var(--fg-color);color:var(--text-color);text-transform:uppercase;font-size:12.5px;}
 		.bk-none{padding:26px;text-align:center;color:var(--text-muted);font-size:12.5px;}
@@ -134,6 +160,16 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 					<button class="btn btn-sm btn-default bk-add">${__("Add")}</button>
 				</div>
 			</div>
+		</div>
+
+		<div class="pm-sec">${__("Bucket Access")}</div>
+		<div class="ba-card">
+			<div class="ba-h">
+				<span>${__("Who keeps which bucket")}</span>
+				<input class="ba-find" placeholder="${__("find a person…")}">
+			</div>
+			<div class="ba-wrap"><table class="ba-tbl"><thead></thead><tbody></tbody></table></div>
+			<div class="ba-foot">${__("One bucket per person — picking another moves them. Hallmarking and certification are not restricted by this.")}</div>
 		</div>
 	`);
 	const root = $(page.main);
@@ -255,8 +291,67 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 	}
 	root.on("click", ".bk-add", addBucket);
 	root.on("keydown", ".bk-name", (e) => { if (e.key === "Enter") { e.preventDefault(); addBucket(); } });
-	page.set_primary_action(__("Refresh"), () => { load(); loadBuckets(); }, "refresh");
+	// ---- Bucket Access ------------------------------------------------------
+	// A shelf of finished stock and the person who keeps it. One bucket per
+	// person, enforced by the record itself (it is named by the user), so a radio
+	// per row is not just a UI nicety — there is no second answer to store.
+	const BA = { buckets: [], users: [], counts: {}, keepers: {} };
+
+	function paintAccess() {
+		const q = (root.find(".ba-find").val() || "").trim().toLowerCase();
+		root.find(".ba-tbl thead").html(`<tr><th>${__("Person")}</th>${
+			BA.buckets.map((b) => `<th>${esc(b)}<span class="cnt">${
+				BA.keepers[b] || 0} ${__("keeper(s)")} · ${BA.counts[b] || 0} ${__("pcs")}</span></th>`).join("")
+		}<th>${__("None")}</th><th>${__("Can move out")}</th></tr>`);
+		const people = BA.users.filter((u) => !q || u.name.toLowerCase().includes(q)
+			|| u.user.toLowerCase().includes(q));
+		root.find(".ba-tbl tbody").html(people.map((u) => `
+			<tr class="${u.bucket ? "has" : ""}" data-user="${esc(u.user)}">
+				<td><b>${esc(u.name)}</b> <span class="em">${esc(u.user)}</span></td>
+				${BA.buckets.map((b) => `<td><input type="radio" name="ba-${esc(u.user)}"
+					value="${esc(b)}" ${u.bucket === b ? "checked" : ""}></td>`).join("")}
+				<td><input type="radio" name="ba-${esc(u.user)}" value="" ${u.bucket ? "" : "checked"}></td>
+				<td class="mv"><input type="checkbox" class="ba-mv" ${u.can_transfer ? "checked" : ""}
+					${u.bucket ? "" : "disabled"} title="${__("may move goods out of their bucket")}"></td>
+			</tr>`).join("") || `<tr><td colspan="${BA.buckets.length + 3}" class="em">${__("Nobody by that name.")}</td></tr>`);
+	}
+
+	function loadAccess() {
+		return frappe.call({ method: API + ".get_bucket_access", freeze: false }).then((r) => {
+			Object.assign(BA, r.message || {});
+			paintAccess();
+		});
+	}
+
+	function saveAccess(user, bucket, move) {
+		return frappe.call({ method: API + ".set_bucket_access", freeze: false,
+			args: { user, bucket, can_transfer: move ? 1 : 0 } })
+			.then(() => {
+				const u = BA.users.find((x) => x.user === user);
+				frappe.show_alert({ message: bucket
+					? __("{0} keeps {1}{2}.", [u ? u.name : user, bucket, move ? __(" and can move goods out") : ""])
+					: __("{0} keeps no bucket now.", [u ? u.name : user]), indicator: "green" }, 3);
+				loadAccess();          // keeper counts in the header change with it
+			});
+	}
+
+	root.on("change", ".ba-tbl input[type=radio]", function () {
+		const tr = $(this).closest("tr");
+		const bucket = this.value;
+		// taking the bucket away takes the permission with it
+		const move = bucket ? tr.find(".ba-mv").prop("checked") : false;
+		saveAccess(tr.data("user"), bucket, move);
+	});
+	root.on("change", ".ba-mv", function () {
+		const tr = $(this).closest("tr");
+		const bucket = tr.find("input[type=radio]:checked").val();
+		if (bucket) saveAccess(tr.data("user"), bucket, this.checked);
+	});
+	root.on("input", ".ba-find", paintAccess);
+
+	page.set_primary_action(__("Refresh"), () => { load(); loadBuckets(); loadAccess(); }, "refresh");
 	load();
 	loadBuckets();
-	frappe.pages["delivery-masters"].on_page_show = () => { load(); loadBuckets(); };
+	loadAccess();
+	frappe.pages["delivery-masters"].on_page_show = () => { load(); loadBuckets(); loadAccess(); };
 };
