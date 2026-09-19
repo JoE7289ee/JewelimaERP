@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* The Jewelima skin, as design tokens — one fixed green look, no light mode. */
+@theme {
+	--color-emerald-deep: #0D2B1E;
+	--color-forest: #1B4332;
+	--color-leaf: #2E7D5B;
+	--color-gold: #D4AF37;
+	--color-champagne: #E6C778;
+	--color-ivory: #FAF7EF;
+	--color-dim: #E3D3A0;
+	--color-up: #7BD8A4;
+	--color-down: #F09A9A;
+	--font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
+	--font-script: "Snell Roundhand", "Segoe Script", "Brush Script MT", "Apple Chancery", cursive;
+}
+
+html, body, #root { height: 100%; }
+body {
+	margin: 0;
+	background: var(--color-emerald-deep);
+	color: var(--color-ivory);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-webkit-tap-highlight-color: transparent;
+	overscroll-behavior-y: none;
+}
+/* the whole app sits on the brand's radial ground */
+.jw-ground {
+	background: radial-gradient(120% 60% at 50% 0%, var(--color-forest) 0%, var(--color-emerald-deep) 60%) fixed;
+}
+/* a screen slid over the grid scrolls on its own, where a FIXED background is
+   painted against the viewport and shows as a seam — it takes a plain ground */
+.jw-panel {
+	background: radial-gradient(140% 50% at 50% 0%, var(--color-forest) 0%, var(--color-emerald-deep) 70%);
+	background-color: var(--color-emerald-deep);
+}
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.tabular { font-variant-numeric: tabular-nums; }

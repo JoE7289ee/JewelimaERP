@@ -57,3 +57,6 @@ jspm_packages/
 # dev-only demo scaffolding — never ships
 jewelima/jewelima/_demoloss.py
 jewelima/jewelima/loadtest.py
+
+# the phone app's toolchain — the BUILT files in jewelima/public/jw are committed
+frontend/*/node_modules/
