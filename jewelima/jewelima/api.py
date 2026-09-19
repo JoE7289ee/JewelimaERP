@@ -13960,7 +13960,9 @@ def _price_chart_letter_html(d, for_browser=False):
 		</td></tr></table>
 	</body></html>""".format(
 		base_font=base_font, cell_pad=cell_pad, logo_h=logo_h, logo=logo_html, foot=foot_html,
-		chart_name=esc(d["chart_name"]), chart_date=esc(d["chart_date"]),
+		chart_name=esc(d["chart_name"]),
+		# day first, the way a party in India reads a date: 19-09-2026, not 2026-09-19
+		chart_date=esc(frappe.utils.formatdate(d["chart_date"], "dd-mm-yyyy") if d["chart_date"] else ""),
 		body=body, terms=terms_block,
 		page_rule=("@page { size: A4; margin: 0; }" if for_browser
 			else "@page { size: A4; margin: 12mm 14mm; }"),
