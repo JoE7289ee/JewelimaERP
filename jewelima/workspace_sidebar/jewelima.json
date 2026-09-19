@@ -1492,6 +1492,18 @@
    "type": "Link"
   },
   {
+   "child": 1,
+   "collapsible": 1,
+   "icon": "package",
+   "indent": 1,
+   "keep_closed": 0,
+   "label": "Parcel",
+   "link_to": "parcel",
+   "link_type": "Page",
+   "show_arrow": 0,
+   "type": "Link"
+  },
+  {
    "child": 0,
    "collapsible": 1,
    "icon": "folder",
@@ -1582,18 +1594,6 @@
    "keep_closed": 0,
    "label": "Certification",
    "link_to": "certify",
-   "link_type": "Page",
-   "show_arrow": 0,
-   "type": "Link"
-  },
-  {
-   "child": 1,
-   "collapsible": 1,
-   "icon": "package",
-   "indent": 0,
-   "keep_closed": 0,
-   "label": "Parcel",
-   "link_to": "parcel",
    "link_type": "Page",
    "show_arrow": 0,
    "type": "Link"
@@ -2842,7 +2842,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-19 10:25:58.436427",
+ "modified": "2026-09-19 11:18:55.502312",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Jewelima",

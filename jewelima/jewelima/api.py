@@ -19371,6 +19371,108 @@ def set_cert_submission_no(name, submission_no=""):
 	return {"name": name, "submission_no": (submission_no or "").strip()}
 
 
+PARCEL_ROLES = ("System Manager", "JW Manager", "Stock Manager", "JW Delivery", "JW Parcel",
+	"Jewelima Certification", "Jewelima Hallmarking")
+PARCEL_KINDS = (("certification", "Certification", "Certification Item"),
+	("hallmarking", "Hallmarking Batch", "Hallmarking Item"))
+
+
+def _parcel_row(kind, name):
+	"""One batch as the counter reads it: what, where, how much, since when."""
+	dt, child = {"certification": ("Certification", "Certification Item"),
+		"hallmarking": ("Hallmarking Batch", "Hallmarking Item")}[kind]
+	fields = ["name", "center", "status", "prepared_on", "sent_on", "collected_on",
+		"submission_no", "owner"] + (["cert_type", "quality"] if kind == "certification" else [])
+	d = frappe.db.get_value(dt, name, fields, as_dict=True)
+	if not d:
+		return None
+	items = frappe.get_all(child, filters={"parent": name}, fields=["gross", "dmd_ct"],
+		limit_page_length=0)
+	sent = d.sent_on
+	return {
+		"kind": kind, "name": d.name, "status": d.status,
+		"where": (d.get("cert_type") or "") if kind == "certification" else frappe._("Hallmarking"),
+		"center": d.center or "", "quality": d.get("quality") or "",
+		"submission_no": d.submission_no or "", "owner_label": _user_label(d.owner),
+		"prepared_on": str(d.prepared_on or ""), "sent_on": str(sent or ""),
+		"collected_on": str(d.collected_on or ""),
+		# how long it has been away is the number the counter chases a lab on
+		"days_out": (frappe.utils.date_diff(d.collected_on or frappe.utils.today(), sent) if sent else None),
+		"pieces": len(items),
+		"gross": round(sum(flt(i.gross) for i in items), 3),
+		"dmd_ct": round(sum(flt(i.dmd_ct) for i in items), 3),
+	}
+
+
+@frappe.whitelist()
+def get_parcel_out():
+	"""Everything that has left the house and not yet been collected back.
+
+	A batch is OUT from the moment the counter sends it until somebody collects
+	it on Certification Out or Hallmarking Out — collecting is what moves it to
+	Collected, so that is what clears it from here. Oldest first: the packet that
+	has been away longest is the one to chase."""
+	frappe.only_for(list(PARCEL_ROLES))
+	rows = []
+	for kind, dt, _child in PARCEL_KINDS:
+		for nm in frappe.get_all(dt, filters={"status": "Sent"}, pluck="name"):
+			r = _parcel_row(kind, nm)
+			if r:
+				rows.append(r)
+	rows.sort(key=lambda r: (r["sent_on"] or "9999", r["name"]))
+	return {"rows": rows, "hall_centers": _hall_centers()}
+
+
+@frappe.whitelist()
+def get_parcel_history(days=90):
+	"""Everything that went out and came back, newest first."""
+	frappe.only_for(list(PARCEL_ROLES))
+	since = frappe.utils.add_days(frappe.utils.today(), -max(1, min(cint(days) or 90, 730)))
+	rows = []
+	for kind, dt, _child in PARCEL_KINDS:
+		for nm in frappe.get_all(dt,
+				filters={"status": ["in", ["Collected", "Partially Received", "Received"]],
+					"collected_on": [">=", since]}, pluck="name"):
+			r = _parcel_row(kind, nm)
+			if r:
+				rows.append(r)
+	rows.sort(key=lambda r: (r["collected_on"], r["name"]), reverse=True)
+	return {"rows": rows, "since": since}
+
+
+def _hall_centers():
+	return (frappe.get_all("Hallmarking Center", filters={"disabled": 0}, pluck="name")
+		if frappe.db.exists("DocType", "Hallmarking Center") else [])
+
+
+@frappe.whitelist()
+def parcel_send(batches, center=None):
+	"""Send what the counter has scanned, in one go.
+
+	Each batch goes through the SAME call its own desk makes, so the stock move
+	and the status change are exactly what they would have been; this only saves
+	the counter from sending them one at a time. A hallmarking batch with no
+	centre of its own takes the one chosen for this send. One batch failing does
+	not stop the rest — each answers for itself."""
+	frappe.only_for(list(PARCEL_ROLES))
+	names = frappe.parse_json(batches) if isinstance(batches, str) else (batches or [])
+	sent, failed = [], []
+	for nm in names:
+		try:
+			if frappe.db.exists("Certification", nm):
+				send_cert_prep(nm)
+			elif frappe.db.exists("Hallmarking Batch", nm):
+				send_hall_prep(nm, frappe.db.get_value("Hallmarking Batch", nm, "center") or center)
+			else:
+				raise frappe.ValidationError(frappe._("No batch {0}.").format(nm))
+			sent.append(nm)
+		except Exception as e:
+			frappe.db.rollback()
+			failed.append({"name": nm, "error": frappe.utils.strip_html(str(e))[:200]})
+	frappe.db.commit()
+	return {"sent": sent, "failed": failed}
+
+
 @frappe.whitelist()
 def get_parcel_queue():
 	"""The packing counter: every batch that is prepped and waiting to go out,
@@ -19417,22 +19519,21 @@ def parcel_scan(code):
 	code = (code or "").strip()
 	if not code:
 		return {"error": frappe._("Scan a batch or a piece.")}
-	if frappe.db.exists("Certification", code):
-		st = frappe.db.get_value("Certification", code, "status")
-		return ({"batch": code, "kind": "certification"} if st == "Prepared"
-			else {"error": frappe._("{0} is {1} — only prepared batches go out here.").format(code, st)})
-	if frappe.db.exists("Hallmarking Batch", code):
-		st = frappe.db.get_value("Hallmarking Batch", code, "status")
-		return ({"batch": code, "kind": "hallmarking"} if st == "Prepared"
-			else {"error": frappe._("{0} is {1} — only prepared batches go out here.").format(code, st)})
+	frappe.only_for(list(PARCEL_ROLES))
+	code = code.upper()
+	for kind, dt, _child in PARCEL_KINDS:
+		if frappe.db.exists(dt, code):
+			st = frappe.db.get_value(dt, code, "status")
+			if st != "Prepared":
+				return {"error": frappe._("{0} is {1} — only a batch that is ready to send goes out here.").format(code, st)}
+			return {"batch": code, "kind": kind, "row": _parcel_row(kind, code)}
 	# a piece: find the prepared batch holding it
-	for dt, child, kind in (("Certification", "Certification Item", "certification"),
-			("Hallmarking Batch", "Hallmarking Item", "hallmarking")):
-		parents = frappe.get_all(child, filters={"order_bag": code}, pluck="parent")
-		for pnt in parents:
+	piece = _resolve_bag_code(code) or code
+	for kind, dt, child in PARCEL_KINDS:
+		for pnt in frappe.get_all(child, filters={"order_bag": piece}, pluck="parent"):
 			if frappe.db.get_value(dt, pnt, "status") == "Prepared":
-				return {"batch": pnt, "kind": kind, "via_piece": code}
-	return {"error": frappe._("{0} is not on any prepared batch.").format(code)}
+				return {"batch": pnt, "kind": kind, "via_piece": piece, "row": _parcel_row(kind, pnt)}
+	return {"error": frappe._("{0} is not on any batch that is ready to send.").format(code)}
 
 
 @frappe.whitelist()
