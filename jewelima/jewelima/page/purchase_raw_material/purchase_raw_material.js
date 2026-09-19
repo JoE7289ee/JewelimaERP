@@ -86,8 +86,6 @@ frappe.pages["purchase-raw-material"].on_page_load = function (wrapper) {
 		.pr-foot{margin-top:1px;color:var(--text-muted);font-size:12px;}
 		</style>
 		<div class="pr-wrap">
-			<div class="pr-title">${__("PURCHASE RAW MATERIAL")}
-				<span class="pr-sub">${__("gold and stones into stock")}</span></div>
 			<div class="pr-head">
 				<div class="pr-h-voucher"></div><div class="pr-h-supplier"></div><div class="pr-h-wh"></div>
 			</div>
