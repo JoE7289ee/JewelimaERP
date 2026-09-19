@@ -18,7 +18,14 @@
  */
 .body-sidebar .standard-sidebar-item .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .sidebar-item-label {
-	font-weight: 700;
+	font-weight: 600;
+	color: #1c2620;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+[data-theme="dark"] .body-sidebar .standard-sidebar-item .sidebar-item-label,
+[data-theme="dark"] .sidebar-item-container .standard-sidebar-item .sidebar-item-label {
+	color: inherit;
 }
 
 /* A section heading leads a group, so it carries a touch more than the lines
@@ -27,7 +34,7 @@
  */
 .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
-	font-weight: 800;
+	font-weight: 700;
 }
 
 /* A light green ground for the sidebar, so the navigation reads as a separate
@@ -52,9 +59,9 @@
  * values are re-asserted so this override cannot leak into it.
  */
 .body-sidebar-container {
-	--surface-menu-bar: #dfece1;
-	--sidebar-hover-color: #d0e2d3;
-	--sidebar-border-color: #c2d8c6;
+	--surface-menu-bar: #c6dccb;
+	--sidebar-hover-color: #b4cfba;
+	--sidebar-border-color: #a6c5ad;
 }
 [data-theme="dark"] .body-sidebar-container {
 	--surface-menu-bar: #0f0f0f;
@@ -69,7 +76,7 @@
  */
 .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
 .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
-	color: #666666;
+	color: #3d4a41;
 }
 [data-theme="dark"] .body-sidebar .standard-sidebar-item .section-break .sidebar-item-label,
 [data-theme="dark"] .sidebar-item-container .standard-sidebar-item .section-break .sidebar-item-label {
@@ -96,13 +103,13 @@
  */
 .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {
-	background: #cbe0ce;
+	background: #a9c9b0;
 	box-shadow: var(--shadow-sm);
 	border-radius: 8px;
 }
 .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item .sidebar-item-label {
-	color: #4d4d4d;
+	color: #16201a;
 }
 [data-theme="dark"] .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {
