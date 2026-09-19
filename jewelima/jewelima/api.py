@@ -19447,6 +19447,17 @@ def set_cert_submission_no(name, submission_no=""):
 	return {"name": name, "submission_no": (submission_no or "").strip()}
 
 
+@frappe.whitelist()
+def set_cert_shop_name(name, shop_name=""):
+	"""Free-text shop name for the packet, typed on the prep card; printed on the note."""
+	frappe.only_for(("System Manager", "JW Manager", "JW Delivery", "Stock Manager", "Jewelima Certification"))
+	if not frappe.db.exists("Certification", name):
+		frappe.throw(frappe._("No batch {0}.").format(name or "?"))
+	frappe.db.set_value("Certification", name, "shop_name", (shop_name or "").strip() or None)
+	frappe.db.commit()
+	return {"name": name, "shop_name": (shop_name or "").strip()}
+
+
 PARCEL_ROLES = ("System Manager", "JW Manager", "Stock Manager", "JW Delivery", "JW Parcel",
 	"Jewelima Certification", "Jewelima Hallmarking")
 PARCEL_KINDS = (("certification", "Certification", "Certification Item"),
@@ -19700,7 +19711,7 @@ def get_cert_batch_slip(name):
 			<div class="nm">{emblem}{slip_title}</div>
 			<div class="sub">{sub}</div>
 			<div class="pcs"><b>{pc}</b> {pcl}</div>
-			{subno}
+			{subno}{shop}
 		</td>
 		<td class="qr">{qrimg}<div class="qrc">{nm}</div></td>
 	</tr></table>
@@ -19724,6 +19735,9 @@ def get_cert_batch_slip(name):
 			frappe._("Submission no"), frappe.utils.escape_html(d.submission_no))
 			if d.get("submission_no")
 			else '<div class="sub-missing">{0}</div>'.format(frappe._("Submission no not recorded"))),
+		shop=('<div class="sub-no">{0} <b>{1}</b></div>'.format(
+			frappe._("Shop"), frappe.utils.escape_html(d.shop_name))
+			if d.get("shop_name") else ""),
 		qrimg='<img src="{0}">'.format(qr) if qr else "",
 		h_type=frappe._("Design type"), h_pc=frappe._("PC"),
 		h_gw=frappe._("GW (g)"), h_ct=frappe._("Diam (ct)"),
@@ -19880,7 +19894,7 @@ def get_cert_preps():
 	for r in frappe.get_all("Certification",
 			filters={"status": ["in", ["Prepared", "Sent", "Cancelled"]], "cert_type": ["is", "set"]},
 			fields=["name", "cert_type", "center", "quality", "status", "prepared_on", "submission_no",
-				"sent_on", "owner"],
+				"shop_name", "sent_on", "owner"],
 			order_by="creation desc", limit=40):
 		r["pieces"] = frappe.db.count("Certification Item", {"parent": r.name})
 		r["owner_label"] = _user_label(r.owner)

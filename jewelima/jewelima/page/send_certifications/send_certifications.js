@@ -84,6 +84,16 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 		});
 	});
 
+	root.on("change", ".sc-shop", function () {
+		const nm = $(this).closest(".sc-card").data("name");
+		const el = this;
+		frappe.call({ method: API + ".set_cert_shop_name",
+			args: { name: nm, shop_name: this.value || "" } }).then(() => {
+			$(el).addClass("saved");
+			setTimeout(() => $(el).removeClass("saved"), 1200);
+		});
+	});
+
 	function load() {
 		frappe.call({ method: API + ".get_cert_preps" }).then((r) => {
 			const m = r.message || { prepared: [], recent: [] };
@@ -100,6 +110,11 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 						<label>${__("Submission no")}</label>
 						<input class="sc-subno" value="${esc(p.submission_no || "")}"
 							placeholder="${__("the lab's number")}">
+					</div>
+					<div class="sc-sub">
+						<label>${__("Shop name")}</label>
+						<input class="sc-shop" value="${esc(p.shop_name || "")}"
+							placeholder="${__("shop name")}">
 					</div>
 					<div class="sc-actions">
 						${p.can_manage

@@ -17,6 +17,7 @@
   "col_break_head",
   "lab",
   "submission_no",
+  "shop_name",
   "stock_entry",
   "remarks",
   "items_section",
@@ -54,7 +55,7 @@
    "label": "Collected On"
   },
   {
-   "description": "Stone labs (IGL / DHSC / SGL / IDT / GIG) \u2014 a piece goes to ONE of them. HALLMARKING is separate; nearly every piece gets it.",
+   "description": "Stone labs (IGL / DHSC / SGL / IDT / GIG) — a piece goes to ONE of them. HALLMARKING is separate; nearly every piece gets it.",
    "fieldname": "certification_type",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -94,10 +95,16 @@
    "fieldname": "submission_no",
    "fieldtype": "Data",
    "label": "Submission No",
-   "description": "The number the lab gives when the packet is handed over. Not needed to send \u2014 it usually arrives after."
+   "description": "The number the lab gives when the packet is handed over. Not needed to send — it usually arrives after."
   },
   {
-   "description": "The stock move Finished Goods \u2192 At Certification that backed this batch.",
+   "fieldname": "shop_name",
+   "fieldtype": "Data",
+   "label": "Shop Name",
+   "description": "Free text: the shop this packet is for, printed on the note."
+  },
+  {
+   "description": "The stock move Finished Goods → At Certification that backed this batch.",
    "fieldname": "stock_entry",
    "fieldtype": "Link",
    "label": "Stock Entry (send)",
@@ -124,7 +131,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-23 10:00:00.000000",
+ "modified": "2026-09-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Jewelima",
  "name": "Certification",
