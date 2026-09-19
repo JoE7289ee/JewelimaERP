@@ -35,10 +35,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 		.mb2-kpi .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;}
 		.mb2-kpi .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;}
 		.mb2-kpi .v small{font-size:11px;font-weight:600;color:var(--text-muted);}
-		.mb2-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-color);margin-bottom:12px;}
-		.mb2-tab{padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;border-bottom:2px solid transparent;
-			color:var(--text-muted);}
-		.mb2-tab.on{color:var(--text-color);border-bottom-color:#1B4332;}
 		.mb2-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
 		.mb2-bar input,.mb2-bar select{border:1px solid var(--border-color);border-radius:8px;padding:6px 10px;
 			font-size:12.5px;background:var(--fg-color);color:var(--text-color);}
@@ -75,10 +71,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 			<select class="mb2-pick" hidden></select>
 		</div>
 		<div class="mb2-kpis"></div>
-		<div class="mb2-tabs">
-			<div class="mb2-tab on" data-tab="shelf">${__("On the shelf")}</div>
-			<div class="mb2-tab" data-tab="history">${__("Came in / went out")}</div>
-		</div>
 		<div class="mb2-body"></div>`);
 
 	// ---- the shelf -------------------------------------------------------------
@@ -224,13 +216,17 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 		S.picked.clear();
 		S.tab === "shelf" ? loadShelf() : loadShelf().then(loadHistory);
 	});
-	root.on("click", ".mb2-tab", function () {
-		S.tab = $(this).data("tab");
-		root.find(".mb2-tab").removeClass("on");
-		$(this).addClass("on");
+	// The history is a second look at the same shelf, so it sits in the page head
+	// beside Refresh rather than as a tab strip across the page. One button,
+	// which says where it will take you.
+	function showView(tab) {
+		S.tab = tab;
+		page.set_secondary_action(tab === "shelf" ? __("Came in / went out") : __("Back to the shelf"),
+			() => showView(S.tab === "shelf" ? "history" : "shelf"),
+			tab === "shelf" ? "history" : "list");
 		if (!S.bucket) return;
-		S.tab === "shelf" ? paintShelf() : loadHistory();
-	});
+		tab === "shelf" ? paintShelf() : loadHistory();
+	}
 	root.on("change", ".mb2-days", function () { S.days = parseInt(this.value, 10) || 30; loadHistory(); });
 
 	root.on("change", ".mb2-pk", function () {
@@ -278,5 +274,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 
 	page.set_primary_action(__("Refresh"), () => (S.tab === "shelf" ? loadShelf() : loadShelf().then(loadHistory)), "refresh");
 	frappe.pages["my-bucket"].on_page_show = () => loadShelf();
+	showView("shelf");
 	loadShelf();
 };
