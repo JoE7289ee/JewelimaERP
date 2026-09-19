@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
 /* Copyright (c) 2026, efeone and contributors
  * For license information, please see license.txt
  *
@@ -9,6 +10,18 @@
  * that stops applying after an upgrade should fail QUIETLY (a label that is no
  * longer bold), never break a screen.
  */
+
+/* The desk's typeface: IBM Plex Sans, a sober, engineered face made for
+ * business software. Frappe reads --font-stack everywhere, so one variable
+ * moves the whole desk; Inter stays behind it as the fallback.
+ */
+:root {
+	--font-stack: "IBM Plex Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+body {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
 
 /* The sidebar is read at a glance, from across a bench, on screens that are not
  * always clean. Frappe sets the menu lines at the default weight, which is fine
@@ -59,9 +72,9 @@
  * values are re-asserted so this override cannot leak into it.
  */
 .body-sidebar-container {
-	--surface-menu-bar: #c6dccb;
-	--sidebar-hover-color: #b4cfba;
-	--sidebar-border-color: #a6c5ad;
+	--surface-menu-bar: #b3cfb9;
+	--sidebar-hover-color: #a0c2a8;
+	--sidebar-border-color: #8fb598;
 }
 [data-theme="dark"] .body-sidebar-container {
 	--surface-menu-bar: #0f0f0f;
@@ -103,7 +116,7 @@
  */
 .body-sidebar .sidebar-item-container.section-item:has(> .nested-container:not(.hidden))
 	> .standard-sidebar-item {
-	background: #a9c9b0;
+	background: #92b89c;
 	box-shadow: var(--shadow-sm);
 	border-radius: 8px;
 }
