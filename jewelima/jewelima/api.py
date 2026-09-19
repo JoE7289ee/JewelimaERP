@@ -10331,6 +10331,7 @@ def transfer_bucket(bags, to_bucket, remarks=None):
 # Hallmarking and certification are deliberately NOT restricted by this yet.
 # ---------------------------------------------------------------------------
 BUCKET_ACCESS_ADMIN = ("System Manager", "JW Manager")
+BUCKET_KEEPER_ROLE = "JW Delivery"          # who can be given a bucket to keep
 MY_BUCKET_ROLES = ("System Manager", "JW Manager", "JW Delivery", "Stock Manager")
 
 
@@ -10351,12 +10352,16 @@ def get_bucket_access():
 	frappe.only_for(list(BUCKET_ACCESS_ADMIN))
 	buckets = frappe.get_all("Finished Bucket", filters={"active": 1},
 		pluck="name", order_by="name")
-	users = frappe.get_all("User",
-		filters={"enabled": 1, "user_type": "System User",
-			"name": ["not in", ["Administrator", "Guest"]]},
-		fields=["name", "full_name"], order_by="full_name")
 	rows = {r.user: r for r in frappe.get_all("Bucket Access",
 		fields=["user", "bucket", "can_transfer", "assigned_by", "assigned_on"])}
+	# a keeper is somebody on the delivery counter. Anyone who ALREADY keeps a
+	# bucket stays listed even if the role is later taken off them — otherwise
+	# their assignment would carry on, invisible, with no row to undo it from.
+	counter = set(frappe.get_all("Has Role",
+		filters={"parenttype": "User", "role": BUCKET_KEEPER_ROLE}, pluck="parent"))
+	users = frappe.get_all("User",
+		filters={"enabled": 1, "name": ["in", list(counter | set(rows)) or ["-"]]},
+		fields=["name", "full_name"], order_by="full_name")
 	held = {}
 	for r in rows.values():
 		held.setdefault(r.bucket, 0)
