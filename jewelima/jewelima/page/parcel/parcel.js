@@ -77,7 +77,8 @@ frappe.pages["parcel"].on_page_load = function (wrapper) {
 	}
 
 	const tag = (r) => `<span class="pl-tag ${r.kind === "hallmarking" ? "hall" : ""}">${
-		r.kind === "hallmarking" ? __("Hallmarking") : __("Certification")}</span>`;
+		r.kind === "hallmarking" ? __("Hallmarking")
+			: r.kind === "stonechange" ? __("Stone Change") : __("Certification")}</span>`;
 	const centre = (r) => esc((r.center || "").split("-").slice(1).join("-") || r.center || "—");
 	const sub = (r) => r.submission_no ? esc(r.submission_no) : `<span class="pl-miss">${__("none")}</span>`;
 
@@ -90,7 +91,7 @@ frappe.pages["parcel"].on_page_load = function (wrapper) {
 				<th>${__("Submission")}</th><th class="num">${__("Pieces")}</th>
 				<th class="num">${__("Gross g")}</th><th class="num">${__("DMD ct")}</th><th></th>
 			</tr></thead><tbody>${send.map((r) => `<tr data-name="${esc(r.name)}">
-				<td class="pl-nm">${esc(r.name)}</td><td>${tag(r)} ${esc(r.where && r.kind === "certification" ? r.where : "")}</td>
+				<td class="pl-nm">${esc(r.name)}</td><td>${tag(r)} ${esc(r.where && r.kind !== "hallmarking" ? r.where : "")}</td>
 				<td>${centre(r)}</td><td>${sub(r)}</td>
 				<td class="num">${r.pieces}</td><td class="num">${flt(r.gross).toFixed(3)}</td>
 				<td class="num">${flt(r.dmd_ct).toFixed(3)}</td>
@@ -211,7 +212,8 @@ frappe.pages["parcel"].on_page_load = function (wrapper) {
 	root.on("click", ".pl-note", function () {
 		const nm = $(this).closest("tr").data("name");
 		const row = S.send.find((x) => x.name === nm) || {};
-		const method = row.kind === "certification" ? ".get_cert_batch_slip" : ".get_hall_batch_slip";
+		const method = row.kind === "certification" ? ".get_cert_batch_slip"
+			: row.kind === "stonechange" ? ".get_stone_change_slip" : ".get_hall_batch_slip";
 		frappe.call({ method: API + method, args: { name: nm } }).then((r) => {
 			const m = r.message || {};
 			if (!m.html) return;

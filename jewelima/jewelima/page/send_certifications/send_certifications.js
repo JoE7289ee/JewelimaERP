@@ -129,9 +129,9 @@ frappe.pages["send-certifications"].on_page_load = function (wrapper) {
 					</div>
 				</div>`).join("") || `<div class="sc-empty">${__("Nothing prepared — build a batch on the Certification desk.")}</div>`);
 			root.find(".sc-recent").html(m.recent.length ? `<table class="sc-r"><thead><tr>
-				<th>${__("Batch")}</th><th>${__("Certification")}</th><th>${__("Status")}</th><th>${__("Pieces")}</th><th>${__("Sent")}</th></tr></thead>
+				<th>${__("Batch")}</th><th>${__("Certification")}</th><th>${__("Status")}</th><th>${__("Pieces")}</th><th>${__("Sent")}</th><th>${__("Shop name")}</th></tr></thead>
 				<tbody>${m.recent.map((p) => `<tr><td><b>${esc(p.name)}</b></td><td>${esc(p.cert_type)}</td>
-				<td>${esc(p.status)}</td><td>${p.pieces}</td><td>${esc(p.sent_on || "")}</td></tr>`).join("")}</tbody></table>`
+				<td>${esc(p.status)}</td><td>${p.pieces}</td><td>${esc(p.sent_on || "")}</td><td>${esc(p.shop_name || "")}</td></tr>`).join("")}</tbody></table>`
 				: `<div class="sc-empty">${__("Nothing yet.")}</div>`);
 		});
 	}

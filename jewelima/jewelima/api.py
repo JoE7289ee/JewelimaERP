@@ -19470,16 +19470,28 @@ def set_cert_shop_name(name, shop_name=""):
 PARCEL_ROLES = ("System Manager", "JW Manager", "Stock Manager", "JW Delivery", "JW Parcel",
 	"Jewelima Certification", "Jewelima Hallmarking")
 PARCEL_KINDS = (("certification", "Certification", "Certification Item"),
-	("hallmarking", "Hallmarking Batch", "Hallmarking Item"))
+	("hallmarking", "Hallmarking Batch", "Hallmarking Item"),
+	("stonechange", "Stone Change", "Stone Change Item"))
+# the status a batch sits in while it is packed and waiting for the counter
+PARCEL_READY = {"certification": "Prepared", "hallmarking": "Prepared", "stonechange": "Prep"}
 
 
 def _parcel_row(kind, name):
 	"""One batch as the counter reads it: what, where, how much, since when."""
-	dt, child = {"certification": ("Certification", "Certification Item"),
-		"hallmarking": ("Hallmarking Batch", "Hallmarking Item")}[kind]
-	fields = ["name", "center", "status", "prepared_on", "sent_on", "collected_on",
-		"submission_no", "owner"] + (["cert_type", "quality"] if kind == "certification" else [])
-	d = frappe.db.get_value(dt, name, fields, as_dict=True)
+	dt, child = {k: (d_, c_) for k, d_, c_ in PARCEL_KINDS}[kind]
+	if kind == "stonechange":
+		# a stone change keeps its dates under its own names; read them into the
+		# shape every other batch answers in
+		d = frappe.db.get_value(dt, name, ["name", "center", "status", "prepped_on",
+			"sent_on", "closed_on", "owner"], as_dict=True)
+		if d:
+			d.prepared_on, d.collected_on, d.submission_no = d.prepped_on, d.closed_on, ""
+			d.cert_type = ", ".join(sorted({x for x in frappe.get_all(child,
+				filters={"parent": name}, pluck="from_certification") if x}))
+	else:
+		fields = ["name", "center", "status", "prepared_on", "sent_on", "collected_on",
+			"submission_no", "owner"] + (["cert_type", "quality"] if kind == "certification" else [])
+		d = frappe.db.get_value(dt, name, fields, as_dict=True)
 	if not d:
 		return None
 	items = frappe.get_all(child, filters={"parent": name}, fields=["gross", "dmd_ct"],
@@ -19487,7 +19499,7 @@ def _parcel_row(kind, name):
 	sent = d.sent_on
 	return {
 		"kind": kind, "name": d.name, "status": d.status,
-		"where": (d.get("cert_type") or "") if kind == "certification" else frappe._("Hallmarking"),
+		"where": frappe._("Hallmarking") if kind == "hallmarking" else (d.get("cert_type") or ""),
 		"center": d.center or "", "quality": d.get("quality") or "",
 		"submission_no": d.submission_no or "", "owner_label": _user_label(d.owner),
 		"prepared_on": str(d.prepared_on or ""), "sent_on": str(sent or ""),
@@ -19528,7 +19540,8 @@ def get_parcel_history(days=90):
 	for kind, dt, _child in PARCEL_KINDS:
 		for nm in frappe.get_all(dt,
 				filters={"status": ["in", ["Collected", "Partially Received", "Received"]],
-					"collected_on": [">=", since]}, pluck="name"):
+					("closed_on" if kind == "stonechange" else "collected_on"): [">=", since]},
+				pluck="name"):
 			r = _parcel_row(kind, nm)
 			if r:
 				rows.append(r)
@@ -19559,6 +19572,8 @@ def parcel_send(batches, center=None):
 				send_cert_prep(nm)
 			elif frappe.db.exists("Hallmarking Batch", nm):
 				send_hall_prep(nm, frappe.db.get_value("Hallmarking Batch", nm, "center") or center)
+			elif frappe.db.exists("Stone Change", nm):
+				send_stone_change(nm)
 			else:
 				raise frappe.ValidationError(frappe._("No batch {0}.").format(nm))
 			sent.append(nm)
@@ -19620,14 +19635,14 @@ def parcel_scan(code):
 	for kind, dt, _child in PARCEL_KINDS:
 		if frappe.db.exists(dt, code):
 			st = frappe.db.get_value(dt, code, "status")
-			if st != "Prepared":
+			if st != PARCEL_READY[kind]:
 				return {"error": frappe._("{0} is {1} — only a batch that is ready to send goes out here.").format(code, st)}
 			return {"batch": code, "kind": kind, "row": _parcel_row(kind, code)}
 	# a piece: find the prepared batch holding it
 	piece = _resolve_bag_code(code) or code
 	for kind, dt, child in PARCEL_KINDS:
 		for pnt in frappe.get_all(child, filters={"order_bag": piece}, pluck="parent"):
-			if frappe.db.get_value(dt, pnt, "status") == "Prepared":
+			if frappe.db.get_value(dt, pnt, "status") == PARCEL_READY[kind]:
 				return {"batch": pnt, "kind": kind, "via_piece": piece, "row": _parcel_row(kind, pnt)}
 	return {"error": frappe._("{0} is not on any batch that is ready to send.").format(code)}
 
@@ -20323,6 +20338,90 @@ def collect_stone_change(name):
 	frappe.db.commit()
 	return {"name": name, "count": len(bags), "stock_entry": se,
 		"reopened": sorted(touched)}
+
+
+@frappe.whitelist()
+def get_stone_change_slip(name):
+	"""The tray's note, A6 landscape like the certification note: the stone
+	change number with its QR (the Parcel counter scans it to send), the lab
+	batch the pieces came back from, and one line per piece with what to change.
+	A tray is a handful of pieces, so here the pieces ARE the summary."""
+	d = frappe.get_doc("Stone Change", name)
+	if not d.items:
+		frappe.throw(frappe._("Nothing on the tray."))
+	esc = frappe.utils.escape_html
+	certs = sorted({r.from_certification for r in d.items if r.from_certification})
+	t_gw = sum(flt(r.gross) for r in d.items)
+	t_ct = sum(flt(r.dmd_ct) for r in d.items)
+	body = "".join("""<tr><td class="t">{0}</td><td>{1}</td><td>{2}</td>
+		<td class="n">{3:.3f}</td><td class="n">{4}</td></tr>""".format(
+		esc(r.order_bag), esc(r.design_type or r.design or ""), esc(r.from_certification or ""),
+		flt(r.gross), "{0:.3f}".format(flt(r.dmd_ct)) if flt(r.dmd_ct) else "—")
+		+ ('<tr class="nt"><td colspan="5">{0}</td></tr>'.format(esc(r.note)) if r.note else "")
+		for r in d.items)
+	qr = _qr_data_uri(name) or ""
+	_brand = _slip_brand()
+	centre = (d.center or "").split("-", 1)[-1].strip() if d.center else ""
+	html = """<!doctype html><html><head><meta charset="utf-8"><title>{nm}</title><style>
+	@page {{ size: 148mm 105mm; margin: 0; }}
+	html, body {{ margin:0; padding:0; }}
+	body {{ font-family:Helvetica,Arial,sans-serif; color:#111;
+		-webkit-print-color-adjust:exact; print-color-adjust:exact; }}
+	.slip {{ width:148mm; height:105mm; box-sizing:border-box; padding:6mm 7mm; overflow:hidden; }}
+	table {{ border-collapse:collapse; width:100%; }}
+	.hd td {{ vertical-align:top; padding:0; }}
+	.nm {{ font-size:17pt; font-weight:bold; letter-spacing:.3px; line-height:1; }}
+	.nm img {{ height:9.5mm; vertical-align:-1.6mm; margin-right:2.5mm; }}
+	.sub {{ font-size:8.5pt; color:#444; padding-top:2mm; }}
+	.no {{ font-size:9pt; padding-top:1.5mm; }}
+	.no b {{ font-size:13pt; letter-spacing:.3px; }}
+	.qr {{ width:26mm; }}
+	.qr img {{ width:26mm; height:26mm; display:block; }}
+	.qrc {{ font-size:6.5pt; color:#666; text-align:center; padding-top:.6mm; }}
+	table.it {{ margin-top:3.5mm; font-size:9pt; }}
+	table.it th {{ text-align:left; font-size:7pt; letter-spacing:.6px; text-transform:uppercase;
+		color:#555; border-bottom:.5pt solid #333; padding:0 2mm 1.2mm 0; }}
+	table.it td {{ padding:1.2mm 2mm 1.2mm 0; border-bottom:.3pt solid #ddd; }}
+	table.it td.t {{ font-weight:bold; }}
+	table.it tr.nt td {{ font-size:7.5pt; color:#444; font-style:italic; padding-top:0; }}
+	table.it th.n, table.it td.n {{ text-align:right; padding-right:0; }}
+	table.it tr.tot td {{ border-top:.8pt solid #333; border-bottom:none; font-weight:bold;
+		font-size:10pt; padding-top:1.5mm; }}
+	.ft {{ font-size:6.5pt; color:#888; padding-top:2mm; }}
+	.tag img {{ width:100%; display:block; margin-top:1.5mm; }}
+	</style></head><body><div class="slip">
+	<table class="hd"><tr>
+		<td>
+			<div class="nm">{emblem}{title}</div>
+			<div class="sub">{sub}</div>
+			<div class="no">{l_sc} <b>{nm}</b></div>
+			{cert}
+		</td>
+		<td class="qr">{qrimg}<div class="qrc">{nm}</div></td>
+	</tr></table>
+	<table class="it">
+		<thead><tr><th>{h_pc}</th><th>{h_type}</th><th>{h_from}</th>
+			<th class="n">{h_gw}</th><th class="n">{h_ct}</th></tr></thead>
+		<tbody>{body}
+		<tr class="tot"><td>{l_tot} · {n}</td><td></td><td></td>
+			<td class="n">{t_gw:.3f}</td><td class="n">{t_ct:.3f}</td></tr></tbody>
+	</table>
+	<div class="ft">{ft}</div>
+	<div class="tag">{tagline}</div>
+	</div></body></html>""".format(
+		nm=esc(name), title=frappe._("Stone Change"),
+		emblem=('<img src="{0}">'.format(_brand["emblem"]) if _brand["emblem"] else ""),
+		tagline=('<img src="{0}">'.format(_brand["tagline"]) if _brand["tagline"] else ""),
+		sub=esc(" · ".join(x for x in (centre, "{0} {1}".format(len(d.items), frappe._("piece(s)"))) if x)),
+		l_sc=frappe._("Stone change no"),
+		cert=('<div class="no">{0} <b>{1}</b></div>'.format(frappe._("Cert batch"), esc(", ".join(certs)))
+			if certs else ""),
+		qrimg='<img src="{0}">'.format(qr) if qr else "",
+		h_pc=frappe._("Piece"), h_type=frappe._("Design type"), h_from=frappe._("Cert batch"),
+		h_gw=frappe._("GW (g)"), h_ct=frappe._("Diam (ct)"),
+		body=body, l_tot=frappe._("TOTAL"), n=len(d.items), t_gw=t_gw, t_ct=t_ct,
+		ft="{0} · {1}".format(frappe._("opened"), d.opened_on or ""))
+	return {"name": name, "pieces": len(d.items), "html": html}
 
 
 @frappe.whitelist()

@@ -54,6 +54,8 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		.sx-send{background:#117a65;border:1px solid #117a65;color:#fff;font-weight:700;
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
+		.sx-print{background:var(--fg-color);border:1px solid var(--border-color);color:var(--text-color);
+			font-weight:700;border-radius:8px;padding:8px 14px;font-size:12.5px;cursor:pointer;margin-left:8px;}
 		.sx-prep{background:#D4AF37;border:1px solid #D4AF37;color:#fff;font-weight:700;
 			border-radius:8px;padding:8px 18px;font-size:12.5px;cursor:pointer;}
 		.sx-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 16px;
@@ -131,7 +133,7 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 						? `<span class="sx-age">${__("{0} day(s) since it opened", [b.days])}</span>` : ""}
 				<span class="meta"><b>${b.pieces}</b> ${__("piece(s)")} · ${flt(b.gross).toFixed(3)} g · ${
 					flt(b.dmd_ct).toFixed(3)} ct</span>
-				${act ? `<span class="act">${act}</span>` : ""}
+				<span class="act">${act}<button class="sx-print">${__("Print")}</button></span>
 			</div>
 			${rows(b, stage === "processing" || stage === "prep")}
 		</div>`;
@@ -202,6 +204,23 @@ frappe.pages["stone-changes"].on_page_load = function (wrapper) {
 
 	// nothing to fill in: the tray goes back to the centre it came from, and the
 	// only question worth asking is whether it is going now
+	// the tray's note: SC number with its QR, the cert batch, one line a piece
+	root.on("click", ".sx-print", function (e) {
+		e.stopPropagation();
+		const nm = $(this).closest(".sx-card").data("name");
+		frappe.call({ method: API + ".get_stone_change_slip", args: { name: nm } }).then((r) => {
+			const m = r.message || {};
+			if (!m.html) return;
+			document.getElementById("jw-sc-note")?.remove();
+			const fr = document.createElement("iframe");
+			fr.id = "jw-sc-note";
+			fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;";
+			document.body.appendChild(fr);
+			const doc = fr.contentDocument;
+			doc.open(); doc.write(m.html); doc.close();
+			setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); }, 350);
+		});
+	});
 	root.on("click", ".sx-send", function () {
 		const nm = $(this).closest(".sx-card").data("name");
 		const b = (DATA.prep || []).find((x) => x.name === nm) || {};

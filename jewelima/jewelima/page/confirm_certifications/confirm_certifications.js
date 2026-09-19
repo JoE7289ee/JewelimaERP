@@ -344,7 +344,7 @@ frappe.pages["confirm-certifications"].on_page_load = function (wrapper) {
 				frappe.show_alert({ indicator: "green",
 					message: __("{0} saved.", [m.saved || 0]) }, 5);
 				if (m.stone_change) {
-					frappe.show_alert({ indicator: "orange", message:
+					frappe.show_alert({ indicator: "blue", message:
 						__("{0} opened — {1} piece(s) out for a stone change.",
 							[m.stone_change.name, m.stone_change.count]) }, 8);
 				}
