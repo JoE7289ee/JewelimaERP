@@ -1,38 +1,36 @@
 # Copyright (c) 2026, efeone and contributors
 #
-# The PHONE app at /jw — a small shell of our own beside the desk.
+# The PHONE app at /jw — React (Vite, Tailwind, Motion), all nine screens. The
+# original is kept at /jw-classic as a way back while this one beds in.
 #
-# It is not the desk in a narrow window: the desk boots a router, a form engine,
-# list views and a large payload before it shows anything, which on shop-floor
-# wifi is seconds of nothing. This page loads one screen, and every job it does
-# calls the SAME whitelisted API the desk calls — no second backend, no second
-# copy of any rule.
-#
-# Two gates, in order: a session, then the JW Phone role. That role is the key to
-# the app itself and grants nothing inside it — what a user can DO here is still
-# their other roles' business, so a filer with JW Phone gets the phone app with a
-# filer's powers in it.
+# Same two gates as /jw: a session, then the JW Phone role (System Manager is
+# always in). The page itself is only a shell: it hands the browser the built
+# bundle, whose hashed file names are read off Vite's manifest so a new build is
+# picked up on the very next load, with no cache to fight.
 
+import json
 import os
 
 import frappe
 
 no_cache = 1
 
-
-def _build():
-	"""When this app was last changed, as a stamp the screen can show.
-
-	Installed to a home screen there is no address bar and no view-source, so
-	"did the refresh actually take?" is otherwise unanswerable from the floor.
-	The file's own mtime is the honest answer and costs one stat."""
-	try:
-		return str(int(os.path.getmtime(os.path.join(os.path.dirname(__file__), "jw.html"))))[-6:]
-	except OSError:
-		return "?"
-
 PHONE_ROLE = "JW Phone"
-ALWAYS_IN = ("System Manager",)  # the one account that must never be locked out
+ALWAYS_IN = ("System Manager",)
+BUILD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "public", "jw")
+
+
+def _bundle():
+	"""The built entry's script and stylesheet, from Vite's manifest."""
+	try:
+		with open(os.path.join(BUILD_DIR, ".vite", "manifest.json")) as f:
+			m = json.load(f)
+	except OSError:
+		return None, [], ""
+	entry = next((v for v in m.values() if v.get("isEntry")), None) or {}
+	base = "/assets/jewelima/jw/"
+	stamp = str(int(os.path.getmtime(os.path.join(BUILD_DIR, ".vite", "manifest.json"))))[-6:]
+	return (base + entry["file"]) if entry.get("file") else None, [base + c for c in entry.get("css", [])], stamp
 
 
 def get_context(context):
@@ -40,13 +38,12 @@ def get_context(context):
 		frappe.local.flags.redirect_location = "/jw-login"
 		raise frappe.Redirect
 	roles = set(frappe.get_roles())
+	# no key: the page says so plainly rather than throw a 403 at somebody
+	# standing at a bench — they signed in correctly, they lack the role
+	context.jw_denied = not roles.intersection({PHONE_ROLE, *ALWAYS_IN})
+	js, css, stamp = _bundle()
 	context.no_cache = 1
-	context.show_sidebar = False
+	context.jw_js, context.jw_css, context.jw_build = js, css, stamp
 	context.jw_user = frappe.session.user
 	context.jw_full_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
-	context.jw_roles = sorted(roles)
-	context.jw_build = _build()
-	# no key: say so plainly rather than throw a 403 page at somebody standing at
-	# a bench — they signed in correctly, they simply do not hold this role
-	context.jw_denied = not roles.intersection({PHONE_ROLE, *ALWAYS_IN})
 	return context

@@ -30,3 +30,11 @@ const board = () => {
 export const MOCK: Record<string, Fn> = {
 	"jewelima.jewelima.api.get_jw_board": board,
 };
+
+// Real answers captured off the dev bench, for previewing every screen. Loaded
+// only in preview mode, as its own file, so the phone never downloads it.
+let fixtures: Record<string, unknown> | null = null;
+export async function fixture(method: string) {
+	fixtures ??= (await import("./fixtures.json")).default as Record<string, unknown>;
+	return fixtures[method];
+}

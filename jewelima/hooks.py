@@ -28,7 +28,11 @@ extend_bootinfo = "jewelima.boot.boot_session"
 
 # The phone app's door: the file has to be jw_login.py (a module name), but the
 # address people see should read like one.
-website_route_rules = [{"from_route": "/jw-login", "to_route": "jw_login"}]
+website_route_rules = [
+	{"from_route": "/jw-login", "to_route": "jw_login"},
+	# the original phone app, kept as a way back while the React one beds in
+	{"from_route": "/jw-classic", "to_route": "jw_classic"},
+]
 
 # Includes in <head>
 # ------------------

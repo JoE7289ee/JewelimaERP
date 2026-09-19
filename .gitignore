@@ -60,3 +60,5 @@ jewelima/jewelima/loadtest.py
 
 # the phone app's toolchain — the BUILT files in jewelima/public/jw are committed
 frontend/*/node_modules/
+# preview answers captured off the dev bench — real names and weights, never committed
+frontend/jw/src/lib/fixtures.json

@@ -12,7 +12,7 @@ declare global {
 	}
 }
 
-import { MOCK } from "./mock";
+import { MOCK, fixture } from "./mock";
 
 export class NoSession extends Error {}
 
@@ -21,9 +21,14 @@ export async function call<T = unknown>(
 	args: Record<string, unknown> = {},
 	write = false,
 ): Promise<T> {
-	if (window.JW?.mock && method in MOCK) {
+	// Preview answers exist only in a development build. In production this whole
+	// branch — and the fixture file, which holds real names and weights — is
+	// compiled out, because anything under /assets is served without a login.
+	if (import.meta.env.DEV && window.JW?.mock) {
 		await new Promise((r) => setTimeout(r, 250));
-		return MOCK[method](args) as T;
+		if (method in MOCK) return MOCK[method](args) as T;
+		const f = await fixture(method);
+		if (f !== undefined) return f as T;
 	}
 	const body = new URLSearchParams(
 		Object.entries(args).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]),
