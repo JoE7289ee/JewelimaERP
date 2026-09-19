@@ -302,7 +302,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 		root.find(".ba-tbl thead").html(`<tr><th>${__("Person")}</th>${
 			BA.buckets.map((b) => `<th>${esc(b)}<span class="cnt">${
 				BA.keepers[b] || 0} ${__("keeper(s)")} · ${BA.counts[b] || 0} ${__("pcs")}</span></th>`).join("")
-		}<th>${__("None")}</th><th>${__("Can move out")}</th></tr>`);
+		}<th>${__("None")}</th></tr>`);
 		const people = BA.users.filter((u) => !q || u.name.toLowerCase().includes(q)
 			|| u.user.toLowerCase().includes(q));
 		root.find(".ba-tbl tbody").html(people.map((u) => `
@@ -311,9 +311,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 				${BA.buckets.map((b) => `<td><input type="radio" name="ba-${esc(u.user)}"
 					value="${esc(b)}" ${u.bucket === b ? "checked" : ""}></td>`).join("")}
 				<td><input type="radio" name="ba-${esc(u.user)}" value="" ${u.bucket ? "" : "checked"}></td>
-				<td class="mv"><input type="checkbox" class="ba-mv" ${u.can_transfer ? "checked" : ""}
-					${u.bucket ? "" : "disabled"} title="${__("may move goods out of their bucket")}"></td>
-			</tr>`).join("") || `<tr><td colspan="${BA.buckets.length + 3}" class="em">${__("Nobody by that name.")}</td></tr>`);
+			</tr>`).join("") || `<tr><td colspan="${BA.buckets.length + 2}" class="em">${__("Nobody by that name.")}</td></tr>`);
 	}
 
 	function loadAccess() {
@@ -329,7 +327,7 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 			.then(() => {
 				const u = BA.users.find((x) => x.user === user);
 				frappe.show_alert({ message: bucket
-					? __("{0} keeps {1}{2}.", [u ? u.name : user, bucket, move ? __(" and can move goods out") : ""])
+					? __("{0} keeps {1}.", [u ? u.name : user, bucket])
 					: __("{0} keeps no bucket now.", [u ? u.name : user]), indicator: "green" }, 3);
 				loadAccess();          // keeper counts in the header change with it
 			});
@@ -337,15 +335,8 @@ frappe.pages["delivery-masters"].on_page_load = function (wrapper) {
 
 	root.on("change", ".ba-tbl input[type=radio]", function () {
 		const tr = $(this).closest("tr");
-		const bucket = this.value;
-		// taking the bucket away takes the permission with it
-		const move = bucket ? tr.find(".ba-mv").prop("checked") : false;
-		saveAccess(tr.data("user"), bucket, move);
-	});
-	root.on("change", ".ba-mv", function () {
-		const tr = $(this).closest("tr");
-		const bucket = tr.find("input[type=radio]:checked").val();
-		if (bucket) saveAccess(tr.data("user"), bucket, this.checked);
+		// My Bucket is for reading, so a keeper is assigned and nothing more
+		saveAccess(tr.data("user"), this.value, false);
 	});
 	root.on("input", ".ba-find", paintAccess);
 

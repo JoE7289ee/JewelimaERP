@@ -6,7 +6,8 @@
 // Each bucket has a keeper, set on Delivery Masters. This page is that keeper's
 // view of it and nothing else: the pieces on their shelf, filtered any way they
 // like, and the history of what came onto it — made here, or moved in from
-// another bucket — and what left.
+// another bucket — and what left. It is for READING: moving stock between
+// buckets stays on Transfer Bucket.
 //
 // A manager sees a bucket picker and may look at any shelf; a keeper sees their
 // own, whatever they ask for, because the server decides which bucket answers.
@@ -18,9 +19,9 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 	const flt = (v) => parseFloat(v) || 0;
 	const g3 = (v) => flt(v).toFixed(3);
 	const root = $(page.main);
-	const S = { bucket: null, is_admin: false, can_transfer: false, tab: "shelf",
+	const S = { bucket: null, is_admin: false, tab: "shelf",
 		f: { q: "", design_type: "", karat: "", status: "", stone: "" },
-		picked: new Set(), data: null, days: 30 };
+		data: null, days: 30 };
 
 	root.append(`
 		<style>
@@ -49,7 +50,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 			padding:7px 10px;border-bottom:1px solid var(--border-color);white-space:nowrap;}
 		table.mb2-tbl td{padding:6px 10px;border-bottom:1px solid var(--border-color);white-space:nowrap;}
 		table.mb2-tbl tbody tr:nth-child(even) td{background:rgba(128,128,128,.045);}
-		table.mb2-tbl tbody tr.sel td{background:rgba(27,67,50,.12);}
 		table.mb2-tbl .num{text-align:right;font-variant-numeric:tabular-nums;}
 		table.mb2-tbl .card{font-weight:800;letter-spacing:.02em;}
 		.mb2-chip{display:inline-block;font-size:10px;font-weight:800;border-radius:9px;padding:1px 7px;
@@ -101,20 +101,14 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 				<select data-f="stone"><option value="">${__("Any stones")}</option>
 					<option value="none" ${S.f.stone === "none" ? "selected" : ""}>${__("No stones")}</option>
 					${(fc.stone || []).map((o) => `<option ${o === S.f.stone ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>
-				<span class="sp"></span>
-				<span class="mb2-count">${S.picked.size ? __("{0} picked", [S.picked.size]) : ""}</span>
-				${S.can_transfer ? `<button class="btn btn-sm btn-default mb2-move" ${S.picked.size ? "" : "disabled"}>${
-					__("Move out…")}</button>` : ""}
 			</div>
 			<div class="mb2-card"><div class="mb2-wrap">${rows.length ? `
 				<table class="mb2-tbl"><thead><tr>
-					${S.can_transfer ? `<th><input type="checkbox" class="mb2-all"></th>` : ""}
 					<th>${__("Card")}</th><th>${__("Design")}</th><th>${__("Type")}</th><th>${__("Karat")}</th>
 					<th class="num">${__("Gross")}</th><th class="num">${__("Pure")}</th>
 					<th>${__("Stones")}</th><th>${__("Status")}</th><th>${__("HUID")}</th><th>${__("Since")}</th>
 				</tr></thead><tbody>${rows.map((p) => `
-					<tr class="${S.picked.has(p.name) ? "sel" : ""}" data-card="${esc(p.name)}">
-						${S.can_transfer ? `<td><input type="checkbox" class="mb2-pk" ${S.picked.has(p.name) ? "checked" : ""}></td>` : ""}
+					<tr data-card="${esc(p.name)}">
 						<td class="card">${esc(p.name)}</td>
 						<td>${esc(p.design)}</td><td>${esc(p.design_type)}</td><td>${esc(p.karat)}</td>
 						<td class="num">${g3(p.gross)}</td><td class="num">${g3(p.pure)}</td>
@@ -134,7 +128,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 			S.data = d;
 			S.bucket = d.bucket;
 			S.is_admin = d.is_admin;
-			S.can_transfer = d.can_transfer;
 			paintHead();
 			if (!d.bucket) {
 				root.find(".mb2-kpis").empty();
@@ -213,7 +206,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 	root.on("change", ".mb2-pick", function () {
 		if (!this.value) return;
 		S.bucket = this.value;
-		S.picked.clear();
 		S.tab === "shelf" ? loadShelf() : loadShelf().then(loadHistory);
 	});
 	// The history is a second look at the same shelf, so it sits in the page head
@@ -228,49 +220,6 @@ frappe.pages["my-bucket"].on_page_load = function (wrapper) {
 		tab === "shelf" ? paintShelf() : loadHistory();
 	}
 	root.on("change", ".mb2-days", function () { S.days = parseInt(this.value, 10) || 30; loadHistory(); });
-
-	root.on("change", ".mb2-pk", function () {
-		const card = $(this).closest("tr").data("card");
-		this.checked ? S.picked.add(card) : S.picked.delete(card);
-		paintShelf();
-	});
-	root.on("change", ".mb2-all", function () {
-		const on = this.checked;
-		(S.data.pieces || []).forEach((p) => (on ? S.picked.add(p.name) : S.picked.delete(p.name)));
-		paintShelf();
-	});
-
-	root.on("click", ".mb2-move", () => {
-		if (!S.picked.size) return;
-		const others = (S.data.buckets && S.data.buckets.length ? S.data.buckets : [])
-			.filter((b) => b !== S.bucket);
-		const d = new frappe.ui.Dialog({
-			title: __("Move {0} piece(s) out of {1}", [S.picked.size, S.bucket]),
-			fields: [
-				others.length
-					? { fieldname: "to", fieldtype: "Select", label: __("To bucket"), reqd: 1, options: others.join("\n") }
-					: { fieldname: "to", fieldtype: "Link", options: "Finished Bucket", label: __("To bucket"), reqd: 1 },
-				{ fieldname: "remarks", fieldtype: "Data", label: __("Why (optional)") },
-			],
-			primary_action_label: __("Move"),
-			primary_action(v) {
-				d.hide();
-				frappe.call({ method: API + ".my_bucket_transfer",
-					args: { bags: JSON.stringify([...S.picked]), to_bucket: v.to, remarks: v.remarks } })
-					.then((r) => {
-						const m = r.message || {};
-						frappe.show_alert({ message: __("{0} moved to {1}.", [m.count || 0, v.to]),
-							indicator: "green" }, 5);
-						if ((m.errors || []).length) {
-							frappe.msgprint(m.errors.map((e) => `${esc(e.name)}: ${esc(e.error)}`).join("<br>"));
-						}
-						S.picked.clear();
-						loadShelf();
-					});
-			},
-		});
-		d.show();
-	});
 
 	page.set_primary_action(__("Refresh"), () => (S.tab === "shelf" ? loadShelf() : loadShelf().then(loadHistory)), "refresh");
 	frappe.pages["my-bucket"].on_page_show = () => loadShelf();

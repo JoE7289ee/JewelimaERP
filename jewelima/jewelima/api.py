@@ -10557,23 +10557,6 @@ def get_my_bucket_history(bucket=None, days=30):
 			"out": sum(1 for e in events if e["kind"] == "out")}}
 
 
-@frappe.whitelist()
-def my_bucket_transfer(bags, to_bucket, remarks=None):
-	"""A keeper moving pieces OFF their own shelf. Only a keeper who has been
-	allowed to, and only pieces that are actually on their shelf."""
-	frappe.only_for(list(MY_BUCKET_ROLES))
-	b, is_admin, can_move = _resolve_my_bucket(None)
-	if not is_admin:
-		if not b:
-			frappe.throw(frappe._("You do not keep a bucket."))
-		if not can_move:
-			frappe.throw(frappe._("You can look after {0} but not move goods out of it.").format(b))
-		names = frappe.parse_json(bags) if isinstance(bags, str) else (bags or [])
-		strays = [n for n in names if frappe.db.get_value("Order Bag", n, "bucket") != b]
-		if strays:
-			frappe.throw(frappe._("Not on your shelf: {0}").format(", ".join(strays[:6])))
-	return transfer_bucket(bags, to_bucket, remarks)
-
 
 @frappe.whitelist()
 def make_products(bags, bucket=None):
