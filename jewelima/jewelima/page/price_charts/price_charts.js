@@ -331,35 +331,43 @@ frappe.pages["price-charts"].on_page_load = function (wrapper) {
 		cur[field] = box.find(".pc-pt input").map(function () { return this.value.trim(); }).get()
 			.filter(Boolean).join("\n");
 	}
-	function repaintPoints(box) {
-		const field = box.data("pf");
-		const label = box.find("> label").text();
-		box.replaceWith(pointsHtml(field, label));
-	}
 	root.on("input", ".pc-pt input", function () { savePoints($(this).closest(".pc-pts")); });
+	// A new point is a new BOX, added on screen and nothing else. It used to go
+	// through cur — but cur keeps only filled points, so the blank one was thrown
+	// away on the repaint and focus landed on, and cleared, the LAST REAL point.
+	// Nothing is written to cur until something is typed in the new box.
+	function renumber(box) {
+		box.find(".pc-pt .n").each(function (i) { $(this).text(`${i + 1}.`); });
+	}
+	function addPoint(box) {
+		const row = $(`<div class="pc-pt"><span class="n"></span>
+			<input value="" placeholder="${__("one condition")}">
+			<span class="x" title="${__("remove this point")}">&times;</span></div>`);
+		box.find(".pc-pt-add").before(row);
+		renumber(box);
+		row.find("input").trigger("focus");
+	}
 	root.on("keydown", ".pc-pt input", function (e) {
 		if (e.key !== "Enter") return;
 		e.preventDefault();                        // Enter starts the next point
 		const box = $(this).closest(".pc-pts");
-		const field = box.data("pf");
-		savePoints(box);
-		cur[field] = (cur[field] ? cur[field] + "\n" : "") + " ";
-		repaintPoints(box);
-		root.find(`.pc-pts[data-pf="${field}"] .pc-pt input`).last().val("").trigger("focus");
+		// Enter on a point that is still empty stays put — no ladder of blanks
+		if (!this.value.trim()) return;
+		addPoint(box);
 	});
 	root.on("click", ".pc-pt-add", function () {
 		const box = $(this).closest(".pc-pts");
-		const field = box.data("pf");
-		savePoints(box);
-		cur[field] = (cur[field] ? cur[field] + "\n" : "") + " ";
-		repaintPoints(box);
-		root.find(`.pc-pts[data-pf="${field}"] .pc-pt input`).last().val("").trigger("focus");
+		// one empty box waiting is enough: go to it rather than add another
+		const blank = box.find(".pc-pt input").filter(function () { return !this.value.trim(); }).first();
+		if (blank.length) { blank.trigger("focus"); return; }
+		addPoint(box);
 	});
 	root.on("click", ".pc-pt .x", function () {
 		const box = $(this).closest(".pc-pts");
 		$(this).closest(".pc-pt").remove();
+		if (!box.find(".pc-pt").length) addPoint(box);   // always somewhere to type
 		savePoints(box);
-		repaintPoints(box);
+		renumber(box);
 	});
 
 	// simple field edits land straight on cur
