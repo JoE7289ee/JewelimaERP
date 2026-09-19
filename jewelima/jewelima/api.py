@@ -43,9 +43,12 @@ def _wh(name):
 	return full if frappe.db.exists("Warehouse", full) else None
 
 
-def _stock_move(item, qty, source, target):
+def _stock_move(item, qty, source, target, remarks=None):
 	"""Submit a Material Transfer of `qty` (stock UOM) of `item` from source ->
-	target warehouse. No-op when qty<=0 or either warehouse is missing."""
+	target warehouse. No-op when qty<=0 or either warehouse is missing.
+
+	`remarks` says WHY: a transfer with none is anonymous in the stock ledger —
+	the gold arrives, and nothing can say which act sent it."""
 	qty = flt(qty)
 	if qty <= 0 or not source or not target:
 		return None
@@ -53,6 +56,7 @@ def _stock_move(item, qty, source, target):
 		"doctype": "Stock Entry",
 		"stock_entry_type": "Material Transfer",
 		"company": _company(),
+		"remarks": remarks or None,
 		"items": [{
 			"item_code": item,
 			"qty": qty,
@@ -174,7 +178,12 @@ def melt_gold(warehouse, output_item, output_weight, inputs, send_to_casting=0):
 	out = {"name": se.name, "total_in": round(total_in, 3), "output": round(out_w, 3),
 		"loss": loss_w, "loss_warehouse": loss_wh}
 	if cint(send_to_casting):
-		out["casting_transfer"] = _stock_move(output_item, out_w, warehouse, _wh("Casting"))
+		# the move names the melt that produced it, so Melt History can put the
+		# two side by side — before this the transfer had no remarks at all and
+		# the gold simply appeared in Casting with nothing saying why
+		out["casting_transfer"] = _stock_move(output_item, out_w, warehouse, _wh("Casting"),
+			remarks="Melt to casting: {0} · {1} g {2} {3} -> {4}".format(
+				se.name, round(out_w, 3), output_item, warehouse, _wh("Casting")))
 		out["casting_warehouse"] = _wh("Casting")
 	frappe.db.commit()
 	return out
@@ -24515,6 +24524,52 @@ def get_loss_history(period="all", start=None, end=None):
 		"writtenoff_pure": round(sum(x["pure"] for x in rows if x["kind"] == "Written Off"), 3)}
 
 
+def _attach_casting_moves(rows):
+	"""Find each melt's onward move to Casting and hang it under the melt.
+
+	From today a melt's casting move carries the melt's own number in its
+	remarks, so the match is exact. Melts sent before that left an anonymous
+	transfer; those are matched on everything a transfer can be matched on — the
+	same item, the same weight to the gram, from the melt's own warehouse to
+	Casting, submitted within two minutes of the melt. A match that tight is the
+	same act; anything looser is left unmatched rather than guessed at."""
+	casting = _wh("Casting")
+	if not rows or not casting:
+		return
+	names = [r["name"] for r in rows]
+	tagged = {}
+	for se in frappe.get_all("Stock Entry",
+			filters={"docstatus": 1, "remarks": ["like", "Melt to casting:%"]},
+			fields=["name", "remarks", "posting_date", "posting_time"], limit_page_length=0):
+		for nm in names:
+			if nm in (se.remarks or ""):
+				tagged[nm] = se
+	for r in rows:
+		se = tagged.get(r["name"])
+		if not se and r.get("out_item") and r.get("warehouse"):
+			made = frappe.db.get_value("Stock Entry", r["name"], "creation")
+			if made:
+				hits = frappe.db.sql("""
+					SELECT se.name, se.posting_date, se.posting_time
+					FROM `tabStock Entry` se JOIN `tabStock Entry Detail` d ON d.parent = se.name
+					WHERE se.docstatus = 1 AND se.stock_entry_type = 'Material Transfer'
+						AND d.item_code = %(item)s AND ABS(d.qty - %(qty)s) < 0.0005
+						AND d.s_warehouse = %(src)s AND d.t_warehouse = %(dst)s
+						AND se.creation BETWEEN %(t0)s AND %(t0)s + INTERVAL 2 MINUTE
+					ORDER BY se.creation LIMIT 1""",
+					{"item": r["out_item"], "qty": r["got"], "src": r["warehouse"],
+					 "dst": casting, "t0": made}, as_dict=True)
+				se = hits[0] if hits else None
+				if se:
+					se["matched"] = 1
+		if se:
+			r["casting"] = {"name": se.name, "to": casting.rsplit(" - ", 1)[0],
+				"when": "{0} {1}".format(se.posting_date, str(se.posting_time or "")[:5]).strip(),
+				"qty": r["got"], "item": r.get("out_item"),
+				# say when the link was worked out rather than written down
+				"inferred": bool(se.get("matched"))}
+
+
 @frappe.whitelist()
 def get_melt_history(period="all", start=None, end=None):
 	"""Every melt: what went into the pot, what karat gold came out, the melt
@@ -24536,6 +24591,7 @@ def get_melt_history(period="all", start=None, end=None):
 			"loss_warehouse": (lost[0]["warehouse"] if lost else ""),
 			"out_item": (kept[0]["item"] if kept else ""),
 			"warehouse": (kept[0]["warehouse"] if kept else "")})
+	_attach_casting_moves(rows)
 	return {"rows": rows, "label": label,
 		"total_fed": round(sum(x["fed"] for x in rows), 3),
 		"total_got": round(sum(x["got"] for x in rows), 3),

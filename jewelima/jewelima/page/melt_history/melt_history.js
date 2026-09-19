@@ -32,6 +32,10 @@ frappe.pages["melt-history"].on_page_load = function (wrapper) {
 		.mh-none{padding:40px;text-align:center;color:var(--text-muted);}
 		td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
 		.mh-loss{color:#b02a2a;font-weight:700;}
+		/* the melt's onward move — the second half of the same act */
+		.mh-cast{margin-top:4px;font-size:11px;font-weight:700;color:#1d7a33;white-space:nowrap;}
+		[data-theme="dark"] .mh-cast{color:#7fc98f;}
+		.mh-cast .mh-se{font-weight:500;color:var(--text-muted);}
 		</style>
 		<div class="mh-bar">
 			<span class="mh-pill" data-p="today">${__("Today")}</span>
@@ -74,6 +78,7 @@ frappe.pages["melt-history"].on_page_load = function (wrapper) {
 		const rows = sortRows(S.rows.filter((x) => !q
 			|| (x.who || "").toLowerCase().includes(q)
 			|| (x.out_item || "").toLowerCase().includes(q)
+			|| (x.casting && ("casting " + x.casting.name).toLowerCase().includes(q))
 			|| (x.warehouse || "").toLowerCase().includes(q)
 			|| (x.name || "").toLowerCase().includes(q)
 			|| (x.consumed || []).some((c) => (c.item || "").toLowerCase().includes(q))));
@@ -88,7 +93,12 @@ frappe.pages["melt-history"].on_page_load = function (wrapper) {
 				<td>${frappe.datetime.str_to_user(x.when)}</td>
 				<td class="mh-lines">${x.consumed.map((c) => `${c.qty.toFixed(3)} g ${esc(c.item)}`).join("<br>")}
 					<div style="margin-top:2px;"><b style="color:var(--text-color);">${x.fed.toFixed(3)} g ${__("total")}</b></div></td>
-				<td><b>${x.got.toFixed(3)} g</b> ${esc(x.out_item)}</td>
+				<td><b>${x.got.toFixed(3)} g</b> ${esc(x.out_item)}${x.casting ? `
+					<div class="mh-cast" title="${esc(x.casting.name)}${x.casting.inferred
+						? " — " + __("matched on item, weight and time: this melt predates the link") : ""}">
+						&#8594; ${__("sent to {0}", [esc(x.casting.to)])} · ${esc(x.casting.when)}
+						<span class="mh-se">${esc(x.casting.name)}</span>${x.casting.inferred ? " *" : ""}
+					</div>` : ""}</td>
 				<td class="num ${x.loss > 0 ? "mh-loss" : ""}" title="${esc(x.loss_warehouse || "")}">${x.loss.toFixed(3)}</td>
 				<td>${esc((x.warehouse || "").replace(" - JD", ""))}</td>
 				<td>${esc(x.who)}</td>
